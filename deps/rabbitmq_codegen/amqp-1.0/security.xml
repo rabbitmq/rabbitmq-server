@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+
+<!--
+Copyright Bank of America, N.A., Barclays Bank PLC, Cisco Systems, Credit
+Suisse, Deutsche Boerse, Envoy Technologies Inc., Goldman Sachs, HCL
+Technologies Ltd, IIT Software GmbH, iMatix Corporation, INETCO Systems Limited,
+Informatica Corporation, JPMorgan Chase & Co., Kaazing Corporation, N.A,
+Microsoft Corporation, my-Channels, Novell, Progress Software, Red Hat Inc.,
+Software AG, Solace Systems Inc., StormMQ Ltd., Tervela Inc., TWIST Process
+Innovations Ltd, GoPivotal, Inc., and WS02 Inc. 2006-2011. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+
+<amqp name="security" xmlns="http://www.amqp.org/schema/amqp.xsd">
+  <section name="tls">
+    <definition name="TLS-MAJOR" value="1"/>
+    <definition name="TLS-MINOR" value="0"/>
+    <definition name="TLS-REVISION" value="0"/>
+  </section>
+  <section name="sasl">
+    <type name="sasl-mechanisms" class="composite" source="list" provides="sasl-frame">
+      <descriptor name="amqp:sasl-mechanisms:list" code="0x00000000:0x00000040"/>
+      <field name="sasl-server-mechanisms" type="symbol" mandatory="true" multiple="true"/>
+    </type>
+    <type name="sasl-init" class="composite" source="list" provides="sasl-frame">
+      <descriptor name="amqp:sasl-init:list" code="0x00000000:0x00000041"/>
+      <field name="mechanism" type="symbol" mandatory="true"/>
+      <field name="initial-response" type="binary"/>
+      <field name="hostname" type="string"/>
+    </type>
+    <type name="sasl-challenge" class="composite" source="list" provides="sasl-frame">
+      <descriptor name="amqp:sasl-challenge:list" code="0x00000000:0x00000042"/>
+      <field name="challenge" type="binary" mandatory="true"/>
+    </type>
+    <type name="sasl-response" class="composite" source="list" provides="sasl-frame">
+      <descriptor name="amqp:sasl-response:list" code="0x00000000:0x00000043"/>
+      <field name="response" type="binary" mandatory="true"/>
+    </type>
+    <type name="sasl-outcome" class="composite" source="list" provides="sasl-frame">
+      <descriptor name="amqp:sasl-outcome:list" code="0x00000000:0x00000044"/>
+      <field name="code" type="sasl-code" mandatory="true"/>
+      <field name="additional-data" type="binary"/>
+    </type>
+    <type name="sasl-code" class="restricted" source="ubyte">
+      <choice name="ok" value="0"/>
+      <choice name="auth" value="1"/>
+      <choice name="sys" value="2"/>
+      <choice name="sys-perm" value="3"/>
+      <choice name="sys-temp" value="4"/>
+    </type>
+    <definition name="SASL-MAJOR" value="1"/>
+    <definition name="SASL-MINOR" value="0"/>
+    <definition name="SASL-REVISION" value="0"/>
+  </section>
+</amqp>

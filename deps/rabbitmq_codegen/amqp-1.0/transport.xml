@@ -1,0 +1,200 @@
+<?xml version="1.0"?>
+
+<!--
+Copyright Bank of America, N.A., Barclays Bank PLC, Cisco Systems, Credit
+Suisse, Deutsche Boerse, Envoy Technologies Inc., Goldman Sachs, HCL
+Technologies Ltd, IIT Software GmbH, iMatix Corporation, INETCO Systems Limited,
+Informatica Corporation, JPMorgan Chase & Co., Kaazing Corporation, N.A,
+Microsoft Corporation, my-Channels, Novell, Progress Software, Red Hat Inc.,
+Software AG, Solace Systems Inc., StormMQ Ltd., Tervela Inc., TWIST Process
+Innovations Ltd, GoPivotal, Inc., and WS02 Inc. 2006-2011. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+
+<amqp name="transport" xmlns="http://www.amqp.org/schema/amqp.xsd">
+  <section name="performatives">
+    <type name="open" class="composite" source="list" provides="frame">
+      <descriptor name="amqp:open:list" code="0x00000000:0x00000010"/>
+      <field name="container-id" type="string" mandatory="true"/>
+      <field name="hostname" type="string"/>
+      <field name="max-frame-size" type="uint" default="4294967295"/>
+      <field name="channel-max" type="ushort" default="65535"/>
+      <field name="idle-time-out" type="milliseconds"/>
+      <field name="outgoing-locales" type="ietf-language-tag" multiple="true"/>
+      <field name="incoming-locales" type="ietf-language-tag" multiple="true"/>
+      <field name="offered-capabilities" type="symbol" multiple="true"/>
+      <field name="desired-capabilities" type="symbol" multiple="true"/>
+      <field name="properties" type="fields"/>
+    </type>
+    <type name="begin" class="composite" source="list" provides="frame">
+      <descriptor name="amqp:begin:list" code="0x00000000:0x00000011"/>
+      <field name="remote-channel" type="ushort"/>
+      <field name="next-outgoing-id" type="transfer-number" mandatory="true"/>
+      <field name="incoming-window" type="uint" mandatory="true"/>
+      <field name="outgoing-window" type="uint" mandatory="true"/>
+      <field name="handle-max" type="handle" default="4294967295"/>
+      <field name="offered-capabilities" type="symbol" multiple="true"/>
+      <field name="desired-capabilities" type="symbol" multiple="true"/>
+      <field name="properties" type="fields"/>
+    </type>
+    <type name="attach" class="composite" source="list" provides="frame">
+      <descriptor name="amqp:attach:list" code="0x00000000:0x00000012"/>
+      <field name="name" type="string" mandatory="true"/>
+      <field name="handle" type="handle" mandatory="true"/>
+      <field name="role" type="role" mandatory="true"/>
+      <field name="snd-settle-mode" type="sender-settle-mode" default="mixed"/>
+      <field name="rcv-settle-mode" type="receiver-settle-mode" default="first"/>
+      <field name="source" type="*" requires="source"/>
+      <field name="target" type="*" requires="target"/>
+      <field name="unsettled" type="map"/>
+      <field name="incomplete-unsettled" type="boolean" default="false"/>
+      <field name="initial-delivery-count" type="sequence-no"/>
+      <field name="max-message-size" type="ulong"/>
+      <field name="offered-capabilities" type="symbol" multiple="true"/>
+      <field name="desired-capabilities" type="symbol" multiple="true"/>
+      <field name="properties" type="fields"/>
+    </type>
+    <type name="flow" class="composite" source="list" provides="frame">
+      <descriptor name="amqp:flow:list" code="0x00000000:0x00000013"/>
+      <field name="next-incoming-id" type="transfer-number"/>
+      <field name="incoming-window" type="uint" mandatory="true"/>
+      <field name="next-outgoing-id" type="transfer-number" mandatory="true"/>
+      <field name="outgoing-window" type="uint" mandatory="true"/>
+      <field name="handle" type="handle"/>
+      <field name="delivery-count" type="sequence-no"/>
+      <field name="link-credit" type="uint"/>
+      <field name="available" type="uint"/>
+      <field name="drain" type="boolean" default="false"/>
+      <field name="echo" type="boolean" default="false"/>
+      <field name="properties" type="fields"/>
+    </type>
+    <type name="transfer" class="composite" source="list" provides="frame">
+      <descriptor name="amqp:transfer:list" code="0x00000000:0x00000014"/>
+      <field name="handle" type="handle" mandatory="true"/>
+      <field name="delivery-id" type="delivery-number"/>
+      <field name="delivery-tag" type="delivery-tag"/>
+      <field name="message-format" type="message-format"/>
+      <field name="settled" type="boolean"/>
+      <field name="more" type="boolean" default="false"/>
+      <field name="rcv-settle-mode" type="receiver-settle-mode"/>
+      <field name="state" type="*" requires="delivery-state"/>
+      <field name="resume" type="boolean" default="false"/>
+      <field name="aborted" type="boolean" default="false"/>
+      <field name="batchable" type="boolean" default="false"/>
+    </type>
+    <type name="disposition" class="composite" source="list" provides="frame">
+      <descriptor name="amqp:disposition:list" code="0x00000000:0x00000015"/>
+      <field name="role" type="role" mandatory="true"/>
+      <field name="first" type="delivery-number" mandatory="true"/>
+      <field name="last" type="delivery-number"/>
+      <field name="settled" type="boolean" default="false"/>
+      <field name="state" type="*" requires="delivery-state"/>
+      <field name="batchable" type="boolean" default="false"/>
+    </type>
+    <type name="detach" class="composite" source="list" provides="frame">
+      <descriptor name="amqp:detach:list" code="0x00000000:0x00000016"/>
+      <field name="handle" type="handle" mandatory="true"/>
+      <field name="closed" type="boolean" default="false"/>
+      <field name="error" type="error"/>
+    </type>
+    <type name="end" class="composite" source="list" provides="frame">
+      <descriptor name="amqp:end:list" code="0x00000000:0x00000017"/>
+      <field name="error" type="error"/>
+    </type>
+    <type name="close" class="composite" source="list" provides="frame">
+      <descriptor name="amqp:close:list" code="0x00000000:0x00000018"/>
+      <field name="error" type="error"/>
+    </type>
+  </section>
+  <section name="definitions">
+    <type name="role" class="restricted" source="boolean">
+      <choice name="sender" value="false"/>
+      <choice name="receiver" value="true"/>
+    </type>
+    <type name="sender-settle-mode" class="restricted" source="ubyte">
+      <choice name="unsettled" value="0"/>
+      <choice name="settled" value="1"/>
+      <choice name="mixed" value="2"/>
+    </type>
+    <type name="receiver-settle-mode" class="restricted" source="ubyte">
+      <choice name="first" value="0"/>
+      <choice name="second" value="1"/>
+    </type>
+    <type name="handle" class="restricted" source="uint"/>
+    <type name="seconds" class="restricted" source="uint"/>
+    <type name="milliseconds" class="restricted" source="uint"/>
+    <type name="delivery-tag" class="restricted" source="binary"/>
+    <type name="delivery-number" class="restricted" source="sequence-no"/>
+    <type name="transfer-number" class="restricted" source="sequence-no"/>
+    <type name="sequence-no" class="restricted" source="uint"/>
+    <type name="message-format" class="restricted" source="uint"/>
+    <type name="ietf-language-tag" class="restricted" source="symbol"/>
+    <type name="fields" class="restricted" source="map"/>
+    <type name="error" class="composite" source="list">
+      <descriptor name="amqp:error:list" code="0x00000000:0x0000001d"/>
+      <field name="condition" type="symbol" mandatory="true" requires="error-condition"/>
+      <field name="description" type="string"/>
+      <field name="info" type="fields"/>
+    </type>
+    <type name="amqp-error" class="restricted" source="symbol" provides="error-condition">
+      <choice name="internal-error" value="amqp:internal-error"/>
+      <choice name="not-found" value="amqp:not-found"/>
+      <choice name="unauthorized-access" value="amqp:unauthorized-access"/>
+      <choice name="decode-error" value="amqp:decode-error"/>
+      <choice name="resource-limit-exceeded" value="amqp:resource-limit-exceeded"/>
+      <choice name="not-allowed" value="amqp:not-allowed"/>
+      <choice name="invalid-field" value="amqp:invalid-field"/>
+      <choice name="not-implemented" value="amqp:not-implemented"/>
+      <choice name="resource-locked" value="amqp:resource-locked"/>
+      <choice name="precondition-failed" value="amqp:precondition-failed"/>
+      <choice name="resource-deleted" value="amqp:resource-deleted"/>
+      <choice name="illegal-state" value="amqp:illegal-state"/>
+      <choice name="frame-size-too-small" value="amqp:frame-size-too-small"/>
+    </type>
+    <type name="connection-error" class="restricted" source="symbol" provides="error-condition">
+      <choice name="connection-forced" value="amqp:connection:forced"/>
+      <choice name="framing-error" value="amqp:connection:framing-error"/>
+      <choice name="redirect" value="amqp:connection:redirect"/>
+    </type>
+    <type name="session-error" class="restricted" source="symbol" provides="error-condition">
+      <choice name="window-violation" value="amqp:session:window-violation"/>
+      <choice name="errant-link" value="amqp:session:errant-link"/>
+      <choice name="handle-in-use" value="amqp:session:handle-in-use"/>
+      <choice name="unattached-handle" value="amqp:session:unattached-handle"/>
+    </type>
+    <type name="link-error" class="restricted" source="symbol" provides="error-condition">
+      <choice name="detach-forced" value="amqp:link:detach-forced"/>
+      <choice name="transfer-limit-exceeded" value="amqp:link:transfer-limit-exceeded"/>
+      <choice name="message-size-exceeded" value="amqp:link:message-size-exceeded"/>
+      <choice name="redirect" value="amqp:link:redirect"/>
+      <choice name="stolen" value="amqp:link:stolen"/>
+    </type>
+    <definition name="PORT" value="5672"/>
+    <definition name="SECURE-PORT" value="5671"/>
+    <definition name="MAJOR" value="1"/>
+    <definition name="MINOR" value="0"/>
+    <definition name="REVISION" value="0"/>
+    <definition name="MIN-MAX-FRAME-SIZE" value="512"/>
+  </section>
+</amqp>
