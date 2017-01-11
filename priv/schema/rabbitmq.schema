@@ -396,6 +396,23 @@ end}.
     {datatype, atom}
 ]}.
 
+%% Credential validation.
+%%
+
+{mapping, "credential_validator.validation_backend", "rabbit.credential_validator.validation_backend", [
+    {datatype, atom}
+]}.
+
+{mapping, "credential_validator.min_length", "rabbit.credential_validator.min_length", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{mapping, "credential_validator.regexp", "rabbit.credential_validator.regexp", [
+    {datatype, string}
+]}.
+
+
+
 %%
 %% Default User / VHost
 %% ====================
