@@ -25,7 +25,7 @@ defmodule CloseAllConnectionsCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand
 
   @vhost "/"
-  
+
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -40,6 +40,11 @@ defmodule CloseAllConnectionsCommandTest do
     :ok
   end
 
+  setup context do
+    close_all_connections(get_rabbit_hostname)
+    {:ok, context}
+  end
+
   test "validate: with an invalid number of arguments returns an arg count error", context do
     assert @command.validate(["random", "explanation"], context[:opts]) == {:validation_failure, :too_many_args}
     assert @command.validate([], context[:opts]) == {:validation_failure, :not_enough_args}
@@ -50,7 +55,6 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   test "run: a close connections request in an existing vhost with all defaults closes all connections", context do
-    close_all_connections(get_rabbit_hostname)
     with_connection(@vhost, fn(_) ->
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
@@ -62,7 +66,6 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   test "run: close a limited number of connections in an existing vhost closes a subset of connections", context do
-    close_all_connections(get_rabbit_hostname)
     with_connections([@vhost, @vhost, @vhost], fn(_) ->
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
@@ -81,12 +84,10 @@ defmodule CloseAllConnectionsCommandTest do
       opts = %{node: node, vhost: "burrow", global: false, per_connection_delay: 0, limit: 0}
       assert {:ok, "Closed 0 connections"} == @command.run(["test"], opts)
       assert fetch_connections_vhosts(node, nodes) == [[vhost: @vhost]]
-      close_all_connections(node)
     end)
   end
 
   test "run: a close connections request to an existing node with --global (all vhosts)", context do
-    close_all_connections(get_rabbit_hostname)
     with_connection(@vhost, fn(_) ->
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
