@@ -19,8 +19,9 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
+
 -include("amqp10_client.hrl").
--include("rabbit_amqp1_0_framing.hrl").
 
 -compile(export_all).
 
@@ -68,11 +69,11 @@ end_per_suite(Config) ->
       ]).
 
 start_amqp10_client_app(Config) ->
-    application:start(amqp10_client),
+    ?assertMatch({ok, _}, application:ensure_all_started(amqp10_client)),
     Config.
 
 stop_amqp10_client_app(Config) ->
-    application:stop(amqp10_client),
+    ok = application:stop(amqp10_client),
     Config.
 
 %% -------------------------------------------------------------------

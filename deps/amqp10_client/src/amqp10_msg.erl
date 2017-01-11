@@ -20,7 +20,7 @@
          set_properties/2
         ]).
 
--include("rabbit_amqp1_0_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -type maybe(T) :: T | undefined.
 

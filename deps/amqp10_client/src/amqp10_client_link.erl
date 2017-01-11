@@ -1,7 +1,7 @@
 -module(amqp10_client_link).
 
 -include("amqp10_client.hrl").
--include("rabbit_amqp1_0_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -export([
          sender/3,

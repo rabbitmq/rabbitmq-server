@@ -19,7 +19,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--include("rabbit_amqp1_0_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -compile(export_all).
 

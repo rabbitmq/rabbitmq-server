@@ -38,6 +38,7 @@ endif
 # base of the topic branch.
 
 dep_amqp_client                       = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_amqp10_common                     = git_rmq rabbitmq-amqp1.0-common $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit                            = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit_common                     = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_amqp1_0                  = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref) master
@@ -106,6 +107,7 @@ dep_ranch_commit = 1.3.0
 dep_webmachine_commit = 1.10.8p2
 
 RABBITMQ_COMPONENTS = amqp_client \
+		      amqp10_common \
 		      rabbit \
 		      rabbit_common \
 		      rabbitmq_amqp1_0 \

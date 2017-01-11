@@ -1,6 +1,6 @@
 -module(amqp10_client_types).
 
--include("rabbit_amqp1_0_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -export([
          unpack/1,

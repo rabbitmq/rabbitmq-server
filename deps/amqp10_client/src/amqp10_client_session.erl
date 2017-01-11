@@ -3,7 +3,7 @@
 -behaviour(gen_fsm).
 
 -include("amqp10_client.hrl").
--include("rabbit_amqp1_0_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 %% Public API.
 -export(['begin'/1,
