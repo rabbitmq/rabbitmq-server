@@ -3,6 +3,9 @@
 # Use a real VM so we can install all the packages we want.
 sudo: required
 
+# Use Ubuntu Trusty to install .NET Core.
+dist: trusty
+
 language: erlang
 notifications:
   email:
@@ -12,11 +15,14 @@ addons:
     sources:
       - sourceline: deb https://packages.erlang-solutions.com/ubuntu precise contrib
         key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
+      - sourceline: deb https://apt-mo.trafficmanager.net/repos/dotnet-release trusty main
+        key_url: http://keyserver.ubuntu.com/pks/lookup?op=get&fingerprint=on&search=0xB02C46DF417A0893
     packages:
       # Use Elixir from Erlang Solutions. The provided Elixir is
       # installed with kiex but is old. By using an prebuilt Debian
       # package, we save the compilation time.
       - elixir
+      - dotnet-dev-1.0.0-preview2-003156
       - xsltproc
 otp_release:
   - "18.3"
