@@ -40,8 +40,7 @@
                      | {fail, Reason :: term()}
                      | {unknown, state()}.
 
--record(entry, {filename :: string(), identifier :: tuple(), change_time :: integer()}).
--record(state, {directory_change_time :: integer(), whitelist_directory :: string(), refresh_interval :: integer()}).
+-record(state, {providers_state :: [{module(), term()}], refresh_interval :: integer()}).
 
 
 %% OTP Supervision
@@ -97,19 +96,16 @@ whitelisted(_, {extension, _}, St) ->
 
 -spec is_whitelisted(certificate()) -> boolean().
 is_whitelisted(#'OTPCertificate'{}=C) ->
-    #entry{identifier = Id} = extract_unique_attributes(C),
-    ets:member(table_name(), Id).
-
+    rabbit_trust_store_storage:is_whitelisted(C).
 
 %% Generic Server Callbacks
 
 init(Settings) ->
     erlang:process_flag(trap_exit, true),
-    ets:new(table_name(), table_options()),
-    Path = path(Settings),
-    Interval = refresh_interval(Settings),
-    Initial = modification_time(Path),
-    tabulate(Path),
+    rabbit_trust_store_storage:init(),
+    SettingsAndEnv = lists:ukeymerge(1, application:get_all_env(rabbitmq_trust_store), Settings),
+    ProvidersState = rabbit_trust_store_storage:refresh_certs(SettingsAndEnv, []),
+    Interval = refresh_interval(SettingsAndEnv),
     if
         Interval =:= 0 ->
             ok;
@@ -117,31 +113,35 @@ init(Settings) ->
             erlang:send_after(Interval, erlang:self(), refresh)
     end,
     {ok,
-     #state{directory_change_time = Initial,
-      whitelist_directory = Path,
+     #state{
+      providers_state = ProvidersState,
       refresh_interval = Interval}}.
 
 handle_call(mode, _, St) ->
     {reply, mode(St), St};
-handle_call(refresh, _, St) ->
-    {reply, refresh(St), St};
-handle_call(list, _, St) ->
-    {reply, list(St), St};
+handle_call(refresh, _, #state{providers_state = ProvidersState} = St) ->
+    Config = application:get_all_env(rabbitmq_trust_store),
+    NewProvidersState = rabbit_trust_store_storage:refresh_certs(Config, ProvidersState),
+    {reply, ok, St#state{providers_state = NewProvidersState}};
+% handle_call(list, _, St) ->
+%     {reply, list(St), St};
 handle_call(_, _, St) ->
     {noreply, St}.
 
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info(refresh, #state{refresh_interval = Interval} = St) ->
-    New = refresh(St),
+handle_info(refresh, #state{refresh_interval = Interval,
+                            providers_state = ProvidersState} = St) ->
+    Config = application:get_all_env(rabbitmq_trust_store),
+    NewProvidersState = rabbit_trust_store_storage:refresh_certs(Config, ProvidersState),
     erlang:send_after(Interval, erlang:self(), refresh),
-    {noreply, St#state{directory_change_time = New}};
+    {noreply, St#state{providers_state = NewProvidersState}};
 handle_info(_, St) ->
     {noreply, St}.
 
 terminate(shutdown, _St) ->
-    true = ets:delete(table_name()).
+    rabbit_trust_store_storage:terminate().
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -149,11 +149,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Ancillary & Constants
 
-list(#state{whitelist_directory = Path}) ->
-    Formatted =
-        [format_cert(Path, F, S) ||
-         #entry{filename = F, identifier = {_, S}} <- ets:tab2list(table_name())],
-    to_big_string(Formatted).
+% list(#state{whitelist_directory = Path}) ->
+%     Formatted =
+%         [format_cert(Path, F, S) ||
+%          #entry{filename = F, identifier = {_, S}} <- ets:tab2list(table_name())],
+%     to_big_string(Formatted).
 
 mode(#state{refresh_interval = I}) ->
     if
@@ -161,122 +161,29 @@ mode(#state{refresh_interval = I}) ->
         I  >  0 -> 'automatic'
     end.
 
-refresh(#state{whitelist_directory = Path, directory_change_time = Old}) ->
-    New = modification_time(Path),
-    case New > Old of
-        false ->
-            ok;
-        true  ->
-            tabulate(Path)
-    end,
-    New.
-
 refresh_interval(Pairs) ->
     {refresh_interval, S} = lists:keyfind(refresh_interval, 1, Pairs),
     timer:seconds(S).
 
-path(Pairs) ->
-    {directory, Path} = lists:keyfind(directory, 1, Pairs),
-    Path.
+% scan_then_parse(Filename) when is_list(Filename) ->
+%     {ok, Bin} = file:read_file(Filename),
+%     [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
+%     public_key:pkix_decode_cert(Data, otp).
 
-table_name() ->
-    trust_store_whitelist.
+% to_big_string(Formatted) ->
+%     string:join([cert_to_string(X) || X <- Formatted], "~n~n").
 
-table_options() ->
-    [protected,
-     named_table,
-     set,
-     {keypos, #entry.identifier},
-     {heir, none}].
+% cert_to_string({Name, Serial, Subject, Issuer, Validity}) ->
+%     Text =
+%         io_lib:format("Name: ~s~nSerial: ~p | 0x~.16.0B~nSubject: ~s~nIssuer: ~s~nValidity: ~p~n",
+%                      [ Name, Serial, Serial, Subject, Issuer, Validity]),
+%     lists:flatten(Text).
 
-modification_time(Path) ->
-    {ok, Info} = file:read_file_info(Path, [{time, posix}]),
-    Info#file_info.mtime.
-
-already_whitelisted_filenames() ->
-    ets:select(table_name(),
-        ets:fun2ms(fun (#entry{filename = N, change_time = T}) -> {N, T} end)).
-
-one_whitelisted_filename({Name, Time}) ->
-    ets:fun2ms(fun (#entry{filename = N, change_time = T}) when N =:= Name, T =:= Time -> true end).
-
-build_entry(Path, {Name, Time}) ->
-    Absolute    = filename:join(Path, Name),
-    Certificate = scan_then_parse(Absolute),
-    Unique      = extract_unique_attributes(Certificate),
-    Unique#entry{filename = Name, change_time = Time}.
-
-try_build_entry(Path, {Name, Time}) ->
-    try build_entry(Path, {Name, Time}) of
-        Entry ->
-            rabbit_log:info(
-              "trust store: loading certificate '~s'", [Name]),
-            {ok, Entry}
-    catch
-        _:Err ->
-            rabbit_log:error(
-              "trust store: failed to load certificate '~s', error: ~p",
-              [Name, Err]),
-            {error, Err}
-    end.
-
-do_insertions(Before, After, Path) ->
-    Entries = [try_build_entry(Path, NameTime) ||
-                       NameTime <- (After -- Before)],
-    [insert(Entry) || {ok, Entry} <- Entries].
-
-do_removals(Before, After) ->
-    [delete(NameTime) || NameTime <- (Before -- After)].
-
-get_new(Path) ->
-    {ok, New} = file:list_dir(Path),
-    [{X, modification_time(filename:absname(X, Path))} || X <- New].
-
-tabulate(Path) ->
-    Old = already_whitelisted_filenames(),
-    New = get_new(Path),
-    do_insertions(Old, New, Path),
-    do_removals(Old, New),
-    ok.
-
-delete({Name, Time}) ->
-    rabbit_log:info("removing certificate '~s'", [Name]),
-    ets:select_delete(table_name(), one_whitelisted_filename({Name, Time})).
-
-insert(Entry) ->
-    true = ets:insert(table_name(), Entry).
-
-scan_then_parse(Filename) when is_list(Filename) ->
-    {ok, Bin} = file:read_file(Filename),
-    [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
-    public_key:pkix_decode_cert(Data, otp).
-
-extract_unique_attributes(#'OTPCertificate'{}=C) ->
-    {Serial, Issuer} = case public_key:pkix_issuer_id(C, other) of
-        {error, _Reason} ->
-            {ok, Identifier} = public_key:pkix_issuer_id(C, self),
-            Identifier;
-        {ok, Identifier} ->
-            Identifier
-    end,
-    %% Why change the order of attributes? For the same reason we put
-    %% the *most significant figure* first (on the left hand side).
-    #entry{identifier = {Issuer, Serial}}.
-
-to_big_string(Formatted) ->
-    string:join([cert_to_string(X) || X <- Formatted], "~n~n").
-
-cert_to_string({Name, Serial, Subject, Issuer, Validity}) ->
-    Text =
-        io_lib:format("Name: ~s~nSerial: ~p | 0x~.16.0B~nSubject: ~s~nIssuer: ~s~nValidity: ~p~n",
-                     [ Name, Serial, Serial, Subject, Issuer, Validity]),
-    lists:flatten(Text).
-
-format_cert(Path, Name, Serial) ->
-    {ok, Bin} = file:read_file(filename:join(Path, Name)),
-    [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
-    Validity = rabbit_ssl:peer_cert_validity(Data),
-    Subject = rabbit_ssl:peer_cert_subject(Data),
-    Issuer = rabbit_ssl:peer_cert_issuer(Data),
-    {Name, Serial, Subject, Issuer, Validity}.
+% format_cert(Path, Name, Serial) ->
+%     {ok, Bin} = file:read_file(filename:join(Path, Name)),
+%     [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
+%     Validity = rabbit_ssl:peer_cert_validity(Data),
+%     Subject = rabbit_ssl:peer_cert_subject(Data),
+%     Issuer = rabbit_ssl:peer_cert_issuer(Data),
+%     {Name, Serial, Subject, Issuer, Validity}.
 
