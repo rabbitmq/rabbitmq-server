@@ -1,0 +1,23 @@
+*~
+.sw?
+.*.sw?
+*.beam
+*.coverdata
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/git-revisions.txt
+/logs/
+/plugins/
+/rebar.config
+/rebar.lock
+/test/ct.cover.spec
+/xrefr
+
+/amqp10_common.d
+
+# Generated source files.
+/include/amqp10_framing.hrl
+/src/amqp10_framing0.erl
