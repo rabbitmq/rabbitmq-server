@@ -13,10 +13,12 @@ AMQP_SPEC_1_0 = $(CODEGEN_DIR)/amqp-1.0/messaging.xml			\
 		$(CODEGEN_DIR)/amqp-1.0/transactions.xml
 
 include/amqp10_framing.hrl:: $(CODEGEN) $(CODEGEN_AMQP) $(AMQP_SPEC_1_0)
+	$(verbose) mkdir -p $(dir $@)
 	$(gen_verbose) env PYTHONPATH=$(CODEGEN_DIR) \
 	  $(PYTHON) $(CODEGEN) hrl $(AMQP_SPEC_1_0) > $@
 
 src/amqp10_framing0.erl:: $(CODEGEN) $(CODEGEN_AMQP) $(AMQP_SPEC_1_0)
+	$(verbose) mkdir -p $(dir $@)
 	$(gen_verbose) env PYTHONPATH=$(CODEGEN_DIR) \
 	  $(PYTHON) $(CODEGEN) erl $(AMQP_SPEC_1_0) > $@
 
