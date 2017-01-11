@@ -1,11 +1,22 @@
-sudo: false
+# vim:sw=2:et:
+
+# Use a real VM so we can install all the packages we want.
+sudo: required
+
+# Use Ubuntu Trusty to install .NET Core.
+dist: trusty
+
 language: erlang
 notifications:
   email:
     - alerts@rabbitmq.com
 addons:
   apt:
+    sources:
+      - sourceline: deb https://apt-mo.trafficmanager.net/repos/dotnet-release trusty main
+        key_url: http://keyserver.ubuntu.com/pks/lookup?op=get&fingerprint=on&search=0xB02C46DF417A0893
     packages:
+      - dotnet-dev-1.0.0-preview2-003156
       - xsltproc
 otp_release:
   - "R16B03-1"
