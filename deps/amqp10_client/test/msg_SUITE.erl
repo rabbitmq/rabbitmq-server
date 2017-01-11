@@ -34,12 +34,15 @@ groups() ->
                                    amqp_bodies,
                                    full_input,
                                    new,
+                                   new_with_options,
                                    new_amqp_value,
                                    new_amqp_sequence,
                                    set_message_format,
                                    set_headers,
                                    update_headers,
-                                   set_properties
+                                   set_properties,
+                                   to_amqp_records,
+                                   set_handle
                                   ]}
     ].
 
@@ -178,6 +181,13 @@ new(_Config) ->
     Tag = amqp10_msg:delivery_tag(Msg),
     [<<"hi">>] = amqp10_msg:body(Msg).
 
+new_with_options(_Config) ->
+    Tag = <<"tag">>,
+    Body = <<"hi">>,
+    Msg = amqp10_msg:new(Tag, Body, true),
+    Tag = amqp10_msg:delivery_tag(Msg),
+    true = amqp10_msg:settled(Msg).
+
 new_amqp_value(_Config) ->
     Tag = <<"tag">>,
     Body = #'v1_0.amqp_value'{content = {utf8, <<"hi">>}},
@@ -212,6 +222,11 @@ update_headers(_Config) ->
     Msg2 = amqp10_msg:set_headers(Headers#{priority => 9}, Msg1),
     #{priority := 9} = amqp10_msg:headers(Msg2).
 
+set_handle(_Config) ->
+    Msg0 = amqp10_msg:new(<<"tag">>,  <<"hi">>),
+    Msg1 = amqp10_msg:set_handle(42, Msg0),
+    42 = amqp10_msg:handle(Msg1).
+
 set_properties(_Config) ->
     Props = #{message_id => <<"msg-id">>,
               user_id => <<"zen">>,
@@ -231,6 +246,10 @@ set_properties(_Config) ->
     Msg1 = amqp10_msg:set_properties(Props, Msg0),
     Props = amqp10_msg:properties(Msg1).
 
+to_amqp_records(_Config) ->
+    Msg = amqp10_msg:new(<<"tag">>, <<"data">>),
+    [#'v1_0.transfer'{}, #'v1_0.data'{content = <<"data">>}] =
+     amqp10_msg:to_amqp_records(Msg).
 %% -------------------------------------------------------------------
 %% Utilities
 %% -------------------------------------------------------------------

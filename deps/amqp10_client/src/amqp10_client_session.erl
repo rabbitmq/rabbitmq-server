@@ -9,7 +9,7 @@
 -export(['begin'/1,
          'end'/1,
          attach/5,
-         transfer/3,
+         transfer/2,
          flow/3
         ]).
 
@@ -97,9 +97,10 @@
 attach(Session, Name, Role, Source, Target) ->
     gen_fsm:sync_send_event(Session, {attach, {Name, Role, Source, Target}}).
 
--spec transfer(pid(), #'v1_0.transfer'{}, any()) -> ok.
-transfer(Session, Transfer, Message) ->
-    gen_fsm:sync_send_event(Session, {transfer, {Transfer, Message}}).
+-spec transfer(pid(), amqp10_msg:amqp10_msg()) -> ok.
+transfer(Session, Amqp10Msg) ->
+    Records = amqp10_msg:to_amqp_records(Amqp10Msg),
+    gen_fsm:sync_send_event(Session, {transfer, Records}).
 
 flow(Session, Handle, Flow) ->
     gen_fsm:send_event(Session, {flow, Handle, Flow}).
@@ -196,7 +197,7 @@ mapped(#'v1_0.attach'{name = {utf8, Name},
         #state{links = Links, link_index = LinkIndex,
                link_handle_index = LHI,
                pending_attach_requests = PARs} = State) ->
-    error_logger:info_msg("ATTACH ~p STATE ~p", [Attach, State]),
+    error_logger:info_msg("ATTACH ~p~nSTATE ~p", [Attach, State]),
     #{Name := From} = PARs,
     #{Name := OutHandle} = LinkIndex,
     #{OutHandle := Link0} = Links,
@@ -227,7 +228,7 @@ mapped(#'v1_0.flow'{handle = {uint, InHandle},
     {next_state, mapped, State};
 
 mapped([#'v1_0.transfer'{handle = {uint, InHandle},
-                         more = More} = Transfer | MessageParts],
+                         more = More} = Transfer | _] = MessageParts,
                          #state{links = Links} = State0)
   when More =:= false orelse More =:= undefined ->
 
@@ -239,8 +240,9 @@ mapped([#'v1_0.transfer'{handle = {uint, InHandle},
                link_credit = LC} = Link} = find_link_by_input_handle(InHandle,
                                                                      State0),
 
+    Msg = amqp10_msg:from_amqp_records(MessageParts),
     % deliver to the registered receiver process
-    TargetPid ! {message, OutHandle, MessageParts},
+    TargetPid ! {message, OutHandle, Msg},
 
     %% TODO: session book keeping
 
@@ -262,18 +264,16 @@ mapped(Frame, State) ->
 
 %% mapped/3
 
-mapped({transfer, {#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0,
-                  Message}}, _From, #state{links = Links,
-                                           next_outgoing_id = NOI,
-                                           next_delivery_id = NDI} = State) ->
+mapped({transfer, [#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0 |
+                  Parts]}, _From, #state{links = Links,
+                                         next_outgoing_id = NOI,
+                                         next_delivery_id = NDI} = State) ->
     % TODO: handle flow
     #{Handle := _Link} = Links,
-    % use the delivery-id as the tag for now
-    DeliveryTag = erlang:integer_to_binary(NDI),
+
     % augment transfer with session stuff
-    Transfer = Transfer0#'v1_0.transfer'{delivery_id = {uint, NDI},
-                                         delivery_tag = {binary, DeliveryTag}},
-    ok = send_transfer(Transfer, Message, State),
+    Transfer = Transfer0#'v1_0.transfer'{delivery_id = {uint, NDI}},
+    ok = send_transfer([Transfer | Parts], State),
     % reply after socket write
     % TODO when using settle = false delay reply until disposition
     % TODO look into if erlang will correctly wrap integers durin
@@ -341,14 +341,14 @@ send(Record, #state{socket = Socket} = State) ->
     Frame = encode_frame(Record, State),
     gen_tcp:send(Socket, Frame).
 
-encode_transfer_frame(Transfer, Payload0, #state{channel = Channel}) ->
-    Encoded = rabbit_amqp1_0_framing:encode_bin(Transfer),
-    Payload = rabbit_amqp1_0_framing:encode_bin(Payload0),
-    rabbit_amqp1_0_binary_generator:build_frame(Channel, [Encoded, Payload]).
+encode_transfer_frame(Records, #state{channel = Channel}) ->
+    %% TODO split into multiple transfers if required
+    Encoded = [rabbit_amqp1_0_framing:encode_bin(R) || R <- Records],
+    rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded).
 
 % TODO large messages need to be split into several frames
-send_transfer(Transfer, Payload, #state{socket = Socket} = State) ->
-    Frame = encode_transfer_frame(Transfer, Payload, State),
+send_transfer(Records, #state{socket = Socket} = State) ->
+    Frame = encode_transfer_frame(Records, State),
     gen_tcp:send(Socket, Frame).
 
 handle_attach(Send, {Name, Role, Source, Target}, {FromPid, _} = From,

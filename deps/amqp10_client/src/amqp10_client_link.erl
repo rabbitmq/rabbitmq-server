@@ -25,18 +25,16 @@ get(#link_ref{role = receiver, session = Session, link_handle = Handle}) ->
     ok = amqp10_client_session:flow(Session, Handle, Flow),
     % wait for transfer
     receive
-        {message, Handle, Message} -> Message
+        {message, Handle, Message} -> {amqp_msg, Message}
     after 5000 ->
               {error, timeout}
     end.
 
 
--spec send(link_ref(), message()) -> ok.
-send(#link_ref{role = sender, session = Session, link_handle = Handle},
-     Message) ->
-    Transfer = #'v1_0.transfer'{handle = {uint, Handle}, settled = true},
-    Payload = #'v1_0.data'{content = Message},
-    ok = amqp10_client_session:transfer(Session, Transfer, Payload),
+-spec send(link_ref(), amqp10_msg:amqp10_msg()) -> ok.
+send(#link_ref{role = sender, session = Session, link_handle = Handle}, Msg0) ->
+    Msg = amqp10_msg:set_handle(Handle, Msg0),
+    ok = amqp10_client_session:transfer(Session, Msg),
     ok.
 
 -spec sender(pid(), binary(), binary()) -> {ok, link_ref()}.

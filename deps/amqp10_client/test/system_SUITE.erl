@@ -117,9 +117,10 @@ basic_get(Config) ->
     {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
     {ok, Session} = amqp10_client_session:'begin'(Connection),
     {ok, Sender} = amqp10_client_link:sender(Session, <<"banana-sender">>, <<"test">>),
-    ok = amqp10_client_link:send(Sender, <<"banana">>),
-    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"banana-receiver">>, <<"test">>),
-    Message = amqp10_client_link:get(Receiver),
-    ?assert(lists:member(#'v1_0.data'{content = <<"banana">>}, Message)),
+    Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
+    ok = amqp10_client_link:send(Sender, Msg),
+    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"banana-receiver2">>, <<"test">>),
+    {amqp_msg, OutMsg} = amqp10_client_link:get(Receiver),
     ok = amqp10_client_session:'end'(Session),
-    ok = amqp10_client_connection:close(Connection).
+    ok = amqp10_client_connection:close(Connection),
+    ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)).

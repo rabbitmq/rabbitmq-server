@@ -2,8 +2,11 @@
 
 -export([
          from_amqp_records/1,
+         to_amqp_records/1,
          % "read" api
          delivery_tag/1,
+         handle/1,
+         settled/1,
          message_format/1,
          headers/1,
          header/2,
@@ -15,6 +18,9 @@
          footer/1,
          % "write" api
          new/2,
+         new/3,
+         set_handle/2,
+         set_settled/2,
          set_message_format/2,
          set_headers/2,
          set_properties/2
@@ -89,11 +95,21 @@
     amqp10_msg().
 from_amqp_records([#'v1_0.transfer'{} = Transfer | Records]) ->
     lists:foldl(fun parse_from_amqp/2, #amqp10_msg{transfer = Transfer,
-                                                 body = unset}, Records).
+                                                   body = unset}, Records).
+
+-spec to_amqp_records(amqp10_msg()) -> [amqp10_client_types:amqp10_msg_record()].
+to_amqp_records(#amqp10_msg{transfer = T, body = B}) ->
+    lists:flatten([T, B]).
 
 -spec delivery_tag(amqp10_msg()) -> binary().
 delivery_tag(#amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = Tag}}) ->
-    amqp10_client_types:unpack(Tag).
+    unpack(Tag).
+
+handle(#amqp10_msg{transfer = #'v1_0.transfer'{handle = Handle}}) ->
+    unpack(Handle).
+
+settled(#amqp10_msg{transfer = #'v1_0.transfer'{settled = Settled}}) ->
+    Settled.
 
 % First 3 octets are the format
 % the last 1 octet is the version
@@ -189,20 +205,34 @@ body(#amqp10_msg{body = [#'v1_0.data'{} | _] = Data}) ->
 body(#amqp10_msg{body = Body}) -> Body.
 
 
--spec new(binary(), amqp10_body()) -> amqp10_msg().
-new(DeliveryTag, Body) when is_binary(Body) ->
-    #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = DeliveryTag},
+-spec new(binary(), amqp10_body(), boolean()) -> amqp10_msg().
+new(DeliveryTag, Body, Settled) when is_binary(Body) ->
+    #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
+                                            settled = Settled},
                 body = [#'v1_0.data'{content = Body}]};
-new(DeliveryTag, Body) ->
-    #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = DeliveryTag},
+new(DeliveryTag, Body, Settled) ->
+    #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
+                                            settled = Settled},
                 body = Body}.
+
+-spec new(binary(), amqp10_body()) -> amqp10_msg().
+new(DeliveryTag, Body) ->
+    new(DeliveryTag, Body, false).
 
 set_message_format({Format, Version}, #amqp10_msg{transfer = T} = Msg) ->
     <<MsgFormat:32/unsigned>> = <<Format:24/unsigned, Version:8/unsigned>>,
     Msg#amqp10_msg{transfer = T#'v1_0.transfer'{message_format =
                                                 {uint, MsgFormat}}}.
 
+-spec set_handle(non_neg_integer(), amqp10_msg()) -> amqp10_msg().
+set_handle(Handle, #amqp10_msg{transfer = T} = Msg) ->
+    Msg#amqp10_msg{transfer = T#'v1_0.transfer'{handle = {uint, Handle}}}.
 
+-spec set_settled(boolean(), amqp10_msg()) -> amqp10_msg().
+set_settled(Settled, #amqp10_msg{transfer = T} = Msg) ->
+    Msg#amqp10_msg{transfer = T#'v1_0.transfer'{settled = Settled}}.
+
+-spec set_headers(#{atom() => any()}, amqp10_msg()) -> amqp10_msg().
 set_headers(Headers, #amqp10_msg{header = undefined} = Msg) ->
     set_headers(Headers, Msg#amqp10_msg{header = #'v1_0.header'{}});
 set_headers(Headers, #amqp10_msg{header = Current} = Msg) ->
