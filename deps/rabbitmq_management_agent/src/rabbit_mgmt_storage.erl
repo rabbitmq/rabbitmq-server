@@ -34,7 +34,7 @@ reset() ->
     rabbit_log:warning("Resetting RabbitMQ management storage"),
     [ets:delete_all_objects(IndexTable) || IndexTable <- ?INDEX_TABLES],
     [ets:delete_all_objects(Table) || {Table, _} <- ?TABLES],
-    rabbit_mgmt_metrics_collector:reset(),
+    rabbit_mgmt_metrics_collector:reset_all(),
     ok.
 
 reset_all() ->
