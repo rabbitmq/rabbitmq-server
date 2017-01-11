@@ -13,6 +13,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
+BUILD_DEPS = rabbitmq_codegen
 DEPS = rabbit_common rabbit amqp_client
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
@@ -48,8 +49,10 @@ PYTHON       ?= python
 CODEGEN       = $(CURDIR)/codegen.py
 CODEGEN_DIR  ?= $(DEPS_DIR)/rabbitmq_codegen
 CODEGEN_AMQP  = $(CODEGEN_DIR)/amqp_codegen.py
-CODEGEN_SPECS = spec/messaging.xml spec/security.xml spec/transport.xml \
-		spec/transactions.xml
+CODEGEN_SPECS = $(CODEGEN_DIR)/amqp-1.0/messaging.xml			\
+		$(CODEGEN_DIR)/amqp-1.0/security.xml			\
+		$(CODEGEN_DIR)/amqp-1.0/transport.xml			\
+		$(CODEGEN_DIR)/amqp-1.0/transactions.xml
 
 include/rabbit_amqp1_0_framing.hrl:: $(CODEGEN) $(CODEGEN_AMQP) \
     $(CODEGEN_SPECS)
