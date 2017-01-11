@@ -34,6 +34,8 @@ groups() ->
                                    amqp_bodies,
                                    full_input,
                                    new,
+                                   new_amqp_value,
+                                   new_amqp_sequence,
                                    set_message_format,
                                    set_headers,
                                    update_headers,
@@ -175,6 +177,20 @@ new(_Config) ->
     Msg = amqp10_msg:new(Tag, Body),
     Tag = amqp10_msg:delivery_tag(Msg),
     [<<"hi">>] = amqp10_msg:body(Msg).
+
+new_amqp_value(_Config) ->
+    Tag = <<"tag">>,
+    Body = #'v1_0.amqp_value'{content = {utf8, <<"hi">>}},
+    Msg = amqp10_msg:new(Tag, Body),
+    Tag = amqp10_msg:delivery_tag(Msg),
+    Body = amqp10_msg:body(Msg).
+
+new_amqp_sequence(_Config) ->
+    Tag = <<"tag">>,
+    Body = #'v1_0.amqp_sequence'{content = {list, [utf8("hi"), utf8("there")]}},
+    Msg = amqp10_msg:new(Tag, Body),
+    Tag = amqp10_msg:delivery_tag(Msg),
+    Body = amqp10_msg:body(Msg).
 
 set_message_format(_Config) ->
     MsgFormat = {103, 3},

@@ -201,11 +201,10 @@ handle_input(expecting_extended_frame_header, Data,
     end;
 
 handle_input(expecting_frame_body, Data,
-             #state{frame_state =
-                    #frame_state{frame_length = Length,
-                                 type = FrameType,
-                                 data_offset = DOff,
-                                 channel = Channel}} = State) ->
+             #state{frame_state = #frame_state{frame_length = Length,
+                                               type = FrameType,
+                                               data_offset = DOff,
+                                               channel = Channel}} = State) ->
     Skip = DOff * 4 - 8,
     BodyLength = Length - Skip - 8,
     case Data of

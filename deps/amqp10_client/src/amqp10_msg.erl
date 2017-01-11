@@ -112,10 +112,10 @@ message_format(#amqp10_msg{transfer =
 -spec headers(amqp10_msg()) -> amqp10_header().
 headers(#amqp10_msg{header = undefined}) -> #{};
 headers(#amqp10_msg{header = #'v1_0.header'{durable = Durable,
-                                         priority = Priority,
-                                         ttl = Ttl,
-                                         first_acquirer = FA,
-                                         delivery_count = DC}}) ->
+                                            priority = Priority,
+                                            ttl = Ttl,
+                                            first_acquirer = FA,
+                                            delivery_count = DC}}) ->
     Fields = [{durable, header_value(durable, Durable)},
               {priority, header_value(priority, Priority)},
               {ttl, header_value(ttl, Ttl)},
@@ -192,7 +192,10 @@ body(#amqp10_msg{body = Body}) -> Body.
 -spec new(binary(), amqp10_body()) -> amqp10_msg().
 new(DeliveryTag, Body) when is_binary(Body) ->
     #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = DeliveryTag},
-              body = [#'v1_0.data'{content = Body}]}.
+                body = [#'v1_0.data'{content = Body}]};
+new(DeliveryTag, Body) ->
+    #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = DeliveryTag},
+                body = Body}.
 
 set_message_format({Format, Version}, #amqp10_msg{transfer = T} = Msg) ->
     <<MsgFormat:32/unsigned>> = <<Format:24/unsigned, Version:8/unsigned>>,
