@@ -14,6 +14,8 @@
     when CertId :: term(),
          Attributes :: term(),
          Config :: list(),
-         Cert :: #'OTPCertificate'{}.
+         Cert :: public_key:der_encoded().
 
 
+-callback format_cert_id(CertId) -> binary()
+    when CertId :: term().

@@ -18,14 +18,13 @@
 
 -export([mode/0, refresh/0, list/0]). %% Console Interface.
 -export([whitelisted/3, is_whitelisted/1]). %% Client-side Interface.
--export([start/1, start_link/1]).
+-export([start_link/0]).
 -export([init/1, terminate/2,
          handle_call/3, handle_cast/2,
          handle_info/2,
          code_change/3]).
 
 -include_lib("kernel/include/file.hrl").
--include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 -type certificate() :: #'OTPCertificate'{}.
@@ -45,11 +44,8 @@
 
 %% OTP Supervision
 
-start(Settings) ->
-    gen_server:start(?MODULE, Settings, []).
-
-start_link(Settings) ->
-    gen_server:start_link({local, trust_store}, ?MODULE, Settings, []).
+start_link() ->
+    gen_server:start_link({local, trust_store}, ?MODULE, [], []).
 
 
 %% Console Interface
@@ -64,7 +60,7 @@ refresh() ->
 
 -spec list() -> string().
 list() ->
-    gen_server:call(trust_store, list).
+    rabbit_trust_store_storage:list().
 
 %% Client (SSL Socket) Interface
 
@@ -100,12 +96,12 @@ is_whitelisted(#'OTPCertificate'{}=C) ->
 
 %% Generic Server Callbacks
 
-init(Settings) ->
+init([]) ->
     erlang:process_flag(trap_exit, true),
     rabbit_trust_store_storage:init(),
-    SettingsAndEnv = lists:ukeymerge(1, application:get_all_env(rabbitmq_trust_store), Settings),
-    ProvidersState = rabbit_trust_store_storage:refresh_certs(SettingsAndEnv, []),
-    Interval = refresh_interval(SettingsAndEnv),
+    Config = application:get_all_env(rabbitmq_trust_store),
+    ProvidersState = rabbit_trust_store_storage:refresh_certs(Config, []),
+    Interval = refresh_interval(Config),
     if
         Interval =:= 0 ->
             ok;
@@ -123,8 +119,6 @@ handle_call(refresh, _, #state{providers_state = ProvidersState} = St) ->
     Config = application:get_all_env(rabbitmq_trust_store),
     NewProvidersState = rabbit_trust_store_storage:refresh_certs(Config, ProvidersState),
     {reply, ok, St#state{providers_state = NewProvidersState}};
-% handle_call(list, _, St) ->
-%     {reply, list(St), St};
 handle_call(_, _, St) ->
     {noreply, St}.
 
@@ -149,41 +143,25 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Ancillary & Constants
 
-% list(#state{whitelist_directory = Path}) ->
-%     Formatted =
-%         [format_cert(Path, F, S) ||
-%          #entry{filename = F, identifier = {_, S}} <- ets:tab2list(table_name())],
-%     to_big_string(Formatted).
-
 mode(#state{refresh_interval = I}) ->
     if
         I =:= 0 -> 'manual';
         I  >  0 -> 'automatic'
     end.
 
-refresh_interval(Pairs) ->
-    {refresh_interval, S} = lists:keyfind(refresh_interval, 1, Pairs),
-    timer:seconds(S).
+refresh_interval(Config) ->
+    Seconds = case proplists:get_value(refresh_interval, Config) of
+        undefined ->
+            default_refresh_interval();
+        S when is_integer(S), S >= 0 ->
+            S;
+        {seconds, S} when is_integer(S), S >= 0 ->
+            S
+    end,
+    timer:seconds(Seconds).
 
-% scan_then_parse(Filename) when is_list(Filename) ->
-%     {ok, Bin} = file:read_file(Filename),
-%     [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
-%     public_key:pkix_decode_cert(Data, otp).
+default_refresh_interval() ->
+    {ok, I} = application:get_env(rabbitmq_trust_store, default_refresh_interval),
+    I.
 
-% to_big_string(Formatted) ->
-%     string:join([cert_to_string(X) || X <- Formatted], "~n~n").
-
-% cert_to_string({Name, Serial, Subject, Issuer, Validity}) ->
-%     Text =
-%         io_lib:format("Name: ~s~nSerial: ~p | 0x~.16.0B~nSubject: ~s~nIssuer: ~s~nValidity: ~p~n",
-%                      [ Name, Serial, Serial, Subject, Issuer, Validity]),
-%     lists:flatten(Text).
-
-% format_cert(Path, Name, Serial) ->
-%     {ok, Bin} = file:read_file(filename:join(Path, Name)),
-%     [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
-%     Validity = rabbit_ssl:peer_cert_validity(Data),
-%     Subject = rabbit_ssl:peer_cert_subject(Data),
-%     Issuer = rabbit_ssl:peer_cert_issuer(Data),
-%     {Name, Serial, Subject, Issuer, Validity}.
 
