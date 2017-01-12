@@ -209,7 +209,7 @@ dispatcher_add(function(sammy) {
             return false;
         });
     path('#/policies', {'policies': '/policies',
-                        'operator_policies': '/operator_policies',
+                        'operator_policies': '/operator-policies',
                         'vhosts':   '/vhosts'}, 'policies');
     sammy.get('#/policies/:vhost/:id', function() {
             render({'policy': '/policies/' + esc(this.params['vhost'])
@@ -232,8 +232,8 @@ dispatcher_add(function(sammy) {
                             ['name', 'pattern', 'policy'], ['priority'], []);
             return false;
         });
-    sammy.del('#/operator_policies', function() {
-            if (sync_delete(this, '/operator_policies/:vhost/:name'))
+    sammy.del('#/operator-policies', function() {
+            if (sync_delete(this, '/operator-policies/:vhost/:name'))
                 update();
         });
 
@@ -251,14 +251,15 @@ dispatcher_add(function(sammy) {
     sammy.put('#/column-options', function() {
             update_column_options(this);
         });
-    path('#/limits', {'limits': '/vhost_limits',
+    path('#/limits', {'limits': '/vhost-limits',
                       'vhosts': '/vhosts'}, 'limits');
+
     sammy.put('#/limits', function() {
         this.params.value = parseInt(this.params.value) || this.params.value;
-        if (sync_put(this, '/vhost_limits/:vhost/:name')) update();
+        if (sync_put(this, '/vhost-limits/:vhost/:name')) update();
     });
     sammy.del('#/limits', function() {
-        if (sync_delete(this, '/vhost_limits/:vhost/:name')) update();
+        if (sync_delete(this, '/vhost-limits/:vhost/:name')) update();
     });
     sammy.del("#/reset", function(){
             if(sync_delete(this, '/reset')){

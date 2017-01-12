@@ -34,7 +34,7 @@ variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"GET">>, <<"OPTIONS">>], ReqData, Context}.
+    {[<<"GET">>, <<"PUT">>, <<"OPTIONS">>], ReqData, Context}.
 
 %% Admin user can see all vhosts
 
