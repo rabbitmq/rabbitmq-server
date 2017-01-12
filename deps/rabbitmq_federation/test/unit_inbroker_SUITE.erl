@@ -164,12 +164,14 @@ get_connection_name(_Config) ->
     ok.
 
 with_exchanges(Fun) ->
-    rabbit_exchange:declare(r(?US_NAME), fanout, false, false, false, []),
-    X = rabbit_exchange:declare(r(?DS_NAME), fanout, false, false, false, []),
+    rabbit_exchange:declare(r(?US_NAME), fanout, false, false, false, [],
+                            <<"acting-user">>),
+    X = rabbit_exchange:declare(r(?DS_NAME), fanout, false, false, false, [],
+                                <<"acting-user">>),
     Fun(X),
     %% Delete downstream first or it will recreate the upstream
-    rabbit_exchange:delete(r(?DS_NAME), false),
-    rabbit_exchange:delete(r(?US_NAME), false),
+    rabbit_exchange:delete(r(?DS_NAME), false, <<"acting-user">>),
+    rabbit_exchange:delete(r(?US_NAME), false, <<"acting-user">>),
     ok.
 
 add_binding(Ser, X, B) ->
