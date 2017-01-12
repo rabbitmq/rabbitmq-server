@@ -23,6 +23,12 @@ set TDP0=%~dp0
 set STAR=%*
 set CONF_SCRIPT_DIR="%~dp0"
 setlocal enabledelayedexpansion
+setlocal enableextensions
+
+if ERRORLEVEL 1 (
+    echo "Failed to enable command extensions!"
+    exit /B 1
+)
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
@@ -197,6 +203,7 @@ EXIT /B 0
 set "%~2=%~dpn1"
 EXIT /B 0
 
+endlocal
 endlocal
 endlocal
 
