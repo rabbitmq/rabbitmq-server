@@ -19,7 +19,7 @@
 -export([init/3, rest_init/2, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, user/1, put_user/1, put_user/2]).
+         delete_resource/2, user/1, put_user/2, put_user/3]).
 -export([variances/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -57,18 +57,18 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(rabbit_mgmt_format:internal_user(User),
                            ReqData, Context).
 
-accept_content(ReqData, Context) ->
+accept_content(ReqData, Context = #context{user = #user{username = ActingUser}}) ->
     Username = rabbit_mgmt_util:id(user, ReqData),
     rabbit_mgmt_util:with_decode(
       [], ReqData, Context,
       fun(_, User) ->
-              put_user(User#{name => Username}),
+              put_user(User#{name => Username}, ActingUser),
               {true, ReqData, Context}
       end).
 
-delete_resource(ReqData, Context) ->
+delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}) ->
     User = rabbit_mgmt_util:id(user, ReqData),
-    rabbit_auth_backend_internal:delete_user(User),
+    rabbit_auth_backend_internal:delete_user(User, ActingUser),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -79,16 +79,17 @@ is_authorized(ReqData, Context) ->
 user(ReqData) ->
     rabbit_auth_backend_internal:lookup_user(rabbit_mgmt_util:id(user, ReqData)).
 
-put_user(User) -> put_user(User, undefined).
+put_user(User, ActingUser) -> put_user(User, undefined, ActingUser).
 
-put_user(User, Version) ->
+put_user(User, Version, ActingUser) ->
     PasswordUpdateFun = 
         fun(Username) ->
                 case {maps:is_key(password, User),
                       maps:is_key(password_hash, User)} of
                     {true, _} ->
                         rabbit_auth_backend_internal:change_password(
-                          Username, maps:get(password, User, undefined));
+                          Username, maps:get(password, User, undefined),
+                          ActingUser);
                     {_, true} ->
                         HashingAlgorithm = hashing_algorithm(User, Version),
 
@@ -97,12 +98,12 @@ put_user(User, Version) ->
                         rabbit_auth_backend_internal:change_password_hash(
                           Username, Hash, HashingAlgorithm);
                     _         ->
-                        rabbit_auth_backend_internal:clear_password(Username)
+                        rabbit_auth_backend_internal:clear_password(Username, ActingUser)
                 end
         end,
-    put_user0(User, PasswordUpdateFun).
+    put_user0(User, PasswordUpdateFun, ActingUser).
 
-put_user0(User, PasswordUpdateFun) ->
+put_user0(User, PasswordUpdateFun, ActingUser) ->
     Username = maps:get(name, User, undefined),
     Tags = case {maps:get(tags, User, undefined), maps:get(administrator, User, undefined)} of
                {undefined, undefined} ->
@@ -119,12 +120,12 @@ put_user0(User, PasswordUpdateFun) ->
     case rabbit_auth_backend_internal:lookup_user(Username) of
         {error, not_found} ->
             rabbit_auth_backend_internal:add_user(
-              Username, rabbit_guid:binary(rabbit_guid:gen_secure(), "tmp"));
+              Username, rabbit_guid:binary(rabbit_guid:gen_secure(), "tmp"), ActingUser);
         _ ->
             ok
     end,
     PasswordUpdateFun(Username),
-    ok = rabbit_auth_backend_internal:set_tags(Username, Tags).
+    ok = rabbit_auth_backend_internal:set_tags(Username, Tags, ActingUser).
 
 hashing_algorithm(User, Version) ->
     case maps:get(hashing_algorithm, User, undefined) of

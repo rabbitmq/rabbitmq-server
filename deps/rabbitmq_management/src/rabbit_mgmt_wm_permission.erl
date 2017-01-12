@@ -54,7 +54,7 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(perms(ReqData), ReqData, Context).
 
-accept_content(ReqData, Context) ->
+accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
     case perms(ReqData) of
          not_found ->
             rabbit_mgmt_util:bad_request(vhost_or_user_not_found,
@@ -66,15 +66,15 @@ accept_content(ReqData, Context) ->
               [configure, write, read], ReqData, Context,
               fun([Conf, Write, Read], _) ->
                       rabbit_auth_backend_internal:set_permissions(
-                        User, VHost, Conf, Write, Read),
+                        User, VHost, Conf, Write, Read, Username),
                       {true, ReqData, Context}
               end)
     end.
 
-delete_resource(ReqData, Context) ->
+delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
     User = rabbit_mgmt_util:id(user, ReqData),
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    rabbit_auth_backend_internal:clear_permissions(User, VHost),
+    rabbit_auth_backend_internal:clear_permissions(User, VHost, Username),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->

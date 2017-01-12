@@ -24,6 +24,7 @@
 
 -import(rabbit_misc, [pget/2]).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 %%--------------------------------------------------------------------
@@ -55,7 +56,7 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(parameter(ReqData)),
                            ReqData, Context).
 
-accept_content(ReqData, Context) ->
+accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
     rabbit_mgmt_util:with_decode(
       [value], ReqData, Context,
       fun([Value], _) ->
@@ -64,7 +65,8 @@ accept_content(ReqData, Context) ->
                      if
                          is_map(Value) -> maps:to_list(Value);
                          true -> Value
-                     end) of
+                     end,
+                     Username) of
                   ok ->
                       {true, ReqData, Context};
                   {error_string, Reason} ->
@@ -73,8 +75,8 @@ accept_content(ReqData, Context) ->
               end
       end).
 
-delete_resource(ReqData, Context) ->
-    ok = rabbit_runtime_parameters:clear_global(name(ReqData)),
+delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
+    ok = rabbit_runtime_parameters:clear_global(name(ReqData), Username),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->

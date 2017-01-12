@@ -81,9 +81,9 @@ accept_content(ReqData, Context = #context{user = User}) ->
               end)
     end.
 
-delete_resource(ReqData, Context) ->
+delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
     ok = rabbit_runtime_parameters:clear(
-           rabbit_mgmt_util:vhost(ReqData), component(ReqData), name(ReqData)),
+           rabbit_mgmt_util:vhost(ReqData), component(ReqData), name(ReqData), Username),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->

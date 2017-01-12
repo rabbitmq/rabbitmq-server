@@ -50,11 +50,11 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(
       [{name, rabbit_nodes:cluster_name()}], ReqData, Context).
 
-accept_content(ReqData, Context) ->
+accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
     rabbit_mgmt_util:with_decode(
       [name], ReqData, Context, fun([Name], _) ->
                                         rabbit_nodes:set_cluster_name(
-                                          as_binary(Name)),
+                                          as_binary(Name), Username),
                                         {true, ReqData, Context}
                                 end).
 

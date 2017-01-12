@@ -21,7 +21,7 @@
 -export([accept_multipart/2]).
 -export([variances/2]).
 
--export([apply_defs/3]).
+-export([apply_defs/4]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -149,57 +149,59 @@ is_authorized_qs(ReqData, Context, Auth) ->
 
 %%--------------------------------------------------------------------
 
-accept(Body, ReqData, Context) ->
+accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         none ->
-            apply_defs(Body, fun() -> {true, ReqData, Context} end,
+            apply_defs(Body, Username, fun() -> {true, ReqData, Context} end,
                        fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end);
         not_found ->
             rabbit_mgmt_util:bad_request(list_to_binary("vhost_not_found"),
                                          ReqData, Context);
         VHost ->
-            apply_defs(Body, fun() -> {true, ReqData, Context} end,
+            apply_defs(Body, Username, fun() -> {true, ReqData, Context} end,
                        fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end,
                        VHost)
     end.
 
-apply_defs(Body, SuccessFun, ErrorFun) ->
+apply_defs(Body, Username, SuccessFun, ErrorFun) ->
     case rabbit_mgmt_util:decode([], Body) of
         {error, E} ->
             ErrorFun(E);
         {ok, _, All} ->
             Version = maps:get(rabbit_version, All, undefined),
             try
-                for_all(users,              All, fun(User) ->
-                                                     rabbit_mgmt_wm_user:put_user(
-                                                       User,
-                                                       Version)
-                                                 end),
-                for_all(vhosts,             All, fun add_vhost/1),
-                for_all(permissions,        All, fun add_permission/1),
-                for_all(topic_permissions,  All, fun add_topic_permission/1),
-                for_all(parameters,         All, fun add_parameter/1),
-                for_all(global_parameters,  All, fun add_global_parameter/1),
-                for_all(policies,           All, fun add_policy/1),
-                for_all(queues,             All, fun add_queue/1),
-                for_all(exchanges,          All, fun add_exchange/1),
-                for_all(bindings,           All, fun add_binding/1),
+                for_all(users,              Username, All,
+                        fun(User, _Username) ->
+                                rabbit_mgmt_wm_user:put_user(
+                                  User,
+                                  Version,
+                                  Username)
+                        end),
+                for_all(vhosts,             Username, All, fun add_vhost/2),
+                for_all(permissions,        Username, All, fun add_permission/2),
+                for_all(topic_permissions,  Username, All, fun add_topic_permission/2),
+                for_all(parameters,         Username, All, fun add_parameter/2),
+                for_all(global_parameters,  Username, All, fun add_global_parameter/2),
+                for_all(policies,           Username, All, fun add_policy/2),
+                for_all(queues,             Username, All, fun add_queue/2),
+                for_all(exchanges,          Username, All, fun add_exchange/2),
+                for_all(bindings,           Username, All, fun add_binding/2),
                 SuccessFun()
             catch {error, E} -> ErrorFun(format(E));
                   exit:E     -> ErrorFun(format(E))
             end
     end.
 
-apply_defs(Body, SuccessFun, ErrorFun, VHost) ->
+apply_defs(Body, Username, SuccessFun, ErrorFun, VHost) ->
     case rabbit_mgmt_util:decode([], Body) of
         {error, E} ->
             ErrorFun(E);
         {ok, _, All} ->
             try
-                for_all(policies,    All, VHost, fun add_policy/2),
-                for_all(queues,      All, VHost, fun add_queue/2),
-                for_all(exchanges,   All, VHost, fun add_exchange/2),
-                for_all(bindings,    All, VHost, fun add_binding/2),
+                for_all(policies,    Username, All, VHost, fun add_policy/3),
+                for_all(queues,      Username, All, VHost, fun add_queue/3),
+                for_all(exchanges,   Username, All, VHost, fun add_exchange/3),
+                for_all(bindings,    Username, All, VHost, fun add_binding/3),
                 SuccessFun()
             catch {error, E} -> ErrorFun(format(E));
                   exit:E     -> ErrorFun(format(E))
@@ -283,17 +285,19 @@ strip_vhost(Item) ->
 
 %%--------------------------------------------------------------------
 
-for_all(Name, All, Fun) ->
+for_all(Name, Username, All, Fun) ->
     case maps:get(Name, All, undefined) of
         undefined -> ok;
-        List      -> [Fun(maps:from_list([{atomise_name(K), V} || {K, V} <- maps:to_list(M)])) ||
+        List      -> [Fun(maps:from_list([{atomise_name(K), V} || {K, V} <- maps:to_list(M)]),
+                          Username) ||
                          M <- List, is_map(M)]
     end.
 
-for_all(Name, All, VHost, Fun) ->
+for_all(Name, Username, All, VHost, Fun) ->
     case maps:get(Name, All, undefined) of
         undefined -> ok;
-        List      -> [Fun(VHost, maps:from_list([{atomise_name(K), V} || {K, V} <- maps:to_list(M)])) ||
+        List      -> [Fun(VHost, maps:from_list([{atomise_name(K), V} || {K, V} <- maps:to_list(M)]),
+                          Username) ||
                          M <- List, is_map(M)]
     end.
 
@@ -301,28 +305,28 @@ atomise_name(N) -> list_to_atom(binary_to_list(N)).
 
 %%--------------------------------------------------------------------
 
-add_parameter(Param) ->
+add_parameter(Param, Username) ->
     VHost = maps:get(vhost,     Param, undefined),
     Comp  = maps:get(component, Param, undefined),
     Key   = maps:get(name,      Param, undefined),
     Term  = maps:get(value,     Param, undefined),
-    case rabbit_runtime_parameters:set(VHost, Comp, Key, Term, none) of
+    case rabbit_runtime_parameters:set(VHost, Comp, Key, Term, Username) of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s/~s)",
                                                     [VHost, Comp, Key]),
                              exit(list_to_binary(E ++ S))
     end.
 
-add_global_parameter(Param) ->
+add_global_parameter(Param, Username) ->
     Key   = maps:get(name,      Param, undefined),
     Term  = maps:get(value,     Param, undefined),
-    rabbit_runtime_parameters:set_global(Key, Term).
+    rabbit_runtime_parameters:set_global(Key, Term, Username).
 
-add_policy(Param) ->
+add_policy(Param, Username) ->
     VHost = maps:get(vhost, Param, undefined),
-    add_policy(VHost, Param).
+    add_policy(VHost, Param, Username).
 
-add_policy(VHost, Param) ->
+add_policy(VHost, Param, Username) ->
     Key   = maps:get(name,  Param, undefined),
     case rabbit_policy:set(
            VHost, Key, maps:get(pattern, Param, undefined),
@@ -331,51 +335,55 @@ add_policy(VHost, Param) ->
                Def -> maps:to_list(Def)
            end,
            maps:get(priority, Param, undefined),
-           maps:get('apply-to', Param, <<"all">>)) of
+           maps:get('apply-to', Param, <<"all">>),
+           Username) of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [VHost, Key]),
                              exit(list_to_binary(E ++ S))
     end.
 
-add_vhost(VHost) ->
+add_vhost(VHost, Username) ->
     VHostName = maps:get(name, VHost, undefined),
     VHostTrace = maps:get(tracing, VHost, undefined),
-    rabbit_mgmt_wm_vhost:put_vhost(VHostName, VHostTrace).
+    rabbit_mgmt_wm_vhost:put_vhost(VHostName, VHostTrace, Username).
 
-add_permission(Permission) ->
+add_permission(Permission, Username) ->
     rabbit_auth_backend_internal:set_permissions(maps:get(user,      Permission, undefined),
                                                  maps:get(vhost,     Permission, undefined),
                                                  maps:get(configure, Permission, undefined),
                                                  maps:get(write,     Permission, undefined),
-                                                 maps:get(read,      Permission, undefined)).
+                                                 maps:get(read,      Permission, undefined),
+                                                 Username).
 
-add_topic_permission(TopicPermission) ->
+add_topic_permission(TopicPermission, Username) ->
     rabbit_auth_backend_internal:set_topic_permissions(
         maps:get(user,      TopicPermission, undefined),
         maps:get(vhost,     TopicPermission, undefined),
         maps:get(exchange,  TopicPermission, undefined),
-        maps:get(pattern,   TopicPermission, undefined)).
+        maps:get(pattern,   TopicPermission, undefined),
+      Username).
 
-add_queue(Queue) ->
-    add_queue_int(Queue, r(queue, Queue)).
+add_queue(Queue, Username) ->
+    add_queue_int(Queue, r(queue, Queue), Username).
 
-add_queue(VHost, Queue) ->
-    add_queue_int(Queue, rv(VHost, queue, Queue)).
+add_queue(VHost, Queue, Username) ->
+    add_queue_int(Queue, rv(VHost, queue, Queue), Username).
 
-add_queue_int(Queue, Name) ->
+add_queue_int(Queue, Name, Username) ->
     rabbit_amqqueue:declare(Name,
                             maps:get(durable,                         Queue, undefined),
                             maps:get(auto_delete,                     Queue, undefined),
                             rabbit_mgmt_util:args(maps:get(arguments, Queue, undefined)),
-                            none).
+                            none,
+                            Username).
 
-add_exchange(Exchange) ->
-    add_exchange_int(Exchange, r(exchange, Exchange)).
+add_exchange(Exchange, Username) ->
+    add_exchange_int(Exchange, r(exchange, Exchange), Username).
 
-add_exchange(VHost, Exchange) ->
-    add_exchange_int(Exchange, rv(VHost, exchange, Exchange)).
+add_exchange(VHost, Exchange, Username) ->
+    add_exchange_int(Exchange, rv(VHost, exchange, Exchange), Username).
 
-add_exchange_int(Exchange, Name) ->
+add_exchange_int(Exchange, Name, Username) ->
     Internal = case maps:get(internal, Exchange, undefined) of
                    undefined -> false; %% =< 2.2.0
                    I         -> I
@@ -385,24 +393,26 @@ add_exchange_int(Exchange, Name) ->
                             maps:get(durable,                         Exchange, undefined),
                             maps:get(auto_delete,                     Exchange, undefined),
                             Internal,
-                            rabbit_mgmt_util:args(maps:get(arguments, Exchange, undefined))).
+                            rabbit_mgmt_util:args(maps:get(arguments, Exchange, undefined)),
+                            Username).
 
-add_binding(Binding) ->
+add_binding(Binding, Username) ->
     DestType = dest_type(Binding),
     add_binding_int(Binding, r(exchange, source, Binding),
-                    r(DestType, destination, Binding)).
+                    r(DestType, destination, Binding), Username).
 
-add_binding(VHost, Binding) ->
+add_binding(VHost, Binding, Username) ->
     DestType = dest_type(Binding),
     add_binding_int(Binding, rv(VHost, exchange, source, Binding),
-                    rv(VHost, DestType, destination, Binding)).
+                    rv(VHost, DestType, destination, Binding), Username).
 
-add_binding_int(Binding, Source, Destination) ->
+add_binding_int(Binding, Source, Destination, Username) ->
     rabbit_binding:add(
       #binding{source       = Source,
                destination  = Destination,
                key          = maps:get(routing_key, Binding, undefined),
-               args         = rabbit_mgmt_util:args(maps:get(arguments, Binding, undefined))}).
+               args         = rabbit_mgmt_util:args(maps:get(arguments, Binding, undefined))},
+      Username).
 
 dest_type(Binding) ->
     list_to_atom(binary_to_list(maps:get(destination_type, Binding, undefined))).
