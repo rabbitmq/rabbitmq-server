@@ -169,8 +169,8 @@ check_topic_access(User = #user{username = Username,
             check_access(
                 fun() -> Module:check_topic_access(
                     auth_user(User, Impl), Resource, Permission, Context) end,
-                Module, "access to ~s refused for user '~s'",
-                [rabbit_misc:rs(Resource), Username]);
+                Module, "access to topic '~s' in exchange ~s refused for user '~s'",
+                [maps:get(routing_key, Context), rabbit_misc:rs(Resource), Username]);
             (_, Else) -> Else
         end, ok, Modules).
 
