@@ -320,17 +320,17 @@ security_validation(Config) ->
 
 security_validation_add_user() ->
     [begin
-         rabbit_vhost:add(U),
-         rabbit_auth_backend_internal:add_user(U, <<>>),
+         rabbit_vhost:add(U, <<"acting-user">>),
+         rabbit_auth_backend_internal:add_user(U, <<>>, <<"acting-user">>),
          rabbit_auth_backend_internal:set_permissions(
-           U, U, <<".*">>, <<".*">>, <<".*">>)
+           U, U, <<".*">>, <<".*">>, <<".*">>, <<"acting-user">>)
      end || U <- [<<"a">>, <<"b">>]],
     ok.
 
 security_validation_remove_user() ->
     [begin
-         rabbit_vhost:delete(U),
-         rabbit_auth_backend_internal:delete_user(U)
+         rabbit_vhost:delete(U, <<"acting-user">>),
+         rabbit_auth_backend_internal:delete_user(U, <<"acting-user">>)
      end || U <- [<<"a">>, <<"b">>]],
     ok.
 
@@ -399,7 +399,7 @@ valid_param(Config, Value, User) ->
 valid_param1(_Config, Value, User) ->
     ok = rabbit_runtime_parameters:set(
            <<"/">>, <<"shovel">>, <<"a">>, Value, User),
-    ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"a">>).
+    ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"a">>, <<"acting-user">>).
 
 invalid_param(Config, Value) -> invalid_param(Config, Value, none).
 valid_param(Config, Value) -> valid_param(Config, Value, none).
@@ -416,9 +416,11 @@ cleanup(Config) ->
 cleanup1(_Config) ->
     [rabbit_runtime_parameters:clear(rabbit_misc:pget(vhost, P),
                                      rabbit_misc:pget(component, P),
-                                     rabbit_misc:pget(name, P)) ||
+                                     rabbit_misc:pget(name, P),
+                                     <<"acting-user">>) ||
         P <- rabbit_runtime_parameters:list()],
-    [rabbit_amqqueue:delete(Q, false, false) || Q <- rabbit_amqqueue:list()].
+    [rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>)
+     || Q <- rabbit_amqqueue:list()].
 
 await_autodelete(Config, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,

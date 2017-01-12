@@ -50,4 +50,4 @@ await(Pred) ->
 
 clear_param(Config, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
-      rabbit_runtime_parameters, clear, [<<"/">>, <<"shovel">>, Name]).
+      rabbit_runtime_parameters, clear, [<<"/">>, <<"shovel">>, Name, <<"acting-user">>]).

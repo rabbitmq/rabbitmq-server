@@ -30,3 +30,5 @@
          reconnect_delay,
          delete_after = never
         }).
+
+-define(SHOVEL_USER, <<"rmq-shovel">>).

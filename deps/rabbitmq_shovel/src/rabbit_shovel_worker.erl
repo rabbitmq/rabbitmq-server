@@ -165,7 +165,7 @@ terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
     close_connections(State),
     %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
     put(shovel_worker_autodelete, true),
-    rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name),
+    rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ?SHOVEL_USER),
     rabbit_shovel_status:remove({VHost, Name}),
     ok;
 terminate(Reason, State) ->
