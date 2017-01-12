@@ -521,6 +521,13 @@ function show_popup(type, text, mode) {
 
 
 function postprocess() {
+    $('form.confirm-queue').submit(function() {
+        return confirm("Are you sure? The queue is going to be deleted. " +
+                       "Messages cannot be recovered after deletion.");
+        });
+    $('form.confirm-purge-queue').submit(function() {
+        return confirm("Are you sure? Messages cannot be recovered after purging.");
+        });
     $('form.confirm').submit(function() {
             return confirm("Are you sure? This object cannot be recovered " +
                            "after deletion.");
@@ -608,8 +615,10 @@ function postprocess() {
         var field = $(this).attr('field');
         var row = $('#' + field).find('.mf').last();
         var key = row.find('input').first();
+        var value = row.find('input').last();
         var type = row.find('select').last();
         key.val($(this).attr('key'));
+        value.val($(this).attr('value'));
         type.val($(this).attr('type'));
         update_multifields();
     });
@@ -1122,7 +1131,7 @@ function check_bad_response(req, full_page_404) {
         var error = JSON.parse(req.responseText).error;
         if (typeof(error) != 'string') error = JSON.stringify(error);
 
-        if (error == 'bad_request' || error == 'not_found') {
+        if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised') {
             show_popup('warn', reason);
         } else if (error == 'page_out_of_range') {
             var seconds = 60;
