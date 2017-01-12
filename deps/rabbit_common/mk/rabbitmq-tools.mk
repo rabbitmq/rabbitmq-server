@@ -80,7 +80,7 @@ show-ERL_LIBS:
 	@echo $(ERL_LIBS)
 
 show-ERLC_OPTS:
-	@$(foreach opt,$(ERLC_OPTS),echo "$(opt)";)
+	@$(foreach opt,$(ERLC_OPTS) -pa ebin -I include,echo "$(opt)";)
 
 show-TEST_ERLC_OPTS:
-	@$(foreach opt,$(TEST_ERLC_OPTS),echo "$(opt)";)
+	@$(foreach opt,$(TEST_ERLC_OPTS) -pa ebin -I include,echo "$(opt)";)

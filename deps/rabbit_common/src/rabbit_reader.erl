@@ -227,7 +227,7 @@ conserve_resources(Pid, Source, {_, Conserve, _}) ->
     ok.
 
 server_properties(Protocol) ->
-    {ok, Product} = application:get_key(rabbit, id),
+    {ok, Product} = application:get_key(rabbit, description),
     {ok, Version} = application:get_key(rabbit, vsn),
 
     %% Get any configuration-specified server properties
