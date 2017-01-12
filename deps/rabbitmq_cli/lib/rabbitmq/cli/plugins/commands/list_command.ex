@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
 defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
@@ -76,7 +76,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     all     = PluginHelpers.list(opts)
     enabled = PluginHelpers.read_enabled(opts)
 
-    case MapSet.difference(MapSet.new(enabled), MapSet.new(plugin_names(all))) do
+    case MapSet.difference(MapSet.new(enabled), MapSet.new(PluginHelpers.plugin_names(all))) do
         %MapSet{} -> :ok;
         missing   -> IO.puts("WARNING - plugins currently enabled but missing: #{missing}~n~n")
     end
@@ -153,10 +153,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     normal = format_plugin(plugin, :normal, enabled, enabled_implicitly, running)
     plugin(dependencies: dependencies, description: description) = plugin
     Map.merge(normal, %{dependencies: dependencies, description: description})
-  end
-
-  defp plugin_names(plugins) do
-    for plugin <- plugins, do: PluginHelpers.plugin_name(plugin)
   end
 
   defp default_opts() do

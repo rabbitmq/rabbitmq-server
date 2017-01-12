@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 alias RabbitMQ.CLI.Core.Helpers, as: CliHelpers
 alias RabbitMQ.CLI.Core.Config, as: Config
 
@@ -73,6 +73,10 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   def plugin_name(plugin) do
     plugin(name: name) = plugin
     name
+  end
+
+  def plugin_names(plugins) do
+    for plugin <- plugins, do: plugin_name(plugin)
   end
 
   defp to_list(str) when is_binary(str) do

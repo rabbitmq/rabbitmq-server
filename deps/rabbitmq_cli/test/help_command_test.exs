@@ -11,13 +11,12 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
 defmodule HelpCommandTest do
   use ExUnit.Case, async: false
 
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
   alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
   alias RabbitMQ.CLI.Core.ExitCodes,   as: ExitCodes
 

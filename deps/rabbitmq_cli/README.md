@@ -114,4 +114,4 @@ examples.
 The project is [licensed under the MPL](LICENSE-MPL-RabbitMQ), the same license
 as RabbitMQ.
 
-(c) Pivotal Software, Inc, 2016-Current.
+(c) Pivotal Software, Inc, 2016-2017.

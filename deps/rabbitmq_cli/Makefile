@@ -27,13 +27,11 @@ ESCRIPTS = escript/rabbitmqctl \
 	   escript/rabbitmq-diagnostics
 
 $(HOME)/.mix/archives/hex-*:
-	mix local.hex --force
+	$(verbose) mix local.hex --force
 
 hex: $(HOME)/.mix/archives/hex-*
 
 deps:: hex
-	mix deps.get
-	mix deps.compile
 
 app:: $(ESCRIPTS)
 	@:
@@ -41,33 +39,30 @@ app:: $(ESCRIPTS)
 rabbitmqctl_srcs := mix.exs \
 		    $(shell find config lib -name "*.ex" -o -name "*.exs")
 
-ebin: $(rabbitmqctl_srcs) hex
-	mix deps.get
-	mix deps.compile
-	rm -rf ebin
-	mix compile
-	mkdir -p ebin
-	cp -r _build/dev/lib/rabbitmqctl/ebin/* ebin
-
-escript/rabbitmqctl: ebin
-	mix escript.build
+# Elixir dependencies are fetched and compiled as part of the alias
+# `mix make_all`. We do not fetch and build them in `make deps` because
+# mix(1) startup time is quite high. Thus we prefer to run it once, even
+# though it kind of breaks the Erlang.mk model.
+escript/rabbitmqctl: $(rabbitmqctl_srcs) deps
+	$(gen_verbose) mix make_all
 
 escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
-	ln -sf rabbitmqctl $@
+	$(gen_verbose) ln -sf rabbitmqctl $@
 
 rel:: $(ESCRIPTS)
 	@:
 
 tests:: $(ESCRIPTS)
-	$(MIX_TEST)
+	$(gen_verbose) $(MIX_TEST)
 
 test:: $(ESCRIPTS)
-	$(MIX_TEST) $(TEST_FILE)
+	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
 
-clean:: hex
-	rm -f $(ESCRIPTS)
-	rm -rf ebin
-	mix clean
+clean:: clean-mix
+
+clean-mix: hex
+	$(gen_verbose) rm -f $(ESCRIPTS)
+	$(verbose) mix clean
 
 repl:
-	iex -S mix
+	$(verbose) iex -S mix

@@ -11,9 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
-
-
+## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQCtl.MixfileBase do
   use Mix.Project
@@ -33,7 +31,8 @@ defmodule RabbitMQCtl.MixfileBase do
                 emu_args: "-hidden",
                 path: "escript/rabbitmqctl"],
       deps_path: deps_dir,
-      deps: deps(deps_dir)
+      deps: deps(deps_dir),
+      aliases: aliases
    ]
   end
 
@@ -86,29 +85,20 @@ defmodule RabbitMQCtl.MixfileBase do
   #
   # Type "mix help deps" for more examples and options
   defp deps(deps_dir) do
-    # RabbitMQ components (rabbit_common and amqp_client) require GNU
-    # Make. This ensures that GNU Make is available before we attempt
-    # to use it.
-    make = find_gnu_make()
-
     [
-      # {
-      #   :rabbit,
-      #   path: Path.join(deps_dir, "rabbit"),
-      #   compile: make,
-      #   override: true
-      # },
+      # We use `true` as the command to "build" rabbit_common and
+      # amqp_client because Erlang.mk already built them.
       {
         :rabbit_common,
         path: Path.join(deps_dir, "rabbit_common"),
-        compile: make,
+        compile: "true",
         override: true
       },
       {
         :amqp_client,
         only: :test,
         path: Path.join(deps_dir, "amqp_client"),
-        compile: make,
+        compile: "true",
         override: true
       },
       {:amqp, "~> 0.1.5", only: :test},
@@ -118,27 +108,22 @@ defmodule RabbitMQCtl.MixfileBase do
     ]
   end
 
-  defp find_gnu_make do
-    possible_makes = [
-      System.get_env("MAKE"),
-      "make",
-      "gmake"
+  defp aliases do
+    [
+      make_deps: [
+        "deps.get",
+        "deps.compile",
+      ],
+      make_app: [
+        "compile",
+        "escript.build",
+      ],
+      make_all: [
+        "deps.get",
+        "deps.compile",
+        "compile",
+        "escript.build",
+      ],
     ]
-    test_gnu_make(possible_makes)
   end
-
-  defp test_gnu_make([nil | rest]) do
-    test_gnu_make(rest)
-  end
-  defp test_gnu_make([make | rest]) do
-    {output, _} = System.cmd(make, ["--version"], stderr_to_stdout: true)
-    case String.contains?(output, "GNU Make") do
-      true  -> make
-      false -> test_gnu_make(rest)
-    end
-  end
-  defp test_gnu_make([]) do
-    nil
-  end
-
 end

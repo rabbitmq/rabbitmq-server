@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule DisablePluginsCommandTest do
   use ExUnit.Case, async: false
@@ -40,7 +40,8 @@ defmodule DisablePluginsCommandTest do
     opts = %{enabled_plugins_file: plugins_file,
              plugins_dir: plugins_dir,
              rabbitmq_home: rabbitmq_home,
-             online: true, offline: false}
+             online: true, offline: false,
+             all: false}
 
     on_exit(fn ->
       set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname, opts)

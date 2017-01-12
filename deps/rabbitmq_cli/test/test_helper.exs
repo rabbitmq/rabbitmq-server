@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
 ExUnit.start()
@@ -244,6 +244,21 @@ defmodule TestHelper do
       end
     end)
     fun.(conn)
+  end
+
+  def with_connections(vhosts, fun) do
+    conns = for v <- vhosts do
+      {:ok, conn} = AMQP.Connection.open(virtual_host: v)
+      conn
+    end
+    ExUnit.Callbacks.on_exit(fn ->
+      try do
+        for c <- conns, do: :amqp_connection.close(c, 1000)
+      catch
+        :exit, _ -> :ok
+      end
+    end)
+    fun.(conns)
   end
 
   def message_count(vhost, queue_name) do
