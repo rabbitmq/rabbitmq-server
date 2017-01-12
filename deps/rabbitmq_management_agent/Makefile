@@ -18,7 +18,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 DEPS = rabbit_common rabbit
-TEST_DEPS = rabbitmq_ct_helpers
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 LOCAL_DEPS += xmerl mnesia ranch ssl crypto public_key
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
