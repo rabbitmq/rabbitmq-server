@@ -47,8 +47,14 @@ all() ->
 
 groups() ->
     [
-     {rabbitmq, [], [basic_get]},
-     {activemq, [], [basic_get]}
+     {rabbitmq, [], [
+                     basic_roundtrip,
+                     split_transfer
+                    ]},
+     {activemq, [], [
+                     basic_roundtrip,
+                     split_transfer
+                    ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -110,17 +116,38 @@ end_per_testcase(_, Config) ->
 
 %% -------------------------------------------------------------------
 
-basic_get(Config) ->
+basic_roundtrip(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     ct:pal("Opening connection to ~s:~b", [Hostname, Port]),
     {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
     {ok, Session} = amqp10_client_session:'begin'(Connection),
-    {ok, Sender} = amqp10_client_link:sender(Session, <<"banana-sender">>, <<"test">>),
+    {ok, Sender} = amqp10_client_link:sender(Session, <<"banana-sender">>,
+                                             <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
     ok = amqp10_client_link:send(Sender, Msg),
-    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"banana-receiver2">>, <<"test">>),
+    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"banana-receiver">>,
+                                                 <<"test">>),
     {amqp_msg, OutMsg} = amqp10_client_link:get(Receiver),
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection),
     ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)).
+
+split_transfer(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    ct:pal("Opening connection to ~s:~b", [Hostname, Port]),
+    Conf = #{address => Hostname, port => Port, max_frame_size => 512},
+    {ok, Connection} = amqp10_client_connection:open(Conf),
+    {ok, Session} = amqp10_client_session:'begin'(Connection),
+    Data = list_to_binary(string:chars(64, 1000)),
+    {ok, Sender} = amqp10_client_link:sender(Session, <<"data-sender">>,
+                                             <<"test">>),
+    Msg = amqp10_msg:new(<<"my-tag">>, Data, true),
+    ok = amqp10_client_link:send(Sender, Msg),
+    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"data-receiver">>,
+                                                 <<"test">>),
+    {amqp_msg, OutMsg} = amqp10_client_link:get(Receiver),
+    ok = amqp10_client_session:'end'(Session),
+    ok = amqp10_client_connection:close(Connection),
+    ?assertEqual([Data], amqp10_msg:body(OutMsg)).

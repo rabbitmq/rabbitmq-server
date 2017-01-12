@@ -40,7 +40,7 @@
                       delivery_count.
 
 -type amqp10_header() :: #{durable => boolean(), % false
-                           priority => non_neg_integer(), % 4
+                           priority => byte(), % 4
                            ttl => maybe(non_neg_integer()),
                            first_acquirer => boolean(), % false
                            delivery_count => non_neg_integer()}. % 0

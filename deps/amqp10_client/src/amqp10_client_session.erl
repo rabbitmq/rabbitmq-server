@@ -52,7 +52,8 @@
          delivery_count = 0 :: non_neg_integer(),
          link_credit = 0 :: non_neg_integer(),
          available = undefined :: non_neg_integer() | undefined,
-         drain = false :: boolean()
+         drain = false :: boolean(),
+         partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()]}
          }).
 
 -record(state,
@@ -227,20 +228,50 @@ mapped(#'v1_0.flow'{handle = {uint, InHandle},
                          links = Links1},
     {next_state, mapped, State};
 
-mapped([#'v1_0.transfer'{handle = {uint, InHandle},
-                         more = More} = Transfer | _] = MessageParts,
-                         #state{links = Links} = State0)
-  when More =:= false orelse More =:= undefined ->
+mapped({#'v1_0.transfer'{handle = {uint, InHandle},
+                         more = true} = Transfer, Payload},
+                         #state{links = Links} = State0) ->
 
-    % TODO: handle case when `more` is true. See: 2.6.14
+    {ok, #link{
+               output_handle = OutHandle,
+               delivery_count = DC,
+               link_credit = LC,
+               partial_transfers = PT0} = Link} =
+    find_link_by_input_handle(InHandle, State0),
+
+    PT = case PT0 of
+             undefined -> {Transfer, [Payload]};
+             {T, P} -> {T, [Payload | P]}
+         end,
+    % TODO: do partial transfers decrese credit?
+    Link1 = Link#link{delivery_count = DC+1,
+                      link_credit = LC-1,
+                      partial_transfers = PT},
+
+    error_logger:info_msg("PART TRANSFER RECEIVED  ~p", [Transfer]),
+
+    State = State0#state{links = Links#{OutHandle => Link1}},
+    {next_state, mapped, State};
+mapped({#'v1_0.transfer'{handle = {uint, InHandle}} = Transfer0, Payload0},
+                         #state{links = Links} = State0) ->
+
 
     {ok, #link{target = {pid, TargetPid},
                output_handle = OutHandle,
                delivery_count = DC,
-               link_credit = LC} = Link} = find_link_by_input_handle(InHandle,
-                                                                     State0),
+               link_credit = LC,
+               partial_transfers = PT0} = Link} =
+    find_link_by_input_handle(InHandle, State0),
 
-    Msg = amqp10_msg:from_amqp_records(MessageParts),
+    {Transfer, Payload} =
+        case PT0 of
+            undefined -> {Transfer0, Payload0};
+            {T = #'v1_0.transfer'{handle = {uint, InHandle}}, P} ->
+                {T, iolist_to_binary(lists:reverse([Payload0 | P]))}
+        end,
+
+    Records = rabbit_amqp1_0_framing:decode_bin(Payload),
+    Msg = amqp10_msg:from_amqp_records([Transfer | Records]),
     % deliver to the registered receiver process
     TargetPid ! {message, OutHandle, Msg},
 

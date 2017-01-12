@@ -6,12 +6,14 @@
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 %% Public API.
--export([open/2,
+-export([
+         open/1,
+         open/2,
          close/1
         ]).
 
 %% Private API.
--export([start_link/1,
+-export([start_link/2,
          socket_ready/2,
          protocol_header_received/5,
          begin_session/1
@@ -35,29 +37,40 @@
          opened/2,
          expecting_close_frame/2]).
 
+-type connection_config() :: #{address => inet:socket_address() | inet:hostname(),
+                               port => inet:port_number(),
+                               max_frame_size => non_neg_integer()}. % tODO constrain to large than 512
+
 -record(state,
         {next_channel = 1 :: pos_integer(),
          connection_sup :: pid(),
          sessions_sup :: pid() | undefined,
          pending_session_reqs = [] :: [term()],
          reader :: pid() | undefined,
-         socket :: gen_tcp:socket() | undefined
+         socket :: gen_tcp:socket() | undefined,
+         config :: connection_config()
         }).
+
+-export_type([connection_config/0]).
 
 %% -------------------------------------------------------------------
 %% Public API.
 %% -------------------------------------------------------------------
 
+
 -spec open(
         inet:socket_address() | inet:hostname(),
         inet:port_number()) -> supervisor:startchild_ret().
-
 open(Addr, Port) ->
+    open(#{address => Addr, port => Port}).
+
+-spec open(connection_config()) -> supervisor:startchild_ret().
+open(Config) ->
     %% Start the supervision tree dedicated to that connection. It
     %% starts at least a connection process (the PID we want to return)
     %% and a reader process (responsible for opening and reading the
     %% socket).
-    case supervisor:start_child(amqp10_client_sup, [Addr, Port]) of
+    case supervisor:start_child(amqp10_client_sup, [Config]) of
         {ok, ConnSup} ->
             %% We query the PIDs of the connection and reader processes. The
             %% reader process needs to know the connection PID to send it the
@@ -82,8 +95,8 @@ close(Pid) ->
 %% Private API.
 %% -------------------------------------------------------------------
 
-start_link(Sup) ->
-    gen_fsm:start_link(?MODULE, Sup, []).
+start_link(Sup, Config) ->
+    gen_fsm:start_link(?MODULE, [Sup, Config], []).
 
 set_other_procs(Pid, OtherProcs) ->
     gen_fsm:send_all_state_event(Pid, {set_other_procs, OtherProcs}).
@@ -108,8 +121,9 @@ begin_session(Pid) ->
 %% gen_fsm callbacks.
 %% -------------------------------------------------------------------
 
-init(Sup) ->
-    {ok, expecting_socket, #state{connection_sup = Sup}}.
+init([Sup, Config]) ->
+    {ok, expecting_socket, #state{connection_sup = Sup,
+                                  config = Config}}.
 
 expecting_socket({socket_ready, Socket}, State) ->
     State1 = State#state{socket = Socket},
@@ -143,9 +157,11 @@ expecting_amqp_protocol_header({protocol_header_received, Protocol, Maj, Min, Re
     {stop, normal, State}.
 
 expecting_open_frame(
-  #'v1_0.open'{},
+  #'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
   #state{pending_session_reqs = PendingSessionReqs} = State) ->
-    error_logger:info_msg("-- CONNECTION OPENED --~n", []),
+    error_logger:info_msg(
+      "-- CONNECTION OPENED -- Max frame size: ~p Idle timeout ~p~n",
+      [MFSz, Timeout]),
     State3 = lists:foldr(
       fun(From, State1) ->
               {Ret, State2} = handle_begin_session(State1),
@@ -224,7 +240,7 @@ handle_begin_session(#state{sessions_sup = Sup, reader = Reader,
              end,
     {Ret, State1}.
 
-send_open(#state{socket = Socket}) ->
+send_open(#state{socket = Socket, config = Config}) ->
     {ok, Product} = application:get_key(description),
     {ok, Version} = application:get_key(vsn),
     Platform = "Erlang/OTP " ++ erlang:system_info(otp_release),
@@ -235,12 +251,16 @@ send_open(#state{socket = Socket}) ->
                    {{symbol, <<"platform">>},
                     {utf8, list_to_binary(Platform)}}
                   ]},
-    Open = #'v1_0.open'{container_id = {utf8, <<"test">>},
-                        hostname = {utf8, <<"localhost">>},
-                        max_frame_size = {uint, ?MAX_FRAME_SIZE},
-                        channel_max = {ushort, 100},
-                        idle_time_out = {uint, 0},
-                        properties = Props},
+    Open0 = #'v1_0.open'{container_id = {utf8, <<"test">>},
+                         hostname = {utf8, <<"localhost">>},
+                         channel_max = {ushort, 100},
+                         idle_time_out = {uint, 0},
+                         properties = Props},
+    Open = case Config of
+               #{max_frame_size := MFSz} ->
+                   Open0#'v1_0.open'{max_frame_size = {uint, MFSz}};
+               _ -> Open0
+           end,
     Encoded = rabbit_amqp1_0_framing:encode_bin(Open),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
     gen_tcp:send(Socket, Frame).

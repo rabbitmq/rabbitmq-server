@@ -10,7 +10,7 @@
 -endif.
 
 %% Private API.
--export([start_link/3,
+-export([start_link/2,
          set_connection/2,
          connection_closing/1,
          register_session/3,
@@ -53,13 +53,11 @@
 
 %% @private
 
--spec start_link(pid(),
-                 inet:socket_address() | inet:hostname(),
-                 inet:port_number()) ->
+-spec start_link(pid(), amqp10_client_connection:connection_config()) ->
     {ok, pid()} | ignore | {error, any()}.
 
-start_link(Sup, Addr, Port) ->
-    gen_fsm:start_link(?MODULE, [Sup, Addr, Port], []).
+start_link(Sup, Config) ->
+    gen_fsm:start_link(?MODULE, [Sup, Config], []).
 
 %% @private
 %% @doc
@@ -88,7 +86,7 @@ unregister_session(Reader, Session, OutgoingChannel, IncomingChannel) ->
 %% gen_fsm callbacks.
 %% -------------------------------------------------------------------
 
-init([Sup, Host, Port]) ->
+init([Sup, #{address := Host, port := Port}]) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Socket} ->
             State = #state{connection_sup = Sup, socket = Socket},
@@ -210,8 +208,11 @@ handle_input(expecting_frame_body, Data,
     case Data of
         <<FrameBody:BodyLength/binary, Rest/binary>> ->
             State1 = State#state{frame_state = undefined},
-            Frame = rabbit_amqp1_0_framing:decode_bin(FrameBody),
-            State2 = route_frame(Channel, FrameType, Frame, State1),
+            {PerfDesc, Payload} = rabbit_amqp1_0_binary_parser:parse(FrameBody),
+            Perf = rabbit_amqp1_0_framing:decode(PerfDesc),
+            error_logger:info_msg("PERF ~p~n", [Perf]),
+            % Frame = rabbit_amqp1_0_framing:decode_bin(FrameBody),
+            State2 = route_frame(Channel, FrameType, {Perf, Payload}, State1),
             handle_input(expecting_frame_header, Rest, State2);
         _ ->
             {ok, expecting_frame_body, Data, State}
@@ -220,18 +221,15 @@ handle_input(expecting_frame_body, Data,
 handle_input(StateName, Data, State) ->
     {ok, StateName, Data, State}.
 
-route_frame(Channel, FrameType, [Performative | _] = Frame, State0) ->
+route_frame(Channel, FrameType, {Performative, Payload} = Frame, State0) ->
     {DestinationPid, State} = find_destination(Channel, FrameType, Performative,
                                                State0),
     error_logger:info_msg("ROUTING FRAME ~p -> (~p, ~p)",
                           [Frame, Channel, DestinationPid]),
-    case Frame of
-        [Performative] ->
-            ok = gen_fsm:send_event(DestinationPid, Performative);
-        Multi ->
-            ok = gen_fsm:send_event(DestinationPid, Multi)
+    case Payload of
+        <<>> -> ok = gen_fsm:send_event(DestinationPid, Performative);
+        _ -> ok = gen_fsm:send_event(DestinationPid, Frame)
     end,
-
     State.
 
 -spec find_destination(amqp10_client_types:channel(), frame_type(),
