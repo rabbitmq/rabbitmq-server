@@ -237,9 +237,21 @@ orelse Group =:= backing_queue_embed_limit_1024 ->
 end_per_group1(_, Config) ->
     Config.
 
+init_per_testcase(Testcase, Config) when Testcase == variable_queue_requeue;
+                                         Testcase == variable_queue_fold ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, queue_explicit_gc_run_operation_threshold, 0]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(Testcase, Config) when Testcase == variable_queue_requeue;
+                                        Testcase == variable_queue_fold ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, queue_explicit_gc_run_operation_threshold, 1000]),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 

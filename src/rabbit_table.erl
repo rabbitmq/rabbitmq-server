@@ -18,7 +18,8 @@
 
 -export([create/0, create_local_copy/1, wait_for_replicated/1, wait/1,
          force_load/0, is_present/0, is_empty/0, needs_default_data/0,
-         check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0]).
+         check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
+         wait_for_replicated/0]).
 
 %% for testing purposes
 -export([definitions/0]).
@@ -31,6 +32,7 @@
 -spec create() -> 'ok'.
 -spec create_local_copy('disc' | 'ram') -> 'ok'.
 -spec wait_for_replicated(retry()) -> 'ok'.
+-spec wait_for_replicated() -> 'ok'.
 -spec wait([atom()]) -> 'ok'.
 -spec retry_timeout() -> {non_neg_integer() | infinity, non_neg_integer()}.
 -spec force_load() -> 'ok'.
@@ -78,6 +80,11 @@ create_local_copy(disc) ->
 create_local_copy(ram)  ->
     create_local_copies(ram),
     create_local_copy(schema, ram_copies).
+
+%% This arity only exists for backwards compatibility with certain
+%% plugins. See https://github.com/rabbitmq/rabbitmq-clusterer/issues/19.
+wait_for_replicated() ->
+    wait_for_replicated(false).
 
 wait_for_replicated(Retry) ->
     wait([Tab || {Tab, TabDef} <- definitions(),
