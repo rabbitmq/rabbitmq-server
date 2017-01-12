@@ -218,7 +218,7 @@ cluster_name_default() ->
 set_cluster_name(Name) ->
     %% Cluster name should be binary
     BinaryName = rabbit_data_coercion:to_binary(Name),
-    rabbit_runtime_parameters:set_global(cluster_name, Name).
+    rabbit_runtime_parameters:set_global(cluster_name, BinaryName).
 
 ensure_epmd() ->
     {ok, Prog} = init:get_argument(progname),
