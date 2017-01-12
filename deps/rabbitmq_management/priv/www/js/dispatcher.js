@@ -232,7 +232,7 @@ dispatcher_add(function(sammy) {
                             ['name', 'pattern', 'policy'], ['priority'], []);
             return false;
         });
-    sammy.del('#/operator-policies', function() {
+    sammy.del('#/operator_policies', function() {
             if (sync_delete(this, '/operator-policies/:vhost/:name'))
                 update();
         });
