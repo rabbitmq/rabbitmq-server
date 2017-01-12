@@ -143,7 +143,7 @@ consume_msg(Ch, Q) ->
 wait_until(Fun) ->
     wait_until(Fun, 120).
 
-wait_until(Fun, 0) ->
+wait_until(_, 0) ->
     false;
 wait_until(Fun, N) ->
     case Fun() of
