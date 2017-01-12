@@ -39,6 +39,10 @@ $(shell awk 'BEGIN {
 }')
 endef
 
+# Add the CLI ebin directory to the code path for the compiler: plugin
+# CLI extensions may access behaviour modules defined in this directory.
+RMQ_ERLC_OPTS += -pa $(DEPS_DIR)/rabbitmq_cli/_build/dev/lib/rabbitmqctl/ebin
+
 # Add Lager parse_transform module and our default Lager extra sinks.
 LAGER_EXTRA_SINKS += rabbit_log \
 		     rabbit_log_channel \
