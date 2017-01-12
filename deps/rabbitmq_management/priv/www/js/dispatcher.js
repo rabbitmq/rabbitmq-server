@@ -228,7 +228,7 @@ dispatcher_add(function(sammy) {
         });
     sammy.put('#/operator_policies', function() {
             this.params = rename_multifield(this.params, "definitionop", "definition");
-            put_cast_params(this, '/operator_policies/:vhost/:name',
+            put_cast_params(this, '/operator-policies/:vhost/:name',
                             ['name', 'pattern', 'policy'], ['priority'], []);
             return false;
         });
