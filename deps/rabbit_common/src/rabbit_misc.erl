@@ -412,6 +412,8 @@ r_arg(VHostPath, Kind, Table, Key) ->
         {Type, _}          -> {error, {invalid_type, Type}}
     end.
 
+rs(#resource{virtual_host = VHostPath, kind = topic, name = Name}) ->
+    format("'~s' in vhost '~s'", [Name, VHostPath]);
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     format("~s '~s' in vhost '~s'", [Kind, Name, VHostPath]).
 
