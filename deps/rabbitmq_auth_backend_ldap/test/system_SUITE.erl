@@ -57,7 +57,7 @@ base_conf_ldap(LdapPort, IdleTimeout, PoolSize) ->
                                                   {pool_size,          PoolSize},
                                                   {log,                true},
                                                   {group_lookup_base,  "ou=groups,dc=rabbitmq,dc=com"},
-                                                  {vhost_access_query, {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}},
+                                                  {vhost_access_query, vhost_access_query_base()},
                                                   {resource_access_query,
                                                    {for, [{resource, exchange,
                                                            {for, [{permission, configure,
@@ -95,7 +95,7 @@ base_conf_ldap(LdapPort, IdleTimeout, PoolSize) ->
 
 all() ->
     [
-      {group, non_parallel_tests},
+          {group, non_parallel_tests},
       {group, with_idle_timeout}
     ].
 
@@ -108,7 +108,8 @@ groups() ->
         tag_attribution_ldap_and_internal,
         tag_attribution_internal_followed_by_ldap_and_internal,
         invalid_or_clause_ldap_only,
-        invalid_and_clause_ldap_only
+        invalid_and_clause_ldap_only,
+        match_bidirectional
     ],
     [
       {non_parallel_tests, [], Tests
@@ -223,6 +224,11 @@ end_per_testcase(connections_closed_after_timeout, Config) ->
                                       [rabbitmq_auth_backend_ldap,
                                        other_bind, anon]),
     rabbit_ct_helpers:testcase_finished(Config, connections_closed_after_timeout);
+end_per_testcase(Testcase, Config)
+    when Testcase == invalid_or_clause_ldap_only;
+         Testcase == invalid_and_clause_ldap_only ->
+    set_env(Config, vhost_access_query_base_env()),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -355,6 +361,27 @@ invalid_and_clause_ldap_only(Config) ->
     % This may not be a reliable return value assertion
     {error, not_allowed} = amqp_connection:start(B?ALICE).
 
+match_bidirectional(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        application, set_env, [rabbit, auth_backends, [rabbit_auth_backend_ldap]]),
+
+    Configurations = [
+        fun resource_access_query_match/0,
+        fun resource_access_query_match_query_is_string/0,
+        fun resource_access_query_match_re_query_is_string/0,
+        fun resource_access_query_match_query_and_re_query_are_strings/0
+    ],
+
+    [begin
+         set_env(Config, ConfigurationFunction()),
+         Q1 = [#'queue.declare'{queue = <<"Alice-queue">>}],
+         Q2 = [#'queue.declare'{queue = <<"Ali">>}],
+         P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
+         [test_resource(PTR) || PTR <- [{P?ALICE, Q1, ok},
+                                        {P?ALICE, Q2, fail}]]
+     end || ConfigurationFunction <- Configurations],
+    ok.
+
 %%--------------------------------------------------------------------
 
 login(Config) ->
@@ -485,6 +512,32 @@ vhost_access_query_and_in_group() ->
 
 vhost_access_query_nested_groups_env() ->
     [{vhost_access_query, {in_group_nested, "cn=admins,ou=groups,dc=rabbitmq,dc=com"}}].
+
+resource_access_query_match() ->
+    [{resource_access_query, {match, {string, "${name}"},
+        {string, "^${username}-"}}
+    }].
+
+resource_access_query_match_query_is_string() ->
+    [{resource_access_query, {match, "${name}",
+        {string, "^${username}-"}}
+    }].
+
+resource_access_query_match_re_query_is_string() ->
+    [{resource_access_query, {match, {string, "${name}"},
+        "^${username}-"}
+    }].
+
+resource_access_query_match_query_and_re_query_are_strings() ->
+    [{resource_access_query, {match, "${name}",
+        "^${username}-"}
+    }].
+
+vhost_access_query_base_env() ->
+    [{vhost_access_query, vhost_access_query_base()}].
+
+vhost_access_query_base() ->
+    {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}.
 
 test_login(Config, {N, Env}, Login, FilterList, ResultFun) ->
     case lists:member(N, FilterList) of
