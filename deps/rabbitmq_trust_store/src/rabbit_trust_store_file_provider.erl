@@ -64,7 +64,7 @@ list_certs_0(Path) ->
         fun(FileName) ->
             AbsName = filename:absname(FileName, Path),
             CertId = {FileName, modification_time(AbsName)},
-            {CertId, #{}}
+            {CertId, #{name => FileName}}
         end,
         FileNames).
 

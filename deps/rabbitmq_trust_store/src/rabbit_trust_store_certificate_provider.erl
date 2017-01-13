@@ -6,18 +6,18 @@
     -> no_change | {ok, [{CertId, Attributes}]}
     when Config :: list(),
          CertId :: term(),
-         Attributes :: term().
+         Attributes :: map().
 
 -callback list_certs(Config, ProviderState)
     -> no_change | {ok, [{CertId, Attributes}]}
     when Config :: list(),
          ProviderState :: term(),
          CertId :: term(),
-         Attributes :: term().
+         Attributes :: map().
 
 -callback get_cert_data(CertId, Attributes, Config)
     -> {ok, Cert} | {error, term()}
     when CertId :: term(),
-         Attributes :: term(),
+         Attributes :: map(),
          Config :: list(),
          Cert :: public_key:der_encoded().

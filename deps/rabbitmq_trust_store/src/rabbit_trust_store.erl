@@ -224,7 +224,11 @@ refresh_provider_certs(Provider, Config, ProviderState) ->
             ProviderState;
         {ok, CertsList, NewProviderState} ->
             update_certs(CertsList, Provider, Config),
-            NewProviderState
+            NewProviderState;
+        {error, Reason} ->
+            rabbit_log:error("Unable to load certificate list for provider ~p"
+                             " reason: ~p~n",
+                             [Provider, Reason])
     end.
 
 list_certs(Provider, Config, nostate) ->
@@ -268,7 +272,7 @@ get_cert_data(Provider, CertId, Attributes, Config) ->
             {error, Reason} -> {error, Reason}
         end
     catch _:Error ->
-        {error, Error}
+        {error, {Error, erlang:get_stacktrace()}}
     end.
 
 delete_cert(CertId, Provider) ->
