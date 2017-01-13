@@ -26,7 +26,7 @@
 -export([update_limit/3, clear_limit/2, get_limit/2]).
 -export([validate/5, notify/4, notify_clear/3]).
 -export([connection_limit/1, queue_limit/1,
-         is_over_queue_limit/1, is_over_connection_limit/1]).
+    is_over_queue_limit/1, is_over_connection_limit/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -59,21 +59,26 @@ connection_limit(VirtualHost) ->
 queue_limit(VirtualHost) ->
     get_limit(VirtualHost, <<"max-queues">>).
 
--spec list() -> [{rabbit_types:vhost(), rabbit_types:infos()}].
 
-list() ->
-    case rabbit_runtime_parameters:list_component(<<"vhost-limits">>) of
+list0(VHost) ->
+    case rabbit_runtime_parameters:list(VHost, <<"vhost-limits">>) of
         []     -> [];
         Params -> [ {pget(vhost, Param), pget(value, Param)}
-                    || Param <- Params,
-                       pget(value, Param) =/= undefined,
-                       pget(name, Param) == <<"limits">> ]
+		    || Param <- Params,
+		       pget(value, Param) =/= undefined,
+		       pget(name, Param) == <<"limits">> ]
     end.
+
+
+-spec list() -> [{rabbit_types:vhost(), rabbit_types:infos()}].
+
+list() -> list0('_').
+
 
 -spec list(rabbit_types:vhost()) -> rabbit_types:infos().
 
-list(VHost) ->
-    rabbit_runtime_parameters:value(VHost, <<"vhost-limits">>, <<"limits">>, []).
+list(VHost) -> list0(VHost).
+
 
 -spec is_over_connection_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
 
