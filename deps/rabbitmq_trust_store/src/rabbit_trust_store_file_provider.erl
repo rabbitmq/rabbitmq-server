@@ -4,7 +4,7 @@
 
 -behaviour(rabbit_trust_store_certificate_provider).
 
--export([list_certs/2, get_cert_data/3, format_cert_id/1]).
+-export([list_certs/1, list_certs/2, get_cert_data/3]).
 
 -define(DIRECTORY_OR_FILE_NAME_EXISTS, eexist).
 
@@ -12,12 +12,21 @@
     directory_path,
     directory_change_time}).
 
-list_certs(Config, nostate) ->
+-type cert_id() :: {FileName :: string(), ChangeTime :: integer()}.
+
+-spec list_certs(Config :: list())
+    -> no_change | {ok, [{cert_id(), map()}], State}
+    when State :: #directory_state{}.
+list_certs(Config) ->
     Path = directory_path(Config),
     NewChangeTime = modification_time(Path),
     Certs = list_certs_0(Path),
     {ok, Certs, #directory_state{directory_path = Path,
-                                 directory_change_time = NewChangeTime}};
+                                 directory_change_time = NewChangeTime}}.
+
+-spec list_certs(Config :: list(), State)
+    -> no_change | {ok, [{cert_id(), map()}], State}
+    when State :: #directory_state{}.
 list_certs(Config, #directory_state{directory_path = DirPath,
                                     directory_change_time = ChangeTime}) ->
     Path = directory_path(Config, DirPath),
@@ -31,15 +40,14 @@ list_certs(Config, #directory_state{directory_path = DirPath,
                                          directory_change_time = NewChangeTime}}
     end.
 
-get_cert_data({FileName, _}, no_attributes, Config) ->
+-spec get_cert_data(cert_id(), map(), Config :: list())
+    -> {ok, Cert :: public_key:der_encoded()}.
+get_cert_data({FileName, _}, #{}, Config) ->
     Path = directory_path(Config),
     Cert = extract_cert(Path, FileName),
     rabbit_log:info(
       "trust store: loading certificate '~s'", [FileName]),
     {ok, Cert}.
-
-format_cert_id({FileName, _}) ->
-    rabbit_data_coercion:to_binary(FileName).
 
 extract_cert(Path, FileName) ->
     Absolute = filename:join(Path, FileName),
@@ -56,7 +64,7 @@ list_certs_0(Path) ->
         fun(FileName) ->
             AbsName = filename:absname(FileName, Path),
             CertId = {FileName, modification_time(AbsName)},
-            {CertId, no_attributes}
+            {CertId, #{}}
         end,
         FileNames).
 

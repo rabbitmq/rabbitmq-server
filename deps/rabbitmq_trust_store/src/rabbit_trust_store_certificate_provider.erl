@@ -2,6 +2,12 @@
 
 -include_lib("public_key/include/public_key.hrl").
 
+-callback list_certs(Config)
+    -> no_change | {ok, [{CertId, Attributes}]}
+    when Config :: list(),
+         CertId :: term(),
+         Attributes :: term().
+
 -callback list_certs(Config, ProviderState)
     -> no_change | {ok, [{CertId, Attributes}]}
     when Config :: list(),
@@ -15,7 +21,3 @@
          Attributes :: term(),
          Config :: list(),
          Cert :: public_key:der_encoded().
-
-
--callback format_cert_id(CertId) -> binary()
-    when CertId :: term().
