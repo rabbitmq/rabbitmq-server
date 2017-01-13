@@ -237,12 +237,41 @@ evaluate0({equals, StringQuery1, StringQuery2}, Args, User, LDAP) ->
               evaluate(StringQuery1, Args, User, LDAP),
               evaluate(StringQuery2, Args, User, LDAP));
 
-evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) ->
+evaluate0({match, {string, _} = StringQuery, {string, _} = REQuery}, Args, User, LDAP) ->
     safe_eval(fun (String1, String2) ->
                       do_match(String1, String2)
               end,
               evaluate(StringQuery, Args, User, LDAP),
               evaluate(REQuery, Args, User, LDAP));
+
+evaluate0({match, StringQuery, {string, _} = REQuery}, Args, User, LDAP) when is_list(StringQuery)->
+    safe_eval(fun (String1, String2) ->
+        do_match(String1, String2)
+              end,
+        evaluate(StringQuery, Args, User, LDAP),
+        evaluate(REQuery, Args, User, LDAP));
+
+evaluate0({match, {string, _} = StringQuery, REQuery}, Args, User, LDAP) when is_list(REQuery) ->
+    safe_eval(fun (String1, String2) ->
+        do_match(String1, String2)
+              end,
+        evaluate(StringQuery, Args, User, LDAP),
+        evaluate(REQuery, Args, User, LDAP));
+
+evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) when is_list(StringQuery),
+                                                                is_list(REQuery)  ->
+    safe_eval(fun (String1, String2) ->
+        do_match(String1, String2)
+              end,
+        evaluate(StringQuery, Args, User, LDAP),
+        evaluate(REQuery, Args, User, LDAP));
+
+evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) ->
+    safe_eval(fun (String1, String2) ->
+        do_match_bidirectionally(String1, String2)
+              end,
+        evaluate(StringQuery, Args, User, LDAP),
+        evaluate(REQuery, Args, User, LDAP));
 
 evaluate0(StringPattern, Args, User, LDAP) when is_list(StringPattern) ->
     evaluate0({string, StringPattern}, Args, User, LDAP);
@@ -304,6 +333,14 @@ safe_eval(_F, _,          {error, _}) -> false;
 safe_eval(F,  V1,         V2)         -> F(V1, V2).
 
 do_match(S1, S2) ->
+    case re:run(S1, S2) of
+        {match, _} -> log_match(S1, S2, R = true),
+            R;
+        nomatch    -> log_match(S1, S2, R = false),
+            R
+    end.
+
+do_match_bidirectionally(S1, S2) ->
     case re:run(S1, S2) of
         {match, _} -> log_match(S1, S2, R = true),
                       R;
