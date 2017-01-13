@@ -452,13 +452,11 @@ list_permissions() ->
 
 list_permissions(Keys, QueryThunk) ->
     [extract_user_permission_params(Keys, U) ||
-        %% TODO: use dirty ops instead
         U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 
 list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(U) -> extract_user_permission_params(Keys, U) end,
-      %% TODO: use dirty ops instead
       rabbit_misc:execute_mnesia_transaction(QueryThunk)).
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
@@ -535,7 +533,6 @@ list_user_vhost_topic_permissions(Username, VHost) ->
 
 list_topic_permissions(Keys, QueryThunk) ->
     [extract_topic_permission_params(Keys, U) ||
-        %% TODO: use dirty ops instead
         U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 
 match_user_vhost_topic_permission(Username, VHostPath) ->
