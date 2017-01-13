@@ -362,15 +362,25 @@ invalid_and_clause_ldap_only(Config) ->
     {error, not_allowed} = amqp_connection:start(B?ALICE).
 
 match_bidirectional(Config) ->
-    set_env(Config, resource_access_query_match()),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
         application, set_env, [rabbit, auth_backends, [rabbit_auth_backend_ldap]]),
 
-    Q1 = [#'queue.declare'{queue = <<"Alice-queue">>}],
-    Q2 = [#'queue.declare'{queue = <<"Ali">>}],
-    P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
-    [test_resource(PTR) || PTR <- [{P?ALICE, Q1, ok},
-                                   {P?ALICE, Q2, fail}]].
+    Configurations = [
+        fun resource_access_query_match/0,
+        fun resource_access_query_match_query_is_string/0,
+        fun resource_access_query_match_re_query_is_string/0,
+        fun resource_access_query_match_query_and_re_query_are_strings/0
+    ],
+
+    [begin
+         set_env(Config, ConfigurationFunction()),
+         Q1 = [#'queue.declare'{queue = <<"Alice-queue">>}],
+         Q2 = [#'queue.declare'{queue = <<"Ali">>}],
+         P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
+         [test_resource(PTR) || PTR <- [{P?ALICE, Q1, ok},
+                                        {P?ALICE, Q2, fail}]]
+     end || ConfigurationFunction <- Configurations],
+    ok.
 
 %%--------------------------------------------------------------------
 
@@ -506,6 +516,21 @@ vhost_access_query_nested_groups_env() ->
 resource_access_query_match() ->
     [{resource_access_query, {match, {string, "${name}"},
         {string, "^${username}-"}}
+    }].
+
+resource_access_query_match_query_is_string() ->
+    [{resource_access_query, {match, "${name}",
+        {string, "^${username}-"}}
+    }].
+
+resource_access_query_match_re_query_is_string() ->
+    [{resource_access_query, {match, {string, "${name}"},
+        "^${username}-"}
+    }].
+
+resource_access_query_match_query_and_re_query_are_strings() ->
+    [{resource_access_query, {match, "${name}",
+        "^${username}-"}
     }].
 
 vhost_access_query_base_env() ->

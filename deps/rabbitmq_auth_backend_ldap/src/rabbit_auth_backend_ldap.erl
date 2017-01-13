@@ -215,6 +215,28 @@ evaluate0({match, {string, _} = StringQuery, {string, _} = REQuery}, Args, User,
               evaluate(StringQuery, Args, User, LDAP),
               evaluate(REQuery, Args, User, LDAP));
 
+evaluate0({match, StringQuery, {string, _} = REQuery}, Args, User, LDAP) when is_list(StringQuery)->
+    safe_eval(fun (String1, String2) ->
+        do_match(String1, String2)
+              end,
+        evaluate(StringQuery, Args, User, LDAP),
+        evaluate(REQuery, Args, User, LDAP));
+
+evaluate0({match, {string, _} = StringQuery, REQuery}, Args, User, LDAP) when is_list(REQuery) ->
+    safe_eval(fun (String1, String2) ->
+        do_match(String1, String2)
+              end,
+        evaluate(StringQuery, Args, User, LDAP),
+        evaluate(REQuery, Args, User, LDAP));
+
+evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) when is_list(StringQuery),
+                                                                is_list(REQuery)  ->
+    safe_eval(fun (String1, String2) ->
+        do_match(String1, String2)
+              end,
+        evaluate(StringQuery, Args, User, LDAP),
+        evaluate(REQuery, Args, User, LDAP));
+
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) ->
     safe_eval(fun (String1, String2) ->
         do_match_bidirectionally(String1, String2)
