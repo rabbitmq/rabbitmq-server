@@ -237,6 +237,10 @@ assert_list(Exp, Act) ->
      end || ExpI <- Exp].
     %_ = [assert_item(ExpI, ActI) || {ExpI, ActI} <- lists:zip(Exp, Act)],
 
+assert_item(ExpI, [H | _] = ActI) when is_list(ActI) ->
+    %% just check first item of the list
+    assert_item(ExpI, H),
+    ok;
 assert_item(ExpI, ActI) ->
     ExpI = maps:with(maps:keys(ExpI), ActI),
     ok.

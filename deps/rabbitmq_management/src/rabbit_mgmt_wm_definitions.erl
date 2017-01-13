@@ -75,6 +75,7 @@ all_definitions(ReqData, Context) ->
         [{users,             rabbit_mgmt_wm_users:users()},
          {vhosts,            rabbit_mgmt_wm_vhosts:basic()},
          {permissions,       rabbit_mgmt_wm_permissions:permissions()},
+         {topic_permissions, rabbit_mgmt_wm_topic_permissions:topic_permissions()},
          {parameters,        rabbit_mgmt_wm_parameters:basic(ReqData)},
          {global_parameters, rabbit_mgmt_wm_global_parameters:basic()},
          {policies,          rabbit_mgmt_wm_policies:basic(ReqData)},
@@ -176,6 +177,7 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
                                                  end),
                 for_all(vhosts,             All, fun add_vhost/1),
                 for_all(permissions,        All, fun add_permission/1),
+                for_all(topic_permissions,  All, fun add_topic_permission/1),
                 for_all(parameters,         All, fun add_parameter/1),
                 for_all(global_parameters,  All, fun add_global_parameter/1),
                 for_all(policies,           All, fun add_policy/1),
@@ -257,6 +259,7 @@ rw_state() ->
     [{users,              [name, password_hash, hashing_algorithm, tags]},
      {vhosts,             [name]},
      {permissions,        [user, vhost, configure, write, read]},
+     {topic_permissions,  [user, vhost, exchange, pattern]},
      {parameters,         [vhost, component, name, value]},
      {global_parameters,  [name, value]},
      {policies,           [vhost, name, pattern, definition, priority, 'apply-to']},
@@ -345,6 +348,13 @@ add_permission(Permission) ->
                                                  maps:get(configure, Permission, undefined),
                                                  maps:get(write,     Permission, undefined),
                                                  maps:get(read,      Permission, undefined)).
+
+add_topic_permission(TopicPermission) ->
+    rabbit_auth_backend_internal:set_topic_permissions(
+        maps:get(user,      TopicPermission, undefined),
+        maps:get(vhost,     TopicPermission, undefined),
+        maps:get(exchange,  TopicPermission, undefined),
+        maps:get(pattern,   TopicPermission, undefined)).
 
 add_queue(Queue) ->
     add_queue_int(Queue, r(queue, Queue)).

@@ -225,7 +225,7 @@ Content-Length: 0</pre>
         </td>
         <td>
           The server definitions - exchanges, queues, bindings, users,
-          virtual hosts, permissions and parameters. Everything apart from
+          virtual hosts, permissions, topic permissions, and parameters. Everything apart from
           messages. POST to upload an existing set of definitions. Note
           that:
           <ul>
@@ -646,6 +646,14 @@ Content-Length: 0</pre>
         <td></td>
         <td></td>
         <td></td>
+        <td class="path">/api/vhosts/<i>name</i>/topic-permissions</td>
+        <td>A list of all topic permissions for a given virtual host.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
         <td class="path">/api/users</td>
         <td>A list of all users.</td>
       </tr>
@@ -680,6 +688,14 @@ or:
         <td></td>
         <td></td>
         <td></td>
+        <td class="path">/api/users/<i>user</i>/topic-permissions</td>
+        <td>A list of all topic permissions for a given user.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
         <td class="path">/api/whoami</td>
         <td>Details of the currently authenticated user.</td>
       </tr>
@@ -700,6 +716,24 @@ or:
         <td>An individual permission of a user and virtual host. To PUT a permission, you will need a body looking something like this:
 <pre>{"configure":".*","write":".*","read":".*"}</pre>
         All keys are mandatory.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/topic-permissions</td>
+        <td>A list of all topic permissions for all users.</td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td>X</td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/topic-permissions/<i>vhost</i>/<i>user</i></td>
+        <td>Topic permissions for a user and virtual host. To PUT a topic permission, you will need a body looking something like this:
+          <pre>{"exchange":"amp.topic","pattern":"^a"}</pre>
+          All keys are mandatory.</td>
       </tr>
       <tr>
         <td>X</td>
