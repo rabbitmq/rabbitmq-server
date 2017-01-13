@@ -7,7 +7,8 @@ define PROJECT_ENV
 	    {http_method,   get},
 	    {user_path,     "http://localhost:8000/auth/user"},
 	    {vhost_path,    "http://localhost:8000/auth/vhost"},
-	    {resource_path, "http://localhost:8000/auth/resource"}
+	    {resource_path, "http://localhost:8000/auth/resource"},
+	    {topic_path,    "http://localhost:8000/auth/topic"}
 	  ]
 endef
 

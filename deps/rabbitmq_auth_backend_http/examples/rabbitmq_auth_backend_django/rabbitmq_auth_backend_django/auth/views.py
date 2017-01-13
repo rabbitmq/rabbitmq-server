@@ -18,3 +18,6 @@ def vhost(request):
 
 def resource(request):
     return HttpResponse("allow")
+
+def topic(request):
+    return HttpResponse("allow")

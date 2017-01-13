@@ -13,3 +13,6 @@
 
 {mapping, "rabbitmq_auth_backend_http.resource_path", "rabbitmq_auth_backend_http.resource_path", 
     [{datatype, string}, {validators, ["uri"]}]}.
+
+{mapping, "rabbitmq_auth_backend_http.topic_path", "rabbitmq_auth_backend_http.topic_path",
+    [{datatype, string}, {validators, ["uri"]}]}.
