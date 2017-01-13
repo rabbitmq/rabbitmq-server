@@ -107,12 +107,13 @@ defmodule SetTopicPermissionsCommandTest do
   end
 
   @tag user: @user, vhost: @root
-  test "run: Invalid regex patterns return error", context do
+  test "run: invalid regex patterns return error", context do
+    n = Enum.count(list_user_topic_permissions(context[:user]))
     {:error, {:invalid_regexp, _, _}} = @command.run(
                                             [context[:user], "amq.topic", "["],
                                             context[:opts]
                                           )
-    assert Enum.count(list_user_topic_permissions(context[:user])) == 0
+    assert Enum.count(list_user_topic_permissions(context[:user])) == n
   end
 
   @tag user: @user, vhost: @vhost
