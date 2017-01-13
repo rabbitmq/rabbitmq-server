@@ -21,6 +21,9 @@
          check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
          wait_for_replicated/0]).
 
+%% for testing purposes
+-export([definitions/0]).
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -272,6 +275,13 @@ definitions() ->
        {match, #user_permission{user_vhost = #user_vhost{_='_'},
                                 permission = #permission{_='_'},
                                 _='_'}}]},
+     {rabbit_topic_permission,
+      [{record_name, topic_permission},
+       {attributes, record_info(fields, topic_permission)},
+       {disc_copies, [node()]},
+       {match, #topic_permission{topic_permission_key = #topic_permission_key{_='_'},
+                                 pattern = '_',
+                                 _='_'}}]},
      {rabbit_vhost,
       [{record_name, vhost},
        {attributes, record_info(fields, vhost)},

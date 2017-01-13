@@ -121,6 +121,9 @@ internal_delete(VHostPath) ->
     [ok = rabbit_auth_backend_internal:clear_permissions(
             proplists:get_value(user, Info), VHostPath)
      || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHostPath)],
+    TopicPermissions = rabbit_auth_backend_internal:list_vhost_topic_permissions(VHostPath),
+    [ok = rabbit_auth_backend_internal:clear_topic_permissions(
+        proplists:get_value(user, TopicPermission), VHostPath) || TopicPermission <- TopicPermissions],
     Fs1 = [rabbit_runtime_parameters:clear(VHostPath,
                                            proplists:get_value(component, Info),
                                            proplists:get_value(name, Info))

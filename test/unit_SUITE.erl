@@ -83,7 +83,7 @@ init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
                                    TC =:= decrypt_start_app_undefined ->
     application:load(rabbit),
     Config;
-init_per_testcase(_, Config) ->
+init_per_testcase(_Testcase, Config) ->
     Config.
 
 end_per_testcase(TC, _Config) when TC =:= decrypt_start_app;
@@ -463,6 +463,8 @@ rabbitmqctl_encode_encrypt_decrypt(Secret) ->
         [lists:flatten(io_lib:format("~p", [{encrypted, Encrypted}])), PassPhrase ++ " "]
     )
     .
+
+
 
 %% -------------------------------------------------------------------
 %% pg_local.
