@@ -286,3 +286,6 @@
 -define(LOG_TRUNC, {100000, {2000, 100, 50, 5}}).
 
 -define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
+
+%% For event audit purposes
+-define(INTERNAL_USER, <<"rmq-internal">>).
