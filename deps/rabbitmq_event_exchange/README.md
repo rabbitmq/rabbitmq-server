@@ -124,6 +124,8 @@ Permission events:
 
 - `permission.created`
 - `permission.deleted`
+- `topic.permission.created`
+- `topic.permission.deleted`
 
 ### Shovel Plugin
 
