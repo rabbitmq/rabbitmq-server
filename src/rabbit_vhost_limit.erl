@@ -21,10 +21,10 @@
 -include("rabbit.hrl").
 
 -export([register/0]).
--export([parse_set/2, set/2, clear/1]).
+-export([parse_set/3, set/3, clear/2]).
 -export([list/0, list/1]).
--export([update_limit/3, clear_limit/2, get_limit/2]).
--export([validate/5, notify/4, notify_clear/3]).
+-export([update_limit/4, clear_limit/3, get_limit/2]).
+-export([validate/5, notify/5, notify_clear/4]).
 -export([connection_limit/1, queue_limit/1,
     is_over_queue_limit/1, is_over_connection_limit/1]).
 
@@ -45,12 +45,15 @@ validate(_VHost, <<"vhost-limits">>, Name, Term, _User) ->
     rabbit_parameter_validation:proplist(
       Name, vhost_limit_validation(), Term).
 
-notify(VHost, <<"vhost-limits">>, <<"limits">>, Limits) ->
-    rabbit_event:notify(vhost_limits_set, [{name, <<"limits">>} | Limits]),
+notify(VHost, <<"vhost-limits">>, <<"limits">>, Limits, ActingUser) ->
+    rabbit_event:notify(vhost_limits_set, [{name, <<"limits">>},
+                                           {user_who_performed_action, ActingUser}
+                                           | Limits]),
     update_vhost(VHost, Limits).
 
-notify_clear(VHost, <<"vhost-limits">>, <<"limits">>) ->
-    rabbit_event:notify(vhost_limits_cleared, [{name, <<"limits">>}]),
+notify_clear(VHost, <<"vhost-limits">>, <<"limits">>, ActingUser) ->
+    rabbit_event:notify(vhost_limits_cleared, [{name, <<"limits">>},
+                                               {user_who_performed_action, ActingUser}]),
     update_vhost(VHost, undefined).
 
 connection_limit(VirtualHost) ->
@@ -128,38 +131,38 @@ is_over_queue_limit(VirtualHost) ->
 
 %%----------------------------------------------------------------------------
 
-parse_set(VHost, Defn) ->
+parse_set(VHost, Defn, ActingUser) ->
     Definition = rabbit_data_coercion:to_binary(Defn),
     case rabbit_json:try_decode(Definition) of
         {ok, Term} ->
-            set(VHost, maps:to_list(Term));
+            set(VHost, maps:to_list(Term), ActingUser);
         error ->
             {error_string, "JSON decoding error"}
     end.
 
-set(VHost, Defn) ->
+set(VHost, Defn, ActingUser) ->
     rabbit_runtime_parameters:set_any(VHost, <<"vhost-limits">>,
-                                      <<"limits">>, Defn, none).
+                                      <<"limits">>, Defn, ActingUser).
 
-clear(VHost) ->
+clear(VHost, ActingUser) ->
     rabbit_runtime_parameters:clear_any(VHost, <<"vhost-limits">>,
-                                        <<"limits">>).
+                                        <<"limits">>, ActingUser).
 
-update_limit(VHost, Name, Value) ->
+update_limit(VHost, Name, Value, ActingUser) ->
     OldDef = case rabbit_runtime_parameters:list(VHost, <<"vhost-limits">>) of
         []      -> [];
         [Param] -> pget(value, Param, [])
     end,
     NewDef = [{Name, Value} | lists:keydelete(Name, 1, OldDef)],
-    set(VHost, NewDef).
+    set(VHost, NewDef, ActingUser).
 
-clear_limit(VHost, Name) ->
+clear_limit(VHost, Name, ActingUser) ->
     OldDef = case rabbit_runtime_parameters:list(VHost, <<"vhost-limits">>) of
         []      -> [];
         [Param] -> pget(value, Param, [])
     end,
     NewDef = lists:keydelete(Name, 1, OldDef),
-    set(VHost, NewDef).
+    set(VHost, NewDef, ActingUser).
 
 vhost_limit_validation() ->
     [{<<"max-connections">>, fun rabbit_parameter_validation:integer/2, optional},

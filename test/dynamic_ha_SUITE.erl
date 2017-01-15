@@ -223,7 +223,7 @@ vhost_deletion(Config) ->
     rabbit_ct_broker_helpers:set_ha_policy_all(Config),
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     amqp_channel:call(ACh, #'queue.declare'{queue = <<"vhost_deletion-q">>}),
-    ok = rpc:call(A, rabbit_vhost, delete, [<<"/">>]),
+    ok = rpc:call(A, rabbit_vhost, delete, [<<"/">>, <<"acting-user">>]),
     ok.
 
 promote_on_shutdown(Config) ->
