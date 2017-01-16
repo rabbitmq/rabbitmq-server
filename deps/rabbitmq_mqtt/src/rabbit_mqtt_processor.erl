@@ -817,6 +817,9 @@ check_topic_access(TopicName, write = Access,
     try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
         R -> R
     catch
+        _:{amqp_error, access_refused, Msg, _} ->
+            rabbit_log:error("operation resulted in a topic error access_refused: ~p~n", [Msg]),
+            {error, access_refused};
         _:Error ->
             rabbit_log:error("~p~n", [Error]),
             {error, access_refused}
@@ -831,6 +834,9 @@ check_topic_access(TopicName, read = Access,
   try rabbit_access_control:check_resource_access(User, Resource, Access) of
       R -> R
   catch
+      _:{amqp_error, access_refused, Msg, _} ->
+          rabbit_log:error("operation resulted in a topic error access_refused: ~p~n", [Msg]),
+          {error, access_refused};
       _:Error ->
           rabbit_log:error("~p~n", [Error]),
           {error, access_refused}
