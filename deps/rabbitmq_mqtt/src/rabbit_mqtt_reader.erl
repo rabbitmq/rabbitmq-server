@@ -280,7 +280,9 @@ process_received_bytes(Bytes,
                         [Error, ConnStr]),
                     {stop, {shutdown, Error}, State};
                 {stop, ProcState1} ->
-                    {stop, normal, pstate(State, ProcState1)}
+                    {stop, normal, pstate(State, ProcState1)};
+                {err, unauthorized = Reason, ProcState1} ->
+                    {stop, {shutdown, Reason}, pstate(State, ProcState1)}
             end;
         {error, Error} ->
             log(error, "MQTT detected framing error '~p' for connection ~p~n",
