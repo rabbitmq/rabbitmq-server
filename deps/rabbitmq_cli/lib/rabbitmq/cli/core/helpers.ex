@@ -196,4 +196,6 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
+  def cli_acting_user, do: "rmq-cli"
+
 end

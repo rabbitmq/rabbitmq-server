@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags []
@@ -25,7 +28,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
   def run([vhost], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, Helpers.cli_acting_user()])
   end
 
   def usage, do: "add_vhost <vhost>"

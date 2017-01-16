@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags [:vhost]
@@ -33,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
 
   def run([username], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
-      :rabbit_auth_backend_internal, :clear_permissions, [username, vhost])
+      :rabbit_auth_backend_internal, :clear_permissions, [username, vhost, Helpers.cli_acting_user()])
   end
 
   def usage, do: "clear_permissions [-p vhost] <username>"

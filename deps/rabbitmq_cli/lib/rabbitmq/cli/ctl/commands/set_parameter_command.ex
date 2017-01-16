@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags [:vhost]
@@ -41,7 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,
       :parse_set,
-      [vhost, component_name, name, value, :none]
+      [vhost, component_name, name, value, Helpers.cli_acting_user()]
     )
   end
 

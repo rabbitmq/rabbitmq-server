@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags []
@@ -24,7 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
   def merge_defaults(args, opts), do: {args, opts}
 
   def run([arg], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :delete, [arg])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :delete, [arg, Helpers.cli_acting_user()])
   end
 
   def usage, do: "delete_vhost <vhost>"

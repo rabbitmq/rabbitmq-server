@@ -43,11 +43,11 @@ defmodule TestHelper do
   end
 
   def add_vhost(name) do
-    :rpc.call(get_rabbit_hostname, :rabbit_vhost, :add, [name])
+    :rpc.call(get_rabbit_hostname, :rabbit_vhost, :add, [name, "acting-user"])
   end
 
   def delete_vhost(name) do
-    :rpc.call(get_rabbit_hostname, :rabbit_vhost, :delete, [name])
+    :rpc.call(get_rabbit_hostname, :rabbit_vhost, :delete, [name, "acting-user"])
   end
 
   def list_vhosts() do
@@ -55,11 +55,13 @@ defmodule TestHelper do
   end
 
   def add_user(name, password) do
-    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :add_user, [name, password])
+    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :add_user,
+      [name, password, "acting-user"])
   end
 
   def delete_user(name) do
-    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :delete_user, [name])
+    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :delete_user,
+      [name, "acting-user"])
   end
 
   def list_users() do
@@ -75,7 +77,8 @@ defmodule TestHelper do
   end
 
   def set_user_tags(name, tags) do
-    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_tags, [name, tags])
+    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_tags,
+      [name, tags, "acting-user"])
   end
 
   def authenticate_user(name, password) do
@@ -87,7 +90,7 @@ defmodule TestHelper do
   end
 
   def clear_parameter(vhost, component_name, key) do
-    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :clear, [vhost, component_name, key])
+    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :clear, [vhost, component_name, key, <<"acting-user">>])
   end
 
   def list_parameters(vhost) do
@@ -95,11 +98,13 @@ defmodule TestHelper do
   end
 
   def set_global_parameter(key, value) do
-    :ok = :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :parse_set_global, [key, value])
+    :ok = :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :parse_set_global,
+      [key, value, "acting-user"])
   end
 
   def clear_global_parameter(key) do
-    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :clear_global, [key])
+    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :clear_global,
+      [key, "acting-user"])
   end
 
   def list_global_parameters() do
@@ -107,7 +112,7 @@ defmodule TestHelper do
   end
 
   def set_permissions(user, vhost, [conf, write, read]) do
-    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read])
+    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read, "acting-user"])
   end
 
   def list_policies(vhost) do
@@ -117,11 +122,11 @@ defmodule TestHelper do
   def set_policy(vhost, name, pattern, value) do
     {:ok, decoded} = :rabbit_json.try_decode(value)
     parsed = :maps.to_list(decoded)
-    :ok = :rpc.call(get_rabbit_hostname, :rabbit_policy, :set, [vhost, name, pattern, parsed, 0, "all"])
+    :ok = :rpc.call(get_rabbit_hostname, :rabbit_policy, :set, [vhost, name, pattern, parsed, 0, "all", "acting-user"])
   end
 
   def clear_policy(vhost, key) do
-    :rpc.call(get_rabbit_hostname, :rabbit_policy, :delete, [vhost, key])
+    :rpc.call(get_rabbit_hostname, :rabbit_policy, :delete, [vhost, key, "acting-user"])
   end
 
   def list_operator_policies(vhost) do
@@ -131,32 +136,32 @@ defmodule TestHelper do
   def set_operator_policy(vhost, name, pattern, value) do
     {:ok, decoded} = :rabbit_json.try_decode(value)
     parsed = :maps.to_list(decoded)
-    :ok = :rpc.call(get_rabbit_hostname, :rabbit_policy, :set_op, [vhost, name, pattern, parsed, 0, "all"])
+    :ok = :rpc.call(get_rabbit_hostname, :rabbit_policy, :set_op, [vhost, name, pattern, parsed, 0, "all", "acting-user"])
   end
 
   def clear_operator_policy(vhost, key) do
-    :rpc.call(get_rabbit_hostname, :rabbit_policy, :delete_op, [vhost, key])
+    :rpc.call(get_rabbit_hostname, :rabbit_policy, :delete_op, [vhost, key, "acting-user"])
   end
 
   def declare_queue(name, vhost, durable \\ false, auto_delete \\ false, args \\ [], owner \\ :none) do
     queue_name = :rabbit_misc.r(vhost, :queue, name)
     :rpc.call(get_rabbit_hostname,
               :rabbit_amqqueue, :declare,
-              [queue_name, durable, auto_delete, args, owner])
+              [queue_name, durable, auto_delete, args, owner, "acting-user"])
   end
 
   def delete_queue(name, vhost) do
     queue_name = :rabbit_misc.r(vhost, :queue, name)
     :rpc.call(get_rabbit_hostname,
               :rabbit_amqqueue, :delete,
-              [queue_name, false, false])
+              [queue_name, false, false, "acting-user"])
   end
 
   def declare_exchange(name, vhost, type \\ :direct, durable \\ false, auto_delete \\ false, internal \\ false, args \\ []) do
     exchange_name = :rabbit_misc.r(vhost, :exchange, name)
     :rpc.call(get_rabbit_hostname,
               :rabbit_exchange, :declare,
-              [exchange_name, type, durable, auto_delete, internal, args])
+              [exchange_name, type, durable, auto_delete, internal, args, "acting-user"])
   end
 
   def list_permissions(vhost) do
@@ -174,7 +179,7 @@ defmodule TestHelper do
         get_rabbit_hostname,
         :rabbit_auth_backend_internal,
         :set_topic_permissions,
-        [user, vhost, exchange, pattern],
+        [user, vhost, exchange, pattern, "acting-user"],
         :infinity
     )
   end
@@ -194,7 +199,7 @@ defmodule TestHelper do
         get_rabbit_hostname,
         :rabbit_auth_backend_internal,
         :clear_topic_permissions,
-        [user, vhost],
+        [user, vhost, "acting-user"],
         :infinity
       )
     end
@@ -398,7 +403,7 @@ defmodule TestHelper do
 
   def set_vhost_limits(vhost, limits) do
     :rpc.call(get_rabbit_hostname,
-              :rabbit_vhost_limit, :parse_set, [vhost, limits])
+              :rabbit_vhost_limit, :parse_set, [vhost, limits, <<"acting-user">>])
   end
   def get_vhost_limits(vhost) do
     :rpc.call(get_rabbit_hostname, :rabbit_vhost_limit, :list, [vhost])
@@ -406,7 +411,7 @@ defmodule TestHelper do
   end
 
   def clear_vhost_limits(vhost) do
-    :rpc.call(get_rabbit_hostname, :rabbit_vhost_limit, :clear, [vhost])
+    :rpc.call(get_rabbit_hostname, :rabbit_vhost_limit, :clear, [vhost, <<"acting-user">>])
   end
 
   def set_scope(scope) do

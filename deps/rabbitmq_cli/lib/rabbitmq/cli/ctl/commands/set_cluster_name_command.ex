@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags []
@@ -38,7 +41,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
 
   def run([cluster_name], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
-      :rabbit_nodes, :set_cluster_name, [cluster_name])
+      :rabbit_nodes, :set_cluster_name, [cluster_name, Helpers.cli_acting_user()])
   end
 
   def usage, do: "set_cluster_name <name>"

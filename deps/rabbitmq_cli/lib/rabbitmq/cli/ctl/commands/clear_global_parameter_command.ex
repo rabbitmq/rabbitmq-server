@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearGlobalParameterCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags []
@@ -35,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearGlobalParameterCommand do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,
       :clear_global,
-      [key])
+      [key, Helpers.cli_acting_user()])
   end
 
   def usage, do: "clear_global_parameter <key>"

@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags []
@@ -26,7 +29,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
       :set_tags,
-      [user, tags]
+      [user, tags, Helpers.cli_acting_user()]
     )
   end
 

@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -34,7 +37,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
 
   def run([definition], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
-                          :rabbit_vhost_limit, :parse_set, [vhost, definition])
+                          :rabbit_vhost_limit, :parse_set, [vhost, definition, Helpers.cli_acting_user()])
   end
 
   def usage, do: "set_vhost_limits [-p <vhost>] <definition>"
