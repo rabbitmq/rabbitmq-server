@@ -364,7 +364,7 @@ audit_user(Config) ->
     ActingUser = <<"Bugs Bunny">>,
     User = <<"Wabbit">>,
 
-    rabbit_ct_broker_helpers:add_user(Config, User, ActingUser),
+    rabbit_ct_broker_helpers:add_user(Config, 0, User, User, ActingUser),
     receive_user_in_event(<<"user.created">>, ActingUser),
 
     rabbit_ct_broker_helpers:delete_user(Config, 0, User, ActingUser),
@@ -378,7 +378,7 @@ audit_user_password(Config) ->
     ActingUser = <<"Bugs Bunny">>,
     User = <<"Wabbit">>,
 
-    rabbit_ct_broker_helpers:add_user(Config, User, ActingUser),
+    rabbit_ct_broker_helpers:add_user(Config, 0, User, User, ActingUser),
     rabbit_ct_broker_helpers:change_password(Config, 0, User, <<"pass">>, ActingUser),
     receive_user_in_event(<<"user.password.changed">>, ActingUser),
 
@@ -394,7 +394,7 @@ audit_user_tags(Config) ->
     ActingUser = <<"Bugs Bunny">>,
     User = <<"Wabbit">>,
 
-    rabbit_ct_broker_helpers:add_user(Config, User, ActingUser),
+    rabbit_ct_broker_helpers:add_user(Config, 0, User, User, ActingUser),
     rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management], ActingUser),
     receive_user_in_event(<<"user.tags.set">>, ActingUser),
 
@@ -409,7 +409,7 @@ audit_permission(Config) ->
     ActingUser = <<"Bugs Bunny">>,
     User = <<"Wabbit">>,
 
-    rabbit_ct_broker_helpers:add_user(Config, User, ActingUser),
+    rabbit_ct_broker_helpers:add_user(Config, 0, User, User, ActingUser),
     rabbit_ct_broker_helpers:set_permissions(Config, 0, User, VHost, <<".*">>,
                                              <<".*">>, <<".*">>, ActingUser),
     receive_user_in_event(<<"permission.created">>, ActingUser),
@@ -427,7 +427,7 @@ audit_topic_permission(Config) ->
     ActingUser = <<"Bugs Bunny">>,
     User = <<"Wabbit">>,
 
-    rabbit_ct_broker_helpers:add_user(Config, User, ActingUser),
+    rabbit_ct_broker_helpers:add_user(Config, 0, User, User, ActingUser),
     rabbit_ct_broker_helpers:rpc(
       Config, 0, rabbit_auth_backend_internal, set_topic_permissions,
       [User, VHost, <<"amq.topic">>, "^a", ActingUser]),
