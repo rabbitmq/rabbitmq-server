@@ -26,13 +26,6 @@ ESCRIPTS = escript/rabbitmqctl \
 	   escript/rabbitmq-plugins \
 	   escript/rabbitmq-diagnostics
 
-$(HOME)/.mix/archives/hex-*:
-	$(verbose) mix local.hex --force
-
-hex: $(HOME)/.mix/archives/hex-*
-
-deps:: hex
-
 app:: $(ESCRIPTS)
 	@:
 
@@ -43,8 +36,13 @@ rabbitmqctl_srcs := mix.exs \
 # `mix make_all`. We do not fetch and build them in `make deps` because
 # mix(1) startup time is quite high. Thus we prefer to run it once, even
 # though it kind of breaks the Erlang.mk model.
+#
+# We write `y` on mix stdin because it asks approval to install Hex if
+# it's missing. Another way to do it is to use `mix local.hex` but it
+# can't be integrated in an alias and doing it from the Makefile isn't
+# practical.
 escript/rabbitmqctl: $(rabbitmqctl_srcs) deps
-	$(gen_verbose) mix make_all
+	$(gen_verbose) echo y | mix make_all
 
 # We create hard links for rabbitmq-plugins and rabbitmq-diagnostics
 # pointing to rabbitmqctl. We use hard links instead of symlinks because
@@ -69,9 +67,9 @@ test:: $(ESCRIPTS)
 
 clean:: clean-mix
 
-clean-mix: hex
+clean-mix:
 	$(gen_verbose) rm -f $(ESCRIPTS)
-	$(verbose) mix clean
+	$(verbose) echo y | mix clean
 
 repl:
 	$(verbose) iex -S mix
