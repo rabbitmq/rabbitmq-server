@@ -295,6 +295,8 @@ install-scripts: install-escripts
 			"$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
 	done
+	$(inst_verbose) cp "$(DEPS_DIR)/rabbitmq_cli/scripts/
+
 
 # FIXME: We do symlinks to scripts in $(RMQ_ERLAPP_DIR))/sbin but this
 # code assumes a certain hierarchy to make relative symlinks.

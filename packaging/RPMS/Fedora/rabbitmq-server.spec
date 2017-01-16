@@ -41,6 +41,7 @@ RabbitMQ is an open source multi-protocol messaging broker.
 %define _rabbit_server_ocf scripts/rabbitmq-server.ocf
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
 %define _rabbit_server_ha_ocf scripts/rabbitmq-server-ha.ocf
+%define _rabbitmqctl_autocomplete scripts/rabbitmqctl-autocomplete
 
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
@@ -72,6 +73,7 @@ install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ha_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
 install -p -D -m 0644 %{S:2} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
+install -p -d -m 0755 %{_rabbitmqctl_autocomplete} %{buildroot}%{_sysconfdir}/profile.d/rabbitmqctl-autocomplete
 
 mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 
@@ -195,6 +197,8 @@ fi
 %if 0%{?rhel} < 7
 %{_initrddir}/rabbitmq-server
 %endif
+
+%{_sysconfdir}/profile.d/rabbitmqctl-autocomplete
 
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*
