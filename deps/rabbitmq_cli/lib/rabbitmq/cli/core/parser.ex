@@ -21,7 +21,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
   # the English language is 5.
   @levenshtein_distance_limit 5
 
-  @spec parse(String.t) :: {command :: :no_command | atom(),
+  @spec parse(String.t) :: {command :: :no_command | atom() | {:suggest, String.t()},
                             command_name :: String.t,
                             arguments :: [String.t],
                             options :: Map.t,

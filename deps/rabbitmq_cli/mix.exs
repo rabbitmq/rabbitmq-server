@@ -64,7 +64,11 @@ defmodule RabbitMQCtl.MixfileBase do
                     RabbitMQ.CLI.Seagull.Commands.SeagullCommand,
                     RabbitMQ.CLI.Seagull.Commands.PacificGullCommand,
                     RabbitMQ.CLI.Seagull.Commands.HerringGullCommand,
-                    RabbitMQ.CLI.Seagull.Commands.HermannGullCommand]
+                    RabbitMQ.CLI.Seagull.Commands.HermannGullCommand,
+                    RabbitMQ.CLI.Wolf.Commands.CanisLupusCommand,
+                    RabbitMQ.CLI.Wolf.Commands.CanisLatransCommand,
+                    RabbitMQ.CLI.Wolf.Commands.CanisAureusCommand
+                  ]
     [{:modules, mods ++ test_modules |> Enum.sort} | app]
   end
   defp add_modules(app, _) do
