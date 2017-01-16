@@ -44,7 +44,8 @@ all() ->
      audit_user,
      audit_user_password,
      audit_user_tags,
-     audit_permission
+     audit_permission,
+     audit_topic_permission
     ].
 
 %% -------------------------------------------------------------------
@@ -415,6 +416,27 @@ audit_permission(Config) ->
 
     rabbit_ct_broker_helpers:clear_permissions(Config, 0, User, VHost, ActingUser),
     receive_user_in_event(<<"permission.deleted">>, ActingUser),
+    rabbit_ct_broker_helpers:delete_user(Config, 0, User, ActingUser),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    ok.
+
+audit_topic_permission(Config) ->
+    Ch = declare_event_queue(Config, <<"topic.permission.*">>),
+    VHost = proplists:get_value(rmq_vhost, Config),
+    ActingUser = <<"Bugs Bunny">>,
+    User = <<"Wabbit">>,
+
+    rabbit_ct_broker_helpers:add_user(Config, User, ActingUser),
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_auth_backend_internal, set_topic_permissions,
+      [User, VHost, <<"amq.topic">>, "^a", ActingUser]),
+    receive_user_in_event(<<"topic.permission.created">>, ActingUser),
+
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_auth_backend_internal, clear_topic_permissions,
+      [User, VHost, ActingUser]),
+    receive_user_in_event(<<"topic.permission.deleted">>, ActingUser),
     rabbit_ct_broker_helpers:delete_user(Config, 0, User, ActingUser),
 
     rabbit_ct_client_helpers:close_channel(Ch),
