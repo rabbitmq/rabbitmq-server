@@ -32,7 +32,7 @@ defmodule RabbitMQCtl.MixfileBase do
                 path: "escript/rabbitmqctl"],
       deps_path: deps_dir,
       deps: deps(deps_dir),
-      aliases: aliases
+      aliases: aliases()
    ]
   end
 
