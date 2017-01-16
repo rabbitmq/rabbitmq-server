@@ -46,8 +46,17 @@ rabbitmqctl_srcs := mix.exs \
 escript/rabbitmqctl: $(rabbitmqctl_srcs) deps
 	$(gen_verbose) mix make_all
 
+# We create hard links for rabbitmq-plugins and rabbitmq-diagnostics
+# pointing to rabbitmqctl. We use hard links instead of symlinks because
+# they also work on Windows (symlinks are supported on Windows but
+# apparently require privileges).
+#
+# Also, we change to the `escript` directory to create the link
+# because, on Windows, the target of the link must exist (unlike on
+# Unix). As we want the link to point to `rabbitmqctl` in the same
+# directory, we need to cd first.
 escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
-	$(gen_verbose) ln -sf rabbitmqctl $@
+	$(gen_verbose) cd $(dir $@) && ln -f rabbitmqctl $(notdir $@)
 
 rel:: $(ESCRIPTS)
 	@:
