@@ -63,7 +63,9 @@
     get_queue_sup_pid/1,
 
     set_policy/6,
+    set_policy/7,
     clear_policy/3,
+    clear_policy/4,
     set_operator_policy/6,
     clear_operator_policy/3,
     set_ha_policy/4, set_ha_policy/5,
@@ -73,8 +75,10 @@
 
     set_parameter/5,
     set_parameter/6,
+    set_parameter/7,
     clear_parameter/4,
     clear_parameter/5,
+    clear_parameter/6,
 
     set_global_parameter/3,
     set_global_parameter/4,
@@ -83,16 +87,24 @@
 
     add_vhost/2,
     add_vhost/3,
+    add_vhost/4,
     delete_vhost/2,
     delete_vhost/3,
+    delete_vhost/4,
 
     add_user/2,
     add_user/3,
     add_user/4,
+    add_user/5,
     set_user_tags/4,
+    set_user_tags/5,
 
     delete_user/2,
     delete_user/3,
+    delete_user/4,
+
+    change_password/5,
+    clear_password/4,
 
     change_password/3,
 
@@ -101,6 +113,7 @@
 
     set_permissions/6,
     set_permissions/7,
+    set_permissions/8,
     set_full_permissions/2,
     set_full_permissions/3,
     set_full_permissions/4,
@@ -108,6 +121,7 @@
     clear_permissions/2,
     clear_permissions/3,
     clear_permissions/4,
+    clear_permissions/5,
 
     enable_plugin/3,
     disable_plugin/3,
@@ -800,13 +814,19 @@ add_vhost(Config, VHost) ->
     add_vhost(Config, 0, VHost).
 
 add_vhost(Config, Node, VHost) ->
-    rpc(Config, Node, rabbit_vhost, add, [VHost]).
+    add_vhost(Config, Node, VHost, <<"acting-user">>).
+
+add_vhost(Config, Node, VHost, Username) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, add, [VHost, Username]).
 
 delete_vhost(Config, VHost) ->
     delete_vhost(Config, 0, VHost).
 
 delete_vhost(Config, Node, VHost) ->
-    rpc(Config, Node, rabbit_vhost, delete, [VHost]).
+    delete_vhost(Config, Node, VHost, <<"acting-user">>).
+
+delete_vhost(Config, Node, VHost, Username) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, delete, [VHost, Username]).
 
 add_user(Config, Username) ->
     %% for many tests it is convenient that
@@ -817,23 +837,41 @@ add_user(Config, Username, Password) ->
     add_user(Config, 0, Username, Password).
 
 add_user(Config, Node, Username, Password) ->
-    rpc(Config, Node, rabbit_auth_backend_internal, add_user,
+    add_user(Config, Node, Username, Password, <<"acting-user">>).
+
+add_user(Config, Node, Username, Password, AuditUsername) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, add_user,
         [rabbit_data_coercion:to_binary(Username),
-         rabbit_data_coercion:to_binary(Password)]).
+         rabbit_data_coercion:to_binary(Password),
+         AuditUsername]).
 
 set_user_tags(Config, Node, Username, Tags) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, set_tags, [Username, Tags]).
+    set_user_tags(Config, Node, Username, Tags, <<"acting-user">>).
+
+set_user_tags(Config, Node, Username, Tags, AuditUsername) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, set_tags,
+                                 [Username, Tags, AuditUsername]).
 
 delete_user(Config, Username) ->
     delete_user(Config, 0, Username).
 
 delete_user(Config, Node, Username) ->
-    rpc(Config, Node, rabbit_auth_backend_internal, delete_user, [Username]).
+    delete_user(Config, Node, Username, <<"acting-user">>).
+
+delete_user(Config, Node, Username, AuditUsername) ->
+    rpc(Config, Node, rabbit_auth_backend_internal, delete_user,
+        [Username, AuditUsername]).
 
 change_password(Config, Username, Password) ->
-    rpc(Config, 0,
-        rabbit_auth_backend_internal, change_password, [Username, Password]).
+    change_password(Config, 0, Username, Password, <<"acting-user">>).
 
+change_password(Config, Node, Username, Password, AuditUsername) ->
+    rpc(Config, Node, rabbit_auth_backend_internal, change_password,
+                                 [Username, Password, AuditUsername]).
+
+clear_password(Config, Node, Username, AuditUsername) ->
+    rpc(Config, Node, rabbit_auth_backend_internal, clear_password,
+        [Username, AuditUsername]).
 
 switch_credential_validator(Config, accept_everything) ->
     rpc(Config, 0, application, set_env,
@@ -868,7 +906,13 @@ set_full_permissions(Config, Node, Username, VHost) ->
 
 set_permissions(Config, Username, VHost, ConfigurePerm, WritePerm, ReadPerm) ->
     set_permissions(Config, 0, Username, VHost, ConfigurePerm, WritePerm, ReadPerm).
+
 set_permissions(Config, Node, Username, VHost, ConfigurePerm, WritePerm, ReadPerm) ->
+    set_permissions(Config, Node, Username, VHost, ConfigurePerm, WritePerm, ReadPerm,
+                    <<"acting-user">>).
+
+set_permissions(Config, Node, Username, VHost, ConfigurePerm, WritePerm, ReadPerm,
+                ActingUser) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
                                  rabbit_auth_backend_internal,
                                  set_permissions,
@@ -876,18 +920,24 @@ set_permissions(Config, Node, Username, VHost, ConfigurePerm, WritePerm, ReadPer
                                   rabbit_data_coercion:to_binary(VHost),
                                   rabbit_data_coercion:to_binary(ConfigurePerm),
                                   rabbit_data_coercion:to_binary(WritePerm),
-                                  rabbit_data_coercion:to_binary(ReadPerm)]).
+                                  rabbit_data_coercion:to_binary(ReadPerm),
+                                  ActingUser]).
 
 clear_permissions(Config, VHost) ->
     clear_permissions(Config, 0, <<"guest">>, VHost).
 clear_permissions(Config, Username, VHost) ->
     clear_permissions(Config, 0, Username, VHost).
+
 clear_permissions(Config, Node, Username, VHost) ->
+    clear_permissions(Config, Node, Username, VHost, <<"acting-user">>).
+
+clear_permissions(Config, Node, Username, VHost, ActingUser) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
                                  rabbit_auth_backend_internal,
                                  clear_permissions,
                                  [rabbit_data_coercion:to_binary(Username),
-                                  rabbit_data_coercion:to_binary(VHost)]).
+                                  rabbit_data_coercion:to_binary(VHost),
+                                  ActingUser]).
 
 
 %% Functions to execute code on a remote node/broker.
@@ -1061,20 +1111,28 @@ get_queue_sup_pid([], _QueuePid) ->
 %% -------------------------------------------------------------------
 
 set_policy(Config, Node, Name, Pattern, ApplyTo, Definition) ->
+    set_policy(Config, Node, Name, Pattern, ApplyTo, Definition, <<"acting-user">>).
+
+set_policy(Config, Node, Name, Pattern, ApplyTo, Definition, Username) ->
     ok = rpc(Config, Node,
-      rabbit_policy, set, [<<"/">>, Name, Pattern, Definition, 0, ApplyTo]).
+             rabbit_policy, set, [<<"/">>, Name, Pattern, Definition, 0, ApplyTo,
+                                  Username]).
 
 clear_policy(Config, Node, Name) ->
+    clear_policy(Config, Node, Name, <<"acting-user">>).
+
+clear_policy(Config, Node, Name, Username) ->
     rpc(Config, Node,
-        rabbit_policy, delete, [<<"/">>, Name]).
+        rabbit_policy, delete, [<<"/">>, Name, Username]).
 
 set_operator_policy(Config, Node, Name, Pattern, ApplyTo, Definition) ->
     ok = rpc(Config, Node,
-      rabbit_policy, set_op, [<<"/">>, Name, Pattern, Definition, 0, ApplyTo]).
+      rabbit_policy, set_op, [<<"/">>, Name, Pattern, Definition, 0, ApplyTo,
+                              <<"acting-user">>]).
 
 clear_operator_policy(Config, Node, Name) ->
     rpc(Config, Node,
-        rabbit_policy, delete_op, [<<"/">>, Name]).
+        rabbit_policy, delete_op, [<<"/">>, Name, <<"acting-user">>]).
 
 set_ha_policy(Config, Node, Pattern, Policy) ->
     set_ha_policy(Config, Node, Pattern, Policy, []).
@@ -1121,30 +1179,36 @@ set_ha_policy_two_pos_batch_sync(Config) ->
 %% -------------------------------------------------------------------
 
 set_parameter(Config, Node, Component, Name, Value) ->
-    set_parameter(Config, Node, <<"/">>, Component, Name, Value).
+    set_parameter(Config, Node, <<"/">>, Component, Name, Value, none).
 
 set_parameter(Config, Node, VHost, Component, Name, Value) ->
+    set_parameter(Config, Node, VHost, Component, Name, Value, none).
+
+set_parameter(Config, Node, VHost, Component, Name, Value, Username) ->
     ok = rpc(Config, Node,
-      rabbit_runtime_parameters, set, [VHost, Component, Name, Value, none]).
+      rabbit_runtime_parameters, set, [VHost, Component, Name, Value, Username]).
 
 clear_parameter(Config, Node, Component, Name) ->
     clear_parameter(Config, Node, <<"/">>, Component, Name).
 
 clear_parameter(Config, Node, VHost, Component, Name) ->
+    clear_parameter(Config, Node, VHost, Component, Name, <<"acting-user">>).
+
+clear_parameter(Config, Node, VHost, Component, Name, Username) ->
     ok = rpc(Config, Node,
-      rabbit_runtime_parameters, clear, [VHost, Component, Name]).
+      rabbit_runtime_parameters, clear, [VHost, Component, Name, Username]).
 
 set_global_parameter(Config, Name, Value) ->
     set_global_parameter(Config, 0, Name, Value).
 set_global_parameter(Config, Node, Name, Value) ->
     ok = rpc(Config, Node,
-      rabbit_runtime_parameters, set_global, [Name, Value]).
+      rabbit_runtime_parameters, set_global, [Name, Value, <<"acting-user">>]).
 
 clear_global_parameter(Config, Name) ->
     clear_global_parameter(Config, 0, Name).
 clear_global_parameter(Config, Node, Name) ->
     ok = rpc(Config, Node,
-      rabbit_runtime_parameters, clear_global, [Name]).
+      rabbit_runtime_parameters, clear_global, [Name, <<"acting-user">>]).
 
 %% -------------------------------------------------------------------
 %% Parameter helpers.
