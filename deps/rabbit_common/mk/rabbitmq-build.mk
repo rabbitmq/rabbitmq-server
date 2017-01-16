@@ -2,6 +2,10 @@
 # Compiler flags.
 # --------------------------------------------------------------------
 
+# NOTE: This plugin is loaded twice because Erlang.mk recurses. That's
+# why ERL_LIBS may contain twice the path to Elixir libraries or
+# ERLC_OPTS may contain duplicated flags.
+
 # Add Elixir libraries to ERL_LIBS for testsuites.
 #
 # We replace the leading drive letter ("C:/") with an MSYS2-like path
