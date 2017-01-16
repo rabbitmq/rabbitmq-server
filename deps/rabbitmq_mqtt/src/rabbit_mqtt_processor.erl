@@ -177,7 +177,7 @@ process_request(?PUBLISH,
                                                   message_id = MessageId },
                   payload = Payload },
                   PState = #proc_state{retainer_pid = RPid}) ->
-    check_publish_or_die(Topic, fun() ->
+    check_publish(Topic, fun() ->
         Msg = #mqtt_msg{retain     = Retain,
                         qos        = Qos,
                         topic      = Topic,
@@ -202,7 +202,7 @@ process_request(?SUBSCRIBE,
                             exchange = Exchange,
                             retainer_pid = RPid,
                             send_fun = SendFun } = PState0) ->
-    check_subscribe_or_die(Topics, fun() ->
+    check_subscribe(Topics, fun() ->
         {QosResponse, PState1} =
             lists:foldl(fun (#mqtt_topic{name = TopicName,
                                          qos  = Qos}, {QosList, PState}) ->
@@ -785,34 +785,62 @@ close_connection(PState = #proc_state{ connection = Connection,
     PState #proc_state{ channels   = {undefined, undefined},
                         connection = undefined }.
 
-% NB: check_*_or_die: MQTT spec says we should ack normally, ie pretend there
+% NB: check_*: MQTT spec says we should ack normally, ie pretend there
 % was no auth error, but here we are closing the connection with an error. This
 % is what happens anyway if there is an authorization failure at the AMQP level.
 
-check_publish_or_die(TopicName, Fn, PState) ->
+check_publish(TopicName, Fn, PState) ->
   case check_topic_access(TopicName, write, PState) of
     ok -> Fn();
     _ -> {err, unauthorized, PState}
   end.
 
-check_subscribe_or_die([], Fn, _) ->
+check_subscribe([], Fn, _) ->
   Fn();
 
-check_subscribe_or_die([#mqtt_topic{name = TopicName} | Topics], Fn, PState) ->
+check_subscribe([#mqtt_topic{name = TopicName} | Topics], Fn, PState) ->
   case check_topic_access(TopicName, read, PState) of
-    ok -> check_subscribe_or_die(Topics, Fn, PState);
+    ok -> check_subscribe(Topics, Fn, PState);
     _ -> {err, unauthorized, PState}
   end.
 
-check_topic_access(TopicName, Access,
+check_topic_access(TopicName, write = Access,
+                   #proc_state{
+                        auth_state = #auth_state{user = User,
+                                                 vhost = VHost},
+                        exchange = Exchange}) ->
+  Resource = #resource{virtual_host = VHost,
+                       kind = topic,
+                       name = Exchange},
+  Context = #{routing_key => rabbit_mqtt_util:mqtt2amqp(TopicName)},
+
+    try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
+        R -> R
+    catch
+        _:{amqp_error, access_refused, Msg, _} ->
+            rabbit_log:error("operation resulted in an error (access_refused): ~p~n", [Msg]),
+            {error, access_refused};
+        _:Error ->
+            rabbit_log:error("~p~n", [Error]),
+            {error, access_refused}
+    end;
+check_topic_access(TopicName, read = Access,
                    #proc_state{
                       auth_state = #auth_state{user = User,
                                                vhost = VHost}}) ->
   Resource = #resource{virtual_host = VHost,
                        kind = topic,
                        name = TopicName},
-  rabbit_access_control:check_resource_access(User, Resource, Access).
-
+  try rabbit_access_control:check_resource_access(User, Resource, Access) of
+      R -> R
+  catch
+      _:{amqp_error, access_refused, Msg, _} ->
+          rabbit_log:error("operation resulted in an error (access_refused): ~p~n", [Msg]),
+          {error, access_refused};
+      _:Error ->
+          rabbit_log:error("~p~n", [Error]),
+          {error, access_refused}
+  end.
 
 info(consumer_tags, #proc_state{consumer_tags = Val}) -> Val;
 info(unacked_pubs, #proc_state{unacked_pubs = Val}) -> Val;
