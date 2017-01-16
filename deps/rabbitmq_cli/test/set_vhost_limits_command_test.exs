@@ -112,7 +112,7 @@ defmodule SetVhostLimitsCommandTest do
       context[:opts]
     ) == {:error_string, 'JSON decoding error'}
 
-    assert get_vhost_limits(context[:vhost]) == %{}
+    assert get_vhost_limits(context[:vhost]) == []
   end
 
   test "run: invalid limit returns an error", context do
@@ -121,7 +121,7 @@ defmodule SetVhostLimitsCommandTest do
       context[:opts]
     ) == {:error_string, 'Validation failed\n\nUnrecognised terms [{<<"foo">>,<<"bar">>}] in limits\n'}
 
-    assert get_vhost_limits(context[:vhost]) == %{}
+    assert get_vhost_limits(context[:vhost]) == []
   end
 
   test "run: an empty JSON object definition unsets all limits for vhost", context do
@@ -138,7 +138,7 @@ defmodule SetVhostLimitsCommandTest do
       context[:opts]
     ) == :ok
 
-    assert get_vhost_limits(context[:vhost]) == %{}
+    assert get_vhost_limits(context[:vhost]) == [{"test1", %{}}]
   end
 
   test "banner", context do
@@ -149,7 +149,8 @@ defmodule SetVhostLimitsCommandTest do
   end
 
   defp assert_limits(context) do
-    limits = get_vhost_limits(context[:vhost])
+    vhost = context[:vhost]
+    [{vhost, limits}] = get_vhost_limits(context[:vhost])
     assert {:ok, limits} == JSON.decode(context[:definition])
   end
 end

@@ -83,14 +83,14 @@ defmodule ClearVhostLimitsCommandTest do
 
     :ok = set_vhost_limits(context[:vhost], @definition)
 
-    assert get_vhost_limits(context[:vhost]) != %{}
+    assert get_vhost_limits(context[:vhost]) != []
 
     assert @command.run(
       [],
       vhost_opts
     ) == :ok
 
-    assert get_vhost_limits(context[:vhost]) == %{}
+    assert get_vhost_limits(context[:vhost]) == []
   end
 
   @tag vhost: "bad-vhost"
