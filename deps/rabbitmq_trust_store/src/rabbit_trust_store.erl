@@ -205,6 +205,7 @@ default_refresh_interval() ->
            Config :: list().
 refresh_certs(Config, State) ->
     Providers = providers(Config),
+    clean_deleted_providers(Providers),
     lists:foldl(
         fun(Provider, NewStates) ->
             ProviderState = proplists:get_value(Provider, State, nostate),
@@ -297,7 +298,19 @@ get_old_cert_ids(Provider) ->
     lists:append(ets:select(table_name(), MS)).
 
 providers(Config) ->
-    proplists:get_value(providers, Config, []).
+    Providers = proplists:get_value(providers, Config, []),
+    lists:filter(
+        fun(Provider) ->
+            case code:ensure_loaded(Provider) of
+                {module, Provider} -> true;
+                {error, Error} ->
+                    rabbit_log:warning("Unable to load trust store certificates"
+                                       " provider module ~p. Reason ~p~n",
+                                       [Provider, Error]),
+                    false
+            end
+        end,
+        Providers).
 
 table_name() ->
     trust_store_whitelist.
@@ -318,3 +331,10 @@ extract_issuer_id(#'OTPCertificate'{} = C) ->
             Identifier
     end,
     {Issuer, Serial}.
+
+clean_deleted_providers(Providers) ->
+    [{EntryMatch, _, [true]}] =
+        ets:fun2ms(fun(#entry{provider = P})-> true end),
+    Condition = [ {'=/=', '$1', Provider} || Provider <- Providers ],
+    ets:select_delete(table_name(), [{EntryMatch, Condition, [true]}]).
+
