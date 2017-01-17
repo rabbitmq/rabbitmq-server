@@ -86,7 +86,8 @@ start() ->
 make_tar(Release, RabbitHome) ->
     systools:make_tar(Release,
                       [
-                       {dirs, [docs, etc, include, plugins, sbin, share]},
+                       {dirs,
+                        [docs, escript, etc, include, plugins, sbin, share]},
                        {erts, code:root_dir()},
                        {outdir, RabbitHome}
                       ]).
