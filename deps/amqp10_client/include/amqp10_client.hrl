@@ -1,3 +1,5 @@
 -define(AMQP_PROTOCOL_HEADER, <<"AMQP", 0, 1, 0, 0>>).
 -define(SASL_PROTOCOL_HEADER, <<"AMQP", 3, 1, 0, 0>>).
 -define(MIN_MAX_FRAME_SIZE, 512).
+-define(MAX_MAX_FRAME_SIZE, 4294967295).
+-define(FRAME_HEADER_SIZE, 8).

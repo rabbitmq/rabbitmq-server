@@ -15,7 +15,8 @@
 %% Private API.
 %% -------------------------------------------------------------------
 
--spec start_link() -> {ok, pid()} | ignore | {error, any()}.
+-spec start_link() ->
+    {ok, pid()} | ignore | {error, any()}.
 
 start_link() ->
     supervisor:start_link(?MODULE, []).
@@ -24,6 +25,6 @@ start_link() ->
 %% Supervisor callbacks.
 %% -------------------------------------------------------------------
 
-init([]) ->
-    Template = ?CHILD(session, amqp10_client_session, worker, []),
+init(Args) ->
+    Template = ?CHILD(session, amqp10_client_session, worker, Args),
     {ok, {{simple_one_for_one, 0, 1}, [Template]}}.

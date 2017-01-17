@@ -14,7 +14,7 @@
         ]).
 
 %% Private API.
--export([start_link/2,
+-export([start_link/3,
          socket_ready/2
         ]).
 
@@ -73,7 +73,8 @@
          next_link_handle = 0 :: link_handle(),
          next_delivery_id = 0 :: non_neg_integer(),
          early_attach_requests = [] :: [term()],
-         pending_attach_requests = #{} :: #{link_name() => {pid(), any()}}
+         pending_attach_requests = #{} :: #{link_name() => {pid(), any()}},
+         connection_config = #{} :: amqp10_client_connection:connection_config()
         }).
 
 %% -------------------------------------------------------------------
@@ -110,8 +111,8 @@ flow(Session, Handle, Flow) ->
 %% Private API.
 %% -------------------------------------------------------------------
 
-start_link(Channel, Reader) ->
-    gen_fsm:start_link(?MODULE, [Channel, Reader], []).
+start_link(Channel, Reader, ConnConfig) ->
+    gen_fsm:start_link(?MODULE, [Channel, Reader, ConnConfig], []).
 
 -spec socket_ready(pid(), gen_tcp:socket()) -> ok.
 
@@ -122,9 +123,10 @@ socket_ready(Pid, Socket) ->
 %% gen_fsm callbacks.
 %% -------------------------------------------------------------------
 
-init([Channel, Reader]) ->
+init([Channel, Reader, ConnConfig]) ->
     amqp10_client_frame_reader:register_session(Reader, self(), Channel),
-    State = #state{channel = Channel, reader = Reader},
+    State = #state{channel = Channel, reader = Reader,
+                   connection_config = ConnConfig},
     {ok, unmapped, State}.
 
 unmapped({socket_ready, Socket}, State) ->
@@ -304,7 +306,7 @@ mapped({transfer, [#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0 |
 
     % augment transfer with session stuff
     Transfer = Transfer0#'v1_0.transfer'{delivery_id = {uint, NDI}},
-    ok = send_transfer([Transfer | Parts], State),
+    ok = send_transfer(Transfer, Parts, State),
     % reply after socket write
     % TODO when using settle = false delay reply until disposition
     % TODO look into if erlang will correctly wrap integers durin
@@ -372,15 +374,46 @@ send(Record, #state{socket = Socket} = State) ->
     Frame = encode_frame(Record, State),
     gen_tcp:send(Socket, Frame).
 
-encode_transfer_frame(Records, #state{channel = Channel}) ->
-    %% TODO split into multiple transfers if required
-    Encoded = [rabbit_amqp1_0_framing:encode_bin(R) || R <- Records],
-    rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded).
+% encode_transfer_frame(Records, #state{channel = Channel}) ->
+%     %% TODO split into multiple transfers if required
+%     Encoded = [rabbit_amqp1_0_framing:encode_bin(R) || R <- Records],
+%     rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded).
 
 % TODO large messages need to be split into several frames
-send_transfer(Records, #state{socket = Socket} = State) ->
-    Frame = encode_transfer_frame(Records, State),
-    gen_tcp:send(Socket, Frame).
+send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
+                                        connection_config = Config}) ->
+    OutMaxFrameSize = case Config of
+                          #{outgoing_max_frame_size := undefined} ->
+                              ?MAX_MAX_FRAME_SIZE;
+                          #{outgoing_max_frame_size := Sz} -> Sz;
+                          _ -> ?MAX_MAX_FRAME_SIZE
+                      end,
+    Transfer = rabbit_amqp1_0_framing:encode_bin(Transfer0),
+    TSize = iolist_size(Transfer),
+    Parts = [rabbit_amqp1_0_framing:encode_bin(P) || P <- Parts0],
+    PartsBin = iolist_to_binary(Parts),
+
+    % TODO: this does not take the extended header into account
+    % see: 2.3
+    MaxPayloadSize = OutMaxFrameSize - TSize - ?FRAME_HEADER_SIZE,
+
+    Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
+    ok = gen_tcp:send(Socket, Frames).
+
+build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)
+  when byte_size(Bin) =< MaxPayloadSize ->
+    T = rabbit_amqp1_0_framing:encode_bin(Trf#'v1_0.transfer'{more = false}),
+    Frame = rabbit_amqp1_0_binary_generator:build_frame(Channel, [T, Bin]),
+    lists:reverse([Frame | Acc]);
+build_frames(Channel, Trf, Payload, MaxPayloadSize, Acc) ->
+    <<Bin:MaxPayloadSize/binary, Rest/binary>> = Payload,
+    T = rabbit_amqp1_0_framing:encode_bin(Trf#'v1_0.transfer'{more = true}),
+    Frame = rabbit_amqp1_0_binary_generator:build_frame(Channel, [T, Bin]),
+    build_frames(Channel, Trf, Rest, MaxPayloadSize, [Frame | Acc]).
+
+
+
+
 
 handle_attach(Send, {Name, Role, Source, Target}, {FromPid, _} = From,
       #state{next_link_handle = Handle, links = Links,

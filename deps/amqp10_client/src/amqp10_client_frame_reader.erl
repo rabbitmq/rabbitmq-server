@@ -44,6 +44,7 @@
          buffer = <<>> :: binary(),
          frame_state :: #frame_state{} | undefined,
          connection :: pid() | undefined,
+         connection_config = #{} :: amqp10_client_connection:connection_config(),
          outgoing_channels = #{},
          incoming_channels = #{}}).
 
@@ -86,10 +87,11 @@ unregister_session(Reader, Session, OutgoingChannel, IncomingChannel) ->
 %% gen_fsm callbacks.
 %% -------------------------------------------------------------------
 
-init([Sup, #{address := Host, port := Port}]) ->
+init([Sup, #{address := Host, port := Port} = ConnConfig]) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Socket} ->
-            State = #state{connection_sup = Sup, socket = Socket},
+            State = #state{connection_sup = Sup, socket = Socket,
+                           connection_config = ConnConfig},
             {ok, expecting_connection_pid, State};
         {error, Reason} ->
             {stop, Reason}

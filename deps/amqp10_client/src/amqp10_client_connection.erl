@@ -39,7 +39,9 @@
 
 -type connection_config() :: #{address => inet:socket_address() | inet:hostname(),
                                port => inet:port_number(),
-                               max_frame_size => non_neg_integer()}. % tODO constrain to large than 512
+                               max_frame_size => non_neg_integer(), % TODO constrain to large than 512
+                               outgoing_max_frame_size => non_neg_integer() | undefined
+                              }.
 
 -record(state,
         {next_channel = 1 :: pos_integer(),
@@ -158,10 +160,12 @@ expecting_amqp_protocol_header({protocol_header_received, Protocol, Maj, Min, Re
 
 expecting_open_frame(
   #'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
-  #state{pending_session_reqs = PendingSessionReqs} = State) ->
+  #state{pending_session_reqs = PendingSessionReqs, config = Config} = State0) ->
     error_logger:info_msg(
       "-- CONNECTION OPENED -- Max frame size: ~p Idle timeout ~p~n",
       [MFSz, Timeout]),
+    State = State0#state{config =
+                         Config#{outgoing_max_frame_size => unpack(MFSz)}},
     State3 = lists:foldr(
       fun(From, State1) ->
               {Ret, State2} = handle_begin_session(State1),
@@ -232,8 +236,9 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% -------------------------------------------------------------------
 
 handle_begin_session(#state{sessions_sup = Sup, reader = Reader,
-                            next_channel = Channel} = State) ->
-    Ret = supervisor:start_child(Sup, [Channel, Reader]),
+                            next_channel = Channel,
+                            config = Config} = State) ->
+    Ret = supervisor:start_child(Sup, [Channel, Reader, Config]),
     State1 = case Ret of
                  {ok, _} -> State#state{next_channel = Channel + 1};
                  _       -> State
@@ -286,3 +291,5 @@ send(Record, FrameType, #state{socket = Socket}) ->
     Encoded = rabbit_amqp1_0_framing:encode_bin(Record),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, FrameType, Encoded),
     gen_tcp:send(Socket, Frame).
+
+unpack(V) -> amqp10_client_types:unpack(V).
