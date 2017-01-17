@@ -245,7 +245,7 @@ update_certs(CertsList, Provider, Config) ->
         fun(CertId) ->
             Attributes = proplists:get_value(CertId, CertsList),
             Name = maps:get(name, Attributes, undefined),
-            case get_cert_data(Provider, CertId, Attributes, Config) of
+            case load_and_decode_cert(Provider, CertId, Attributes, Config) of
                 {ok, Cert, IssuerId} ->
                     save_cert(CertId, Provider, IssuerId, Cert, Name);
                 {error, Reason} ->
@@ -263,9 +263,9 @@ update_certs(CertsList, Provider, Config) ->
         OldCertIds -- NewCertIds),
     ok.
 
-get_cert_data(Provider, CertId, Attributes, Config) ->
+load_and_decode_cert(Provider, CertId, Attributes, Config) ->
     try
-        case Provider:get_cert_data(CertId, Attributes, Config) of
+        case Provider:load_cert(CertId, Attributes, Config) of
             {ok, Cert} ->
                 DecodedCert = public_key:pkix_decode_cert(Cert, otp),
                 Id = extract_issuer_id(DecodedCert),

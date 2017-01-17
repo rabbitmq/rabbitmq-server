@@ -15,7 +15,7 @@
          CertId :: term(),
          Attributes :: map().
 
--callback get_cert_data(CertId, Attributes, Config)
+-callback load_cert(CertId, Attributes, Config)
     -> {ok, Cert} | {error, term()}
     when CertId :: term(),
          Attributes :: map(),

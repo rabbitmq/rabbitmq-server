@@ -4,7 +4,7 @@
 
 -behaviour(rabbit_trust_store_certificate_provider).
 
--export([list_certs/1, list_certs/2, get_cert_data/3]).
+-export([list_certs/1, list_certs/2, load_cert/3]).
 
 -define(DIRECTORY_OR_FILE_NAME_EXISTS, eexist).
 
@@ -40,9 +40,9 @@ list_certs(Config, #directory_state{directory_path = DirPath,
                                          directory_change_time = NewChangeTime}}
     end.
 
--spec get_cert_data(cert_id(), map(), Config :: list())
+-spec load_cert(cert_id(), map(), Config :: list())
     -> {ok, Cert :: public_key:der_encoded()}.
-get_cert_data({FileName, _}, #{}, Config) ->
+load_cert({FileName, _}, #{}, Config) ->
     Path = directory_path(Config),
     Cert = extract_cert(Path, FileName),
     rabbit_log:info(

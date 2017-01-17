@@ -2,7 +2,7 @@
 
 -behaviour(rabbit_trust_store_certificate_provider).
 
--export([list_certs/1, list_certs/2, get_cert_data/3]).
+-export([list_certs/1, list_certs/2, load_cert/3]).
 
 %% This is an example implementation for
 %% rabbit_trust_store_certificate_provider behaviour.
@@ -46,7 +46,7 @@ list_certs(Config, _) -> list_certs(Config).
 %% This function loads a certificate data using certifocate ID and attributes.
 %% We use the url parameter in attributes.
 %% Some providers can ignore attributes and use CertId instead
-get_cert_data(_CertId, #{url := Url}, _Config) ->
+load_cert(_CertId, #{url := Url}, _Config) ->
     case httpc:request(get, {rabbit_data_coercion:to_list(Url), []},
                        [], [{body_format, binary}]) of
         {ok, {{_,Code,_}, _Headers, Body}} when Code div 100 == 2 ->
