@@ -63,7 +63,7 @@ queue_limit(VirtualHost) ->
     get_limit(VirtualHost, <<"max-queues">>).
 
 
-list0(VHost) ->
+query_limits(VHost) ->
     case rabbit_runtime_parameters:list(VHost, <<"vhost-limits">>) of
         []     -> [];
         Params -> [ {pget(vhost, Param), pget(value, Param)}
@@ -74,14 +74,15 @@ list0(VHost) ->
 
 
 -spec list() -> [{rabbit_types:vhost(), rabbit_types:infos()}].
-
-list() -> list0('_').
-
+list() ->
+    query_limits('_').
 
 -spec list(rabbit_types:vhost()) -> rabbit_types:infos().
-
-list(VHost) -> list0(VHost).
-
+list(VHost) ->
+    case query_limits(VHost) of
+        []               -> [];
+        [{VHost, Value}] -> Value
+    end.
 
 -spec is_over_connection_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
 
