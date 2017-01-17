@@ -2181,7 +2181,6 @@ vhost_limits_list_test(Config) ->
 
     Limits1 =  [#{vhost => <<"limit_test_vhost_1">>,
                   value => #{'max-connections' => 100, 'max-queues' => 100}}],
-
     Limits2 =  [#{vhost => <<"limit_test_vhost_2">>,
 		  value => #{'max-connections' => 200}}],
 
@@ -2272,7 +2271,7 @@ vhost_limit_set_test(Config) ->
     Limits4 = [#{vhost => <<"limit_test_vhost_1">>,
         value => #{'max-queues' => 100}}],
     Limits4 = http_get(Config, "/vhost-limits/limit_test_vhost_1", ?OK),
-    
+
     %% Only admin can clear limits
     http_delete(Config, "/vhost-limits/limit_test_vhost_1/max-queues", Vhost1User, Vhost1User, ?NOT_AUTHORISED),
 

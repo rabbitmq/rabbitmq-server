@@ -94,9 +94,9 @@ topic_perms(ReqData) ->
                         rabbit_auth_backend_internal:list_user_vhost_topic_permissions(
                           User, VHost),
                     case Perms of
+                        []     -> none;
                         TopicPermissions -> [[{user, User}, {vhost, VHost} | TopicPermission]
-                        || TopicPermission <- TopicPermissions];
-                        []     -> none
+                        || TopicPermission <- TopicPermissions]
                     end
             end;
         {error, _} ->
