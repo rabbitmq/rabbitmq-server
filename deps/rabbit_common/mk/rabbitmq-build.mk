@@ -2,19 +2,32 @@
 # Compiler flags.
 # --------------------------------------------------------------------
 
+# NOTE: This plugin is loaded twice because Erlang.mk recurses. That's
+# why ERL_LIBS may contain twice the path to Elixir libraries or
+# ERLC_OPTS may contain duplicated flags.
+
+# Add Elixir libraries to ERL_LIBS for testsuites.
+#
+# We replace the leading drive letter ("C:/") with an MSYS2-like path
+# ("/C/") for Windows. Otherwise, ERL_LIBS mixes `:` as a PATH separator
+# and a drive letter marker. This causes the Erlang VM to crash with
+# "Bad address".
+#
+# The space before `~r//` is apparently required. Otherwise, Elixir
+# complains with "unexpected token "~"".
+
+ELIXIR_LIB_DIR := $(shell elixir -e 'IO.puts(Regex.replace( ~r/^([a-zA-Z]):/, to_string(:code.lib_dir(:elixir)), "/\\1"))')
+ifeq ($(ERL_LIBS),)
+ERL_LIBS := $(ELIXIR_LIB_DIR)
+else
+ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR)
+endif
+
 # FIXME: We copy Erlang.mk default flags here: rabbitmq-build.mk is
 # loaded as a plugin, so before those variables are defined. And because
 # Erlang.mk uses '?=', the flags we set here override the default set.
 #
 # See: https://github.com/ninenines/erlang.mk/issues/502
-
-ELIXIR_LIB_DIR = $(shell elixir -e 'IO.puts(:code.lib_dir(:elixir))')
- ifeq ($(ERL_LIBS),)
-     ERL_LIBS = $(ELIXIR_LIB_DIR)
- else
-     ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR)
- endif
-
 
 WARNING_OPTS += +debug_info \
 		+warn_export_vars \
