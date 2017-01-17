@@ -402,7 +402,7 @@ defmodule TestHelper do
   end
   def get_vhost_limits(vhost) do
     :rpc.call(get_rabbit_hostname, :rabbit_vhost_limit, :list, [vhost])
-    |> Enum.map(fn({vhost, limits}) -> {vhost, Map.new(limits)} end)
+    |> Map.new
   end
 
   def clear_vhost_limits(vhost) do
