@@ -62,8 +62,10 @@ limits(ReqData, Context) ->
               || {VHost, Value} <- rabbit_vhost_limit:list(),
                  lists:member(VHost, VisibleVhosts) ];
         VHost when is_binary(VHost) ->
-            [ [{vhost, AVHost}, {value, Value}]
-	      || {AVHost, Value} <- rabbit_vhost_limit:list(VHost)]
+            case rabbit_vhost_limit:list(VHost) of
+                []    -> [];
+                Value -> [[{vhost, VHost}, {value, Value}]]
+            end
     end.
 %%--------------------------------------------------------------------
 
