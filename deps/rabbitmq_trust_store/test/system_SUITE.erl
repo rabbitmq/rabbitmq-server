@@ -662,7 +662,6 @@ disabled_provider_removes_certificates(Config) ->
     %% Certificate is not there anymore
     CertsAfterDelete = rabbit_ct_broker_helpers:rpc(Config, 0,
            rabbit_trust_store, list, []),
-    ct:pal("Certs ofter delete ~p~n", [CertsAfterDelete]),
     nomatch = re:run(CertsAfterDelete, ".*alice\.pem.*").
 
 enabled_provider_adds_cerificates(Config) ->
@@ -686,7 +685,6 @@ enabled_provider_adds_cerificates(Config) ->
     %% Certificate is there
     CertsAfterAdd = rabbit_ct_broker_helpers:rpc(Config, 0,
            rabbit_trust_store, list, []),
-    ct:pal("Certs ofter add ~p~n", [CertsAfterAdd]),
     {match, _} = re:run(CertsAfterAdd, ".*alice\.pem.*").
 
 
