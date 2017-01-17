@@ -107,6 +107,8 @@ Virtual host events:
 
 - `vhost.created`
 - `vhost.deleted`
+- `vhost.limits.set`
+- `vhost.limits.cleared`
 
 User related events:
 
@@ -122,6 +124,8 @@ Permission events:
 
 - `permission.created`
 - `permission.deleted`
+- `topic.permission.created`
+- `topic.permission.deleted`
 
 ### Shovel Plugin
 
