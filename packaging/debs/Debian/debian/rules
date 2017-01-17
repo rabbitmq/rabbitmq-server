@@ -40,7 +40,6 @@ override_dh_auto_install:
 		cp -a $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl \
 		 $(DEB_DESTDIR)$(PREFIX)/sbin/$$script; \
 	done
-
 	install -p -D -m 0644 debian/rabbitmq-server.default \
 		$(DEB_DESTDIR)/etc/default/rabbitmq-server
 
@@ -49,8 +48,8 @@ override_dh_auto_install:
 	install -p -D -m 0755 scripts/rabbitmq-server-ha.ocf \
 		$(DEB_DESTDIR)$(PREFIX)/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
 
-	install -p -D -m 0755 scripts/rabbitmqctl-autocomplete \
-		$(DEB_DESTDIR)/etc/profile.d/
+	install -p -D -m 0755 scripts/rabbitmqctl-autocomplete.sh \
+		$(DEB_DESTDIR)/etc/profile.d/rabbitmqctl-autocomplete.sh
 
 	rm $(DEB_DESTDIR)$(RMQ_ERLAPP_DIR)/LICENSE* \
 		$(DEB_DESTDIR)$(RMQ_ERLAPP_DIR)/INSTALL
