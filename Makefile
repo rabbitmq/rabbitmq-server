@@ -150,32 +150,32 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	done
 	$(verbose) echo "PLUGINS := $(PLUGINS)" > $@/plugins.mk
 
+$(SOURCE_DIST).manifest: $(SOURCE_DIST)
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) | LC_COLLATE=C sort > $@
+
 # TODO: Fix file timestamps to have reproducible source archives.
 # $(verbose) find $@ -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $@/git-revisions.txt
 
-$(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
+$(SOURCE_DIST).tar.gz: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(TAR) $(TAR_V) --no-recursion -cf - | \
+		$(TAR) $(TAR_V) -T $(SOURCE_DIST).manifest --no-recursion -cf - | \
 		$(GZIP) --best > $@
 
-$(SOURCE_DIST).tar.bz2: $(SOURCE_DIST)
+$(SOURCE_DIST).tar.bz2: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(TAR) $(TAR_V) --no-recursion -cf - | \
+		$(TAR) $(TAR_V) -T $(SOURCE_DIST).manifest --no-recursion -cf - | \
 		$(BZIP2) > $@
 
-$(SOURCE_DIST).tar.xz: $(SOURCE_DIST)
+$(SOURCE_DIST).tar.xz: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(TAR) $(TAR_V) --no-recursion -cf - | \
+		$(TAR) $(TAR_V) -T $(SOURCE_DIST).manifest --no-recursion -cf - | \
 		$(XZ) > $@
 
-$(SOURCE_DIST).zip: $(SOURCE_DIST)
+$(SOURCE_DIST).zip: $(SOURCE_DIST).manifest
 	$(verbose) rm -f $@
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(ZIP) $(ZIP_V) $@
+		$(ZIP) $(ZIP_V) --names-stdin $@ < $(SOURCE_DIST).manifest
 
 clean:: clean-source-dist clean-upgrade
 
