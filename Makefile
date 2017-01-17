@@ -62,6 +62,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.travis.yml'			\
 	       --exclude '.*.plt'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
+	       --exclude '_build/'			\
 	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
 	       --exclude 'ebin/'			\
@@ -77,12 +78,18 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'xrefr'			\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
 	       --exclude '/PACKAGES/'			\
+	       --exclude '/upgrade/'			\
+	       --exclude '/amqp_client/doc/'		\
+	       --exclude '/amqp_client/rebar.config'	\
 	       --exclude '/cowboy/doc/'			\
 	       --exclude '/cowboy/examples/'		\
 	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/build/'\
 	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/swiftmq*'\
 	       --exclude '/rabbitmq_mqtt/test/build/'	\
 	       --exclude '/rabbitmq_mqtt/test/test_client/'\
+	       --exclude '/ranch/doc/'			\
+	       --exclude '/ranch/examples/'		\
+	       --exclude '/sockjs/examples/'		\
 	       --delete					\
 	       --delete-excluded
 
