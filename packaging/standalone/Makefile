@@ -91,6 +91,7 @@ dist:
 	rm -rf $(RLS_DIR)/lib/rabbit-$(VERSION)
 
 # fix Erlang ROOTDIR
+	chmod +w $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl
 	patch -o $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.src < erl.diff
 	rm -f $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.orig
 
