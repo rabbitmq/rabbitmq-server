@@ -90,7 +90,7 @@ defmodule ClearVhostLimitsCommandTest do
       vhost_opts
     ) == :ok
 
-    assert get_vhost_limits(context[:vhost]) == []
+    assert get_vhost_limits(context[:vhost]) == %{}
   end
 
   @tag vhost: "bad-vhost"
