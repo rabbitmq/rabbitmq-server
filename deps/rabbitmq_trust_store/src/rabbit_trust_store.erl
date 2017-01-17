@@ -18,14 +18,14 @@
 
 -export([mode/0, refresh/0, list/0]). %% Console Interface.
 -export([whitelisted/3, is_whitelisted/1]). %% Client-side Interface.
--export([start/1, start_link/1]).
+-export([start_link/0]).
 -export([init/1, terminate/2,
          handle_call/3, handle_cast/2,
          handle_info/2,
          code_change/3]).
 
--include_lib("kernel/include/file.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
+-include_lib("kernel/include/file.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 -type certificate() :: #'OTPCertificate'{}.
@@ -40,17 +40,23 @@
                      | {fail, Reason :: term()}
                      | {unknown, state()}.
 
--record(entry, {filename :: string(), identifier :: tuple(), change_time :: integer()}).
--record(state, {directory_change_time :: integer(), whitelist_directory :: string(), refresh_interval :: integer()}).
+-record(state, {
+    providers_state :: [{module(), term()}],
+    refresh_interval :: integer()
+}).
+-record(entry, {
+    name :: string(),
+    cert_id :: term(),
+    provider :: module(),
+    issuer_id :: tuple(),
+    certificate :: public_key:der_encoded()
+}).
 
 
 %% OTP Supervision
 
-start(Settings) ->
-    gen_server:start(?MODULE, Settings, []).
-
-start_link(Settings) ->
-    gen_server:start_link({local, trust_store}, ?MODULE, Settings, []).
+start_link() ->
+    gen_server:start_link({local, trust_store}, ?MODULE, [], []).
 
 
 %% Console Interface
@@ -65,7 +71,28 @@ refresh() ->
 
 -spec list() -> string().
 list() ->
-    gen_server:call(trust_store, list).
+    Formatted = lists:map(
+        fun(#entry{
+                name = N,
+                cert_id = CertId,
+                certificate = Cert,
+                issuer_id = {_, Serial}}) ->
+            %% Use the certificate unique identifier as a default for the name.
+            Name = case N of
+                undefined -> io_lib:format("~p", [CertId]);
+                _         -> N
+            end,
+            Validity = rabbit_ssl:peer_cert_validity(Cert),
+            Subject = rabbit_ssl:peer_cert_subject(Cert),
+            Issuer = rabbit_ssl:peer_cert_issuer(Cert),
+            Text = io_lib:format("Name: ~s~nSerial: ~p | 0x~.16.0B~n"
+                                 "Subject: ~s~nIssuer: ~s~nValidity: ~p~n",
+                                 [Name, Serial, Serial,
+                                  Subject, Issuer, Validity]),
+            lists:flatten(Text)
+        end,
+        ets:tab2list(table_name())),
+    string:join(Formatted, "~n~n").
 
 %% Client (SSL Socket) Interface
 
@@ -97,19 +124,17 @@ whitelisted(_, {extension, _}, St) ->
 
 -spec is_whitelisted(certificate()) -> boolean().
 is_whitelisted(#'OTPCertificate'{}=C) ->
-    #entry{identifier = Id} = extract_unique_attributes(C),
+    Id = extract_issuer_id(C),
     ets:member(table_name(), Id).
-
 
 %% Generic Server Callbacks
 
-init(Settings) ->
+init([]) ->
     erlang:process_flag(trap_exit, true),
     ets:new(table_name(), table_options()),
-    Path = path(Settings),
-    Interval = refresh_interval(Settings),
-    Initial = modification_time(Path),
-    tabulate(Path),
+    Config = application:get_all_env(rabbitmq_trust_store),
+    ProvidersState = refresh_certs(Config, []),
+    Interval = refresh_interval(Config),
     if
         Interval =:= 0 ->
             ok;
@@ -117,26 +142,28 @@ init(Settings) ->
             erlang:send_after(Interval, erlang:self(), refresh)
     end,
     {ok,
-     #state{directory_change_time = Initial,
-      whitelist_directory = Path,
+     #state{
+      providers_state = ProvidersState,
       refresh_interval = Interval}}.
 
 handle_call(mode, _, St) ->
     {reply, mode(St), St};
-handle_call(refresh, _, St) ->
-    {reply, refresh(St), St};
-handle_call(list, _, St) ->
-    {reply, list(St), St};
+handle_call(refresh, _, #state{providers_state = ProvidersState} = St) ->
+    Config = application:get_all_env(rabbitmq_trust_store),
+    NewProvidersState = refresh_certs(Config, ProvidersState),
+    {reply, ok, St#state{providers_state = NewProvidersState}};
 handle_call(_, _, St) ->
     {noreply, St}.
 
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info(refresh, #state{refresh_interval = Interval} = St) ->
-    New = refresh(St),
+handle_info(refresh, #state{refresh_interval = Interval,
+                            providers_state = ProvidersState} = St) ->
+    Config = application:get_all_env(rabbitmq_trust_store),
+    NewProvidersState = refresh_certs(Config, ProvidersState),
     erlang:send_after(Interval, erlang:self(), refresh),
-    {noreply, St#state{directory_change_time = New}};
+    {noreply, St#state{providers_state = NewProvidersState}};
 handle_info(_, St) ->
     {noreply, St}.
 
@@ -149,35 +176,141 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Ancillary & Constants
 
-list(#state{whitelist_directory = Path}) ->
-    Formatted =
-        [format_cert(Path, F, S) ||
-         #entry{filename = F, identifier = {_, S}} <- ets:tab2list(table_name())],
-    to_big_string(Formatted).
-
 mode(#state{refresh_interval = I}) ->
     if
         I =:= 0 -> 'manual';
         I  >  0 -> 'automatic'
     end.
 
-refresh(#state{whitelist_directory = Path, directory_change_time = Old}) ->
-    New = modification_time(Path),
-    case New > Old of
-        false ->
-            ok;
-        true  ->
-            tabulate(Path)
+refresh_interval(Config) ->
+    Seconds = case proplists:get_value(refresh_interval, Config) of
+        undefined ->
+            default_refresh_interval();
+        S when is_integer(S), S >= 0 ->
+            S;
+        {seconds, S} when is_integer(S), S >= 0 ->
+            S
     end,
-    New.
+    timer:seconds(Seconds).
 
-refresh_interval(Pairs) ->
-    {refresh_interval, S} = lists:keyfind(refresh_interval, 1, Pairs),
-    timer:seconds(S).
+default_refresh_interval() ->
+    {ok, I} = application:get_env(rabbitmq_trust_store, default_refresh_interval),
+    I.
 
-path(Pairs) ->
-    {directory, Path} = lists:keyfind(directory, 1, Pairs),
-    Path.
+
+%% =================================
+
+-spec refresh_certs(Config, State) -> State
+      when State :: [{module(), term()}],
+           Config :: list().
+refresh_certs(Config, State) ->
+    Providers = providers(Config),
+    clean_deleted_providers(Providers),
+    lists:foldl(
+        fun(Provider, NewStates) ->
+            ProviderState = proplists:get_value(Provider, State, nostate),
+            RefreshedState = refresh_provider_certs(Provider, Config, ProviderState),
+            [{Provider, RefreshedState} | NewStates]
+        end,
+        [],
+        Providers).
+
+-spec refresh_provider_certs(Provider, Config, ProviderState) -> ProviderState
+      when Provider :: module(),
+           Config :: list(),
+           ProviderState :: term().
+refresh_provider_certs(Provider, Config, ProviderState) ->
+    case list_certs(Provider, Config, ProviderState) of
+        no_change ->
+            ProviderState;
+        {ok, CertsList, NewProviderState} ->
+            update_certs(CertsList, Provider, Config),
+            NewProviderState;
+        {error, Reason} ->
+            rabbit_log:error("Unable to load certificate list for provider ~p,"
+                             " reason: ~p~n",
+                             [Provider, Reason])
+    end.
+
+list_certs(Provider, Config, nostate) ->
+    Provider:list_certs(Config);
+list_certs(Provider, Config, ProviderState) ->
+    Provider:list_certs(Config, ProviderState).
+
+update_certs(CertsList, Provider, Config) ->
+    OldCertIds = get_old_cert_ids(Provider),
+    {NewCertIds, _} = lists:unzip(CertsList),
+
+    lists:foreach(
+        fun(CertId) ->
+            Attributes = proplists:get_value(CertId, CertsList),
+            Name = maps:get(name, Attributes, undefined),
+            case load_and_decode_cert(Provider, CertId, Attributes, Config) of
+                {ok, Cert, IssuerId} ->
+                    save_cert(CertId, Provider, IssuerId, Cert, Name);
+                {error, Reason} ->
+                    rabbit_log:error("Unable to load CA sertificate ~p"
+                                     " with provider ~p,"
+                                     " reason: ~p",
+                                     [CertId, Provider, Reason])
+            end
+        end,
+        NewCertIds -- OldCertIds),
+    lists:foreach(
+        fun(CertId) ->
+            delete_cert(CertId, Provider)
+        end,
+        OldCertIds -- NewCertIds),
+    ok.
+
+load_and_decode_cert(Provider, CertId, Attributes, Config) ->
+    try
+        case Provider:load_cert(CertId, Attributes, Config) of
+            {ok, Cert} ->
+                DecodedCert = public_key:pkix_decode_cert(Cert, otp),
+                Id = extract_issuer_id(DecodedCert),
+                {ok, Cert, Id};
+            {error, Reason} -> {error, Reason}
+        end
+    catch _:Error ->
+        {error, {Error, erlang:get_stacktrace()}}
+    end.
+
+delete_cert(CertId, Provider) ->
+    MS = ets:fun2ms(fun(#entry{cert_id = CId, provider = P})
+                    when P == Provider, CId == CertId ->
+                        true
+                    end),
+    ets:select_delete(table_name(), MS).
+
+save_cert(CertId, Provider, Id, Cert, Name) ->
+    ets:insert(table_name(), #entry{cert_id = CertId,
+                                    provider = Provider,
+                                    issuer_id = Id,
+                                    certificate = Cert,
+                                    name = Name}).
+
+get_old_cert_ids(Provider) ->
+    MS = ets:fun2ms(fun(#entry{provider = P, cert_id = CId})
+                    when P == Provider ->
+                        CId
+                    end),
+    lists:append(ets:select(table_name(), MS)).
+
+providers(Config) ->
+    Providers = proplists:get_value(providers, Config, []),
+    lists:filter(
+        fun(Provider) ->
+            case code:ensure_loaded(Provider) of
+                {module, Provider} -> true;
+                {error, Error} ->
+                    rabbit_log:warning("Unable to load trust store certificates"
+                                       " with provider module ~p. Reason: ~p~n",
+                                       [Provider, Error]),
+                    false
+            end
+        end,
+        Providers).
 
 table_name() ->
     trust_store_whitelist.
@@ -186,72 +319,10 @@ table_options() ->
     [protected,
      named_table,
      set,
-     {keypos, #entry.identifier},
+     {keypos, #entry.issuer_id},
      {heir, none}].
 
-modification_time(Path) ->
-    {ok, Info} = file:read_file_info(Path, [{time, posix}]),
-    Info#file_info.mtime.
-
-already_whitelisted_filenames() ->
-    ets:select(table_name(),
-        ets:fun2ms(fun (#entry{filename = N, change_time = T}) -> {N, T} end)).
-
-one_whitelisted_filename({Name, Time}) ->
-    ets:fun2ms(fun (#entry{filename = N, change_time = T}) when N =:= Name, T =:= Time -> true end).
-
-build_entry(Path, {Name, Time}) ->
-    Absolute    = filename:join(Path, Name),
-    Certificate = scan_then_parse(Absolute),
-    Unique      = extract_unique_attributes(Certificate),
-    Unique#entry{filename = Name, change_time = Time}.
-
-try_build_entry(Path, {Name, Time}) ->
-    try build_entry(Path, {Name, Time}) of
-        Entry ->
-            rabbit_log:info(
-              "trust store: loading certificate '~s'", [Name]),
-            {ok, Entry}
-    catch
-        _:Err ->
-            rabbit_log:error(
-              "trust store: failed to load certificate '~s', error: ~p",
-              [Name, Err]),
-            {error, Err}
-    end.
-
-do_insertions(Before, After, Path) ->
-    Entries = [try_build_entry(Path, NameTime) ||
-                       NameTime <- (After -- Before)],
-    [insert(Entry) || {ok, Entry} <- Entries].
-
-do_removals(Before, After) ->
-    [delete(NameTime) || NameTime <- (Before -- After)].
-
-get_new(Path) ->
-    {ok, New} = file:list_dir(Path),
-    [{X, modification_time(filename:absname(X, Path))} || X <- New].
-
-tabulate(Path) ->
-    Old = already_whitelisted_filenames(),
-    New = get_new(Path),
-    do_insertions(Old, New, Path),
-    do_removals(Old, New),
-    ok.
-
-delete({Name, Time}) ->
-    rabbit_log:info("removing certificate '~s'", [Name]),
-    ets:select_delete(table_name(), one_whitelisted_filename({Name, Time})).
-
-insert(Entry) ->
-    true = ets:insert(table_name(), Entry).
-
-scan_then_parse(Filename) when is_list(Filename) ->
-    {ok, Bin} = file:read_file(Filename),
-    [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
-    public_key:pkix_decode_cert(Data, otp).
-
-extract_unique_attributes(#'OTPCertificate'{}=C) ->
+extract_issuer_id(#'OTPCertificate'{} = C) ->
     {Serial, Issuer} = case public_key:pkix_issuer_id(C, other) of
         {error, _Reason} ->
             {ok, Identifier} = public_key:pkix_issuer_id(C, self),
@@ -259,24 +330,11 @@ extract_unique_attributes(#'OTPCertificate'{}=C) ->
         {ok, Identifier} ->
             Identifier
     end,
-    %% Why change the order of attributes? For the same reason we put
-    %% the *most significant figure* first (on the left hand side).
-    #entry{identifier = {Issuer, Serial}}.
+    {Issuer, Serial}.
 
-to_big_string(Formatted) ->
-    string:join([cert_to_string(X) || X <- Formatted], "~n~n").
-
-cert_to_string({Name, Serial, Subject, Issuer, Validity}) ->
-    Text =
-        io_lib:format("Name: ~s~nSerial: ~p | 0x~.16.0B~nSubject: ~s~nIssuer: ~s~nValidity: ~p~n",
-                     [ Name, Serial, Serial, Subject, Issuer, Validity]),
-    lists:flatten(Text).
-
-format_cert(Path, Name, Serial) ->
-    {ok, Bin} = file:read_file(filename:join(Path, Name)),
-    [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
-    Validity = rabbit_ssl:peer_cert_validity(Data),
-    Subject = rabbit_ssl:peer_cert_subject(Data),
-    Issuer = rabbit_ssl:peer_cert_issuer(Data),
-    {Name, Serial, Subject, Issuer, Validity}.
+clean_deleted_providers(Providers) ->
+    [{EntryMatch, _, [true]}] =
+        ets:fun2ms(fun(#entry{provider = P})-> true end),
+    Condition = [ {'=/=', '$1', Provider} || Provider <- Providers ],
+    ets:select_delete(table_name(), [{EntryMatch, Condition, [true]}]).
 

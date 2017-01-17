@@ -29,7 +29,9 @@ groups() ->
                                  ensure_configuration_using_binary_strings_is_handled,
                                  ignore_corrupt_cert,
                                  ignore_same_cert_with_different_name,
-                                 list
+                                 list,
+                                 disabled_provider_removes_certificates,
+                                 enabled_provider_adds_cerificates
                                ]}
     ].
 
@@ -640,6 +642,51 @@ list(Config) ->
            rabbit_trust_store, list, []),
     % only really tests it isn't totally broken.
     {match, _} = re:run(Certs, ".*alice\.pem.*").
+
+disabled_provider_removes_certificates(Config) ->
+    {_Root,  Cert, Key}    = ct_helper:make_certs(),
+    ok = whitelist(Config, "alice", Cert,  Key),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE,  change_configuration, [rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]]),
+
+    %% Certificate is there
+    Certs = rabbit_ct_broker_helpers:rpc(Config, 0,
+           rabbit_trust_store, list, []),
+    {match, _} = re:run(Certs, ".*alice\.pem.*"),
+
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_trust_store, providers, []]),
+    wait_for_trust_store_refresh(),
+
+    %% Certificate is not there anymore
+    CertsAfterDelete = rabbit_ct_broker_helpers:rpc(Config, 0,
+           rabbit_trust_store, list, []),
+    nomatch = re:run(CertsAfterDelete, ".*alice\.pem.*").
+
+enabled_provider_adds_cerificates(Config) ->
+    {_Root,  Cert, Key}    = ct_helper:make_certs(),
+    ok = whitelist(Config, "alice", Cert,  Key),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE,  change_configuration,
+           [rabbitmq_trust_store, [{directory, whitelist_dir(Config)},
+                                   {providers, []}]]),
+
+    %% Certificate is not there yet
+    Certs = rabbit_ct_broker_helpers:rpc(Config, 0,
+           rabbit_trust_store, list, []),
+    nomatch = re:run(Certs, ".*alice\.pem.*"),
+
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_trust_store, providers, [rabbit_trust_store_file_provider]]),
+    wait_for_trust_store_refresh(),
+
+    %% Certificate is there
+    CertsAfterAdd = rabbit_ct_broker_helpers:rpc(Config, 0,
+           rabbit_trust_store, list, []),
+    {match, _} = re:run(CertsAfterAdd, ".*alice\.pem.*").
+
 
 %% Test Constants
 
