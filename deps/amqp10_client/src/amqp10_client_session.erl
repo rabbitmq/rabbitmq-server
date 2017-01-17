@@ -374,12 +374,6 @@ send(Record, #state{socket = Socket} = State) ->
     Frame = encode_frame(Record, State),
     gen_tcp:send(Socket, Frame).
 
-% encode_transfer_frame(Records, #state{channel = Channel}) ->
-%     %% TODO split into multiple transfers if required
-%     Encoded = [rabbit_amqp1_0_framing:encode_bin(R) || R <- Records],
-%     rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded).
-
-% TODO large messages need to be split into several frames
 send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
                                         connection_config = Config}) ->
     OutMaxFrameSize = case Config of

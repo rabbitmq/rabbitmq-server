@@ -65,17 +65,16 @@
 
 
 
-% TODO: need to be able to handle multiple transfer frames
 -record(amqp10_msg,
-        {transfer :: #'v1_0.transfer'{}, % the first transfer
+        {transfer :: #'v1_0.transfer'{},
          header :: maybe(#'v1_0.header'{}),
          delivery_annotations :: maybe(#'v1_0.delivery_annotations'{}),
          message_annotations :: maybe(#'v1_0.message_annotations'{}),
          properties :: maybe(#'v1_0.properties'{}),
          application_properties :: maybe(#'v1_0.application_properties'{}),
          body :: amqp10_body() | unset,
-         footer :: maybe(#'v1_0.footer'{}),
-         additional = [] :: [amqp10_msg()]}). % additional transfers
+         footer :: maybe(#'v1_0.footer'{})
+         }).
 
 -opaque amqp10_msg() :: #amqp10_msg{}.
 
@@ -284,7 +283,7 @@ set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->
     Msg#amqp10_msg{properties = P}.
 
 %% LOCAL
-%%
+
 header_value(durable, undefined) -> false;
 header_value(priority, undefined) -> 4;
 header_value(first_acquirer, undefined) -> false;
