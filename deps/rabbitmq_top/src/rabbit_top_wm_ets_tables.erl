@@ -16,36 +16,27 @@
 
 -module(rabbit_top_wm_ets_tables).
 
--export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/3]).
+-export([rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) ->
-    {upgrade, protocol, cowboy_rest}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-rest_init(Req, _Opts) ->
-    {ok, Req, #context{}}.
+rest_init(ReqData, _) -> {ok, ReqData, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Sort = case cowboy_req:qs_val(<<"sort">>, ReqData) of
-               {undefined, _} -> memory;
-               {Bin1, _}      -> b2a(Bin1)
-           end,
-    Node = b2a(rabbit_mgmt_util:id(node, ReqData)),
-    Order = case cowboy_req:qs_val(<<"sort_reverse">>, ReqData) of
-                {<<"true">>, _} -> asc;
-                _               -> desc
-            end,
-    RowCount = case cowboy_req:qs_val(<<"row_count">>, ReqData) of
-                   {undefined, _} -> 20;
-                   {Bin2, _}      -> list_to_integer(binary_to_list(Bin2))
-               end,
+    Sort     = rabbit_top_util:sort_by_param(ReqData, memory),
+    Node     = rabbit_data_coercion:to_atom(rabbit_mgmt_util:id(node, ReqData)),
+    Order    = rabbit_top_util:sort_order_param(ReqData),
+    RowCount = rabbit_top_util:row_count_param(ReqData, 20),
+
     rabbit_mgmt_util:reply([{node,       Node},
                             {row_count,  RowCount},
                             {ets_tables, ets_tables(Node, Sort, Order, RowCount)}],
@@ -55,8 +46,6 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
 
 %%--------------------------------------------------------------------
-
-b2a(B) -> list_to_atom(binary_to_list(B)).
 
 ets_tables(Node, Sort, Order, RowCount) ->
     [fmt(P) || P <- rabbit_top_worker:ets_tables(Node, Sort, Order, RowCount)].
