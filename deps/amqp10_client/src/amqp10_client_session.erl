@@ -8,7 +8,7 @@
 %% Public API.
 -export(['begin'/1,
          'end'/1,
-         attach/5,
+         attach/2,
          transfer/2,
          flow/3
         ]).
@@ -38,15 +38,34 @@
 -type transfer_id() :: non_neg_integer().
 -type link_handle() :: non_neg_integer().
 -type link_name() :: binary().
--type role() :: sender | receiver.
--type link_source() :: binary() | undefined.
+-type link_address() :: binary().
+-type link_role() :: sender | receiver.
+-type link_source() :: link_address() | undefined.
 -type link_target() :: {pid, pid()} | binary() | undefined.
+
+-type snd_settle_mode() :: unsettled | settled | mixed.
+-type rcv_settle_mode() :: first | second.
+
+
+-type target_def() :: #{address => link_address(), durable => boolean()}.
+-type source_def() :: #{address => link_address()}.
+
+-type attach_role() :: {sender, target_def()} | {receiver, source_def(), pid()}.
+
+-type attach_args() :: #{name => binary(),
+                         role => attach_role(),
+                         snd_settle_mode => snd_settle_mode(),
+                         rcv_settle_mode => rcv_settle_mode()
+                        }.
+
+-export_type([snd_settle_mode/0,
+              rcv_settle_mode/0]).
 
 -record(link,
         {name :: link_name(),
          output_handle :: link_handle(),
          input_handle :: link_handle() | undefined,
-         role :: role(),
+         role :: link_role(),
          source :: link_source(),
          target :: link_target(),
          delivery_count = 0 :: non_neg_integer(),
@@ -74,8 +93,12 @@
          next_delivery_id = 0 :: non_neg_integer(),
          early_attach_requests = [] :: [term()],
          pending_attach_requests = #{} :: #{link_name() => {pid(), any()}},
-         connection_config = #{} :: amqp10_client_connection:connection_config()
+         connection_config = #{} :: amqp10_client_connection:connection_config(),
+         % the unsettled map needs to go in the session state as a disposition
+         % can reference transfers for many different links
+         unsettled = #{} :: #{transfer_id() => {link_handle(), any()}} %TODO: refine as FsmRef
         }).
+
 
 %% -------------------------------------------------------------------
 %% Public API.
@@ -94,15 +117,14 @@
 'end'(Pid) ->
     gen_fsm:send_event(Pid, 'end').
 
--spec attach(pid(), binary(), role(), #'v1_0.source'{}, #'v1_0.target'{}) ->
-    {ok, link_handle()}.
-attach(Session, Name, Role, Source, Target) ->
-    gen_fsm:sync_send_event(Session, {attach, {Name, Role, Source, Target}}).
+-spec attach(pid(), attach_args()) -> {ok, link_handle()}.
+attach(Session, Args) ->
+    gen_fsm:sync_send_event(Session, {attach, Args}).
 
 -spec transfer(pid(), amqp10_msg:amqp10_msg()) -> ok.
 transfer(Session, Amqp10Msg) ->
-    Records = amqp10_msg:to_amqp_records(Amqp10Msg),
-    gen_fsm:sync_send_event(Session, {transfer, Records}).
+    [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
+    gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}).
 
 flow(Session, Handle, Flow) ->
     gen_fsm:send_event(Session, {flow, Handle, Flow}).
@@ -146,7 +168,7 @@ begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                           [State#state.channel, RemoteChannel]),
     State1 = State#state{remote_channel = RemoteChannel},
     State2 = lists:foldr(fun({From, Attach}, S) ->
-                                 handle_attach(fun send/2, Attach, From, S)
+                                 send_attach(fun send/2, Attach, From, S)
                          end, State1, EARs),
     {next_state, mapped, State2#state{early_attach_requests = [],
                                       next_incoming_id = NOI,
@@ -290,32 +312,69 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle}} = Transfer0, Payload0},
 
     State = State0#state{links = Links#{OutHandle => Link1}},
     {next_state, mapped, State};
+% role=true indicates the disposition is from a `receiver`. i.e. from the
+% clients point of view these are dispositions relating to `sender`links
+mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
+                           last = {uint, Last}, state = DeliveryState},
+       #state{unsettled = Unsettled0} = State) ->
+
+    % TODO: no good if the range becomes very large!!
+    Range = lists:seq(First, Last),
+    Unsettled =
+        lists:foldl(fun(Id, Acc) ->
+                            case Acc of
+                                #{Id := {_Handle, Receiver}} ->
+                                    S = translate_delivery_state(DeliveryState),
+                                    gen_fsm:reply(Receiver, S),
+                                    maps:remove(Id, Acc);
+                                _ -> Acc
+                            end end, Unsettled0, Range),
+
+
+    error_logger:info_msg("DISPOSITION RANGE ~p STATE ~p", [Range, State]),
+    {next_state, mapped, State#state{unsettled = Unsettled}};
 mapped(Frame, State) ->
     error_logger:info_msg("SESS UNANDLED FRAME ~p STATE ~p", [Frame, State]),
     {next_state, mapped, State}.
 
 
 %% mapped/3
+%% TODO:: settled = false is probably dependent on the snd_settle_mode
+%% e.g. if snd_settle_mode = settled it may not be valid to send an
+%% unsettled transfer. Who knows really?
+%%
+%% Transfer. See spec section: 2.6.12
+mapped({transfer, #'v1_0.transfer'{handle = {uint, InHandle},
+                                   settled = false} = Transfer0, Parts}, From,
+       #state{next_delivery_id = NDI} = State) ->
 
-mapped({transfer, [#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0 |
-                  Parts]}, _From, #state{links = Links,
-                                         next_outgoing_id = NOI,
-                                         next_delivery_id = NDI} = State) ->
+    % TODO: handle link flow
+    {ok, #link{output_handle = OutHandle}} =
+        find_link_by_input_handle(InHandle, State),
+
+    % augment transfer with session stuff
+    Transfer = Transfer0#'v1_0.transfer'{delivery_id = {uint, NDI}},
+    ok = send_transfer(Transfer, Parts, State),
+    % delay reply to caller until disposition frame is received
+    % Link1 = Link#link{unsettled = #{NDI => From}},
+    State1 = State#state{unsettled = #{NDI => {OutHandle, From}}},
+    {next_state, mapped, increment_delivery_ids(State1)};
+mapped({transfer, #'v1_0.transfer'{handle = {uint, InHandle}} = Transfer0,
+        Parts}, _From, #state{next_delivery_id = NDI} = State) ->
     % TODO: handle flow
-    #{Handle := _Link} = Links,
+    {ok, #link{output_handle = _OutHandle}} =
+        find_link_by_input_handle(InHandle, State),
 
     % augment transfer with session stuff
     Transfer = Transfer0#'v1_0.transfer'{delivery_id = {uint, NDI}},
     ok = send_transfer(Transfer, Parts, State),
     % reply after socket write
-    % TODO when using settle = false delay reply until disposition
     % TODO look into if erlang will correctly wrap integers durin
     % binary conversion.
-    {reply, ok, mapped, State#state{next_delivery_id = NDI+1,
-                                    next_outgoing_id = NOI+1}};
+    {reply, ok, mapped, increment_delivery_ids(State)};
 
 mapped({attach, Attach}, From, State) ->
-    State1 = handle_attach(fun send/2, Attach, From, State),
+    State1 = send_attach(fun send/2, Attach, From, State),
     {next_state, mapped, State1}.
 
 
@@ -405,28 +464,46 @@ build_frames(Channel, Trf, Payload, MaxPayloadSize, Acc) ->
     Frame = rabbit_amqp1_0_binary_generator:build_frame(Channel, [T, Bin]),
     build_frames(Channel, Trf, Rest, MaxPayloadSize, [Frame | Acc]).
 
+make_source(#{role := {sender, _}}) ->
+    #'v1_0.source'{};
+make_source(#{role := {receiver, #{address := Address}, _Pid}}) ->
+    #'v1_0.source'{address = {utf8, Address}}.
 
+make_target(#{role := {receiver, _Source, _Pid}}) ->
+    #'v1_0.target'{};
+make_target(#{role := {sender, #{address := Address}}}) ->
+    #'v1_0.target'{address = {utf8, Address}}.
 
-
-
-handle_attach(Send, {Name, Role, Source, Target}, {FromPid, _} = From,
+send_attach(Send, #{name := Name, role := Role} = Args, From,
       #state{next_link_handle = Handle, links = Links,
              pending_attach_requests = PARs,
              link_index = LinkIndex} = State) ->
 
-    % create attach frame
-    Attach = #'v1_0.attach'{name = {utf8, Name}, role = Role == receiver,
-                            handle = {uint, Handle}, source = Source,
+    Source = make_source(Args),
+    Target = make_target(Args),
+
+    RoleAsBool = case Role of
+                     {receiver, _, _} -> true;
+                     _ -> false
+                 end,
+
+    % create attach performative
+    Attach = #'v1_0.attach'{name = {utf8, Name},
+                            role = RoleAsBool,
+                            handle = {uint, Handle},
+                            source = Source,
                             initial_delivery_count = {uint, 0},
-                            snd_settle_mode = {ubyte, 1}, % settled TODO: pass value
+                            snd_settle_mode = snd_settle_mode(Args),
+                            rcv_settle_mode = rcv_settle_mode(Args),
                             target = Target},
     ok = Send(Attach, State),
     {T, S} = case Role of
-                 receiver -> {{pid, FromPid}, Source#'v1_0.source'.address};
-                 sender -> {Source#'v1_0.source'.address, undefined}
+                 {receiver, _, Pid} -> {{pid, Pid}, undefined};
+                 {sender, #{address := TargetAddr}} ->
+                     {TargetAddr, undefined}
              end,
     Link = #link{name = Name, output_handle = Handle,
-                 role = Role, source = S, target = T},
+                 role = element(1, Role), source = S, target = T},
 
     % stash the From pid
     State#state{links = Links#{Handle => Link},
@@ -451,3 +528,23 @@ find_link_by_input_handle(InHandle, #state{link_handle_index = LHI,
     end.
 
 unpack(X) -> amqp10_client_types:unpack(X).
+
+snd_settle_mode(#{snd_settle_mode := unsettled}) -> {ubyte, 0};
+snd_settle_mode(#{snd_settle_mode := settled}) -> {ubyte, 1};
+snd_settle_mode(#{snd_settle_mode := mixed}) -> {ubyte, 2};
+snd_settle_mode(_) -> undefined.
+
+rcv_settle_mode(#{rcv_settle_mode := first}) -> {ubyte, 0};
+rcv_settle_mode(#{rcv_settle_mode := second}) -> {ubyte, 1};
+rcv_settle_mode(_) -> undefined.
+
+translate_delivery_state(#'v1_0.accepted'{}) -> accepted;
+translate_delivery_state(#'v1_0.rejected'{}) -> rejected;
+translate_delivery_state(#'v1_0.modified'{}) -> modified;
+translate_delivery_state(#'v1_0.released'{}) -> released;
+translate_delivery_state(#'v1_0.received'{}) -> received.
+
+increment_delivery_ids(#state{next_outgoing_id = NOI,
+                              next_delivery_id = NDI} = State) ->
+    State#state{next_delivery_id = NDI+1, next_outgoing_id = NOI+1}.
+

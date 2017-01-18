@@ -49,11 +49,13 @@ groups() ->
     [
      {rabbitmq, [], [
                      basic_roundtrip,
-                     split_transfer
+                     split_transfer,
+                     transfer_unsettled
                     ]},
      {activemq, [], [
                      basic_roundtrip,
-                     split_transfer
+                     split_transfer,
+                     transfer_unsettled
                     ]}
     ].
 
@@ -151,3 +153,15 @@ split_transfer(Config) ->
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection),
     ?assertEqual([Data], amqp10_msg:body(OutMsg)).
+
+transfer_unsettled(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Conf = #{address => Hostname, port => Port},
+    {ok, Connection} = amqp10_client_connection:open(Conf),
+    {ok, Session} = amqp10_client_session:'begin'(Connection),
+    Data = list_to_binary(string:chars(64, 1000)),
+    {ok, Sender} = amqp10_client_link:sender(Session, <<"data-sender">>,
+                                             <<"test">>, unsettled),
+    Msg = amqp10_msg:new(<<"my-tag">>, Data, false),
+    accepted = amqp10_client_link:send(Sender, Msg).
