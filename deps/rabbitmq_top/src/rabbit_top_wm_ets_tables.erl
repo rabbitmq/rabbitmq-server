@@ -16,31 +16,34 @@
 
 -module(rabbit_top_wm_ets_tables).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/3]).
+-export([rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
+
+rest_init(ReqData, _) -> {ok, ReqData, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Sort = case wrq:get_qs_value("sort", ReqData) of
-               undefined -> memory;
-               Str       -> list_to_atom(Str)
+    Sort = case cowboy_req:qs_val(<<"sort">>, ReqData) of
+               {undefined, _} -> memory;
+               {Bin, _}       -> list_to_atom(binary_to_list(Bin))
            end,
     Node = b2a(rabbit_mgmt_util:id(node, ReqData)),
-    Order = case wrq:get_qs_value("sort_reverse", ReqData) of
-                "true" -> asc;
-                _      -> desc
+    Order = case cowboy_req:qs_val(<<"sort_reverse">>, ReqData) of
+                {<<"true">>, _} -> asc;
+                _               -> desc
             end,
-    RowCount = case wrq:get_qs_value("row_count", ReqData) of
-                   undefined -> 20;
-                   List when is_list(List) -> list_to_integer(List)
+    RowCount = case cowboy_req:qs_val(<<"row_count">>, ReqData) of
+                   {undefined, _} -> 20;
+                   {Bin2, _} -> list_to_integer(binary_to_list(Bin2))
                end,
     rabbit_mgmt_util:reply([{node,       Node},
                             {row_count,  RowCount},
