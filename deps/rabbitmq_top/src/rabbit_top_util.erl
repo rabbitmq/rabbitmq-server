@@ -19,6 +19,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([toplist/3, fmt_all/1, fmt/1, obtain_name/1, safe_process_info/2]).
+-export([sort_by_param/2, sort_order_param/1, row_count_param/2]).
 
 toplist(Key, Count, List) ->
     Sorted = lists:sublist(
@@ -29,6 +30,24 @@ toplist(Key, Count, List) ->
 toplist(Key, Info) ->
     {Key, Val} = lists:keyfind(Key, 1, Info),
     {Val, Info}.
+
+sort_by_param(ReqData, Default) ->
+    case cowboy_req:qs_val(<<"sort">>, ReqData) of
+        {undefined, _} -> Default;
+        {Bin, _}       -> rabbit_data_coercion:to_atom(Bin)
+    end.
+
+sort_order_param(ReqData) ->
+    case cowboy_req:qs_val(<<"sort_reverse">>, ReqData) of
+        {<<"true">>, _} -> asc;
+        _               -> desc
+    end.
+
+row_count_param(ReqData, Default) ->
+    case cowboy_req:qs_val(<<"row_count">>, ReqData) of
+        {undefined, _} -> Default;
+        {Bin, _}       -> rabbit_data_coercion:to_integer(Bin)
+    end.
 
 add_name(Info) ->
     {pid, Pid} = lists:keyfind(pid, 1, Info),
