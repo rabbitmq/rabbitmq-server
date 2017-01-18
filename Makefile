@@ -111,8 +111,7 @@ ZIP_V_2 =
 ZIP_V = $(ZIP_V_$(V))
 
 .PHONY: $(SOURCE_DIST)
-.PHONY: clean-source-dist distclean-packages clean-unpacked-source-dist \
-	clean-upgrade distclean-upgrade
+.PHONY: clean-source-dist distclean-packages clean-unpacked-source-dist
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
@@ -178,18 +177,12 @@ $(SOURCE_DIST).zip: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
 		$(ZIP) $(ZIP_V) --names-stdin $@ < $(SOURCE_DIST).manifest
 
-clean:: clean-source-dist clean-upgrade
-
-clean-upgrade:
-	$(MAKE) -C upgrade clean
+clean:: clean-source-dist
 
 clean-source-dist:
 	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
 
-distclean:: distclean-packages distclean-upgrade
-
-distclean-upgrade:
-	$(MAKE) -C upgrade distclean
+distclean:: distclean-packages
 
 distclean-packages:
 	$(gen_verbose) rm -rf -- $(PACKAGES_DIR)
@@ -382,6 +375,3 @@ install-windows-docs: install-windows-erlapp
 		*) mv "$$file" "$$file.txt" ;; \
 		esac; \
 	done
-
-test-upgrade:
-	$(MAKE) -C upgrade
