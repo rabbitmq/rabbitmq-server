@@ -65,10 +65,12 @@ end_per_group(_, Config) -> Config.
 minimal_input(_Config) ->
     Tag = <<"tag">>,
     Content = <<"content">>,
-    Input = [#'v1_0.transfer'{delivery_tag = {utf8, Tag}},
+    Input = [#'v1_0.transfer'{delivery_tag = {utf8, Tag},
+                              delivery_id = {uint, 5672}},
              #'v1_0.data'{content = Content}],
     Res = amqp10_msg:from_amqp_records(Input),
     Tag = amqp10_msg:delivery_tag(Res),
+    5672 = amqp10_msg:delivery_id(Res),
     undefined = amqp10_msg:message_format(Res),
     #{} = amqp10_msg:headers(Res),
     #{} = amqp10_msg:delivery_annotations(Res),

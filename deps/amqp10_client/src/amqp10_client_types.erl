@@ -26,8 +26,11 @@
 -type source() :: #'v1_0.source'{}.
 -type target() :: #'v1_0.target'{}.
 
+-type delivery_state() :: accepted | rejected | modified | received | released.
+
 -export_type([amqp10_performative/0, channel/0,
-              source/0, target/0, amqp10_msg_record/0
+              source/0, target/0, amqp10_msg_record/0,
+              delivery_state/0
              ]).
 
 

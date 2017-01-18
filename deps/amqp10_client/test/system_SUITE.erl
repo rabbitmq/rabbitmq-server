@@ -130,7 +130,7 @@ basic_roundtrip(Config) ->
     ok = amqp10_client_link:send(Sender, Msg),
     {ok, Receiver} = amqp10_client_link:receiver(Session, <<"banana-receiver">>,
                                                  <<"test">>),
-    {amqp_msg, OutMsg} = amqp10_client_link:get(Receiver),
+    {amqp_msg, OutMsg} = amqp10_client_link:get_one(Receiver),
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection),
     ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)).
@@ -149,7 +149,7 @@ split_transfer(Config) ->
     ok = amqp10_client_link:send(Sender, Msg),
     {ok, Receiver} = amqp10_client_link:receiver(Session, <<"data-receiver">>,
                                                  <<"test">>),
-    {amqp_msg, OutMsg} = amqp10_client_link:get(Receiver),
+    {amqp_msg, OutMsg} = amqp10_client_link:get_one(Receiver),
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection),
     ?assertEqual([Data], amqp10_msg:body(OutMsg)).
@@ -164,4 +164,12 @@ transfer_unsettled(Config) ->
     {ok, Sender} = amqp10_client_link:sender(Session, <<"data-sender">>,
                                              <<"test">>, unsettled),
     Msg = amqp10_msg:new(<<"my-tag">>, Data, false),
-    accepted = amqp10_client_link:send(Sender, Msg).
+    accepted = amqp10_client_link:send(Sender, Msg),
+    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"data-receiver">>,
+                                                 <<"test">>, unsettled),
+    {amqp_msg, OutMsg} = amqp10_client_link:get_one(Receiver),
+    ok = amqp10_client_link:accept(Receiver, OutMsg),
+    {error, timeout} = amqp10_client_link:get_one(Receiver, 1000),
+    ok = amqp10_client_session:'end'(Session),
+    ok = amqp10_client_connection:close(Connection),
+    ?assertEqual([Data], amqp10_msg:body(OutMsg)).

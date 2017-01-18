@@ -4,6 +4,7 @@
          from_amqp_records/1,
          to_amqp_records/1,
          % "read" api
+         delivery_id/1,
          delivery_tag/1,
          handle/1,
          settled/1,
@@ -103,6 +104,10 @@ to_amqp_records(#amqp10_msg{transfer = T, body = B}) ->
 -spec delivery_tag(amqp10_msg()) -> binary().
 delivery_tag(#amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = Tag}}) ->
     unpack(Tag).
+
+-spec delivery_id(amqp10_msg()) -> non_neg_integer().
+delivery_id(#amqp10_msg{transfer = #'v1_0.transfer'{delivery_id = Id}}) ->
+    unpack(Id).
 
 handle(#amqp10_msg{transfer = #'v1_0.transfer'{handle = Handle}}) ->
     unpack(Handle).

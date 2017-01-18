@@ -9,8 +9,9 @@
 -export(['begin'/1,
          'end'/1,
          attach/2,
-         transfer/2,
-         flow/3
+         transfer/3,
+         flow/3,
+         disposition/5
         ]).
 
 %% Private API.
@@ -21,6 +22,7 @@
 %% gen_fsm callbacks.
 -export([init/1,
          unmapped/2,
+         unmapped/3,
          begin_sent/2,
          begin_sent/3,
          mapped/2,
@@ -96,7 +98,8 @@
          connection_config = #{} :: amqp10_client_connection:connection_config(),
          % the unsettled map needs to go in the session state as a disposition
          % can reference transfers for many different links
-         unsettled = #{} :: #{transfer_id() => {link_handle(), any()}} %TODO: refine as FsmRef
+         unsettled = #{} :: #{transfer_id() => {link_handle(), any()}}, %TODO: refine as FsmRef
+         incoming_unsettled = #{} :: #{transfer_id() => link_handle()}
         }).
 
 
@@ -105,7 +108,6 @@
 %% -------------------------------------------------------------------
 
 -spec 'begin'(pid()) -> supervisor:startchild_ret().
-
 'begin'(Connection) ->
     %% The connection process is responsible for allocating a channel
     %% number and contact the sessions supervisor to start a new session
@@ -113,7 +115,6 @@
     amqp10_client_connection:begin_session(Connection).
 
 -spec 'end'(pid()) -> ok.
-
 'end'(Pid) ->
     gen_fsm:send_event(Pid, 'end').
 
@@ -121,13 +122,22 @@
 attach(Session, Args) ->
     gen_fsm:sync_send_event(Session, {attach, Args}).
 
--spec transfer(pid(), amqp10_msg:amqp10_msg()) -> ok.
-transfer(Session, Amqp10Msg) ->
+-spec transfer(pid(), amqp10_msg:amqp10_msg(), timeout()) ->
+    ok | amqp10_client_types:delivery_state().
+transfer(Session, Amqp10Msg, Timeout) ->
     [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
-    gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}).
+    gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}, Timeout).
 
 flow(Session, Handle, Flow) ->
     gen_fsm:send_event(Session, {flow, Handle, Flow}).
+
+-spec disposition(pid(), transfer_id(), transfer_id(), boolean(),
+               amqp10_client_types:delivery_state()) -> ok.
+disposition(Session, First, Last, Settled, DeliveryState) ->
+    gen_fsm:sync_send_event(Session, {disposition, First, Last, Settled,
+                                      DeliveryState}).
+
+
 
 %% -------------------------------------------------------------------
 %% Private API.
@@ -157,6 +167,11 @@ unmapped({socket_ready, Socket}, State) ->
         ok    -> {next_state, begin_sent, State1};
         Error -> {stop, Error, State1}
     end.
+
+unmapped({attach, Attach}, From,
+                      #state{early_attach_requests = EARs} = State) ->
+    {next_state, unmapped,
+     State#state{early_attach_requests = [{From, Attach} | EARs]}}.
 
 begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                          next_outgoing_id = {uint, NOI},
@@ -276,8 +291,11 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
 
     State = State0#state{links = Links#{OutHandle => Link1}},
     {next_state, mapped, State};
-mapped({#'v1_0.transfer'{handle = {uint, InHandle}} = Transfer0, Payload0},
-                         #state{links = Links} = State0) ->
+mapped({#'v1_0.transfer'{handle = {uint, InHandle},
+                         delivery_id = {uint, DeliveryId},
+                         settled = Settled} = Transfer0, Payload0},
+                         #state{links = Links,
+                                incoming_unsettled = Unsettled0} = State0) ->
 
 
     {ok, #link{target = {pid, TargetPid},
@@ -299,6 +317,12 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle}} = Transfer0, Payload0},
     % deliver to the registered receiver process
     TargetPid ! {message, OutHandle, Msg},
 
+    % stash the DeliveryId
+    Unsettled = case Settled of
+                   true -> Unsettled0;
+                   _ -> Unsettled0#{DeliveryId => OutHandle}
+                end,
+
     %% TODO: session book keeping
 
     % link bookkeeping
@@ -310,7 +334,8 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle}} = Transfer0, Payload0},
 
     error_logger:info_msg("TRANSFER RECEIVED  ~p", [Transfer]),
 
-    State = State0#state{links = Links#{OutHandle => Link1}},
+    State = State0#state{links = Links#{OutHandle => Link1},
+                         incoming_unsettled = Unsettled},
     {next_state, mapped, State};
 % role=true indicates the disposition is from a `receiver`. i.e. from the
 % clients point of view these are dispositions relating to `sender`links
@@ -373,6 +398,22 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, InHandle}} = Transfer0,
     % binary conversion.
     {reply, ok, mapped, increment_delivery_ids(State)};
 
+mapped({disposition, First, Last, Settled, DeliveryState}, _From,
+       #state{incoming_unsettled = Unsettled0} = State) ->
+    Disposition =
+    begin
+        DS = reverse_translate_delivery_state(DeliveryState),
+        #'v1_0.disposition'{first = {uint, First},
+                            last = {uint, Last},
+                            settled = Settled,
+                            state = DS}
+    end,
+
+    Unsettled = lists:foldl(fun maps:remove/2, Unsettled0,
+                            lists:seq(First, Last)),
+    Res = send(Disposition, State),
+
+    {reply, Res, mapped, State#state{incoming_unsettled = Unsettled}};
 mapped({attach, Attach}, From, State) ->
     State1 = send_attach(fun send/2, Attach, From, State),
     {next_state, mapped, State1}.
@@ -543,6 +584,13 @@ translate_delivery_state(#'v1_0.rejected'{}) -> rejected;
 translate_delivery_state(#'v1_0.modified'{}) -> modified;
 translate_delivery_state(#'v1_0.released'{}) -> released;
 translate_delivery_state(#'v1_0.received'{}) -> received.
+
+reverse_translate_delivery_state(accepted) -> #'v1_0.accepted'{};
+reverse_translate_delivery_state(rejected) -> #'v1_0.rejected'{};
+reverse_translate_delivery_state(modified) -> #'v1_0.modified'{};
+reverse_translate_delivery_state(released) -> #'v1_0.released'{};
+reverse_translate_delivery_state(received) -> #'v1_0.received'{}.
+
 
 increment_delivery_ids(#state{next_outgoing_id = NOI,
                               next_delivery_id = NDI} = State) ->
