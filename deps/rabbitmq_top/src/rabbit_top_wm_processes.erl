@@ -41,9 +41,9 @@ to_json(ReqData, Context) ->
                 {<<"true">>, _} -> asc;
                 _               -> desc
             end,
-    RowCount = case wrq:get_qs_value("row_count", ReqData) of
-                   undefined -> 20;
-                   List when is_list(List) -> list_to_integer(List)
+    RowCount = case cowboy_req:qs_val(<<"row_count">>, ReqData) of
+                   {undefined, _} -> 20;
+                   {Bin2, _} -> list_to_integer(binary_to_list(Bin2))
                end,
     rabbit_mgmt_util:reply([{node,      Node},
                             {row_count, RowCount},
