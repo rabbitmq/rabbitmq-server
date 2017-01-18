@@ -80,6 +80,7 @@ init({Upstream, XName}) ->
             gen_server2:cast(self(), maybe_go),
             {ok, {not_started, {Upstream, UParams, XName}}};
         {error, not_found} ->
+            rabbit_federation_link_util:log_warning(XName, "not found, stopping link~n", []),
             {stop, gone}
     end.
 
