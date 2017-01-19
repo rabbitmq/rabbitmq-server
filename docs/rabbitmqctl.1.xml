@@ -1328,15 +1328,28 @@
                     JSON term. In most shells you are very likely to
                     need to quote this.
 
-                    Recognised limits: max-connections (0 means "no limit").
+                    Recognised limits: max-connections, max-queues. Use a negative value to specify "no limit".
                 </para></listitem>
               </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl set_vhost_limits -p qa_env '{"max-connections": 1024}'</screen>
+            <screen role="example">rabbitmqctl set_vhost_limits -p qa_env '{"max-connections": 64}'</screen>
             <para role="example">
               This command limits the max number of concurrent connections in vhost <command>qa_env</command>
-              to 1024.
+              to 64.
+            </para>
+            <screen role="example">rabbitmqctl set_vhost_limits -p qa_env '{"max-queues": 256}'</screen>
+            <para role="example">
+              This command limits the max number of queues in vhost <command>qa_env</command>
+              to 256.
+            </para>
+            <screen role="example">rabbitmqctl set_vhost_limits -p qa_env '{"max-connections": -1}'</screen>
+            <para role="example">
+              This command clears the max number of connections limit in vhost <command>qa_env</command>.
+            </para>
+            <screen role="example">rabbitmqctl set_vhost_limits -p qa_env '{"max-connections": 0}'</screen>
+            <para role="example">
+              This command disables client connections in vhost <command>qa_env</command>.
             </para>
           </listitem>
         </varlistentry>
