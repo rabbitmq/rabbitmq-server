@@ -568,7 +568,7 @@ user_password_hashing() ->
 topic_permission() ->
     create(rabbit_topic_permission,
         [{record_name, topic_permission},
-         {attributes, [topic_permission_key, pattern]},
+         {attributes, [topic_permission_key, permission]},
          {disc_copies, [node()]}]).
 
 %%--------------------------------------------------------------------
