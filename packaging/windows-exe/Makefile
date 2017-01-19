@@ -6,6 +6,7 @@ endif
 ZIP = $(notdir $(wildcard $(ZIP_DIR)/rabbitmq-server-windows-*.zip))
 
 VERSION = $(patsubst rabbitmq-server-windows-%.zip,%,$(ZIP))
+PRODUCT_VERSION ?= $(VERSION).0
 
 unexport DEPS_DIR
 unexport ERL_LIBS
@@ -25,6 +26,7 @@ dist: rabbitmq-$(VERSION).nsi rabbitmq_server-$(VERSION)
 rabbitmq-$(VERSION).nsi: rabbitmq_nsi.in
 	sed \
 	    -e 's|%%VERSION%%|$(VERSION)|' \
+	    -e 's|%%PRODUCT_VERSION%%|$(PRODUCT_VERSION)|' \
 	    $< > $@
 
 rabbitmq_server-$(VERSION):
