@@ -61,7 +61,7 @@ SetCompressor /solid lzma
 
 ;--------------------------------
 
-VIProductVersion "%%VERSION%%.0"
+VIProductVersion "%%PRODUCT_VERSION%%"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductVersion" "%%VERSION%%"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "RabbitMQ Server"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "Comments" ""
