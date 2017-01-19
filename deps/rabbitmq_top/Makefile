@@ -3,7 +3,7 @@ PROJECT_DESCRIPTION = RabbitMQ Top
 PROJECT_MOD = rabbit_top_app
 
 define PROJECT_APP_EXTRA_KEYS
-	{broker_version_requirements, ["3.7.0"]}
+	{broker_version_requirements, []}
 endef
 
 DEPS = rabbit_common rabbit amqp_client rabbitmq_management
