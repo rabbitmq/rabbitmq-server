@@ -71,6 +71,6 @@
 -callback check_topic_access(rabbit_types:auth_user(),
     rabbit_types:r(atom()),
     rabbit_access_control:permission_atom(),
-    rabbit_types:context()) ->
+    rabbit_types:topic_access_context()) ->
     boolean() | {'error', any()}.
 

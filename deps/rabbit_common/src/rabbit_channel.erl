@@ -788,12 +788,12 @@ check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}
                 undefined -> [];
                 Other     -> Other
             end,
-    case lists:member({Resource, Context}, Cache) of
+    case lists:member({Resource, Context, write}, Cache) of
         true  -> ok;
         false -> ok = rabbit_access_control:check_topic_access(
             User, Resource, write, Context),
             CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
-            put(topic_permission_cache, [{Resource, Context} | CacheTail])
+            put(topic_permission_cache, [{Resource, Context, write} | CacheTail])
     end;
 check_topic_authorisation(_, _, _) ->
     ok.

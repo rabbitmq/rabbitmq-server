@@ -39,7 +39,7 @@
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
 -record(topic_permission_key, {user_vhost, exchange}).
--record(topic_permission, {topic_permission_key, pattern}).
+-record(topic_permission, {topic_permission_key, permission}).
 
 %% Represents a vhost.
 %%

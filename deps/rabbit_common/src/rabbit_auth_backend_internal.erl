@@ -27,7 +27,7 @@
          change_password/2, clear_password/1,
          hash_password/2, change_password_hash/2, change_password_hash/3,
          set_tags/2, set_permissions/5, clear_permissions/2,
-         set_topic_permissions/4, clear_topic_permissions/2, clear_topic_permissions/3,
+         set_topic_permissions/5, clear_topic_permissions/2, clear_topic_permissions/3,
          add_user_sans_validation/2]).
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
@@ -164,7 +164,7 @@ check_resource_access(#auth_user{username = Username},
 
 check_topic_access(#auth_user{username = Username},
                    #resource{virtual_host = VHostPath, name = Name, kind = topic},
-                   _Permission,
+                   Permission,
                    Context) ->
     case mnesia:dirty_read({rabbit_topic_permission,
         #topic_permission_key{user_vhost = #user_vhost{username     = Username,
@@ -173,8 +173,8 @@ check_topic_access(#auth_user{username = Username},
                              }}) of
         [] ->
             true;
-        [#topic_permission{pattern = Pattern}] ->
-            PermRegexp = case Pattern of
+        [#topic_permission{permission = P}] ->
+            PermRegexp = case element(permission_index(Permission), P) of
                              %% <<"^$">> breaks Emacs' erlang mode
                              <<"">> -> <<$^, $$>>;
                              RE     -> RE
@@ -357,13 +357,17 @@ update_user(Username, Fun) ->
                 ok = mnesia:write(rabbit_user, Fun(User), write)
         end)).
 
-set_topic_permissions(Username, VHostPath, Exchange, Pattern) ->
-    Regexp = rabbit_data_coercion:to_binary(Pattern),
-    case re:compile(Regexp) of
-        {ok, _}         -> ok;
-        {error, Reason} -> throw({error, {invalid_regexp,
-            Regexp, Reason}})
-    end,
+set_topic_permissions(Username, VHostPath, Exchange, WritePerm, ReadPerm) ->
+    WritePermRegex = rabbit_data_coercion:to_binary(WritePerm),
+    ReadPermRegex = rabbit_data_coercion:to_binary(ReadPerm),
+    lists:map(
+        fun (RegexpBin) ->
+            case re:compile(RegexpBin) of
+                {ok, _}         -> ok;
+                {error, Reason} -> throw({error, {invalid_regexp,
+                    RegexpBin, Reason}})
+            end
+        end, [WritePerm, ReadPerm]),
     R = rabbit_misc:execute_mnesia_transaction(
         rabbit_misc:with_user_and_vhost(
             Username, VHostPath,
@@ -376,7 +380,10 @@ set_topic_permissions(Username, VHostPath, Exchange, Pattern) ->
                             virtual_host = VHostPath},
                         exchange = Exchange
                     },
-                    pattern    = Pattern
+                    permission = #permission{
+                            write = WritePermRegex,
+                            read  = ReadPermRegex
+                    }
                 },
                 write)
             end)),
@@ -384,7 +391,8 @@ set_topic_permissions(Username, VHostPath, Exchange, Pattern) ->
         {user,      Username},
         {vhost,     VHostPath},
         {exchange,  Exchange},
-        {pattern,   Pattern}]),
+        {write,     WritePermRegex},
+        {read,      ReadPermRegex}]),
     R.
 
 clear_topic_permissions(Username, VHostPath) ->
@@ -432,10 +440,10 @@ vhost_perms_info_keys()      -> [user | ?PERMS_INFO_KEYS].
 user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
 user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
 
-topic_perms_info_keys()            -> [user, vhost, exchange, pattern].
-user_topic_perms_info_keys()       -> [vhost, exchange, pattern].
-vhost_topic_perms_info_keys()      -> [user, exchange, pattern].
-user_vhost_topic_perms_info_keys() -> [exchange, pattern].
+topic_perms_info_keys()            -> [user, vhost, exchange, write, read].
+user_topic_perms_info_keys()       -> [vhost, exchange, write, read].
+vhost_topic_perms_info_keys()      -> [user, exchange, write, read].
+user_vhost_topic_perms_info_keys() -> [exchange, write, read].
 
 list_users() ->
     [extract_internal_user_params(U) ||
@@ -546,7 +554,7 @@ match_user_vhost_topic_permission(Username, VHostPath, Exchange) ->
                 username     = Username,
                 virtual_host = VHostPath},
             exchange = Exchange},
-            pattern = '_'},
+            permission = '_'},
         read)
     end.
 
@@ -555,8 +563,11 @@ extract_topic_permission_params(Keys, #topic_permission{
                                     user_vhost = #user_vhost{username     = Username,
                                                              virtual_host = VHostPath},
                                     exchange = Exchange},
-            pattern = Pattern}) ->
+            permission = #permission{
+                write     = WritePerm,
+                read      = ReadPerm}}) ->
     filter_props(Keys, [{user,      Username},
         {vhost,     VHostPath},
         {exchange,  Exchange},
-        {pattern,   Pattern}]).
+        {write,     WritePerm},
+        {read,      ReadPerm}]).
