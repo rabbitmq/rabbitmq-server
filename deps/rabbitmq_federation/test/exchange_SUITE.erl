@@ -279,9 +279,10 @@ user_id(Config) ->
                   ok = rpc:call(Hare,
                                 rabbit_auth_backend_internal, F, A)
            end,
-    Perm(add_user, [<<"hare-user">>, <<"hare-user">>]),
+    Perm(add_user, [<<"hare-user">>, <<"hare-user">>, <<"acting-user">>]),
     Perm(set_permissions, [<<"hare-user">>,
-                           <<"/">>, <<".*">>, <<".*">>, <<".*">>]),
+                           <<"/">>, <<".*">>, <<".*">>, <<".*">>,
+                           <<"acting-user">>]),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
     {ok, Conn2} = amqp_connection:start(
@@ -757,9 +758,10 @@ with_ch(Config, Fun, Xs) ->
     ok.
 
 cleanup(Config, Node) ->
-    [rabbit_ct_broker_helpers:rpc(Config, Node,
-        rabbit_amqqueue, delete, [Q, false, false]) ||
-      Q <- queues(Config, Node)].
+    [rabbit_ct_broker_helpers:rpc(
+       Config, Node, rabbit_amqqueue, delete, [Q, false, false,
+                                               <<"acting-user">>]) ||
+        Q <- queues(Config, Node)].
 
 queues(Config, Node) ->
     Ret = rabbit_ct_broker_helpers:rpc(Config, Node,

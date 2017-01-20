@@ -20,7 +20,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([validate/5, notify/4, notify_clear/3]).
+-export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0, validate_policy/1, adjust/1]).
 
 -define(RUNTIME_PARAMETERS,
@@ -62,16 +62,16 @@ validate(_VHost, <<"federation-upstream">>, Name, Term, _User) ->
 validate(_VHost, _Component, Name, _Term, _User) ->
     {error, "name not recognised: ~p", [Name]}.
 
-notify(_VHost, <<"federation-upstream-set">>, Name, _Term) ->
+notify(_VHost, <<"federation-upstream-set">>, Name, _Term, _Username) ->
     adjust({upstream_set, Name});
 
-notify(_VHost, <<"federation-upstream">>, Name, _Term) ->
+notify(_VHost, <<"federation-upstream">>, Name, _Term, _Username) ->
     adjust({upstream, Name}).
 
-notify_clear(_VHost, <<"federation-upstream-set">>, Name) ->
+notify_clear(_VHost, <<"federation-upstream-set">>, Name, _Username) ->
     adjust({clear_upstream_set, Name});
 
-notify_clear(_VHost, <<"federation-upstream">>, Name) ->
+notify_clear(_VHost, <<"federation-upstream">>, Name, _Username) ->
     adjust({clear_upstream, Name}).
 
 adjust(Thing) ->
