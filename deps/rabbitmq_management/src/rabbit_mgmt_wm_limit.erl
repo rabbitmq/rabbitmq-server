@@ -41,7 +41,7 @@ content_types_accepted(ReqData, Context) ->
 allowed_methods(ReqData, Context) ->
     {[<<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
-accept_content(ReqData, Context) ->
+accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found ->
             rabbit_mgmt_util:not_found(vhost_not_found, ReqData, Context);
@@ -50,7 +50,8 @@ accept_content(ReqData, Context) ->
                 [value], ReqData, Context,
                 fun([Value], _Body) ->
                     Name = rabbit_mgmt_util:id(name, ReqData),
-                    case rabbit_vhost_limit:update_limit(VHost, Name, Value) of
+                    case rabbit_vhost_limit:update_limit(VHost, Name, Value,
+                                                         Username) of
                         ok ->
                             {true, ReqData, Context};
                         {error_string, Reason} ->
@@ -60,9 +61,9 @@ accept_content(ReqData, Context) ->
                 end)
     end.
 
-delete_resource(ReqData, Context) ->
+delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
     ok = rabbit_vhost_limit:clear_limit(rabbit_mgmt_util:vhost(ReqData),
-                                        name(ReqData)),
+                                        name(ReqData), Username),
     {true, ReqData, Context}.
 
 

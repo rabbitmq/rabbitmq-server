@@ -539,6 +539,8 @@ test_auth(Config, Code, Headers) ->
     passed.
 
 exchanges_test(Config) ->
+    %% Can list exchanges
+    http_get(Config, "/exchanges", {group, '2xx'}),
     %% Can pass booleans or strings
     Good = [{type, <<"direct">>}, {durable, <<"true">>}],
     http_put(Config, "/vhosts/myvhost", none, {group, '2xx'}),

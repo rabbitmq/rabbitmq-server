@@ -19,7 +19,7 @@
 -export([init/3, rest_init/2, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, id/1, put_vhost/2]).
+         delete_resource/2, id/1, put_vhost/3]).
 -export([variances/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -60,19 +60,20 @@ to_json(ReqData, Context) ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
     end.
 
-accept_content(ReqData, Context) ->
+accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
     Name = id(ReqData),
     rabbit_mgmt_util:with_decode(
       [], ReqData, Context,
       fun(_, VHost) ->
               put_vhost(Name, rabbit_mgmt_util:parse_bool(
-                                maps:get(tracing, VHost, undefined))),
+                                maps:get(tracing, VHost, undefined)),
+                        Username),
               {true, ReqData, Context}
       end).
 
-delete_resource(ReqData, Context) ->
+delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
     VHost = id(ReqData),
-    rabbit_vhost:delete(VHost),
+    rabbit_vhost:delete(VHost, Username),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
@@ -83,10 +84,10 @@ is_authorized(ReqData, Context) ->
 id(ReqData) ->
     rabbit_mgmt_util:id(vhost, ReqData).
 
-put_vhost(Name, Trace) ->
+put_vhost(Name, Trace, Username) ->
     case rabbit_vhost:exists(Name) of
         true  -> ok;
-        false -> rabbit_vhost:add(Name)
+        false -> rabbit_vhost:add(Name, Username)
     end,
     case Trace of
         true      -> rabbit_trace:start(Name);

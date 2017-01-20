@@ -55,7 +55,7 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(policy(ReqData), ReqData, Context).
 
-accept_content(ReqData, Context) ->
+accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found ->
             rabbit_mgmt_util:not_found(vhost_not_found, ReqData, Context);
@@ -67,7 +67,8 @@ accept_content(ReqData, Context) ->
                              VHost, name(ReqData), Pattern,
                              maps:to_list(Definition),
                              maps:get(priority, Body, undefined),
-                             maps:get('apply-to', Body, undefined)) of
+                             maps:get('apply-to', Body, undefined),
+                             Username) of
                           ok ->
                               {true, ReqData, Context};
                           {error_string, Reason} ->
@@ -77,9 +78,9 @@ accept_content(ReqData, Context) ->
               end)
     end.
 
-delete_resource(ReqData, Context) ->
+delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
     ok = rabbit_policy:delete_op(
-           rabbit_mgmt_util:vhost(ReqData), name(ReqData)),
+           rabbit_mgmt_util:vhost(ReqData), name(ReqData), Username),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
