@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -40,7 +43,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
   def run([_, _] = args, %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
-      :add_user, args)
+      :add_user, args ++ [Helpers.cli_acting_user()])
   end
 
   def usage, do: "add_user <username> <password>"

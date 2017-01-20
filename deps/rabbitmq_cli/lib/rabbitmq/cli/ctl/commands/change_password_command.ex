@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags []
@@ -27,7 +30,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
 
   def run([_user, _] = args, %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
-      :rabbit_auth_backend_internal, :change_password, args)
+      :rabbit_auth_backend_internal, :change_password, args ++ [Helpers.cli_acting_user()])
   end
 
   def usage, do: "change_password <username> <password>"

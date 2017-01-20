@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags [:vhost]
@@ -33,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand do
 
   def run([key], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
-      :rabbit_policy, :delete, [vhost, key])
+      :rabbit_policy, :delete, [vhost, key, Helpers.cli_acting_user()])
   end
 
   def usage, do: "clear_policy [-p <vhost>] <key>"

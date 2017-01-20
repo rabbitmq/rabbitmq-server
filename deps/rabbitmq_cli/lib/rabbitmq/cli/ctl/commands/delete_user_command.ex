@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags []
@@ -26,7 +29,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
       :delete_user,
-      [username]
+      [username, Helpers.cli_acting_user()]
     )
   end
 

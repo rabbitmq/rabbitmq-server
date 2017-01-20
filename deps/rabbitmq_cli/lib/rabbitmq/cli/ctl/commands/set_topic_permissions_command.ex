@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags [:vhost]
@@ -39,7 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
       :set_topic_permissions,
-      [user, vhost, exchange, pattern]
+      [user, vhost, exchange, pattern, Helpers.cli_acting_user()]
     )
   end
 

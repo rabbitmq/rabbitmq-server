@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -50,7 +53,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
        pattern,
        definition,
        priority,
-       apply_to])
+       apply_to,
+       Helpers.cli_acting_user()])
   end
 
   def usage, do: "set_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern>  <definition>"

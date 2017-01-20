@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags [:vhost]
@@ -35,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,
       :clear,
-      [vhost, component_name, key])
+      [vhost, component_name, key, Helpers.cli_acting_user()])
   end
 
   def usage, do: "clear_parameter [-p <vhost>] <component_name> <key>"

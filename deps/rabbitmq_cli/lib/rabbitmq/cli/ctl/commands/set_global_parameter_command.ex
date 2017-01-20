@@ -15,6 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
+
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   @flags []
@@ -41,7 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,
       :parse_set_global,
-      [name, value]
+      [name, value, Helpers.cli_acting_user()]
     )
   end
 
