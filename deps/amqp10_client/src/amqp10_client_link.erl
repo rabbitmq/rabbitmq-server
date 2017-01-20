@@ -44,7 +44,7 @@ get_one(#link_ref{role = receiver, session = Session, link_handle = Handle},
 % else it returns the delivery state from the disposition
 % TODO: timeouts
 -spec send(link_ref(), amqp10_msg:amqp10_msg()) ->
-    ok | amqp10_client_types:delivery_state().
+    ok | insufficient_credit | amqp10_client_types:delivery_state().
 send(#link_ref{role = sender, session = Session,
                link_handle = Handle}, Msg0) ->
     Msg = amqp10_msg:set_handle(Handle, Msg0),

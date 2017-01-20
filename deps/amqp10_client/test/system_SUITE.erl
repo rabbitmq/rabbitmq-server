@@ -55,7 +55,8 @@ groups() ->
      {activemq, [], [
                      basic_roundtrip,
                      split_transfer,
-                     transfer_unsettled
+                     transfer_unsettled,
+                     send_multiple
                     ]}
     ].
 
@@ -173,3 +174,18 @@ transfer_unsettled(Config) ->
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection),
     ?assertEqual([Data], amqp10_msg:body(OutMsg)).
+
+send_multiple(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
+    {ok, Session} = amqp10_client_session:'begin'(Connection),
+    {ok, Sender} = amqp10_client_link:sender(Session, <<"multi-sender">>,
+                                             <<"test">>),
+    Msg1 = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
+    Msg2 = amqp10_msg:new(<<"my-tag2">>, <<"banana">>, true),
+    ok = amqp10_client_link:send(Sender, Msg1),
+    ok = amqp10_client_link:send(Sender, Msg2),
+
+    ok = amqp10_client_session:'end'(Session),
+    ok = amqp10_client_connection:close(Connection).

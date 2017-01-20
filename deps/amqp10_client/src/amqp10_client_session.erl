@@ -125,7 +125,7 @@ attach(Session, Args) ->
     gen_fsm:sync_send_event(Session, {attach, Args}).
 
 -spec transfer(pid(), amqp10_msg:amqp10_msg(), timeout()) ->
-    ok | amqp10_client_types:delivery_state().
+    ok | insufficient_credit | amqp10_client_types:delivery_state().
 transfer(Session, Amqp10Msg, Timeout) ->
     [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
     gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}, Timeout).
@@ -181,8 +181,7 @@ begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                          outgoing_window = {uint, OutWindow}
                         },
            #state{early_attach_requests = EARs} =  State) ->
-    error_logger:info_msg("-- SESSION BEGUN (~b <-> ~b) --~n",
-                          [State#state.channel, RemoteChannel]),
+
     State1 = State#state{remote_channel = RemoteChannel},
     State2 = lists:foldr(fun({From, Attach}, S) ->
                                  send_attach(fun send/2, Attach, From, S)
@@ -223,7 +222,6 @@ mapped({flow, OutHandle, #'v1_0.flow'{link_credit = {uint, LinkCredit}} = Flow0}
                              delivery_count = uint(DeliveryCount),
                              available = uint(Available)
                              },
-    error_logger:info_msg("SENDING FLOW ~p~n", [Flow]),
     ok = send(Flow, State),
     {next_state, mapped,
      State#state{links = Links#{OutHandle =>
@@ -235,11 +233,11 @@ mapped(#'v1_0.end'{}, State) ->
     {stop, normal, State};
 mapped(#'v1_0.attach'{name = {utf8, Name},
                       initial_delivery_count = IDC,
-                      handle = {uint, InHandle}} = Attach,
+                      handle = {uint, InHandle}},
         #state{links = Links, link_index = LinkIndex,
                link_handle_index = LHI,
                pending_attach_requests = PARs} = State) ->
-    error_logger:info_msg("ATTACH ~p~nSTATE ~p", [Attach, State]),
+
     #{Name := From} = PARs,
     #{Name := OutHandle} = LinkIndex,
     #{OutHandle := Link0} = Links,
@@ -277,71 +275,41 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
                          more = true} = Transfer, Payload},
                          #state{links = Links} = State0) ->
 
-    {ok, #link{
-               output_handle = OutHandle,
-               delivery_count = DC,
-               link_credit = LC,
-               partial_transfers = PT0} = Link} =
-    find_link_by_input_handle(InHandle, State0),
+    {ok, #link{output_handle = OutHandle} = Link} =
+        find_link_by_input_handle(InHandle, State0),
 
-    PT = case PT0 of
-             undefined -> {Transfer, [Payload]};
-             {T, P} -> {T, [Payload | P]}
-         end,
-    % TODO: do partial transfers decrese credit?
-    Link1 = Link#link{delivery_count = DC+1,
-                      link_credit = LC-1,
-                      partial_transfers = PT},
+    Link1 = append_partial_transfer(Transfer, Payload, Link),
 
-    error_logger:info_msg("PART TRANSFER RECEIVED  ~p", [Transfer]),
-
-    State = State0#state{links = Links#{OutHandle => Link1}},
+    State = book_partial_transfer_received(
+              State0#state{links = Links#{OutHandle => Link1}}),
     {next_state, mapped, State};
 mapped({#'v1_0.transfer'{handle = {uint, InHandle},
                          delivery_id = {uint, DeliveryId},
                          settled = Settled} = Transfer0, Payload0},
-                         #state{links = Links,
-                                incoming_unsettled = Unsettled0} = State0) ->
-
+                         #state{incoming_unsettled = Unsettled0} = State0) ->
 
     {ok, #link{target = {pid, TargetPid},
-               output_handle = OutHandle,
-               delivery_count = DC,
-               link_credit = LC,
-               partial_transfers = PT0} = Link} =
-    find_link_by_input_handle(InHandle, State0),
+               output_handle = OutHandle} = Link} =
+        find_link_by_input_handle(InHandle, State0),
 
-    {Transfer, Payload} =
-        case PT0 of
-            undefined -> {Transfer0, Payload0};
-            {T = #'v1_0.transfer'{handle = {uint, InHandle}}, P} ->
-                {T, iolist_to_binary(lists:reverse([Payload0 | P]))}
-        end,
+    {Transfer, Payload} = complete_partial_transfer(Transfer0, Payload0, Link),
 
-    Records = rabbit_amqp1_0_framing:decode_bin(Payload),
-    Msg = amqp10_msg:from_amqp_records([Transfer | Records]),
+    Msg = decode_as_msg(Transfer, Payload),
+
     % deliver to the registered receiver process
     TargetPid ! {message, OutHandle, Msg},
 
-    % stash the DeliveryId
+    % stash the DeliveryId - not sure for what yet
     Unsettled = case Settled of
                    true -> Unsettled0;
                    _ -> Unsettled0#{DeliveryId => OutHandle}
                 end,
 
-    %% TODO: session book keeping
-
     % link bookkeeping
     % TODO: what to do if LC-1 is negative?
     % detach the Link with a transfer-limit-exceeded error code
-    Link1 = Link#link{delivery_count = DC+1,
-                      link_credit = LC-1},
-
-
-    error_logger:info_msg("TRANSFER RECEIVED  ~p", [Transfer]),
-
-    State = State0#state{links = Links#{OutHandle => Link1},
-                         incoming_unsettled = Unsettled},
+    State = book_transfer_received(State0#state{incoming_unsettled = Unsettled},
+                                   Link),
     {next_state, mapped, State};
 % role=true indicates the disposition is from a `receiver`. i.e. from the
 % clients point of view these are dispositions relating to `sender`links
@@ -350,7 +318,6 @@ mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
        #state{unsettled = Unsettled0} = State) ->
 
     % TODO: no good if the range becomes very large!!
-    Range = lists:seq(First, Last),
     Unsettled =
         lists:foldl(fun(Id, Acc) ->
                             case Acc of
@@ -359,15 +326,13 @@ mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
                                     gen_fsm:reply(Receiver, S),
                                     maps:remove(Id, Acc);
                                 _ -> Acc
-                            end end, Unsettled0, Range),
+                            end
+                    end, Unsettled0, lists:seq(First, Last)),
 
-
-    error_logger:info_msg("DISPOSITION RANGE ~p STATE ~p", [Range, State]),
     {next_state, mapped, State#state{unsettled = Unsettled}};
 mapped(Frame, State) ->
-    error_logger:info_msg("SESS UNANDLED FRAME ~p STATE ~p", [Frame, State]),
+    error_logger:info_msg("UNHANDLED FRAME ~p~n", [Frame]),
     {next_state, mapped, State}.
-
 
 %% mapped/3
 %% TODO:: settled = false is probably dependent on the snd_settle_mode
@@ -375,34 +340,38 @@ mapped(Frame, State) ->
 %% unsettled transfer. Who knows really?
 %%
 %% Transfer. See spec section: 2.6.12
-mapped({transfer, #'v1_0.transfer'{handle = {uint, InHandle},
+mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
                                    settled = false} = Transfer0, Parts}, From,
-       #state{next_delivery_id = NDI} = State) ->
+       #state{next_delivery_id = NDI, links = Links} = State) ->
 
-    % TODO: handle link flow
-    {ok, #link{output_handle = OutHandle}} =
-        find_link_by_input_handle(InHandle, State),
+    case Links of
+        #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
+            {reply, insufficient_credit, mapped, State};
+        #{OutHandle := Link} ->
+            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
+            ok = send_transfer(Transfer, Parts, State),
+            % delay reply to caller until disposition frame is received
+            State1 = State#state{unsettled = #{NDI => {OutHandle, From}}},
+            {next_state, mapped, book_transfer_send(Link, State1)};
+        _ ->
+            {reply, {error, link_not_found}, mapped, State}
+    end;
+mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
+        Parts}, _From, #state{next_delivery_id = NDI,
+                              links = Links} = State) ->
 
-    % augment transfer with session stuff
-    Transfer = Transfer0#'v1_0.transfer'{delivery_id = {uint, NDI}},
-    ok = send_transfer(Transfer, Parts, State),
-    % delay reply to caller until disposition frame is received
-    % Link1 = Link#link{unsettled = #{NDI => From}},
-    State1 = State#state{unsettled = #{NDI => {OutHandle, From}}},
-    {next_state, mapped, increment_delivery_ids(State1)};
-mapped({transfer, #'v1_0.transfer'{handle = {uint, InHandle}} = Transfer0,
-        Parts}, _From, #state{next_delivery_id = NDI} = State) ->
-    % TODO: handle flow
-    {ok, #link{output_handle = _OutHandle}} =
-        find_link_by_input_handle(InHandle, State),
-
-    % augment transfer with session stuff
-    Transfer = Transfer0#'v1_0.transfer'{delivery_id = {uint, NDI}},
-    ok = send_transfer(Transfer, Parts, State),
-    % reply after socket write
-    % TODO look into if erlang will correctly wrap integers durin
-    % binary conversion.
-    {reply, ok, mapped, increment_delivery_ids(State)};
+    case Links of
+        #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
+            {reply, insufficient_credit, mapped, State};
+        #{OutHandle := Link} ->
+            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
+            ok = send_transfer(Transfer, Parts, State),
+            % TODO look into if erlang will correctly wrap integers durin
+            % binary conversion.
+            {reply, ok, mapped, book_transfer_send(Link, State)};
+        _ ->
+            {reply, {error, link_not_found}, mapped, State}
+    end;
 
 mapped({disposition, First, Last, Settled, DeliveryState}, _From,
        #state{incoming_unsettled = Unsettled0} = State) ->
@@ -641,9 +610,54 @@ reverse_translate_delivery_state(released) -> #'v1_0.released'{};
 reverse_translate_delivery_state(received) -> #'v1_0.received'{}.
 
 
-increment_delivery_ids(#state{next_outgoing_id = NOI,
-                              next_delivery_id = NDI} = State) ->
-    State#state{next_delivery_id = NDI+1, next_outgoing_id = NOI+1}.
+book_transfer_send(#link{output_handle = Handle} = Link,
+              #state{next_outgoing_id = NOI,
+                     next_delivery_id = NDI,
+                     remote_incoming_window = RIW,
+                     links = Links} = State) ->
+    State#state{next_delivery_id = NDI+1,
+                next_outgoing_id = NOI+1,
+                remote_incoming_window = RIW-1,
+                links = Links#{Handle => incr_link_counters(Link)}}.
+
+book_partial_transfer_received(#state{next_incoming_id = NID,
+                                      remote_outgoing_window = ROW} = State) ->
+    State#state{next_incoming_id = NID+1,
+                remote_outgoing_window = ROW-1}.
+
+book_transfer_received(#state{next_incoming_id = NID,
+                              remote_outgoing_window = ROW,
+                              links = Links} = State,
+                       #link{output_handle = OutHandle,
+                             delivery_count = DC,
+                             link_credit = LC} = Link) ->
+    Link1 = Link#link{delivery_count = DC+1,
+                      link_credit = LC-1},
+
+    State#state{links = Links#{OutHandle => Link1},
+                next_incoming_id = NID+1,
+                remote_outgoing_window = ROW-1}.
+
+incr_link_counters(#link{link_credit = LC, delivery_count = DC} = Link) ->
+    Link#link{delivery_count = DC+1, link_credit = LC+1}.
+
+append_partial_transfer(Transfer, Payload,
+                        #link{partial_transfers = undefined} = Link) ->
+    Link#link{partial_transfers = {Transfer, [Payload]}};
+append_partial_transfer(_Transfer, Payload,
+                        #link{partial_transfers = {T, Payloads}} = Link) ->
+    Link#link{partial_transfers = {T, [Payload | Payloads]}}.
+
+complete_partial_transfer(Transfer, Payload,
+                          #link{partial_transfers = undefined}) ->
+    {Transfer, Payload};
+complete_partial_transfer(_Transfer, Payload,
+                          #link{partial_transfers = {T, Payloads}}) ->
+    {T, iolist_to_binary(lists:reverse([Payload | Payloads]))}.
+
+decode_as_msg(Transfer, Payload) ->
+    Records = rabbit_amqp1_0_framing:decode_bin(Payload),
+    amqp10_msg:from_amqp_records([Transfer | Records]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
