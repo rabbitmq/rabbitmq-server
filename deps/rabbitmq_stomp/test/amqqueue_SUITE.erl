@@ -96,9 +96,10 @@ init_per_testcase0(publish_unauthorized_error, Config) ->
         amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
                                                     auto_delete = true}),
 
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user, [<<"user">>, <<"pass">>]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user,
+                                 [<<"user">>, <<"pass">>, <<"acting-user">>]),
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_permissions, [
-        <<"user">>, <<"/">>, <<"nothing">>, <<"nothing">>, <<"nothing">>]),
+        <<"user">>, <<"/">>, <<"nothing">>, <<"nothing">>, <<"nothing">>, <<"acting-user">>]),
     Version = ?config(version, Config),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass", StompPort),
@@ -109,7 +110,8 @@ init_per_testcase0(_, Config) ->
 end_per_testcase0(publish_unauthorized_error, Config) ->
     ClientFoo = ?config(client_foo, Config),
     rabbit_stomp_client:disconnect(ClientFoo),
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user, [<<"user">>]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user,
+                                 [<<"user">>, <<"acting-user">>]),
     Config;
 end_per_testcase0(_, Config) ->
     Config.
