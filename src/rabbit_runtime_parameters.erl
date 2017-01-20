@@ -51,13 +51,13 @@
 
 -include("rabbit.hrl").
 
--export([parse_set/5, set/5, set_any/5, clear/3, clear_any/3, list/0, list/1,
+-export([parse_set/5, set/5, set_any/5, clear/4, clear_any/4, list/0, list/1,
          list_component/1, list/2, list_formatted/1, list_formatted/3,
          lookup/3, value/3, value/4, info_keys/0, clear_component/1]).
 
--export([parse_set_global/2, set_global/2, value_global/1, value_global/2,
+-export([parse_set_global/3, set_global/3, value_global/1, value_global/2,
          list_global/0, list_global_formatted/0, list_global_formatted/2,
-         lookup_global/1, global_info_keys/0, clear_global/1]).
+         lookup_global/1, global_info_keys/0, clear_global/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -65,15 +65,18 @@
 -type ok_thunk_or_error_string() :: ok_or_error_string() | fun(() -> 'ok').
 
 -spec parse_set(rabbit_types:vhost(), binary(), binary(), string(),
-                      rabbit_types:user() | 'none') -> ok_or_error_string().
+                rabbit_types:user() | rabbit_types:username() | 'none')
+               -> ok_or_error_string().
 -spec set(rabbit_types:vhost(), binary(), binary(), term(),
-                rabbit_types:user() | 'none') -> ok_or_error_string().
+                rabbit_types:user() | rabbit_types:username() | 'none')
+         -> ok_or_error_string().
 -spec set_any(rabbit_types:vhost(), binary(), binary(), term(),
-                    rabbit_types:user() | 'none') -> ok_or_error_string().
--spec set_global(atom(), term()) -> 'ok'.
--spec clear(rabbit_types:vhost(), binary(), binary())
-                 -> ok_thunk_or_error_string().
--spec clear_any(rabbit_types:vhost(), binary(), binary())
+              rabbit_types:user() | rabbit_types:username() | 'none')
+             -> ok_or_error_string().
+-spec set_global(atom(), term(), rabbit_types:username()) -> 'ok'.
+-spec clear(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
+           -> ok_thunk_or_error_string().
+-spec clear_any(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
                      -> ok_thunk_or_error_string().
 -spec list() -> [rabbit_types:infos()].
 -spec list(rabbit_types:vhost() | '_') -> [rabbit_types:infos()].
@@ -113,19 +116,20 @@ set(_, <<"policy">>, _, _, _) ->
 set(VHost, Component, Name, Term, User) ->
     set_any(VHost, Component, Name, Term, User).
 
-parse_set_global(Name, String) ->
+parse_set_global(Name, String, ActingUser) ->
     Definition = rabbit_data_coercion:to_binary(String),
     case rabbit_json:try_decode(Definition) of
-        {ok, Term} when is_map(Term) -> set_global(Name, maps:to_list(Term));
-        {ok, Term} -> set_global(Name, Term);
+        {ok, Term} when is_map(Term) -> set_global(Name, maps:to_list(Term), ActingUser);
+        {ok, Term} -> set_global(Name, Term, ActingUser);
         error      -> {error_string, "JSON decoding error"}
     end.
 
-set_global(Name, Term)  ->
+set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
     mnesia_update(NameAsAtom, Term),
     event_notify(parameter_set, none, global, [{name,  NameAsAtom},
-        {value, Term}]),
+                                               {value, Term},
+                                               {user_who_performed_action, ActingUser}]),
     ok.
 
 format_error(L) ->
@@ -141,15 +145,19 @@ set_any0(VHost, Component, Name, Term, User) ->
     case lookup_component(Component) of
         {ok, Mod} ->
             case flatten_errors(
-                   Mod:validate(VHost, Component, Name, Term, User)) of
+                   Mod:validate(VHost, Component, Name, Term, get_user(User))) of
                 ok ->
                     case mnesia_update(VHost, Component, Name, Term) of
-                        {old, Term} -> ok;
-                        _           -> event_notify(
-                                         parameter_set, VHost, Component,
-                                         [{name,  Name},
-                                          {value, Term}]),
-                                       Mod:notify(VHost, Component, Name, Term)
+                        {old, Term} ->
+                            ok;
+                        _           ->
+                            ActingUser = get_username(User),
+                            event_notify(
+                              parameter_set, VHost, Component,
+                              [{name,  Name},
+                               {value, Term},
+                               {user_who_performed_action, ActingUser}]),
+                            Mod:notify(VHost, Component, Name, Term, ActingUser)
                     end,
                     ok;
                 E ->
@@ -158,6 +166,19 @@ set_any0(VHost, Component, Name, Term, User) ->
         E ->
             E
     end.
+
+%% Validate only an user record as expected by the API before #rabbitmq-event-exchange-10
+get_user(#user{} = User) ->
+    User;
+get_user(_) ->
+    none.
+
+get_username(#user{username = Username}) ->
+    Username;
+get_username(none) ->
+    ?INTERNAL_USER;
+get_username(Any) ->
+    Any.
 
 mnesia_update(Key, Term) ->
     rabbit_misc:execute_mnesia_transaction(mnesia_update_fun(Key, Term)).
@@ -176,15 +197,17 @@ mnesia_update_fun(Key, Term) ->
             Res
     end.
 
-clear(_, <<"policy">> , _) ->
+clear(_, <<"policy">> , _, _) ->
     {error_string, "policies may not be cleared using this method"};
-clear(VHost, Component, Name) ->
-    clear_any(VHost, Component, Name).
+clear(VHost, Component, Name, ActingUser) ->
+    clear_any(VHost, Component, Name, ActingUser).
 
-clear_global(Key) ->
+clear_global(Key, ActingUser) ->
     KeyAsAtom = rabbit_data_coercion:to_atom(Key),
     Notify = fun() ->
-                    event_notify(parameter_set, none, global, [{name,  KeyAsAtom}]),
+                    event_notify(parameter_set, none, global,
+                                 [{name,  KeyAsAtom},
+                                  {user_who_performed_action, ActingUser}]),
                     ok
              end,
     case value_global(KeyAsAtom) of
@@ -212,13 +235,14 @@ clear_component(Component) ->
             ok
     end.
 
-clear_any(VHost, Component, Name) ->
+clear_any(VHost, Component, Name, ActingUser) ->
     Notify = fun () ->
                      case lookup_component(Component) of
                          {ok, Mod} -> event_notify(
                                         parameter_cleared, VHost, Component,
-                                        [{name, Name}]),
-                                      Mod:notify_clear(VHost, Component, Name);
+                                        [{name, Name},
+                                         {user_who_performed_action, ActingUser}]),
+                                      Mod:notify_clear(VHost, Component, Name, ActingUser);
                          _         -> ok
                      end
              end,

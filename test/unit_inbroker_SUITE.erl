@@ -794,7 +794,7 @@ bq_variable_queue_delete_msg_store_files_callback1(Config) ->
       rabbit_amqqueue:declare(
         queue_name(Config,
           <<"bq_variable_queue_delete_msg_store_files_callback-q">>),
-        true, false, [], none),
+        true, false, [], none, <<"acting-user">>),
     Payload = <<0:8388608>>, %% 1MB
     Count = 30,
     publish_and_confirm(Q, Payload, Count),
@@ -811,7 +811,7 @@ bq_variable_queue_delete_msg_store_files_callback1(Config) ->
     %% give the queue a second to receive the close_fds callback msg
     timer:sleep(1000),
 
-    rabbit_amqqueue:delete(Q, false, false),
+    rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
     passed.
 
 bq_queue_recover(Config) ->
@@ -822,7 +822,7 @@ bq_queue_recover1(Config) ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     {new, #amqqueue { pid = QPid, name = QName } = Q} =
         rabbit_amqqueue:declare(queue_name(Config, <<"bq_queue_recover-q">>),
-                                true, false, [], none),
+                                true, false, [], none, <<"acting-user">>),
     publish_and_confirm(Q, <<>>, Count),
 
     SupPid = rabbit_ct_broker_helpers:get_queue_sup_pid(QPid),
@@ -848,7 +848,7 @@ bq_queue_recover1(Config) ->
                   rabbit_variable_queue:fetch(true, VQ1),
               CountMinusOne = rabbit_variable_queue:len(VQ2),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
-              ok = rabbit_amqqueue:internal_delete(QName)
+              ok = rabbit_amqqueue:internal_delete(QName, <<"acting-user">>)
       end),
     passed.
 
@@ -2166,12 +2166,12 @@ change_password1(_Config) ->
     UserName = <<"test_user">>,
     Password = <<"test_password">>,
     case rabbit_auth_backend_internal:lookup_user(UserName) of
-        {ok, _} -> rabbit_auth_backend_internal:delete_user(UserName);
+        {ok, _} -> rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>);
         _       -> ok
     end,
     ok = application:set_env(rabbit, password_hashing_module,
                              rabbit_password_hashing_md5),
-    ok = rabbit_auth_backend_internal:add_user(UserName, Password),
+    ok = rabbit_auth_backend_internal:add_user(UserName, Password, <<"acting-user">>),
     {ok, #auth_user{username = UserName}} =
         rabbit_auth_backend_internal:user_login_authentication(
             UserName, [{password, Password}]),
@@ -2182,7 +2182,8 @@ change_password1(_Config) ->
             UserName, [{password, Password}]),
 
     NewPassword = <<"test_password1">>,
-    ok = rabbit_auth_backend_internal:change_password(UserName, NewPassword),
+    ok = rabbit_auth_backend_internal:change_password(UserName, NewPassword,
+                                                      <<"acting-user">>),
     {ok, #auth_user{username = UserName}} =
         rabbit_auth_backend_internal:user_login_authentication(
             UserName, [{password, NewPassword}]),
@@ -3004,14 +3005,14 @@ declare_on_dead_queue1(_Config, SecondaryNode) ->
                 fun () ->
                         {new, #amqqueue{name = QueueName, pid = QPid}} =
                             rabbit_amqqueue:declare(QueueName, false, false, [],
-                                                    none),
+                                                    none, <<"acting-user">>),
                         exit(QPid, kill),
                         Self ! {self(), killed, QPid}
                 end),
     receive
         {Pid, killed, OldPid} ->
             Q = dead_queue_loop(QueueName, OldPid),
-            {ok, 0} = rabbit_amqqueue:delete(Q, false, false),
+            {ok, 0} = rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
             passed
     after ?TIMEOUT -> throw(failed_to_create_and_kill_queue)
     end.
@@ -3038,9 +3039,9 @@ refresh_events1(Config, SecondaryNode) ->
 
     {new, #amqqueue{name = QName} = Q} =
         rabbit_amqqueue:declare(queue_name(Config, <<"refresh_events-q">>),
-                                false, false, [], none),
+                                false, false, [], none, <<"acting-user">>),
     expect_events(name, QName, queue_created),
-    rabbit_amqqueue:delete(Q, false, false),
+    rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
 
     dummy_event_receiver:stop(),
     passed.
@@ -3074,7 +3075,8 @@ must_exit(Fun) ->
     end.
 
 dead_queue_loop(QueueName, OldPid) ->
-    {existing, Q} = rabbit_amqqueue:declare(QueueName, false, false, [], none),
+    {existing, Q} = rabbit_amqqueue:declare(QueueName, false, false, [], none,
+                                            <<"acting-user">>),
     case Q#amqqueue.pid of
         OldPid -> timer:sleep(25),
                   dead_queue_loop(QueueName, OldPid);

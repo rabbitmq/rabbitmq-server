@@ -17,11 +17,11 @@
 -module(rabbit_binding).
 -include("rabbit.hrl").
 
--export([recover/2, exists/1, add/1, add/2, remove/1, remove/2, list/1]).
+-export([recover/2, exists/1, add/2, add/3, remove/1, remove/3, list/1]).
 -export([list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
-         process_deletions/1]).
+         process_deletions/2]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
 %% these must all be run inside a mnesia tx
 -export([has_for_source/1, remove_for_source/1,
@@ -57,10 +57,10 @@
 -spec recover([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
                         'ok'.
 -spec exists(rabbit_types:binding()) -> boolean() | bind_errors().
--spec add(rabbit_types:binding())              -> bind_res().
--spec add(rabbit_types:binding(), inner_fun()) -> bind_res().
+-spec add(rabbit_types:binding(), rabbit_types:username()) -> bind_res().
+-spec add(rabbit_types:binding(), inner_fun(), rabbit_types:username()) -> bind_res().
 -spec remove(rabbit_types:binding())              -> bind_res().
--spec remove(rabbit_types:binding(), inner_fun()) -> bind_res().
+-spec remove(rabbit_types:binding(), inner_fun(), rabbit_types:username()) -> bind_res().
 -spec list(rabbit_types:vhost()) -> bindings().
 -spec list_for_source
         (rabbit_types:binding_source()) -> bindings().
@@ -84,7 +84,7 @@
         (rabbit_types:binding_destination(), boolean()) -> deletions().
 -spec remove_transient_for_destination
         (rabbit_types:binding_destination()) -> deletions().
--spec process_deletions(deletions()) -> rabbit_misc:thunk('ok').
+-spec process_deletions(deletions(), rabbit_types:username()) -> rabbit_misc:thunk('ok').
 -spec combine_deletions(deletions(), deletions()) -> deletions().
 -spec add_deletion
         (rabbit_exchange:name(),
@@ -158,9 +158,9 @@ exists(Binding) ->
                        rabbit_misc:const(mnesia:read({rabbit_route, B}) /= [])
                end, fun not_found_or_absent_errs/1).
 
-add(Binding) -> add(Binding, fun (_Src, _Dst) -> ok end).
+add(Binding, ActingUser) -> add(Binding, fun (_Src, _Dst) -> ok end, ActingUser).
 
-add(Binding, InnerFun) ->
+add(Binding, InnerFun, ActingUser) ->
     binding_action(
       Binding,
       fun (Src, Dst, B) ->
@@ -172,7 +172,7 @@ add(Binding, InnerFun) ->
                       case InnerFun(Src, Dst) of
                           ok ->
                               case mnesia:read({rabbit_route, B}) of
-                                  []  -> add(Src, Dst, B);
+                                  []  -> add(Src, Dst, B, ActingUser);
                                   [_] -> fun () -> ok end
                               end;
                           {error, _} = Err ->
@@ -183,7 +183,7 @@ add(Binding, InnerFun) ->
               end
       end, fun not_found_or_absent_errs/1).
 
-add(Src, Dst, B) ->
+add(Src, Dst, B, ActingUser) ->
     [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
     case (SrcDurable andalso DstDurable andalso
           mnesia:read({rabbit_durable_route, B}) =/= []) of
@@ -193,14 +193,16 @@ add(Src, Dst, B) ->
                  Serial = rabbit_exchange:serial(Src),
                  fun () ->
                          x_callback(Serial, Src, add_binding, B),
-                         ok = rabbit_event:notify(binding_created, info(B))
+                         ok = rabbit_event:notify(
+                                binding_created,
+                                info(B) ++ [{user_who_performed_action, ActingUser}])
                  end;
         true  -> rabbit_misc:const({error, binding_not_found})
     end.
 
-remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end).
+remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end, ?INTERNAL_USER).
 
-remove(Binding, InnerFun) ->
+remove(Binding, InnerFun, ActingUser) ->
     binding_action(
       Binding,
       fun (Src, Dst, B) ->
@@ -210,18 +212,18 @@ remove(Binding, InnerFun) ->
                             _  -> rabbit_misc:const({error, binding_not_found})
                         end;
                   _  -> case InnerFun(Src, Dst) of
-                            ok               -> remove(Src, Dst, B);
+                            ok               -> remove(Src, Dst, B, ActingUser);
                             {error, _} = Err -> rabbit_misc:const(Err)
                         end
               end
       end, fun absent_errs_only/1).
 
-remove(Src, Dst, B) ->
+remove(Src, Dst, B, ActingUser) ->
     ok = sync_route(#route{binding = B}, durable(Src), durable(Dst),
                     fun mnesia:delete_object/3),
     Deletions = maybe_auto_delete(
                   B#binding.source, [B], new_deletions(), false),
-    process_deletions(Deletions).
+    process_deletions(Deletions, ActingUser).
 
 list(VHostPath) ->
     VHostResource = rabbit_misc:r(VHostPath, '_'),
@@ -539,7 +541,7 @@ merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
      anything_but(not_deleted, Deleted1, Deleted2),
      [Bindings1 | Bindings2]}.
 
-process_deletions(Deletions) ->
+process_deletions(Deletions, ActingUser) ->
     AugmentedDeletions =
         dict:map(fun (_XName, {X, deleted, Bindings}) ->
                          Bs = lists:flatten(Bindings),
@@ -553,16 +555,21 @@ process_deletions(Deletions) ->
     fun() ->
             dict:fold(fun (XName, {X, deleted, Bs, Serial}, ok) ->
                               ok = rabbit_event:notify(
-                                     exchange_deleted, [{name, XName}]),
-                              del_notify(Bs),
+                                     exchange_deleted,
+                                     [{name, XName},
+                                      {user_who_performed_action, ActingUser}]),
+                              del_notify(Bs, ActingUser),
                               x_callback(Serial, X, delete, Bs);
                           (_XName, {X, not_deleted, Bs, Serial}, ok) ->
-                              del_notify(Bs),
+                              del_notify(Bs, ActingUser),
                               x_callback(Serial, X, remove_bindings, Bs)
                       end, ok, AugmentedDeletions)
     end.
 
-del_notify(Bs) -> [rabbit_event:notify(binding_deleted, info(B)) || B <- Bs].
+del_notify(Bs, ActingUser) -> [rabbit_event:notify(
+                               binding_deleted,
+                               info(B) ++ [{user_who_performed_action, ActingUser}])
+                             || B <- Bs].
 
 x_callback(Serial, X, F, Bs) ->
     ok = rabbit_exchange:callback(X, F, Serial, [X, Bs]).

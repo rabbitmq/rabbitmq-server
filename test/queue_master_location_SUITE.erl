@@ -245,7 +245,8 @@ unset_location_config(Config) ->
 declare(Config, QueueName, Durable, AutoDelete, Args, Owner) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     {new, Queue} = rpc:call(Node, rabbit_amqqueue, declare,
-                            [QueueName, Durable, AutoDelete, Args, Owner]),
+                            [QueueName, Durable, AutoDelete, Args, Owner,
+                             <<"acting-user">>]),
     Queue.
 
 verify_min_master(Config, Q) ->

@@ -323,6 +323,7 @@ tracked_connection_from_connection_state(#connection{
        {node, node()},
        {vhost, VHost},
        {user, Username},
+       {user_who_performed_action, Username},
        {connected_at, Ts},
        {pid, self()},
        {type, network},
