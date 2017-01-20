@@ -41,7 +41,8 @@ info(_X) -> [].
 info(_X, _) -> [].
 
 register() ->
-    rabbit_exchange:declare(exchange(), topic, true, false, true, []),
+    rabbit_exchange:declare(exchange(), topic, true, false, true, [],
+                            ?INTERNAL_USER),
     gen_event:add_handler(rabbit_event, ?MODULE, []).
 
 unregister() ->
@@ -98,7 +99,7 @@ ensure_vhost_exists() ->
                     V
             end,
     case rabbit_vhost:exists(VHost) of
-        false -> rabbit_vhost:add(VHost);
+        false -> rabbit_vhost:add(VHost, ?INTERNAL_USER);
         _     -> ok
     end,
     VHost.
