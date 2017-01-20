@@ -52,7 +52,8 @@ banner([Name], #{vhost := Vhost}) ->
 
 run([Name], #{node := Node, vhost := Vhost}) ->
     rabbit_misc:rpc_call(Node, rabbit_runtime_parameters, clear,
-                         [Vhost, <<"shovel">>, Name]).
+                         [Vhost, <<"shovel">>, Name,
+                          'Elixir.RabbitMQ.CLI.Core.Helpers':cli_acting_user()]).
         
 
 switches() ->

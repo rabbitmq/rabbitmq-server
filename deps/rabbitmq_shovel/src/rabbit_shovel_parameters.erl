@@ -20,7 +20,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
--export([validate/5, notify/4, notify_clear/3]).
+-export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0, parse/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
@@ -66,10 +66,10 @@ pget2(K1, K2, Defs) -> case {pget(K1, Defs), pget(K2, Defs)} of
                            {_,         _}         -> both
                        end.
 
-notify(VHost, <<"shovel">>, Name, Definition) ->
+notify(VHost, <<"shovel">>, Name, Definition, _Username) ->
     rabbit_shovel_dyn_worker_sup_sup:adjust({VHost, Name}, Definition).
 
-notify_clear(VHost, <<"shovel">>, Name) ->
+notify_clear(VHost, <<"shovel">>, Name, _Username) ->
     rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}).
 
 %%----------------------------------------------------------------------------
