@@ -284,7 +284,7 @@ with_ch(Config, Fun) ->
 cleanup(Config) ->
     cleanup(Config, 0).
 cleanup(Config, NodeIndex) ->
-    [rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_amqqueue, delete, [Q, false, false])
+    [rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_amqqueue, delete, [Q, false, false, <<"test-user">>])
      || Q <- queues(Config, 0)].
 
 teardown(Config, Ch, Xs, Policies) ->

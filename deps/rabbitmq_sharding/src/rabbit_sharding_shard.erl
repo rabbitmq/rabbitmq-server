@@ -33,6 +33,7 @@
                     {requires,    recovery}]}).
 
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
+-define(SHARDING_USER, <<"rmq-sharding">>).
 
 %% We make sure the sharded queues are created when
 %% RabbitMQ starts.
@@ -92,7 +93,8 @@ bind_queues(#exchange{name = XName} = X) ->
 declare_queue(XName, Durable, N, Node) ->
     QBin = make_queue_name(exchange_bin(XName), a2b(Node), N),
     QueueName = rabbit_misc:r(v(XName), queue, QBin),
-    try rabbit_amqqueue:declare(QueueName, Durable, false, [], none, Node) of
+    try rabbit_amqqueue:declare(QueueName, Durable, false, [], none,
+                                ?SHARDING_USER, Node) of
         {_Reply, _Q} ->
             ok
     catch
@@ -104,13 +106,13 @@ declare_queue(XName, Durable, N, Node) ->
     end.
 
 bind_queue(XName, RoutingKey, N, Node) ->
-    binding_action(fun rabbit_binding:add/2,
+    binding_action(fun rabbit_binding:add/3,
                    XName, RoutingKey, N, Node,
                    "sharding failed to bind queue ~p to exchange ~p"
                    " - soft error:~n~p~n").
 
 unbind_queue(XName, RoutingKey, N, Node) ->
-    binding_action(fun rabbit_binding:remove/2,
+    binding_action(fun rabbit_binding:remove/3,
                    XName, RoutingKey, N, Node,
                    "sharding failed to unbind queue ~p to exchange ~p"
                    " - soft error:~n~p~n").
@@ -122,7 +124,8 @@ binding_action(F, XName, RoutingKey, N, Node, ErrMsg) ->
                     destination = QueueName,
                     key         = RoutingKey,
                     args        = []},
-           fun (_X, _Q) -> ok end) of
+           fun (_X, _Q) -> ok end,
+           ?SHARDING_USER) of
         ok              -> ok;
         {error, Reason} ->
             rabbit_log:error(ErrMsg, [QBin, exchange_bin(XName), Reason]),
