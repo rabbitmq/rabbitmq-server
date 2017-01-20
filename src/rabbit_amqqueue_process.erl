@@ -963,7 +963,7 @@ i(reductions, _State) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;
 i(user_who_performed_action, #q{q = #amqqueue{options = Opts}}) ->
-    maps:get(user, Opts);
+    maps:get(user, Opts, ?UNKNOWN_USER);
 i(Item, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:info(Item, BQS).
 

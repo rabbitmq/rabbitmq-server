@@ -346,7 +346,7 @@ i(policy,      X) ->  case rabbit_policy:name(X) of
                           Policy -> Policy
                       end;
 i(user_who_performed_action, #exchange{options = Opts}) ->
-    maps:get(user, Opts);
+    maps:get(user, Opts, ?UNKNOWN_USER);
 i(Item, #exchange{type = Type} = X) ->
     case (type_to_module(Type)):info(X, [Item]) of
         [{Item, I}] -> I;
