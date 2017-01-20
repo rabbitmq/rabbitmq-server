@@ -107,7 +107,7 @@ Note that you cannot create arbitrary virtual hosts using this plugin; you can o
 * `vhost`       - the name of the virtual host containing the resource
 * `resource`    - the type of resource (`topic` in this case)
 * `name`        - the name of the exchange
-* `permission`  - the access level to the resource (`write` in this case)
+* `permission`  - the access level to the resource (`write` or `read`)
 * `routing_key` - the routing key of the published message
 
 See [topic authorisation](http://www.rabbitmq.com/access-control.html#topic-authorisation) for more information
