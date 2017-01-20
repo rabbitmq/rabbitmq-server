@@ -36,6 +36,8 @@
 
 -define(MAX_SESSION_WINDOW_SIZE, 65535).
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
+-define(INITIAL_OUTGOING_ID, 65535).
+-define(INITIAL_DELIVERY_COUNT, 0).
 
 -type transfer_id() :: non_neg_integer().
 -type link_handle() :: non_neg_integer().
@@ -72,7 +74,7 @@
          target :: link_target(),
          delivery_count = 0 :: non_neg_integer(),
          link_credit = 0 :: non_neg_integer(),
-         available = undefined :: non_neg_integer() | undefined,
+         available = 0 :: non_neg_integer(),
          drain = false :: boolean(),
          partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()]}
          }).
@@ -82,7 +84,7 @@
          remote_channel :: pos_integer() | undefined,
          next_incoming_id = 0 :: transfer_id(),
          incoming_window = ?MAX_SESSION_WINDOW_SIZE :: non_neg_integer(),
-         next_outgoing_id = 0 :: transfer_id(),
+         next_outgoing_id = ?INITIAL_OUTGOING_ID + 1 :: transfer_id(),
          outgoing_window = ?MAX_SESSION_WINDOW_SIZE  :: non_neg_integer(),
          remote_incoming_window = 0 :: non_neg_integer(),
          remote_outgoing_window = 0 :: non_neg_integer(),
@@ -208,20 +210,20 @@ mapped({flow, OutHandle, #'v1_0.flow'{link_credit = {uint, LinkCredit}} = Flow0}
               next_incoming_id = NII,
               next_outgoing_id = NOI,
               outgoing_window = OutWin,
-              incoming_window = InWin
-             } = State) ->
+              incoming_window = InWin} = State) ->
     #{OutHandle := #link{output_handle = H,
-                          role = receiver,
-                          delivery_count = DeliveryCount,
-                          available = _Available} = Link} = Links,
-    Flow = Flow0#'v1_0.flow'{handle = pack_uint(H),
-                             next_incoming_id = pack_uint(NII),
-                             next_outgoing_id = pack_uint(NOI),
-                             outgoing_window = pack_uint(OutWin),
-                             incoming_window = pack_uint(InWin),
-                             delivery_count = pack_uint(DeliveryCount)
+                         role = receiver,
+                         delivery_count = DeliveryCount,
+                         available = Available} = Link} = Links,
+    Flow = Flow0#'v1_0.flow'{handle = uint(H),
+                             next_incoming_id = uint(NII),
+                             next_outgoing_id = uint(NOI),
+                             outgoing_window = uint(OutWin),
+                             incoming_window = uint(InWin),
+                             delivery_count = uint(DeliveryCount),
+                             available = uint(Available)
                              },
-    error_logger:info_msg("FLOW ~p~n", [Flow]),
+    error_logger:info_msg("SENDING FLOW ~p~n", [Flow]),
     ok = send(Flow, State),
     {next_state, mapped,
      State#state{links = Links#{OutHandle =>
@@ -242,30 +244,34 @@ mapped(#'v1_0.attach'{name = {utf8, Name},
     #{Name := OutHandle} = LinkIndex,
     #{OutHandle := Link0} = Links,
     gen_fsm:reply(From, {ok, OutHandle}),
+    % TODO there coudl be many differnt things to do depending on link role
+    DeliveryCount = case Link0 of
+                        #link{role = sender, delivery_count = DC} -> DC;
+                        _ -> unpack(IDC)
+                    end,
     Link = Link0#link{input_handle = InHandle,
-                      delivery_count = unpack(IDC)},
+                      delivery_count = DeliveryCount},
     {next_state, mapped,
      State#state{links = Links#{OutHandle => Link},
                  link_handle_index = LHI#{InHandle => OutHandle},
                  pending_attach_requests = maps:remove(Name, PARs)}};
 
-mapped(#'v1_0.flow'{handle = {uint, InHandle},
-                    next_outgoing_id = {uint, NOI},
-                    outgoing_window = {uint, OutWin},
-                    delivery_count = {uint, DeliveryCount},
-                    available = Available},
+mapped(#'v1_0.flow'{handle = undefined} = Flow, State0) ->
+    State = handle_session_flow(Flow, State0),
+    {next_state, mapped, State};
+mapped(#'v1_0.flow'{handle = {uint, InHandle}} = Flow,
        #state{links = Links} = State0) ->
 
-    {ok, #link{output_handle = OutHandle} = Link} =
-        find_link_by_input_handle(InHandle, State0),
-    Links1 = Links#{OutHandle =>
-                    Link#link{delivery_count = DeliveryCount,
-                              available = unpack(Available)}},
-    State = State0#state{next_incoming_id = NOI,
-                         incoming_window = OutWin,
-                         remote_outgoing_window = OutWin,
-                         links = Links1},
-    {next_state, mapped, State};
+    State = handle_session_flow(Flow, State0),
+
+    {ok, #link{output_handle = OutHandle} = Link0} =
+        find_link_by_input_handle(InHandle, State),
+
+     % TODO: handle `send_flow` return tag
+    {ok, Link} = handle_link_flow(Flow, Link0),
+    Links1 = Links#{OutHandle => Link},
+    State1 = State#state{links = Links1},
+    {next_state, mapped, State1};
 
 mapped({#'v1_0.transfer'{handle = {uint, InHandle},
                          more = true} = Transfer, Payload},
@@ -454,9 +460,9 @@ send_begin(#state{socket = Socket,
                   incoming_window = InWin,
                   outgoing_window = OutWin} = State) ->
     Begin = #'v1_0.begin'{
-               next_outgoing_id = pack_uint(NextOutId),
-               incoming_window = pack_uint(InWin),
-               outgoing_window = pack_uint(OutWin)
+               next_outgoing_id = uint(NextOutId),
+               incoming_window = uint(InWin),
+               outgoing_window = uint(OutWin)
               },
     Frame = encode_frame(Begin, State),
     gen_tcp:send(Socket, Frame).
@@ -533,7 +539,8 @@ send_attach(Send, #{name := Name, role := Role} = Args, From,
                             role = RoleAsBool,
                             handle = {uint, Handle},
                             source = Source,
-                            initial_delivery_count = {uint, 0},
+                            initial_delivery_count =
+                                {uint, ?INITIAL_DELIVERY_COUNT},
                             snd_settle_mode = snd_settle_mode(Args),
                             rcv_settle_mode = rcv_settle_mode(Args),
                             target = Target},
@@ -552,7 +559,48 @@ send_attach(Send, #{name := Name, role := Role} = Args, From,
                 pending_attach_requests = PARs#{Name => From},
                 link_index = LinkIndex#{Name => Handle}}.
 
-pack_uint(Int) -> {uint, Int}.
+-spec handle_session_flow(#'v1_0.flow'{}, #state{}) -> #state{}.
+handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
+                                 next_outgoing_id = {uint, NOI},
+                                 incoming_window = {uint, InWin},
+                                 outgoing_window = {uint, OutWin}},
+       #state{next_outgoing_id = OurNOI} = State) ->
+
+    NII = case MaybeNII of
+              {uint, N} -> N;
+              undefined -> ?INITIAL_OUTGOING_ID + 1 % TODO: should it be +1?
+          end,
+
+    State#state{next_incoming_id = NOI,
+                remote_incoming_window = NII + InWin - OurNOI, % see: 2.5.6
+                remote_outgoing_window = OutWin}.
+
+-spec handle_link_flow(#'v1_0.flow'{}, #link{}) -> {ok | send_flow, #link{}}.
+handle_link_flow(#'v1_0.flow'{drain = true, link_credit = {uint, TheirCredit}},
+                 Link = #link{role = sender,
+                              delivery_count = OurDC,
+                              available = 0}) ->
+    {send_flow, Link#link{link_credit = 0,
+                          delivery_count = OurDC + TheirCredit}};
+handle_link_flow(#'v1_0.flow'{delivery_count = MaybeTheirDC,
+                              link_credit = {uint, TheirCredit}},
+                 Link = #link{role = sender,
+                              delivery_count = OurDC}) ->
+    TheirDC = case MaybeTheirDC of
+                  undefined -> ?INITIAL_DELIVERY_COUNT;
+                  {uint, DC} -> DC
+              end,
+    LinkCredit = TheirDC + TheirCredit - OurDC,
+
+    {ok, Link#link{link_credit = LinkCredit}};
+handle_link_flow(#'v1_0.flow'{delivery_count = TheirDC,
+                              available = Available,
+                              drain = Drain},
+                 Link = #link{role = receiver}) ->
+
+    {ok, Link#link{delivery_count = unpack(TheirDC),
+                   available = unpack(Available),
+                   drain = Drain}}.
 
 -spec find_link_by_input_handle(link_handle(), #state{}) ->
     {ok, #link{}} | not_found.
@@ -568,6 +616,7 @@ find_link_by_input_handle(InHandle, #state{link_handle_index = LHI,
         _ -> not_found
     end.
 
+uint(Int) -> {uint, Int}.
 unpack(X) -> amqp10_client_types:unpack(X).
 
 snd_settle_mode(#{snd_settle_mode := unsettled}) -> {ubyte, 0};
@@ -596,3 +645,84 @@ increment_delivery_ids(#state{next_outgoing_id = NOI,
                               next_delivery_id = NDI} = State) ->
     State#state{next_delivery_id = NDI+1, next_outgoing_id = NOI+1}.
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+handle_session_flow_test() ->
+    % see spec section: 2.5.6 for logic
+    Flow = #'v1_0.flow'{next_incoming_id = {uint, 50},
+                        next_outgoing_id = {uint, 42},
+                        incoming_window = {uint, 1000},
+                        outgoing_window = {uint, 2000}},
+    State0 = #state{next_outgoing_id = 51},
+    State = handle_session_flow(Flow, State0),
+    42 = State#state.next_incoming_id,
+    2000 = State#state.remote_outgoing_window,
+    50 + 1000 - 51 = State#state.remote_incoming_window.
+
+handle_session_flow_pre_begin_test() ->
+    % see spec section: 2.5.6 for logic
+    Flow = #'v1_0.flow'{next_incoming_id = undefined,
+                        next_outgoing_id = {uint, 42},
+                        incoming_window = {uint, 1000},
+                        outgoing_window = {uint, 2000}},
+    State0 = #state{next_outgoing_id = 51},
+    State = handle_session_flow(Flow, State0),
+    42 = State#state.next_incoming_id,
+    2000 = State#state.remote_outgoing_window,
+    ?INITIAL_OUTGOING_ID + 1 + 1000 - 51 = State#state.remote_incoming_window.
+
+handle_link_flow_sender_test() ->
+    Handle = 45,
+    DeliveryCount = 55,
+    Link = #link{role = sender, output_handle = 99,
+                 link_credit = 0, delivery_count = DeliveryCount + 2},
+    Flow = #'v1_0.flow'{handle = {uint, Handle},
+                        link_credit = {uint, 42},
+                        delivery_count = {uint, DeliveryCount}
+                       },
+    {ok, Outcome} = handle_link_flow(Flow, Link),
+    % see section 2.6.7
+    Expected = DeliveryCount + 42 - (DeliveryCount + 2),
+    Expected = Outcome#link.link_credit,
+
+    % receiver does not yet know the delivery_count
+    {ok, Outcome2} = handle_link_flow(Flow#'v1_0.flow'{delivery_count = undefined},
+                                Link),
+    Expected2 = ?INITIAL_DELIVERY_COUNT + 42 - (DeliveryCount + 2),
+    Expected2 = Outcome2#link.link_credit.
+
+handle_link_flow_sender_drain_test() ->
+    Handle = 45,
+    SndDeliveryCount = 55,
+    RcvLinkCredit = 42,
+    Link = #link{role = sender, output_handle = 99,
+                 available = 0, link_credit = 20,
+                 delivery_count = SndDeliveryCount},
+    Flow = #'v1_0.flow'{handle = {uint, Handle},
+                        link_credit = {uint, RcvLinkCredit},
+                        drain = true},
+    {send_flow, Outcome} = handle_link_flow(Flow, Link),
+    0 = Outcome#link.link_credit,
+    ExpectedDC = SndDeliveryCount + RcvLinkCredit,
+    ExpectedDC = Outcome#link.delivery_count.
+
+
+handle_link_flow_receiver_test() ->
+    Handle = 45,
+    DeliveryCount = 55,
+    SenderDC = 57,
+    Link = #link{role = receiver, output_handle = 99,
+                 link_credit = 0, delivery_count = DeliveryCount},
+    Flow = #'v1_0.flow'{handle = {uint, Handle},
+                        delivery_count = {uint, SenderDC},
+                        available = 99,
+                        drain = true % what to do?
+                       },
+    {ok, Outcome} = handle_link_flow(Flow, Link),
+    % see section 2.6.7
+    99 = Outcome#link.available,
+    true = Outcome#link.drain,
+    SenderDC = Outcome#link.delivery_count. % maintain delivery count
+
+-endif.
