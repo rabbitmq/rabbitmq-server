@@ -289,3 +289,4 @@
 
 %% For event audit purposes
 -define(INTERNAL_USER, <<"rmq-internal">>).
+-define(UNKNOWN_USER,  <<"unknown">>).
