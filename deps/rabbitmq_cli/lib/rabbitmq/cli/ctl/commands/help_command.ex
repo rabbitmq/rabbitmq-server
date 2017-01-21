@@ -21,8 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   alias RabbitMQ.CLI.Core.Config,         as: Config
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  # use RabbitMQ.CLI.DefaultOutput
-  @flags []
+
   def validate(_, _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
 
@@ -33,7 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
       true  ->
         command = CommandModules.module_map[command_name]
         Enum.join([base_usage(command, opts)] ++
-                  options_usage ++
+                  options_usage() ++
                   input_types(command), "\n");
       false ->
         all_usage(opts)
@@ -53,9 +52,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def all_usage(opts) do
     Enum.join(tool_usage(program_name(opts)) ++
-              options_usage ++
-              commands ++
-              input_types, "\n")
+              options_usage() ++
+              commands() ++
+              input_types(), "\n")
   end
 
   def usage(), do: "help <command>"
