@@ -32,8 +32,8 @@ defmodule ListTopicPermissionsCommandTest do
 
     add_vhost(@vhost)
     add_user(@user, @password)
-    set_topic_permissions(@user, @vhost, "amq.topic", "^a")
-    set_topic_permissions(@user, @vhost, "topic1", "^a")
+    set_topic_permissions(@user, @vhost, "amq.topic", "^a", "^b")
+    set_topic_permissions(@user, @vhost, "topic1", "^a", "^b")
 
     on_exit([], fn ->
       clear_topic_permissions(@user, @vhost)
@@ -82,8 +82,8 @@ defmodule ListTopicPermissionsCommandTest do
     permissions = @command.run([], Map.merge(context[:opts], %{vhost: @vhost}))
     assert Enum.count(permissions) == 2
     assert Enum.sort(permissions) == [
-        [user: @user, exchange: "amq.topic", pattern: "^a"],
-        [user: @user, exchange: "topic1", pattern: "^a"]
+        [user: @user, exchange: "amq.topic", write: "^a", read: "^b"],
+        [user: @user, exchange: "topic1", write: "^a", read: "^b"]
     ]
   end
 

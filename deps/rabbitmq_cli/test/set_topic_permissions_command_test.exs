@@ -63,7 +63,8 @@ defmodule SetTopicPermissionsCommandTest do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["not", "enough"], %{}) == {:validation_failure, :not_enough_args}
-    assert @command.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["still", "not", "enough"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["this", "is", "way", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag user: @user, vhost: @vhost
@@ -71,11 +72,12 @@ defmodule SetTopicPermissionsCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [context[:user], "amq.topic", "^a"],
+      [context[:user], "amq.topic", "^a", "^b"],
       vhost_opts
     ) == :ok
 
-    assert List.first(list_user_topic_permissions(context[:user]))[:pattern] == "^a"
+    assert List.first(list_user_topic_permissions(context[:user]))[:write] == "^a"
+    assert List.first(list_user_topic_permissions(context[:user]))[:read] == "^b"
   end
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
@@ -83,13 +85,13 @@ defmodule SetTopicPermissionsCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: @vhost}
 
-    assert @command.run([@user, "amq.topic", "^a"], opts) == {:badrpc, :nodedown}
+    assert @command.run([@user, "amq.topic", "^a", "^b"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: "interloper", vhost: @root
   test "run: an invalid user returns a no-such-user error", context do
     assert @command.run(
-      [context[:user], "amq.topic", "^a"],
+      [context[:user], "amq.topic", "^a", "^b"],
       context[:opts]
     ) == {:error, {:no_such_user, context[:user]}}
   end
@@ -99,7 +101,7 @@ defmodule SetTopicPermissionsCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [context[:user], "amq.topic", "^a"],
+      [context[:user], "amq.topic", "^a", "^b"],
       vhost_opts
     ) == {:error, {:no_such_vhost, context[:vhost]}}
 
@@ -110,7 +112,7 @@ defmodule SetTopicPermissionsCommandTest do
   test "run: invalid regex patterns return error", context do
     n = Enum.count(list_user_topic_permissions(context[:user]))
     {:error, {:invalid_regexp, _, _}} = @command.run(
-                                            [context[:user], "amq.topic", "["],
+                                            [context[:user], "amq.topic", "[", "^b"],
                                             context[:opts]
                                           )
     assert Enum.count(list_user_topic_permissions(context[:user])) == n
@@ -120,7 +122,7 @@ defmodule SetTopicPermissionsCommandTest do
   test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert @command.banner([context[:user], "amq.topic", "^a"], vhost_opts)
+    assert @command.banner([context[:user], "amq.topic", "^a", "^b"], vhost_opts)
       =~ ~r/Setting topic permissions on \"amq.topic\" for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 end

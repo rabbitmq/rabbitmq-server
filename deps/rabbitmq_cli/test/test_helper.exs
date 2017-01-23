@@ -174,12 +174,12 @@ defmodule TestHelper do
     )
   end
 
-  def set_topic_permissions(user, vhost, exchange, pattern) do
+  def set_topic_permissions(user, vhost, exchange, writePerm, readPerm) do
     :rpc.call(
         get_rabbit_hostname,
         :rabbit_auth_backend_internal,
         :set_topic_permissions,
-        [user, vhost, exchange, pattern, "acting-user"],
+        [user, vhost, exchange, writePerm, readPerm, "acting-user"],
         :infinity
     )
   end
