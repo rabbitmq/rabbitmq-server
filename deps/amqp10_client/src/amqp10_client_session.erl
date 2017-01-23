@@ -7,6 +7,8 @@
 
 %% Public API.
 -export(['begin'/1,
+         begin_sync/1,
+         begin_sync/2,
          'end'/1,
          attach/2,
          transfer/3,
@@ -15,7 +17,7 @@
         ]).
 
 %% Private API.
--export([start_link/3,
+-export([start_link/5,
          socket_ready/2
         ]).
 
@@ -36,6 +38,7 @@
 
 -define(MAX_SESSION_WINDOW_SIZE, 65535).
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
+-define(DEFAULT_TIMEOUT, 5000).
 -define(INITIAL_OUTGOING_ID, 65535).
 -define(INITIAL_DELIVERY_COUNT, 0).
 
@@ -80,7 +83,8 @@
          }).
 
 -record(state,
-        {channel :: pos_integer(),
+        {owner :: pid(),
+         channel :: pos_integer(),
          remote_channel :: pos_integer() | undefined,
          next_incoming_id = 0 :: transfer_id(),
          incoming_window = ?MAX_SESSION_WINDOW_SIZE :: non_neg_integer(),
@@ -101,7 +105,8 @@
          % the unsettled map needs to go in the session state as a disposition
          % can reference transfers for many different links
          unsettled = #{} :: #{transfer_id() => {link_handle(), any()}}, %TODO: refine as FsmRef
-         incoming_unsettled = #{} :: #{transfer_id() => link_handle()}
+         incoming_unsettled = #{} :: #{transfer_id() => link_handle()},
+         notify :: boolean()
         }).
 
 
@@ -114,7 +119,20 @@
     %% The connection process is responsible for allocating a channel
     %% number and contact the sessions supervisor to start a new session
     %% process.
-    amqp10_client_connection:begin_session(Connection).
+    amqp10_client_connection:begin_session(Connection, false).
+
+-spec begin_sync(pid()) -> supervisor:startchild_ret().
+begin_sync(Connection) ->
+    begin_sync(Connection, ?DEFAULT_TIMEOUT).
+
+-spec begin_sync(pid(), non_neg_integer()) ->
+    supervisor:startchild_ret() | session_timeout.
+begin_sync(Connection, Timeout) ->
+    {ok, Session} = amqp10_client_connection:begin_session(Connection, true),
+    receive
+        {session_begin, Session} -> {ok, Session}
+    after Timeout -> session_timeout
+    end.
 
 -spec 'end'(pid()) -> ok.
 'end'(Pid) ->
@@ -145,8 +163,8 @@ disposition(Session, First, Last, Settled, DeliveryState) ->
 %% Private API.
 %% -------------------------------------------------------------------
 
-start_link(Channel, Reader, ConnConfig) ->
-    gen_fsm:start_link(?MODULE, [Channel, Reader, ConnConfig], []).
+start_link(From, Notify, Channel, Reader, ConnConfig) ->
+    gen_fsm:start_link(?MODULE, [From, Notify, Channel, Reader, ConnConfig], []).
 
 -spec socket_ready(pid(), gen_tcp:socket()) -> ok.
 
@@ -157,9 +175,10 @@ socket_ready(Pid, Socket) ->
 %% gen_fsm callbacks.
 %% -------------------------------------------------------------------
 
-init([Channel, Reader, ConnConfig]) ->
+init([From, Notify, Channel, Reader, ConnConfig]) ->
     amqp10_client_frame_reader:register_session(Reader, self(), Channel),
-    State = #state{channel = Channel, reader = Reader,
+    State = #state{owner = From, channel = Channel, reader = Reader,
+                   notify = Notify,
                    connection_config = ConnConfig},
     {ok, unmapped, State}.
 
@@ -180,12 +199,15 @@ begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                          incoming_window = {uint, InWindow},
                          outgoing_window = {uint, OutWindow}
                         },
-           #state{early_attach_requests = EARs} =  State) ->
+           #state{early_attach_requests = EARs} = State) ->
 
     State1 = State#state{remote_channel = RemoteChannel},
     State2 = lists:foldr(fun({From, Attach}, S) ->
                                  send_attach(fun send/2, Attach, From, S)
                          end, State1, EARs),
+
+    ok = notify_session_begin(State2),
+
     {next_state, mapped, State2#state{early_attach_requests = [],
                                       next_incoming_id = NOI,
                                       remote_incoming_window = InWindow,
@@ -366,7 +388,7 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
         #{OutHandle := Link} ->
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
             ok = send_transfer(Transfer, Parts, State),
-            % TODO look into if erlang will correctly wrap integers durin
+            % TODO look into if erlang will correctly wrap integers during
             % binary conversion.
             {reply, ok, mapped, book_transfer_send(Link, State)};
         _ ->
@@ -609,6 +631,10 @@ reverse_translate_delivery_state(modified) -> #'v1_0.modified'{};
 reverse_translate_delivery_state(released) -> #'v1_0.released'{};
 reverse_translate_delivery_state(received) -> #'v1_0.received'{}.
 
+notify_session_begin(#state{owner = Owner, notify = true}) ->
+    Owner ! {session_begin, self()},
+    ok;
+notify_session_begin(_State) -> ok.
 
 book_transfer_send(#link{output_handle = Handle} = Link,
               #state{next_outgoing_id = NOI,

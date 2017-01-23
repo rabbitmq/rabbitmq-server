@@ -48,16 +48,21 @@ all() ->
 groups() ->
     [
      {rabbitmq, [], [
+                     open_close_connection,
                      basic_roundtrip,
                      split_transfer,
                      transfer_unsettled
                     ]},
      {activemq, [], [
+                     open_close_connection,
                      basic_roundtrip,
                      split_transfer,
                      transfer_unsettled,
                      send_multiple
-                    ]}
+                    ]},
+     {mock, [], [
+                 mock1
+                ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -96,7 +101,11 @@ init_per_group(rabbitmq, Config) ->
 init_per_group(activemq, Config) ->
       rabbit_ct_helpers:run_steps(
         Config,
-        activemq_ct_helpers:setup_steps()).
+        activemq_ct_helpers:setup_steps());
+init_per_group(mock, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{mock_port, 21000},
+                                          {mock_host, "localhost"}
+                                         ]).
 
 end_per_group(rabbitmq, Config) ->
       rabbit_ct_helpers:run_steps(
@@ -105,19 +114,37 @@ end_per_group(rabbitmq, Config) ->
 end_per_group(activemq, Config) ->
       rabbit_ct_helpers:run_steps(
         Config,
-        activemq_ct_helpers:teardown_steps()).
+        activemq_ct_helpers:teardown_steps());
+end_per_group(mock, Config) ->
+    Config.
 
 %% -------------------------------------------------------------------
 %% Test cases.
 %% -------------------------------------------------------------------
 
-init_per_testcase(_, Config) ->
-    Config.
+init_per_testcase(_Test, Config) ->
+    case lists:keyfind(mock_port, 1, Config) of
+        {_, Port} ->
+            M = mock_server:start(Port),
+            rabbit_ct_helpers:set_config(Config, {mock_server, M});
+        _ -> Config
+    end.
 
-end_per_testcase(_, Config) ->
-    Config.
+end_per_testcase(_Test, Config) ->
+    case lists:keyfind(mock_server, 1, Config) of
+        {_, M} -> mock_server:stop(M);
+        _ -> Config
+    end.
 
 %% -------------------------------------------------------------------
+
+open_close_connection(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
+    {ok, Session} = amqp10_client_session:'begin'(Connection),
+    ok = amqp10_client_session:'end'(Session),
+    ok = amqp10_client_connection:close(Connection).
 
 basic_roundtrip(Config) ->
     Hostname = ?config(rmq_hostname, Config),
@@ -189,3 +216,41 @@ send_multiple(Config) ->
 
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection).
+
+
+mock1(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = false, name = Name}, _Pay}) ->
+                         {Ch, [#'v1_0.attach'{name = Name,
+                                              handle = {uint, 99},
+                                              role = true}]}
+                 end,
+    Steps = [
+             fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep)
+            ],
+
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none},
+    {ok, Connection} = amqp10_client_connection:open(Cfg),
+    {ok, Session} = amqp10_client_session:begin_sync(Connection),
+    {ok, _Sender} = amqp10_client_link:sender(Session, <<"mock1-sender">>,
+                                             <<"test">>),
+    ok = amqp10_client_session:'end'(Session),
+    ok = amqp10_client_connection:close(Connection),
+    ok.

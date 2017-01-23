@@ -16,7 +16,7 @@
 -export([start_link/2,
          socket_ready/2,
          protocol_header_received/5,
-         begin_session/1
+         begin_session/2
         ]).
 
 %% gen_fsm callbacks.
@@ -37,11 +37,13 @@
          opened/2,
          expecting_close_frame/2]).
 
--type connection_config() :: #{address => inet:socket_address() | inet:hostname(),
-                               port => inet:port_number(),
-                               max_frame_size => non_neg_integer(), % TODO constrain to large than 512
-                               outgoing_max_frame_size => non_neg_integer() | undefined
-                              }.
+-type connection_config() ::
+    #{address => inet:socket_address() | inet:hostname(),
+      port => inet:port_number(),
+      max_frame_size => non_neg_integer(), % TODO constrain to large than 512
+      outgoing_max_frame_size => non_neg_integer() | undefined,
+      sasl => none | anon | {plain, binary(), binary()} % {plain, User, Pwd}
+      }.
 
 -record(state,
         {next_channel = 1 :: pos_integer(),
@@ -114,10 +116,10 @@ socket_ready(Pid, Socket) ->
 protocol_header_received(Pid, Protocol, Maj, Min, Rev) ->
     gen_fsm:send_event(Pid, {protocol_header_received, Protocol, Maj, Min, Rev}).
 
--spec begin_session(pid()) -> supervisor:startchild_ret().
+-spec begin_session(pid(), boolean()) -> supervisor:startchild_ret().
 
-begin_session(Pid) ->
-    gen_fsm:sync_send_all_state_event(Pid, begin_session).
+begin_session(Pid, Notify) ->
+    gen_fsm:sync_send_all_state_event(Pid, {begin_session, Notify}).
 
 %% -------------------------------------------------------------------
 %% gen_fsm callbacks.
@@ -127,10 +129,16 @@ init([Sup, Config]) ->
     {ok, expecting_socket, #state{connection_sup = Sup,
                                   config = Config}}.
 
-expecting_socket({socket_ready, Socket}, State) ->
+expecting_socket({socket_ready, Socket}, State = #state{config = Cfg}) ->
     State1 = State#state{socket = Socket},
-    ok = gen_tcp:send(Socket, ?SASL_PROTOCOL_HEADER),
-    {next_state, expecting_sasl_protocol_header, State1}.
+    case Cfg of
+        #{sasl := none} ->
+            ok = gen_tcp:send(Socket, ?AMQP_PROTOCOL_HEADER),
+            {next_state, expecting_amqp_protocol_header, State1};
+        _ -> % assume anonymous
+            ok = gen_tcp:send(Socket, ?SASL_PROTOCOL_HEADER),
+            {next_state, expecting_sasl_protocol_header, State1}
+    end.
 
 expecting_sasl_protocol_header({protocol_header_received, 3, 1, 0, 0}, State) ->
     {next_state, expecting_sasl_mechanisms, State}.
@@ -167,8 +175,8 @@ expecting_open_frame(
     State = State0#state{config =
                          Config#{outgoing_max_frame_size => unpack(MFSz)}},
     State3 = lists:foldr(
-      fun(From, State1) ->
-              {Ret, State2} = handle_begin_session(State1),
+      fun({From, Notify}, State1) ->
+              {Ret, State2} = handle_begin_session(From, Notify, State1),
               _ = gen_fsm:reply(From, Ret),
               State2
       end, State, PendingSessionReqs),
@@ -201,18 +209,18 @@ handle_event({set_other_procs, OtherProcs}, StateName, State) ->
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
-handle_sync_event(begin_session, _, opened, State) ->
-    {Ret, State1} = handle_begin_session(State),
+handle_sync_event({begin_session, Notify}, From, opened, State) ->
+    {Ret, State1} = handle_begin_session(From, Notify, State),
     {reply, Ret, opened, State1};
-handle_sync_event(begin_session, From, StateName,
+handle_sync_event({begin_session, Notify}, From, StateName,
                   #state{pending_session_reqs = PendingSessionReqs} = State)
   when StateName =/= expecting_close_frame ->
     %% The caller already asked for a new session but the connection
     %% isn't fully opened. Let's queue this request until the connection
     %% is ready.
-    State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
+    State1 = State#state{pending_session_reqs = [{From, Notify} | PendingSessionReqs]},
     {next_state, StateName, State1};
-handle_sync_event(begin_session, _, StateName, State) ->
+handle_sync_event({begin_session, _Notify}, _, StateName, State) ->
     {reply, {error, connection_closed}, StateName, State};
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
@@ -235,10 +243,11 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Internal functions.
 %% -------------------------------------------------------------------
 
-handle_begin_session(#state{sessions_sup = Sup, reader = Reader,
+handle_begin_session({FromPid, _Ref}, Notify,
+                     #state{sessions_sup = Sup, reader = Reader,
                             next_channel = Channel,
                             config = Config} = State) ->
-    Ret = supervisor:start_child(Sup, [Channel, Reader, Config]),
+    Ret = supervisor:start_child(Sup, [FromPid, Notify, Channel, Reader, Config]),
     State1 = case Ret of
                  {ok, _} -> State#state{next_channel = Channel + 1};
                  _       -> State
