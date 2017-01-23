@@ -821,17 +821,20 @@ insert_default_data() ->
     DefaultWritePermBin = rabbit_data_coercion:to_binary(DefaultWritePerm),
     DefaultReadPermBin = rabbit_data_coercion:to_binary(DefaultReadPerm),
 
-    ok = rabbit_vhost:add(DefaultVHostBin),
+    ok = rabbit_vhost:add(DefaultVHostBin, ?INTERNAL_USER),
     ok = rabbit_auth_backend_internal:add_user(
         DefaultUserBin,
-        DefaultPassBin
+        DefaultPassBin,
+        ?INTERNAL_USER
     ),
-    ok = rabbit_auth_backend_internal:set_tags(DefaultUserBin,DefaultTags),
+    ok = rabbit_auth_backend_internal:set_tags(DefaultUserBin, DefaultTags,
+                                               ?INTERNAL_USER),
     ok = rabbit_auth_backend_internal:set_permissions(DefaultUserBin,
                                                       DefaultVHostBin,
                                                       DefaultConfigurePermBin,
                                                       DefaultWritePermBin,
-                                                      DefaultReadPermBin),
+                                                      DefaultReadPermBin,
+                                                      ?INTERNAL_USER),
     ok.
 
 %%---------------------------------------------------------------------------

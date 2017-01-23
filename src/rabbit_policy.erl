@@ -43,10 +43,10 @@
 -export([register/0]).
 -export([invalidate/0, recover/0]).
 -export([name/1, name_op/1, effective_definition/1, get/2, get_arg/3, set/1]).
--export([validate/5, notify/4, notify_clear/3]).
--export([parse_set/6, set/6, delete/2, lookup/2, list/0, list/1,
+-export([validate/5, notify/5, notify_clear/4]).
+-export([parse_set/7, set/7, delete/3, lookup/2, list/0, list/1,
          list_formatted/1, list_formatted/3, info_keys/0]).
--export([parse_set_op/6, set_op/6, delete_op/2, lookup_op/2, list_op/0, list_op/1,
+-export([parse_set_op/7, set_op/7, delete_op/3, lookup_op/2, list_op/0, list_op/1,
          list_formatted_op/1, list_formatted_op/3]).
 
 -rabbit_boot_step({?MODULE,
@@ -198,38 +198,42 @@ invalid_file() ->
 
 %%----------------------------------------------------------------------------
 
-parse_set_op(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
-    parse_set(<<"operator_policy">>, VHost, Name, Pattern, Definition, Priority, ApplyTo).
+parse_set_op(VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser) ->
+    parse_set(<<"operator_policy">>, VHost, Name, Pattern, Definition, Priority,
+              ApplyTo, ActingUser).
 
-parse_set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
-    parse_set(<<"policy">>, VHost, Name, Pattern, Definition, Priority, ApplyTo).
+parse_set(VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser) ->
+    parse_set(<<"policy">>, VHost, Name, Pattern, Definition, Priority, ApplyTo,
+              ActingUser).
 
-parse_set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
+parse_set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser) ->
     try rabbit_data_coercion:to_integer(Priority) of
-        Num -> parse_set0(Type, VHost, Name, Pattern, Definition, Num, ApplyTo)
+        Num -> parse_set0(Type, VHost, Name, Pattern, Definition, Num, ApplyTo,
+                          ActingUser)
     catch
         error:badarg -> {error, "~p priority must be a number", [Priority]}
     end.
 
-parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo) ->
+parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo, ActingUser) ->
     case rabbit_json:try_decode(Defn) of
         {ok, Term} ->
             set0(Type, VHost, Name,
                  [{<<"pattern">>,    Pattern},
                   {<<"definition">>, maps:to_list(Term)},
                   {<<"priority">>,   Priority},
-                  {<<"apply-to">>,   ApplyTo}]);
+                  {<<"apply-to">>,   ApplyTo}],
+                 ActingUser);
         error ->
             {error_string, "JSON decoding error"}
     end.
 
-set_op(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
-    set(<<"operator_policy">>, VHost, Name, Pattern, Definition, Priority, ApplyTo).
+set_op(VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser) ->
+    set(<<"operator_policy">>, VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser).
 
-set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
-    set(<<"policy">>, VHost, Name, Pattern, Definition, Priority, ApplyTo).
+set(VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser) ->
+    set(<<"policy">>, VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser).
 
-set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
+set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser) ->
     PolicyProps = [{<<"pattern">>,    Pattern},
                    {<<"definition">>, Definition},
                    {<<"priority">>,   case Priority of
@@ -240,16 +244,16 @@ set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
                                           undefined -> <<"all">>;
                                           _         -> ApplyTo
                                       end}],
-    set0(Type, VHost, Name, PolicyProps).
+    set0(Type, VHost, Name, PolicyProps, ActingUser).
 
-set0(Type, VHost, Name, Term) ->
-    rabbit_runtime_parameters:set_any(VHost, Type, Name, Term, none).
+set0(Type, VHost, Name, Term, ActingUser) ->
+    rabbit_runtime_parameters:set_any(VHost, Type, Name, Term, ActingUser).
 
-delete_op(VHost, Name) ->
-    rabbit_runtime_parameters:clear_any(VHost, <<"operator_policy">>, Name).
+delete_op(VHost, Name, ActingUser) ->
+    rabbit_runtime_parameters:clear_any(VHost, <<"operator_policy">>, Name, ActingUser).
 
-delete(VHost, Name) ->
-    rabbit_runtime_parameters:clear_any(VHost, <<"policy">>, Name).
+delete(VHost, Name, ActingUser) ->
+    rabbit_runtime_parameters:clear_any(VHost, <<"policy">>, Name, ActingUser).
 
 lookup_op(VHost, Name) ->
     case rabbit_runtime_parameters:lookup(VHost, <<"operator_policy">>, Name) of
@@ -322,18 +326,23 @@ validate(_VHost, <<"operator_policy">>, Name, Term, _User) ->
     rabbit_parameter_validation:proplist(
       Name, operator_policy_validation(), Term).
 
-notify(VHost, <<"policy">>, Name, Term) ->
-    rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost} | Term]),
+notify(VHost, <<"policy">>, Name, Term, ActingUser) ->
+    rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost},
+                                     {user_who_performed_action, ActingUser} | Term]),
     update_policies(VHost);
-notify(VHost, <<"operator_policy">>, Name, Term) ->
-    rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost} | Term]),
+notify(VHost, <<"operator_policy">>, Name, Term, ActingUser) ->
+    rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost},
+                                     {user_who_performed_action, ActingUser} | Term]),
     update_policies(VHost).
 
-notify_clear(VHost, <<"policy">>, Name) ->
-    rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost}]),
+notify_clear(VHost, <<"policy">>, Name, ActingUser) ->
+    rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost},
+                                         {user_who_performed_action, ActingUser}]),
     update_policies(VHost);
-notify_clear(VHost, <<"operator_policy">>, Name) ->
-    rabbit_event:notify(operator_policy_cleared, [{name, Name}, {vhost, VHost}]),
+notify_clear(VHost, <<"operator_policy">>, Name, ActingUser) ->
+    rabbit_event:notify(operator_policy_cleared,
+                        [{name, Name}, {vhost, VHost},
+                         {user_who_performed_action, ActingUser}]),
     update_policies(VHost).
 
 %%----------------------------------------------------------------------------

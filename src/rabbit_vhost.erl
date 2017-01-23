@@ -20,14 +20,14 @@
 
 %%----------------------------------------------------------------------------
 
--export([add/1, delete/1, exists/1, list/0, with/2, assert/1, update/2,
+-export([add/2, delete/2, exists/1, list/0, with/2, assert/1, update/2,
          set_limits/2, limits_of/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
 -export([purge_messages/1]).
 
--spec add(rabbit_types:vhost()) -> 'ok'.
--spec delete(rabbit_types:vhost()) -> 'ok'.
+-spec add(rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
+-spec delete(rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
 -spec update(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
 -spec exists(rabbit_types:vhost()) -> boolean().
 -spec list() -> [rabbit_types:vhost()].
@@ -46,7 +46,7 @@
 
 -define(INFO_KEYS, [name, tracing]).
 
-add(VHostPath) ->
+add(VHostPath, ActingUser) ->
     rabbit_log:info("Adding vhost '~s'~n", [VHostPath]),
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -62,7 +62,7 @@ add(VHostPath) ->
               (ok, false) ->
                   [rabbit_exchange:declare(
                      rabbit_misc:r(VHostPath, exchange, Name),
-                     Type, true, false, Internal, []) ||
+                     Type, true, false, Internal, [], ActingUser) ||
                       {Name, Type, Internal} <-
                           [{<<"">>,                   direct,  false},
                            {<<"amq.direct">>,         direct,  false},
@@ -75,24 +75,26 @@ add(VHostPath) ->
                            {<<"amq.rabbitmq.trace">>, topic,   true}]],
                   ok
           end),
-    rabbit_event:notify(vhost_created, info(VHostPath)),
+    rabbit_event:notify(vhost_created, info(VHostPath)
+                        ++ [{user_who_performed_action, ActingUser}]),
     R.
 
-delete(VHostPath) ->
+delete(VHostPath, ActingUser) ->
     %% FIXME: We are forced to delete the queues and exchanges outside
     %% the TX below. Queue deletion involves sending messages to the queue
     %% process, which in turn results in further mnesia actions and
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
     rabbit_log:info("Deleting vhost '~s'~n", [VHostPath]),
-    QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false) end,
+    QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [assert_benign(rabbit_amqqueue:with(Name, QDelFun)) ||
         #amqqueue{name = Name} <- rabbit_amqqueue:list(VHostPath)],
-    [assert_benign(rabbit_exchange:delete(Name, false)) ||
+    [assert_benign(rabbit_exchange:delete(Name, false, ActingUser)) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
     Funs = rabbit_misc:execute_mnesia_transaction(
-          with(VHostPath, fun () -> internal_delete(VHostPath) end)),
-    ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
+          with(VHostPath, fun () -> internal_delete(VHostPath, ActingUser) end)),
+    ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath},
+                                             {user_who_performed_action, ActingUser}]),
     [ok = Fun() || Fun <- Funs],
     ok.
 
@@ -117,18 +119,19 @@ assert_benign({error, {absent, Q, _}}) ->
         {error, not_found} -> ok
     end.
 
-internal_delete(VHostPath) ->
+internal_delete(VHostPath, ActingUser) ->
     [ok = rabbit_auth_backend_internal:clear_permissions(
-            proplists:get_value(user, Info), VHostPath)
+            proplists:get_value(user, Info), VHostPath, ActingUser)
      || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHostPath)],
     TopicPermissions = rabbit_auth_backend_internal:list_vhost_topic_permissions(VHostPath),
     [ok = rabbit_auth_backend_internal:clear_topic_permissions(
         proplists:get_value(user, TopicPermission), VHostPath) || TopicPermission <- TopicPermissions],
     Fs1 = [rabbit_runtime_parameters:clear(VHostPath,
                                            proplists:get_value(component, Info),
-                                           proplists:get_value(name, Info))
+                                           proplists:get_value(name, Info),
+                                           ActingUser)
      || Info <- rabbit_runtime_parameters:list(VHostPath)],
-    Fs2 = [rabbit_policy:delete(VHostPath, proplists:get_value(name, Info))
+    Fs2 = [rabbit_policy:delete(VHostPath, proplists:get_value(name, Info), ActingUser)
            || Info <- rabbit_policy:list(VHostPath)],
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
     purge_messages(VHostPath),

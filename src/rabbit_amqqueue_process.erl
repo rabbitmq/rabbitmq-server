@@ -131,7 +131,8 @@
          auto_delete,
          arguments,
          owner_pid,
-         exclusive
+         exclusive,
+         user_who_performed_action
         ]).
 
 -define(INFO_KEYS, [pid | ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name]]).
@@ -286,7 +287,9 @@ terminate(_Reason,           State = #q{q = Q}) ->
 
 terminate_delete(EmitStats, Reason,
                  State = #q{q = #amqqueue{name          = QName},
-                                          backing_queue = BQ}) ->
+                            backing_queue = BQ,
+                            status = Status}) ->
+    ActingUser = terminated_by(Status),
     fun (BQS) ->
         BQS1 = BQ:delete_and_terminate(Reason, BQS),
         if EmitStats -> rabbit_event:if_enabled(State, #q.stats_timer,
@@ -294,11 +297,17 @@ terminate_delete(EmitStats, Reason,
            true      -> ok
         end,
         %% don't care if the internal delete doesn't return 'ok'.
-        rabbit_amqqueue:internal_delete(QName),
+        rabbit_amqqueue:internal_delete(QName, ActingUser),
         BQS1
     end.
 
-terminate_shutdown(Fun, State) ->
+terminated_by({terminated_by, ActingUser}) ->
+    ActingUser;
+terminated_by(_) ->
+    ?INTERNAL_USER.
+
+terminate_shutdown(Fun, #q{status = Status} = State) ->
+    ActingUser = terminated_by(Status),
     State1 = #q{backing_queue_state = BQS, consumers = Consumers} =
         lists:foldl(fun (F, S) -> F(S) end, State,
                     [fun stop_sync_timer/1,
@@ -310,7 +319,7 @@ terminate_shutdown(Fun, State) ->
         _         -> ok = rabbit_memory_monitor:deregister(self()),
                      QName = qname(State),
                      notify_decorators(shutdown, State),
-                     [emit_consumer_deleted(Ch, CTag, QName) ||
+                     [emit_consumer_deleted(Ch, CTag, QName, ActingUser) ||
                          {Ch, CTag, _, _, _} <-
                              rabbit_queue_consumers:all(Consumers)],
                      State1#q{backing_queue_state = Fun(BQS)}
@@ -731,7 +740,7 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
             {ok, State1};
         {ChAckTags, ChCTags, Consumers1} ->
             QName = qname(State1),
-            [emit_consumer_deleted(DownPid, CTag, QName) || CTag <- ChCTags],
+            [emit_consumer_deleted(DownPid, CTag, QName, ?INTERNAL_USER) || CTag <- ChCTags],
             Holder1 = case Holder of
                           {DownPid, _} -> none;
                           Other        -> Other
@@ -953,6 +962,8 @@ i(garbage_collection, _State) ->
 i(reductions, _State) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;
+i(user_who_performed_action, #q{q = #amqqueue{options = Opts}}) ->
+    maps:get(user, Opts, ?UNKNOWN_USER);
 i(Item, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:info(Item, BQS).
 
@@ -970,7 +981,7 @@ emit_stats(State, Extra) ->
     rabbit_event:notify(queue_stats, Extra ++ All).
 
 emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName,
-                      PrefetchCount, Args, Ref) ->
+                      PrefetchCount, Args, Ref, ActingUser) ->
     rabbit_event:notify(consumer_created,
                         [{consumer_tag,   CTag},
                          {exclusive,      Exclusive},
@@ -978,15 +989,17 @@ emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName,
                          {channel,        ChPid},
                          {queue,          QName},
                          {prefetch_count, PrefetchCount},
-                         {arguments,      Args}],
+                         {arguments,      Args},
+                         {user_who_performed_action, ActingUser}],
                         Ref).
 
-emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
+emit_consumer_deleted(ChPid, ConsumerTag, QName, ActingUser) ->
     rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},
                          {channel,      ChPid},
-                         {queue,        QName}]).
+                         {queue,        QName},
+                         {user_who_performed_action, ActingUser}]).
 
 %%----------------------------------------------------------------------------
 
@@ -996,7 +1009,7 @@ prioritise_call(Msg, _From, _Len, State) ->
         {info, _Items}                             -> 9;
         consumers                                  -> 9;
         stat                                       -> 7;
-        {basic_consume, _, _, _, _, _, _, _, _, _} -> consumer_bias(State);
+        {basic_consume, _, _, _, _, _, _, _, _, _, _} -> consumer_bias(State);
         {basic_cancel, _, _, _}                    -> consumer_bias(State);
         _                                          -> 0
     end.
@@ -1096,7 +1109,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             PrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg},
+             PrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
             _From, State = #q{consumers          = Consumers,
                               exclusive_consumer = Holder}) ->
     case check_exclusive_access(Holder, ExclusiveConsume, State) of
@@ -1105,7 +1118,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                                  ChPid, ConsumerTag, NoAck,
                                  LimiterPid, LimiterActive,
                                  PrefetchCount, Args, is_empty(State),
-                                 Consumers),
+                                 ActingUser, Consumers),
                   ExclusiveConsumer =
                       if ExclusiveConsume -> {ChPid, ConsumerTag};
                          true             -> Holder
@@ -1121,12 +1134,12 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
 		    PrefetchCount, Args),
                   emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                         AckRequired, QName, PrefetchCount,
-					Args, none),
+					Args, none, ActingUser),
                   notify_decorators(State1),
                   reply(ok, run_message_queue(State1))
     end;
 
-handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
+handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, _From,
             State = #q{consumers          = Consumers,
                        exclusive_consumer = Holder}) ->
     ok = maybe_send_reply(ChPid, OkMsg),
@@ -1140,7 +1153,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
                       end,
             State1 = State#q{consumers          = Consumers1,
                              exclusive_consumer = Holder1},
-            emit_consumer_deleted(ChPid, ConsumerTag, qname(State1)),
+            emit_consumer_deleted(ChPid, ConsumerTag, qname(State1), ActingUser),
             notify_decorators(State1),
             case should_auto_delete(State1) of
                 false -> reply(ok, ensure_expiry_timer(State1));
@@ -1159,14 +1172,15 @@ handle_call(stat, _From, State) ->
         ensure_expiry_timer(State),
     reply({ok, BQ:len(BQS), rabbit_queue_consumers:count()}, State1);
 
-handle_call({delete, IfUnused, IfEmpty}, _From,
+handle_call({delete, IfUnused, IfEmpty, ActingUser}, _From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     IsEmpty  = BQ:is_empty(BQS),
     IsUnused = is_unused(State),
     if
         IfEmpty  and not(IsEmpty)  -> reply({error, not_empty}, State);
         IfUnused and not(IsUnused) -> reply({error,    in_use}, State);
-        true                       -> stop({ok, BQ:len(BQS)}, State)
+        true                       -> stop({ok, BQ:len(BQS)},
+                                           State#q{status = {terminated_by, ActingUser}})
     end;
 
 handle_call(purge, _From, State = #q{backing_queue       = BQ,
@@ -1321,14 +1335,16 @@ handle_cast({force_event_refresh, Ref},
     QName = qname(State),
     AllConsumers = rabbit_queue_consumers:all(Consumers),
     case Exclusive of
-        none       -> [emit_consumer_created(
-                         Ch, CTag, false, AckRequired, QName, Prefetch,
-                         Args, Ref) ||
-                          {Ch, CTag, AckRequired, Prefetch, Args}
-                              <- AllConsumers];
-        {Ch, CTag} -> [{Ch, CTag, AckRequired, Prefetch, Args}] = AllConsumers,
-                      emit_consumer_created(
-                        Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref)
+        none ->
+            [emit_consumer_created(
+               Ch, CTag, false, AckRequired, QName, Prefetch,
+               Args, Ref, ActingUser) ||
+                {Ch, CTag, AckRequired, Prefetch, Args, ActingUser}
+                    <- AllConsumers];
+        {Ch, CTag} ->
+            [{Ch, CTag, AckRequired, Prefetch, Args, ActingUser}] = AllConsumers,
+            emit_consumer_created(
+              Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref, ActingUser)
     end,
     noreply(rabbit_event:init_stats_timer(State, #q.stats_timer));
 

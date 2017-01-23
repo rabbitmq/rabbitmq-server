@@ -70,13 +70,13 @@ topic_permission_database_access(Config) ->
 
 topic_permission_database_access1(_Config) ->
     0 = length(ets:tab2list(rabbit_topic_permission)),
-    rabbit_vhost:add(<<"/">>),
-    rabbit_vhost:add(<<"other-vhost">>),
-    rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>),
-    rabbit_auth_backend_internal:add_user(<<"dummy">>, <<"dummy">>),
+    rabbit_vhost:add(<<"/">>, <<"acting-user">>),
+    rabbit_vhost:add(<<"other-vhost">>, <<"acting-user">>),
+    rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>, <<"acting-user">>),
+    rabbit_auth_backend_internal:add_user(<<"dummy">>, <<"dummy">>, <<"acting-user">>),
 
     rabbit_auth_backend_internal:set_topic_permissions(
-        <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a"
+        <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>
     ),
     1 = length(ets:tab2list(rabbit_topic_permission)),
     1 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
@@ -88,7 +88,7 @@ topic_permission_database_access1(_Config) ->
     1 = length(rabbit_auth_backend_internal:list_topic_permissions()),
 
     rabbit_auth_backend_internal:set_topic_permissions(
-        <<"guest">>, <<"other-vhost">>, <<"amq.topic">>, ".*", ".*"
+        <<"guest">>, <<"other-vhost">>, <<"amq.topic">>, ".*", ".*", <<"acting-user">>
     ),
     2 = length(ets:tab2list(rabbit_topic_permission)),
     2 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
@@ -100,10 +100,10 @@ topic_permission_database_access1(_Config) ->
     2 = length(rabbit_auth_backend_internal:list_topic_permissions()),
 
     rabbit_auth_backend_internal:set_topic_permissions(
-        <<"guest">>, <<"/">>, <<"topic1">>, "^a", "^a"
+        <<"guest">>, <<"/">>, <<"topic1">>, "^a", "^a", <<"acting-user">>
     ),
     rabbit_auth_backend_internal:set_topic_permissions(
-        <<"guest">>, <<"/">>, <<"topic2">>, "^a", "^a"
+        <<"guest">>, <<"/">>, <<"topic2">>, "^a", "^a", <<"acting-user">>
     ),
 
     4 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
@@ -111,25 +111,28 @@ topic_permission_database_access1(_Config) ->
     1 = length(rabbit_auth_backend_internal:list_user_vhost_topic_permissions(<<"guest">>,<<"other-vhost">>)),
     4 = length(rabbit_auth_backend_internal:list_topic_permissions()),
 
-    rabbit_auth_backend_internal:clear_topic_permissions(<<"guest">>, <<"other-vhost">>),
+    rabbit_auth_backend_internal:clear_topic_permissions(<<"guest">>, <<"other-vhost">>,
+                                                         <<"acting-user">>),
     0 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"other-vhost">>)),
     3 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
-    rabbit_auth_backend_internal:clear_topic_permissions(<<"guest">>, <<"/">>, <<"topic1">>),
+    rabbit_auth_backend_internal:clear_topic_permissions(<<"guest">>, <<"/">>, <<"topic1">>,
+                                                         <<"acting-user">>),
     2 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
-    rabbit_auth_backend_internal:clear_topic_permissions(<<"guest">>, <<"/">>),
+    rabbit_auth_backend_internal:clear_topic_permissions(<<"guest">>, <<"/">>,
+                                                         <<"acting-user">>),
     0 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
 
 
     {error, {no_such_user, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
-        <<"non-existing-user">>, <<"other-vhost">>, <<"amq.topic">>, ".*", ".*"
+        <<"non-existing-user">>, <<"other-vhost">>, <<"amq.topic">>, ".*", ".*", <<"acting-user">>
     )),
 
     {error, {no_such_vhost, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
-        <<"guest">>, <<"non-existing-vhost">>, <<"amq.topic">>, ".*", ".*"
+        <<"guest">>, <<"non-existing-vhost">>, <<"amq.topic">>, ".*", ".*", <<"acting-user">>
     )),
 
     {error, {no_such_user, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
-        <<"non-existing-user">>, <<"non-existing-vhost">>, <<"amq.topic">>, ".*", ".*"
+        <<"non-existing-user">>, <<"non-existing-vhost">>, <<"amq.topic">>, ".*", ".*", <<"acting-user">>
     )),
 
     {error, {no_such_user, _}} = (catch rabbit_auth_backend_internal:list_user_topic_permissions(
@@ -141,7 +144,7 @@ topic_permission_database_access1(_Config) ->
     )),
 
     {error, {invalid_regexp, _, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
-        <<"guest">>, <<"/">>, <<"amq.topic">>, "[", "^a"
+        <<"guest">>, <<"/">>, <<"amq.topic">>, "[", "^a", <<"acting-user">>
     )),
     ok.
 
@@ -159,11 +162,11 @@ topic_permission_checks1(_Config) ->
             #vhost{virtual_host = <<"other-vhost">>},
             write)
                                            end),
-    rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>),
-    rabbit_auth_backend_internal:add_user(<<"dummy">>, <<"dummy">>),
+    rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>, <<"acting-user">>),
+    rabbit_auth_backend_internal:add_user(<<"dummy">>, <<"dummy">>, <<"acting-user">>),
 
     rabbit_auth_backend_internal:set_topic_permissions(
-        <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a"
+        <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>
     ),
     1 = length(ets:tab2list(rabbit_topic_permission)),
     1 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
@@ -172,7 +175,7 @@ topic_permission_checks1(_Config) ->
     0 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"other-vhost">>)),
 
     rabbit_auth_backend_internal:set_topic_permissions(
-        <<"guest">>, <<"other-vhost">>, <<"amq.topic">>, ".*", ".*"
+        <<"guest">>, <<"other-vhost">>, <<"amq.topic">>, ".*", ".*", <<"acting-user">>
     ),
     2 = length(ets:tab2list(rabbit_topic_permission)),
     2 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),

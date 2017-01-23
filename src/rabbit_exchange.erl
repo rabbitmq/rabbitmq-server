@@ -18,12 +18,12 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, policy_changed/2, callback/4, declare/6,
+-export([recover/0, policy_changed/2, callback/4, declare/7,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
          update_scratch/3, update_decorators/1, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
-         route/2, delete/2, validate_binding/2]).
+         route/2, delete/3, validate_binding/2]).
 %% these must be run inside a mnesia tx
 -export([maybe_auto_delete/2, serial/1, peek_serial/1, update/2]).
 
@@ -43,7 +43,7 @@
         (rabbit_types:exchange(), rabbit_types:exchange()) -> 'ok'.
 -spec declare
         (name(), type(), boolean(), boolean(), boolean(),
-         rabbit_framing:amqp_table())
+         rabbit_framing:amqp_table(), rabbit_types:username())
         -> rabbit_types:exchange().
 -spec check_type
         (binary()) -> atom() | rabbit_types:connection_exit().
@@ -86,8 +86,10 @@
 -spec route(rabbit_types:exchange(), rabbit_types:delivery())
                  -> [rabbit_amqqueue:name()].
 -spec delete
-        (name(),  'true') -> 'ok' | rabbit_types:error('not_found' | 'in_use');
-        (name(), 'false') -> 'ok' | rabbit_types:error('not_found').
+        (name(),  'true', rabbit_types:username()) ->
+                    'ok'| rabbit_types:error('not_found' | 'in_use');
+        (name(), 'false', rabbit_types:username()) ->
+                    'ok' | rabbit_types:error('not_found').
 -spec validate_binding
         (rabbit_types:exchange(), rabbit_types:binding())
         -> rabbit_types:ok_or_error({'binding_invalid', string(), [any()]}).
@@ -101,7 +103,7 @@
 %%----------------------------------------------------------------------------
 
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments,
-                    policy]).
+                    policy, user_who_performed_action]).
 
 recover() ->
     Xs = rabbit_misc:table_filter(
@@ -151,14 +153,15 @@ serial(#exchange{name = XName} = X) ->
         (false) -> none
     end.
 
-declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
+declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
     X = rabbit_exchange_decorator:set(
           rabbit_policy:set(#exchange{name        = XName,
                                       type        = Type,
                                       durable     = Durable,
                                       auto_delete = AutoDelete,
                                       internal    = Internal,
-                                      arguments   = Args})),
+                                      arguments   = Args,
+                                      options     = #{user => Username}})),
     XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
@@ -342,6 +345,8 @@ i(policy,      X) ->  case rabbit_policy:name(X) of
                           none   -> '';
                           Policy -> Policy
                       end;
+i(user_who_performed_action, #exchange{options = Opts}) ->
+    maps:get(user, Opts, ?UNKNOWN_USER);
 i(Item, #exchange{type = Type} = X) ->
     case (type_to_module(Type)):info(X, [Item]) of
         [{Item, I}] -> I;
@@ -437,7 +442,7 @@ call_with_exchange(XName, Fun) ->
                 end
       end).
 
-delete(XName, IfUnused) ->
+delete(XName, IfUnused, Username) ->
     Fun = case IfUnused of
               true  -> fun conditional_delete/2;
               false -> fun unconditional_delete/2
@@ -449,7 +454,7 @@ delete(XName, IfUnused) ->
         %% see rabbitmq/rabbitmq-federation#7
         rabbit_runtime_parameters:set(XName#resource.virtual_host,
                                       ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
-                                      XName#resource.name, true, none),
+                                      XName#resource.name, true, Username),
         call_with_exchange(
           XName,
           fun (X) ->
@@ -457,7 +462,7 @@ delete(XName, IfUnused) ->
                       {deleted, X, Bs, Deletions} ->
                           rabbit_binding:process_deletions(
                             rabbit_binding:add_deletion(
-                              XName, {X, deleted, Bs}, Deletions));
+                              XName, {X, deleted, Bs}, Deletions), Username);
                       {error, _InUseOrNotFound} = E ->
                           rabbit_misc:const(E)
                   end
@@ -465,7 +470,7 @@ delete(XName, IfUnused) ->
     after
         rabbit_runtime_parameters:clear(XName#resource.virtual_host,
                                         ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
-                                        XName#resource.name)
+                                        XName#resource.name, Username)
     end.
 
 validate_binding(X = #exchange{type = XType}, Binding) ->
