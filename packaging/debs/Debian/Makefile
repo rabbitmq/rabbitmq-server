@@ -60,15 +60,14 @@ package: clean
 # before starting a possibly long build. At the same time, display some
 # useful informations on the key so the caller can double-check if he
 # wants.
-	@set -e; \
-	if test "$(SIGNING_KEY)"; then \
-		echo; \
-		echo '--------------------------------------------------'; \
-		echo "The package will be signed with key $(SIGNING_KEY):"; \
-		gpg -K "$(SIGNING_KEY)"; \
-		echo '--------------------------------------------------'; \
-		echo; \
-	fi
+ifneq ($(SIGNING_KEY),)
+	@echo
+	@echo '--------------------------------------------------'
+	@echo "The package will be signed with key $(SIGNING_KEY):"
+	@gpg -K "$(SIGNING_KEY)"
+	@echo '--------------------------------------------------'
+	@echo
+endif
 # Because we are creating a source package as well, Debian expects the
 # source archive to have a specially formatted name. Copy the original
 # archive to a correctly named file.
@@ -94,17 +93,17 @@ package: clean
 # Before we remove the source directory, copy the possibly updated
 # debian/changelog to the original debian subdirectory, if the caller
 # asks for it. He is then responsible for committing it.
-	if test "$(SAVE_DEBIAN_CHANGELOG)" = 'yes'; then \
-		cp -a "$(UNPACKED_DIR)/debian/changelog" debian/changelog; \
-	fi
+ifeq ($(SAVE_CHANGELOG),yes)
+	cp -a "$(UNPACKED_DIR)/debian/changelog" debian/changelog
+endif
 	rm -rf "$(UNPACKED_DIR)"
 # If $(PACKAGES_DIR) is specified, move all package files to that
 # location.
-	if test "$(PACKAGES_DIR)"; then \
-		mkdir -p "$(PACKAGES_DIR)"; \
-		mv $$(./scripts/get-debian-package-files-list.sh $(CHANGES_FILE)) \
-			"$(PACKAGES_DIR)"; \
-	fi
+ifneq ($(PACKAGES_DIR),)
+	mkdir -p "$(PACKAGES_DIR)"
+	mv $$(./scripts/get-debian-package-files-list.sh $(CHANGES_FILE)) \
+		"$(PACKAGES_DIR)"
+endif
 
 clean:
 	rm -rf $(UNPACKED_DIR)
