@@ -61,7 +61,7 @@ groups() ->
                      send_multiple
                     ]},
      {mock, [], [
-                 mock1
+                 insufficient_credit
                 ]}
     ].
 
@@ -218,7 +218,7 @@ send_multiple(Config) ->
     ok = amqp10_client_connection:close(Connection).
 
 
-mock1(Config) ->
+insufficient_credit(Config) ->
     Hostname = ?config(mock_host, Config),
     Port = ?config(mock_port, Config),
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
@@ -231,7 +231,8 @@ mock1(Config) ->
                                              outgoing_window = {uint, 1000}}
                                              ]}
                 end,
-    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = false, name = Name}, _Pay}) ->
+    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = false,
+                                             name = Name}, <<>>}) ->
                          {Ch, [#'v1_0.attach'{name = Name,
                                               handle = {uint, 99},
                                               role = true}]}
@@ -249,8 +250,11 @@ mock1(Config) ->
     Cfg = #{address => Hostname, port => Port, sasl => none},
     {ok, Connection} = amqp10_client_connection:open(Cfg),
     {ok, Session} = amqp10_client_session:begin_sync(Connection),
-    {ok, _Sender} = amqp10_client_link:sender(Session, <<"mock1-sender">>,
+    {ok, Sender} = amqp10_client_link:sender(Session, <<"mock1-sender">>,
                                              <<"test">>),
+    Msg = amqp10_msg:new(<<"mock-tag">>, <<"banana">>, true),
+    insufficient_credit = amqp10_client_link:send(Sender, Msg),
+
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection),
     ok.
