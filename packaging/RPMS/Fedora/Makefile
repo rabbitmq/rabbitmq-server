@@ -90,9 +90,7 @@ endif
 # Create the build tree and populate it.
 	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
 	cp $(SOURCE_DIST_FILE) SOURCES/$(RPM_ORIG_TARBALL)
-	sed -e 's|%%VERSION%%|$(RPM_VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
-		< rabbitmq-server.spec \
-		> SPECS/rabbitmq-server.spec
+	cp rabbitmq-server.spec SPECS/rabbitmq-server.spec.in
 	cp rabbitmq-server.service SOURCES/rabbitmq-server.service
 	cp rabbitmq-server.tmpfiles SOURCES/rabbitmq-server.tmpfiles
 	sed \
@@ -106,7 +104,10 @@ endif
 #   - if it contains an entry for the specified version, do nothing;
 #   - otherwise, prepend a generated entry using "1" as the package
 #     revision.
-	scripts/update-changelog.sh SPECS/rabbitmq-server.spec "$(RPM_VERSION)"
+	scripts/update-changelog.sh SPECS/rabbitmq-server.spec.in "$(RPM_VERSION)"
+	sed -e 's|%%VERSION%%|$(RPM_VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
+		< SPECS/rabbitmq-server.spec.in \
+		> SPECS/rabbitmq-server.spec
 # Finally build the package!
 	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) \
 		$(OS_DEFINES) $(SPEC_DEFINES)
@@ -114,7 +115,7 @@ endif
 # debian/changelog to the original debian subdirectory, if the caller
 # asks for it. He is then responsible for committing it.
 ifeq ($(SAVE_CHANGELOG),yes)
-	cp -a SPECS/rabbitmq-server.spec rabbitmq-server.spec
+	mv SPECS/rabbitmq-server.spec.in rabbitmq-server.spec
 endif
 	rm -rf SOURCES SPECS BUILD tmp
 # If a PGP key is specified, sign source and binary packages. We start
