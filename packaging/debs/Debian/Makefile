@@ -7,51 +7,102 @@ endif
 ifneq ($(words $(SOURCE_DIST_FILE)),1)
 $(error Multiple source archives found; please specify SOURCE_DIST_FILE)
 endif
+endif
 
 VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
 ifeq ($(VERSION),)
 $(error Cannot determine version; please specify VERSION)
 endif
+
+# $(DEBIAN_VERSION) doesn't include the package revision: this one is
+# only set in debian/changelog.
+DEBIAN_VERSION = $(subst -,~,$(VERSION))
+DEBIAN_ORIG_TARBALL = rabbitmq-server_$(DEBIAN_VERSION).orig.tar.xz
+UNPACKED_DIR = $(patsubst %.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
+
+DEB_HOST_ARCH = $(shell dpkg-architecture -qDEB_HOST_ARCH)
+CHANGES_FILE = rabbitmq-server_$(DEBIAN_VERSION)-*_$(DEB_HOST_ARCH).changes
+
+# Package signing.
+#
+# At least the key ID is mandatory ($(SIGNING_KEY)). If it's set, we
+# enable signing in dpkg-build-package(1), otherwise we ask for an
+# unsigned package.
+#
+# To maintain backward compatibility, the caller can also specify
+# $(GNUPG_PATH) and we set GNUPGHOME accordingly.
+
+ifneq ($(SIGNING_KEY),)
+	SIGNING_FLAG = -k$(SIGNING_KEY)
+ifneq ($(GNUPG_PATH),)
+	GNUPGHOME = $(GNUPG_PATH)/.gnupg
+	export GNUPGHOME
 endif
-
-DEBIAN_ORIG_TARBALL = rabbitmq-server_$(VERSION).orig.tar.xz
-UNPACKED_DIR = rabbitmq-server-$(VERSION)
-PACKAGENAME = rabbitmq-server
-
-ifneq "$(UNOFFICIAL_RELEASE)" ""
-  SIGNING=-us -uc
 else
-  SIGNING=-k$(SIGNING_KEY)
+	SIGNING_FLAG = -us -uc
 endif
 
 unexport DEPS_DIR
 unexport ERL_LIBS
 MAKEOVERRIDES =
 
+.PHONY: all package clean
+
 all: package
 	@:
 
 package: clean
-	cp -a $(SOURCE_DIST_FILE) $(DEBIAN_ORIG_TARBALL)
-	xzcat $(DEBIAN_ORIG_TARBALL) | tar -xf -
+# If a signing key ID was specified, verify that the key is available
+# before starting a possibly long build. At the same time, display some
+# useful informations on the key so the caller can double-check if he
+# wants.
+	@set -e; \
+	if test "$(SIGNING_KEY)"; then \
+		echo; \
+		echo '--------------------------------------------------'; \
+		echo "The package will be signed with key $(SIGNING_KEY):"; \
+		gpg -K "$(SIGNING_KEY)"; \
+		echo '--------------------------------------------------'; \
+		echo; \
+	fi
+# Because we are creating a source package as well, Debian expects the
+# source archive to have a specially formatted name. Copy the original
+# archive to a correctly named file.
+	cp -a "$(SOURCE_DIST_FILE)" "$(DEBIAN_ORIG_TARBALL)"
+# Prepare the source directory: we extract the source archive and copy
+# the debian/ subdirectory.
+	xzcat "$(DEBIAN_ORIG_TARBALL)" | tar -xf -
 	rsync -a \
 		--exclude '.sw?' --exclude '.*.sw?' \
 		--exclude '.git*' \
 		--delete --delete-excluded \
-		debian/ $(UNPACKED_DIR)/debian/
-	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
-	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -sa $(SIGNING)
-	rm -rf $(UNPACKED_DIR)
-
+		debian/ "$(UNPACKED_DIR)/debian/"
+# Possibly update debian/changelog (in the created source directory):
+#   - if it contains an entry for the specified version, do nothing;
+#   - otherwise, prepend a generated entry using "1" as the package
+#     revision.
+	cd "$(UNPACKED_DIR)"; \
+		../scripts/update-changelog.sh "$(DEBIAN_VERSION)"
+# Finally build the package! We ask for both the source package and one
+# or more binary packages.
+	cd "$(UNPACKED_DIR)"; \
+		dpkg-buildpackage -sa $(SIGNING_FLAG)
+# Before we remove the source directory, copy the possibly updated
+# debian/changelog to the original debian subdirectory, if the caller
+# asks for it. He is then responsible for committing it.
+	if test "$(SAVE_DEBIAN_CHANGELOG)" = 'yes'; then \
+		cp -a "$(UNPACKED_DIR)/debian/changelog" debian/changelog; \
+	fi
+	rm -rf "$(UNPACKED_DIR)"
+# If $(PACKAGES_DIR) is specified, move all package files to that
+# location.
 	if test "$(PACKAGES_DIR)"; then \
 		mkdir -p "$(PACKAGES_DIR)"; \
-		mv $(PACKAGENAME)_$(VERSION)* "$(PACKAGES_DIR)"; \
+		mv $$(./scripts/get-debian-package-files-list.sh $(CHANGES_FILE)) \
+			"$(PACKAGES_DIR)"; \
 	fi
 
 clean:
 	rm -rf $(UNPACKED_DIR)
 	rm -f $(DEBIAN_ORIG_TARBALL)
-	rm -f $(PACKAGENAME)_*.debian.tar.gz
-	rm -f $(PACKAGENAME)_*.dsc
-	rm -f $(PACKAGENAME)_*_*.changes
-	rm -f $(PACKAGENAME)_*_*.deb
+	./scripts/get-debian-package-files-list.sh $(CHANGES_FILE) | xargs rm -f
