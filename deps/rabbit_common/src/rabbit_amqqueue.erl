@@ -16,9 +16,10 @@
 
 -module(rabbit_amqqueue).
 
--export([recover/0, stop/0, start/1, declare/5, declare/6,
-         delete_immediately/1, delete_exclusive/2, delete/3, purge/1,
-         forget_all_durable/1, delete_crashed/1, delete_crashed_internal/1]).
+-export([recover/0, stop/0, start/1, declare/6, declare/7,
+         delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
+         forget_all_durable/1, delete_crashed/1, delete_crashed/2,
+         delete_crashed_internal/2]).
 -export([pseudo_queue/2, immutable/1]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
@@ -30,7 +31,7 @@
 -export([list_down/1, count/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
--export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
+-export([basic_get/4, basic_consume/11, basic_cancel/5, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
@@ -40,7 +41,7 @@
 -export([pid_of/1, pid_of/2]).
 
 %% internal
--export([internal_declare/2, internal_delete/1, run_backing_queue/3,
+-export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
 	 emit_consumers_local/3]).
 
@@ -74,13 +75,13 @@
 -spec start([rabbit_types:amqqueue()]) -> 'ok'.
 -spec declare
         (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
-         rabbit_types:maybe(pid())) ->
+         rabbit_types:maybe(pid()), rabbit_types:username()) ->
             {'new' | 'existing' | 'absent' | 'owner_died',
              rabbit_types:amqqueue()} |
             rabbit_types:channel_exit().
 -spec declare
         (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
-         rabbit_types:maybe(pid()), node()) ->
+         rabbit_types:maybe(pid()), rabbit_types:username(), node()) ->
             {'new' | 'existing' | 'owner_died', rabbit_types:amqqueue()} |
             {'absent', rabbit_types:amqqueue(), absent_reason()} |
             rabbit_types:channel_exit().
@@ -132,18 +133,18 @@
 -spec delete_immediately(qpids()) -> 'ok'.
 -spec delete_exclusive(qpids(), pid()) -> 'ok'.
 -spec delete
-        (rabbit_types:amqqueue(), 'false', 'false') ->
+        (rabbit_types:amqqueue(), 'false', 'false', rabbit_types:username()) ->
             qlen();
-        (rabbit_types:amqqueue(), 'true' , 'false') ->
+        (rabbit_types:amqqueue(), 'true' , 'false', rabbit_types:username()) ->
             qlen() | rabbit_types:error('in_use');
-        (rabbit_types:amqqueue(), 'false', 'true' ) ->
+        (rabbit_types:amqqueue(), 'false', 'true', rabbit_types:username()) ->
             qlen() | rabbit_types:error('not_empty');
-        (rabbit_types:amqqueue(), 'true' , 'true' ) ->
+        (rabbit_types:amqqueue(), 'true' , 'true', rabbit_types:username()) ->
             qlen() |
             rabbit_types:error('in_use') |
             rabbit_types:error('not_empty').
 -spec delete_crashed(rabbit_types:amqqueue()) -> 'ok'.
--spec delete_crashed_internal(rabbit_types:amqqueue()) -> 'ok'.
+-spec delete_crashed_internal(rabbit_types:amqqueue(), rabbit_types:username()) -> 'ok'.
 -spec purge(rabbit_types:amqqueue()) -> qlen().
 -spec forget_all_durable(node()) -> 'ok'.
 -spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
@@ -164,15 +165,16 @@
 -spec basic_consume
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
          non_neg_integer(), rabbit_types:ctag(), boolean(),
-         rabbit_framing:amqp_table(), any()) ->
+         rabbit_framing:amqp_table(), any(), rabbit_types:username()) ->
             rabbit_types:ok_or_error('exclusive_consume_unavailable').
 -spec basic_cancel
-        (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok'.
+        (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any(),
+         rabbit_types:username()) -> 'ok'.
 -spec notify_decorators(rabbit_types:amqqueue()) -> 'ok'.
 -spec notify_sent(pid(), pid()) -> 'ok'.
 -spec notify_sent_queue_down(pid()) -> 'ok'.
 -spec resume(pid(), pid()) -> 'ok'.
--spec internal_delete(name()) ->
+-spec internal_delete(name(), rabbit_types:username()) ->
           rabbit_types:ok_or_error('not_found') |
           rabbit_types:connection_exit() |
           fun (() ->
@@ -280,14 +282,15 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
                       [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
 
-declare(QueueName, Durable, AutoDelete, Args, Owner) ->
-    declare(QueueName, Durable, AutoDelete, Args, Owner, node()).
+declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
+    declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser, node()).
 
 
 %% The Node argument suggests where the queue (master if mirrored)
 %% should be. Note that in some cases (e.g. with "nodes" policy in
 %% effect) this might not be possible to satisfy.
-declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args, Owner, Node) ->
+declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
+        Owner, ActingUser, Node) ->
     ok = check_declare_arguments(QueueName, Args),
     Q = rabbit_queue_decorator:set(
           rabbit_policy:set(#amqqueue{name               = QueueName,
@@ -303,7 +306,8 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args, 
                                       state              = live,
                                       policy_version     = 0,
                                       slave_pids_pending_shutdown = [],
-                                      vhost                       = VHost})),
+                                      vhost                       = VHost,
+                                      options = #{user => ActingUser}})),
 
     Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
               {ok, Node0}  -> Node0;
@@ -392,7 +396,8 @@ add_default_binding(#amqqueue{name = QueueName}) ->
     rabbit_binding:add(#binding{source      = ExchangeName,
                                 destination = QueueName,
                                 key         = RoutingKey,
-                                args        = []}).
+                                args        = []},
+                       ?INTERNAL_USER).
 
 lookup([])     -> [];                             %% optimisation
 lookup([Name]) -> ets:lookup(rabbit_queue, Name); %% optimisation
@@ -701,7 +706,7 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
     [lists:zip(ConsumerInfoKeys,
                [Q#amqqueue.name, ChPid, CTag,
                 AckRequired, Prefetch, Args]) ||
-        {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)].
+        {ChPid, CTag, AckRequired, Prefetch, Args, _} <- consumers(Q)].
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).
 
@@ -720,16 +725,19 @@ delete_immediately(QPids) ->
     [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
     ok.
 
-delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    delegate:call(QPid, {delete, IfUnused, IfEmpty}).
+delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty, ActingUser) ->
+    delegate:call(QPid, {delete, IfUnused, IfEmpty, ActingUser}).
 
-delete_crashed(#amqqueue{ pid = QPid } = Q) ->
-    ok = rpc:call(node(QPid), ?MODULE, delete_crashed_internal, [Q]).
+delete_crashed(Q) ->
+    delete_crashed(Q, ?INTERNAL_USER).
 
-delete_crashed_internal(Q = #amqqueue{ name = QName }) ->
+delete_crashed(#amqqueue{ pid = QPid } = Q, ActingUser) ->
+    ok = rpc:call(node(QPid), ?MODULE, delete_crashed_internal, [Q, ActingUser]).
+
+delete_crashed_internal(Q = #amqqueue{ name = QName }, ActingUser) ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     BQ:delete_crashed(Q),
-    ok = internal_delete(QName).
+    ok = internal_delete(QName, ActingUser).
 
 purge(#amqqueue{ pid = QPid }) -> delegate:call(QPid, purge).
 
@@ -771,14 +779,14 @@ basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
 
 basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
-              ExclusiveConsume, Args, OkMsg) ->
+              ExclusiveConsume, Args, OkMsg, ActingUser) ->
     ok = check_consume_arguments(QName, Args),
     delegate:call(QPid, {basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                          ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
-                         Args, OkMsg}).
+                         Args, OkMsg, ActingUser}).
 
-basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg) ->
-    delegate:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg}).
+basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg, ActingUser) ->
+    delegate:call(QPid, {basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}).
 
 notify_decorators(#amqqueue{pid = QPid}) ->
     delegate:cast(QPid, notify_decorators).
@@ -814,7 +822,7 @@ internal_delete1(QueueName, OnlyDurable) ->
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName, OnlyDurable).
 
-internal_delete(QueueName) ->
+internal_delete(QueueName, ActingUser) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case {mnesia:wread({rabbit_queue, QueueName}),
@@ -823,12 +831,15 @@ internal_delete(QueueName) ->
                       rabbit_misc:const({error, not_found});
                   _ ->
                       Deletions = internal_delete1(QueueName, false),
-                      T = rabbit_binding:process_deletions(Deletions),
+                      T = rabbit_binding:process_deletions(Deletions,
+                                                           ?INTERNAL_USER),
                       fun() ->
                               ok = T(),
 			      rabbit_core_metrics:queue_deleted(QueueName),
-                              ok = rabbit_event:notify(queue_deleted,
-                                                       [{name, QueueName}])
+                              ok = rabbit_event:notify(
+                                     queue_deleted,
+                                     [{name, QueueName},
+                                      {user_who_performed_action, ActingUser}])
                       end
               end
       end).
@@ -955,14 +966,16 @@ on_node_down(Node) ->
                 {Qs, Dels} = lists:unzip(QsDels),
                 T = rabbit_binding:process_deletions(
                       lists:foldl(fun rabbit_binding:combine_deletions/2,
-                                  rabbit_binding:new_deletions(), Dels)),
+                                  rabbit_binding:new_deletions(), Dels),
+                      ?INTERNAL_USER),
                 fun () ->
                         T(),
                         lists:foreach(
                           fun(QName) ->
 				  rabbit_core_metrics:queue_deleted(QName),
                                   ok = rabbit_event:notify(queue_deleted,
-                                                           [{name, QName}])
+                                                           [{name, QName},
+                                                            {user, ?INTERNAL_USER}])
                           end, Qs)
                 end
       end).

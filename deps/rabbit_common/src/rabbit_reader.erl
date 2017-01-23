@@ -133,7 +133,7 @@
         peer_cert_validity, auth_mechanism, ssl_protocol,
         ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
         timeout, frame_max, channel_max, client_properties, connected_at,
-        node]).
+        node, user_who_performed_action]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
@@ -1383,6 +1383,7 @@ ic(protocol,          #connection{protocol    = none})     -> none;
 ic(protocol,          #connection{protocol    = P})        -> P:version();
 ic(user,              #connection{user        = none})     -> '';
 ic(user,              #connection{user        = U})        -> U#user.username;
+ic(user_who_performed_action, C) -> ic(user, C);
 ic(vhost,             #connection{vhost       = VHost})    -> VHost;
 ic(timeout,           #connection{timeout_sec = Timeout})  -> Timeout;
 ic(frame_max,         #connection{frame_max   = FrameMax}) -> FrameMax;

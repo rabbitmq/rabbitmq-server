@@ -173,7 +173,8 @@
          connection,
          number,
          user,
-         vhost]).
+         vhost,
+         user_who_performed_action]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
@@ -636,14 +637,15 @@ handle_pre_hibernate(State) ->
                 end),
     {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
 
-terminate(_Reason, State = #ch{}) ->
+terminate(_Reason, State = #ch{user = #user{username = Username}}) ->
     {_Res, _State1} = notify_queues(State),
     pg_local:leave(rabbit_channels, self()),
     rabbit_event:if_enabled(State, #ch.stats_timer,
                             fun() -> emit_stats(State) end),
     [delete_stats(Tag) || {Tag, _} <- get()],
     rabbit_core_metrics:channel_closed(self()),
-    rabbit_event:notify(channel_closed, [{pid, self()}]).
+    rabbit_event:notify(channel_closed, [{pid, self()},
+                                         {user_who_performed_action, Username}]).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -1148,7 +1150,8 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
 
 handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
               _, State = #ch{consumer_mapping = ConsumerMapping,
-                             queue_consumers  = QCons}) ->
+                             queue_consumers  = QCons,
+                             user             = #user{username = Username}}) ->
     OkMsg = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
     case dict:find(ConsumerTag, ConsumerMapping) of
         error ->
@@ -1176,7 +1179,8 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
                    fun () -> {error, not_found} end,
                    fun () ->
                            rabbit_amqqueue:basic_cancel(
-                             Q, self(), ConsumerTag, ok_msg(NoWait, OkMsg))
+                             Q, self(), ConsumerTag, ok_msg(NoWait, OkMsg),
+                             Username)
                    end) of
                 ok ->
                     {noreply, NewState};
@@ -1250,7 +1254,8 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                   internal    = Internal,
                                   nowait      = NoWait,
                                   arguments   = Args},
-              _, State = #ch{virtual_host = VHostPath}) ->
+              _, State = #ch{virtual_host = VHostPath,
+                             user = #user{username = Username}}) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
@@ -1275,7 +1280,8 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                         Durable,
                                         AutoDelete,
                                         Internal,
-                                        Args)
+                                        Args,
+                                        Username)
         end,
     ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable,
                                             AutoDelete, Internal, Args),
@@ -1293,13 +1299,14 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
 handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
                                  if_unused = IfUnused,
                                  nowait    = NoWait},
-              _, State = #ch{virtual_host = VHostPath}) ->
+              _, State = #ch{virtual_host = VHostPath,
+                             user = #user{username = Username}}) ->
     StrippedExchangeNameBin = strip_cr_lf(ExchangeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, StrippedExchangeNameBin),
     check_not_default_exchange(ExchangeName),
     check_exchange_deletion(ExchangeName),
     check_configure_permitted(ExchangeName, State),
-    case rabbit_exchange:delete(ExchangeName, IfUnused) of
+    case rabbit_exchange:delete(ExchangeName, IfUnused, Username) of
         {error, not_found} ->
             return_ok(State, NoWait,  #'exchange.delete_ok'{});
         {error, in_use} ->
@@ -1313,7 +1320,7 @@ handle_method(#'exchange.bind'{destination = DestinationNameBin,
                                routing_key = RoutingKey,
                                nowait      = NoWait,
                                arguments   = Arguments}, _, State) ->
-    binding_action(fun rabbit_binding:add/2,
+    binding_action(fun rabbit_binding:add/3,
                    strip_cr_lf(SourceNameBin), exchange, strip_cr_lf(DestinationNameBin), RoutingKey,
                    Arguments, #'exchange.bind_ok'{}, NoWait, State);
 
@@ -1322,7 +1329,7 @@ handle_method(#'exchange.unbind'{destination = DestinationNameBin,
                                  routing_key = RoutingKey,
                                  nowait      = NoWait,
                                  arguments   = Arguments}, _, State) ->
-    binding_action(fun rabbit_binding:remove/2,
+    binding_action(fun rabbit_binding:remove/3,
                    strip_cr_lf(SourceNameBin), exchange, strip_cr_lf(DestinationNameBin), RoutingKey,
                    Arguments, #'exchange.unbind_ok'{}, NoWait, State);
 
@@ -1348,7 +1355,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                                arguments   = Args} = Declare,
               _, State = #ch{virtual_host        = VHostPath,
                              conn_pid            = ConnPid,
-                             queue_collector_pid = CollectorPid}) ->
+                             queue_collector_pid = CollectorPid,
+                             user = #user{username = Username}}) ->
     Owner = case ExclusiveDeclare of
                 true  -> ConnPid;
                 false -> none
@@ -1388,7 +1396,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                    ok
             end,
             case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
-                                         Args, Owner) of
+                                         Args, Owner, Username) of
                 {new, #amqqueue{pid = QPid}} ->
                     %% We need to notify the reader within the channel
                     %% process so that we can be sure there are no
@@ -1434,7 +1442,8 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
                               if_unused = IfUnused,
                               if_empty  = IfEmpty,
                               nowait    = NoWait},
-              _, State = #ch{conn_pid = ConnPid}) ->
+              _, State = #ch{conn_pid = ConnPid,
+                             user = #user{username = Username}}) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = qbin_to_resource(StrippedQueueNameBin, State),
     check_configure_permitted(QueueName, State),
@@ -1442,10 +1451,10 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
            QueueName,
            fun (Q) ->
                    rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
-                   rabbit_amqqueue:delete(Q, IfUnused, IfEmpty)
+                   rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username)
            end,
            fun (not_found)            -> {ok, 0};
-               ({absent, Q, crashed}) -> rabbit_amqqueue:delete_crashed(Q),
+               ({absent, Q, crashed}) -> rabbit_amqqueue:delete_crashed(Q, Username),
                                          {ok, 0};
                ({absent, Q, Reason})  -> rabbit_misc:absent(Q, Reason)
            end) of
@@ -1463,7 +1472,7 @@ handle_method(#'queue.bind'{queue       = QueueNameBin,
                             routing_key = RoutingKey,
                             nowait      = NoWait,
                             arguments   = Arguments}, _, State) ->
-    binding_action(fun rabbit_binding:add/2,
+    binding_action(fun rabbit_binding:add/3,
                    strip_cr_lf(ExchangeNameBin), queue, strip_cr_lf(QueueNameBin), RoutingKey, Arguments,
                    #'queue.bind_ok'{}, NoWait, State);
 
@@ -1471,7 +1480,7 @@ handle_method(#'queue.unbind'{queue       = QueueNameBin,
                               exchange    = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments   = Arguments}, _, State) ->
-    binding_action(fun rabbit_binding:remove/2,
+    binding_action(fun rabbit_binding:remove/3,
                    strip_cr_lf(ExchangeNameBin), queue, strip_cr_lf(QueueNameBin), RoutingKey, Arguments,
                    #'queue.unbind_ok'{}, false, State);
 
@@ -1554,7 +1563,8 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
               ExclusiveConsume, Args, NoWait,
               State = #ch{conn_pid          = ConnPid,
                           limiter           = Limiter,
-                          consumer_mapping  = ConsumerMapping}) ->
+                          consumer_mapping  = ConsumerMapping,
+                          user              = #user{username = Username}}) ->
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
            fun (Q) ->
@@ -1565,7 +1575,8 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                       ConsumerPrefetch, ActualConsumerTag,
                       ExclusiveConsume, Args,
                       ok_msg(NoWait, #'basic.consume_ok'{
-                               consumer_tag = ActualConsumerTag})),
+                               consumer_tag = ActualConsumerTag}),
+                      Username),
                     Q}
            end) of
         {ok, Q = #amqqueue{pid = QPid, name = QName}} ->
@@ -1677,7 +1688,8 @@ handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
 binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                RoutingKey, Arguments, ReturnMethod, NoWait,
                State = #ch{virtual_host = VHostPath,
-                           conn_pid     = ConnPid }) ->
+                           conn_pid     = ConnPid,
+                           user         = #user{username = Username}}) ->
     DestinationName = name_to_resource(DestinationType, DestinationNameBin, State),
     check_write_permitted(DestinationName, State),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
@@ -1693,7 +1705,8 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
                      end;
                  (_X, #exchange{}) ->
                      ok
-             end) of
+             end,
+             Username) of
         {error, {resources_missing, [{not_found, Name} | _]}} ->
             rabbit_misc:not_found(Name);
         {error, {resources_missing, [{absent, Q, Reason} | _]}} ->
@@ -2027,6 +2040,7 @@ i(pid,            _)                               -> self();
 i(connection,     #ch{conn_pid         = ConnPid}) -> ConnPid;
 i(number,         #ch{channel          = Channel}) -> Channel;
 i(user,           #ch{user             = User})    -> User#user.username;
+i(user_who_performed_action, Ch) -> i(user, Ch);
 i(vhost,          #ch{virtual_host     = VHost})   -> VHost;
 i(transactional,  #ch{tx               = Tx})      -> Tx =/= none;
 i(confirm,        #ch{confirm_enabled  = CE})      -> CE;
