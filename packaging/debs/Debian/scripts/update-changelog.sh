@@ -1,9 +1,16 @@
 #!/bin/sh
 
+set -e
+
 PACKAGE_VERSION=$1
 
+if test -z "$PACKAGE_VERSION"; then
+    echo "Syntax: $(basename "$0") <debian version>" 1>&2
+    exit 64
+fi
+
 PACKAGE_NAME=$(awk '/^Source:/ { print $2; }' < debian/control)
-CHANGELOG_VERSION=$(dpkg-parsechangelog  | sed -n 's/^Version: \(.*\)-[^-]*$/\1/p')
+CHANGELOG_VERSION=$(dpkg-parsechangelog | sed -n 's/^Version: \(.*\)-[^-]*$/\1/p')
 CHANGELOG_DATE=$(date -R)
 
 if [ "${CHANGELOG_VERSION}" != "${PACKAGE_VERSION}" ]; then

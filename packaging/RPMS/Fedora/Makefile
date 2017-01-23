@@ -7,14 +7,16 @@ endif
 ifneq ($(words $(SOURCE_DIST_FILE)),1)
 $(error Multiple source archives found; please specify SOURCE_DIST_FILE)
 endif
+endif
 
 VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
 ifeq ($(VERSION),)
 $(error Cannot determine version; please specify VERSION)
 endif
-endif
 
-RPM_VERSION = $(subst -,.,$(VERSION))
+# $(RPM_VERSION) doesn't include the package revision: this one is only
+# set in the .spec file.
+RPM_VERSION = $(subst -,~,$(VERSION))
 RPM_ORIG_TARBALL = rabbitmq-server-$(VERSION).tar.xz
 
 TOP_DIR = $(shell pwd)
@@ -24,9 +26,7 @@ DEFINES = --define 'upstream_version $(VERSION)' \
 	  --define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' \
 	  --define '_sysconfdir /etc' --define '_localstatedir /var'
 
-ifndef RPM_OS
-RPM_OS = fedora
-endif
+RPM_OS ?= fedora
 
 ifeq "$(RPM_OS)" "suse"
 FUNCTION_LIBRARY=
@@ -48,38 +48,95 @@ endif
 START_PROG=daemon
 endif
 
+# Package signing.
+#
+# At least the key ID is mandatory ($(SIGNING_KEY)). If it's set, we
+# call `rpm --addsign`, otherwise we do nothing.
+#
+# To maintain backward compatibility, the caller can also specify
+# $(KEYSDIR) or $(GNUPG_PATH) and we set GNUPGHOME accordingly.
+
+ifneq ($(KEYSDIR),)
+	GNUPGHOME = $(KEYSDIR)/keyring/.gnupg
+	export GNUPGHOME
+endif
+ifneq ($(GNUPG_PATH),)
+	GNUPGHOME = $(GNUPG_PATH)/.gnupg
+	export GNUPGHOME
+endif
+
 unexport DEPS_DIR
 unexport ERL_LIBS
 MAKEOVERRIDES =
 
-.PHONY: all prepare server clean
+.PHONY: all package clean
 
-all:   clean server
+all: package
 	@:
 
-prepare:
+package: clean
+# If a signing key ID was specified, verify that the key is available
+# before starting a possibly long build. At the same time, display some
+# useful informations on the key so the caller can double-check if he
+# wants.
+ifneq ($(SIGNING_KEY),)
+	@echo
+	@echo '--------------------------------------------------'
+	@echo "The package will be signed with key $(SIGNING_KEY):"
+	@gpg -K "$(SIGNING_KEY)"
+	@echo '--------------------------------------------------'
+	@echo
+endif
+# Create the build tree and populate it.
 	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
 	cp $(SOURCE_DIST_FILE) SOURCES/$(RPM_ORIG_TARBALL)
-	cp rabbitmq-server.spec SPECS
-	sed -i 's|%%VERSION%%|$(RPM_VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
-		SPECS/rabbitmq-server.spec
-
+	sed -e 's|%%VERSION%%|$(RPM_VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
+		< rabbitmq-server.spec \
+		> SPECS/rabbitmq-server.spec
 	cp rabbitmq-server.service SOURCES/rabbitmq-server.service
 	cp rabbitmq-server.tmpfiles SOURCES/rabbitmq-server.tmpfiles
-	cp rabbitmq-server.init SOURCES/rabbitmq-server.init
-	sed -i \
-	    -e 's|^START_PROG=.*$$|START_PROG="$(START_PROG)"|' \
-	    -e 's|^@FUNCTION_LIBRARY@|$(FUNCTION_LIBRARY)|' \
-	    SOURCES/rabbitmq-server.init
+	sed \
+		-e 's|^START_PROG=.*$$|START_PROG="$(START_PROG)"|' \
+		-e 's|^@FUNCTION_LIBRARY@|$(FUNCTION_LIBRARY)|' \
+		< rabbitmq-server.init \
+		> SOURCES/rabbitmq-server.init
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
-
-server: prepare
-	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES) $(SPEC_DEFINES)
-
-	if test "$(PACKAGES_DIR)"; then \
-		mkdir -p "$(PACKAGES_DIR)"; \
-		mv SRPMS/*.rpm RPMS/noarch/*.rpm "$(PACKAGES_DIR)"; \
-	fi
+# Possibly update the changelog inside the spec (in the created build
+# directory):
+#   - if it contains an entry for the specified version, do nothing;
+#   - otherwise, prepend a generated entry using "1" as the package
+#     revision.
+	scripts/update-changelog.sh SPECS/rabbitmq-server.spec "$(RPM_VERSION)"
+# Finally build the package!
+	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) \
+		$(OS_DEFINES) $(SPEC_DEFINES)
+# Before we remove the source directory, copy the possibly updated
+# debian/changelog to the original debian subdirectory, if the caller
+# asks for it. He is then responsible for committing it.
+ifeq ($(SAVE_CHANGELOG),yes)
+	cp -a SPECS/rabbitmq-server.spec rabbitmq-server.spec
+endif
+	rm -rf SOURCES SPECS BUILD tmp
+# If a PGP key is specified, sign source and binary packages. We start
+# rpm(1) in a new session and redirect its stdin so that it doesn't
+# prompt for a passphrase.
+# https://ask.fedoraproject.org/en/question/56107/can-gpg-agent-be-used-when-signing-rpm-packages/?answer=76395#post-id-76395
+ifneq ($(SIGNING_KEY),)
+	setsid \
+		rpm --addsign \
+		--define '_signature gpg' \
+		--define '_gpg_name $(SIGNING_KEY)' \
+		SRPMS/*-$(RPM_VERSION)*.rpm \
+		RPMS/noarch/*-$(RPM_VERSION)*.rpm \
+		< /dev/null
+endif
+# If $(PACKAGES_DIR) is specified, move all package files to that
+# location.
+ifneq ($(PACKAGES_DIR),)
+	mkdir -p "$(PACKAGES_DIR)"
+	mv SRPMS/*-$(RPM_VERSION)*.rpm RPMS/noarch/*-$(RPM_VERSION)*.rpm \
+		"$(PACKAGES_DIR)"
+endif
 
 clean:
 	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp
