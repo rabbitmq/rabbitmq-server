@@ -27,7 +27,10 @@ defmodule RabbitMQCtl do
   @type options() :: Map.t
   @type command_result() :: {:error, ExitCodes.exit_code, term()} | term()
 
-  def main(["--auto-complete", str]) do
+  def main(["--auto-complete", "./rabbitmqctl " <> str]) do
+    auto_complete(str)
+  end
+  def main(["--auto-complete", "rabbitmqctl " <> str]) do
     auto_complete(str)
   end
   def main(unparsed_command) do
