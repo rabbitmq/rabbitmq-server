@@ -1,27 +1,25 @@
 ## RabbitMQ authorisation Backend for [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa)
 
 Allows to use access tokens provided by CF UAA to authorize in RabbitMQ.
-Make requests to `/check_token` endpoint on UAA server. See https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id32
 
 ### Usage
 
 First, enable the plugin. Then, configure access to UAA:
 
 ``` erlang
-{rabbitmq_auth_backend_uaa,
-  [{uri,      <<"https://your-uaa-server">>},
-   {username, <<"uaa-client-id">>},
-   {password, <<"uaa-client-secret">>},
-   {resource_server_id, <<"your-resource-server-id"}]}
-
+[{rabbitmq_auth_backend_uaa,
+  [{resource_server_id, <<"your-resource-server-id"}]},
+ {uaa_jwt, [
+  {signing_keys, #{
+    <<"key1">> => {map, #{<<"kty">> => <<"oct">>, <<"k">> => <<"dG9rZW5rZXk">>}},
+    <<"key2">> => {pem, <<"/path/to/public_key.pem">>},
+    <<"key3">> => {json, "{\"kid\":\"key3\",\"alg\":\"HMACSHA256\",\"value\":\"tokenkey\",\"kty\":\"MAC\",\"use\":\"sig\"}"}}}]}].
 ```
 
 where
 
- * `your-uaa-server` is a UAA server host
- * `uaa-client-id` is a UAA client ID
- * `uaa-client-secret` is the shared secret
  * `your-resource-server-id` is a resource server ID (e.g. 'rabbitmq')
+ * `signing_keys` is a map of keys to sign JWT tokens (see [UAA_JWT](uaa_jwt) library for mode info)
 
 To learn more about UAA/OAuth 2 clients, see [UAA docs](https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id73).
 
@@ -58,7 +56,6 @@ the pattern must be [URL-encoded](https://en.wikipedia.org/wiki/Percent-encoding
 
 See the [./test/wildcard_match_SUITE.erl](wildcard matching test suite) for more examples.
 
-
 ### Authorization Workflow
 
 #### Prerequisites
@@ -73,3 +70,5 @@ See the [./test/wildcard_match_SUITE.erl](wildcard matching test suite) for more
 1. Client authorize with UAA, requesting `access_token` (using any grant type)
 2. Token scope should contain RabbitMQ resource scopes (e.g. `configure:%2F/foo` means "configure queue 'foo' in vhost '/'")
 3. Client passes token for a username when connecting to a RabbitMQ node
+
+[uaa_jwt](https://github.com/rabbitmq/uaa_jwt)

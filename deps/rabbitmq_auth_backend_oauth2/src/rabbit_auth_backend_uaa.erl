@@ -23,7 +23,8 @@
 
 -export([description/0]).
 -export([user_login_authentication/2, user_login_authorization/1,
-         check_vhost_access/3, check_resource_access/3]).
+         check_vhost_access/3, check_resource_access/3,
+         check_topic_access/4]).
 
 %% httpc seems to get racy when using HTTP 1.1
 -define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
@@ -56,25 +57,28 @@ user_login_authorization(Username) ->
     end.
 
 check_vhost_access(#auth_user{username = Username}, VHost, _Sock) ->
-    with_token(Username,
-               fun(UserData) ->
-                    Scopes = get_scopes(UserData),
-                    rabbit_oauth2_scope:vhost_access(VHost, Scopes)
-               end).
+    with_token(
+        Username,
+        fun(UserData) ->
+            Scopes = get_scopes(UserData),
+            rabbit_oauth2_scope:vhost_access(VHost, Scopes)
+        end).
 
 check_resource_access(#auth_user{username = Username}, Resource, Permission) ->
-    with_token(Username,
-               fun(UserData) ->
-                    Scopes = get_scopes(UserData),
-                    rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
-               end).
+    with_token(
+        Username,
+        fun(UserData) ->
+            Scopes = get_scopes(UserData),
+            rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
+        end).
 
 check_topic_access(#auth_user{username = Username}, Resource, Permission, Context) ->
-    with_token(Username,
-               fun(UserData) ->
-                    Scopes = get_scopes(UserData),
-                    rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
-               end).
+    with_token(
+        Username,
+        fun(UserData) ->
+            Scopes = get_scopes(UserData),
+            rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
+        end).
 
 %%--------------------------------------------------------------------
 
@@ -84,61 +88,25 @@ with_token(Token, Fun) ->
         _              -> false
     end.
 
+-spec check_token(binary()) -> {ok, map()} | {error, term()}.
 check_token(Token) ->
-    {ok, UaaUri} = application:get_env(rabbitmq_auth_backend_uaa, uri),
-    Path   = UaaUri ++ "/check_token",
-    {ok, AuthUser} = application:get_env(rabbitmq_auth_backend_uaa, username),
-    {ok, AuthPass} = application:get_env(rabbitmq_auth_backend_uaa, password),
-    Auth = base64:encode_to_string(AuthUser ++ ":" ++ AuthPass),
-    URI  = uri_parser:parse(Path, [{port, 80}]),
-
-    {host, Host} = lists:keyfind(host, 1, URI),
-    {port, Port} = lists:keyfind(port, 1, URI),
-    HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
-    ReqBody = "token=" ++ http_uri:encode(binary_to_list(Token)),
-    Resp = httpc:request(post,
-                         {Path,
-                          [{"Host", HostHdr},
-                           {"Authorization", "Basic " ++ Auth}],
-                          "application/x-www-form-urlencoded",
-                          ReqBody},
-                         ?HTTPC_OPTS, []),
-    rabbit_log:info("Resp ~p", [Resp]),
-    case Resp of
-        {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
-            case Code of
-                200 -> parse_resp(Body);
-                400 -> parse_err(Body);
-                401 -> {error, resource_server_authentication_failed};
-                _   -> {error, {Code, Body}}
-            end;
-        {error, _} = E -> E
+    case 'Elixir.UaaJWT':decode_and_verify(Token) of
+        {error, Reason} -> {refused, {error, Reason}};
+        {true, Payload} -> validate_payload(Payload);
+        {false, _}      -> {refused, signature_invalid}
     end.
 
-parse_resp(Body) ->
-    {struct, Resp} = mochijson2:decode(Body),
-    Aud = proplists:get_value(<<"aud">>, Resp, []),
-    {ok, ResIdStr} = application:get_env(rabbitmq_auth_backend_uaa,
-                                         resource_server_id),
-    ResId = list_to_binary(ResIdStr),
-    ValidAud = case Aud of
-        List when is_list(List) -> lists:member(ResId, Aud);
-        _                       -> false
-    end,
-    case ValidAud of
-        true  ->
-            Scope = own_scope(proplists:get_value(<<"scope">>, Resp, []),
-                              ResId),
-            {ok, lists:keyreplace(<<"scope">>, 1, Resp, {<<"scope">>, Scope})};
-        false ->
-            {refused, {invalid_aud, Resp, ResId}}
+validate_payload(#{<<"scope">> := Scope, <<"aud">> := Aud} = UserData) ->
+    ResIdStr = application:get_env(rabbitmq_auth_backend_uaa,
+                                   resource_server_id, <<>>),
+    ResId = rabbit_data_coercion:to_binary(ResIdStr),
+    case valid_aud(Aud, ResId) of
+        true  -> {ok, UserData#{<<"scope">> => filter_scope(Scope, ResId)}};
+        false -> {refused, {invalid_aud, UserData, ResId}}
     end.
 
-parse_err(Body) ->
-    {refused, Body}.
-
-own_scope(Scope, <<"">>) -> Scope;
-own_scope(Scope, ResId)  ->
+filter_scope(Scope, <<"">>) -> Scope;
+filter_scope(Scope, ResId)  ->
     Pattern = <<ResId/binary, ".">>,
     PatternLength = byte_size(Pattern),
     lists:filtermap(
@@ -154,7 +122,13 @@ own_scope(Scope, ResId)  ->
         end,
         Scope).
 
-get_scopes(UserData) ->
-    proplists:get_value(<<"scope">>, UserData, []).
+valid_aud(_, <<>>)    -> true;
+valid_aud(Aud, ResId) ->
+    case Aud of
+        List when is_list(List) -> lists:member(ResId, Aud);
+        _                       -> false
+    end.
+
+get_scopes(#{<<"scope">> := Scope}) -> Scope.
 
 %%--------------------------------------------------------------------
