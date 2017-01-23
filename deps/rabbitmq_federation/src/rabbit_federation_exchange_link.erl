@@ -107,9 +107,17 @@ handle_cast(go, State) ->
 handle_cast({enqueue, _, _}, State = {not_started, _}) ->
     {noreply, State};
 
-handle_cast({enqueue, Serial, Cmd}, State = #state{waiting_cmds = Waiting}) ->
+handle_cast({enqueue, Serial, Cmd},
+            State = #state{waiting_cmds = Waiting,
+                           downstream_exchange = XName}) ->
     Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
-    {noreply, play_back_commands(State#state{waiting_cmds = Waiting1})};
+    try
+        {noreply, play_back_commands(State#state{waiting_cmds = Waiting1})}
+    catch exit:{{shutdown, {server_initiated_close, 404, Text}}, _} ->
+            rabbit_federation_link_util:log_warning(
+              XName, "detected upstream changes, restarting link: ~p~n", [Text]),
+            {stop, {shutdown, restart}, State}
+    end;
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
