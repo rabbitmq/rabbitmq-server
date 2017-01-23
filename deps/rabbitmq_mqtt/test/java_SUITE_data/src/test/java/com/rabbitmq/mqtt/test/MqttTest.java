@@ -665,7 +665,7 @@ public class MqttTest implements MqttCallback {
         }
     }
 
-    @Test public void topicAuthorisation() throws Exception {
+    @Test public void topicAuthorisationPublish() throws Exception {
         client.connect(conOpt);
         client.setCallback(this);
         client.subscribe("some/topic");
@@ -678,6 +678,20 @@ public class MqttTest implements MqttCallback {
             client.disconnect();
         } catch(Exception e) {
             // OK
+        }
+    }
+
+    @Test public void topicAuthorisationSubscribe() throws Exception {
+        client.connect(conOpt);
+        client.setCallback(this);
+        client.subscribe("some/topic");
+        try {
+            client.subscribe("forbidden");
+            fail("Subscribing to a forbidden topic, an exception should have been thrown");
+            client.disconnect();
+        } catch(Exception e) {
+            // OK
+            e.printStackTrace();
         }
     }
 
