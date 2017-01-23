@@ -75,6 +75,7 @@ install -p -D -m 0755 %{_rabbit_server_ha_ocf} %{buildroot}%{_exec_prefix}/lib/o
 install -p -D -m 0644 %{S:2} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 install -p -D -m 0755 %{_rabbitmqctl_autocomplete} %{buildroot}%{_sysconfdir}/profile.d/rabbitmqctl-autocomplete.sh
 
+
 mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 
 mkdir -p %{buildroot}%{_sbindir}
@@ -137,6 +138,9 @@ if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitm
 fi
 
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
+
+# Update profile to enable autocompletion
+source /etc/profile
 
 %preun
 if [ $1 = 0 ]; then
