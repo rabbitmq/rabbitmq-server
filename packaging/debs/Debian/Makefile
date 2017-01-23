@@ -30,10 +30,14 @@ CHANGES_FILE = rabbitmq-server_$(DEBIAN_VERSION)-*_$(DEB_HOST_ARCH).changes
 # unsigned package.
 #
 # To maintain backward compatibility, the caller can also specify
-# $(GNUPG_PATH) and we set GNUPGHOME accordingly.
+# $(KEYSDIR) or $(GNUPG_PATH) and we set GNUPGHOME accordingly.
 
 ifneq ($(SIGNING_KEY),)
 	SIGNING_FLAG = -k$(SIGNING_KEY)
+ifneq ($(KEYSDIR),)
+	GNUPGHOME = $(KEYSDIR)/keyring/.gnupg
+	export GNUPGHOME
+endif
 ifneq ($(GNUPG_PATH),)
 	GNUPGHOME = $(GNUPG_PATH)/.gnupg
 	export GNUPGHOME
