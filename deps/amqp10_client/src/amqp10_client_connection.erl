@@ -271,7 +271,11 @@ send_open(#state{socket = Socket, config = Config}) ->
                    {{symbol, <<"platform">>},
                     {utf8, list_to_binary(Platform)}}
                   ]},
-    Open0 = #'v1_0.open'{container_id = {utf8, <<"test">>},
+    ContainerId = case Config of
+                      #{container_id := Cid} -> Cid;
+                      _ -> generate_container_id()
+                  end,
+    Open0 = #'v1_0.open'{container_id = {utf8, ContainerId},
                          hostname = {utf8, <<"localhost">>},
                          channel_max = {ushort, 100},
                          idle_time_out = {uint, 0},
@@ -308,3 +312,14 @@ send(Record, FrameType, #state{socket = Socket}) ->
     gen_tcp:send(Socket, Frame).
 
 unpack(V) -> amqp10_client_types:unpack(V).
+
+-spec generate_container_id() -> binary().
+generate_container_id() ->
+    Pre = list_to_binary(atom_to_list(node())),
+    Id = bin_to_hex(crypto:strong_rand_bytes(8)),
+    <<Pre/binary, <<"_">>/binary, Id/binary>>.
+
+bin_to_hex(Bin) ->
+    <<<<if N >= 10 -> N -10 + $a;
+           true  -> N + $0 end>>
+      || <<N:4>> <= Bin>>.
