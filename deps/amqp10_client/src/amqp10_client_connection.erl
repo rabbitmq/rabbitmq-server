@@ -29,16 +29,17 @@
 
 %% gen_fsm state callbacks.
 -export([expecting_socket/2,
-         expecting_sasl_protocol_header/2,
-         expecting_sasl_mechanisms/2,
-         expecting_sasl_outcome/2,
-         expecting_amqp_protocol_header/2,
-         expecting_open_frame/2,
+         sasl_hdr_sent/2,
+         sasl_hdr_rcvds/2,
+         sasl_init_sent/2,
+         hdr_sent/2,
+         open_sent/2,
          opened/2,
-         expecting_close_frame/2]).
+         close_sent/2]).
 
 -type connection_config() ::
-    #{address => inet:socket_address() | inet:hostname(),
+    #{container_id => binary(),
+      address => inet:socket_address() | inet:hostname(),
       port => inet:port_number(),
       max_frame_size => non_neg_integer(), % TODO constrain to large than 512
       outgoing_max_frame_size => non_neg_integer() | undefined,
@@ -134,39 +135,40 @@ expecting_socket({socket_ready, Socket}, State = #state{config = Cfg}) ->
     case Cfg of
         #{sasl := none} ->
             ok = gen_tcp:send(Socket, ?AMQP_PROTOCOL_HEADER),
-            {next_state, expecting_amqp_protocol_header, State1};
-        _ -> % assume anonymous
+            {next_state, hdr_sent, State1};
+        _ -> % assume anonymous TODO: PLAIN
             ok = gen_tcp:send(Socket, ?SASL_PROTOCOL_HEADER),
-            {next_state, expecting_sasl_protocol_header, State1}
+            {next_state, sasl_hdr_sent, State1}
     end.
 
-expecting_sasl_protocol_header({protocol_header_received, 3, 1, 0, 0}, State) ->
-    {next_state, expecting_sasl_mechanisms, State}.
+sasl_hdr_sent({protocol_header_received, 3, 1, 0, 0}, State) ->
+    {next_state, sasl_hdr_rcvds, State}.
 
-expecting_sasl_mechanisms(#'v1_0.sasl_mechanisms'{
-                             sasl_server_mechanisms = {array, _Mechs}}, State) ->
+sasl_hdr_rcvds(#'v1_0.sasl_mechanisms'{
+                  sasl_server_mechanisms = {array, _Mechs}}, State) ->
     % TODO validate anon is a returned mechanism
     ok = send_sasl_init(State, <<"ANONYMOUS">>),
-    {next_state, expecting_sasl_outcome, State}.
+    {next_state, sasl_init_sent, State}.
 
-expecting_sasl_outcome(#'v1_0.sasl_outcome'{code = _Code} = O,
-                       #state{socket = Socket} = State) ->
+sasl_init_sent(#'v1_0.sasl_outcome'{code = _Code} = O,
+               #state{socket = Socket} = State) ->
     % TODO validate anon is a returned mechanism
     error_logger:info_msg("SASL OUTCOME: ~p", [O]),
     ok = gen_tcp:send(Socket, ?AMQP_PROTOCOL_HEADER),
-    {next_state, expecting_amqp_protocol_header, State}.
+    {next_state, hdr_sent, State}.
 
-expecting_amqp_protocol_header({protocol_header_received, 0, 1, 0, 0}, State) ->
+hdr_sent({protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
-        ok    -> {next_state, expecting_open_frame, State};
+        ok    -> {next_state, open_sent, State};
         Error -> {stop, Error, State}
     end;
-expecting_amqp_protocol_header({protocol_header_received, Protocol, Maj, Min, Rev}, State) ->
+hdr_sent({protocol_header_received, Protocol, Maj, Min,
+                                Rev}, State) ->
     error_logger:info_msg("Unsupported protocol version: ~b ~b.~b.~b~n",
                           [Protocol, Maj, Min, Rev]),
     {stop, normal, State}.
 
-expecting_open_frame(
+open_sent(
   #'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
   #state{pending_session_reqs = PendingSessionReqs, config = Config} = State0) ->
     error_logger:info_msg(
@@ -184,8 +186,10 @@ expecting_open_frame(
 
 opened(close, State) ->
     %% We send the first close frame and wait for the reply.
+    %% TODO: stop all sessions writing
+    %% We could still accept incoming frames (See: 2.4.6)
     case send_close(State) of
-        ok              -> {next_state, expecting_close_frame, State};
+        ok              -> {next_state, close_sent, State};
         {error, closed} -> {stop, normal, State};
         Error           -> {stop, Error, State}
     end;
@@ -193,10 +197,12 @@ opened(#'v1_0.close'{}, State) ->
     %% We receive the first close frame, reply and terminate.
     _ = send_close(State),
     {stop, normal, State};
-opened(_Frame, State) ->
+opened(Frame, State) ->
+    error_logger:info_msg("UNEXPECTED CONNECTION FRAME ~p~n",
+                          [Frame]),
     {next_state, opened, State}.
 
-expecting_close_frame(#'v1_0.close'{}, State) ->
+close_sent(#'v1_0.close'{}, State) ->
     {stop, normal, State}.
 
 handle_event({set_other_procs, OtherProcs}, StateName, State) ->
@@ -214,7 +220,7 @@ handle_sync_event({begin_session, Notify}, From, opened, State) ->
     {reply, Ret, opened, State1};
 handle_sync_event({begin_session, Notify}, From, StateName,
                   #state{pending_session_reqs = PendingSessionReqs} = State)
-  when StateName =/= expecting_close_frame ->
+  when StateName =/= close_sent ->
     %% The caller already asked for a new session but the connection
     %% isn't fully opened. Let's queue this request until the connection
     %% is ready.

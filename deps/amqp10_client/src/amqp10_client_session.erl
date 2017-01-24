@@ -252,6 +252,7 @@ mapped({flow, OutHandle, #'v1_0.flow'{link_credit = {uint, LinkCredit}} = Flow0}
 mapped(#'v1_0.end'{}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
+    % TODO: send notifications for links?
     {stop, normal, State};
 mapped(#'v1_0.attach'{name = {utf8, Name},
                       initial_delivery_count = IDC,
