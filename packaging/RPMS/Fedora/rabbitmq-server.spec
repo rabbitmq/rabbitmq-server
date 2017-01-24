@@ -140,7 +140,7 @@ fi
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 
 # Update profile to enable autocompletion
-source /etc/profile
+. /etc/profile
 
 %preun
 if [ $1 = 0 ]; then
