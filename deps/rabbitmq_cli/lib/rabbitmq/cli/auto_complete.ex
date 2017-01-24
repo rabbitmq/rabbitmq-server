@@ -18,18 +18,16 @@ defmodule Rabbitmq.CLI.AutoComplete do
   alias RabbitMQ.CLI.Core.Parser, as: Parser
   alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
-  @spec complete(String.t) :: [String.t]
-  def complete(script_name, str) do
-    tokens = String.split(str, " ", trim: true)
-    case List.last(tokens) do
-      nil   -> [];
-      _last ->
-        case Parser.parse_global(tokens) do
-          %{script_name: _args_script_name} ->
-            complete(tokens);
-          _                                ->
-            complete(["--script-name", script_name | tokens])
-        end
+  @spec complete(String.t, [String.t]) :: [String.t]
+  def complete(_, []) do
+    []
+  end
+  def complete(script_name, args) do
+    case Parser.parse_global(args) do
+      %{script_name: _args_script_name} ->
+        complete(args);
+      _                                ->
+        complete(["--script-name", script_name | args])
     end
   end
 
@@ -48,6 +46,7 @@ defmodule Rabbitmq.CLI.AutoComplete do
       {command, _} ->
         complete_command_opts(command, last_token)
     end
+    |> Enum.sort
   end
 
   defp complete_default_opts(opt) do

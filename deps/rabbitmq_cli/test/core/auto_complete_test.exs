@@ -21,33 +21,41 @@ defmodule AutoCompleteTest do
 
 
   test "Auto-completes a command" do
-    ["canis_lupus", "canis_latrans", "canis_aureus"] = @subject.complete("rabbitmqctl", "canis")
-    ["canis_lupus", "canis_latrans", "canis_aureus"] = @subject.complete("rabbitmqctl", "canis_")
-    ["canis_lupus", "canis_latrans"] = @subject.complete("rabbitmqctl", "canis_l")
-    ["canis_latrans"] = @subject.complete("rabbitmqctl", "canis_la")
-    ["canis_aureus"] = @subject.complete("rabbitmqctl", "canis_a")
-    ["canis_aureus"] = @subject.complete("rabbitmqctl", "--node foo --quet canis_a")
+    ["canis_aureus", "canis_latrans", "canis_lupus"] = @subject.complete("rabbitmqctl", ["canis"])
+    ["canis_aureus", "canis_latrans", "canis_lupus"] = @subject.complete("rabbitmqctl", ["canis_"])
+    ["canis_latrans", "canis_lupus"] = @subject.complete("rabbitmqctl", ["canis_l"])
+    ["canis_latrans"] = @subject.complete("rabbitmqctl", ["canis_la"])
+    ["canis_aureus"] = @subject.complete("rabbitmqctl", ["canis_a"])
+    ["canis_aureus"] = @subject.complete("rabbitmqctl", ["--node", "foo", "--quet", "canis_a"])
   end
 
   test "Auto-completes default options if command is not specified" do
-    ["--vhost"] = @subject.complete("rabbitmqctl", "--vh")
+    ["--vhost"] = @subject.complete("rabbitmqctl", ["--vh"])
     ## Prints script_name as script-name
-    ["--script-name"] = @subject.complete("rabbitmqctl", "--script")
-    ["--script-name"] = @subject.complete("rabbitmqctl", "--node foo --script")
+    ["--script-name"] = @subject.complete("rabbitmqctl", ["--script"])
+    ["--script-name"] = @subject.complete("rabbitmqctl", ["--node", "foo", "--script"])
   end
 
   test "Auto-completes the command options if full command is specified" do
-    ["--colour", "--dingo", "--dog"] = @subject.complete("rabbitmqctl", "canis_lupus -")
-    ["--colour", "--dingo", "--dog"] = @subject.complete("rabbitmqctl", "canis_lupus --")
-    ["--dingo", "--dog"] = @subject.complete("rabbitmqctl", "canis_lupus --d")
+    ["--colour", "--dingo", "--dog"] = @subject.complete("rabbitmqctl", ["canis_lupus", "-"])
+    ["--colour", "--dingo", "--dog"] = @subject.complete("rabbitmqctl", ["canis_lupus", "--"])
+    ["--dingo", "--dog"] = @subject.complete("rabbitmqctl", ["canis_lupus", "--d"])
   end
 
   test "Auto-completes scoped command" do
-    ["enable"] = @subject.complete("rabbitmq-plugins", "enab")
+    ["enable"] = @subject.complete("rabbitmq-plugins", ["enab"])
+    scopes = Application.get_env(:rabbitmqctl, :scopes)
+    scopes_with_wolf = Keyword.put(scopes, :rabbitmq_wolf, :wolf)
+    Application.put_env(:rabbitmqctl, :scopes, scopes_with_wolf)
+    on_exit(fn() ->
+      Application.put_env(:rabbitmqctl, :scopes, scopes)
+    end)
+
+    ["canis_aureus", "canis_latrans", "canis_lupus"] = @subject.complete("rabbitmq_wolf", ["canis"])
   end
 
   test "Auto-completes scoped command with --script-name flag" do
-    ["enable"] = @subject.complete("rabbitmqctl", "--script-name rabbitmq-plugins enab")
+    ["enable"] = @subject.complete("rabbitmqctl", ["--script-name", "rabbitmq-plugins", "enab"])
   end
 end
 

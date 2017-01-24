@@ -27,12 +27,12 @@ defmodule RabbitMQCtl do
   @type options() :: Map.t
   @type command_result() :: {:error, ExitCodes.exit_code, term()} | term()
 
-  def main(["--auto-complete", str]) do
-    case extract_auto_complete_args(str) do
-      #Script name is not supported
-      nil -> :ok;
-      {script_name, args_string} -> auto_complete(script_name, args_string)
-    end
+  def main(["--auto-complete" | []]) do
+    handle_shutdown(:ok)
+  end
+  def main(["--auto-complete", script_name | args]) do
+    script_basename = Path.basename(script_name)
+    auto_complete(script_basename, args)
   end
   def main(unparsed_command) do
     unparsed_command
@@ -91,22 +91,8 @@ defmodule RabbitMQCtl do
     exit_program(ExitCodes.exit_ok)
   end
 
-  def extract_auto_complete_args(str) do
-    Application.get_env(:rabbitmqctl, :scopes, [])
-    |> Enum.reduce(nil,
-      fn({key, _}, nil) ->
-        script_name = to_string(key)
-        case String.split(str, script_name <> " ", parts: 2) do
-          [_path, args] -> {script_name, args}
-          [_]           -> nil
-        end;
-      # Skip remaining script names
-      (_, val) -> val
-      end)
-  end
-
-  def auto_complete(script_name, str) do
-    Rabbitmq.CLI.AutoComplete.complete(script_name, str)
+  def auto_complete(script_name, args) do
+    Rabbitmq.CLI.AutoComplete.complete(script_name, args)
     |> Stream.map(&IO.puts/1) |> Stream.run
     exit_program(ExitCodes.exit_ok)
   end

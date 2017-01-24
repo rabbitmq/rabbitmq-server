@@ -165,11 +165,16 @@ defmodule RabbitMQCtlTest do
 ## ------------------------- Auto-complete ------------------------------------
 
   test "rabbitmqctl auto-completes commands" do
-    check_output(["--auto-complete", "rabbitmqctl list_q"], "list_queues\n")
-    check_output(["--auto-complete", "/usr/bin/rabbitmqctl list_q"], "list_queues\n")
-    check_output(["--auto-complete", "/my/custom/path/rabbitmqctl list_q"], "list_queues\n")
-    check_output(["--auto-complete", "rabbitmq-plugins enab"], "enable\n")
-    check_output(["--auto-complete", "/path/to/rabbitmq-plugins enab"], "enable\n")
+    check_output(["--auto-complete", "rabbitmqctl", "list_q"], "list_queues\n")
+    check_output(["--auto-complete", "/usr/bin/rabbitmqctl", "list_q"], "list_queues\n")
+    check_output(["--auto-complete", "/my/custom/path/rabbitmqctl", "list_q"], "list_queues\n")
+    check_output(["--auto-complete", "rabbitmq-plugins", "enab"], "enable\n")
+    check_output(["--auto-complete", "/path/to/rabbitmq-plugins", "enab"], "enable\n")
+  end
+
+  test "invalid script name does not autocomplete" do
+    check_output(["--auto-complete", "rabbitmqinvalid list"], "")
+    check_output(["--auto-complete", "rabbitmqinvalid --script-name rabbitmqctl list"], "")
   end
 
   defp check_output(cmd, out) do
