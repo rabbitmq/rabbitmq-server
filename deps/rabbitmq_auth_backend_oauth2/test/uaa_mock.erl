@@ -113,5 +113,6 @@ response() ->
                        {<<"scope">>, [<<"rabbitmq.configure:vhost/foo">>,
                                       <<"rabbitmq.write:vhost/foo">>,
                                       <<"rabbitmq.read:vhost/foo">>,
-                                      <<"rabbitmq.read:vhost/bar">>]}
+                                      <<"rabbitmq.read:vhost/bar">>,
+                                      <<"rabbitmq.read:vhost/bar/%23%2Ffoo">>]}
                       ]).

@@ -31,11 +31,12 @@ Then you can use `access_tokens` acquired from UAA as username to authenticate i
 
 Scopes define token permissions for rabbitmq resources.
 
-Current scope format is `<permission>:<vhost_pattern>/<name_pattern>`, where
+Current scope format is `<permission>:<vhost_pattern>/<name_pattern>[/<routing_key_pattern>]`, where
 
  * `<permission>` is an access permission (`configure`, `read`, or `write`)
  * `<vhost_pattern>` is a wildcard pattern for vhosts, token has acces to.
  * `<name_pattern>` is a wildcard pattern for resource name
+ * `<routing_key_pattern>` is an optional wildcard pattern for routing key in topic authorization
 
 Wildcard patterns are strings with optional wildcard symbols `*` that match
 any sequence of characters.

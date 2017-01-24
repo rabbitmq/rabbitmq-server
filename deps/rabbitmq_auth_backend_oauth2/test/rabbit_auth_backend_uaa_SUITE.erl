@@ -126,7 +126,21 @@ test_token(Config) ->
               #resource{virtual_host = <<"vhost">>,
                         kind = custom,
                         name = <<"bar">>},
-              write).
+              write),
+    true = rabbit_auth_backend_uaa:check_topic_access(
+              User,
+              #resource{virtual_host = <<"vhost">>,
+                        kind = topic,
+                        name = <<"bar">>},
+              read,
+              #{routing_key => <<"#/foo">>}),
+    false = rabbit_auth_backend_uaa:check_topic_access(
+              User,
+              #resource{virtual_host = <<"vhost">>,
+                        kind = topic,
+                        name = <<"bar">>},
+              read,
+              #{routing_key => <<"foo/#">>}).
 
 test_wildcard(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_uaa_mock),

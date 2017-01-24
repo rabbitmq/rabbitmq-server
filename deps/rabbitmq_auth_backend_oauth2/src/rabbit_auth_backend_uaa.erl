@@ -69,6 +69,13 @@ check_resource_access(#auth_user{username = Username}, Resource, Permission) ->
                     rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
                end).
 
+check_topic_access(#auth_user{username = Username}, Resource, Permission, Context) ->
+    with_token(Username,
+               fun(UserData) ->
+                    Scopes = get_scopes(UserData),
+                    rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
+               end).
+
 %%--------------------------------------------------------------------
 
 with_token(Token, Fun) ->

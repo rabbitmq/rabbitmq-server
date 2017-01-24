@@ -16,7 +16,7 @@
 
 -module(rabbit_oauth2_scope).
 
--export([vhost_access/2, resource_access/3]).
+-export([vhost_access/2, resource_access/3, topic_access/4]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -26,7 +26,7 @@
 -spec vhost_access(binary(), [binary()]) -> boolean().
 vhost_access(VHost, Scopes) ->
     lists:any(
-        fun({#resource{virtual_host = ScopeVHost}, _}) ->
+        fun({ScopeVHost, _, _, _}) ->
             wildcard:match(VHost, ScopeVHost)
         end,
         get_scope_permissions(Scopes)).
@@ -35,10 +35,24 @@ vhost_access(VHost, Scopes) ->
 resource_access(#resource{virtual_host = VHost, name = Name},
                 Permission, Scopes) ->
     lists:any(
-        fun({#resource{virtual_host = ScopeVHost, name = ScopeName}, Perm}) ->
+        fun({ScopeVHost, ScopeName, _, ScopePermission}) ->
             wildcard:match(VHost, ScopeVHost) andalso
             wildcard:match(Name, ScopeName) andalso
-            Permission =:= Perm
+            Permission =:= ScopePermission
+        end,
+        get_scope_permissions(Scopes)).
+
+topic_access(#resource{virtual_host = VHost, name = ExchangeName},
+             Permission,
+             #{routing_key := RoutingKey},
+             Scopes) ->
+    lists:any(
+        fun({ScopeVHost, ScopeExchangeName, ScopeRoutingKey, ScopePermission}) ->
+            is_binary(ScopeRoutingKey) andalso
+            wildcard:match(VHost, ScopeVHost) andalso
+            wildcard:match(ExchangeName, ScopeExchangeName) andalso
+            wildcard:match(RoutingKey, ScopeRoutingKey) andalso
+            Permission =:= ScopePermission
         end,
         get_scope_permissions(Scopes)).
 
@@ -68,11 +82,14 @@ parse_permission_pattern(<<"configure:", ResourcePatternBin/binary>>) ->
 parse_permission_pattern(_Other) ->
     ignore.
 
--spec parse_resource_pattern(binary(), permission()) -> {rabbit_types:r(pattern), permission()}.
+-spec parse_resource_pattern(binary(), permission()) ->
+    {rabbit_types:vhost(), binary(), binary() | none, permission()}.
 parse_resource_pattern(Pattern, Permission) ->
-    case binary:split(Pattern, <<"/">>) of
+    case binary:split(Pattern, <<"/">>, [global]) of
         [VhostPattern, NamePattern] ->
-            {rabbit_misc:r(VhostPattern, pattern, NamePattern), Permission};
+            {VhostPattern, NamePattern, none, Permission};
+        [VhostPattern, NamePattern, RoutingKeyPattern] ->
+            {VhostPattern, NamePattern, RoutingKeyPattern, Permission};
         _Other -> ignore
     end.
 
