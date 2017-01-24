@@ -4,7 +4,7 @@ if which rabbitmqctl > /dev/null; then
           COMPREPLY=()
           local LANG=en_US.UTF-8
           local word="${COMP_WORDS[COMP_CWORD]}"
-          local completions="$(/usr/lib/rabbitmq/bin/rabbitmqctl --auto-complete "$COMP_LINE")"
+          local completions="$(/usr/lib/rabbitmq/bin/rabbitmqctl --auto-complete $COMP_LINE)"
           COMPREPLY=( $(compgen -W "$completions" -- "$word") )
         }
 
@@ -15,7 +15,7 @@ if which rabbitmqctl > /dev/null; then
           local LANG=en_US.UTF-8
           read -cl a
           word="$1"
-          completions="$(/usr/lib/rabbitmq/bin/rabbitmqctl --auto-complete "${a}")"
+          completions="$(/usr/lib/rabbitmq/bin/rabbitmqctl --auto-complete ${a})"
           reply=( "${(ps:\n:)completions}" )
         }
 
