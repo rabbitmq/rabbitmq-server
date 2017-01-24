@@ -45,6 +45,10 @@ defmodule AutoCompleteTest do
   test "Auto-completes scoped command" do
     ["enable"] = @subject.complete("rabbitmq-plugins", "enab")
   end
+
+  test "Auto-completes scoped command with --script-name flag" do
+    ["enable"] = @subject.complete("rabbitmqctl", "--script-name rabbitmq-plugins enab")
+  end
 end
 
 defmodule RabbitMQ.CLI.Wolf.Commands.CanisLupusCommand do
