@@ -312,9 +312,9 @@ install-bin: install-scripts install-autocomplete-scripts
 install-autocomplete-scripts:
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)
 	$(inst_verbose) for script in $(AUTOCOMPLETE_SCRIPTS); do \
-		cp "$(DEPS_DIR)/rabbitmq_server_release/scripts/$$script" \
-			"$(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)/sbin"; \
-		chmod 0755 "$(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)/sbin/$$script"; \
+		cp "scripts/$$script" \
+			"$(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)" && \
+		chmod 0755 "$(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)/$$script"; \
 	done
 
 install-man: manpages
