@@ -22,7 +22,7 @@ defmodule ForgetClusterNodeCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    node = get_rabbit_hostname
+    node = get_rabbit_hostname()
     :net_kernel.connect_node(node)
 
     start_rabbitmq_app
@@ -45,7 +45,7 @@ defmodule ForgetClusterNodeCommandTest do
   end
 
   setup context do
-    {:ok, opts: Map.merge(context[:opts], %{node: get_rabbit_hostname})
+    {:ok, opts: Map.merge(context[:opts], %{node: get_rabbit_hostname()})
     }
   end
 

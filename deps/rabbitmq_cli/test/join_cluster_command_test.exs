@@ -22,13 +22,13 @@ defmodule JoinClusterCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     start_rabbitmq_app
 
     on_exit([], fn ->
       start_rabbitmq_app
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -37,7 +37,7 @@ defmodule JoinClusterCommandTest do
 
   setup do
     {:ok, opts: %{
-      node: get_rabbit_hostname,
+      node: get_rabbit_hostname(),
       disc: true,
       ram: false,
     }}
@@ -107,7 +107,7 @@ defmodule JoinClusterCommandTest do
 
   test "banner", context do
     assert @command.banner(["a"], context[:opts]) =~
-      ~r/Clustering node #{get_rabbit_hostname} with a/
+      ~r/Clustering node #{get_rabbit_hostname()} with a/
   end
 
   test "output mnesia is running error", context do

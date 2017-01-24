@@ -22,10 +22,10 @@ defmodule SetClusterNameCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -33,7 +33,7 @@ defmodule SetClusterNameCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "shows up in help" do

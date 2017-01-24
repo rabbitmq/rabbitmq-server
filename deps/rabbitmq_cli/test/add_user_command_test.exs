@@ -22,10 +22,10 @@ defmodule AddUserCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -34,7 +34,7 @@ defmodule AddUserCommandTest do
 
   setup context do
     on_exit(context, fn -> delete_user(context[:user]) end)
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: on an inappropriate number of arguments, validate should return an arg count error" do

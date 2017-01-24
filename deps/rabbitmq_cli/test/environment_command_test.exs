@@ -22,10 +22,10 @@ defmodule EnvironmentCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -33,7 +33,7 @@ defmodule EnvironmentCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: argument count validates" do
@@ -41,7 +41,7 @@ defmodule EnvironmentCommandTest do
     assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
-  @tag target: get_rabbit_hostname
+  @tag target: get_rabbit_hostname()
   test "run: environment request on a named, active RMQ node is successful", context do
     assert @command.run([], context[:opts])[:kernel] != nil
     assert @command.run([], context[:opts])[:rabbit] != nil
@@ -57,6 +57,6 @@ defmodule EnvironmentCommandTest do
 
   test "banner", context do
     assert @command.banner([], context[:opts])
-      =~ ~r/Application environment of node #{get_rabbit_hostname}/
+      =~ ~r/Application environment of node #{get_rabbit_hostname()}/
   end
 end

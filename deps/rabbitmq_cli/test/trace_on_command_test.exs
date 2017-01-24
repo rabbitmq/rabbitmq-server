@@ -25,12 +25,12 @@ defmodule TraceOnCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     add_vhost(@test_vhost)
 
     on_exit([], fn ->
       delete_vhost(@test_vhost)
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -39,12 +39,12 @@ defmodule TraceOnCommandTest do
 
   setup context do
     on_exit(context, fn -> trace_off(context[:vhost]) end)
-    {:ok, opts: %{node: get_rabbit_hostname, vhost: context[:vhost]}}
+    {:ok, opts: %{node: get_rabbit_hostname(), vhost: context[:vhost]}}
   end
 
   test "merge_defaults: on an active node, trace_on command works on default" do
-    opts = %{node: get_rabbit_hostname}
-    opts_with_vhost = %{node: get_rabbit_hostname, vhost: "/"}
+    opts = %{node: get_rabbit_hostname()}
+    opts_with_vhost = %{node: get_rabbit_hostname(), vhost: "/"}
 
     assert @command.merge_defaults([], opts) == {[], opts_with_vhost}
 

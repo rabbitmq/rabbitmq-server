@@ -23,17 +23,17 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     reset_vm_memory_high_watermark()
 
     on_exit([], fn ->
       reset_vm_memory_high_watermark()
 
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: a string returns an error", context do
@@ -149,23 +149,23 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
 
   test "banner: absolute memory request prints info message", context do
     assert @command.banner(["absolute", "10"], context[:opts])
-      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to 10 bytes .../
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname()} to 10 bytes .../
 
     assert @command.banner(["absolute", "-10"], context[:opts])
-      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to -10 bytes .../
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname()} to -10 bytes .../
 
     assert @command.banner(["absolute", "sandwich"], context[:opts])
-      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to sandwich bytes .../
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname()} to sandwich bytes .../
   end
 
   test "banner, relative memory", context do
     assert @command.banner(["0.7"], context[:opts])
-      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to 0.7 .../
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname()} to 0.7 .../
 
     assert @command.banner(["-0.7"], context[:opts])
-      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to -0.7 .../
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname()} to -0.7 .../
 
     assert @command.banner(["sandwich"], context[:opts])
-      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to sandwich .../
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname()} to sandwich .../
   end
 end

@@ -34,7 +34,7 @@ defmodule HelpersTest do
     :ok
   end
 
-## --------------------- get_rabbit_hostname/0 tests -------------------------
+## --------------------- get_rabbit_hostname()/0 tests -------------------------
 
 test "RabbitMQ hostname is properly formed" do
     assert @subject.get_rabbit_hostname() |> Atom.to_string =~ ~r/rabbit@\w+/

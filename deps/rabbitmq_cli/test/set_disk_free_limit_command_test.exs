@@ -24,12 +24,12 @@ defmodule SetDiskFreeLimitCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     set_disk_free_limit(@default_limit)
 
     on_exit([], fn ->
       set_disk_free_limit(@default_limit)
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -39,7 +39,7 @@ defmodule SetDiskFreeLimitCommandTest do
     context[:tag] # silences warnings
     on_exit([], fn -> set_disk_free_limit(@default_limit) end)
 
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: an invalid number of arguments results in arg count errors" do
@@ -162,23 +162,23 @@ defmodule SetDiskFreeLimitCommandTest do
 
   test "banner: returns absolute message", context do
     assert @command.banner(["10"], context[:opts])
-      =~ ~r/Setting disk free limit on #{get_rabbit_hostname} to 10 bytes .../
+      =~ ~r/Setting disk free limit on #{get_rabbit_hostname()} to 10 bytes .../
 
     assert @command.banner(["-10"], context[:opts])
-      =~ ~r/Setting disk free limit on #{get_rabbit_hostname} to -10 bytes .../
+      =~ ~r/Setting disk free limit on #{get_rabbit_hostname()} to -10 bytes .../
 
     assert @command.banner(["sandwich"], context[:opts])
-      =~ ~r/Setting disk free limit on #{get_rabbit_hostname} to sandwich bytes .../
+      =~ ~r/Setting disk free limit on #{get_rabbit_hostname()} to sandwich bytes .../
   end
 
   test "banner: returns memory-relative message", context do
     assert @command.banner(["mem_relative", "1.3"], context[:opts])
-      =~ ~r/Setting disk free limit on #{get_rabbit_hostname} to 1\.3 times the total RAM \.\.\./
+      =~ ~r/Setting disk free limit on #{get_rabbit_hostname()} to 1\.3 times the total RAM \.\.\./
 
     assert @command.banner(["mem_relative", "-1.3"], context[:opts])
-      =~ ~r/Setting disk free limit on #{get_rabbit_hostname} to -1\.3 times the total RAM \.\.\./
+      =~ ~r/Setting disk free limit on #{get_rabbit_hostname()} to -1\.3 times the total RAM \.\.\./
 
     assert @command.banner(["mem_relative", "sandwich"], context[:opts])
-      =~ ~r/Setting disk free limit on #{get_rabbit_hostname} to sandwich times the total RAM \.\.\./
+      =~ ~r/Setting disk free limit on #{get_rabbit_hostname()} to sandwich times the total RAM \.\.\./
   end
 end

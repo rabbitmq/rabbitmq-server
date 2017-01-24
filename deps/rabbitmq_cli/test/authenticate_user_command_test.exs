@@ -24,10 +24,10 @@ defmodule AuthenticateUserCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -37,7 +37,7 @@ defmodule AuthenticateUserCommandTest do
   setup context do
     add_user(@user, @password)
     on_exit(context, fn -> delete_user(@user) end)
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: invalid number of arguments returns a validation failure" do

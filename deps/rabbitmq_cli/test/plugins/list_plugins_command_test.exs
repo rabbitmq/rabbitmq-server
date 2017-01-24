@@ -28,7 +28,7 @@ defmodule ListPluginsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    node = get_rabbit_hostname
+    node = get_rabbit_hostname()
     :net_kernel.connect_node(node)
     {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
                                                 :application, :get_env,
@@ -47,7 +47,7 @@ defmodule ListPluginsCommandTest do
              enabled: false, implicitly_enabled: false}
 
     on_exit(fn ->
-      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname, opts)
+      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname(), opts)
     end)
 
     :erlang.disconnect_node(node)
@@ -57,20 +57,20 @@ defmodule ListPluginsCommandTest do
   end
 
   setup context do
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],
                         :online,
-                        get_rabbit_hostname,
+                        get_rabbit_hostname(),
                         context[:opts])
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
     end)
 
     {
       :ok,
       opts: Map.merge(context[:opts], %{
-              node: get_rabbit_hostname,
+              node: get_rabbit_hostname(),
             })
     }
   end
@@ -258,7 +258,7 @@ defmodule ListPluginsCommandTest do
     opts = get_opts_with_plugins_directories(context, [plugins_directory_01])
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
     set_enabled_plugins([:mock_rabbitmq_plugins_02, :rabbitmq_federation, :rabbitmq_stomp],
-                        :online, get_rabbit_hostname, opts)
+                        :online, get_rabbit_hostname(), opts)
     assert %{status: :running,
              plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
                        %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
