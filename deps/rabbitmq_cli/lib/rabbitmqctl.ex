@@ -28,7 +28,11 @@ defmodule RabbitMQCtl do
   @type command_result() :: {:error, ExitCodes.exit_code, term()} | term()
 
   def main(["--auto-complete", str]) do
-    auto_complete(str)
+    case extract_auto_complete_args(str) do
+      #Script name is not supported
+      nil         -> :ok;
+      args_string -> auto_complete(args_string)
+    end
   end
   def main(unparsed_command) do
     unparsed_command
@@ -85,6 +89,21 @@ defmodule RabbitMQCtl do
   end
   def handle_shutdown(_) do
     exit_program(ExitCodes.exit_ok)
+  end
+
+  def extract_auto_complete_args(str) do
+    script_names = Application.get_env(:rabbitmqctl, :scopes, []) |> Keyword.keys
+    script_names
+    |> Enum.reduce(nil,
+      fn(key, nil) ->
+        script_name = to_string(key)
+        case String.split(str, script_name <> " ", parts: 2) do
+          [_path, args] -> args
+          [_]           -> nil
+        end;
+      # Skip remaining script names
+      (key, val) -> val
+      end)
   end
 
   def auto_complete(str) do
