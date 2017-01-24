@@ -588,7 +588,9 @@ Content-Length: 0</pre>
         <td class="path">/api/bindings/<i>vhost</i>/e/<i>exchange</i>/q/<i>queue</i>/<i>props</i></td>
         <td>An individual binding between an exchange and a queue.
         The <i>props</i> part of the URI is a "name" for the binding
-        composed of its routing key and a hash of its arguments.</td>
+        composed of its routing key and a hash of its
+        arguments. <i>props</i> is the field named "properties_key"
+        from a bindings listing response.</td>
       </tr>
       <tr>
         <td>X</td>
