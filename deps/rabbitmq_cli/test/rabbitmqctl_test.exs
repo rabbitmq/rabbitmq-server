@@ -23,10 +23,10 @@ defmodule RabbitMQCtlTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -45,7 +45,7 @@ defmodule RabbitMQCtlTest do
     command = ["list_users", "-t", "0"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_tempfail)
-    end) =~ ~r/Error: operation list_users on node #{get_rabbit_hostname} timed out. Timeout: 0/
+    end) =~ ~r/Error: operation list_users on node #{get_rabbit_hostname()} timed out. Timeout: 0/
   end
 
   test "print an authentication error message when auth is refused" do
@@ -130,7 +130,7 @@ defmodule RabbitMQCtlTest do
 
   test "an empty node option is filled with the default rabbit node" do
     assert RabbitMQCtl.merge_all_defaults(%{})[:node] ==
-      TestHelper.get_rabbit_hostname
+      TestHelper.get_rabbit_hostname()
   end
 
   test "a non-empty node option is not overwritten" do
@@ -160,5 +160,21 @@ defmodule RabbitMQCtlTest do
     assert capture_io(:stderr, fn ->
       error_check(command2, exit_usage)
     end) =~ ~r/Error: Invalid options for this command/
+  end
+
+## ------------------------- Auto-complete ------------------------------------
+
+  test "rabbitmqctl auto-completes commands" do
+    check_output(["--auto-complete", "rabbitmqctl list_q"], "list_queues\n")
+    check_output(["--auto-complete", "/usr/bin/rabbitmqctl list_q"], "list_queues\n")
+    check_output(["--auto-complete", "/my/custom/path/rabbitmqctl list_q"], "list_queues\n")
+    check_output(["--auto-complete", "rabbitmq-plugins enab"], "enable\n")
+    check_output(["--auto-complete", "/path/to/rabbitmq-plugins enab"], "enable\n")
+  end
+
+  defp check_output(cmd, out) do
+    assert capture_io(fn ->
+      error_check(cmd, exit_ok())
+    end) == out
   end
 end

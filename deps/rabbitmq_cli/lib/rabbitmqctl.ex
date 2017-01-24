@@ -30,8 +30,8 @@ defmodule RabbitMQCtl do
   def main(["--auto-complete", str]) do
     case extract_auto_complete_args(str) do
       #Script name is not supported
-      nil         -> :ok;
-      args_string -> auto_complete(args_string)
+      nil -> :ok;
+      {script_name, args_string} -> auto_complete(script_name, args_string)
     end
   end
   def main(unparsed_command) do
@@ -92,22 +92,21 @@ defmodule RabbitMQCtl do
   end
 
   def extract_auto_complete_args(str) do
-    script_names = Application.get_env(:rabbitmqctl, :scopes, []) |> Keyword.keys
-    script_names
+    Application.get_env(:rabbitmqctl, :scopes, [])
     |> Enum.reduce(nil,
-      fn(key, nil) ->
+      fn({key, _}, nil) ->
         script_name = to_string(key)
         case String.split(str, script_name <> " ", parts: 2) do
-          [_path, args] -> args
+          [_path, args] -> {script_name, args}
           [_]           -> nil
         end;
       # Skip remaining script names
-      (_key, val) -> val
+      (_, val) -> val
       end)
   end
 
-  def auto_complete(str) do
-    Rabbitmq.CLI.AutoComplete.complete(str)
+  def auto_complete(script_name, str) do
+    Rabbitmq.CLI.AutoComplete.complete(script_name, str)
     |> Stream.map(&IO.puts/1) |> Stream.run
     exit_program(ExitCodes.exit_ok)
   end
