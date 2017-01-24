@@ -51,14 +51,15 @@ groups() ->
                      open_close_connection,
                      basic_roundtrip,
                      split_transfer,
-                     transfer_unsettled
+                     transfer_unsettled,
+                     subscribe
                     ]},
      {activemq, [], [
                      open_close_connection,
                      basic_roundtrip,
                      split_transfer,
                      transfer_unsettled,
-                     send_multiple
+                     subscribe
                     ]},
      {mock, [], [
                  insufficient_credit
@@ -205,17 +206,25 @@ transfer_unsettled(Config) ->
     ok = amqp10_client_connection:close(Connection),
     ?assertEqual([Data], amqp10_msg:body(OutMsg)).
 
-send_multiple(Config) ->
+subscribe(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    QueueName = <<"test-sub">>,
     {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
     {ok, Session} = amqp10_client_session:'begin'(Connection),
-    {ok, Sender} = amqp10_client_link:sender(Session, <<"multi-sender">>,
-                                             <<"test">>),
+    {ok, Sender} = amqp10_client_link:sender(Session, <<"sub-sender">>,
+                                             QueueName),
     Msg1 = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
     Msg2 = amqp10_msg:new(<<"my-tag2">>, <<"banana">>, true),
     ok = amqp10_client_link:send(Sender, Msg1),
     ok = amqp10_client_link:send(Sender, Msg2),
+    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"sub-receiver">>,
+                                                 QueueName, unsettled),
+    ok = amqp10_client_link:flow_credit(Receiver, 2),
+
+    ok = receive_one(Receiver),
+    ok = receive_one(Receiver),
+    timeout = receive_one(Receiver),
 
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection).
@@ -261,3 +270,18 @@ insufficient_credit(Config) ->
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection),
     ok.
+
+
+
+
+%%% HELPERS
+
+
+receive_one(Receiver) ->
+    Handle = amqp10_client_link:link_handle(Receiver),
+    receive
+        {message, Handle, Msg} ->
+            amqp10_client_link:accept(Receiver, Msg)
+    after 2000 ->
+          timeout
+    end.

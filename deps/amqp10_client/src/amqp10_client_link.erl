@@ -11,7 +11,9 @@
          send/2,
          get_one/1,
          get_one/2,
-         accept/2
+         accept/2,
+         flow_credit/2,
+         link_handle/1
         ]).
 
 
@@ -23,6 +25,8 @@
 
 -export_type([link_ref/0
               ]).
+
+link_handle(#link_ref{link_handle = Handle}) -> Handle.
 
 get_one(LinkRef) ->
     get_one(LinkRef, ?DEFAULT_TIMEOUT).
@@ -38,6 +42,12 @@ get_one(#link_ref{role = receiver, session = Session, link_handle = Handle},
     after Timeout ->
               {error, timeout}
     end.
+
+-spec flow_credit(link_ref(), non_neg_integer()) -> ok.
+flow_credit(#link_ref{role = receiver, session = Session,
+                      link_handle = Handle}, Credit) ->
+    Flow = #'v1_0.flow'{link_credit = {uint, Credit}},
+    ok = amqp10_client_session:flow(Session, Handle, Flow).
 
 
 % Returns ok for "async" transfers when messages are send with settled=true
