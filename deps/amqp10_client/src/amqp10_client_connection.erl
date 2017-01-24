@@ -9,6 +9,8 @@
 -export([
          open/1,
          open/2,
+         open_sync/1,
+         open_sync/2,
          close/1
         ]).
 
@@ -41,10 +43,11 @@
     #{container_id => binary(),
       address => inet:socket_address() | inet:hostname(),
       port => inet:port_number(),
+      notify => pid(),
       max_frame_size => non_neg_integer(), % TODO constrain to large than 512
       outgoing_max_frame_size => non_neg_integer() | undefined,
       sasl => none | anon | {plain, binary(), binary()} % {plain, User, Pwd}
-      }.
+  }.
 
 -record(state,
         {next_channel = 1 :: pos_integer(),
@@ -58,6 +61,8 @@
 
 -export_type([connection_config/0]).
 
+-define(DEFAULT_TIMEOUT, 5000).
+
 %% -------------------------------------------------------------------
 %% Public API.
 %% -------------------------------------------------------------------
@@ -68,6 +73,20 @@
         inet:port_number()) -> supervisor:startchild_ret().
 open(Addr, Port) ->
     open(#{address => Addr, port => Port}).
+
+-spec open_sync(connection_config()) ->
+    supervisor:startchild_ret() | connection_timeout.
+open_sync(Config) ->
+    open_sync(Config, ?DEFAULT_TIMEOUT).
+
+-spec open_sync(connection_config(), timeout()) ->
+    supervisor:startchild_ret() | connection_timeout.
+open_sync(Config, Timeout) ->
+    {ok, Conn} = open(Config),
+    receive
+        {opened, Conn} -> {ok, Conn}
+    after Timeout -> connection_timeout
+    end.
 
 -spec open(connection_config()) -> supervisor:startchild_ret().
 open(Config) ->
@@ -182,6 +201,7 @@ open_sent(
               _ = gen_fsm:reply(From, Ret),
               State2
       end, State, PendingSessionReqs),
+    ok = notify_opened(Config),
     {next_state, opened, State3}.
 
 opened(close, State) ->
@@ -310,6 +330,11 @@ send(Record, FrameType, #state{socket = Socket}) ->
     Encoded = rabbit_amqp1_0_framing:encode_bin(Record),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, FrameType, Encoded),
     gen_tcp:send(Socket, Frame).
+
+notify_opened(#{notify := Pid}) ->
+    Pid ! {opened, self()},
+    ok;
+notify_opened(_Config) -> ok.
 
 unpack(V) -> amqp10_client_types:unpack(V).
 

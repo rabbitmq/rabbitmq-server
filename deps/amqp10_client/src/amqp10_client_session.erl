@@ -412,6 +412,7 @@ mapped({disposition, First, Last, Settled, DeliveryState}, _From,
     Res = send(Disposition, State),
 
     {reply, Res, mapped, State#state{incoming_unsettled = Unsettled}};
+
 mapped({attach, Attach}, From, State) ->
     State1 = send_attach(fun send/2, Attach, From, State),
     {next_state, mapped, State1}.

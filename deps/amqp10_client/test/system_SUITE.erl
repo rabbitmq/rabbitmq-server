@@ -142,13 +142,10 @@ open_close_connection(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     OpnConf = #{address => Hostname, port => Port,
+                notify => self(),
                 container_id => <<"open_close_connection_container">>},
     {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
-    {ok, Connection2} = amqp10_client_connection:open(OpnConf),
-    {ok, Session} = amqp10_client_session:begin_sync(Connection),
-    {ok, Session2} = amqp10_client_session:begin_sync(Connection2),
-    ok = amqp10_client_session:'end'(Session),
-    ok = amqp10_client_session:'end'(Session2),
+    {ok, Connection2} = amqp10_client_connection:open_sync(OpnConf),
     ok = amqp10_client_connection:close(Connection2),
     ok = amqp10_client_connection:close(Connection).
 
