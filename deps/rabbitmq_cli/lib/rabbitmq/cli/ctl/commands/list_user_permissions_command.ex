@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
-  @flags []
+
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], _), do: :ok

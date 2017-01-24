@@ -17,7 +17,7 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  @flags []
+
 
   def usage, do: "purge_queue <queue>"
 

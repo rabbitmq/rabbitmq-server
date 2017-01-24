@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults([], opts), do: merge_defaults([".*"], opts)
-  def merge_defaults(args, opts), do: {args, Map.merge(default_opts, opts)}
+  def merge_defaults(args, opts), do: {args, Map.merge(default_opts(), opts)}
 
   def switches(), do: [verbose: :boolean,
                        minimal: :boolean,

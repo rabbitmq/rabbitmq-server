@@ -21,7 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
-  @flags []
+
   @info_keys ~w(name tracing)a
 
   def scopes(), do: [:ctl, :diagnostics]

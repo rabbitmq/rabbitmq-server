@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
-  @flags []
+
   def merge_defaults([], opts) do
     {[], opts}
   end

@@ -19,7 +19,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
-  @flags []
   def merge_defaults(args, opts), do: {args, opts}
 
   def scopes(), do: [:ctl, :diagnostics]

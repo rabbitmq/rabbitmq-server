@@ -20,7 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  @flags [:vhost]
+
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}

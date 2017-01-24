@@ -45,7 +45,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       end
   end
   def merge_defaults([_|_] = args, opts) do
-    {args, Map.merge(default_opts, opts)}
+    {args, Map.merge(default_opts(), opts)}
   end
   def merge_defaults([], opts) do
       merge_defaults(~w(name messages), opts)

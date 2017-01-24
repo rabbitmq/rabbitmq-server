@@ -102,7 +102,7 @@ defmodule RabbitMQCtl do
           [_]           -> nil
         end;
       # Skip remaining script names
-      (key, val) -> val
+      (_key, val) -> val
       end)
   end
 
@@ -119,7 +119,7 @@ defmodule RabbitMQCtl do
     |> merge_defaults_longnames
   end
 
-  defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname}, opts)
+  defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname()}, opts)
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
@@ -188,11 +188,11 @@ defmodule RabbitMQCtl do
     module_name = String.to_atom("RabbitMQ.CLI.Printers." <> Macro.camelize(printer))
     case Code.ensure_loaded(module_name) do
       {:module, _}      -> module_name;
-      {:error, :nofile} -> default_printer
+      {:error, :nofile} -> default_printer()
     end
   end
   def get_printer(_) do
-    default_printer
+    default_printer()
   end
 
   def default_printer() do

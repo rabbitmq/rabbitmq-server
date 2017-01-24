@@ -32,16 +32,16 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   def exit_tempfail, do: @exit_tempfail
   def exit_config, do: @exit_config
 
-  def exit_code_for({:validation_failure, :not_enough_args}),      do: exit_usage
-  def exit_code_for({:validation_failure, :too_many_args}),        do: exit_usage
-  def exit_code_for({:validation_failure, {:not_enough_args, _}}), do: exit_usage
-  def exit_code_for({:validation_failure, {:too_many_args, _}}),   do: exit_usage
-  def exit_code_for({:validation_failure, {:bad_argument, _}}),    do: exit_dataerr
-  def exit_code_for({:validation_failure, :bad_argument}),         do: exit_dataerr
-  def exit_code_for({:validation_failure, {:bad_option, _}}),      do: exit_usage
-  def exit_code_for({:validation_failure, _}),                     do: exit_usage
-  def exit_code_for({:badrpc, :timeout}),       do: exit_tempfail
-  def exit_code_for({:badrpc, :nodedown}),      do: exit_unavailable
-  def exit_code_for({:error, _}),               do: exit_software
+  def exit_code_for({:validation_failure, :not_enough_args}),      do: exit_usage()
+  def exit_code_for({:validation_failure, :too_many_args}),        do: exit_usage()
+  def exit_code_for({:validation_failure, {:not_enough_args, _}}), do: exit_usage()
+  def exit_code_for({:validation_failure, {:too_many_args, _}}),   do: exit_usage()
+  def exit_code_for({:validation_failure, {:bad_argument, _}}),    do: exit_dataerr()
+  def exit_code_for({:validation_failure, :bad_argument}),         do: exit_dataerr()
+  def exit_code_for({:validation_failure, {:bad_option, _}}),      do: exit_usage()
+  def exit_code_for({:validation_failure, _}),                     do: exit_usage()
+  def exit_code_for({:badrpc, :timeout}),       do: exit_tempfail()
+  def exit_code_for({:badrpc, :nodedown}),      do: exit_unavailable()
+  def exit_code_for({:error, _}),               do: exit_software()
 
 end

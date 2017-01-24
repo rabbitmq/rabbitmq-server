@@ -16,12 +16,10 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  @flags []
-
   def merge_defaults(args, opts) do
     {args, Map.merge(%{global: false, vhost: "/", per_connection_delay: 0, limit: 0}, opts)}
   end
-  
+
   def validate(args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate(args, _) when length(args) < 1, do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
@@ -59,7 +57,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def switches(), do: [global: :boolean, per_connection_delay: :integer, limit: :integer]
-  
+
   def usage, do: "close_all_connections [-p <vhost> --limit <limit>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
 
   def banner([explanation], %{node: node_name, global: true}) do
