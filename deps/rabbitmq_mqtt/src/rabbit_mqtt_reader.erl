@@ -347,6 +347,11 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
                             fun() -> emit_stats(State) end).
 
+emit_stats(State=#state{connection = undefined}) ->
+    %% Avoid emitting stats on terminate when the connection has not yet been
+    %% established, as this causes orphan entries on the stats database
+    State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
+    ensure_stats_timer(State1);
 emit_stats(State=#state{socket=Sock, connection_state=ConnState, connection=Conn}) ->
     SockInfos = case rabbit_net:getstat(Sock,
             [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
