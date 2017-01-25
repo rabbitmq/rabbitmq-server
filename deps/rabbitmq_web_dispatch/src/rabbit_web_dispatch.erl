@@ -63,17 +63,33 @@ context_selector(Prefix) ->
     end.
 
 %% Produces a handler for use with register_handler that serves up
-%% static content from a directory specified relative to the directory
-%% containing the ebin directory containing the named module's beam
-%% file.
+%% static content from a directory specified relative to the application
+%% (owning the module) priv directory, or to the directory containing
+%% the ebin directory containing the named module's beam file.
 static_context_handler(Prefix, Module, FSPath) ->
-    {file, Here} = code:is_loaded(Module),
-    ModuleRoot = filename:dirname(filename:dirname(Here)),
-    LocalPath = filename:join(ModuleRoot, FSPath),
-    cowboy_router:compile([{'_', [
-        {"/" ++ Prefix, cowboy_static, {file, LocalPath ++ "/index.html"}},
-        {"/" ++ Prefix ++ "/[...]", cowboy_static, {dir, LocalPath}}
-    ]}]).
+    FSPathInPriv = re:replace(FSPath, "^priv/?", "", [{return, list}]),
+    case application:get_application(Module) of
+        {ok, App} when FSPathInPriv =/= FSPath ->
+            %% The caller indicated a file in the application's `priv`
+            %% dir.
+            cowboy_router:compile([{'_', [
+                {"/" ++ Prefix, cowboy_static,
+                 {priv_file, App, filename:join(FSPathInPriv, "index.html")}},
+                {"/" ++ Prefix ++ "/[...]", cowboy_static,
+                 {priv_dir, App, FSPathInPriv}}
+            ]}]);
+        _ ->
+            %% The caller indicated a file we should access directly.
+            {file, Here} = code:is_loaded(Module),
+            ModuleRoot = filename:dirname(filename:dirname(Here)),
+            LocalPath = filename:join(ModuleRoot, FSPath),
+            cowboy_router:compile([{'_', [
+                {"/" ++ Prefix, cowboy_static,
+                 {file, LocalPath ++ "/index.html"}},
+                {"/" ++ Prefix ++ "/[...]", cowboy_static,
+                 {dir, LocalPath}}
+            ]}])
+    end.
 
 %% The opposite of all those register_* functions.
 unregister_context(Name) ->
