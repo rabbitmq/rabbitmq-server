@@ -25,7 +25,8 @@ remove_plugin_traces() {
 
 remove_autocomplete_script() {
     if [ -f /etc/profile.d/rabbitmqctl-autocomplete.sh ]; then
-        rm -r /etc/profile.d/rabbitmqctl-autocomplete.sh
+        rm -rf /etc/profile.d/rabbitmqctl-autocomplete.sh
+        rm -rf /usr/share/zsh/vendor-functions/_enable_rabbitmqctl_completion
     fi
 }
 

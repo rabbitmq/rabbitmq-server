@@ -73,7 +73,9 @@ install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ha_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
 install -p -D -m 0644 %{S:2} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
+
 install -p -D -m 0755 %{_rabbitmqctl_autocomplete} %{buildroot}%{_sysconfdir}/profile.d/rabbitmqctl-autocomplete.sh
+install -p -D -m 0755 scripts/zsh_autocomplete.sh %{buildroot}%{_datarootdir}/zsh/vendor-functions/_enable_rabbitmqctl_completion
 
 
 mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
@@ -203,6 +205,7 @@ fi
 %endif
 
 %{_sysconfdir}/profile.d/rabbitmqctl-autocomplete.sh
+%{_datarootdir}/zsh/vendor-functions/_enable_rabbitmqctl_completion
 
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*

@@ -40,6 +40,11 @@ chmod -R o-rwx,g-w /var/lib/rabbitmq/mnesia
 
 case "$1" in
     configure)
+        if [ -n "$ZSH_VERSION" ]; then
+            echo "Z Shell detected.
+to enable rabbitmqctl autocompletion add the following to your .zshrc file:
+autoload _enable_rabbitmqctl_completion; _enable_rabbitmqctl_completion"
+        fi
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
