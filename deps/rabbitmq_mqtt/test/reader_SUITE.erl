@@ -12,7 +12,8 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-                                block
+                                block,
+                                handle_invalid_frames
                                ]}
     ].
 
@@ -23,6 +24,13 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
+merge_app_env(Config) ->
+    rabbit_ct_helpers:merge_app_env(Config,
+                                    {rabbit, [
+                                              {collect_statistics, basic},
+                                              {collect_statistics_interval, 500}
+                                             ]}).
+
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
@@ -31,6 +39,7 @@ init_per_suite(Config) ->
                                tcp_port_mqtt_tls_extra]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
+      [ fun merge_app_env/1 ] ++
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
@@ -101,6 +110,15 @@ block(Config) ->
 
     emqttc:disconnect(C).
 
+handle_invalid_frames(Config) ->
+    N = rpc(Config, ets, info, [connection_metrics, size]),
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    {ok, C} = gen_tcp:connect("localhost", P, []),
+    Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*">>,
+    gen_tcp:send(C, Bin),
+    gen_tcp:close(C),
+    %% No new stats entries should be inserted as connection never got to initialize
+    N = rpc(Config, ets, info, [connection_metrics, size]).
 
 
 expect_publishes(_Topic, []) -> ok;
