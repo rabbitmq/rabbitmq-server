@@ -111,13 +111,14 @@ block(Config) ->
     emqttc:disconnect(C).
 
 handle_invalid_frames(Config) ->
+    N = rpc(Config, ets, info, [connection_metrics, size]),
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     {ok, C} = gen_tcp:connect("localhost", P, []),
     Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*">>,
     gen_tcp:send(C, Bin),
     gen_tcp:close(C),
-    %% Stats shouldn't be notified as connection pid is undefined
-    0 = rpc(Config, ets, info, [connection_metrics, size]).
+    %% No new stats entries should be inserted as connection never got to initialize
+    N = rpc(Config, ets, info, [connection_metrics, size]).
 
 
 expect_publishes(_Topic, []) -> ok;
