@@ -25,7 +25,68 @@
 -define(IGNORE_FIELDS, [delete_after]).
 -define(EXTRA_KEYS, [add_forward_headers, add_timestamp_header]).
 
-parse(ShovelName, Config) ->
+resolve_module(amqp091) -> rabbit_amqp0_9_1_node;
+resolve_module(amqp10) -> rabbit_amqp10_shovel.
+
+is_legacy(Config) ->
+    not proplists:is_defined(source, Config).
+
+convert_from_legacy(Config) ->
+    S = proplists:get_value(sources, Config),
+    SUris = proplists:get_value(brokers, S, [proplists:get_value(broker, S)]),
+    D = proplists:get_value(destinations, Config),
+    DUris = proplists:get_value(brokers, D, [proplists:get_value(broker, D)]),
+    Q = proplists:get_value(queue, Config),
+    DA = proplists:get_value(delete_after, Config, never),
+    Pref = proplists:get_value(prefetch_count, Config, ?DEFAULT_PREFETCH),
+    RD = proplists:get_value(reconnect_delay, Config, ?DEFAULT_RECONNECT_DELAY),
+    AckMode = proplists:get_value(ack_mode, Config, ?DEFAULT_ACK_MODE),
+    PubFields = proplists:get_value(publish_fields, Config, []),
+    PubProps = proplists:get_value(publish_properties, Config, []),
+    AFH = proplists:get_value(add_forward_headers, Config, false),
+    ATH = proplists:get_value(add_timestamp_header, Config, false),
+    [{source, [{protocol, amqp091},
+               {uris, SUris},
+               {declarations, proplists:get_value(declarations, S, [])},
+               {queue, Q},
+               {delete_after, DA},
+               {prefetch_count, Pref}]},
+     {destination, [{protocol, amqp091},
+                    {uris, DUris},
+                    {declarations, proplists:get_value(declarations, D, [])},
+                    {publish_properties, PubProps},
+                    {publish_fields, PubFields},
+                    {add_forward_headers, AFH},
+                    {add_timestamp_header, ATH}]},
+     {ack_mode, AckMode},
+     {reconnect_delay, RD}].
+
+parse(ShovelName, Config0) ->
+    case is_legacy(Config0) of
+        true ->
+            case parse_legacy(ShovelName, Config0) of
+                {error, _} = Err -> Err;
+                _ ->
+                    Config = convert_from_legacy(Config0),
+                    parse_current(ShovelName, Config)
+            end;
+        false ->
+            parse_current(ShovelName, Config0)
+    end.
+
+parse_current(ShovelName, Config) ->
+    {source, Source} = proplists:lookup(source, Config),
+    SrcMod = resolve_module(proplists:get_value(protocol, Source, amqp091)),
+    {destination, Destination} = proplists:lookup(destination, Config),
+    DstMod = resolve_module(proplists:get_value(protocol, Destination, amqp091)),
+    {ok, #{name => ShovelName,
+           ack_mode => proplists:get_value(ack_mode, Config, no_ack),
+           reconnect_delay => proplists:get_value(reconnect_delay, Config,
+                                                  ?DEFAULT_RECONNECT_DELAY),
+           source => SrcMod:parse(ShovelName, {source, Source}),
+           dest => DstMod:parse(ShovelName, {destination, Destination})}}.
+
+parse_legacy(ShovelName, Config) ->
     {ok, Defaults} = application:get_env(defaults),
     try
         {ok, parse_shovel_config_dict(
@@ -156,6 +217,8 @@ check_uri({[Uri | Uris], Acc}) ->
             throw(Err)
     end.
 
+parse_declaration({[], Acc}) ->
+    {[], Acc};
 parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
     FieldNames = try rabbit_framing_amqp_0_9_1:method_fieldnames(Method)
                  catch exit:Reason -> fail(Reason)
@@ -173,7 +236,7 @@ parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
                             {NewR, Idx + 1}
                     end, {rabbit_framing_amqp_0_9_1:method_record(Method), 2},
                     FieldNames),
-    return({Rest, [Res | Acc]});
+    parse_declaration({Rest, [Res | Acc]});
 parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
     fail({expected_method_field_list, Method, Props});
 parse_declaration({[Method | Rest], Acc}) ->

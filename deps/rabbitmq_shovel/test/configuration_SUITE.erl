@@ -37,7 +37,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
           zero_shovels,
-          invalid_configuration,
+          invalid_legacy_configuration,
+          valid_legacy_configuration,
           valid_configuration
         ]}
     ].
@@ -92,11 +93,11 @@ zero_shovels1(_Config) ->
     ok = application:stop(rabbitmq_shovel),
     passed.
 
-invalid_configuration(Config) ->
+invalid_legacy_configuration(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, invalid_configuration1, [Config]).
+      ?MODULE, invalid_legacy_configuration1, [Config]).
 
-invalid_configuration1(_Config) ->
+invalid_legacy_configuration1(_Config) ->
     %% various ways of breaking the config
     require_list_of_shovel_configurations =
         test_broken_shovel_configs(invalid_config),
@@ -215,9 +216,15 @@ test_broken_shovel_sources(Sources) ->
                                    {queue, <<"">>}]),
     Error.
 
+valid_legacy_configuration(Config) ->
+    ok = setup_legacy_shovels(Config),
+    run_valid_test(Config).
+
 valid_configuration(Config) ->
     ok = setup_shovels(Config),
+    run_valid_test(Config).
 
+run_valid_test(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
 
     #'queue.declare_ok'{ queue = Q } =
@@ -251,11 +258,11 @@ valid_configuration(Config) ->
         {#'basic.deliver' { consumer_tag = CTag, delivery_tag = AckTag,
                             routing_key = ?FROM_SHOVEL },
          #amqp_msg { payload = <<42>>,
-                     props   = #'P_basic' { 
+                     props   = #'P_basic' {
                         delivery_mode = 2,
                         content_type  = ?SHOVELLED,
                         headers       = [{<<"x-shovelled">>, _, _},
-                                         {<<"x-shovelled-timestamp">>, 
+                                         {<<"x-shovelled-timestamp">>,
                                           long, _}]}
                    }} ->
             ok = amqp_channel:call(Chan, #'basic.ack'{ delivery_tag = AckTag })
@@ -279,11 +286,16 @@ valid_configuration(Config) ->
 
     rabbit_ct_client_helpers:close_channel(Chan).
 
+setup_legacy_shovels(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, setup_legacy_shovels1, [Config]).
+
 setup_shovels(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, setup_shovels1, [Config]).
 
-setup_shovels1(Config) ->
+setup_legacy_shovels1(Config) ->
+    _ = application:stop(rabbitmq_shovel),
     Hostname = ?config(rmq_hostname, Config),
     TcpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0,
       tcp_port_amqp),
@@ -313,6 +325,40 @@ setup_shovels1(Config) ->
          {add_forward_headers, true},
          {add_timestamp_header, true}
         ]}],
+      infinity),
+
+    ok = application:start(rabbitmq_shovel),
+    await_running_shovel(test_shovel).
+
+setup_shovels1(Config) ->
+    _ = application:stop(rabbitmq_shovel),
+    Hostname = ?config(rmq_hostname, Config),
+    TcpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0,
+      tcp_port_amqp),
+    %% a working config
+    application:set_env(
+      rabbitmq_shovel,
+      shovels,
+      [{test_shovel,
+        [{source,
+          [{uris, [rabbit_misc:format("amqp://~s:~b/%2f?heartbeat=5",
+                                      [Hostname, TcpPort])]},
+           {declarations,
+            [{'queue.declare',    [exclusive, auto_delete]},
+             {'exchange.declare', [{exchange, ?EXCHANGE}, auto_delete]},
+             {'queue.bind',       [{queue, <<>>}, {exchange, ?EXCHANGE},
+                                   {routing_key, ?TO_SHOVEL}]}]},
+           {queue, <<>>}]},
+         {destination,
+          [{uris, [rabbit_misc:format("amqp://~s:~b/%2f",
+                                      [Hostname, TcpPort])]},
+           {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
+           {publish_properties, [{delivery_mode, 2},
+                                 {cluster_id,    <<"my-cluster">>},
+                                 {content_type,  ?SHOVELLED}]},
+           {add_forward_headers, true},
+           {add_timestamp_header, true}]},
+         {ack_mode, on_confirm}]}],
       infinity),
 
     ok = application:start(rabbitmq_shovel),

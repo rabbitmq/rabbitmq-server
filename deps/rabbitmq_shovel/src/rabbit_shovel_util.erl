@@ -33,7 +33,7 @@ update_headers(Prefix, Suffix, SrcURI, DestURI,
     Props#'P_basic'{headers = Headers2}.
 
 add_timestamp_header(Props = #'P_basic'{headers = undefined}) ->
-    add_timestamp_header(Props#'P_basic'{headers = []});    
+    add_timestamp_header(Props#'P_basic'{headers = []});
 add_timestamp_header(Props = #'P_basic'{headers = Headers}) ->
     Headers2 = rabbit_misc:set_table_value(Headers,
                                            ?TIMESTAMP_HEADER,

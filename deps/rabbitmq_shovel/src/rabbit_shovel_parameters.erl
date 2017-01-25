@@ -167,7 +167,7 @@ parse({VHost, Name}, Def) ->
     DestXKey = pget(<<"dest-exchange-key">>, Def, none),
     DestQ    = pget(<<"dest-queue">>,        Def, none),
     %% [1] src-exchange-key is never ignored if src-exchange is set
-    {SrcFun, Queue, Table1} =
+    {SrcDeclFun, Queue, Table1} =
         case SrcQ of
             none -> {fun (_Conn, Ch) ->
                              Ms = [#'queue.declare'{exclusive = true},
@@ -180,7 +180,8 @@ parse({VHost, Name}, Def) ->
                              ensure_queue(Conn, SrcQ)
                      end, SrcQ, [{<<"src-queue">>, SrcQ}]}
         end,
-    DestFun = fun (Conn, _Ch) ->
+    % TODO: ensure_queue
+    DestDeclFun = fun (Conn, _Ch) ->
                       case DestQ of
                           none -> ok;
                           _    -> ensure_queue(Conn, DestQ)
@@ -225,20 +226,23 @@ parse({VHost, Name}, Def) ->
                           false -> P1
                       end
                   end,
-    {ok, #shovel{
-       sources            = #endpoint{uris                 = SrcURIs,
-                                      resource_declaration = SrcFun},
-       destinations       = #endpoint{uris                 = DestURIs,
-                                      resource_declaration = DestFun},
-       prefetch_count     = pget(<<"prefetch-count">>, Def, 1000),
-       ack_mode           = translate_ack_mode(
-                              pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
-       publish_fields     = PubFun,
-       publish_properties = PubPropsFun,
-       queue              = Queue,
-       reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1),
-       delete_after       = opt_b2a(pget(<<"delete-after">>, Def, <<"never">>))
-      }}.
+    {ok, #{name => Name,
+           source => #{module => rabbit_amqp0_9_1_node,
+                       uris => SrcURIs,
+                       resource_decl => SrcDeclFun,
+                       queue => Queue,
+                       delete_after => opt_b2a(pget(<<"delete-after">>, Def, <<"never">>)),
+                       prefetch_count => pget(<<"prefetch-count">>, Def, 1000)
+                      },
+           dest => #{module => rabbit_amqp0_9_1_node,
+                     uris => DestURIs,
+                     resource_decl => DestDeclFun,
+                     fields_fun => PubFun,
+                     props_fun => PubPropsFun
+                    },
+           ack_mode => translate_ack_mode(pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
+           reconnect_delay => pget(<<"reconnect-delay">>, Def,
+                                   ?DEFAULT_RECONNECT_DELAY)}}.
 
 get_uris(Key, Def) ->
     URIs = case pget(Key, Def) of

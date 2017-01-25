@@ -56,9 +56,10 @@ child_exists(Name) ->
 stop_child(Name) ->
     case get(shovel_worker_autodelete) of
         true -> ok; %% [1]
-        _    -> ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Name),
-                ok = mirrored_supervisor:delete_child(?SUPERVISOR, Name),
-                rabbit_shovel_status:remove(Name)
+        _    ->
+            ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Name),
+            ok = mirrored_supervisor:delete_child(?SUPERVISOR, Name),
+            rabbit_shovel_status:remove(Name)
     end.
 
 %% [1] An autodeleting worker removes its own parameter, and thus ends

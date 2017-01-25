@@ -18,8 +18,11 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-DEPS = rabbit_common rabbit amqp_client
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+DEPS = rabbit_common rabbit amqp_client amqp10_client
+dep_amqp10_client = git git@github.com:rabbitmq/rabbitmq-amqp1.0-client.git master
+
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_amqp1_0
+
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 

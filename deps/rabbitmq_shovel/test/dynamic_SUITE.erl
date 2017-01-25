@@ -217,11 +217,12 @@ change_definition(Config) ->
 
 autodelete(Config) ->
     autodelete_case(Config, {<<"on-confirm">>, <<"queue-length">>,  0, 100}),
-    autodelete_case(Config, {<<"on-confirm">>, 50,                 50,  50}),
+    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50}),
     autodelete_case(Config, {<<"on-publish">>, <<"queue-length">>,  0, 100}),
     autodelete_case(Config, {<<"on-publish">>, 50,                 50,  50}),
     %% no-ack is not compatible with explicit count
-    autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}).
+    autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}),
+    ok.
 
 autodelete_case(Config, Args) ->
     with_ch(Config, autodelete_do(Config, Args)).
@@ -231,7 +232,8 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
             amqp_channel:call(Ch, #'confirm.select'{}),
             amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
             publish_count(Ch, <<>>, <<"src">>, <<"hello">>, 100),
-            amqp_channel:wait_for_confirms(Ch),
+            Ret = amqp_channel:wait_for_confirms(Ch),
+            ct:pal("wait ret ~p~n", [Ret]),
             shovel_test_utils:set_param_nowait(
               Config,
               <<"test">>, [{<<"src-queue">>,    <<"src">>},
@@ -371,7 +373,7 @@ expect(Ch, Q, Payload) ->
     Msg = receive
               {#'basic.deliver'{}, #amqp_msg{payload = Payload} = M} ->
                   M
-          after 1000 ->
+          after 2000 ->
                   exit({not_received, Payload})
           end,
     amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
@@ -384,6 +386,7 @@ publish_count(Ch, X, Key, M, Count) ->
     [publish(Ch, X, Key, M) || _ <- lists:seq(1, Count)].
 
 expect_count(Ch, Q, M, Count) ->
+    ct:pal("expect count ~p ~p~n", [Q, Count]),
     [expect(Ch, Q, M) || _ <- lists:seq(1, Count)],
     expect_empty(Ch, Q).
 

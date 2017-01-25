@@ -19,7 +19,7 @@
 
 -export([start_link/0, init/1]).
 
--import(rabbit_shovel_config, [ensure_defaults/2]).
+-import(rabbit_shovel_config, []).
 
 -include("rabbit_shovel.hrl").
 
@@ -73,8 +73,7 @@ parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc)
                          %% make sure the config we accumulate has any
                          %% relevant default values (discovered during
                          %% validation), applied back to it
-                         UpdatedConfig = ensure_defaults(ShovelConfig, Shovel),
-                         Acc2 = dict:store(ShovelName, UpdatedConfig, Acc),
+                         Acc2 = dict:store(ShovelName, Shovel, Acc),
                          parse_configuration(Defaults, Env, Acc2);
                      Error ->
                          Error
@@ -84,4 +83,5 @@ parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
 
 validate_shovel_config(ShovelName, ShovelConfig) ->
+    error_logger:info_msg("validating ~p ~p", [ShovelName, ShovelConfig]),
     rabbit_shovel_config:parse(ShovelName, ShovelConfig).
