@@ -213,7 +213,8 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
                           path, Path, body, Body})
     end.
 
-decode(?OK, _Headers,  ResBody) -> cleanup(rabbit_json:decode(list_to_binary(ResBody)));
+decode(?OK, _Headers,  ResBody) -> 
+    cleanup(rabbit_json:decode(list_to_binary(ResBody), [return_maps]));
 decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
