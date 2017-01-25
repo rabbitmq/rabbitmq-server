@@ -144,6 +144,12 @@ chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 # Update profile to enable autocompletion
 . /etc/profile
 
+if [ -n "$ZSH_VERSION" ]; then
+    echo "Z Shell detected.
+to enable rabbitmqctl autocompletion add the following to your .zshrc file:
+autoload _enable_rabbitmqctl_completion; _enable_rabbitmqctl_completion"
+fi
+
 %preun
 if [ $1 = 0 ]; then
   #Complete uninstall
