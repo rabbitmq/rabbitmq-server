@@ -16,20 +16,37 @@
 
 -module(rabbit_json).
 
--export([decode/1, try_decode/1, encode/1]).
+-export([decode/1, decode/2, try_decode/1, try_decode/2, encode/1, encode/2]).
+
 
 -spec decode(jsx:json_text()) -> jsx:json_term().
 decode(JSON) ->
-    jsx:decode(JSON, [return_maps]).
+    decode(JSON, []).
+
+
+-spec decode(jsx:json_text(), jsx_to_term:config()) -> jsx:json_term().
+decode(JSON, Opts) ->
+    jsx:decode(JSON, Opts).
+
 
 -spec try_decode(jsx:json_text()) -> {ok, jsx:json_term()} | error.
 try_decode(JSON) ->
+    try_decode(JSON, []).
+
+
+-spec try_decode(jsx:json_text(), jsx_to_term:config()) -> 
+			{ok, jsx:json_term()} | error.
+try_decode(JSON, Opts) ->
     try
-        {ok, decode(JSON)}
+        {ok, decode(JSON, Opts)}
     catch error:_ ->
-        error
+	    error
     end.
 
 -spec encode(jsx:json_term()) -> jsx:json_text().
 encode(Term) ->
-    jsx:encode(Term).
+    encode(Term, []).
+
+-spec encode(jsx:json_term(), jsx_to_json:config()) -> jsx:json_text().
+encode(Term, Opts) ->
+    jsx:encode(Term, Opts).
