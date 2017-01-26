@@ -257,22 +257,22 @@ process_received_bytes(Bytes,
                                     proc_state = ProcState1,
                                     connection = ConnPid });
                 {error, Reason, ProcState1} ->
-                    log(info, "MQTT protocol error ~p for connection ~p~n",
+                    log(info, "MQTT protocol error ~p for connection ~s~n",
                         [Reason, ConnStr]),
                     {stop, {shutdown, Reason}, pstate(State, ProcState1)};
                 {error, Error} ->
-                    log(error, "MQTT detected framing error '~p' for connection ~p~n",
+                    log(error, "MQTT detected framing error '~p' for connection ~s~n",
                         [Error, ConnStr]),
                     {stop, {shutdown, Error}, State};
                 {stop, ProcState1} ->
                     {stop, normal, pstate(State, ProcState1)}
             end;
         {error, {cannot_parse, Error, Stacktrace}} ->
-            log(error, "MQTT cannot parse frame for connection '~p', unparseable payload: ~p, error: {~p, ~p} ~n",
+            log(error, "MQTT cannot parse frame for connection '~s', unparseable payload: ~p, error: {~p, ~p} ~n",
                 [ConnStr, Bytes, Error, Stacktrace]),
             {stop, {shutdown, Error}, State};
         {error, Error} ->
-            log(error, "MQTT detected framing error '~p' for connection ~p~n",
+            log(error, "MQTT detected framing error '~p' for connection ~s~n",
                 [ConnStr, Error]),
             {stop, {shutdown, Error}, State}
     end.
