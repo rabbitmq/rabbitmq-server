@@ -259,7 +259,7 @@ cleanup(L) when is_list(L) ->
     [cleanup(I) || I <- L];
 cleanup(M) when is_map(M) ->
     maps:fold(fun(K, V, Acc) ->
-        Acc#{binary_to_atom(K, latin1) => cleanup(V)}
+        Acc#{binary_to_atom(K, utf8) => cleanup(V)}
               end, #{}, M);
 cleanup(I) ->
     I.
