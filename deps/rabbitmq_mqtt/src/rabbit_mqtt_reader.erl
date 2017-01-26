@@ -268,7 +268,7 @@ process_received_bytes(Bytes,
                     {stop, normal, pstate(State, ProcState1)}
             end;
         {error, {cannot_parse, Error, Stacktrace}} ->
-            log(error, "MQTT cannot parse frame for connection '~p', detected invalid frame ~p with error trace {~p, ~p} ~n",
+            log(error, "MQTT cannot parse frame for connection '~p', unparseable payload: ~p, error: {~p, ~p} ~n",
                 [ConnStr, Bytes, Error, Stacktrace]),
             {stop, {shutdown, Error}, State};
         {error, Error} ->
