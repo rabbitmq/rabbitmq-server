@@ -342,8 +342,8 @@ is_version_supported("0.0.0", _)   -> true;
 is_version_supported(_Version, []) -> true;
 is_version_supported(VersionFull, ExpectedVersions) ->
     %% Pre-release version should be supported in plugins,
-    %% therefore alpha part should be removed
-    Version = remove_version_alpha_part(VersionFull),
+    %% therefore preview part should be removed
+    Version = remove_version_preview_part(VersionFull),
     case lists:any(fun(ExpectedVersion) ->
                        rabbit_misc:version_minor_equivalent(ExpectedVersion, Version)
                        andalso
@@ -354,8 +354,8 @@ is_version_supported(VersionFull, ExpectedVersions) ->
         false -> false
     end.
 
-remove_version_alpha_part(Version) ->
-    {Ver, _Alpha} = rabbit_semver:parse(Version),
+remove_version_preview_part(Version) ->
+    {Ver, _Preview} = rabbit_semver:parse(Version),
     iolist_to_binary(rabbit_semver:format({Ver, {[], []}})).
 
 clean_plugins(Plugins) ->
