@@ -43,7 +43,7 @@
 -define(CREATION_EVENT_KEYS, [pid, protocol, host, port, name,
                               peer_host, peer_port,
                               user, vhost, client_properties, type,
-                              connected_at, node]).
+                              connected_at, node, user_who_performed_action]).
 
 %%---------------------------------------------------------------------------
 
@@ -101,6 +101,7 @@ i(pid,  _State) -> self();
 %% AMQP Params
 i(node,              #state{node = N})   -> N;
 i(user,              #state{params = P}) -> P#amqp_params_direct.username;
+i(user_who_performed_action, St) -> i(user, St);
 i(vhost,             #state{params = P}) -> P#amqp_params_direct.virtual_host;
 i(client_properties, #state{params = P}) ->
     P#amqp_params_direct.client_properties;
