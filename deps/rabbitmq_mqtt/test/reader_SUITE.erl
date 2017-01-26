@@ -136,14 +136,14 @@ stats(Config) ->
     emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
     expect_publishes(<<"TopicA">>, [<<"Payload">>]),
     emqttc:unsubscribe(C, [<<"TopicA">>]),
-    timer:sleep(1000), %% Wait for stats to be published, which it does every 100ms
+    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
     %% Retrieve the connection Pid
     [{_, {Reader, _}}] = rpc(Config, rabbit_mqtt_collector, list, []),
     [{_, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Reader, [connection]]),
     %% Verify the content of the metrics, garbage_collection must be present
     [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),
     true = proplists:is_defined(garbage_collection, Props),
-    %% If the coarse entry is present, we have published the data
+    %% If the coarse entry is present, stats were successfully emitted
     [{Pid, _, _, _}] = rpc(Config, ets, lookup, [connection_coarse_metrics, Pid]),
     emqttc:disconnect(C).
 
