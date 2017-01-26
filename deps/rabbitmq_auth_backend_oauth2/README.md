@@ -29,9 +29,9 @@ Then you can use `access_tokens` acquired from UAA as username to authenticate i
 
 ### Scopes
 
-Scopes define token permissions for rabbitmq resources.
+Scopes are translated into permission grants to RabbitMQ resources for the provided token.
 
-Current scope format is `<permission>:<vhost_pattern>/<name_pattern>[/<routing_key_pattern>]`, where
+The current scope format is `<permission>:<vhost_pattern>/<name_pattern>[/<routing_key_pattern>]` where
 
  * `<permission>` is an access permission (`configure`, `read`, or `write`)
  * `<vhost_pattern>` is a wildcard pattern for vhosts, token has acces to.
@@ -43,10 +43,10 @@ any sequence of characters.
 
 Wildcard patterns match as wollowing:
 
- * `*` matches any strings
- * `foo*` matches any strings, starting with `foo`
- * `*foo` matches any strings, ending with `foo`
- * `foo*bar` matches any strings, starting with `foo` and ending with `bar`
+ * `*` matches any string
+ * `foo*` matches any string starting with a `foo`
+ * `*foo` matches any string ending with a `foo`
+ * `foo*bar` matches any string starting with a `foo` and ending with a `bar`
 
 There can be multiple wildcards in a pattern:
 
@@ -54,11 +54,12 @@ There can be multiple wildcards in a pattern:
  * `*before*after*`
 
 **If you want to use special characters like `*`, `%`, or `/` in a wildacrd pattern,
-the pattern should be urlencoded.**
+the pattern must be [URL-encoded](https://en.wikipedia.org/wiki/Percent-encoding).**
 
-See `test/wildcard_match_SUITE.erl` test for more examples
+See the [./test/wildcard_match_SUITE.erl](wildcard matching test suite) for more examples.
 
-### Authorization workflow
+
+### Authorization Workflow
 
 #### Prerequisites
 
@@ -70,6 +71,5 @@ See `test/wildcard_match_SUITE.erl` test for more examples
 #### Authorization
 
 1. Client authorize with UAA, requesting `access_token` (using any grant type)
-2. Token scope should contain rabbitmq resource scopes (e.g. configure:%2F/foo - configure queue 'foo' on vhost '/')
-3. Client use token as username to connect to RabbitMQ server
-
+2. Token scope should contain RabbitMQ resource scopes (e.g. `configure:%2F/foo` means "configure queue 'foo' in vhost '/'")
+3. Client passes token for a username when connecting to a RabbitMQ node
