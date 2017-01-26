@@ -105,7 +105,7 @@ mixed_match(_Config) ->
     false = wildcard:match(<<"some long string">>, <<"some*other*string">>),
 
     true = wildcard:match(<<"some long string">>, <<"s*e*str*">>),
-    %% "z" char doesn't appear in subject
+    %% The z doesn't appear in the subject
     false = wildcard:match(<<"some long string">>, <<"s*z*str*">>),
 
     false = wildcard:match(<<"string">>, <<"*some*">>),
