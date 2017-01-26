@@ -19,6 +19,8 @@
 
 -module(rabbit_mgmt_wm_static).
 
+-include_lib("kernel/include/file.hrl").
+
 -export([init/3]).
 -export([rest_init/2]).
 -export([malformed_request/2]).
@@ -32,15 +34,21 @@
 init(Transport, Req, Opts) ->
     cowboy_static:init(Transport, Req, Opts).
 
-rest_init(Req, [Path]) ->
-    cowboy_static:rest_init(Req, {dir, Path});
-rest_init(Req, [Path|Tail]) ->
+rest_init(Req, [{App, Path}]) ->
+    do_rest_init(Req, App, Path);
+rest_init(Req, [{App, Path}|Tail]) ->
     {PathInfo, _} = cowboy_req:path_info(Req),
-    Filepath = filename:join([Path|PathInfo]),
-    case filelib:is_regular(Filepath) of
-        true -> cowboy_static:rest_init(Req, {dir, Path});
-        false -> rest_init(Req, Tail)
+    Filepath = filename:join([code:priv_dir(App), Path|PathInfo]),
+    %% We use erl_prim_loader because the file may be inside an .ez archive.
+    FileInfo = erl_prim_loader:read_file_info(binary_to_list(Filepath)),
+    case FileInfo of
+        {ok, #file_info{type = regular}} -> do_rest_init(Req, App, Path);
+        {ok, #file_info{type = symlink}} -> do_rest_init(Req, App, Path);
+        _                                -> rest_init(Req, Tail)
     end.
+
+do_rest_init(Req, App, Path) ->
+    cowboy_static:rest_init(Req, {priv_dir, App, Path}).
 
 malformed_request(Req, State) ->
     cowboy_static:malformed_request(Req, State).

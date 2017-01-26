@@ -21,32 +21,40 @@
 -behaviour(rabbit_mgmt_extension).
 -export([dispatcher/0, web_ui/0]).
 
-static_path(M) ->
-    filename:join(module_path(M), "priv/www").
-
 build_dispatcher(Ignore) ->
-    ThisLocalPath = static_path(?MODULE),
-    LocalPaths = [static_path(M) || M <- modules(Ignore)],
+    ManagementApp = module_app(?MODULE),
+    LocalPaths = [{module_app(M), "www"} || M <- modules(Ignore)],
     cowboy_router:compile([{'_',
         [{"/api" ++ Path, Mod, Args}
             || {Path, Mod, Args} <- lists:append([Module:dispatcher()
-            || Module <- modules(Ignore)])]
-     ++ [{"/", cowboy_static, {file, ThisLocalPath ++ "/index.html"}},
-         {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
-         {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
+                                                  || Module <- modules(Ignore)])]
+     ++ [{"/", cowboy_static, {priv_file, ManagementApp, "www/index.html"}},
+         {"/api", cowboy_static, {priv_file, ManagementApp, "www/api/index.html"}},
+         {"/cli", cowboy_static, {priv_file, ManagementApp, "www/cli/index.html"}},
          {"/mgmt", rabbit_mgmt_wm_redirect, "/"}]
      ++ [{"/[...]", rabbit_mgmt_wm_static, LocalPaths}]
     }]).
 
 modules(IgnoreApps) ->
     [Module || {App, Module, Behaviours} <-
-                   rabbit_misc:all_module_attributes(behaviour),
+               %% Sort rabbitmq_management modules first. This is
+               %% a microoptimization because most files belong to
+               %% this application. Making it first avoids several
+               %% stats(2) which have a great chance of failing in other
+               %% applications.
+               lists:sort(
+                 fun
+                     ({rabbitmq_management, _, _}, _) -> true;
+                     (_, {rabbitmq_management, _, _}) -> false;
+                     ({A, _, _}, {B, _, _})           -> A =< B
+                 end,
+                 rabbit_misc:all_module_attributes(behaviour)),
                not lists:member(App, IgnoreApps),
                lists:member(rabbit_mgmt_extension, Behaviours)].
 
-module_path(Module) ->
-    {file, Here} = code:is_loaded(Module),
-    filename:dirname(filename:dirname(Here)).
+module_app(Module) ->
+    {ok, App} = application:get_application(Module),
+    App.
 
 %%----------------------------------------------------------------------------
 
