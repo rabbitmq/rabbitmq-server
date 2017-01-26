@@ -34,11 +34,12 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
     {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}
   end
 
-  def validate(_, opts) do
+  def validate(plugins, opts) do
     :ok
     |> validate_step(fn() -> Helpers.require_rabbit(opts) end)
     |> validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
     |> validate_step(fn() -> Helpers.plugins_dir(opts) end)
+    |> validate_step(fn() -> PluginHelpers.validate_plugins(Enum.map(plugins, &String.to_atom/1), opts) end)
   end
 
   def validate_step(:ok, step) do

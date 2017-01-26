@@ -70,6 +70,22 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
+  def validate_plugins(plugins, opts) do
+    all = list(opts)
+    deps = :rabbit_plugins.dependencies(false, plugins, all)
+
+    deps_plugins = Enum.filter(all, fn(plugin) ->
+      name = plugin_name(plugin)
+      Enum.member?(plugins, name)
+    end)
+
+    validate_res = :rabbit_plugins.validate_plugins(deps_plugins)
+    case :rabbit_plugins.validate_plugins(deps_plugins) do
+      {_, []}     -> :ok;
+      {_, invalid} -> {:error, :rabbit_plugins.format_invalid_plugins(invalid)}
+    end
+  end
+
   def plugin_name(plugin) do
     plugin(name: name) = plugin
     name
