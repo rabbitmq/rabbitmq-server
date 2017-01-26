@@ -42,10 +42,10 @@ description() ->
 user_login_authentication(Username, _AuthProps) ->
     case check_token(Username) of
         {error, _} = E  -> E;
-        {refused, Err}  -> {refused, "Denied by UAA plugin with error: ~p", 
+        {refused, Err}  -> {refused, "Denied by UAA plugin with error: ~p",
                             [Err]};
-        {ok, _UserData} -> {ok, #auth_user{username = Username, 
-                                           tags = [], 
+        {ok, _UserData} -> {ok, #auth_user{username = Username,
+                                           tags = [],
                                            impl = none}}
     end.
 
@@ -56,15 +56,24 @@ user_login_authorization(Username) ->
     end.
 
 check_vhost_access(#auth_user{username = Username}, VHost, _Sock) ->
-    with_token(Username, 
+    with_token(Username,
                fun(UserData) ->
-                       rabbit_oauth2_scope:vhost_access(VHost, UserData)
+                    Scopes = get_scopes(UserData),
+                    rabbit_oauth2_scope:vhost_access(VHost, Scopes)
                end).
 
 check_resource_access(#auth_user{username = Username}, Resource, Permission) ->
-    with_token(Username, 
+    with_token(Username,
                fun(UserData) ->
-                       rabbit_oauth2_scope:resource_access(Resource, Permission, UserData)
+                    Scopes = get_scopes(UserData),
+                    rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
+               end).
+
+check_topic_access(#auth_user{username = Username}, Resource, Permission, Context) ->
+    with_token(Username,
+               fun(UserData) ->
+                    Scopes = get_scopes(UserData),
+                    rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
                end).
 
 %%--------------------------------------------------------------------
@@ -87,12 +96,12 @@ check_token(Token) ->
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
     ReqBody = "token=" ++ http_uri:encode(binary_to_list(Token)),
-    Resp = httpc:request(post, 
-                         {Path, 
-                          [{"Host", HostHdr}, 
-                           {"Authorization", "Basic " ++ Auth}], 
-                          "application/x-www-form-urlencoded", 
-                          ReqBody}, 
+    Resp = httpc:request(post,
+                         {Path,
+                          [{"Host", HostHdr},
+                           {"Authorization", "Basic " ++ Auth}],
+                          "application/x-www-form-urlencoded",
+                          ReqBody},
                          ?HTTPC_OPTS, []),
     rabbit_log:info("Resp ~p", [Resp]),
     case Resp of
@@ -100,16 +109,16 @@ check_token(Token) ->
             case Code of
                 200 -> parse_resp(Body);
                 400 -> parse_err(Body);
-                401 -> {error, invalid_resource_authorization};
+                401 -> {error, resource_server_authentication_failed};
                 _   -> {error, {Code, Body}}
             end;
         {error, _} = E -> E
     end.
 
-parse_resp(Body) -> 
+parse_resp(Body) ->
     {struct, Resp} = mochijson2:decode(Body),
     Aud = proplists:get_value(<<"aud">>, Resp, []),
-    {ok, ResIdStr} = application:get_env(rabbitmq_auth_backend_uaa, 
+    {ok, ResIdStr} = application:get_env(rabbitmq_auth_backend_uaa,
                                          resource_server_id),
     ResId = list_to_binary(ResIdStr),
     ValidAud = case Aud of
@@ -117,11 +126,11 @@ parse_resp(Body) ->
         _                       -> false
     end,
     case ValidAud of
-        true  -> 
+        true  ->
             Scope = own_scope(proplists:get_value(<<"scope">>, Resp, []),
                               ResId),
             {ok, lists:keyreplace(<<"scope">>, 1, Resp, {<<"scope">>, Scope})};
-        false -> 
+        false ->
             {refused, {invalid_aud, Resp, ResId}}
     end.
 
@@ -137,12 +146,15 @@ own_scope(Scope, ResId)  ->
             case binary:match(ScopeEl, Pattern) of
                 {0, PatternLength} ->
                     ElLength = byte_size(ScopeEl),
-                    {true, 
-                     binary:part(ScopeEl, 
+                    {true,
+                     binary:part(ScopeEl,
                                  {PatternLength, ElLength - PatternLength})};
                 _ -> false
             end
         end,
         Scope).
+
+get_scopes(UserData) ->
+    proplists:get_value(<<"scope">>, UserData, []).
 
 %%--------------------------------------------------------------------

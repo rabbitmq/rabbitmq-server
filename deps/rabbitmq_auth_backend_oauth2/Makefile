@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_auth_backend_uaa
 
-DEPS = mochiweb amqp_client
-TEST_DEPS = cowboy rabbitmq_web_dispatch rabbit
+DEPS = mochiweb amqp_client cowlib
+TEST_DEPS = cowboy rabbitmq_web_dispatch rabbit rabbitmq_ct_helpers
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
