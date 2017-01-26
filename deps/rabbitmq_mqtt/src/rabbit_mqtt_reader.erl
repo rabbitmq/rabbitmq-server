@@ -242,7 +242,7 @@ process_received_bytes(Bytes,
                        State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
                                        conn_name   = ConnStr }) ->
-    case rabbit_mqtt_frame:parse(Bytes, ParseState) of
+    case parse(Bytes, ParseState) of
         {more, ParseState1} ->
             {noreply,
              ensure_stats_timer(control_throttle( State #state{ parse_state = ParseState1 })),
@@ -267,6 +267,10 @@ process_received_bytes(Bytes,
                 {stop, ProcState1} ->
                     {stop, normal, pstate(State, ProcState1)}
             end;
+        {error, {cannot_parse, Error, Stacktrace}} ->
+            log(error, "MQTT cannot parse frame for connection '~p', detected invalid frame ~p with error trace {~p, ~p} ~n",
+                [ConnStr, Bytes, Error, Stacktrace]),
+            {stop, {shutdown, Error}, State};
         {error, Error} ->
             log(error, "MQTT detected framing error '~p' for connection ~p~n",
                 [ConnStr, Error]),
@@ -285,6 +289,13 @@ pstate(State = #state {}, PState = #proc_state{}) ->
     State #state{ proc_state = PState }.
 
 %%----------------------------------------------------------------------------
+parse(Bytes, ParseState) ->
+    try
+        rabbit_mqtt_frame:parse(Bytes, ParseState)
+    catch
+        _:Reason ->
+            {error, {cannot_parse, Reason, erlang:get_stacktrace()}}
+    end.
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
