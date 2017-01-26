@@ -257,9 +257,9 @@ decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
     [cleanup(I) || I <- L];
-cleanup({struct, I}) ->
-    cleanup(I);
-cleanup({K, V}) when is_binary(K) ->
-    {list_to_atom(binary_to_list(K)), cleanup(V)};
+cleanup(M) when is_map(M) ->
+    maps:fold(fun(K, V, Acc) ->
+        Acc#{binary_to_atom(K, latin1) => cleanup(V)}
+              end, #{}, M);
 cleanup(I) ->
     I.
