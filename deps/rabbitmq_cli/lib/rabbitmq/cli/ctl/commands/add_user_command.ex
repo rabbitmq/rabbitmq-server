@@ -17,9 +17,9 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   @flags []
 
@@ -50,4 +50,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   def banner([username, _password], _), do: "Adding user \"#{username}\" ..."
 
+  def output({:error, {:user_already_exists, username}}, _) do
+    {:error, ExitCodes.exit_software(), "User \"#{username}\" already exists"}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 end

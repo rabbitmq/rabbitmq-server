@@ -79,4 +79,10 @@ defmodule AddUserCommandTest do
     assert @command.banner([context[:user], context[:password]], context[:opts])
       =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
   end
+
+  @tag user: "someone"
+  test "output: formats a user_alredy_exists error", context do
+    {:error, 70, "User \"someone\" already exists"} =
+      @command.output({:error, {:user_already_exists, context[:user]}}, %{})
+  end
 end
