@@ -70,7 +70,13 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  def validate_plugins(plugins, opts) do
+  def validate_plugins(requested_plugins, opts) do
+    ## Maybe check all plugins
+    plugins = case opts do
+      %{all: true} -> plugin_names(list(opts))
+      _            -> requested_plugins
+    end
+
     all = list(opts)
     deps = :rabbit_plugins.dependencies(false, plugins, all)
 
