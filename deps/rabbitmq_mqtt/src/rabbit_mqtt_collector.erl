@@ -18,7 +18,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/0, register/2, unregister/2]).
+-export([start_link/0, register/2, unregister/2, list/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -37,6 +37,9 @@ register(ClientId, Pid) ->
 
 unregister(ClientId, Pid) ->
     gen_server:call(rabbit_mqtt_collector, {unregister, ClientId, Pid}, infinity).
+
+list() ->
+    gen_server:call(rabbit_mqtt_collector, list).
 
 %%----------------------------------------------------------------------------
 
@@ -65,6 +68,9 @@ handle_call({unregister, ClientId, Pid}, _From, State = #state{client_ids = Ids}
                         _                 -> {ok, Ids}
                     end,
     {reply, Reply, State#state{ client_ids = Ids1 }};
+
+handle_call(list, _From, State = #state{client_ids = Ids}) ->
+    {reply, dict:to_list(Ids), State};
 
 handle_call(Msg, _From, State) ->
     {stop, {unhandled_call, Msg}, State}.

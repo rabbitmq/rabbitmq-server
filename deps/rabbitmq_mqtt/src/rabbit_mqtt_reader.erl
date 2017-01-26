@@ -24,9 +24,13 @@
 -export([conserve_resources/3, start_keepalive/2]).
 
 -export([ssl_login_name/1]).
+-export([info/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt.hrl").
+
+-define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
+-define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state]).
 
 %%----------------------------------------------------------------------------
 
@@ -48,6 +52,12 @@ start_link(KeepaliveSup, Ref, Sock) ->
 conserve_resources(Pid, _, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
     ok.
+
+info(Pid, InfoItems) ->
+    case InfoItems -- ?INFO_ITEMS of
+        [] -> gen_server2:call(Pid, {info, InfoItems});
+        UnknownItems -> throw({bad_argument, UnknownItems})
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -84,6 +94,14 @@ init([KeepaliveSup, Ref, Sock]) ->
             rabbit_net:fast_close(Sock),
             terminate({network_error, Reason}, undefined)
     end.
+
+handle_call({info, InfoItems}, _From, State) ->
+    Infos = lists:map(
+        fun(InfoItem) ->
+            {InfoItem, info_internal(InfoItem, State)}
+        end,
+        InfoItems),
+    {reply, Infos, State};
 
 handle_call(Msg, From, State) ->
     {stop, {mqtt_unexpected_call, Msg, From}, State}.
@@ -363,17 +381,44 @@ emit_stats(State=#state{connection = undefined}) ->
     %% established, as this causes orphan entries on the stats database
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
     ensure_stats_timer(State1);
-emit_stats(State=#state{socket=Sock, connection_state=ConnState, connection=Conn}) ->
-    SockInfos = case rabbit_net:getstat(Sock,
-            [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
-        {ok,    SI} -> SI;
-        {error,  _} -> []
-    end,
-    Infos = [{pid, Conn}, {state, ConnState}|SockInfos],
-    rabbit_core_metrics:connection_stats(Conn, Infos),
-    rabbit_event:notify(connection_stats, Infos),
+emit_stats(State) ->
+    [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] = I
+	= infos(?SIMPLE_METRICS, State),
+    Infos = infos(?OTHER_METRICS, State),
+    rabbit_core_metrics:connection_stats(Pid, Infos),
+    rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
+    rabbit_event:notify(connection_stats, Infos ++ I),
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
     ensure_stats_timer(State1).
 
 ensure_stats_timer(State = #state{}) ->
     rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats).
+
+infos(Items, State) -> [{Item, info_internal(Item, State)} || Item <- Items].
+
+info_internal(pid, State) -> info_internal(connection, State);
+info_internal(SockStat, #state{socket = Sock}) when SockStat =:= recv_oct;
+                                                    SockStat =:= recv_cnt;
+                                                    SockStat =:= send_oct;
+                                                    SockStat =:= send_cnt;
+                                                    SockStat =:= send_pend ->
+    case rabbit_net:getstat(Sock, [SockStat]) of
+        {ok, [{_, I}]} -> I;
+        {error, _} -> ''
+    end;
+info_internal(state, State) -> info_internal(connection_state, State);
+info_internal(garbage_collection, _State) ->
+    rabbit_misc:get_gc_info(self());
+info_internal(reductions, _State) ->
+    {reductions, Reductions} = erlang:process_info(self(), reductions),
+    Reductions;
+info_internal(conn_name, #state{conn_name = Val}) ->
+    Val;
+info_internal(connection_state, #state{received_connect_frame = false}) ->
+    starting;
+info_internal(connection_state, #state{connection_state = Val}) ->
+    Val;
+info_internal(connection, #state{connection = Val}) ->
+    Val;
+info_internal(Key, #state{proc_state = ProcState}) ->
+    rabbit_mqtt_processor:info(Key, ProcState).

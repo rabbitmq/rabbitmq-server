@@ -13,7 +13,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 block,
-                                handle_invalid_frames
+                                handle_invalid_frames,
+                                stats
                                ]}
     ].
 
@@ -28,7 +29,7 @@ merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(Config,
                                     {rabbit, [
                                               {collect_statistics, basic},
-                                              {collect_statistics_interval, 500}
+                                              {collect_statistics_interval, 100}
                                              ]}).
 
 init_per_suite(Config) ->
@@ -120,6 +121,31 @@ handle_invalid_frames(Config) ->
     %% No new stats entries should be inserted as connection never got to initialize
     N = rpc(Config, ets, info, [connection_metrics, size]).
 
+stats(Config) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    %% CMN = rpc(Config, ets, info, [connection_metrics, size]),
+    %% CCMN = rpc(Config, ets, info, [connection_coarse_metrics, size]),
+    {ok, C} = emqttc:start_link([{host, "localhost"},
+                                 {port, P},
+                                 {client_id, <<"simpleClient">>},
+                                 {proto_ver, 3},
+                                 {logger, info},
+                                 {puback_timeout, 1}]),
+    %% Ensure that there are some stats
+    emqttc:subscribe(C, <<"TopicA">>, qos0),
+    emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
+    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    emqttc:unsubscribe(C, [<<"TopicA">>]),
+    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
+    %% Retrieve the connection Pid
+    [{_, {Reader, _}}] = rpc(Config, rabbit_mqtt_collector, list, []),
+    [{_, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Reader, [connection]]),
+    %% Verify the content of the metrics, garbage_collection must be present
+    [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),
+    true = proplists:is_defined(garbage_collection, Props),
+    %% If the coarse entry is present, stats were successfully emitted
+    [{Pid, _, _, _}] = rpc(Config, ets, lookup, [connection_coarse_metrics, Pid]),
+    emqttc:disconnect(C).
 
 expect_publishes(_Topic, []) -> ok;
 expect_publishes(Topic, [Payload|Rest]) ->
