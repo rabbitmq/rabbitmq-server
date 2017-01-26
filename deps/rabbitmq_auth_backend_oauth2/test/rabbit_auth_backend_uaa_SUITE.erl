@@ -204,13 +204,13 @@ test_errors(Config) ->
     application:set_env(rabbitmq_auth_backend_uaa, password, "wrong_sectet"),
     application:set_env(rabbit, auth_backends, [rabbit_auth_backend_uaa]),
                                                 %% TODO: resource id test
-    {error, invalid_resource_authorization} =
+    {error, resource_server_authentication_failed} =
         rabbit_auth_backend_uaa:user_login_authorization(?TOKEN),
 
     application:set_env(rabbitmq_auth_backend_uaa, username, "wrong_client"),
     application:set_env(rabbitmq_auth_backend_uaa, password, ?SECRET),
 
-    {error, invalid_resource_authorization} =
+    {error, resource_server_authentication_failed} =
         rabbit_auth_backend_uaa:user_login_authorization(?TOKEN),
 
     application:set_env(rabbitmq_auth_backend_uaa, username, ?CLIENT),

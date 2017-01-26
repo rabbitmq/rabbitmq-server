@@ -109,7 +109,7 @@ check_token(Token) ->
             case Code of
                 200 -> parse_resp(Body);
                 400 -> parse_err(Body);
-                401 -> {error, invalid_resource_authorization};
+                401 -> {error, resource_server_authentication_failed};
                 _   -> {error, {Code, Body}}
             end;
         {error, _} = E -> E
