@@ -25,7 +25,7 @@ match(Subject, Pattern) ->
             FirstSize = byte_size(First),
             case Subject of
                 % If a pattern does not start with a wildcard,
-                % do exact matching in the begining of a subject
+                % do exact matching in the beginning of the subject
                 <<First:FirstSize/binary, _/binary>> ->
                     scan(Subject, Rest, FirstSize, byte_size(Subject));
                 _ -> false
@@ -39,14 +39,14 @@ match(Subject, Pattern) ->
 scan(_Subject, [<<>>], _Pos, _Length) -> true;
 % Pattern is complete. Subject scan is complete
 scan(_Subject, [], Length, Length) -> true;
-% No more pattern, but subject scan is not complete
+% No more pattern but subject scan is not complete
 scan(_Subject, [], Pos, Length) when Pos =/= Length -> false;
-% Subject scan is complete, but there are more pattern elements
+% Subject scan is complete but there are more pattern elements
 scan(_Subject, _NonEmpty, Length, Length) -> false;
 % Skip duplicate wildcards
 scan(Subject, [<<>> | Rest], Pos, Length) ->
     scan(Subject, Rest, Pos, Length);
-% Every next Part is after a wildcard
+% Every other Part is after a wildcard
 scan(Subject, [Part | Rest], Pos, Length) ->
     PartSize = byte_size(Part),
     case binary:match(Subject, Part, [{scope, {Pos, Length - Pos}}]) of
