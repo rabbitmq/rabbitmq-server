@@ -34,8 +34,8 @@ exact_match(_Config) ->
                           <<"pattern+with++plus++spaces">>),
     true = wildcard:match(<<"pattern with plus spaces and * wildcard encoded">>,
                           <<"pattern+with+plus+spaces+and+%2A+wildcard+encoded">>),
-    true = wildcard:match(<<"case insensitive * special / characters">>,
-                          <<"case+insensitive+%2a+special+%2f+characters">>),
+    true = wildcard:match(<<"case with * special / characters">>,
+                          <<"case+with+%2a+special+%2f+characters">>),
 
     false = wildcard:match(<<"casesensitive">>, <<"CaseSensitive">>),
 
