@@ -235,6 +235,19 @@ defmodule EnablePluginsCommandTest do
       @command.validate(["mock_rabbitmq_plugin_for_3_8"], opts)
   end
 
+  test "validation: does not enable plugins with unmet version requirements even when enabling all plugins", context do
+    set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
+
+    plugins_directory = fixture_plugins_path("plugins_with_version_requirements")
+    opts = get_opts_with_plugins_directories(context, [plugins_directory])
+    opts = Map.merge(opts, %{all: true})
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+
+    {:validation_failure, _version_error} = @command.validate([], opts)
+  end
+
+
+
   defp check_plugins_enabled(plugins, context) do
     {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert_equal_sets(plugins, xs)
