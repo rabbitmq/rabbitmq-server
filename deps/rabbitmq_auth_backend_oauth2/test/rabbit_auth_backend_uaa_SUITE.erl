@@ -150,7 +150,7 @@ test_wildcard(Config) ->
     application:set_env(rabbitmq_auth_backend_uaa, password, ?SECRET),
     application:set_env(rabbit, auth_backends, [rabbit_auth_backend_uaa]),
 
-    %% Wildcard token has access to everything.
+    %% The wildcard token is granted access to everything (*/* for all 3 permissions).
     %% See wildcard.erl and wildcard_match_SUITE
 
     {ok, #auth_user{username = ?WILDCARD_TOKEN} = User} =
@@ -203,7 +203,7 @@ test_errors(Config) ->
     application:set_env(rabbitmq_auth_backend_uaa, username, ?CLIENT),
     application:set_env(rabbitmq_auth_backend_uaa, password, "wrong_sectet"),
     application:set_env(rabbit, auth_backends, [rabbit_auth_backend_uaa]),
-                                                %TODO: resource id test
+                                                %% TODO: resource id test
     {error, invalid_resource_authorization} =
         rabbit_auth_backend_uaa:user_login_authorization(?TOKEN),
 
