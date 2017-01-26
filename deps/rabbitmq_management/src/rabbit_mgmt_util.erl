@@ -514,7 +514,7 @@ decode(Keys, Body) ->
     case decode(Body) of
         {ok, J0} ->
                     J = maps:fold(fun(K, V, Acc) ->
-                        Acc#{binary_to_atom(K, latin1) => V}
+                        Acc#{binary_to_atom(K, utf8) => V}
                     end, J0, J0),
                     Results = [get_or_missing(K, J) || K <- Keys],
                     case [E || E = {key_missing, _} <- Results] of
