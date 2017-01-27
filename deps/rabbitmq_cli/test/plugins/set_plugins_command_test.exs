@@ -177,4 +177,21 @@ defmodule SetPluginsCommandTest do
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
 
+  test "run: does not enable plugins with unmet version requirements", context do
+    set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
+
+    plugins_directory = fixture_plugins_path("plugins_with_version_requirements")
+    opts = get_opts_with_plugins_directories(context, [plugins_directory])
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+
+    {:stream, _} = @command.run(["mock_rabbitmq_plugin_for_3_7"], opts)
+    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_7], context)
+
+    {:error, _version_error} =
+      @command.run(["mock_rabbitmq_plugin_for_3_8"], opts)
+
+    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_7], context)
+  end
+
+
 end

@@ -16,10 +16,6 @@
 defmodule RabbitMQ.CLI.Formatters.Plugins do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
-  def format_error(err, _) when is_binary(err) do
-    err
-  end
-
   def format_output(%{status: status, format: format, plugins: plugins},
                     options) do
     legend(status, format, options) ++ format_plugins(plugins, format)
