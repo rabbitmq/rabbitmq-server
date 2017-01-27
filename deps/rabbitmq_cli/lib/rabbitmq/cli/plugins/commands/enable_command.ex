@@ -18,6 +18,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
 
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -42,7 +43,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
     {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}
   end
 
-  def validate(_, opts) do
+  def validate(plugins, opts) do
     :ok
     |> validate_step(fn() -> Helpers.require_rabbit(opts) end)
     |> validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
@@ -69,11 +70,19 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   end
 
 
-  def run(plugin_names, %{all: all_flag, node: node_name} = opts) do
+  def run(plugin_names, %{all: all_flag} = opts) do
     plugins = case all_flag do
       false -> for s <- plugin_names, do: String.to_atom(s);
       true  -> PluginHelpers.plugin_names(PluginHelpers.list(opts))
     end
+
+    case PluginHelpers.validate_plugins(plugins, opts) do
+      :ok   -> do_run(plugins, opts)
+      other -> other
+    end
+  end
+
+  def do_run(plugins, %{node: node_name} = opts) do
     %{online: online, offline: offline} = opts
 
     enabled = PluginHelpers.read_enabled(opts)
@@ -112,10 +121,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   end
 
   def output({:error, err}, _opts) do
-    {:error, err}
+    {:error, ExitCodes.exit_software(), to_string(err)}
   end
   def output({:stream, stream}, _opts) do
     {:stream, stream}
   end
-
 end
