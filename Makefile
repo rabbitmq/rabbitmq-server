@@ -237,6 +237,7 @@ RMQ_ROOTDIR ?= $(PREFIX)/lib/erlang
 RMQ_BINDIR ?= $(RMQ_ROOTDIR)/bin
 RMQ_LIBDIR ?= $(RMQ_ROOTDIR)/lib
 RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(PROJECT_VERSION)
+RMQ_AUTOCOMPLETE_DIR ?= $(RMQ_ROOTDIR)/autocomplete
 
 SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-env \
@@ -245,6 +246,8 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-plugins \
 	  rabbitmq-diagnostics \
 	  cuttlefish
+
+AUTOCOMPLETE_SCRIPTS = bash_autocomplete.sh zsh_autocomplete.sh
 
 WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-echopid.bat \
@@ -298,12 +301,20 @@ install-scripts: install-escripts
 
 # FIXME: We do symlinks to scripts in $(RMQ_ERLAPP_DIR))/sbin but this
 # code assumes a certain hierarchy to make relative symlinks.
-install-bin: install-scripts
+install-bin: install-scripts install-autocomplete-scripts
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_BINDIR)
 	$(inst_verbose) for script in $(SCRIPTS); do \
 		test -e $(DESTDIR)$(RMQ_BINDIR)/$$script || \
 			ln -sf ../lib/$(notdir $(RMQ_ERLAPP_DIR))/sbin/$$script \
 			 $(DESTDIR)$(RMQ_BINDIR)/$$script; \
+	done
+
+install-autocomplete-scripts:
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)
+	$(inst_verbose) for script in $(AUTOCOMPLETE_SCRIPTS); do \
+		cp "scripts/$$script" \
+			"$(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)" && \
+		chmod 0755 "$(DESTDIR)$(RMQ_AUTOCOMPLETE_DIR)/$$script"; \
 	done
 
 install-man: manpages

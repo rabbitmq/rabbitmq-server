@@ -41,6 +41,7 @@ RabbitMQ is an open source multi-protocol messaging broker.
 %define _rabbit_server_ocf scripts/rabbitmq-server.ocf
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
 %define _rabbit_server_ha_ocf scripts/rabbitmq-server-ha.ocf
+%define _rabbitmqctl_autocomplete scripts/rabbitmqctl-autocomplete.sh
 
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
@@ -72,6 +73,10 @@ install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ha_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
 install -p -D -m 0644 %{S:2} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
+
+install -p -D -m 0755 %{_rabbitmqctl_autocomplete} %{buildroot}%{_sysconfdir}/profile.d/rabbitmqctl-autocomplete.sh
+install -p -D -m 0755 scripts/zsh_autocomplete.sh %{buildroot}%{_datarootdir}/zsh/vendor-functions/_enable_rabbitmqctl_completion
+
 
 mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 
@@ -136,6 +141,15 @@ fi
 
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 
+# Update profile to enable autocompletion
+. /etc/profile
+
+if [ -n "$ZSH_VERSION" ]; then
+    echo "Z Shell detected.
+to enable rabbitmqctl autocompletion add the following to your .zshrc file:
+autoload _enable_rabbitmqctl_completion; _enable_rabbitmqctl_completion"
+fi
+
 %preun
 if [ $1 = 0 ]; then
   #Complete uninstall
@@ -195,6 +209,9 @@ fi
 %if 0%{?rhel} < 7
 %{_initrddir}/rabbitmq-server
 %endif
+
+%{_sysconfdir}/profile.d/rabbitmqctl-autocomplete.sh
+%{_datarootdir}/zsh/vendor-functions/_enable_rabbitmqctl_completion
 
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*

@@ -23,6 +23,13 @@ remove_plugin_traces() {
     rm -rf /var/lib/rabbitmq/plugins-scratch
 }
 
+remove_autocomplete_script() {
+    if [ -f /etc/profile.d/rabbitmqctl-autocomplete.sh ]; then
+        rm -rf /etc/profile.d/rabbitmqctl-autocomplete.sh
+        rm -rf /usr/share/zsh/vendor-functions/_enable_rabbitmqctl_completion
+    fi
+}
+
 case "$1" in
     purge)
         rm -f /etc/default/rabbitmq
@@ -35,6 +42,7 @@ case "$1" in
         if [ -d /etc/rabbitmq ]; then
                 rm -r /etc/rabbitmq
         fi
+        remove_autocomplete_script
         remove_plugin_traces
         if getent passwd rabbitmq >/dev/null; then
                 # Stop epmd if run by the rabbitmq user
@@ -42,7 +50,11 @@ case "$1" in
         fi
     ;;
 
-    remove|upgrade)
+    remove)
+        remove_autocomplete_script
+        remove_plugin_traces
+    ;;
+    upgrade)
         remove_plugin_traces
     ;;
 
