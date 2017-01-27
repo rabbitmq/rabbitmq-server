@@ -3,14 +3,16 @@
 //
 
 function message_rates(id, stats) {
-    var items = [['Publish', 'publish'], ['Confirm', 'confirm'],
+    var items = [['Publish', 'publish'],
+                 ['Publisher confirm', 'confirm'],
                  ['Publish (In)', 'publish_in'],
                  ['Publish (Out)', 'publish_out'],
-                 ['Deliver', 'deliver'],
+                 ['Deliver (manual ack)', 'deliver'],
+                 ['Deliver (auto ack)', 'deliver_no_ack'],
+                 ['Consumer ack', 'ack'],
                  ['Redelivered', 'redeliver'],
-                 ['Acknowledge', 'ack'],
-                 ['Get', 'get'], ['Deliver (noack)', 'deliver_no_ack'],
-                 ['Get (noack)', 'get_no_ack'],
+                 ['Get (manual ack)', 'get'],
+                 ['Get (auto ack)', 'get_no_ack'],
                  ['Return', 'return_unroutable'],
                  ['Disk read', 'disk_reads'],
                  ['Disk write', 'disk_writes']];
