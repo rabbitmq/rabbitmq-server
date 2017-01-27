@@ -219,14 +219,14 @@ HELP = {
         <dd>Rate at which messages are delivered to consumers that use manual acknowledgements.</dd>\
         <dt>Deliver (auto ack)</dt>\
         <dd>Rate at which messages are delivered to consumers that use automatic acknowledgements.</dd>\
-        <dt>Get (manual ack)</dt>\
-        <dd>Rate at which messages requiring acknowledgement are being delivered in response to basic.get.</dd>\
-        <dt>Get (auto ack)</dt>\
-        <dd>Rate at which messages not requiring acknowledgement are being delivered in response to basic.get.</dd>\
         <dt>Consumer ack</dt>\
         <dd>Rate at which messages are being acknowledged by consumers.</dd>\
         <dt>Redelivered</dt>\
         <dd>Rate at which messages with the \'redelivered\' flag set are being delivered. Note that these messages will <b>also</b> be counted in one of the delivery rates above.</dd>\
+        <dt>Get (manual ack)</dt>\
+        <dd>Rate at which messages requiring acknowledgement are being delivered in response to basic.get.</dd>\
+        <dt>Get (auto ack)</dt>\
+        <dd>Rate at which messages not requiring acknowledgement are being delivered in response to basic.get.</dd>\
         <dt>Return</dt>\
         <dd>Rate at which basic.return is sent to publishers for unroutable messages published with the \'mandatory\' flag set.</dd>\
         <dt>Disk read</dt>\
