@@ -72,13 +72,6 @@ test_token(_) ->
                        kind = exchange,
                        name = <<"foo">>},
              write),
-    true = rabbit_auth_backend_uaa:check_topic_access(
-             User,
-             #resource{virtual_host = <<"vhost">>,
-                       kind = topic,
-                       name = <<"foo">>},
-             read,
-             #{routing_key => <<"routingkey">>}),
 
     false = rabbit_auth_backend_uaa:check_resource_access(
               User,
@@ -86,19 +79,6 @@ test_token(_) ->
                         kind = queue,
                         name = <<"foo1">>},
               configure),
-    false = rabbit_auth_backend_uaa:check_resource_access(
-              User,
-              #resource{virtual_host = <<"vhost">>,
-                        kind = exchange,
-                        name = <<"foo">>},
-              read),
-    false = rabbit_auth_backend_uaa:check_topic_access(
-              User,
-              #resource{virtual_host = <<"vhost1">>,
-                        kind = topic,
-                        name = <<"foo">>},
-              read,
-              #{routing_key => <<"routingkey">>}),
     true = rabbit_auth_backend_uaa:check_resource_access(
               User,
               #resource{virtual_host = <<"vhost">>,
@@ -110,7 +90,22 @@ test_token(_) ->
               #resource{virtual_host = <<"vhost">>,
                         kind = custom,
                         name = <<"bar">>},
-              write).
+              write),
+
+    true = rabbit_auth_backend_uaa:check_topic_access(
+              User,
+              #resource{virtual_host = <<"vhost">>,
+                        kind = topic,
+                        name = <<"bar">>},
+              read,
+              #{routing_key => <<"#/foo">>}),
+    false = rabbit_auth_backend_uaa:check_topic_access(
+              User,
+              #resource{virtual_host = <<"vhost">>,
+                        kind = topic,
+                        name = <<"bar">>},
+              read,
+              #{routing_key => <<"foo/#">>}).
 
 test_own_scope(_) ->
     Examples = [
@@ -175,10 +170,11 @@ fixture_signed_token(Jwk) ->
       <<"kid">> => <<"token-key">>
     },
 
-    Scope = [<<"rabbitmq.vhost_q_configure_foo">>,
-             <<"rabbitmq.vhost_ex_write_foo">>,
-             <<"rabbitmq.vhost_t_read_routingkey_foo">>,
-             <<"rabbitmq.vhost_custom_read_bar">>],
+    Scope = [<<"rabbitmq.configure:vhost/foo">>,
+             <<"rabbitmq.write:vhost/foo">>,
+             <<"rabbitmq.read:vhost/foo">>,
+             <<"rabbitmq.read:vhost/bar">>,
+             <<"rabbitmq.read:vhost/bar/%23%2Ffoo">>],
 
     TokenPayload = #{<<"exp">> => 1484803430,
                      <<"kid">> => <<"token-key">>,
