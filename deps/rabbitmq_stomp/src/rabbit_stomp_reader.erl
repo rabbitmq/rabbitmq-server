@@ -359,6 +359,11 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #reader_state.stats_timer,
                             fun() -> emit_stats(State) end).
 
+emit_stats(State=#reader_state{connection = C}) when C == none; C == undefined ->
+    %% Avoid emitting stats on terminate when the connection has not yet been
+    %% established, as this causes orphan entries on the stats database
+    State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
+    ensure_stats_timer(State1);
 emit_stats(State) ->
     [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] = I
 	= infos(?SIMPLE_METRICS, State),
