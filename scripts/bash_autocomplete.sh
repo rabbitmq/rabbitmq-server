@@ -7,3 +7,7 @@ _rabbitmqctl_complete() {
 }
 
 complete -f -F _rabbitmqctl_complete rabbitmqctl
+
+complete -f -F _rabbitmqctl_complete rabbitmq-plugins
+
+complete -f -F _rabbitmqctl_complete rabbitmq-diagnostics

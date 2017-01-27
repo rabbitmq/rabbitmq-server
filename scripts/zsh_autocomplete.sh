@@ -8,3 +8,7 @@ _rabbitmqctl_complete() {
 }
 
 compctl -f -K _rabbitmqctl_complete rabbitmqctl
+
+compctl -f -K _rabbitmqctl_complete rabbitmq-plugins
+
+compctl -f -K _rabbitmqctl_complete rabbitmq-diagnostics
