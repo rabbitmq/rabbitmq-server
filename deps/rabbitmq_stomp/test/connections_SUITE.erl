@@ -27,14 +27,23 @@
 all() ->
     [
         messages_not_dropped_on_disconnect,
-        direct_client_connections_are_not_leaked
+        direct_client_connections_are_not_leaked,
+        stats_are_not_leaked
     ].
+
+merge_app_env(Config) ->
+    rabbit_ct_helpers:merge_app_env(Config,
+                                    {rabbit, [
+                                              {collect_statistics, basic},
+                                              {collect_statistics_interval, 100}
+                                             ]}).
 
 init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodename_suffix, ?MODULE}]),
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config1,
+      [ fun merge_app_env/1 ] ++
       rabbit_ct_broker_helpers:setup_steps()).
 
 
@@ -111,3 +120,13 @@ messages_not_dropped_on_disconnect(Config) ->
 get_stomp_port(Config) ->
     rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp).
 
+stats_are_not_leaked(Config) ->
+    StompPort = get_stomp_port(Config),
+    N = rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [connection_metrics, size]),
+    {ok, C} = gen_tcp:connect("localhost", StompPort, []),
+    Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*\n\n">>,
+    gen_tcp:send(C, Bin),
+    gen_tcp:close(C),
+    timer:sleep(500),
+    N = rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [connection_metrics, size]),
+    ok.
