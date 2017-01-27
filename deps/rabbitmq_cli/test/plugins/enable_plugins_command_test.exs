@@ -222,20 +222,24 @@ defmodule EnablePluginsCommandTest do
 
   end
 
-  test "validation: does not enable plugins with unmet version requirements", context do
+  test "run: does not enable plugins with unmet version requirements", context do
     set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
     plugins_directory = fixture_plugins_path("plugins_with_version_requirements")
     opts = get_opts_with_plugins_directories(context, [plugins_directory])
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
 
-    :ok = @command.validate(["mock_rabbitmq_plugin_for_3_7"], opts)
+    {:stream, _} = @command.run(["mock_rabbitmq_plugin_for_3_7"], opts)
 
-    {:validation_failure, _version_error} =
-      @command.validate(["mock_rabbitmq_plugin_for_3_8"], opts)
+    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_7], context)
+
+    {:error, _version_error} =
+      @command.run(["mock_rabbitmq_plugin_for_3_8"], opts)
+    ## Not changed
+    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_7], context)
   end
 
-  test "validation: does not enable plugins with unmet version requirements even when enabling all plugins", context do
+  test "run: does not enable plugins with unmet version requirements even when enabling all plugins", context do
     set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
     plugins_directory = fixture_plugins_path("plugins_with_version_requirements")
@@ -243,19 +247,8 @@ defmodule EnablePluginsCommandTest do
     opts = Map.merge(opts, %{all: true})
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
 
-    {:validation_failure, _version_error} = @command.validate([], opts)
-  end
+    {:error, _version_error} = @command.run([], opts)
 
-
-
-  defp check_plugins_enabled(plugins, context) do
-    {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert_equal_sets(plugins, xs)
-  end
-
-  defp assert_equal_sets(a, b) do
-    asorted = Enum.sort(a)
-    bsorted = Enum.sort(b)
-    assert asorted == bsorted
+    check_plugins_enabled([], context)
   end
 end

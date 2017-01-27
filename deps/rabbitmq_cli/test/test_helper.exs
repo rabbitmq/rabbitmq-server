@@ -451,4 +451,15 @@ defmodule TestHelper do
     get_opts_with_plugins_directories(context, [extra_plugin_directory])
   end
 
+  def check_plugins_enabled(plugins, context) do
+    {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
+    assert_equal_sets(plugins, xs)
+  end
+
+  def assert_equal_sets(a, b) do
+    asorted = Enum.sort(a)
+    bsorted = Enum.sort(b)
+    assert asorted == bsorted
+  end
+
 end
