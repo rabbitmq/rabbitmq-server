@@ -27,6 +27,9 @@
 -include("rabbit_stomp_frame.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
+-define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state]).
+
 -record(reader_state, {socket, conn_name, parse_state, processor_state, state,
                        conserve_resources, recv_outstanding, stats_timer,
                        parent, connection, heartbeat_sup, heartbeat}).
@@ -356,21 +359,41 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #reader_state.stats_timer,
                             fun() -> emit_stats(State) end).
 
-emit_stats(State=#reader_state{socket = Sock, state = ConnState, connection = Conn}) ->
-    SockInfos = case rabbit_net:getstat(Sock,
-            [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
-        {ok,    SI} -> SI;
-        {error,  _} -> []
-    end,
-    Infos = [{pid, Conn}, {state, ConnState} | SockInfos],
-    rabbit_core_metrics:connection_stats(Conn, Infos),
-    rabbit_event:notify(connection_stats, Infos),
+emit_stats(State) ->
+    [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] = I
+	= infos(?SIMPLE_METRICS, State),
+    Infos = infos(?OTHER_METRICS, State),
+    rabbit_core_metrics:connection_stats(Pid, Infos),
+    rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
+    rabbit_event:notify(connection_stats, Infos ++ I),
     State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
     ensure_stats_timer(State1).
 
 ensure_stats_timer(State = #reader_state{}) ->
     rabbit_event:ensure_stats_timer(State, #reader_state.stats_timer, emit_stats).
 
+infos(Items, State) -> [{Item, info_internal(Item, State)} || Item <- Items].
+
+info_internal(pid, State) -> info_internal(connection, State);
+info_internal(SockStat, #reader_state{socket = Sock}) when SockStat =:= recv_oct;
+                                                           SockStat =:= recv_cnt;
+                                                           SockStat =:= send_oct;
+                                                           SockStat =:= send_cnt;
+                                                           SockStat =:= send_pend ->
+    case rabbit_net:getstat(Sock, [SockStat]) of
+        {ok, [{_, I}]} -> I;
+        {error, _} -> ''
+    end;
+info_internal(state, State) -> info_internal(connection_state, State);
+info_internal(garbage_collection, _State) ->
+    rabbit_misc:get_gc_info(self());
+info_internal(reductions, _State) ->
+    {reductions, Reductions} = erlang:process_info(self(), reductions),
+    Reductions;
+info_internal(connection, #reader_state{connection = Val}) ->
+    Val;
+info_internal(connection_state, #reader_state{state = Val}) ->
+    Val.
 %%----------------------------------------------------------------------------
 
 
