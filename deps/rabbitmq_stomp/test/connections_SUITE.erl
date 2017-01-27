@@ -28,7 +28,8 @@ all() ->
     [
         messages_not_dropped_on_disconnect,
         direct_client_connections_are_not_leaked,
-        stats_are_not_leaked
+        stats_are_not_leaked,
+        stats
     ].
 
 merge_app_env(Config) ->
@@ -127,6 +128,24 @@ stats_are_not_leaked(Config) ->
     Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*\n\n">>,
     gen_tcp:send(C, Bin),
     gen_tcp:close(C),
-    timer:sleep(500),
+    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
     N = rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [connection_metrics, size]),
+    ok.
+
+stats(Config) ->
+    StompPort = get_stomp_port(Config),
+    {ok, Client} = rabbit_stomp_client:connect(StompPort),
+    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
+    %% Retrieve the connection Pid
+    [Reader] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []),
+    [{_, Pid}] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp_reader,
+                                              info, [Reader, [connection]]),
+    %% Verify the content of the metrics, garbage_collection must be present
+    [{Pid, Props}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
+                                                  [connection_metrics, Pid]),
+    true = proplists:is_defined(garbage_collection, Props),
+    %% If the coarse entry is present, stats were successfully emitted
+    [{Pid, _, _, _}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
+                                                    [connection_coarse_metrics, Pid]),
+    rabbit_stomp_client:disconnect(Client),
     ok.
