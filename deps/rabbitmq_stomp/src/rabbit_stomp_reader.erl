@@ -29,11 +29,15 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
--define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state]).
+-define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, garbage_collection, state,
+                        timeout]).
 
 -record(reader_state, {socket, conn_name, parse_state, processor_state, state,
                        conserve_resources, recv_outstanding, stats_timer,
-                       parent, connection, heartbeat_sup, heartbeat}).
+                       parent, connection, heartbeat_sup, heartbeat,
+                       timeout_sec %% heartbeat timeout value used, 0 means
+                                   %% heartbeats are disabled
+                      }).
 
 %%----------------------------------------------------------------------------
 
@@ -181,7 +185,7 @@ handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     end;
 
 handle_info({start_heartbeats, {0, 0}}, State) -> 
-    {noreply, State};
+    {noreply, State#reader_state{timeout_sec = {0, 0}}};
 
 handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
             State = #reader_state{heartbeat_sup = SupPid, socket = Sock}) ->
@@ -191,7 +195,8 @@ handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
     ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
     Heartbeat = rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
                                        SendFun, ReceiveTimeout, ReceiveFun),
-    {noreply, State#reader_state{heartbeat = Heartbeat}};
+    {noreply, State#reader_state{heartbeat = Heartbeat,
+                                 timeout_sec = {SendTimeout, ReceiveTimeout}}};
 
 
 %%----------------------------------------------------------------------------
@@ -419,6 +424,10 @@ info_internal(garbage_collection, _State) ->
 info_internal(reductions, _State) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;
+info_internal(timeout, #reader_state{timeout_sec = {_, Receive}}) ->
+    Receive;
+info_internal(timeout, #reader_state{timeout_sec = undefined}) ->
+    0;
 info_internal(conn_name, #reader_state{conn_name = Val}) ->
     rabbit_data_coercion:to_binary(Val);
 info_internal(connection, #reader_state{connection = Val}) ->
