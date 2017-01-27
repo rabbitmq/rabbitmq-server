@@ -40,8 +40,8 @@ try_decode(JSON) ->
 try_decode(JSON, Opts) ->
     try
         {ok, decode(JSON, Opts)}
-    catch error:_ ->
-	    error
+    catch error: Reason ->
+        {error, Reason}
     end.
 
 -spec encode(jsx:json_term()) -> jsx:json_text().
@@ -63,6 +63,6 @@ try_encode(Term) ->
 try_encode(Term, Opts) ->
     try
         {ok, encode(Term, Opts)}
-    catch error:_ ->
-        error
+    catch error: Reason ->
+        {error, Reason}
     end.
