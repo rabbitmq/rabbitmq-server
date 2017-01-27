@@ -204,7 +204,7 @@ process_request(ProcessFun, State) ->
     process_request(ProcessFun, fun (StateM) -> StateM end, State).
 
 
-process_request(ProcessFun, SuccessFun, State=#proc_state{connection=Conn}) ->
+process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
               {'EXIT',
                {{shutdown,
@@ -217,13 +217,13 @@ process_request(ProcessFun, SuccessFun, State=#proc_state{connection=Conn}) ->
                   Result
           end,
     case Res of
-        {ok, Frame, NewState} ->
+        {ok, Frame, NewState = #proc_state{connection = Conn}} ->
             case Frame of
                 none -> ok;
                 _    -> send_frame(Frame, NewState)
             end,
             {ok, SuccessFun(NewState), Conn};
-        {error, Message, Detail, NewState} ->
+        {error, Message, Detail, NewState = #proc_state{connection = Conn}} ->
             {ok, send_error(Message, Detail, NewState), Conn};
         {stop, normal, NewState} ->
             {stop, normal, SuccessFun(NewState)};
