@@ -223,8 +223,9 @@ parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo, ActingUser) ->
                   {<<"priority">>,   Priority},
                   {<<"apply-to">>,   ApplyTo}],
                  ActingUser);
-        error ->
-            {error_string, "JSON decoding error"}
+        {error, Reason} ->
+            {error_string,
+                rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
     end.
 
 set_op(VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser) ->
