@@ -22,14 +22,14 @@ defmodule ListUserTopicPermissionsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     set_topic_permissions("guest", "/", "amq.topic", "^a")
     set_topic_permissions("guest", "/", "topic1", "^a")
 
     on_exit([], fn ->
       clear_topic_permissions("guest", "/")
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -41,7 +41,7 @@ defmodule ListUserTopicPermissionsCommandTest do
 
     {
       :ok,
-      opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]},
+      opts: %{node: get_rabbit_hostname(), timeout: context[:test_timeout]},
       no_such_user: no_such_user_result,
       timeout: {:badrpc, :timeout}
     }

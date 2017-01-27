@@ -23,13 +23,13 @@ defmodule ListChannelsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
-    close_all_connections(get_rabbit_hostname)
+    close_all_connections(get_rabbit_hostname())
 
     on_exit([], fn ->
-      close_all_connections(get_rabbit_hostname)
-      :erlang.disconnect_node(get_rabbit_hostname)
+      close_all_connections(get_rabbit_hostname())
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -40,7 +40,7 @@ defmodule ListChannelsCommandTest do
     {
       :ok,
       opts: %{
-        node: get_rabbit_hostname,
+        node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || @default_timeout
       }
     }
@@ -76,7 +76,7 @@ defmodule ListChannelsCommandTest do
   end
 
   test "run: multiple channels on multiple connections", context do
-    node_name = get_rabbit_hostname
+    node_name = get_rabbit_hostname()
     close_all_connections(node_name)
     existent_channels = :rabbit_misc.rpc_call(node_name,:rabbit_channel, :list, [])
     with_channel("/", fn(_channel1) ->
@@ -98,8 +98,8 @@ defmodule ListChannelsCommandTest do
   end
 
   test "run: multiple channels on single connection", context do
-    node_name = get_rabbit_hostname
-    close_all_connections(get_rabbit_hostname)
+    node_name = get_rabbit_hostname()
+    close_all_connections(get_rabbit_hostname())
     with_connection("/", fn(conn) ->
       existent_channels = :rabbit_misc.rpc_call(node_name,:rabbit_channel, :list, [])
       {:ok, _} = AMQP.Channel.open(conn)
@@ -121,7 +121,7 @@ defmodule ListChannelsCommandTest do
   end
 
   test "run: info keys order is preserved", context do
-    close_all_connections(get_rabbit_hostname)
+    close_all_connections(get_rabbit_hostname())
     with_channel("/", fn(_channel) ->
       channels = run_command_to_list(@command, [~w(connection vhost name pid number user), context[:opts]])
       chan     = Enum.at(channels, 0)

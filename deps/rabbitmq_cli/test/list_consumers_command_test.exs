@@ -11,10 +11,10 @@ defmodule ListConsumersCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -30,7 +30,7 @@ defmodule ListConsumersCommandTest do
     {
       :ok,
       opts: %{
-        node: get_rabbit_hostname,
+        node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || @default_timeout,
         vhost: @vhost
       }
@@ -68,7 +68,7 @@ defmodule ListConsumersCommandTest do
   end
 
   test "run: no consumers for no open connections", context do
-    close_all_connections(get_rabbit_hostname)
+    close_all_connections(get_rabbit_hostname())
     [] = run_command_to_list(@command, [["queue_name"], context[:opts]])
   end
 

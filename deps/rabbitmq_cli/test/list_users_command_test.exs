@@ -26,10 +26,10 @@ defmodule ListUsersCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -45,7 +45,7 @@ defmodule ListUsersCommandTest do
     add_user @user, @password
     on_exit([], fn -> delete_user @user end)
 
-    {:ok, opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: context[:test_timeout]}}
   end
 
   test "validate: On incorrect number of commands, return an arg count error" do

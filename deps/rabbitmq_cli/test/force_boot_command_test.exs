@@ -22,10 +22,10 @@ defmodule ForceBootCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -33,7 +33,7 @@ defmodule ForceBootCommandTest do
   end
 
   setup _ do
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: providing too many arguments fails validation" do
@@ -49,7 +49,7 @@ defmodule ForceBootCommandTest do
     stop_rabbitmq_app()
     on_exit(fn -> start_rabbitmq_app() end)
     assert @command.run([], context[:opts]) == :ok
-    mnesia_dir = :rpc.call(get_rabbit_hostname, :rabbit_mnesia, :dir, [])
+    mnesia_dir = :rpc.call(get_rabbit_hostname(), :rabbit_mnesia, :dir, [])
 
     path = Path.join(mnesia_dir, "force_load")
     assert File.exists?(path)

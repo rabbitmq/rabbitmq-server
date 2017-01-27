@@ -31,7 +31,7 @@ defmodule ListPoliciesCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     add_vhost @vhost
 
@@ -39,7 +39,7 @@ defmodule ListPoliciesCommandTest do
 
     on_exit(fn ->
       delete_vhost @vhost
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -55,7 +55,7 @@ defmodule ListPoliciesCommandTest do
     {
       :ok,
       opts: %{
-        node: get_rabbit_hostname,
+        node: get_rabbit_hostname(),
         timeout: (context[:timeout] || :infinity),
         vhost: context[:vhost],
         apply_to: @apply_to,

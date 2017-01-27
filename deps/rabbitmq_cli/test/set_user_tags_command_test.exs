@@ -25,12 +25,12 @@ defmodule SetUserTagsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     add_user @user, @password
 
     on_exit([], fn ->
       delete_user(@user)
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -41,7 +41,7 @@ defmodule SetUserTagsCommandTest do
     context[:user] # silences warnings
     on_exit([], fn -> set_user_tags(context[:user], []) end)
 
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: on an incorrect number of arguments, return an arg count error" do

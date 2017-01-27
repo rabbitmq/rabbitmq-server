@@ -25,12 +25,12 @@ defmodule TraceOffCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     add_vhost(@test_vhost)
 
     on_exit([], fn ->
       delete_vhost(@test_vhost)
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -40,7 +40,7 @@ defmodule TraceOffCommandTest do
   setup context do
     trace_on(context[:vhost])
     on_exit(context, fn -> trace_off(context[:vhost]) end)
-    {:ok, opts: %{node: get_rabbit_hostname, vhost: context[:vhost]}}
+    {:ok, opts: %{node: get_rabbit_hostname(), vhost: context[:vhost]}}
   end
 
   test "merge_defaults: defaults can be overridden" do
@@ -53,8 +53,8 @@ defmodule TraceOffCommandTest do
   end
 
   test "run: on an active node, trace_off command works on default" do
-    opts = %{node: get_rabbit_hostname}
-    opts_with_vhost = %{node: get_rabbit_hostname, vhost: "/"}
+    opts = %{node: get_rabbit_hostname()}
+    opts_with_vhost = %{node: get_rabbit_hostname(), vhost: "/"}
     trace_on(@default_vhost)
 
     assert @command.merge_defaults([], opts) == {[], opts_with_vhost}
@@ -67,7 +67,7 @@ defmodule TraceOffCommandTest do
     assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 
-  @tag target: get_rabbit_hostname, vhost: @default_vhost
+  @tag target: get_rabbit_hostname(), vhost: @default_vhost
   test "run: calls to trace_off are idempotent", context do
     @command.run([], context[:opts])
     assert @command.run([], context[:opts]) == :ok

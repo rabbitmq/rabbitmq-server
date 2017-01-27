@@ -26,7 +26,7 @@ defmodule ListVhostsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     add_vhost @vhost1
     add_vhost @vhost2
@@ -35,7 +35,7 @@ defmodule ListVhostsCommandTest do
     on_exit([], fn ->
       delete_vhost @vhost1
       delete_vhost @vhost2
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -75,7 +75,7 @@ defmodule ListVhostsCommandTest do
   setup context do
     {
       :ok,
-      opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]}
+      opts: %{node: get_rabbit_hostname(), timeout: context[:test_timeout]}
     }
   end
 

@@ -25,7 +25,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   def is_command?([head | _]), do: is_command?(head)
-  def is_command?(str), do: module_map[str] != nil
+  def is_command?(str), do: module_map()[str] != nil
 
   def load(opts) do
     scope = script_scope(opts)

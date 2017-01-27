@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  @flags []
+
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([], _) do

@@ -34,7 +34,7 @@ defmodule HelpersTest do
     :ok
   end
 
-## --------------------- get_rabbit_hostname/0 tests -------------------------
+## --------------------- get_rabbit_hostname()/0 tests -------------------------
 
 test "RabbitMQ hostname is properly formed" do
     assert @subject.get_rabbit_hostname() |> Atom.to_string =~ ~r/rabbit@\w+/
@@ -89,7 +89,7 @@ test "RabbitMQ hostname is properly formed" do
   ## ------------------- parse_node* tests --------------------
 
   test "if nil input, retrieve standard rabbit hostname" do
-    assert @subject.parse_node(nil) == get_rabbit_hostname
+    assert @subject.parse_node(nil) == get_rabbit_hostname()
   end
 
   test "if input is an atom short name, return the atom with hostname" do

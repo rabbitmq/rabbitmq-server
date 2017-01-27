@@ -22,13 +22,13 @@ defmodule NodeHealthCheckCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     reset_vm_memory_high_watermark()
 
     on_exit([], fn ->
       reset_vm_memory_high_watermark()
 
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -36,7 +36,7 @@ defmodule NodeHealthCheckCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname, timeout: 70000}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 70000}}
   end
 
   test "validate: with extra arguments returns an arg count error", context do
@@ -75,6 +75,6 @@ defmodule NodeHealthCheckCommandTest do
 
   test "banner", context do
     assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/Checking health/
-    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/#{get_rabbit_hostname}/
+    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/#{get_rabbit_hostname()}/
   end
 end

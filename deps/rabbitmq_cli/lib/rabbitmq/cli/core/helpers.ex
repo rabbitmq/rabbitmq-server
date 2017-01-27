@@ -25,19 +25,19 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     parse_node(RabbitMQ.CLI.Core.Config.get_option(:node))
   end
 
-  def parse_node(nil), do: get_rabbit_hostname
+  def parse_node(nil), do: get_rabbit_hostname()
   def parse_node(name) when is_atom(name) do
     parse_node(to_string(name))
   end
   def parse_node(name) do
     case String.split(name, "@", parts: 2) do
-      [_,""] -> name <> "#{hostname}" |> String.to_atom
+      [_,""] -> name <> "#{hostname()}" |> String.to_atom
       [_,_] -> name |> String.to_atom
-      [_] -> name <> "@#{hostname}" |> String.to_atom
+      [_] -> name <> "@#{hostname()}" |> String.to_atom
     end
   end
 
-  def connect_to_rabbitmq, do:        :net_kernel.connect_node(get_rabbit_hostname)
+  def connect_to_rabbitmq, do:        :net_kernel.connect_node(get_rabbit_hostname())
   def connect_to_rabbitmq(input) when is_atom(input), do: :net_kernel.connect_node(input)
   def connect_to_rabbitmq(input) when is_binary(input) do
     input

@@ -22,13 +22,13 @@ defmodule StartAppCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     start_rabbitmq_app
 
     on_exit([], fn ->
       start_rabbitmq_app
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -36,7 +36,7 @@ defmodule StartAppCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: with extra arguments returns an arg count error", context do
@@ -59,6 +59,6 @@ defmodule StartAppCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Starting node #{get_rabbit_hostname}/
+    assert @command.banner([], context[:opts]) =~ ~r/Starting node #{get_rabbit_hostname()}/
   end
 end

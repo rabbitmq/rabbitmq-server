@@ -23,14 +23,14 @@ defmodule ClearPermissionsTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     add_user(@user, @password)
     add_vhost(@specific_vhost)
 
     on_exit([], fn ->
       delete_user(@user)
       delete_vhost(@specific_vhost)
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -43,7 +43,7 @@ defmodule ClearPermissionsTest do
 
     {
       :ok,
-      opts: %{node: get_rabbit_hostname, vhost: context[:vhost]}
+      opts: %{node: get_rabbit_hostname(), vhost: context[:vhost]}
     }
   end
 

@@ -23,13 +23,13 @@ defmodule SyncQueueCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     start_rabbitmq_app
 
     on_exit([], fn ->
       start_rabbitmq_app
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -38,7 +38,7 @@ defmodule SyncQueueCommandTest do
 
   setup do
     {:ok, opts: %{
-      node: get_rabbit_hostname,
+      node: get_rabbit_hostname(),
       vhost: @vhost
     }}
   end

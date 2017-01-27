@@ -27,11 +27,12 @@ defmodule RabbitMQCtl do
   @type options() :: Map.t
   @type command_result() :: {:error, ExitCodes.exit_code, term()} | term()
 
-  def main(["--auto-complete", "./rabbitmqctl " <> str]) do
-    auto_complete(str)
+  def main(["--auto-complete" | []]) do
+    handle_shutdown(:ok)
   end
-  def main(["--auto-complete", "rabbitmqctl " <> str]) do
-    auto_complete(str)
+  def main(["--auto-complete", script_name | args]) do
+    script_basename = Path.basename(script_name)
+    auto_complete(script_basename, args)
   end
   def main(unparsed_command) do
     unparsed_command
@@ -50,7 +51,11 @@ defmodule RabbitMQCtl do
     {command, command_name, arguments, parsed_options, invalid} = parse(unparsed_command)
     case {command, invalid} do
       {:no_command, _} ->
-        usage_string = "\nCommand '#{command_name}' not found. \n"<>
+        command_not_found_string = case command_name do
+          "" -> ""
+          _  -> "\nCommand '#{command_name}' not found. \n"
+        end
+        usage_string = command_not_found_string <>
                        HelpCommand.all_usage(parsed_options)
         {:error, ExitCodes.exit_usage, usage_string};
       {{:suggest, suggested}, _} ->
@@ -90,8 +95,8 @@ defmodule RabbitMQCtl do
     exit_program(ExitCodes.exit_ok)
   end
 
-  def auto_complete(str) do
-    Rabbitmq.CLI.AutoComplete.complete(str)
+  def auto_complete(script_name, args) do
+    Rabbitmq.CLI.AutoComplete.complete(script_name, args)
     |> Stream.map(&IO.puts/1) |> Stream.run
     exit_program(ExitCodes.exit_ok)
   end
@@ -103,7 +108,7 @@ defmodule RabbitMQCtl do
     |> merge_defaults_longnames
   end
 
-  defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname}, opts)
+  defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname()}, opts)
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
@@ -172,11 +177,11 @@ defmodule RabbitMQCtl do
     module_name = String.to_atom("RabbitMQ.CLI.Printers." <> Macro.camelize(printer))
     case Code.ensure_loaded(module_name) do
       {:module, _}      -> module_name;
-      {:error, :nofile} -> default_printer
+      {:error, :nofile} -> default_printer()
     end
   end
   def get_printer(_) do
-    default_printer
+    default_printer()
   end
 
   def default_printer() do

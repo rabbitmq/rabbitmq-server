@@ -20,7 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  @flags []
+
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([], _), do: {:validation_failure, :not_enough_args}

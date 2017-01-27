@@ -18,36 +18,38 @@ defmodule Rabbitmq.CLI.AutoComplete do
   alias RabbitMQ.CLI.Core.Parser, as: Parser
   alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
-  @spec complete(String.t) :: [String.t]
-  def complete(str) do
-    tokens = String.split(str, " ", trim: true)
-    case List.last(tokens) do
-      nil        -> [];
-      last_token ->
-        {command, command_name, _, _, _} = Parser.parse(tokens)
-        case {command, command_name} do
-          ## No command provided
-          {_, ""} -> complete_default_opts(last_token);
-          ## Command is not found/incomplete
-          {:no_command, command_name} ->
-            complete_command_name(command_name);
-          {{:suggest, _}, command_name} ->
-            complete_command_name(command_name);
-          ## Command is found
-          {command, _} ->
-            complete_command_opts(command, last_token)
-        end
-        # last_token_position = length(tokens) - 1
-        # Enum.map(variants,
-        #          fn(v) ->
-        #            tokens
-        #            |> List.replace_at(last_token_position, v)
-        #            |> Enum.join(" ")
-        #          end)
+  @spec complete(String.t, [String.t]) :: [String.t]
+  def complete(_, []) do
+    []
+  end
+  def complete(script_name, args) do
+    case Parser.parse_global(args) do
+      %{script_name: _args_script_name} ->
+        complete(args);
+      _                                ->
+        complete(["--script-name", script_name | args])
     end
   end
 
-  def complete_default_opts(opt) do
+  defp complete(tokens) do
+    {command, command_name, _, _, _} = Parser.parse(tokens)
+    last_token = List.last(tokens)
+    case {command, command_name} do
+      ## No command provided
+      {_, ""} -> complete_default_opts(last_token);
+      ## Command is not found/incomplete
+      {:no_command, command_name} ->
+        complete_command_name(command_name);
+      {{:suggest, _}, command_name} ->
+        complete_command_name(command_name);
+      ## Command is found
+      {command, _} ->
+        complete_command_opts(command, last_token)
+    end
+    |> Enum.sort
+  end
+
+  defp complete_default_opts(opt) do
     Parser.default_switches
     |> Keyword.keys
     |> Enum.map(fn(sw) -> "--" <> to_string(sw) end)
@@ -55,7 +57,7 @@ defmodule Rabbitmq.CLI.AutoComplete do
     |> format_options
   end
 
-  def complete_command_name(command_name) do
+  defp complete_command_name(command_name) do
     module_map = CommandModules.module_map
     case module_map[command_name] do
       nil ->
@@ -67,7 +69,7 @@ defmodule Rabbitmq.CLI.AutoComplete do
     end
   end
 
-  def complete_command_opts(command, <<"-", _ :: binary>> = opt) do
+  defp complete_command_opts(command, <<"-", _ :: binary>> = opt) do
     switches = command.switches
                |> Keyword.keys
                |> Enum.map(fn(sw) -> "--" <> to_string(sw) end)
@@ -78,7 +80,7 @@ defmodule Rabbitmq.CLI.AutoComplete do
     select_starts_with(switches, opt)
     |> format_options
   end
-  def complete_command_opts(_, _) do
+  defp complete_command_opts(_, _) do
     []
   end
 

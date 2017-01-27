@@ -20,8 +20,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  @flags []
-
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
