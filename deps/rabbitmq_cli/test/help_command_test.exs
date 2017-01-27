@@ -68,21 +68,21 @@ defmodule HelpCommandTest do
   end
 
   test "Info items are defined for existing commands" do
-    assert @command.run([], %{}) =~ ~r/\n\<vhostinfoitem\> .*\n/
-    assert @command.run([], %{}) =~ ~r/\n\<queueinfoitem\> .*\n/
-    assert @command.run([], %{}) =~ ~r/\n\<exchangeinfoitem\> .*\n/
-    assert @command.run([], %{}) =~ ~r/\n\<bindinginfoitem\> .*\n/
-    assert @command.run([], %{}) =~ ~r/\n\<connectioninfoitem\> .*\n/
-    assert @command.run([], %{}) =~ ~r/\n\<channelinfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/vhostinfoitem/
+    assert @command.run([], %{}) =~ ~r/queueinfoitem/
+    assert @command.run([], %{}) =~ ~r/exchangeinfoitem/
+    assert @command.run([], %{}) =~ ~r/bindinginfoitem/
+    assert @command.run([], %{}) =~ ~r/connectioninfoitem/
+    assert @command.run([], %{}) =~ ~r/channelinfoitem/
   end
 
   test "Info items are printed for selected command" do
-    assert @command.run(["list_vhosts"], %{}) =~ ~r/\n\<vhostinfoitem\> .*/
-    assert @command.run(["list_queues"], %{}) =~ ~r/\n\<queueinfoitem\> .*/
-    assert @command.run(["list_exchanges"], %{}) =~ ~r/\n\<exchangeinfoitem\> .*/
-    assert @command.run(["list_bindings"], %{}) =~ ~r/\n\<bindinginfoitem\> .*/
-    assert @command.run(["list_connections"], %{}) =~ ~r/\n\<connectioninfoitem\> .*/
-    assert @command.run(["list_channels"], %{}) =~ ~r/\n\<channelinfoitem\> .*/
+    assert @command.run(["list_vhosts"], %{}) =~ ~r/vhostinfoitem/
+    assert @command.run(["list_queues"], %{}) =~ ~r/queueinfoitem/
+    assert @command.run(["list_exchanges"], %{}) =~ ~r/exchangeinfoitem/
+    assert @command.run(["list_bindings"], %{}) =~ ~r/bindinginfoitem/
+    assert @command.run(["list_connections"], %{}) =~ ~r/connectioninfoitem/
+    assert @command.run(["list_channels"], %{}) =~ ~r/channelinfoitem/
   end
 
   test "Help command returns exit code OK" do
