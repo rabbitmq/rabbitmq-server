@@ -213,18 +213,18 @@ HELP = {
       <dl>\
         <dt>Publish</dt>\
         <dd>Rate at which messages are entering the server.</dd>\
-        <dt>Confirm</dt>\
+        <dt>Publisher confirm</dt>\
         <dd>Rate at which the server is confirming publishes.</dd>\
-        <dt>Deliver</dt>\
-        <dd>Rate at which messages requiring acknowledgement are being delivered in response to basic.consume.</dd>\
-        <dt>Deliver (noack)</dt>\
-        <dd>Rate at which messages not requiring acknowledgement are being delivered in response to basic.consume.</dd>\
-        <dt>Get</dt>\
+        <dt>Deliver (manual ack)</dt>\
+        <dd>Rate at which messages are delivered to consumers that use manual acknowledgements.</dd>\
+        <dt>Deliver (auto ack)</dt>\
+        <dd>Rate at which messages are delivered to consumers that use automatic acknowledgements.</dd>\
+        <dt>Get (manual ack)</dt>\
         <dd>Rate at which messages requiring acknowledgement are being delivered in response to basic.get.</dd>\
-        <dt>Get (noack)</dt>\
+        <dt>Get (auto ack)</dt>\
         <dd>Rate at which messages not requiring acknowledgement are being delivered in response to basic.get.</dd>\
-        <dt>Acknowledge</dt>\
-        <dd>Rate at which messages are being acknowledged.</dd>\
+        <dt>Consumer ack</dt>\
+        <dd>Rate at which messages are being acknowledged by consumers.</dd>\
         <dt>Redelivered</dt>\
         <dd>Rate at which messages with the \'redelivered\' flag set are being delivered. Note that these messages will <b>also</b> be counted in one of the delivery rates above.</dd>\
         <dt>Return</dt>\
