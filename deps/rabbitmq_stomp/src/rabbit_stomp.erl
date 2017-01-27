@@ -21,6 +21,7 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 -export([parse_default_user/2]).
+-export([list/0]).
 
 -define(DEFAULT_CONFIGURATION,
         #stomp_configuration{
@@ -86,3 +87,11 @@ report_configuration(#stomp_configuration{
     end,
 
     ok.
+
+list() ->
+    [Client
+     || {_, ListSupPid, _, _} <- supervisor2:which_children(rabbit_stomp_sup),
+        {_, RanchSup, supervisor, _} <- supervisor2:which_children(ListSupPid),
+        {ranch_conns_sup, ConnSup, _, _} <- supervisor:which_children(RanchSup),
+        {_, CliSup, _, _} <- supervisor:which_children(ConnSup),
+        {rabbit_stomp_reader, Client, _, _} <- supervisor:which_children(CliSup)].

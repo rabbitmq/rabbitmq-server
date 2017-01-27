@@ -23,17 +23,18 @@
 
 -module(rabbit_stomp_client).
 
--export([connect/1, connect/2, connect/4, disconnect/1, send/2, send/3, send/4, recv/1]).
+-export([connect/1, connect/2, connect/4, connect/5, disconnect/1, send/2, send/3, send/4, recv/1]).
 
 -include("rabbit_stomp_frame.hrl").
 
 -define(TIMEOUT, 1000). % milliseconds
 
-connect(Port)  -> connect0([], "guest", "guest", Port).
-connect(V, Port) -> connect0([{"accept-version", V}], "guest", "guest", Port).
-connect(V, Login, Pass, Port) -> connect0([{"accept-version", V}], Login, Pass, Port).
+connect(Port)  -> connect0([], "guest", "guest", Port, []).
+connect(V, Port) -> connect0([{"accept-version", V}], "guest", "guest", Port, []).
+connect(V, Login, Pass, Port) -> connect0([{"accept-version", V}], Login, Pass, Port, []).
+connect(V, Login, Pass, Port, Headers) -> connect0([{"accept-version", V}], Login, Pass, Port, Headers).
 
-connect0(Version, Login, Pass, Port) ->
+connect0(Version, Login, Pass, Port, Headers) ->
     %% The default port is 61613 but it's in the middle of the ephemeral
     %% ports range on many operating systems. Therefore, there is a
     %% chance this port is already in use. Let's use a port close to the
@@ -41,7 +42,7 @@ connect0(Version, Login, Pass, Port) ->
     {ok, Sock} = gen_tcp:connect(localhost, Port, [{active, false}, binary]),
     Client0 = recv_state(Sock),
     send(Client0, "CONNECT", [{"login", Login},
-                              {"passcode", Pass} | Version]),
+                              {"passcode", Pass} | Version] ++ Headers),
     {#stomp_frame{command = "CONNECTED"}, Client1} = recv(Client0),
     {ok, Client1}.
 
