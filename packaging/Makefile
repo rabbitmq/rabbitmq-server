@@ -34,7 +34,8 @@ all: packages
 # --------------------------------------------------------------------
 
 .PHONY: packages package-deb \
-	package-rpm package-rpm-fedora package-rpm-suse \
+	package-rpm package-rpm-fedora \
+	package-rpm-opensuse package-rpm-suse \
 	package-rpm-rhel6 package-rpm-rhel7 \
 	package-windows package-standalone-macosx \
 	package-generic-unix
@@ -71,7 +72,7 @@ packages: package-deb package-rpm package-windows package-generic-unix
 package-deb: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C debs/Debian $(VARS) all $(DO_CLEAN)
 
-package-rpm: package-rpm-rhel6 package-rpm-rhel7 package-rpm-suse
+package-rpm: package-rpm-rhel6 package-rpm-rhel7 package-rpm-opensuse
 	@:
 
 package-rpm-fedora: $(SOURCE_DIST_FILE)
@@ -83,7 +84,7 @@ package-rpm-rhel6: $(SOURCE_DIST_FILE)
 package-rpm-rhel7: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=rhel7 all $(DO_CLEAN)
 
-package-rpm-suse: $(SOURCE_DIST_FILE)
+package-rpm-opensuse package-rpm-suse: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=suse all $(DO_CLEAN)
 
 package-windows: $(SOURCE_DIST_FILE)
