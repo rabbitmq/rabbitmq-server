@@ -51,7 +51,7 @@ override_dh_auto_install:
 	install -p -D -m 0755 scripts/rabbitmqctl-autocomplete.sh \
 		$(DEB_DESTDIR)/etc/profile.d/rabbitmqctl-autocomplete.sh
 
-	install -p -D -m -755 scripts/zsh_autocomplete.sh \
+	install -p -D -m 0755 scripts/zsh_autocomplete.sh \
 		$(DEB_DESTDIR)/usr/share/zsh/vendor-functions/_enable_rabbitmqctl_completion
 
 	rm $(DEB_DESTDIR)$(RMQ_ERLAPP_DIR)/LICENSE* \
