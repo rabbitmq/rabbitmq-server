@@ -11,17 +11,10 @@ As with all [authentication plugins](http://rabbitmq.com/access-control.html), t
 Note: it's at an early stage of development, although it's
 conceptually very simple.
 
-## Downloading
+## Installing
 
-You can download a pre-built binary of this plugin from
-the [Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
-
-## Building
-
-You can build and install it like any other plugin (see
-[the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
-
-This plugin depends on the Erlang client (just to grab a URI parser).
+Install the corresponding .ez files from our
+[Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
 
 ## Enabling the Plugin
 
@@ -160,3 +153,10 @@ python-django package. It's really not designed to be anything other
 than an example.
 
 See `examples/README` for slightly more information.
+
+## Building from Source
+
+You can build and install it like any other plugin (see
+[the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
+
+This plugin depends on the Erlang client (just to grab a URI parser).
