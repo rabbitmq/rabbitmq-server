@@ -21,7 +21,7 @@
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/1,
-         check_vhost_access/3, check_resource_access/3]).
+         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 %% Implementation of rabbit_auth_backend
 
@@ -57,6 +57,15 @@ check_resource_access(#auth_user{} = AuthUser,
            (false) -> refusal;
            ({error, _} = Err) -> Err;
            (_)                -> unknown
+        end).
+
+check_topic_access(#auth_user{} = AuthUser,
+                   #resource{} = Resource, Permission, Context) ->
+    with_cache(authz, {check_topic_access, [AuthUser, Resource, Permission, Context]},
+        fun(true)  -> success;
+            (false) -> refusal;
+            ({error, _} = Err) -> Err;
+            (_)                -> unknown
         end).
 
 with_cache(BackendType, {F, A}, Fun) ->
