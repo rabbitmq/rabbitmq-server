@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_auth_backend_uaa
 
 BUILD_DEPS = rabbit_common
-DEPS = amqp_client uaa_jwt rabbit
+DEPS = uaa_jwt rabbit
 TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers jose
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
@@ -17,7 +17,6 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
-
 
 MIX_ERL_LIBS = $(shell echo $$(for i in $(DEPS_DIR)/*/_build/dev/lib; do echo $$sep$$i; sep=:; done))
 
