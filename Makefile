@@ -15,8 +15,8 @@ include plugins.mk
 
 DEPS = rabbit_common rabbit $(PLUGINS)
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
+	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
