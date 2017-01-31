@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_auth_backend_uaa
 
 DEPS = amqp_client uaa_jwt rabbit
-TEST_DEPS = cowboy rabbitmq_web_dispatch rabbit rabbitmq_ct_helpers jose
+TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers jose
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
