@@ -22,10 +22,10 @@ defmodule ListUserPermissionsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -46,7 +46,7 @@ defmodule ListUserPermissionsCommandTest do
 
     {
       :ok,
-      opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]},
+      opts: %{node: get_rabbit_hostname(), timeout: context[:test_timeout]},
       result: default_result,
       no_such_user: no_such_user_result,
       timeout: {:badrpc, :timeout}

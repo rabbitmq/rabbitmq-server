@@ -26,12 +26,12 @@ defmodule CloseConnectionCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
-    close_all_connections(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
+    close_all_connections(get_rabbit_hostname())
 
     on_exit([], fn ->
-      close_all_connections(get_rabbit_hostname)
-      :erlang.disconnect_node(get_rabbit_hostname)
+      close_all_connections(get_rabbit_hostname())
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -39,7 +39,7 @@ defmodule CloseConnectionCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname, timeout: :infinity}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: :infinity}}
   end
 
   test "validate: with an invalid number of arguments returns an arg count error", context do

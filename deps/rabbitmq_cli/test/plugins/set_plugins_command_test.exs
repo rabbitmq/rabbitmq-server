@@ -28,7 +28,7 @@ defmodule SetPluginsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    node = get_rabbit_hostname
+    node = get_rabbit_hostname()
     :net_kernel.connect_node(node)
     {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
                                                 :application, :get_env,
@@ -46,7 +46,7 @@ defmodule SetPluginsCommandTest do
              online: true, offline: false}
 
     on_exit(fn ->
-      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname,opts)
+      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname(),opts)
     end)
 
     :erlang.disconnect_node(node)
@@ -56,20 +56,20 @@ defmodule SetPluginsCommandTest do
   end
 
   setup context do
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],
                         :online,
-                        get_rabbit_hostname,
+                        get_rabbit_hostname(),
                         context[:opts])
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
     end)
 
     {
       :ok,
       opts: Map.merge(context[:opts], %{
-              node: get_rabbit_hostname,
+              node: get_rabbit_hostname(),
             })
     }
   end
@@ -162,7 +162,7 @@ defmodule SetPluginsCommandTest do
   end
 
   test "can set multiple plugins", context do
-    set_enabled_plugins([], :online, get_rabbit_hostname, context[:opts])
+    set_enabled_plugins([], :online, get_rabbit_hostname(), context[:opts])
     assert {:stream, test_stream} =
       @command.run(["rabbitmq_federation", "rabbitmq_stomp"], context[:opts])
     assert [[:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
@@ -176,5 +176,22 @@ defmodule SetPluginsCommandTest do
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp] =
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
+
+  test "run: does not enable plugins with unmet version requirements", context do
+    set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
+
+    plugins_directory = fixture_plugins_path("plugins_with_version_requirements")
+    opts = get_opts_with_plugins_directories(context, [plugins_directory])
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+
+    {:stream, _} = @command.run(["mock_rabbitmq_plugin_for_3_7"], opts)
+    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_7], context)
+
+    {:error, _version_error} =
+      @command.run(["mock_rabbitmq_plugin_for_3_8"], opts)
+
+    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_7], context)
+  end
+
 
 end

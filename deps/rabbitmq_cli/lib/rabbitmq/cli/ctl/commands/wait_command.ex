@@ -16,7 +16,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  @flags []
+
 
   def merge_defaults(args, opts), do: {args, opts}
 

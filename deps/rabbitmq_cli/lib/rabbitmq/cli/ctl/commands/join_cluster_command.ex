@@ -18,10 +18,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  @flags [
-    :disc, # --disc is accepted for consistency's sake.
-    :ram
-  ]
 
   def switches() do
     [

@@ -22,10 +22,10 @@ defmodule AddUserCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -34,7 +34,7 @@ defmodule AddUserCommandTest do
 
   setup context do
     on_exit(context, fn -> delete_user(context[:user]) end)
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: on an inappropriate number of arguments, validate should return an arg count error" do
@@ -78,5 +78,11 @@ defmodule AddUserCommandTest do
   test "banner", context do
     assert @command.banner([context[:user], context[:password]], context[:opts])
       =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
+  end
+
+  @tag user: "someone"
+  test "output: formats a user_alredy_exists error", context do
+    {:error, 70, "User \"someone\" already exists"} =
+      @command.output({:error, {:user_already_exists, context[:user]}}, %{})
   end
 end

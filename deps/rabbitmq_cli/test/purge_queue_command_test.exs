@@ -24,10 +24,10 @@ defmodule PurgeQueueCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -36,7 +36,7 @@ defmodule PurgeQueueCommandTest do
 
   setup context do
     {:ok, opts: %{
-        node: get_rabbit_hostname,
+        node: get_rabbit_hostname(),
         vhost: @vhost,
         timeout: context[:test_timeout]
       }}

@@ -22,10 +22,10 @@ defmodule ReportTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -33,7 +33,7 @@ defmodule ReportTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname, timeout: :infinity}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: :infinity}}
   end
 
   test "validate: with extra arguments, status returns an arg count error", context do
@@ -54,6 +54,6 @@ defmodule ReportTest do
 
   test "banner", context do
     assert @command.banner([], context[:opts])
-      =~ ~r/Reporting server status of node #{get_rabbit_hostname}/
+      =~ ~r/Reporting server status of node #{get_rabbit_hostname()}/
   end
 end

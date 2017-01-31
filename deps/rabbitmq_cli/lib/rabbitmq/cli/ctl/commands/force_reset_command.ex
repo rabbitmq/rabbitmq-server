@@ -16,7 +16,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  @flags []
+
 
   def merge_defaults(args, opts), do: {args, opts}
   def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}

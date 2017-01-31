@@ -27,7 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  @flags []
+
 
   def scopes(), do: [:ctl, :diagnostics]
 

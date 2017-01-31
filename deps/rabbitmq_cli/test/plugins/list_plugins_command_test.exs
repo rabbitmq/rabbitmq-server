@@ -28,7 +28,7 @@ defmodule ListPluginsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    node = get_rabbit_hostname
+    node = get_rabbit_hostname()
     :net_kernel.connect_node(node)
     {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
                                                 :application, :get_env,
@@ -47,7 +47,7 @@ defmodule ListPluginsCommandTest do
              enabled: false, implicitly_enabled: false}
 
     on_exit(fn ->
-      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname, opts)
+      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname(), opts)
     end)
 
     :erlang.disconnect_node(node)
@@ -57,20 +57,20 @@ defmodule ListPluginsCommandTest do
   end
 
   setup context do
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],
                         :online,
-                        get_rabbit_hostname,
+                        get_rabbit_hostname(),
                         context[:opts])
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
     end)
 
     {
       :ok,
       opts: Map.merge(context[:opts], %{
-              node: get_rabbit_hostname,
+              node: get_rabbit_hostname(),
             })
     }
   end
@@ -258,7 +258,7 @@ defmodule ListPluginsCommandTest do
     opts = get_opts_with_plugins_directories(context, [plugins_directory_01])
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
     set_enabled_plugins([:mock_rabbitmq_plugins_02, :rabbitmq_federation, :rabbitmq_stomp],
-                        :online, get_rabbit_hostname, opts)
+                        :online, get_rabbit_hostname(), opts)
     assert %{status: :running,
              plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
                        %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
@@ -276,34 +276,4 @@ defmodule ListPluginsCommandTest do
                        %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
       @command.run([".*"], opts)
   end
-
-  defp switch_plugins_directories(old_value, new_value) do
-    :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
-            [:rabbit, :plugins_dir, new_value])
-    on_exit(fn ->
-        :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
-                [:rabbit, :plugins_dir, old_value])
-    end)
-  end
-
-  defp get_opts_with_non_existing_plugins_directory(context) do
-    get_opts_with_plugins_directories(context, ["/tmp/non_existing_rabbitmq_dummy_plugins"])
-  end
-
-  defp get_opts_with_plugins_directories(context, plugins_directories) do
-    opts = context[:opts]
-    plugins_dir = opts[:plugins_dir]
-    all_directories = Enum.join([to_string(plugins_dir) | plugins_directories], Helpers.separator())
-    %{opts | plugins_dir: to_char_list(all_directories)}
-  end
-
-  defp get_opts_with_existing_plugins_directory(context) do
-    extra_plugin_directory = System.tmp_dir!() |> Path.join("existing_rabbitmq_dummy_plugins")
-    File.mkdir!(extra_plugin_directory)
-    on_exit(fn ->
-      File.rm_rf(extra_plugin_directory)
-    end)
-    get_opts_with_plugins_directories(context, [extra_plugin_directory])
-  end
-
 end

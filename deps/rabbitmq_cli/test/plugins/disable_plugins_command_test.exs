@@ -25,7 +25,7 @@ defmodule DisablePluginsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    node = get_rabbit_hostname
+    node = get_rabbit_hostname()
     :net_kernel.connect_node(node)
     {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
                                                 :application, :get_env,
@@ -44,7 +44,7 @@ defmodule DisablePluginsCommandTest do
              all: false}
 
     on_exit(fn ->
-      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname, opts)
+      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname(), opts)
     end)
 
     :erlang.disconnect_node(node)
@@ -54,20 +54,20 @@ defmodule DisablePluginsCommandTest do
   end
 
   setup context do
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
     set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],
                         :online,
-                        get_rabbit_hostname,
+                        get_rabbit_hostname(),
                         context[:opts])
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
     end)
 
     {
       :ok,
       opts: Map.merge(context[:opts], %{
-              node: get_rabbit_hostname,
+              node: get_rabbit_hostname(),
             })
     }
   end

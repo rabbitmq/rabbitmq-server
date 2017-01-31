@@ -22,7 +22,7 @@ defmodule RenameClusterNodeCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    node = get_rabbit_hostname
+    node = get_rabbit_hostname()
     :net_kernel.connect_node(node)
 
     start_rabbitmq_app
@@ -67,7 +67,7 @@ defmodule RenameClusterNodeCommandTest do
   end
 
   test "validate: request to a running node fails", _context do
-    node = get_rabbit_hostname
+    node = get_rabbit_hostname()
     assert match?({:validation_failure, :node_running},
       @command.validate([to_string(node), "other_node@localhost"], %{node: node}))
   end

@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults([_|_] = args, opts) do
-    {args, Map.merge(default_opts, opts)}
+    {args, Map.merge(default_opts(), opts)}
   end
 
   def usage, do: "cancel_sync_queue [-p <vhost>] queue"

@@ -22,10 +22,10 @@ defmodule WaitCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    :net_kernel.connect_node(get_rabbit_hostname())
 
     on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
 
@@ -33,7 +33,7 @@ defmodule WaitCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
   test "validate: with extra arguments returns an arg count error", context do
@@ -42,7 +42,7 @@ defmodule WaitCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Waiting for node #{get_rabbit_hostname}/
+    assert @command.banner([], context[:opts]) =~ ~r/Waiting for node #{get_rabbit_hostname()}/
   end
 
   test "output: process not running error", context do

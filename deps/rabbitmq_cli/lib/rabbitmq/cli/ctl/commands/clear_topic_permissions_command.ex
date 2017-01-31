@@ -20,8 +20,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearTopicPermissionsCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  @flags [:vhost]
-
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end

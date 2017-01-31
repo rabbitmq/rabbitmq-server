@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListTopicPermissionsCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
-  @flags [:vhost]
+
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}

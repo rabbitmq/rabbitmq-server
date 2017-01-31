@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListOperatorPoliciesCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
-  @flags [:vhost]
+
 
   def scopes(), do: [:ctl, :diagnostics]
 
