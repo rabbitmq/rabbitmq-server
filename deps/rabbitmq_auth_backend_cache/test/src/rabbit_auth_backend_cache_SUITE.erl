@@ -70,7 +70,7 @@ cache_expiration(Config) ->
     true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure]),
     true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure]),
 
-    rpc(Config,rabbit_auth_backend_internal, change_password, [<<"guest">>, <<"newpass">>]),
+    rpc(Config,rabbit_auth_backend_internal, change_password, [<<"guest">>, <<"newpass">>, <<"acting-user">>]),
     
     {refused, _, _} = rpc(Config,rabbit_auth_backend_internal, user_login_authentication, [<<"guest">>, [{password, <<"guest">>}]]),
     {ok, Auth} = rpc(Config,rabbit_auth_backend_cache, user_login_authentication, [<<"guest">>, [{password, <<"guest">>}]]),
@@ -80,7 +80,7 @@ cache_expiration(Config) ->
     true = rpc(Config,rabbit_auth_backend_internal, check_resource_access, [Auth, AvailableResource, configure]),
     true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, AvailableResource, configure]),
 
-    rpc(Config,rabbit_auth_backend_internal, delete_user, [<<"guest">>]),
+    rpc(Config,rabbit_auth_backend_internal, delete_user, [<<"guest">>, <<"acting-user">>]),
 
     false = rpc(Config,rabbit_auth_backend_internal, check_vhost_access, [Auth, AvailableVhost, none]),
     true = rpc(Config,rabbit_auth_backend_cache, check_vhost_access, [Auth, AvailableVhost, none]),
