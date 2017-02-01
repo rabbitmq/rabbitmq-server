@@ -33,7 +33,7 @@
                                 req/4, auth_header/2,
                                 amqp_port/1]).
 
--import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_misc, [pget/2]).
 
 -define(COLLECT_INTERVAL, 1000).
 
