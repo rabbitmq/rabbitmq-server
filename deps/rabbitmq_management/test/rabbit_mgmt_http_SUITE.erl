@@ -18,7 +18,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("include/rabbit_mgmt_test.hrl").
+-include("rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
                                    open_unmanaged_connection/1]).
@@ -33,7 +33,7 @@
                                 req/4, auth_header/2,
                                 amqp_port/1]).
 
--import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_misc, [pget/2]).
 
 -define(COLLECT_INTERVAL, 1000).
 
@@ -572,7 +572,7 @@ connections_test(Config) ->
     LocalPort = local_port(Conn),
     Path = binary_to_list(
              rabbit_mgmt_format:print(
-               "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A~w",
+               "/connections/127.0.0.1%3A~w%20-%3E%20127.0.0.1%3A~w",
                [LocalPort, amqp_port(Config)])),
     timer:sleep(1150),
     http_get(Config, Path, ?OK),
@@ -914,13 +914,13 @@ get_conn(Config, Username, Password) ->
                       password = list_to_binary(Password)}),
     LocalPort = local_port(Conn),
     ConnPath = rabbit_misc:format(
-                 "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A~w",
+                 "/connections/127.0.0.1%3A~w%20-%3E%20127.0.0.1%3A~w",
                  [LocalPort, Port]),
     ChPath = rabbit_misc:format(
-               "/channels/127.0.0.1%3A~w%20->%20127.0.0.1%3A~w%20(1)",
+               "/channels/127.0.0.1%3A~w%20-%3E%20127.0.0.1%3A~w%20(1)",
                [LocalPort, Port]),
     ConnChPath = rabbit_misc:format(
-                   "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A~w/channels",
+                   "/connections/127.0.0.1%3A~w%20-%3E%20127.0.0.1%3A~w/channels",
                    [LocalPort, Port]),
     {Conn, ConnPath, ChPath, ConnChPath}.
 
