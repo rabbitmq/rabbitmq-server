@@ -647,10 +647,12 @@ handle_dependent_exit(ChPid, Reason, State) ->
     {Channel, State1} = channel_cleanup(ChPid, State),
     case {Channel, termination_kind(Reason)} of
         {undefined,   controlled} -> State1;
-        {undefined, uncontrolled} -> exit({abnormal_dependent_exit,
+        {undefined, uncontrolled} -> handle_uncontrolled_channel_close(ChPid),
+                                     exit({abnormal_dependent_exit,
                                            ChPid, Reason});
         {_,           controlled} -> maybe_close(control_throttle(State1));
-        {_,         uncontrolled} -> State2 = handle_exception(
+        {_,         uncontrolled} -> handle_uncontrolled_channel_close(ChPid),
+                                     State2 = handle_exception(
                                                 State1, Channel, Reason),
                                      maybe_close(control_throttle(State2))
     end.
@@ -692,6 +694,7 @@ wait_for_channel_termination(N, TimerRef,
                         "error while terminating:~n~p~n",
                         [self(), ConnName, VHost, User#user.username,
                          CS, Channel, Reason]),
+                    handle_uncontrolled_channel_close(ChPid),
                     wait_for_channel_termination(N-1, TimerRef, State1)
             end;
         {'EXIT', Sock, _Reason} ->
@@ -1609,3 +1612,7 @@ dynamic_connection_name(Default) ->
         _ ->
             Default
     end.
+
+handle_uncontrolled_channel_close(ChPid) ->
+    rabbit_core_metrics:channel_closed(ChPid),
+    rabbit_event:notify(channel_closed, [{pid, ChPid}]).

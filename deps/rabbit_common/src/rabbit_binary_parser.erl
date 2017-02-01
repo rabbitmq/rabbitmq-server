@@ -68,7 +68,12 @@ parse_table(<<>>) ->
 ?SIMPLE_PARSE_TABLE($d, Value:64/float, double);
 ?SIMPLE_PARSE_TABLE($f, Value:32/float, float);
 
+%% yes, both 'l' and 'L' fields are decoded to 64-bit signed values;
+%% see https://github.com/rabbitmq/rabbitmq-server/issues/1093#issuecomment-276351183,
+%% http://www.rabbitmq.com/amqp-0-9-1-errata.html, and section
+%% 4.2.1 of the spec for details.
 ?SIMPLE_PARSE_TABLE($l, Value:64/signed, long);
+?SIMPLE_PARSE_TABLE($L, Value:64/signed, long);
 
 
 parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
@@ -120,7 +125,7 @@ parse_array(<<>>) ->
 ?SIMPLE_PARSE_ARRAY($f, Value:32/float, float);
 
 ?SIMPLE_PARSE_ARRAY($l, Value:64/signed, long);
-
+?SIMPLE_PARSE_ARRAY($L, Value:64/signed, long);
 
 
 parse_array(<<$t, Value:8/unsigned, Rest/binary>>) ->
