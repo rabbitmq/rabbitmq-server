@@ -529,7 +529,7 @@ decode(<<"">>) ->
 
 decode(Body) ->
     try
-        {ok, rabbit_json:decode(Body, [return_maps])}
+        {ok, rabbit_json:decode(Body)}
     catch error:_ -> {error, not_json}
     end.
 
