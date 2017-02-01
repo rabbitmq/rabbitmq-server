@@ -215,7 +215,7 @@ parse_set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser)
     end.
 
 parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo, ActingUser) ->
-    case rabbit_json:try_decode(Defn, [return_maps]) of
+    case rabbit_json:try_decode(Defn) of
         {ok, Term} ->
             set0(Type, VHost, Name,
                  [{<<"pattern">>,    Pattern},
