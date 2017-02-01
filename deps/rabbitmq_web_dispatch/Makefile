@@ -6,6 +6,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
+LOCAL_DEPS = inets
 DEPS = rabbit_common rabbit cowboy
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
