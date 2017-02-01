@@ -100,9 +100,9 @@ federation_links(Config) ->
     %% Verify we have 5 running links and 5 down links
     wait_until(fun() ->
                        AllLinks = http_get(Config, "/federation-links"),
-                       Result = [{maps:get(<<"exchange">>, Link),
-                                  maps:get(<<"upstream">>, Link),
-                                  maps:get(<<"status">>, Link)} || Link <- AllLinks],
+                       Result = [{maps:get(exchange, Link),
+                                  maps:get(upstream, Link),
+                                  maps:get(status, Link)} || Link <- AllLinks],
                        Verify(Result)
                end).
 
@@ -121,9 +121,9 @@ federation_down_links(Config) ->
              end,
     wait_until(fun() ->
                        AllLinks = http_get(Config, "/federation-links/state/down"),
-                       Result = [{maps:get(<<"exchange">>, Link),
-                                  maps:get(<<"upstream">>, Link),
-                                  maps:get(<<"status">>, Link)} || Link <- AllLinks],
+                       Result = [{maps:get(exchange, Link),
+                                  maps:get(upstream, Link),
+                                  maps:get(status, Link)} || Link <- AllLinks],
                        Verify(Result)
                end).
 
@@ -167,7 +167,7 @@ wait_until(Fun, N) ->
 
 restart_uri(Link) ->
     "/federation-links/vhost/%2f/" ++
-        binary_to_list(maps:get(<<"id">>, Link)) ++ "/restart".
+        binary_to_list(maps:get(id, Link)) ++ "/restart".
 
 %% -------------------------------------------------------------------
 %% Helpers from rabbitmq_management tests
