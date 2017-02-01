@@ -219,7 +219,7 @@ req(Config, Type, Path, Headers, Body) ->
     httpc:request(Type, {uri_base_from(Config) ++ Path, Headers, "application/json", Body},
                   ?HTTPC_OPTS, []).
 
-decode(?OK, _Headers,  ResBody) -> cleanup(rabbit_json:decode(list_to_binary(ResBody), [return_maps]));
+decode(?OK, _Headers,  ResBody) -> cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)));
 decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
