@@ -19,10 +19,12 @@
 -export([decode/1, decode/2, try_decode/1, try_decode/2,
 	 encode/1, encode/2, try_encode/1, try_encode/2]).
 
+-define(DEFAULT_DECODE_OPTIONS, [return_maps]).
+
 
 -spec decode(jsx:json_text()) -> jsx:json_term().
 decode(JSON) ->
-    decode(JSON, []).
+    decode(JSON, ?DEFAULT_DECODE_OPTIONS).
 
 
 -spec decode(jsx:json_text(), jsx_to_term:config()) -> jsx:json_term().
@@ -33,7 +35,7 @@ decode(JSON, Opts) ->
 -spec try_decode(jsx:json_text()) -> {ok, jsx:json_term()} |
 				     {error, Reason :: term()}.
 try_decode(JSON) ->
-    try_decode(JSON, []).
+    try_decode(JSON, ?DEFAULT_DECODE_OPTIONS).
 
 
 -spec try_decode(jsx:json_text(), jsx_to_term:config()) -> 
