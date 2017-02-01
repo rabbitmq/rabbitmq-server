@@ -16,20 +16,57 @@
 
 -module(rabbit_json).
 
--export([decode/1, try_decode/1, encode/1]).
+-export([decode/1, decode/2, try_decode/1, try_decode/2,
+	 encode/1, encode/2, try_encode/1, try_encode/2]).
+
+-define(DEFAULT_DECODE_OPTIONS, [return_maps]).
+
 
 -spec decode(jsx:json_text()) -> jsx:json_term().
 decode(JSON) ->
-    jsx:decode(JSON, [return_maps]).
+    decode(JSON, ?DEFAULT_DECODE_OPTIONS).
 
--spec try_decode(jsx:json_text()) -> {ok, jsx:json_term()} | error.
+
+-spec decode(jsx:json_text(), jsx_to_term:config()) -> jsx:json_term().
+decode(JSON, Opts) ->
+    jsx:decode(JSON, Opts).
+
+
+-spec try_decode(jsx:json_text()) -> {ok, jsx:json_term()} |
+				     {error, Reason :: term()}.
 try_decode(JSON) ->
+    try_decode(JSON, ?DEFAULT_DECODE_OPTIONS).
+
+
+-spec try_decode(jsx:json_text(), jsx_to_term:config()) -> 
+			{ok, jsx:json_term()} | {error, Reason :: term()}.
+try_decode(JSON, Opts) ->
     try
-        {ok, decode(JSON)}
-    catch error:_ ->
-        error
+        {ok, decode(JSON, Opts)}
+    catch error: Reason ->
+        {error, Reason}
     end.
 
 -spec encode(jsx:json_term()) -> jsx:json_text().
 encode(Term) ->
-    jsx:encode(Term).
+    encode(Term, []).
+
+-spec encode(jsx:json_term(), jsx_to_json:config()) -> jsx:json_text().
+encode(Term, Opts) ->
+    jsx:encode(Term, Opts).
+
+
+-spec try_encode(jsx:json_term()) -> {ok, jsx:json_text()} | 
+				     {error, Reason :: term()}.
+try_encode(Term) ->
+    try_encode(Term, []).
+
+
+-spec try_encode(jsx:json_term(), jsx_to_term:config()) ->
+			{ok, jsx:json_text()} | {error, Reason :: term()}.
+try_encode(Term, Opts) ->
+    try
+        {ok, encode(Term, Opts)}
+    catch error: Reason ->
+	    {error, Reason}
+    end.
