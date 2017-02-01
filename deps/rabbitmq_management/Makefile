@@ -27,9 +27,7 @@ LOCAL_DEPS += xmerl mnesia ranch ssl crypto public_key
 # See rabbitmq-components.mk.
 BUILD_DEPS += ranch
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
