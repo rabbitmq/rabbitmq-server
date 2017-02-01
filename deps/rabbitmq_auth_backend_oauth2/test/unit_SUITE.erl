@@ -7,20 +7,18 @@
 
 all() ->
     [
-        {group, unit_tests},
-        {group, mock_tests}
-    ].
-
-groups() ->
-    [
-        {unit_tests, [], [test_own_scope, test_validate_payload]},
-        {mock_tests, [], [test_token]}
+        test_own_scope,
+        test_validate_payload,
+        test_token,
+        test_command_json,
+        test_command_pem
     ].
 
 init_per_suite(Config) ->
     application:load(rabbitmq_auth_backend_uaa),
     Env = application:get_all_env(rabbitmq_auth_backend_uaa),
-    rabbit_ct_helpers:set_config(Config, {env, Env}).
+    Config1 = rabbit_ct_helpers:set_config(Config, {env, Env}),
+    rabbit_ct_helpers:run_setup_steps(Config1, []).
 
 end_per_suite(Config) ->
     Env = ?config(env, Config),
@@ -29,7 +27,7 @@ end_per_suite(Config) ->
             application:set_env(rabbitmq_auth_backend_uaa, K, V)
         end,
         Env),
-    Config.
+    rabbit_ct_helpers:run_teardown_steps(Config).
 
 test_token(_) ->
     % Generate token with JOSE
@@ -107,6 +105,40 @@ test_token(_) ->
               read,
               #{routing_key => <<"foo/#">>}).
 
+test_command_json(_) ->
+    Jwk = fixture_jwk(),
+    Json = rabbit_json:encode(Jwk),
+    'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
+        [<<"token-key">>],
+        #{node => node(), json => Json}),
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+    Token = fixture_signed_token(Jwk),
+    {ok, #auth_user{username = Token} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+
+    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+
+test_command_pem(Config) ->
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+    CertsDir = ?config(rmq_certsdir, Config),
+    Keyfile = filename:join([CertsDir, "client", "key.pem"]),
+    Jwk = jose_jwk:from_pem_file(Keyfile),
+
+    PublicJwk  = jose_jwk:to_public(Jwk),
+    PublicKeyFile = filename:join([CertsDir, "client", "public.pem"]),
+    jose_jwk:to_pem_file(PublicKeyFile, PublicJwk),
+
+    'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
+        [<<"token-key">>],
+        #{node => node(), pem => PublicKeyFile}),
+
+    Token = fixture_signed_token_rsa(Jwk),
+    {ok, #auth_user{username = Token} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+
+    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+
+
 test_own_scope(_) ->
     Examples = [
         {<<"foo">>, [<<"foo">>, <<"foo.bar">>, <<"bar.foo">>,
@@ -164,30 +196,41 @@ fixture_jwk() ->
       <<"use">> => <<"sig">>,
       <<"value">> => <<"tokenkey">>}.
 
+fixture_signed_token_rsa(Jwk) ->
+    Jws = #{
+      <<"alg">> => <<"RS256">>,
+      <<"kid">> => <<"token-key">>
+    },
+    TokenPayload = fixture_token(),
+    Signed = jose_jwt:sign(Jwk, Jws, TokenPayload),
+
+    jose_jws:compact(Signed).
+
 fixture_signed_token(Jwk) ->
     Jws = #{
       <<"alg">> => <<"HS256">>,
       <<"kid">> => <<"token-key">>
     },
 
+    TokenPayload = fixture_token(),
+    Signed = jose_jwt:sign(Jwk, Jws, TokenPayload),
+    Token = jose_jws:compact(Signed),
+    % Sanity chek
+    {true, #{<<"scope">> :=  Scope}} =
+        'Elixir.UaaJWT.JWT':decode_and_verify(Token, Jwk),
+
+    Token.
+
+fixture_token() ->
     Scope = [<<"rabbitmq.configure:vhost/foo">>,
              <<"rabbitmq.write:vhost/foo">>,
              <<"rabbitmq.read:vhost/foo">>,
              <<"rabbitmq.read:vhost/bar">>,
              <<"rabbitmq.read:vhost/bar/%23%2Ffoo">>],
 
-    TokenPayload = #{<<"exp">> => 1484803430,
-                     <<"kid">> => <<"token-key">>,
-                     <<"iss">> => <<"unit_test">>,
-                     <<"foo">> => <<"bar">>,
-                     <<"aud">> => [<<"rabbitmq">>],
-                     <<"scope">> => Scope},
-
-    Signed = jose_jwt:sign(Jwk, Jws, TokenPayload),
-    Token = jose_jws:compact(Signed),
-
-    % Sanity chek
-    {true, #{<<"scope">> :=  Scope}} =
-        'Elixir.UaaJWT.JWT':decode_and_verify(Token, Jwk),
-
-    Token.
+    #{<<"exp">> => 1484803430,
+      <<"kid">> => <<"token-key">>,
+      <<"iss">> => <<"unit_test">>,
+      <<"foo">> => <<"bar">>,
+      <<"aud">> => [<<"rabbitmq">>],
+      <<"scope">> => Scope}.
