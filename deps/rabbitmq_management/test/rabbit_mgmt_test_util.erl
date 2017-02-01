@@ -56,7 +56,7 @@ http_get_no_map(Config, Path) ->
     {ok, {{_HTTP, CodeAct, _}, _Headers, ResBody}} =
         req(Config, get, Path, [auth_header("guest", "guest")]),
     assert_code(?OK, CodeAct, "GET", Path, ResBody),
-    cleanup(jsx:decode(list_to_binary(ResBody))).
+    cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody), [])).
 
 http_put(Config, Path, List, CodeExp) ->
     http_put_raw(Config, Path, format_for_upload(List), CodeExp).
@@ -213,7 +213,8 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
                           path, Path, body, Body})
     end.
 
-decode(?OK, _Headers,  ResBody) -> cleanup(rabbit_json:decode(list_to_binary(ResBody)));
+decode(?OK, _Headers,  ResBody) -> 
+    cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)));
 decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
