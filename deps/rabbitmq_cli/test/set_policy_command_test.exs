@@ -124,10 +124,9 @@ defmodule SetPolicyCommandTest do
 
   @tag pattern: @pattern, key: @key, value: "bad-value", vhost: @root
   test "run: an invalid value returns a JSON decoding error", context do
-    assert @command.run(
-      [context[:key], context[:pattern], context[:value]],
-      context[:opts]
-    ) == {:error_string, 'JSON decoding error'}
+    assert match?({:error_string, _},
+      @command.run([context[:key], context[:pattern], context[:value]],
+        context[:opts]))
 
     assert list_policies(context[:vhost]) == []
   end

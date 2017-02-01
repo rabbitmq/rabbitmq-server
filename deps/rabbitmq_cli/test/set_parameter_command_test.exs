@@ -113,10 +113,9 @@ defmodule SetParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: "bad-value", vhost: @root
   test "run: an invalid value returns a JSON decoding error", context do
-    assert @command.run(
-      [context[:component_name], context[:key], context[:value]],
-      context[:opts]
-    ) == {:error_string, 'JSON decoding error'}
+    assert match?({:error_string, _},
+      @command.run([context[:component_name], context[:key], context[:value]],
+        context[:opts]))
 
     assert list_parameters(context[:vhost]) == []
   end
