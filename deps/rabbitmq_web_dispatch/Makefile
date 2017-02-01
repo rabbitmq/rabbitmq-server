@@ -2,6 +2,7 @@ PROJECT = rabbitmq_web_dispatch
 PROJECT_DESCRIPTION = RabbitMQ Web Dispatcher
 PROJECT_MOD = rabbit_web_dispatch_app
 
+LOCAL_DEPS = inets
 DEPS = rabbit_common rabbit cowboy
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 dep_cowboy_commit = 1.0.3
