@@ -171,7 +171,7 @@ http_put(Config, Path, List, CodeExp) ->
 
 format_for_upload(Map0) ->
     Map = maps:fold(fun(K, V, Acc) ->
-        Acc#{atom_to_binary(K, utf8) => V}
+        Acc#{atom_to_binary(K, latin1) => V}
     end, #{}, Map0),
     iolist_to_binary(rabbit_json:encode(Map)).
 
@@ -226,7 +226,7 @@ cleanup(L) when is_list(L) ->
     [cleanup(I) || I <- L];
 cleanup(M) when is_map(M) ->
     maps:fold(fun(K, V, Acc) ->
-        Acc#{binary_to_atom(K, utf8) => cleanup(V)}
+        Acc#{binary_to_atom(K, latin1) => cleanup(V)}
     end, #{}, M);
 cleanup(I) ->
     I.
