@@ -26,17 +26,14 @@
          check_vhost_access/3, check_resource_access/3,
          check_topic_access/4]).
 
-%% httpc seems to get racy when using HTTP 1.1
--define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
-
 -ifdef(TEST).
 -compile(export_all).
 -endif.
 %%--------------------------------------------------------------------
 
 description() ->
-    [{name, <<"HTTP">>},
-     {description, <<"HTTP authentication / authorisation">>}].
+    [{name, <<"UAA">>},
+     {description, <<"UAA token authentication / authorisation">>}].
 
 %%--------------------------------------------------------------------
 
@@ -56,31 +53,41 @@ user_login_authorization(Username) ->
         Else                          -> Else
     end.
 
-check_vhost_access(#auth_user{username = Username}, VHost, _Sock) ->
-    with_token(
-        Username,
-        fun(UserData) ->
-            Scopes = get_scopes(UserData),
+check_vhost_access(#auth_user{username = Username, impl = DecodedToken},
+                   VHost, _Sock) ->
+    with_decoded_token(DecodedToken,
+        fun() ->
+            Scopes = get_scopes(DecodedToken),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
-check_resource_access(#auth_user{username = Username}, Resource, Permission) ->
-    with_token(
-        Username,
-        fun(UserData) ->
-            Scopes = get_scopes(UserData),
+check_resource_access(#auth_user{username = Username, impl = DecodedToken},
+                      Resource, Permission) ->
+    with_decoded_token(DecodedToken,
+        fun() ->
+            Scopes = get_scopes(DecodedToken),
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
-check_topic_access(#auth_user{username = Username}, Resource, Permission, Context) ->
-    with_token(
-        Username,
-        fun(UserData) ->
-            Scopes = get_scopes(UserData),
+check_topic_access(#auth_user{username = Username, impl = DecodedToken},
+                   Resource, Permission, Context) ->
+    with_decoded_token(DecodedToken,
+        fun() ->
+            Scopes = get_scopes(DecodedToken),
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
 
 %%--------------------------------------------------------------------
+
+with_decoded_token(DecodedToken, Fun) ->
+    case token_expired(DecodedToken) of
+        false -> Fun();
+        true  -> {error_message, "Token expired"}
+    end.
+
+token_expired(#{<<"exp">> := Exp}) when is_integer(Exp) ->
+    Exp =< os:system_time(seconds);
+token_expired(#{}) -> true.
 
 with_token(Token, Fun) ->
     case check_token(Token) of
