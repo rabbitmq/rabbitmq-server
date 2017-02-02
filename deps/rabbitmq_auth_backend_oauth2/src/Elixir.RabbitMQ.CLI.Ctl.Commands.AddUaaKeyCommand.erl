@@ -37,19 +37,26 @@ validate([_], Options) ->
             {validation_failure,
              {bad_argument, <<"Key type should be either json or pem">>}};
         {true, false} ->
-            validat_json(Json);
+            validate_json(Json);
         {false, true} ->
             validate_pem_file(Pem)
     end.
 
-validat_json(Json) ->
+validate_json(Json) ->
     case rabbit_json:try_decode(Json) of
         {ok, _} ->
             case 'Elixir.UaaJWT':verify_signing_key(json, Json) of
                 ok -> ok;
+                {error, {fields_missing_for_kty, Kty}} ->
+                    {validation_failure,
+                     {bad_argument,
+                      <<"Key fields are missing fot kty \"", Kty/binary, "\"">>}};
                 {error, unknown_kty} ->
                     {validation_failure,
-                     {bad_argument, <<"JSON key should contain \"kty\" field">>}};
+                     {bad_argument, <<"\"kty\" field is invalid">>}};
+                {error, no_kty} ->
+                    {validation_failure,
+                     {bad_argument, <<"Json key should contain \"kty\" field">>}};
                 {error, Err} ->
                     {validation_failure, {bad_argument, Err}}
             end;

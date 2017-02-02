@@ -22,26 +22,26 @@ end_per_suite(Config) ->
 
 
 validate_arguments(_) ->
-    {validation_failure, {bad_argument, too_many_args}} =
+    {validation_failure, too_many_args} =
         ?COMMAND:validate([<<"one">>, <<"two">>], #{json => <<"{}">>}),
-    {validation_failure, {bad_argument, not_enough_args}} =
+    {validation_failure, not_enough_args} =
         ?COMMAND:validate([], #{json => <<"{}">>}),
     {validation_failure, {bad_argument, <<"No key specified">>}} =
         ?COMMAND:validate([<<"foo">>], #{}),
     {validation_failure, {bad_argument, <<"Key type should be either json or pem">>}} =
-        ?COMMAND:validate([<<"foo">>], , #{json => <<"{}">>, pem => "/tmp/key.pem"}).
+        ?COMMAND:validate([<<"foo">>], #{json => <<"{}">>, pem => <<"/tmp/key.pem">>}).
 
 validate_json_key(_) ->
     {validation_failure, {bad_argument, <<"Invalid JSON">>}} =
-        ?COMMAND:validate([<<"foo">>, #{json => <<"foobar">>}]),
-    {validation_failure, {bad_argument, <<"JSON key should contain \"kty\" field">>}} =
-        ?COMMAND:validate([<<"foo">>, #{json => <<"{}">>}]),
+        ?COMMAND:validate([<<"foo">>], #{json => <<"foobar">>}),
+    {validation_failure, {bad_argument, <<"Json key should contain \"kty\" field">>}} =
+        ?COMMAND:validate([<<"foo">>], #{json => <<"{}">>}),
     {validation_failure, {bad_argument, _}} =
-        ?COMMAND:validate([<<"foo">>, #{json => <<"{\"kty\": \"oct\"}">>}]),
-    VlidJson = <<"{\"alg\":\"HS256\",\"k\":\"dG9rZW5rZXk\",\"kid\":\"token-key\",\"kty\":\"oct\",\"use\":\"sig\",\"value\":\"tokenkey\"}">>,
+        ?COMMAND:validate([<<"foo">>], #{json => <<"{\"kty\": \"oct\"}">>}),
+    ValidJson = <<"{\"alg\":\"HS256\",\"k\":\"dG9rZW5rZXk\",\"kid\":\"token-key\",\"kty\":\"oct\",\"use\":\"sig\",\"value\":\"tokenkey\"}">>,
     ok = ?COMMAND:validate([<<"foo">>], #{json => ValidJson}).
 
-validate_pem_key(_) ->
+validate_pem_key(Config) ->
     {validation_failure, {bad_argument, <<"PEM file not found">>}} =
         ?COMMAND:validate([<<"foo">>], #{pem => <<"non_existent_file">>}),
     file:write_file("empty.pem", <<"">>),
@@ -50,6 +50,7 @@ validate_pem_key(_) ->
     file:write_file("not_pem.pem", <<"">>),
     {validation_failure, _} =
         ?COMMAND:validate([<<"foo">>], #{pem => <<"not_pem.pem">>}),
-    Keyfile = filename:join([CertsDir, "client", "key.pem"]),
+    CertsDir = ?config(rmq_certsdir, Config),
+    Keyfile = filename:join([CertsDir, <<"client">>, <<"key.pem">>]),
     ok = ?COMMAND:validate([<<"foo">>], #{pem => Keyfile}).
 
