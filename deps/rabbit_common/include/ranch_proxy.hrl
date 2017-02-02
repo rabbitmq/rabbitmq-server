@@ -25,3 +25,13 @@
 -define(PP2_CLIENT_SSL, 16#01).
 -define(PP2_CLIENT_CERT_CONN, 16#02).
 -define(PP2_CLIENT_CERT_SESS, 16#04).
+
+-record(proxy_socket, { lsocket :: inet:socket()|ssl:sslsocket(),
+    csocket :: inet:socket()|ssl:sslsocket(),
+    opts :: ranch_proxy_protocol:opts(),
+    inet_version :: ipv4|ipv6,
+    source_address :: inet:ip_address(),
+    dest_address :: inet:ip_address(),
+    source_port :: inet:port_number(),
+    dest_port :: inet:port_number(),
+    connection_info = []}).

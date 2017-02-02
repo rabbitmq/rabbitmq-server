@@ -16,6 +16,7 @@
 
 -module(rabbit_net).
 -include("rabbit.hrl").
+-include("ranch_proxy.hrl").
 
 -include_lib("ssl/src/ssl_api.hrl").
 
@@ -23,7 +24,7 @@
          recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
          setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
          peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
-         accept_ack/2]).
+         accept_ack/2, unwrap_socket/1]).
 
 %%---------------------------------------------------------------------------
 
@@ -77,6 +78,7 @@
                            host_or_ip(), rabbit_networking:ip_port()}).
 -spec is_loopback(socket() | inet:ip_address()) -> boolean().
 -spec accept_ack(any(), socket()) -> ok.
+-spec unwrap_socket(socket() | ranch_proxy:proxy_socket()) -> socket().
 
 %%---------------------------------------------------------------------------
 
@@ -212,6 +214,18 @@ connection_string(Sock, Direction) ->
             Error
     end.
 
+socket_ends(#proxy_socket{source_address = FromAddress,
+                          source_port = FromPort,
+                          csocket = CSocket},
+            Direction = inbound) ->
+    {_From, To} = sock_funs(Direction),
+    case To(CSocket) of
+        {ok, {ToAddress, ToPort}} ->
+            {ok, {rdns(FromAddress), FromPort,
+                rdns(ToAddress),   ToPort}};
+        {error, _Reason} = Error ->
+            Error
+    end;
 socket_ends(Sock, Direction) ->
     {From, To} = sock_funs(Direction),
     case {From(Sock), To(Sock)} of
@@ -264,4 +278,10 @@ tune_buffer_size(Sock) ->
         {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
                           setopts(Sock, [{buffer, BufSz}]);
         Error          -> Error
+    end.
+
+unwrap_socket(Sock) ->
+    case Sock of
+        #proxy_socket{csocket = CSocket} -> CSocket;
+        _ -> Sock
     end.

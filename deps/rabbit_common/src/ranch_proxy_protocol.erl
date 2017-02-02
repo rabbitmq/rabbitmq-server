@@ -3,6 +3,8 @@
 %%% @end
 -module(ranch_proxy_protocol).
 
+-include("ranch_proxy.hrl").
+
 -export([accept/3,
          listen/2,
          accept_ack/3,
@@ -30,15 +32,7 @@
          set_csocket/2]).
 
 -type opts() :: ranch_ssl:opts()|ranch_tcp:opts().
--record(proxy_socket, { lsocket :: inet:socket()|ssl:sslsocket(),
-                        csocket :: inet:socket()|ssl:sslsocket(),
-                        opts :: opts(),
-                        inet_version :: ipv4|ipv6,
-                        source_address :: inet:ip_address(),
-                        dest_address :: inet:ip_address(),
-                        source_port :: inet:port_number(),
-                        dest_port :: inet:port_number(),
-                        connection_info = []}).
+
 -type transport() :: module().
 -type proxy_opts() :: [{source_address, inet:ip_address()} |
                        {source_port, inet:port_number()} |
@@ -52,9 +46,7 @@
               proxy_socket/0,
               proxy_protocol_info/0]).
 
--define(DEFAULT_PROXY_TIMEOUT, config(proxy_protocol_timeout)).
-
--include("ranch_proxy.hrl").
+-define(DEFAULT_PROXY_TIMEOUT, 55000).
 
 %% Record manipulation API
 -spec get_csocket(proxy_socket()) -> port().
@@ -134,19 +126,21 @@ accept(Transport, #proxy_socket{lsocket = LSocket,
             ProxySocket = #proxy_socket{lsocket = LSocket,
                                         csocket = CSocket,
                                         opts = Opts},
+            DefaultValuesOfModifiedOptions = [{active, false}, {packet, 0}],
             ok = setopts(Transport, ProxySocket, [{active, once}, {packet, line}]),
             receive
                 {_, CSocket, <<"PROXY ", ProxyInfo/binary>>} ->
+                    io:format("PROXY ~p~n", [ProxyInfo]),
                     case parse_proxy_protocol_v1(ProxyInfo) of
                         {InetVersion, SourceAddress, DestAddress, SourcePort, DestPort} ->
-                            reset_socket_opts(Transport, ProxySocket, Opts),
+                            reset_socket_opts(Transport, ProxySocket, Opts, DefaultValuesOfModifiedOptions),
                             {ok, ProxySocket#proxy_socket{inet_version = InetVersion,
                                                           source_address = SourceAddress,
                                                           dest_address = DestAddress,
                                                           source_port = SourcePort,
                                                           dest_port = DestPort}};
                         unknown_peer ->
-                            reset_socket_opts(Transport, ProxySocket, Opts),
+                            reset_socket_opts(Transport, ProxySocket, Opts, DefaultValuesOfModifiedOptions),
                             {ok, ProxySocket};
                         not_proxy_protocol ->
                             close(Transport, ProxySocket),
@@ -479,15 +473,9 @@ parse_ips([Ip|Ips], Retval) ->
             {error, invalid_address}
     end.
 
-reset_socket_opts(Transport, ProxySocket, Opts) ->
-    Opts2 = ranch:filter_options(Opts, [active,buffer,delay_send,deliver,dontroute,
-                                        exit_on_close,header,high_msgq_watermark,
-                                        high_watermark,keepalive,linger,low_msgq_watermark,
-                                        low_watermark,mode,nodelay,packet,packet_size,priority,
-                                        recbuf,reuseaddr,send_timeout,send_timeout_close,sndbuf,tos],
-                                 [binary, {active, false}, {packet, raw},
-                                  {reuseaddr, true}, {nodelay, true}]),
-    setopts(Transport, ProxySocket, Opts2).
+reset_socket_opts(Transport, ProxySocket, RequestedOpts, DefaultsOfModifiedOptions) ->
+    setopts(Transport, ProxySocket, DefaultsOfModifiedOptions),
+    setopts(Transport, ProxySocket, RequestedOpts).
 
 get_next_timeout(_, _, infinity) ->
     %% Never leave `infinity' in place. This may be valid for socket
@@ -514,6 +502,3 @@ dest_from_socket(Transport, Socket) ->
         Err -> Err
     end.
 
-config(Key) ->
-    {ok, Val} = application:get_env(ranch_proxy_protocol, Key),
-    Val.

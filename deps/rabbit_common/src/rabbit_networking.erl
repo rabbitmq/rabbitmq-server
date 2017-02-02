@@ -283,10 +283,7 @@ start_listener(Listener, NumAcceptors, Protocol, Label, Opts) ->
     ok.
 
 start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
-    Transport = case Protocol of
-        amqp -> ranch_tcp;
-        'amqp/ssl' -> ranch_ssl
-    end,
+    Transport = transport(Protocol),
     Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, Opts,
                              Transport, rabbit_connection_sup, [], Protocol,
                              NumAcceptors, Label),
@@ -296,6 +293,16 @@ start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
                                   exit({could_not_start_tcp_listener,
                                         {rabbit_misc:ntoa(IPAddress), Port}})
     end.
+
+transport(Protocol) ->
+    ProxyProtocol = application:get_env(rabbit, proxy_protocol, false),
+    case {Protocol, ProxyProtocol} of
+        {amqp, false}       -> ranch_tcp;
+        {amqp, true}        -> ranch_proxy;
+        {'amqp/ssl', false} -> ranch_ssl;
+        {'amqp/ssl', true}  -> ranch_proxy_ssl
+    end.
+
 
 stop_tcp_listener(Listener) ->
     [stop_tcp_listener0(Address) ||
