@@ -182,13 +182,17 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
                 {error, E}  ->
                     rabbit_log:error(ErrStr ++ " by ~s: ~p~n",
                                      ErrArgs ++ [Module, E]),
-                    false;
+                    {false, ""};
+                {error_message, Message} ->
+                    rabbit_log:error(ErrStr ++ " by ~s: ~p~n",
+                                     ErrArgs ++ [Module, Message]),
+                    {false, Message};
                 Else ->
-                    Else
+                    {Else, ""}
             end,
     case Allow of
-        true ->
+        {true, _} ->
             ok;
-        false ->
-            rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs)
+        {false, M} ->
+            rabbit_misc:protocol_error(ErrName, ErrStr ++ M, ErrArgs)
     end.
