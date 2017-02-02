@@ -40,7 +40,8 @@ groups() ->
                                queue_coarse_test,
                                connection_coarse_test,
                                fine_stats_aggregation_time_test,
-                               fine_stats_aggregation_test
+                               fine_stats_aggregation_test,
+                               all_consumers_test
                               ]}
     ].
 
@@ -286,6 +287,27 @@ assert_fine_stats({T2, Name}, Type, N, Obj, R) ->
 assert_fine_stats_neg({T2, Name}, Obj) ->
     detailed_stats_absent(Name, pget(expand(T2), Obj)).
 
+ %% {{{resource,<<"/">>,queue,<<"test_lazy">>},
+ %%   <0.953.0>,<<"amq.ctag-sPlBtNl8zwIGkYhNjJrATA">>},
+ %%  false,true,0,[]},
+all_consumers_test(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, all_consumers_test1, [Config]).
+
+all_consumers_test1(_Config) ->
+    %% Tests that we can list all the consumers while channels are in the process of
+    %% being deleted. Thus, channel details might be missing.
+    %% `merge_channel_into_obj` is also used when listing queues, which might now report
+    %% empty channel details while the queue is being deleted. But will not crash.
+    [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
+                                                        {queue,    fun dummy_lookup/1}])
+     || {T, _} <- ?CORE_TABLES],
+    create_cons(q1, ch1, <<"ctag">>, false, true, 0, []),
+    timer:sleep(1150),
+    [Consumer] = rabbit_mgmt_db:get_all_consumers(),
+    [] = proplists:get_value(channel_details, Consumer),
+    %% delete_cons(co),
+    [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
+    ok.
 %%----------------------------------------------------------------------------
 %% Events in
 %%----------------------------------------------------------------------------
@@ -299,6 +321,11 @@ create_ch(Name, Extra) ->
                                                     {name, a2b(Name)}] ++ Extra).
 create_ch(Name) ->
     create_ch(Name, []).
+
+create_cons(QName, ChName, Tag, Exclusive, AckRequired, PrefetchCount, Args) ->
+    rabbit_core_metrics:consumer_created(pid(ChName), Tag, Exclusive,
+                                         AckRequired, q(QName),
+                                         PrefetchCount, Args).
 
 stats_series(Fun, ListsOfPairs) ->
     [begin
@@ -336,6 +363,13 @@ delete_conn(Name) ->
     Pid = pid_del(Name),
     rabbit_core_metrics:connection_closed(Pid),
     rabbit_event:notify(connection_closed, [{pid, Pid}]).
+
+delete_cons(QName, ChName, Tag) ->
+    Pid = pid_del(ChName),
+    rabbit_core_metrics:consumer_deleted(Pid, Tag, q(QName)),
+    rabbit_event:notify(consumer_deleted, [{channel, Pid},
+                                           {queue, q(QName)},
+                                           {consumer_tag, Tag}]).
 
 delete_ch(Name) ->
     Pid = pid_del(Name),
