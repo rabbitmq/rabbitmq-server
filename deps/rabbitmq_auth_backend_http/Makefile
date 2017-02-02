@@ -13,7 +13,7 @@ define PROJECT_ENV
 endef
 
 define PROJECT_APP_EXTRA_KEYS
-	{broker_version_requirements, []}
+	{broker_version_requirements, ["3.6.0", "3.7.0"]}
 endef
 
 LOCAL_DEPS = inets
