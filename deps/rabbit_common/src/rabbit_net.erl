@@ -214,6 +214,9 @@ connection_string(Sock, Direction) ->
             Error
     end.
 
+socket_ends(#ssl_socket{proxy_socket = ProxySocket},
+            Direction = inbound) ->
+    socket_ends(ProxySocket, Direction);
 socket_ends(#proxy_socket{source_address = FromAddress,
                           source_port = FromPort,
                           csocket = CSocket},
@@ -283,5 +286,6 @@ tune_buffer_size(Sock) ->
 unwrap_socket(Sock) ->
     case Sock of
         #proxy_socket{csocket = CSocket} -> CSocket;
+        #ssl_socket{proxy_socket = #proxy_socket{csocket = CSocket}} -> CSocket;
         _ -> Sock
     end.
