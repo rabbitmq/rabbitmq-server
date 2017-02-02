@@ -453,8 +453,12 @@ merge_channel_details(QueueStats, Lookup) ->
 
 merge_channel_into_obj(Obj, ChDet) ->
     case pget(channel_details, Obj) of
-        [] -> CHd = dict:fetch(pget(channel_pid, Obj), ChDet),
-              rabbit_misc:pset(channel_details, CHd, Obj);
+        [] -> case dict:find(pget(channel_pid, Obj), ChDet) of
+                  {ok, CHd} ->
+                      rabbit_misc:pset(channel_details, CHd, Obj);
+                  error ->
+                      Obj
+              end;
         _ -> Obj
     end.
 
