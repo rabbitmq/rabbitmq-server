@@ -11,7 +11,8 @@ all() ->
         test_validate_payload,
         test_token,
         test_command_json,
-        test_command_pem
+        test_command_pem,
+        test_command_pem_no_kid
     ].
 
 init_per_suite(Config) ->
@@ -139,6 +140,31 @@ test_command_pem(Config) ->
     true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
 
 
+test_command_pem_no_kid(Config) ->
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+    CertsDir = ?config(rmq_certsdir, Config),
+    Keyfile = filename:join([CertsDir, "client", "key.pem"]),
+    Jwk = jose_jwk:from_pem_file(Keyfile),
+
+    PublicJwk  = jose_jwk:to_public(Jwk),
+    PublicKeyFile = filename:join([CertsDir, "client", "public.pem"]),
+    jose_jwk:to_pem_file(PublicKeyFile, PublicJwk),
+
+    'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
+        [<<"token-key">>],
+        #{node => node(), pem => PublicKeyFile}),
+
+    %% Set default kid
+
+    application:set_env(uaa_jwt, default_key, <<"token-key">>),
+
+    Token = fixture_signed_token_rsa_no_kid(Jwk),
+    {ok, #auth_user{username = Token} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+
+    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+
+
 test_own_scope(_) ->
     Examples = [
         {<<"foo">>, [<<"foo">>, <<"foo.bar">>, <<"bar.foo">>,
@@ -203,6 +229,12 @@ fixture_signed_token_rsa(Jwk) ->
     },
     TokenPayload = fixture_token(),
     Signed = jose_jwt:sign(Jwk, Jws, TokenPayload),
+
+    jose_jws:compact(Signed).
+
+fixture_signed_token_rsa_no_kid(Jwk) ->
+    TokenPayload = fixture_token(),
+    Signed = jose_jwt:sign(Jwk, TokenPayload),
 
     jose_jws:compact(Signed).
 

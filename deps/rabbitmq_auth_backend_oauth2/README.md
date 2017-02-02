@@ -10,6 +10,7 @@ First, enable the plugin. Then, configure access to UAA:
 [{rabbitmq_auth_backend_uaa,
   [{resource_server_id, <<"your-resource-server-id"}]},
  {uaa_jwt, [
+  {default_key, <<"key1">>},
   {signing_keys, #{
     <<"key1">> => {map, #{<<"kty">> => <<"oct">>, <<"k">> => <<"dG9rZW5rZXk">>}},
     <<"key2">> => {pem, <<"/path/to/public_key.pem">>},
