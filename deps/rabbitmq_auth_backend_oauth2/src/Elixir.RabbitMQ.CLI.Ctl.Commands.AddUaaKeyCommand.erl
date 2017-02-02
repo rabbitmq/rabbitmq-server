@@ -44,18 +44,29 @@ validate([_], Options) ->
 
 validat_json(Json) ->
     case rabbit_json:try_decode(Json) of
-        {ok, _} -> ok;
-        error   -> {validation_failure, {bad_argument, "Invalid JSON"}}
+        {ok, _} ->
+            case 'Elixir.UaaJWT':verify_signing_key(json, Json) of
+                ok -> ok;
+                {error, unknown_kty} ->
+                    {validation_failure,
+                     {bad_argument, <<"JSON key should contain \"kty\" field">>}};
+                {error, Err} ->
+                    {validation_failure, {bad_argument, Err}}
+            end;
+        error   ->
+            {validation_failure, {bad_argument, <<"Invalid JSON">>}}
     end.
 
 validate_pem_file(Pem) ->
-    {ok, PemBin} = file:read_file(Pem),
-    case public_key:pem_decode(PemBin) of
-        []  -> {validation_failure, "Unable to read certificate from PEM file"};
-        [_] -> ok;
-        _   -> {validation_failure, "PEM file should contain a single key"}
+    case 'Elixir.UaaJWT':verify_signing_key(pem, Pem) of
+        ok -> ok;
+        {error, enoent} ->
+            {validation_failure, {bad_argument, <<"PEM file not found">>}};
+        {error, invalid_pem_file} ->
+            {validation_failure, <<"Unable to read a key from the PEM file">>};
+        {error, Err} ->
+            {validation_failure, Err}
     end.
-
 
 merge_defaults(Args, #{pem := FileName} = Options) ->
     AbsFileName = filename:absname(FileName),
