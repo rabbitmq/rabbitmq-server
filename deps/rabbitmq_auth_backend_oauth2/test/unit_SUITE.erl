@@ -37,9 +37,9 @@ test_token(_) ->
     Jwk = fixture_jwk(),
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
-    Token = fixture_signed_token(Jwk),
+    Token = sign_token_hs(fixture_token(), Jwk),
     WrongJwk = Jwk#{<<"k">> => <<"bm90b2tlbmtleQ">>},
-    WrongToken = fixture_signed_token(WrongJwk),
+    WrongToken = sign_token_hs(fixture_token(), WrongJwk),
 
 
     {ok, #auth_user{username = Token} = User} =
@@ -49,7 +49,7 @@ test_token(_) ->
     {refused, _, _} =
         rabbit_auth_backend_uaa:user_login_authentication(WrongToken, any),
 
-    {ok, none} =
+    {ok, #{}} =
         rabbit_auth_backend_uaa:user_login_authorization(Token),
     {refused, _, _} =
         rabbit_auth_backend_uaa:user_login_authorization(<<"not token">>),
@@ -106,6 +106,43 @@ test_token(_) ->
               read,
               #{routing_key => <<"foo/#">>}).
 
+test_token_expiration(_) ->
+    Jwk = fixture_jwk(),
+    application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+    Token = sign_token_hs(expirable_token(), Jwk),
+    {ok, #auth_user{username = Token} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+    true = rabbit_auth_backend_uaa:check_resource_access(
+             User,
+             #resource{virtual_host = <<"vhost">>,
+                       kind = queue,
+                       name = <<"foo">>},
+             configure),
+    true = rabbit_auth_backend_uaa:check_resource_access(
+             User,
+             #resource{virtual_host = <<"vhost">>,
+                       kind = exchange,
+                       name = <<"foo">>},
+             write),
+
+    wait_token_expired(),
+
+    {error_message, "Auth token expired"} =
+        rabbit_auth_backend_uaa:check_resource_access(
+             User,
+             #resource{virtual_host = <<"vhost">>,
+                       kind = queue,
+                       name = <<"foo">>},
+             configure),
+
+    {refused, _, _} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token, any).
+
+
+
+
+
 test_command_json(_) ->
     Jwk = fixture_jwk(),
     Json = rabbit_json:encode(Jwk),
@@ -113,7 +150,7 @@ test_command_json(_) ->
         [<<"token-key">>],
         #{node => node(), json => Json}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
-    Token = fixture_signed_token(Jwk),
+    Token = sign_token_hs(fixture_token(), Jwk),
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
 
@@ -133,7 +170,7 @@ test_command_pem(Config) ->
         [<<"token-key">>],
         #{node => node(), pem => PublicKeyFile}),
 
-    Token = fixture_signed_token_rsa(Jwk),
+    Token = sign_token_rsa(fixture_token(), Jwk, <<"token-key">>),
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
 
@@ -158,7 +195,7 @@ test_command_pem_no_kid(Config) ->
 
     application:set_env(uaa_jwt, default_key, <<"token-key">>),
 
-    Token = fixture_signed_token_rsa_no_kid(Jwk),
+    Token = sign_token_no_kid(fixture_token(), Jwk),
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
 
@@ -213,6 +250,39 @@ test_validate_payload(_) ->
         end,
         Examples).
 
+-define(EXPIRE_TIME, 2000).
+
+expirable_token() ->
+    TokenPayload = fixture_token(),
+    TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(?EXPIRE_TIME)}.
+
+wait_token_expired() ->
+    timer:sleep(?EXPIRE_TIME).
+
+sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk) ->
+    sign_token_hs(Token, Jwk, TokenKey).
+
+sign_token_hs(Token, Jwk, TokenKey) ->
+    Jws = #{
+      <<"alg">> => <<"HS256">>,
+      <<"kid">> => TokenKey
+    },
+    sign_token(Token, Jwk, Jws).
+
+sign_token_rsa(Token, Jwk, TokenKey) ->
+    Jws = #{
+      <<"alg">> => <<"RS256">>,
+      <<"kid">> => TokenKey
+    },
+    sign_token(Token, Jwk, Jws).
+
+sign_token_no_kid(Token, Jwk) ->
+    Signed = jose_jwt:sign(Jwk, Token),
+    jose_jws:compact(Signed).
+
+sign_token(Token, Jwk, Jws) ->
+    Signed = jose_jwt:sign(Jwk, Jws, Token),
+    jose_jws:compact(Signed).
 
 fixture_jwk() ->
     #{<<"alg">> => <<"HS256">>,
@@ -222,37 +292,6 @@ fixture_jwk() ->
       <<"use">> => <<"sig">>,
       <<"value">> => <<"tokenkey">>}.
 
-fixture_signed_token_rsa(Jwk) ->
-    Jws = #{
-      <<"alg">> => <<"RS256">>,
-      <<"kid">> => <<"token-key">>
-    },
-    TokenPayload = fixture_token(),
-    Signed = jose_jwt:sign(Jwk, Jws, TokenPayload),
-
-    jose_jws:compact(Signed).
-
-fixture_signed_token_rsa_no_kid(Jwk) ->
-    TokenPayload = fixture_token(),
-    Signed = jose_jwt:sign(Jwk, TokenPayload),
-
-    jose_jws:compact(Signed).
-
-fixture_signed_token(Jwk) ->
-    Jws = #{
-      <<"alg">> => <<"HS256">>,
-      <<"kid">> => <<"token-key">>
-    },
-
-    TokenPayload = fixture_token(),
-    Signed = jose_jwt:sign(Jwk, Jws, TokenPayload),
-    Token = jose_jws:compact(Signed),
-    % Sanity chek
-    {true, #{<<"scope">> :=  Scope}} =
-        'Elixir.UaaJWT.JWT':decode_and_verify(Token, Jwk),
-
-    Token.
-
 fixture_token() ->
     Scope = [<<"rabbitmq.configure:vhost/foo">>,
              <<"rabbitmq.write:vhost/foo">>,
@@ -260,7 +299,7 @@ fixture_token() ->
              <<"rabbitmq.read:vhost/bar">>,
              <<"rabbitmq.read:vhost/bar/%23%2Ffoo">>],
 
-    #{<<"exp">> => 1484803430,
+    #{<<"exp">> => os:system_time(seconds) + 3000,
       <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,

@@ -42,9 +42,9 @@ user_login_authentication(Username, _AuthProps) ->
         {error, _} = E  -> E;
         {refused, Err}  -> {refused, "Denied by UAA plugin with error: ~p",
                             [Err]};
-        {ok, _UserData} -> {ok, #auth_user{username = Username,
+        {ok, UserData} -> {ok, #auth_user{username = Username,
                                            tags = [],
-                                           impl = none}}
+                                           impl = UserData}}
     end.
 
 user_login_authorization(Username) ->
@@ -82,18 +82,12 @@ check_topic_access(#auth_user{username = Username, impl = DecodedToken},
 with_decoded_token(DecodedToken, Fun) ->
     case token_expired(DecodedToken) of
         false -> Fun();
-        true  -> {error_message, "Token expired"}
+        true  -> {error_message, "Auth token expired"}
     end.
 
 token_expired(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     Exp =< os:system_time(seconds);
 token_expired(#{}) -> true.
-
-with_token(Token, Fun) ->
-    case check_token(Token) of
-        {ok, UserData} -> Fun(UserData);
-        _              -> false
-    end.
 
 -spec check_token(binary()) -> {ok, map()} | {error, term()}.
 check_token(Token) ->
