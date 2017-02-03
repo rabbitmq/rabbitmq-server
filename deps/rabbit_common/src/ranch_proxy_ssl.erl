@@ -31,7 +31,10 @@
 -module(ranch_proxy_ssl).
 -behaviour(ranch_transport).
 
--include("ranch_proxy.hrl").
+-record(ssl_socket, { upgraded = false :: boolean(),
+                      proxy_socket :: ranch_proxy_protocol:proxy_socket(),
+                      sslopts :: ranch_ssl:opts()
+                    }).
 
 -export([name/0,
          secure/0,
@@ -63,6 +66,9 @@
          ssl_connection_information/2
         ]).
 
+% Record manipulation
+-export([get_csocket/1]).
+
 -type proxy_opts() :: ranch_proxy_protocol:proxy_opts().
 -type proxy_socket() :: ranch_proxy_protocol:proxy_socket().
 -type proxy_protocol_info() :: ranch_proxy_protocol:proxy_protocol_info().
@@ -71,6 +77,11 @@
 -define(TRANSPORT, ranch_ssl).
 
 -export_type([ssl_socket/0]).
+
+%% Record manipulation API
+-spec get_csocket(ssl_socket()) -> port().
+get_csocket(#ssl_socket{proxy_socket=ProxySocket}) ->
+    ranch_proxy_protocol:get_csocket(ProxySocket).
 
 -spec name() -> atom().
 name() -> proxy_protocol_ssl.

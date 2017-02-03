@@ -33,8 +33,6 @@
 %%% @end
 -module(ranch_proxy_protocol).
 
--include("ranch_proxy.hrl").
-
 -export([accept/3,
          listen/2,
          accept_ack/3,
@@ -57,12 +55,22 @@
          connection_info/2
         ]).
 
+-include("ranch_proxy.hrl").
+
 % Record manipulation
 -export([get_csocket/1,
          set_csocket/2]).
 
 -type opts() :: ranch_ssl:opts()|ranch_tcp:opts().
-
+-record(proxy_socket, { lsocket :: inet:socket()|ssl:sslsocket(),
+                        csocket :: inet:socket()|ssl:sslsocket(),
+                        opts :: ranch_proxy_protocol:opts(),
+                        inet_version :: ipv4|ipv6,
+                        source_address :: inet:ip_address(),
+                        dest_address :: inet:ip_address(),
+                        source_port :: inet:port_number(),
+                        dest_port :: inet:port_number(),
+                        connection_info = []}).
 -type transport() :: module().
 -type proxy_opts() :: [{source_address, inet:ip_address()} |
                        {source_port, inet:port_number()} |
