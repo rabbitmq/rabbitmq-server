@@ -38,11 +38,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
   end
   def validate(_, _), do: :ok
 
-  def run([user, exchange, writePerm, readPerm], %{node: node_name, vhost: vhost}) do
+  def run([user, exchange, write_pattern, read_pattern], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
       :set_topic_permissions,
-      [user, vhost, exchange, writePerm, readPerm, Helpers.cli_acting_user()]
+      [user, vhost, exchange, write_pattern, read_pattern, Helpers.cli_acting_user()]
     )
   end
 
