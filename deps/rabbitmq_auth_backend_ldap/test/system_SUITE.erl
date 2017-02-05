@@ -86,6 +86,7 @@ base_conf_ldap(LdapPort, IdleTimeout, PoolSize) ->
                                                                     ]}}
                                                                  ]}}
                                                           ]}},
+                                                  {topic_access_query, topic_access_query_base()},
                                                   {tag_queries, [{monitor,       {constant, true}},
                                                                  {administrator, {constant, false}},
                                                                  {management,    {constant, false}}]}
@@ -96,7 +97,7 @@ base_conf_ldap(LdapPort, IdleTimeout, PoolSize) ->
 all() ->
     [
           {group, non_parallel_tests},
-      {group, with_idle_timeout}
+          {group, with_idle_timeout}
     ].
 
 groups() ->
@@ -109,7 +110,8 @@ groups() ->
         tag_attribution_internal_followed_by_ldap_and_internal,
         invalid_or_clause_ldap_only,
         invalid_and_clause_ldap_only,
-        topic_authorisation_ldap_only,
+        topic_authorisation_publishing_ldap_only,
+        topic_authorisation_consumption,
         match_bidirectional
     ],
     [
@@ -229,6 +231,11 @@ end_per_testcase(Testcase, Config)
     when Testcase == invalid_or_clause_ldap_only;
          Testcase == invalid_and_clause_ldap_only ->
     set_env(Config, vhost_access_query_base_env()),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(Testcase, Config)
+    when Testcase == topic_authorisation_publishing_ldap_only;
+         Testcase == topic_authorisation_consumption ->
+    set_env(Config, topic_access_query_base_env()),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -362,7 +369,9 @@ invalid_and_clause_ldap_only(Config) ->
     % This may not be a reliable return value assertion
     {error, not_allowed} = amqp_connection:start(B?ALICE).
 
-topic_authorisation_ldap_only(Config) ->
+topic_authorisation_publishing_ldap_only(Config) ->
+    %% topic authorisation at publishing time is enforced in the AMQP channel
+    %% so it can be tested by sending messages
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
         application, set_env, [rabbit, auth_backends, [rabbit_auth_backend_ldap]]),
 
@@ -376,20 +385,20 @@ topic_authorisation_ldap_only(Config) ->
     P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
     test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
 
-
     %% check string substitution (on username)
-    set_env(Config, [{topic_access_query, {'and',
-            [{equals, "${username}", "Alice"}]
-    }}]),
+    set_env(Config, [{topic_access_query, {for, [{permission, write, {equals, "${username}", "Alice"}},
+                                                 {permission, read, {constant, false}}
+    ]}}]),
     test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
     test_publish(P?BOB, <<"amq.topic">>, <<"a.b.c">>, fail),
 
     %% check string substitution on routing key (with regex)
-    set_env(Config, [{topic_access_query, {'and',
-            [{equals, "${username}", "Alice"},
-             {match, {string, "${routing_key}"}, {string, "^a"}}
-            ]
-    }}]),
+    set_env(Config, [{topic_access_query, {for, [{permission, write, {'and',
+                [{equals, "${username}", "Alice"},
+                 {match, {string, "${routing_key}"}, {string, "^a"}}]
+                }},
+                {permission, read, {constant, false}}
+    ]}}]),
     %% user and routing key OK
     test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
     %% user and routing key OK
@@ -400,6 +409,60 @@ topic_authorisation_ldap_only(Config) ->
     test_publish(P?BOB, <<"amq.topic">>, <<"a.b.c">>, fail),
 
     ok.
+
+topic_authorisation_consumption(Config) ->
+    %% topic authorisation for consumption isn't enforced in AMQP
+    %% (it is in plugins like STOMP and MQTT, at subscription time)
+    %% so we directly test the LDAP backend, inside the broker
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, topic_authorisation_consumption1, [Config]).
+
+topic_authorisation_consumption1(Config) ->
+    %% we can't use the LDAP backend record here, falling back to simple tuples
+    Alice = {auth_user,<<"Alice">>, [monitor],
+             {impl,"cn=Alice,ou=People,dc=rabbitmq,dc=com",<<"password">>}
+    },
+    Bob = {auth_user,<<"Bob">>, [monitor],
+           {impl,"cn=Bob,ou=People,dc=rabbitmq,dc=com",<<"password">>}
+    },
+    Resource = #resource{virtual_host = <<"/">>, name = <<"amq.topic">>, kind = topic},
+    Context = #{routing_key => <<"a.b">>},
+    %% default is to let pass
+    true = rabbit_auth_backend_ldap:check_topic_access(Alice, Resource, read, Context),
+
+    %% let pass for topic
+    set_env(Config, [{topic_access_query, {for, [{permission, read, {constant, true}},
+                                                 {permission, write, {constant, false}}]
+    }}]),
+
+    true = rabbit_auth_backend_ldap:check_topic_access(Alice, Resource, read, Context),
+
+    %% check string substitution (on username)
+    set_env(Config, [{topic_access_query, {for, [{permission, read, {equals, "${username}", "Alice"}},
+                                                 {permission, write, {constant, false}}]
+    }}]),
+
+    true = rabbit_auth_backend_ldap:check_topic_access(Alice, Resource, read, Context),
+    false = rabbit_auth_backend_ldap:check_topic_access(Bob, Resource, read, Context),
+
+    %% check string substitution on routing key (with regex)
+    set_env(Config, [{topic_access_query, {for, [{permission, read, {'and',
+                [{equals, "${username}", "Alice"},
+                 {match, {string, "${routing_key}"}, {string, "^a"}}]
+            }},
+        {permission, write, {constant, false}}]
+    }}]),
+    %% user and routing key OK
+    true = rabbit_auth_backend_ldap:check_topic_access(Alice, Resource, read, #{routing_key => <<"a.b.c">>}),
+    %% user and routing key OK
+    true = rabbit_auth_backend_ldap:check_topic_access(Alice, Resource, read, #{routing_key => <<"a.c">>}),
+    %% user OK, routing key KO, should fail
+    false = rabbit_auth_backend_ldap:check_topic_access(Alice, Resource, read, #{routing_key => <<"b.c">>}),
+    %% user KO, routing key OK, should fail
+    false = rabbit_auth_backend_ldap:check_topic_access(Bob, Resource, read, #{routing_key => <<"a.b.c">>}),
+
+    ok.
+
 
 match_bidirectional(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -593,6 +656,12 @@ vhost_access_query_base_env() ->
 
 vhost_access_query_base() ->
     {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}.
+
+topic_access_query_base_env() ->
+    [{topic_access_query, topic_access_query_base()}].
+
+topic_access_query_base() ->
+    {constant, true}.
 
 test_login(Config, {N, Env}, Login, FilterList, ResultFun) ->
     case lists:member(N, FilterList) of
