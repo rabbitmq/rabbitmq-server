@@ -520,7 +520,7 @@ topic_permissions_list_test(Config) ->
     http_put(Config, "/vhosts/myvhost1", none, {group, '2xx'}),
     http_put(Config, "/vhosts/myvhost2", none, {group, '2xx'}),
 
-    TopicPerms = [{exchange, <<"amq.topic">>}, {pattern, <<"^a">>}],
+    TopicPerms = [{exchange, <<"amq.topic">>}, {write, <<"^a">>}, {read, <<"^b">>}],
     http_put(Config, "/topic-permissions/myvhost1/myuser1", TopicPerms, {group, '2xx'}),
     http_put(Config, "/topic-permissions/myvhost2/myuser1", TopicPerms, {group, '2xx'}),
     http_put(Config, "/topic-permissions/myvhost1/myuser2", TopicPerms, {group, '2xx'}),
@@ -548,7 +548,7 @@ topic_permissions_test(Config) ->
     http_put(Config, "/vhosts/myvhost1", none, {group, '2xx'}),
     http_put(Config, "/vhosts/myvhost2", none, {group, '2xx'}),
 
-    TopicPerms = [{exchange, <<"amq.topic">>}, {pattern, <<"^a">>}],
+    TopicPerms = [{exchange, <<"amq.topic">>}, {write, <<"^a">>}, {read, <<"^b">>}],
     http_put(Config, "/topic-permissions/myvhost1/myuser1", TopicPerms, {group, '2xx'}),
     http_put(Config, "/topic-permissions/myvhost2/myuser1", TopicPerms, {group, '2xx'}),
     http_put(Config, "/topic-permissions/myvhost1/myuser2", TopicPerms, {group, '2xx'}),
@@ -1104,7 +1104,8 @@ definitions_test(Config) ->
          #{user     => <<"guest">>,
            vhost    => <<"/">>,
            exchange => <<"amq.topic">>,
-           pattern  => <<"^a">>}),
+           write    => <<"^a">>,
+           read     => <<"^b">>}),
 
     %% We just messed with guest's permissions
     http_put(Config, "/permissions/%2f/guest",

@@ -261,7 +261,7 @@ rw_state() ->
     [{users,              [name, password_hash, hashing_algorithm, tags]},
      {vhosts,             [name]},
      {permissions,        [user, vhost, configure, write, read]},
-     {topic_permissions,  [user, vhost, exchange, pattern]},
+     {topic_permissions,  [user, vhost, exchange, write, read]},
      {parameters,         [vhost, component, name, value]},
      {global_parameters,  [name, value]},
      {policies,           [vhost, name, pattern, definition, priority, 'apply-to']},
@@ -360,7 +360,8 @@ add_topic_permission(TopicPermission, Username) ->
         maps:get(user,      TopicPermission, undefined),
         maps:get(vhost,     TopicPermission, undefined),
         maps:get(exchange,  TopicPermission, undefined),
-        maps:get(pattern,   TopicPermission, undefined),
+        maps:get(write,     TopicPermission, undefined),
+        maps:get(read,      TopicPermission, undefined),
       Username).
 
 add_queue(Queue, Username) ->
