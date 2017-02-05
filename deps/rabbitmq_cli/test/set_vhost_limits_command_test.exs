@@ -107,10 +107,8 @@ defmodule SetVhostLimitsCommandTest do
   end
 
   test "run: an invalid definition returns a JSON decoding error", context do
-    assert @command.run(
-      ["bad_value"],
-      context[:opts]
-    ) == {:error_string, 'JSON decoding error'}
+    assert match?({:error_string, _},
+      @command.run(["bad_value"], context[:opts]))
 
     assert get_vhost_limits(context[:vhost]) == %{}
   end

@@ -74,10 +74,9 @@ defmodule SetGlobalParameterCommandTest do
   @tag key: @key, value: "bad-value"
   test "run: a value that fails to parse as JSON returns a decoding error", context do
     initial = list_global_parameters()
-    assert @command.run(
-      [context[:key], context[:value]],
-      context[:opts]
-    ) == {:error_string, 'JSON decoding error'}
+    assert match?({:error_string, _},
+      @command.run([context[:key], context[:value]],
+        context[:opts]))
 
     assert list_global_parameters() == initial
   end

@@ -2,6 +2,7 @@
 /cover
 /deps
 /escript
+/log
 /.erlang.mk/
 /ebin
 erl_crash.dump
