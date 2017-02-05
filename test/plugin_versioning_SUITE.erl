@@ -81,6 +81,8 @@ version_support(_Config) ->
     ,{["3.5.2", "3.6.1"], "3.6.2.999", true}       %% x.y.z.p values are supported
     ,{["3.5.2", "3.6.2.333"], "3.6.2.999", true}   %% x.y.z.p values are supported
     ,{["3.5.2", "3.6.2.333"], "3.6.2.222", false}  %% x.y.z.p values are supported
+    ,{["3.6.0", "3.7.0"], "3.6.3-alpha.1", true}   %% Pre-release versions handled like semver part
+    ,{["3.6.0", "3.7.0"], "3.7.0-alpha.89", true}
     ],
 
     lists:foreach(
