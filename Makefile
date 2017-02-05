@@ -90,7 +90,7 @@ define PROJECT_ENV
 	    %% setting has no effect because credit_flow is not used when
 	    %% writing to the queue index. See the setting
 	    %% queue_index_embed_msgs_below above.
-	    {msg_store_credit_disc_bound, {2000, 500}},
+	    {msg_store_credit_disc_bound, {3000, 800}},
 	    {msg_store_io_batch_size, 2048},
 	    %% see rabbitmq-server#143
 	    %% and rabbitmq-server#949
