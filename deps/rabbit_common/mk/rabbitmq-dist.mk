@@ -29,7 +29,9 @@ $(shell awk '
 endef
 
 define get_mix_project_version
-$(shell cd $(1) && $(MIX) run -e "IO.puts(Mix.Project.config[:version])")
+$(shell cd $(1) && \
+	$(MIX) do deps.get, deps.compile, compile >/dev/null && \
+	$(MIX) run -e "IO.puts(Mix.Project.config[:version])")
 endef
 
 # Define the target to create an .ez plugin archive for an
@@ -73,7 +75,7 @@ endef
 
 define get_mix_project_dep_ezs
 $(shell cd $(1) && \
-	$(MIX) do deps.get, deps.compile > /dev/null && \
+	$(MIX) do deps.get, deps.compile, compile >/dev/null && \
 	$(MIX) archive.build.all.list -e -o $(DIST_DIR))
 endef
 

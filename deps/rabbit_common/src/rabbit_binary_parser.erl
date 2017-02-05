@@ -125,7 +125,7 @@ parse_array(<<>>) ->
 ?SIMPLE_PARSE_ARRAY($f, Value:32/float, float);
 
 ?SIMPLE_PARSE_ARRAY($l, Value:64/signed, long);
-
+?SIMPLE_PARSE_ARRAY($L, Value:64/signed, long);
 
 
 parse_array(<<$t, Value:8/unsigned, Rest/binary>>) ->
