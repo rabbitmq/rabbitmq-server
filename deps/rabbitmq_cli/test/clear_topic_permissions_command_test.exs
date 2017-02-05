@@ -39,8 +39,8 @@ defmodule ClearTopicPermissionsTest do
   end
 
   setup context do
-    set_topic_permissions(@user, @specific_vhost, "amq.topic", "^a")
-    set_topic_permissions(@user, @specific_vhost, "topic1", "^a")
+    set_topic_permissions(@user, @specific_vhost, "amq.topic", "^a", "^b")
+    set_topic_permissions(@user, @specific_vhost, "topic1", "^a", "^b")
     {
       :ok,
       opts: %{node: get_rabbit_hostname(), vhost: context[:vhost]}

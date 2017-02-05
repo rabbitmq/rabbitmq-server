@@ -29,25 +29,25 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
-  def validate([_|_] = args, _) when length(args) < 3 do
+  def validate([_|_] = args, _) when length(args) < 4 do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) > 3 do
+  def validate([_|_] = args, _) when length(args) > 4 do
     {:validation_failure, :too_many_args}
   end
   def validate(_, _), do: :ok
 
-  def run([user, exchange, pattern], %{node: node_name, vhost: vhost}) do
+  def run([user, exchange, write_pattern, read_pattern], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
       :set_topic_permissions,
-      [user, vhost, exchange, pattern, Helpers.cli_acting_user()]
+      [user, vhost, exchange, write_pattern, read_pattern, Helpers.cli_acting_user()]
     )
   end
 
-  def usage, do: "set_topic_permissions [-p <vhost>] <user> <exchange> <pattern>"
+  def usage, do: "set_topic_permissions [-p <vhost>] <user> <exchange> <write_pattern> <read_pattern>"
 
 
-  def banner([user, exchange, _], %{vhost: vhost}), do: "Setting topic permissions on \"#{exchange}\" for user \"#{user}\" in vhost \"#{vhost}\" ..."
+  def banner([user, exchange, _, _], %{vhost: vhost}), do: "Setting topic permissions on \"#{exchange}\" for user \"#{user}\" in vhost \"#{vhost}\" ..."
 end
