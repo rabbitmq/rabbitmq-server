@@ -81,7 +81,10 @@ init_per_testcase(Testcase, Config) ->
     User = "O=client,CN=" ++ Hostname,
     {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["add_user", User, ""]),
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["set_permissions",  "-p", "/", User, ".*", ".*", ".*"]),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["set_topic_permissions",  "-p", "/", "guest", "amq.topic", "test-topic|test-retained-topic|.*mid.*|.*topic.*"]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0,
+        ["set_topic_permissions",  "-p", "/", "guest", "amq.topic",
+            "test-topic|test-retained-topic|.*mid.*|.*topic.*",
+            "test-topic|test-retained-topic|.*mid.*|.*topic.*"]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->

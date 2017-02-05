@@ -804,7 +804,7 @@ check_subscribe([#mqtt_topic{name = TopicName} | Topics], Fn, PState) ->
     _ -> {err, unauthorized, PState}
   end.
 
-check_topic_access(TopicName, write = Access,
+check_topic_access(TopicName, Access,
                    #proc_state{
                         auth_state = #auth_state{user = User,
                                                  vhost = VHost},
@@ -823,24 +823,7 @@ check_topic_access(TopicName, write = Access,
         _:Error ->
             rabbit_log:error("~p~n", [Error]),
             {error, access_refused}
-    end;
-check_topic_access(TopicName, read = Access,
-                   #proc_state{
-                      auth_state = #auth_state{user = User,
-                                               vhost = VHost}}) ->
-  Resource = #resource{virtual_host = VHost,
-                       kind = topic,
-                       name = TopicName},
-  try rabbit_access_control:check_resource_access(User, Resource, Access) of
-      R -> R
-  catch
-      _:{amqp_error, access_refused, Msg, _} ->
-          rabbit_log:error("operation resulted in an error (access_refused): ~p~n", [Msg]),
-          {error, access_refused};
-      _:Error ->
-          rabbit_log:error("~p~n", [Error]),
-          {error, access_refused}
-  end.
+    end.
 
 info(consumer_tags, #proc_state{consumer_tags = Val}) -> Val;
 info(unacked_pubs, #proc_state{unacked_pubs = Val}) -> Val;
