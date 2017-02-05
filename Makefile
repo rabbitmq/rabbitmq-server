@@ -94,7 +94,7 @@ define PROJECT_ENV
 	    {msg_store_io_batch_size, 2048},
 	    %% see rabbitmq-server#143
 	    %% and rabbitmq-server#949
-	    {credit_flow_default_credit, {200, 100}},
+	    {credit_flow_default_credit, {400, 200}},
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
@@ -106,7 +106,7 @@ define PROJECT_ENV
 	    %% rabbitmq-server-973
 	    {queue_explicit_gc_run_operation_threshold, 1000},
 	    {lazy_queue_explicit_gc_run_operation_threshold, 1000},
-	    {background_gc_enabled, true},
+	    {background_gc_enabled, false},
 	    {background_gc_target_interval, 60000}
 	  ]
 endef
