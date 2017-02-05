@@ -238,6 +238,8 @@ process_request(ProcessFun, SuccessFun, State) ->
                {{shutdown,
                  {server_initiated_close, ReplyCode, Explanation}}, _}} ->
                   amqp_death(ReplyCode, Explanation, State);
+              {'EXIT', {amqp_error, access_refused, Msg, _}} ->
+                  amqp_death(access_refused, Msg, State);
               {'EXIT', Reason} ->
                   priv_error("Processing error", "Processing error",
                               Reason, State);
@@ -643,6 +645,7 @@ do_subscribe(Destination, DestHdr, Frame,
              State = #proc_state{subscriptions = Subs,
                             route_state   = RouteState,
                             channel       = Channel}) ->
+    check_subscription_access(Destination, State),
     Prefetch =
         rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT,
                                           undefined),
@@ -704,6 +707,22 @@ do_subscribe(Destination, DestHdr, Frame,
         {error, _} = Err ->
             Err
     end.
+
+check_subscription_access(Destination = {topic, _Topic},
+                          #proc_state{auth_login = _User,
+                                      connection = Connection}) ->
+    [{amqp_params, AmqpParams}, {internal_user, InternalUser}] = amqp_connection:info(
+        Connection, [amqp_params, internal_user]
+    ),
+    #amqp_params_direct{virtual_host = VHost} = AmqpParams,
+    {Exchange, RoutingKey} = rabbit_routing_util:parse_routing(Destination),
+    Resource = #resource{virtual_host = VHost,
+        kind = topic,
+        name = rabbit_data_coercion:to_binary(Exchange)},
+    Context = #{routing_key => rabbit_data_coercion:to_binary(RoutingKey)},
+    rabbit_access_control:check_topic_access(InternalUser, Resource, read, Context);
+check_subscription_access(_, _) ->
+    authorized.
 
 maybe_clean_up_queue(Queue, #proc_state{connection = Connection}) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -1084,6 +1103,10 @@ ok(Command, Headers, BodyFragments, State) ->
                       headers     = Headers,
                       body_iolist = BodyFragments}, State}.
 
+amqp_death(access_refused = ErrorName, Explanation, State) ->
+    ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
+    log_error(ErrorName, ErrorDesc, none),
+    {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = amqp_connection:error_atom(ReplyCode),
     ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
