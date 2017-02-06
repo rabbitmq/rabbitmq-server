@@ -5,7 +5,8 @@ performed by RabbitMQ nodes.
 
 ## Project Maturity
 
-This plugin is very young and considered experimental.
+This plugin is relatively young but has known production users.
+It's a candidate for inclusion into the RabbitMQ distribution.
 
 ## Overview
 
