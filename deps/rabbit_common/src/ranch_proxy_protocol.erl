@@ -64,7 +64,7 @@
 -type opts() :: ranch_ssl:opts()|ranch_tcp:opts().
 -record(proxy_socket, { lsocket :: inet:socket()|ssl:sslsocket(),
                         csocket :: inet:socket()|ssl:sslsocket(),
-                        opts :: ranch_proxy_protocol:opts(),
+                        opts :: opts(),
                         inet_version :: ipv4|ipv6,
                         source_address :: inet:ip_address(),
                         dest_address :: inet:ip_address(),
@@ -170,14 +170,14 @@ accept(Transport, #proxy_socket{lsocket = LSocket,
                 {_, CSocket, <<"PROXY ", ProxyInfo/binary>>} ->
                     case parse_proxy_protocol_v1(ProxyInfo) of
                         {InetVersion, SourceAddress, DestAddress, SourcePort, DestPort} ->
-                            reset_socket_opts(Transport, ProxySocket, Opts, DefaultValuesOfModifiedOptions),
+                            reset_socket_opts(Transport, ProxySocket, Opts),
                             {ok, ProxySocket#proxy_socket{inet_version = InetVersion,
                                                           source_address = SourceAddress,
                                                           dest_address = DestAddress,
                                                           source_port = SourcePort,
                                                           dest_port = DestPort}};
                         unknown_peer ->
-                            reset_socket_opts(Transport, ProxySocket, Opts, DefaultValuesOfModifiedOptions),
+                            reset_socket_opts(Transport, ProxySocket, Opts),
                             {ok, ProxySocket};
                         not_proxy_protocol ->
                             close(Transport, ProxySocket),
@@ -510,9 +510,14 @@ parse_ips([Ip|Ips], Retval) ->
             {error, invalid_address}
     end.
 
-reset_socket_opts(Transport, ProxySocket, RequestedOpts, DefaultsOfModifiedOptions) ->
-    setopts(Transport, ProxySocket, DefaultsOfModifiedOptions),
-    setopts(Transport, ProxySocket, RequestedOpts).
+reset_socket_opts(Transport, ProxySocket, Opts) ->
+    ChangedDefaults = [{active, false}, {packet, raw}],
+    Opts2 = [case lists:keyfind(Key, 1, Opts) of
+                 false  -> {Key, Value};
+                 Option -> Option
+             end
+        || {Key, Value} <- ChangedDefaults],
+    setopts(Transport, ProxySocket, Opts2).
 
 get_next_timeout(_, _, infinity) ->
     %% Never leave `infinity' in place. This may be valid for socket
