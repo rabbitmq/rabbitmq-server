@@ -30,7 +30,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(access_response, Config) ->
     ok = rpc(Config, rabbit_auth_backend_internal, set_topic_permissions, [
-        <<"guest">>, <<"/">>, <<"amq.topic">>, <<"^a">>, <<"acting-user">>
+        <<"guest">>, <<"/">>, <<"amq.topic">>, <<"^a">>, <<"^b">>, <<"acting-user">>
     ]),
     Config;
 init_per_testcase(_TestCase, Config) ->
@@ -142,7 +142,7 @@ cache_expiration_topic(Config) ->
     true = rpc(Config,rabbit_auth_backend_cache, check_topic_access, [Auth, TopicResource, write, RestrictedTopicContext]),
 
     ok = rpc(Config, rabbit_auth_backend_internal, set_topic_permissions, [
-        <<"guest">>, <<"/">>, <<"amq.topic">>, <<"^a">>, <<"acting-user">>
+        <<"guest">>, <<"/">>, <<"amq.topic">>, <<"^a">>, <<"^b">>, <<"acting-user">>
     ]),
 
     false = rpc(Config,rabbit_auth_backend_internal, check_topic_access, [Auth, TopicResource, write, RestrictedTopicContext]),
