@@ -99,11 +99,20 @@ fix_ssl(Options) ->
         transport_config(Options ++ rabbit_networking:fix_ssl_options(SSLOpts)),
         protocol_config(Options)}.
 
-transport_config(Options) ->
-    proplists:delete(ssl,
+transport_config(Options0) ->
+    Options = proplists:delete(ssl,
         proplists:delete(ssl_opts,
             proplists:delete(cowboy_opts,
-                Options))).
+                Options0))),
+    case proplists:get_value(ip, Options) of
+        undefined ->
+            Options;
+        IP when is_tuple(IP) ->
+            IP;
+        IP when is_list(IP) ->
+            {ok, ParsedIP} = inet_parse:address(IP),
+            [{ip, ParsedIP}|proplists:delete(ip, Options)]
+    end.
 
 protocol_config(Options) ->
     ProtoOpts = proplists:get_value(cowboy_opts, Options, []),
