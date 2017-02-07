@@ -13,7 +13,7 @@
          attach/2,
          transfer/3,
          flow/3,
-         disposition/5
+         disposition/6
         ]).
 
 %% Private API.
@@ -151,10 +151,10 @@ transfer(Session, Amqp10Msg, Timeout) ->
 flow(Session, Handle, Flow) ->
     gen_fsm:send_event(Session, {flow, Handle, Flow}).
 
--spec disposition(pid(), transfer_id(), transfer_id(), boolean(),
+-spec disposition(pid(), link_role(), transfer_id(), transfer_id(), boolean(),
                amqp10_client_types:delivery_state()) -> ok.
-disposition(Session, First, Last, Settled, DeliveryState) ->
-    gen_fsm:sync_send_event(Session, {disposition, First, Last, Settled,
+disposition(Session, Role, First, Last, Settled, DeliveryState) ->
+    gen_fsm:sync_send_event(Session, {disposition, Role, First, Last, Settled,
                                       DeliveryState}).
 
 
@@ -340,7 +340,10 @@ mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
                            last = {uint, Last}, state = DeliveryState},
        #state{unsettled = Unsettled0} = State) ->
 
-    % TODO: no good if the range becomes very large!!
+    % TODO: no good if the range becomes very large!! refactor
+    % TODO: use range {first, last} to notify caller coudl be tricky
+    % as a disposition could refer to many different links and thus
+    % different processes
     Unsettled =
         lists:foldl(fun(Id, Acc) ->
                             case Acc of
@@ -369,7 +372,7 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
 
     case Links of
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
-            {reply, insufficient_credit, mapped, State};
+            {reply, {error, insufficient_credit}, mapped, State};
         #{OutHandle := Link} ->
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
             ok = send_transfer(Transfer, Parts, State),
@@ -397,12 +400,13 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
             {reply, {error, link_not_found}, mapped, State}
     end;
 
-mapped({disposition, First, Last, Settled, DeliveryState}, _From,
+mapped({disposition, Role, First, Last, Settled, DeliveryState}, _From,
        #state{incoming_unsettled = Unsettled0} = State) ->
     Disposition =
     begin
-        DS = reverse_translate_delivery_state(DeliveryState),
-        #'v1_0.disposition'{first = {uint, First},
+        DS = translate_delivery_state(DeliveryState),
+        #'v1_0.disposition'{role = translate_role(Role),
+                            first = {uint, First},
                             last = {uint, Last},
                             settled = Settled,
                             state = DS}
@@ -628,13 +632,16 @@ translate_delivery_state(#'v1_0.accepted'{}) -> accepted;
 translate_delivery_state(#'v1_0.rejected'{}) -> rejected;
 translate_delivery_state(#'v1_0.modified'{}) -> modified;
 translate_delivery_state(#'v1_0.released'{}) -> released;
-translate_delivery_state(#'v1_0.received'{}) -> received.
+translate_delivery_state(#'v1_0.received'{}) -> received;
+translate_delivery_state(accepted) -> #'v1_0.accepted'{};
+translate_delivery_state(rejected) -> #'v1_0.rejected'{};
+translate_delivery_state(modified) -> #'v1_0.modified'{};
+translate_delivery_state(released) -> #'v1_0.released'{};
+translate_delivery_state(received) -> #'v1_0.received'{}.
 
-reverse_translate_delivery_state(accepted) -> #'v1_0.accepted'{};
-reverse_translate_delivery_state(rejected) -> #'v1_0.rejected'{};
-reverse_translate_delivery_state(modified) -> #'v1_0.modified'{};
-reverse_translate_delivery_state(released) -> #'v1_0.released'{};
-reverse_translate_delivery_state(received) -> #'v1_0.received'{}.
+translate_role(sender) -> false;
+translate_role(receiver) -> true.
+
 
 notify_session_begin(#state{owner = Owner, notify = true}) ->
     Owner ! {session_begin, self()},

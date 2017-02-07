@@ -63,7 +63,7 @@ send(#link_ref{role = sender, session = Session,
 -spec accept(link_ref(), amqp10_msg:amqp10_msg()) -> ok.
 accept(#link_ref{role = receiver, session = Session}, Msg) ->
     DeliveryId = amqp10_msg:delivery_id(Msg),
-    amqp10_client_session:disposition(Session, DeliveryId, DeliveryId, true,
+    amqp10_client_session:disposition(Session, receiver, DeliveryId, DeliveryId, true,
                                       accepted).
 
 -spec sender(pid(), binary(), binary()) -> {ok, link_ref()}.

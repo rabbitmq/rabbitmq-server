@@ -268,7 +268,7 @@ insufficient_credit(Config) ->
     {ok, Sender} = amqp10_client_link:sender(Session, <<"mock1-sender">>,
                                              <<"test">>),
     Msg = amqp10_msg:new(<<"mock-tag">>, <<"banana">>, true),
-    insufficient_credit = amqp10_client_link:send(Sender, Msg),
+    {error, insufficient_credit} = amqp10_client_link:send(Sender, Msg),
 
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection),
