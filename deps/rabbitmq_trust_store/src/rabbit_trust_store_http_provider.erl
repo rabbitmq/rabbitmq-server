@@ -60,7 +60,7 @@ init() ->
 init_state(Config) ->
     Url = proplists:get_value(url, Config),
     Headers = proplists:get_value(http_headers, Config, []),
-    HttpOptions = case proplists:get_value(ssl_opts, Config) of
+    HttpOptions = case proplists:get_value(ssl_options, Config) of
         undefined -> [];
         SslOpts   -> [{ssl, SslOpts}]
     end,
