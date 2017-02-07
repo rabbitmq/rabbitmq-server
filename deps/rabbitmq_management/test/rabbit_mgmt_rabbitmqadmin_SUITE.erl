@@ -40,6 +40,7 @@ groups() ->
              alt_vhost,
              exchanges,
              queues,
+             queues_unicode,
              bindings,
              policies,
              operator_policies,
@@ -228,6 +229,12 @@ queues(Config) ->
     {ok, _} = run(Config, ["declare", "queue", "name=foo"]),
     {ok, ["foo"]} = run_list(Config, l("queues")),
     {ok, _} = run(Config, ["delete", "queue", "name=foo"]).
+
+queues_unicode(Config) ->
+    {ok, _} = run(Config, ["declare", "queue", "name=ööö"]),
+    QUEUE_NAME = binary_to_list(<<"ööö"/utf8>>),
+    {ok, [QUEUE_NAME]} = run_list(Config, l("queues")),
+    {ok, _} = run(Config, ["delete", "queue", "name=ööö"]).
 
 bindings(Config) ->
     {ok, _} = run(Config, ["declare", "queue", "name=foo"]),
