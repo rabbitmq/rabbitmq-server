@@ -307,14 +307,22 @@ ensure_ssl_certs(Config) ->
     case make(Config, CertsMakeDir, Cmd) of
         {ok, _} ->
             %% Add SSL certs to the broker configuration.
+            Verify = case ?config(rabbitmq_ct_tls_verify, Config) of
+                         undefined   -> verify_peer;
+                         VerifyValue -> VerifyValue
+                     end,
+            FailIfNoPeerCert = case ?config(rabbitmq_ct_tls_fail_if_no_peer_cert, Config) of
+                         undefined   -> true;
+                         FailValue -> FailValue
+                     end,
             Config1 = merge_app_env(Config,
               {rabbit, [
                   {ssl_options, [
                       {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
                       {certfile, filename:join([CertsDir, "server", "cert.pem"])},
                       {keyfile, filename:join([CertsDir, "server", "key.pem"])},
-                      {verify, verify_peer},
-                      {fail_if_no_peer_cert, true}
+                      {verify, Verify},
+                      {fail_if_no_peer_cert, FailIfNoPeerCert}
                     ]}]}),
             set_config(Config1, {rmq_certsdir, CertsDir});
         _ ->
