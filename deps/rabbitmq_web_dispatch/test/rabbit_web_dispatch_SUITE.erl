@@ -32,7 +32,8 @@ groups() ->
       {non_parallel_tests, [], [
                                 query_static_resource_test,
                                 add_idempotence_test,
-                                log_source_address_test
+                                log_source_address_test,
+                                parse_ip_test
                                ]}
     ].
 
@@ -97,6 +98,19 @@ add_idempotence_test1(Port) ->
     rabbit_web_dispatch_registry:add(foo, [{port, Port}], F, F, L),
     ?assertEqual(
        1, length([ok || {"/foo", _, _} <-
+                            rabbit_web_dispatch_registry:list_all()])),
+    passed.
+
+parse_ip_test(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_http_extra),
+    %% I have to Port + 1 here to have a free port not used by a listener.
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_ip_test1, [Port + 1]).
+parse_ip_test1(Port) ->
+    F = fun(_Req) -> ok end,
+    L = {"/parse_ip", "ParseIP"},
+    rabbit_web_dispatch_registry:add(parse_ip, [{port, Port}, {ip, "127.0.0.1"}], F, F, L),
+    ?assertEqual(
+       1, length([ok || {"/parse_ip", _, _} <-
                             rabbit_web_dispatch_registry:list_all()])),
     passed.
 
