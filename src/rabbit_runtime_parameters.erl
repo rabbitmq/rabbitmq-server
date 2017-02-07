@@ -108,7 +108,9 @@ parse_set(VHost, Component, Name, String, User) ->
     case rabbit_json:try_decode(Definition) of
         {ok, Term} when is_map(Term) -> set(VHost, Component, Name, maps:to_list(Term), User);
         {ok, Term} -> set(VHost, Component, Name, Term, User);
-        error      -> {error_string, "JSON decoding error"}
+        {error, Reason} ->
+            {error_string,
+                rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
     end.
 
 set(_, <<"policy">>, _, _, _) ->
@@ -121,7 +123,9 @@ parse_set_global(Name, String, ActingUser) ->
     case rabbit_json:try_decode(Definition) of
         {ok, Term} when is_map(Term) -> set_global(Name, maps:to_list(Term), ActingUser);
         {ok, Term} -> set_global(Name, Term, ActingUser);
-        error      -> {error_string, "JSON decoding error"}
+        {error, Reason} ->
+            {error_string,
+                rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
     end.
 
 set_global(Name, Term, ActingUser)  ->

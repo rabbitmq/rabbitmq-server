@@ -137,8 +137,9 @@ parse_set(VHost, Defn, ActingUser) ->
     case rabbit_json:try_decode(Definition) of
         {ok, Term} ->
             set(VHost, maps:to_list(Term), ActingUser);
-        error ->
-            {error_string, "JSON decoding error"}
+        {error, Reason} ->
+            {error_string,
+                rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
     end.
 
 set(VHost, Defn, ActingUser) ->
