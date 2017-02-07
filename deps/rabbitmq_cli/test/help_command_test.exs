@@ -26,11 +26,11 @@ defmodule HelpCommandTest do
     :ok
   end
 
-  test "basic usage info is printed" do
+  test "run: prints basic usage info" do
     assert @command.run([], %{}) =~ ~r/Default node is \"rabbit@server\"/
   end
 
-  test "command usage info is printed if command is specified" do
+  test "run: command-specific usage info is printed if command is specified" do
     CommandModules.module_map
     |>  Map.keys
     |>  Enum.each(
@@ -39,7 +39,7 @@ defmodule HelpCommandTest do
           end)
   end
 
-  test "Command info is printed" do
+  test "run prints command info" do
     assert @command.run([], %{}) =~ ~r/Commands:\n/
 
     # Checks to verify that each module's command appears in the list.
@@ -51,7 +51,7 @@ defmodule HelpCommandTest do
           end)
   end
 
-  test "Commands are sorted alphabetically" do
+  test "run: sorts commands alphabetically" do
     [cmd1, cmd2, cmd3] = CommandModules.module_map
     |> Map.keys
     |> Enum.sort
@@ -67,34 +67,16 @@ defmodule HelpCommandTest do
     assert start2 < start3
   end
 
-  test "Info items are defined for existing commands" do
-    assert @command.run([], %{}) =~ ~r/vhostinfoitem/
-    assert @command.run([], %{}) =~ ~r/queueinfoitem/
-    assert @command.run([], %{}) =~ ~r/exchangeinfoitem/
-    assert @command.run([], %{}) =~ ~r/bindinginfoitem/
-    assert @command.run([], %{}) =~ ~r/connectioninfoitem/
-    assert @command.run([], %{}) =~ ~r/channelinfoitem/
-  end
-
-  test "Info items are printed for selected command" do
-    assert @command.run(["list_vhosts"], %{}) =~ ~r/vhostinfoitem/
-    assert @command.run(["list_queues"], %{}) =~ ~r/queueinfoitem/
-    assert @command.run(["list_exchanges"], %{}) =~ ~r/exchangeinfoitem/
-    assert @command.run(["list_bindings"], %{}) =~ ~r/bindinginfoitem/
-    assert @command.run(["list_connections"], %{}) =~ ~r/connectioninfoitem/
-    assert @command.run(["list_channels"], %{}) =~ ~r/channelinfoitem/
-  end
-
-  test "Help command returns exit code OK" do
+  test "run: exits with code of OK" do
     assert @command.output("Help string", %{}) ==
       {:error, ExitCodes.exit_ok, "Help string"}
   end
 
-  test "No arguments also produce help command" do
+  test "run: no arguments print general help" do
     assert @command.run([], %{}) =~ ~r/Usage:/
   end
 
-  test "Extra arguments also produce help command" do
+  test "run: unrecognizes arguments print general help" do
     assert @command.run(["extra1", "extra2"], %{}) =~ ~r/Usage:/
   end
 end
