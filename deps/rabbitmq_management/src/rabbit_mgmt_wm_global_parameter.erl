@@ -40,7 +40,7 @@ content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{<<"application/json">>, accept_content}], ReqData, Context}.
+   {[{'*', accept_content}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
