@@ -4,11 +4,6 @@ Adds UNIX top-like information on the Erlang VM to the management plugin.
 
 Screenshots: http://imgur.com/a/BjVOP
 
-## Supported RabbitMQ Versions
-
-This plugin is compatible with RabbitMQ `3.4.0` and later versions.
-
-
 ## Installation
 
 This plugin ships with RabbitMQ as of `3.6.3`. Enable it like any other plugin.
