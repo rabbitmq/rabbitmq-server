@@ -178,8 +178,7 @@ log_poodle_fail(Context) ->
       [rabbit_misc:otp_release(), Context]).
 
 maybe_start_proxy_protocol() ->
-    ProxyProtocol = application:get_env(rabbit, proxy_protocol, false),
-    case ProxyProtocol of
+    case application:get_env(rabbit, proxy_protocol, false) of
         false -> ok;
         true  -> application:start(ranch_proxy_protocol)
     end.
