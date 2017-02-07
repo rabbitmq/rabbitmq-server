@@ -357,7 +357,7 @@ mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
 
     {next_state, mapped, State#state{unsettled = Unsettled}};
 mapped(Frame, State) ->
-    error_logger:info_msg("UNHANDLED FRAME ~p~n", [Frame]),
+    ?DBG("UNHANDLED FRAME ~p~n", [Frame]),
     {next_state, mapped, State}.
 
 %% mapped/3
@@ -475,7 +475,7 @@ encode_frame(Record, #state{channel = Channel}) ->
     rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded).
 
 send(Record, #state{socket = Socket} = State) ->
-    error_logger:info_msg("SESSION SEND ~p~n", [Record]),
+    ?DBG("SESSION SEND ~p~n", [Record]),
     Frame = encode_frame(Record, State),
     gen_tcp:send(Socket, Frame).
 
@@ -497,7 +497,7 @@ send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
     MaxPayloadSize = OutMaxFrameSize - TSize - ?FRAME_HEADER_SIZE,
 
     Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
-    error_logger:info_msg("SESSION SEND ~p~n", [Transfer0]),
+    ?DBG("SESSION SEND ~p~n", [Transfer0]),
     ok = gen_tcp:send(Socket, Frames).
 
 build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)

@@ -169,10 +169,9 @@ sasl_hdr_rcvds(#'v1_0.sasl_mechanisms'{
     ok = send_sasl_init(State, <<"ANONYMOUS">>),
     {next_state, sasl_init_sent, State}.
 
-sasl_init_sent(#'v1_0.sasl_outcome'{code = _Code} = O,
+sasl_init_sent(#'v1_0.sasl_outcome'{code = _Code},
                #state{socket = Socket} = State) ->
     % TODO validate anon is a returned mechanism
-    error_logger:info_msg("SASL OUTCOME: ~p", [O]),
     ok = gen_tcp:send(Socket, ?AMQP_PROTOCOL_HEADER),
     {next_state, hdr_sent, State}.
 
@@ -183,14 +182,14 @@ hdr_sent({protocol_header_received, 0, 1, 0, 0}, State) ->
     end;
 hdr_sent({protocol_header_received, Protocol, Maj, Min,
                                 Rev}, State) ->
-    error_logger:info_msg("Unsupported protocol version: ~b ~b.~b.~b~n",
+    ?DBG("Unsupported protocol version: ~b ~b.~b.~b~n",
                           [Protocol, Maj, Min, Rev]),
     {stop, normal, State}.
 
 open_sent(
   #'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
   #state{pending_session_reqs = PendingSessionReqs, config = Config} = State0) ->
-    error_logger:info_msg(
+    ?DBG(
       "-- CONNECTION OPENED -- Max frame size: ~p Idle timeout ~p~n",
       [MFSz, Timeout]),
     State = State0#state{config =
@@ -218,7 +217,7 @@ opened(#'v1_0.close'{}, State) ->
     _ = send_close(State),
     {stop, normal, State};
 opened(Frame, State) ->
-    error_logger:info_msg("UNEXPECTED CONNECTION FRAME ~p~n",
+    ?DBG("UNEXPECTED CONNECTION FRAME ~p~n",
                           [Frame]),
     {next_state, opened, State}.
 
@@ -307,12 +306,14 @@ send_open(#state{socket = Socket, config = Config}) ->
            end,
     Encoded = rabbit_amqp1_0_framing:encode_bin(Open),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
+    ?DBG("CONN <- ~p~n", [Open]),
     gen_tcp:send(Socket, Frame).
 
 send_close(#state{socket = Socket}) ->
     Close = #'v1_0.close'{},
     Encoded = rabbit_amqp1_0_framing:encode_bin(Close),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
+    ?DBG("CONN <- ~p~n", [Close]),
     Ret = gen_tcp:send(Socket, Frame),
     case Ret of
         ok -> _ =
@@ -329,6 +330,7 @@ send_sasl_init(State, Mechanism) ->
 send(Record, FrameType, #state{socket = Socket}) ->
     Encoded = rabbit_amqp1_0_framing:encode_bin(Record),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, FrameType, Encoded),
+    ?DBG("CONN <- ~p~n", [Record]),
     gen_tcp:send(Socket, Frame).
 
 notify_opened(#{notify := Pid}) ->
