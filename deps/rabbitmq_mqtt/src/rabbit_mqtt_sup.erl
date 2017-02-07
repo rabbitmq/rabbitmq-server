@@ -57,11 +57,20 @@ listener_specs(Fun, Args, Listeners) ->
 tcp_listener_spec([Address, SocketOpts, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts,
-      ranch_tcp, rabbit_mqtt_connection_sup, [],
+      transport(mqtt), rabbit_mqtt_connection_sup, [],
       mqtt, NumAcceptors, "MQTT TCP Listener").
 
 ssl_listener_spec([Address, SocketOpts, SslOpts, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts ++ SslOpts,
-      ranch_ssl, rabbit_mqtt_connection_sup, [],
+      transport('mqtt/ssl'), rabbit_mqtt_connection_sup, [],
       'mqtt/ssl', NumAcceptors, "MQTT SSL Listener").
+
+transport(Protocol) ->
+    ProxyProtocol = application:get_env(rabbitmq_mqtt, proxy_protocol, false),
+    case {Protocol, ProxyProtocol} of
+        {mqtt, false}       -> ranch_tcp;
+        {mqtt, true}        -> ranch_proxy;
+        {'mqtt/ssl', false} -> ranch_ssl;
+        {'mqtt/ssl', true}  -> ranch_proxy_ssl
+    end.

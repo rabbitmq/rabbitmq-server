@@ -63,17 +63,19 @@ info(Pid, InfoItems) ->
 
 init([KeepaliveSup, Ref, Sock]) ->
     process_flag(trap_exit, true),
-    rabbit_net:accept_ack(Ref, Sock),
+    RealSocket = rabbit_net:unwrap_socket(Sock),
+    rabbit_net:accept_ack(Ref, RealSocket),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
+            io:format("String ~p~n", [ConnStr]),
             log(debug, "MQTT accepting TCP connection ~p (~s)~n", [self(), ConnStr]),
             rabbit_alarm:register(
               self(), {?MODULE, conserve_resources, []}),
-            ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(Sock)),
+            ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(RealSocket)),
             gen_server2:enter_loop(?MODULE, [],
              rabbit_event:init_stats_timer(
               control_throttle(
-               #state{socket                 = Sock,
+               #state{socket                 = RealSocket,
                       conn_name              = ConnStr,
                       await_recv             = false,
                       connection_state       = running,
@@ -85,13 +87,13 @@ init([KeepaliveSup, Ref, Sock]) ->
                       proc_state             = ProcessorState }), #state.stats_timer),
              {backoff, 1000, 1000, 10000});
         {network_error, Reason} ->
-            rabbit_net:fast_close(Sock),
+            rabbit_net:fast_close(RealSocket),
             terminate({shutdown, Reason}, undefined);
         {error, enotconn} ->
-            rabbit_net:fast_close(Sock),
+            rabbit_net:fast_close(RealSocket),
             terminate(shutdown, undefined);
         {error, Reason} ->
-            rabbit_net:fast_close(Sock),
+            rabbit_net:fast_close(RealSocket),
             terminate({network_error, Reason}, undefined)
     end.
 
