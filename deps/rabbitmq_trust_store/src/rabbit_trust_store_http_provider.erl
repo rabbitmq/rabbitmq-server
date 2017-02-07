@@ -31,7 +31,8 @@ list_certs(_, #http_state{url = Url,
         {error, Reason} -> {error, Reason}
     end.
 
-load_cert(_, #{url := CertUrl}, Config) ->
+load_cert(_, Attributes, Config) ->
+    Url = proplists:get_value(url, Attributes),
     #http_state{url = BaseUrl,
                 http_options = HttpOptions,
                 headers = Headers} = init_state(Config),
@@ -67,8 +68,15 @@ init_state(Config) ->
     #http_state{url = Url, http_options = HttpOptions, headers = Headers}.
 
 decode_cert_list(Body) ->
-    #{<<"certificates">> := Certs} = rabbit_json:decode(Body),
-    [ {CertId, #{url => Url}} || #{<<"id">> := CertId, <<"url">> := Url} <- Certs ].
+    {ok, Struct} = rabbit_misc:json_decode(Body),
+    [{<<"certificates">>, Certs}] = rabbit_misc:json_to_term(Struct),
+    lists:map(
+        fun(Cert) ->
+            Url = proplists:get_value(<<"url">>, Cert),
+            Id = proplists:get_value(<<"id">>, Cert),
+            {CertId, [{url, Url}]}
+        end,
+        Certs).
 
 new_state(RespHeaders, #http_state{headers = Headers} = State) ->
     LastModified = proplists:get_value("Last-Modified",
