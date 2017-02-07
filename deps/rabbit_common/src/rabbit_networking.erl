@@ -124,7 +124,9 @@ boot() ->
     ok = record_distribution_listener(),
     _ = application:start(ranch),
     ok = boot_tcp(application:get_env(rabbit, num_tcp_acceptors, 10)),
-    ok = boot_ssl(application:get_env(rabbit, num_ssl_acceptors, 1)).
+    ok = boot_ssl(application:get_env(rabbit, num_ssl_acceptors, 1)),
+    _ = maybe_start_proxy_protocol(),
+    ok.
 
 boot_tcp(NumAcceptors) ->
     {ok, TcpListeners} = application:get_env(tcp_listeners),
@@ -174,6 +176,13 @@ log_poodle_fail(Context) ->
       "set the config item 'ssl_allow_poodle_attack' to 'true' in the~n"
       "'rabbit' section of your configuration file.~n",
       [rabbit_misc:otp_release(), Context]).
+
+maybe_start_proxy_protocol() ->
+    ProxyProtocol = application:get_env(rabbit, proxy_protocol, false),
+    case ProxyProtocol of
+        false -> ok;
+        true  -> application:start(ranch_proxy_protocol)
+    end.
 
 fix_ssl_options(Config) ->
     fix_verify_fun(fix_ssl_protocol_versions(Config)).
