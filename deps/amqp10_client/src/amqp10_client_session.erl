@@ -143,7 +143,7 @@ attach(Session, Args) ->
     gen_fsm:sync_send_event(Session, {attach, Args}).
 
 -spec transfer(pid(), amqp10_msg:amqp10_msg(), timeout()) ->
-    ok | insufficient_credit | amqp10_client_types:delivery_state().
+    {ok, non_neg_integer()} | {error, insufficient_credit | link_not_found}.
 transfer(Session, Amqp10Msg, Timeout) ->
     [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
     gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}, Timeout).
@@ -346,7 +346,7 @@ mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
                             case Acc of
                                 #{Id := {_Handle, Receiver}} ->
                                     S = translate_delivery_state(DeliveryState),
-                                    gen_fsm:reply(Receiver, S),
+                                    ok = notify_disposition(Receiver, {Id, S}),
                                     maps:remove(Id, Acc);
                                 _ -> Acc
                             end
@@ -375,7 +375,8 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
             ok = send_transfer(Transfer, Parts, State),
             % delay reply to caller until disposition frame is received
             State1 = State#state{unsettled = #{NDI => {OutHandle, From}}},
-            {next_state, mapped, book_transfer_send(Link, State1)};
+            % {next_state, mapped, book_transfer_send(Link, State1)};
+            {reply, {ok, NDI}, mapped, book_transfer_send(Link, State1)};
         _ ->
             {reply, {error, link_not_found}, mapped, State}
     end;
@@ -385,13 +386,13 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
 
     case Links of
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
-            {reply, insufficient_credit, mapped, State};
+            {reply, {error, insufficient_credit}, mapped, State};
         #{OutHandle := Link} ->
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
             ok = send_transfer(Transfer, Parts, State),
             % TODO look into if erlang will correctly wrap integers during
             % binary conversion.
-            {reply, ok, mapped, book_transfer_send(Link, State)};
+            {reply, {ok, NDI}, mapped, book_transfer_send(Link, State)};
         _ ->
             {reply, {error, link_not_found}, mapped, State}
     end;
@@ -470,6 +471,7 @@ encode_frame(Record, #state{channel = Channel}) ->
     rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded).
 
 send(Record, #state{socket = Socket} = State) ->
+    error_logger:info_msg("SESSION SEND ~p~n", [Record]),
     Frame = encode_frame(Record, State),
     gen_tcp:send(Socket, Frame).
 
@@ -491,6 +493,7 @@ send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
     MaxPayloadSize = OutMaxFrameSize - TSize - ?FRAME_HEADER_SIZE,
 
     Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
+    error_logger:info_msg("SESSION SEND ~p~n", [Transfer0]),
     ok = gen_tcp:send(Socket, Frames).
 
 build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)
@@ -638,6 +641,10 @@ notify_session_begin(#state{owner = Owner, notify = true}) ->
     ok;
 notify_session_begin(_State) -> ok.
 
+notify_disposition({Pid, _}, N) ->
+    Pid ! {disposition, N},
+    ok.
+
 book_transfer_send(#link{output_handle = Handle} = Link,
               #state{next_outgoing_id = NOI,
                      next_delivery_id = NDI,
@@ -686,6 +693,9 @@ complete_partial_transfer(_Transfer, Payload,
 decode_as_msg(Transfer, Payload) ->
     Records = rabbit_amqp1_0_framing:decode_bin(Payload),
     amqp10_msg:from_amqp_records([Transfer | Records]).
+
+
+
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

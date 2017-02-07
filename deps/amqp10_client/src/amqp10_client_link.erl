@@ -54,7 +54,7 @@ flow_credit(#link_ref{role = receiver, session = Session,
 % else it returns the delivery state from the disposition
 % TODO: timeouts
 -spec send(link_ref(), amqp10_msg:amqp10_msg()) ->
-    ok | insufficient_credit | amqp10_client_types:delivery_state().
+    {ok, non_neg_integer()} | {error, insufficient_credit | link_not_found}.
 send(#link_ref{role = sender, session = Session,
                link_handle = Handle}, Msg0) ->
     Msg = amqp10_msg:set_handle(Handle, Msg0),
@@ -68,7 +68,7 @@ accept(#link_ref{role = receiver, session = Session}, Msg) ->
 
 -spec sender(pid(), binary(), binary()) -> {ok, link_ref()}.
 sender(Session, Name, Target) ->
-    sender(Session, Name, Target, settled).
+    sender(Session, Name, Target, mixed). % mixed should work with any type of msg
 
 -spec sender(pid(), binary(), binary(),
              amqp10_client_session:snd_settle_mode()) -> {ok, link_ref()}.

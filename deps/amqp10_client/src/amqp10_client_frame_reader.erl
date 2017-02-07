@@ -213,7 +213,6 @@ handle_input(expecting_frame_body, Data,
             {PerfDesc, Payload} = rabbit_amqp1_0_binary_parser:parse(FrameBody),
             Perf = rabbit_amqp1_0_framing:decode(PerfDesc),
             error_logger:info_msg("PERF ~p~n", [Perf]),
-            % Frame = rabbit_amqp1_0_framing:decode_bin(FrameBody),
             State2 = route_frame(Channel, FrameType, {Perf, Payload}, State1),
             handle_input(expecting_frame_header, Rest, State2);
         _ ->
@@ -226,8 +225,8 @@ handle_input(StateName, Data, State) ->
 route_frame(Channel, FrameType, {Performative, Payload} = Frame, State0) ->
     {DestinationPid, State} = find_destination(Channel, FrameType, Performative,
                                                State0),
-    error_logger:info_msg("ROUTING FRAME ~p -> (~p, ~p)",
-                          [Frame, Channel, DestinationPid]),
+    % error_logger:info_msg("ROUTING FRAME ~p -> (~p, ~p)",
+    %                       [Frame, Channel, DestinationPid]),
     case Payload of
         <<>> -> ok = gen_fsm:send_event(DestinationPid, Performative);
         _ -> ok = gen_fsm:send_event(DestinationPid, Frame)

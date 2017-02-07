@@ -159,7 +159,7 @@ basic_roundtrip(Config) ->
     {ok, Sender} = amqp10_client_link:sender(Session, <<"banana-sender">>,
                                              <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
-    ok = amqp10_client_link:send(Sender, Msg),
+    {ok, _} = amqp10_client_link:send(Sender, Msg),
     {ok, Receiver} = amqp10_client_link:receiver(Session, <<"banana-receiver">>,
                                                  <<"test">>),
     {amqp_msg, OutMsg} = amqp10_client_link:get_one(Receiver),
@@ -178,7 +178,7 @@ split_transfer(Config) ->
     {ok, Sender} = amqp10_client_link:sender(Session, <<"data-sender">>,
                                              <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, Data, true),
-    ok = amqp10_client_link:send(Sender, Msg),
+    {ok, _} = amqp10_client_link:send(Sender, Msg),
     {ok, Receiver} = amqp10_client_link:receiver(Session, <<"data-receiver">>,
                                                  <<"test">>),
     {amqp_msg, OutMsg} = amqp10_client_link:get_one(Receiver),
@@ -196,7 +196,8 @@ transfer_unsettled(Config) ->
     {ok, Sender} = amqp10_client_link:sender(Session, <<"data-sender">>,
                                              <<"test">>, unsettled),
     Msg = amqp10_msg:new(<<"my-tag">>, Data, false),
-    accepted = amqp10_client_link:send(Sender, Msg),
+    {ok, DeliveryId} = amqp10_client_link:send(Sender, Msg),
+    ok = await_disposition(DeliveryId),
     {ok, Receiver} = amqp10_client_link:receiver(Session, <<"data-receiver">>,
                                                  <<"test">>, unsettled),
     {amqp_msg, OutMsg} = amqp10_client_link:get_one(Receiver),
@@ -214,10 +215,12 @@ subscribe(Config) ->
     {ok, Session} = amqp10_client_session:'begin'(Connection),
     {ok, Sender} = amqp10_client_link:sender(Session, <<"sub-sender">>,
                                              QueueName),
-    Msg1 = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
-    Msg2 = amqp10_msg:new(<<"my-tag2">>, <<"banana">>, true),
-    ok = amqp10_client_link:send(Sender, Msg1),
-    ok = amqp10_client_link:send(Sender, Msg2),
+    Msg1 = amqp10_msg:new(<<"my-taggy">>, <<"banana">>, false),
+    Msg2 = amqp10_msg:new(<<"my-taggy2">>, <<"banana">>, false),
+    {ok, DeliveryId1} = amqp10_client_link:send(Sender, Msg1),
+    ok = await_disposition(DeliveryId1),
+    {ok, DeliveryId2} = amqp10_client_link:send(Sender, Msg2),
+    ok = await_disposition(DeliveryId2),
     {ok, Receiver} = amqp10_client_link:receiver(Session, <<"sub-receiver">>,
                                                  QueueName, unsettled),
     ok = amqp10_client_link:flow_credit(Receiver, 2),
@@ -284,4 +287,10 @@ receive_one(Receiver) ->
             amqp10_client_link:accept(Receiver, Msg)
     after 2000 ->
           timeout
+    end.
+
+await_disposition(DeliveryId) ->
+    receive
+        {disposition, {DeliveryId, accepted}} -> ok
+    after 3000 -> exit(dispostion_timeout)
     end.
