@@ -295,7 +295,7 @@ get_old_cert_ids(Provider) ->
                     when P == Provider ->
                         CId
                     end),
-    lists:append(ets:select(table_name(), MS)).
+    ets:select(table_name(), MS).
 
 providers(Config) ->
     Providers = proplists:get_value(providers, Config, []),
