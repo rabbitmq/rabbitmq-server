@@ -178,17 +178,14 @@ check_access(Fun, Module, ErrStr, ErrArgs) ->
     check_access(Fun, Module, ErrStr, ErrArgs, access_refused).
 
 check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
-    Allow = case Fun() of
-                {error, E}  ->
-                    rabbit_log:error(ErrStr ++ " by ~s: ~p~n",
-                                     ErrArgs ++ [Module, E]),
-                    false;
-                Else ->
-                    Else
-            end,
-    case Allow of
+    case Fun() of
         true ->
             ok;
         false ->
-            rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs)
+            rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs);
+        {error, E}  ->
+            FullErrStr = ErrStr ++ " by ~s: ~p~n",
+            FullErrArgs = ErrArgs ++ [Module, E],
+            rabbit_log:error(FullErrStr, FullErrArgs),
+            rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)
     end.
