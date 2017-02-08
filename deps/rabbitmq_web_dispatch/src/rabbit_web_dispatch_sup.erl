@@ -108,7 +108,7 @@ transport_config(Options0) ->
         undefined ->
             Options;
         IP when is_tuple(IP) ->
-            IP;
+            Options;
         IP when is_list(IP) ->
             {ok, ParsedIP} = inet_parse:address(IP),
             [{ip, ParsedIP}|proplists:delete(ip, Options)]
