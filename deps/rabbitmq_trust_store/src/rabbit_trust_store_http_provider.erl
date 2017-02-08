@@ -32,7 +32,7 @@ list_certs(_, #http_state{url = Url,
     end.
 
 load_cert(_, Attributes, Config) ->
-    Url = proplists:get_value(url, Attributes),
+    CertUrl = proplists:get_value(url, Attributes),
     #http_state{url = BaseUrl,
                 http_options = HttpOptions,
                 headers = Headers} = init_state(Config),
@@ -73,7 +73,7 @@ decode_cert_list(Body) ->
     lists:map(
         fun(Cert) ->
             Url = proplists:get_value(<<"url">>, Cert),
-            Id = proplists:get_value(<<"id">>, Cert),
+            CertId = proplists:get_value(<<"id">>, Cert),
             {CertId, [{url, Url}]}
         end,
         Certs).
