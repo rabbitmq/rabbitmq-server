@@ -8,12 +8,12 @@
 -define(SERVER_REJECT_CLIENT, {tls_alert, "unknown ca"}).
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, file_provider_tests}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
+      {file_provider_tests, [], [
                                  library,
                                  invasive_SSL_option_change,
                                  validation_success_for_AMQP_client,
@@ -57,19 +57,31 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(_, Config) ->
-    Config.
+init_per_group(file_provider_tests, Config) ->
+    WhitelistDir = filename:join([?config(rmq_certsdir, Config),
+                                  "trust_store",
+                                  "file_provider_tests"]),
+    ok = filelib:ensure_dir(WhitelistDir),
+    ok = file:make_dir(WhitelistDir),
+    Config1 = rabbit_ct_helpers:set_config(Config, {whitelist_dir, WhitelistDir}),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE,  change_configuration,
+           [rabbitmq_trust_store, [{directory, WhitelistDir},
+                                   {refresh_interval, interval()},
+                                   {providers, [rabbit_trust_store_file_provider]}]]),
+    Config1.
 
 end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    TestCaseDir = rabbit_ct_helpers:config_to_testcase_name(Config, Testcase),
-    WhitelistDir = filename:join([?config(rmq_certsdir, Config), "trust_store", TestCaseDir]),
-    ok = filelib:ensure_dir(WhitelistDir),
+    WhitelistDir = ?config(whitelist_dir, Config),
+    ok = rabbit_file:recursive_delete([WhitelistDir]),
     ok = file:make_dir(WhitelistDir),
-    Config1 = rabbit_ct_helpers:set_config(Config, {whitelist_dir, WhitelistDir}),
-    rabbit_ct_helpers:testcase_started(Config1, Testcase).
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE,  change_configuration,
+           [rabbitmq_trust_store, [{directory, WhitelistDir}]]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -178,7 +190,7 @@ validate_chain1(Config) ->
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
 
     ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
-    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
+    rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
@@ -221,7 +233,7 @@ validate_longer_chain1(Config) ->
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
 
     ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
-    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
+    rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
@@ -287,8 +299,7 @@ validate_chain_without_whitelisted1(Config) ->
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
-
-    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
+    rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
@@ -320,7 +331,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
 
     ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
-    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
+    rabbit_trust_store:refresh(),
 
     %% When: Rabbit validates paths with a different root `R` than
     %% that of the certificate `CertTrusted`.
@@ -353,9 +364,7 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
     ok = whitelist(Config, "bob", CertOther,  KeyOther),
-    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)},
-                                                     {refresh_interval,
-                                                        {seconds, interval()}}]),
+    rabbit_trust_store:refresh(),
 
     %% When: we wait for at least one second (the accuracy of the
     %% file system's time), remove the whitelisted certificate,
@@ -392,10 +401,7 @@ installed_certificate_accepted_from_AMQP_client1(Config) ->
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
-
-    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)},
-                                                    {refresh_interval,
-                                                        {seconds, interval()}}]),
+    rabbit_trust_store:refresh(),
 
     %% When: we wait for at least one second (the accuracy of the
     %% file system's time), add a certificate to the directory,
@@ -440,9 +446,7 @@ whitelist_directory_DELTA1(Config) ->
 
     ok = whitelist(Config, "foo", CertListed1,  KeyListed1),
     ok = whitelist(Config, "bar", CertRevoked,  KeyRevoked),
-    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)},
-                                                    {refresh_interval,
-                                                     {seconds, interval()}}]),
+    rabbit_trust_store:refresh(),
 
     %% When: we wait for at least one second (the accuracy
     %% of the file system's time), delete a certificate and
@@ -500,8 +504,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
                                                     {key, Key} | cfg()], 1),
     %% And: the first certificate has been whitelisted
     ok = whitelist(Config, "bart", CertFirst,  KeyFirst),
-    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)},
-                                                  {refresh_interval, {seconds, interval()}}]),
+    rabbit_trust_store:refresh(),
 
     wait_for_trust_store_refresh(),
 
@@ -570,13 +573,12 @@ ignore_corrupt_cert1(Config) ->
     {Root, Cert, Key} = ct_helper:make_certs(),
     {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
-    WhitelistDir = whitelist_dir(Config),
-    ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
+    rabbit_trust_store:refresh(),
     ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
 
     %% When: Rabbit tries to whitelist the corrupt certificate.
     ok = whitelist(Config, "corrupt", <<48>>,  KeyTrusted),
-    ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
+    rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
@@ -608,13 +610,11 @@ ignore_same_cert_with_different_name1(Config) ->
     {Root, Cert, Key} = ct_helper:make_certs(),
     {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
-    WhitelistDir = whitelist_dir(Config),
-
-    ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
+    rabbit_trust_store:refresh(),
     ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
     %% When: Rabbit tries to insert the duplicate certificate
     ok = whitelist(Config, "malice", CertTrusted,  KeyTrusted),
-    ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
+    rabbit_trust_store:refresh(),
 
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
@@ -636,8 +636,8 @@ ignore_same_cert_with_different_name1(Config) ->
 list(Config) ->
     {_Root,  Cert, Key}    = ct_helper:make_certs(),
     ok = whitelist(Config, "alice", Cert,  Key),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-           ?MODULE,  change_configuration, [rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]]),
+    % wait_for_trust_store_refresh(),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_trust_store, refresh, []),
     Certs = rabbit_ct_broker_helpers:rpc(Config, 0,
            rabbit_trust_store, list, []),
     % only really tests it isn't totally broken.
@@ -646,8 +646,7 @@ list(Config) ->
 disabled_provider_removes_certificates(Config) ->
     {_Root,  Cert, Key}    = ct_helper:make_certs(),
     ok = whitelist(Config, "alice", Cert,  Key),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-           ?MODULE,  change_configuration, [rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_trust_store, refresh, []),
 
     %% Certificate is there
     Certs = rabbit_ct_broker_helpers:rpc(Config, 0,
