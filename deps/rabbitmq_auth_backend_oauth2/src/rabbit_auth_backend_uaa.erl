@@ -53,7 +53,7 @@ user_login_authorization(Username) ->
         Else                          -> Else
     end.
 
-check_vhost_access(#auth_user{username = Username, impl = DecodedToken},
+check_vhost_access(#auth_user{impl = DecodedToken},
                    VHost, _Sock) ->
     with_decoded_token(DecodedToken,
         fun() ->
@@ -61,7 +61,7 @@ check_vhost_access(#auth_user{username = Username, impl = DecodedToken},
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
-check_resource_access(#auth_user{username = Username, impl = DecodedToken},
+check_resource_access(#auth_user{impl = DecodedToken},
                       Resource, Permission) ->
     with_decoded_token(DecodedToken,
         fun() ->
@@ -69,7 +69,7 @@ check_resource_access(#auth_user{username = Username, impl = DecodedToken},
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
-check_topic_access(#auth_user{username = Username, impl = DecodedToken},
+check_topic_access(#auth_user{impl = DecodedToken},
                    Resource, Permission, Context) ->
     with_decoded_token(DecodedToken,
         fun() ->
@@ -80,14 +80,17 @@ check_topic_access(#auth_user{username = Username, impl = DecodedToken},
 %%--------------------------------------------------------------------
 
 with_decoded_token(DecodedToken, Fun) ->
-    case token_expired(DecodedToken) of
-        false -> Fun();
-        true  -> {error_message, "Auth token expired"}
+    case validate_token_active(DecodedToken) of
+        ok               -> Fun();
+        {error, _} = Err -> Err
     end.
 
-token_expired(#{<<"exp">> := Exp}) when is_integer(Exp) ->
-    Exp =< os:system_time(seconds);
-token_expired(#{}) -> true.
+validate_token_active(#{<<"exp">> := Exp}) when is_integer(Exp) ->
+    case Exp =< os:system_time(seconds) of
+        true  -> {error, "Auth token expired at unix time: ~p"};
+        false -> ok
+    end;
+validate_token_active(#{}) -> ok.
 
 -spec check_token(binary()) -> {ok, map()} | {error, term()}.
 check_token(Token) ->

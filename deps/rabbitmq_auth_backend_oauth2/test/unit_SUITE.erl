@@ -110,7 +110,8 @@ test_token_expiration(_) ->
     Jwk = fixture_jwk(),
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
-    Token = sign_token_hs(expirable_token(), Jwk),
+    TokenData = expirable_token(),
+    Token = sign_token_hs(TokenData, Jwk),
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
     true = rabbit_auth_backend_uaa:check_resource_access(
@@ -127,8 +128,9 @@ test_token_expiration(_) ->
              write),
 
     wait_token_expired(),
-
-    {error_message, "Auth token expired"} =
+    #{<<"exp">> := Exp} = TokenData,
+    ExpectedError = "Auth token expired at unix time: " ++ integer_to_list(Exp),
+    {error, ExpectedError} =
         rabbit_auth_backend_uaa:check_resource_access(
              User,
              #resource{virtual_host = <<"vhost">>,
