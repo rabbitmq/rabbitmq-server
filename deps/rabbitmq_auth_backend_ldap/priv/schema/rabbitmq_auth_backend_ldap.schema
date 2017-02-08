@@ -17,18 +17,18 @@
 %%
 %% {servers, ["your-server-name-goes-here"]},
 
-{mapping, "rabbitmq_auth_backend_ldap.servers", "rabbitmq_auth_backend_ldap.servers",
+{mapping, "ldap.servers", "rabbitmq_auth_backend_ldap.servers",
     [{datatype, {enum, [none]}}]}.
 
-{mapping, "rabbitmq_auth_backend_ldap.servers.$server", "rabbitmq_auth_backend_ldap.servers", 
+{mapping, "ldap.servers.$server", "rabbitmq_auth_backend_ldap.servers",
     [{datatype, string}]}.
 
 {translation, "rabbitmq_auth_backend_ldap.servers",
 fun(Conf) ->
-    case cuttlefish:conf_get("rabbitmq_auth_backend_ldap.servers", Conf, undefined) of
+    case cuttlefish:conf_get("ldap.servers", Conf, undefined) of
         none -> [];
         _    ->
-            Settings = cuttlefish_variable:filter_by_prefix("rabbitmq_auth_backend_ldap.servers", Conf),
+            Settings = cuttlefish_variable:filter_by_prefix("ldap.servers", Conf),
             [ V || {_, V} <- Settings ]
     end
 end}.
@@ -37,21 +37,21 @@ end}.
 %%
 %% {use_ssl, false},
 
-{mapping, "rabbitmq_auth_backend_ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl", 
+{mapping, "ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl",
     [{datatype, {enum, [true, false]}}]}.
 
 %% Specify the LDAP port to connect to
 %%
 %% {port, 389},
 
-{mapping, "rabbitmq_auth_backend_ldap.port", "rabbitmq_auth_backend_ldap.port", 
+{mapping, "ldap.port", "rabbitmq_auth_backend_ldap.port",
     [{datatype, integer}]}.
 
 %% LDAP connection timeout, in milliseconds or 'infinity'
 %%
 %% {timeout, infinity},
 
-{mapping, "rabbitmq_auth_backend_ldap.timeout", "rabbitmq_auth_backend_ldap.timeout", 
+{mapping, "ldap.timeout", "rabbitmq_auth_backend_ldap.timeout",
     [{datatype, [integer, {atom, infinity}]}]}.
 
 %% Enable logging of LDAP queries.
@@ -64,7 +64,7 @@ end}.
 %%
 %% {log, false},
 
-{mapping, "rabbitmq_auth_backend_ldap.log", "rabbitmq_auth_backend_ldap.log", 
+{mapping, "ldap.log", "rabbitmq_auth_backend_ldap.log",
     [{datatype, {enum, [true, false, network]}}]}.
 
 %%
@@ -77,7 +77,7 @@ end}.
 %%
 %% {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
 
-{mapping, "rabbitmq_auth_backend_ldap.user_dn_pattern", "rabbitmq_auth_backend_ldap.user_dn_pattern", 
+{mapping, "ldap.user_dn_pattern", "rabbitmq_auth_backend_ldap.user_dn_pattern",
     [{datatype, string}]}.
 
 %% Alternatively, you can convert a username to a Distinguished
@@ -91,34 +91,34 @@ end}.
 %% {dn_lookup_attribute,   "userPrincipalName"},
 %% {dn_lookup_base,        "DC=gopivotal,DC=com"},
 
-{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_attribute", "rabbitmq_auth_backend_ldap.dn_lookup_attribute", 
+{mapping, "ldap.dn_lookup_attribute", "rabbitmq_auth_backend_ldap.dn_lookup_attribute",
     [{datatype, [{enum, [none]}, string]}]}.
 
-{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_base", "rabbitmq_auth_backend_ldap.dn_lookup_base", 
+{mapping, "ldap.dn_lookup_base", "rabbitmq_auth_backend_ldap.dn_lookup_base",
     [{datatype, [{enum, [none]}, string]}]}.
 
-{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_bind", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+{mapping, "ldap.dn_lookup_bind", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
     [{datatype, [{enum, [as_user]}]}]}.
 
-{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_bind.user_dn", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+{mapping, "ldap.dn_lookup_bind.user_dn", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
     [{datatype, [string]}]}.
 
-{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_bind.password", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+{mapping, "ldap.dn_lookup_bind.password", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
     [{datatype, [string]}]}.
 
 {translation, "rabbitmq_auth_backend_ldap.dn_lookup_bind",
 fun(Conf) ->
-    case cuttlefish:conf_get("rabbitmq_auth_backend_ldap.dn_lookup_bind", Conf, undefined) of
+    case cuttlefish:conf_get("ldap.dn_lookup_bind", Conf, undefined) of
         as_user -> as_user;
         _       ->
-            User = cuttlefish:conf_get("rabbitmq_auth_backend_ldap.dn_lookup_bind.user_dn", Conf),
-            Pass = cuttlefish:conf_get("rabbitmq_auth_backend_ldap.dn_lookup_bind.password", Conf),
+            User = cuttlefish:conf_get("ldap.dn_lookup_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("ldap.dn_lookup_bind.password", Conf),
             case {User, Pass} of
                 {undefined, _} -> as_user;
                 {_, undefined} -> as_user;
                 _              -> {User, Pass}
             end
-    end  
+    end
 end}.
 
 %% Controls how to bind for authorisation queries and also to
@@ -133,29 +133,29 @@ end}.
 %%
 %% {other_bind, as_user},
 
-{mapping, "rabbitmq_auth_backend_ldap.other_bind", "rabbitmq_auth_backend_ldap.other_bind", 
+{mapping, "ldap.other_bind", "rabbitmq_auth_backend_ldap.other_bind",
     [{datatype, {enum, [as_user, anon]}}]}.
 
-{mapping, "rabbitmq_auth_backend_ldap.other_bind.user_dn", "rabbitmq_auth_backend_ldap.other_bind", 
+{mapping, "ldap.other_bind.user_dn", "rabbitmq_auth_backend_ldap.other_bind",
     [{datatype, string}]}.
 
-{mapping, "rabbitmq_auth_backend_ldap.other_bind.password", "rabbitmq_auth_backend_ldap.other_bind", 
+{mapping, "ldap.other_bind.password", "rabbitmq_auth_backend_ldap.other_bind",
     [{datatype, string}]}.
 
 {translation, "rabbitmq_auth_backend_ldap.other_bind",
 fun(Conf) ->
-    case cuttlefish:conf_get("rabbitmq_auth_backend_ldap.other_bind", Conf, undefined) of
+    case cuttlefish:conf_get("ldap.other_bind", Conf, undefined) of
         as_user -> as_user;
         anon    -> anon;
         _       ->
-            User = cuttlefish:conf_get("rabbitmq_auth_backend_ldap.other_bind.user_dn", Conf),
-            Pass = cuttlefish:conf_get("rabbitmq_auth_backend_ldap.other_bind.password", Conf),
+            User = cuttlefish:conf_get("ldap.other_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("ldap.other_bind.password", Conf),
             case {User, Pass} of
                 {undefined, _} -> as_user;
                 {_, undefined} -> as_user;
                 _              -> {User, Pass}
             end
-    end                    
+    end
 end}.
 
 %%
