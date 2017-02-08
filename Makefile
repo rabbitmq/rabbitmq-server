@@ -139,10 +139,6 @@ EXTRA_SOURCES += $(USAGES_ERL)
 .DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
-copy-escripts:
-	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./
-
-
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
@@ -180,13 +176,27 @@ USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensur
 RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
+.PHONY: copy-escripts clean-extra-sources clean-escripts
+
+ESCRIPT_COPIES_DIR = escript
+
+# We want to copy the `escript` directory in rabbitmq_cli locally. We
+# use pax(1) for that. pax(1) is a little weird to use (we need to cd to
+# the source directory) but its behavior is consistent accross systems,
+# unlike cp(1), in particular w.r.t. hardlinks handling.
+
+copy-escripts:
+	$(gen_verbose) mkdir -p $(ESCRIPT_COPIES_DIR)
+	$(verbose) cd $(DEPS_DIR)/rabbitmq_cli/escript && \
+		pax -rw . $(abspath $(ESCRIPT_COPIES_DIR))
+
 clean:: clean-extra-sources clean-escripts
 
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
 
 clean-escripts:
-	$(gen_verbose) rm -rf escript
+	$(gen_verbose) rm -rf "$(ESCRIPT_COPIES_DIR)"
 
 # --------------------------------------------------------------------
 # Documentation.
