@@ -92,8 +92,8 @@ define PROJECT_ENV
 	    %% queue_index_embed_msgs_below above.
 	    {msg_store_credit_disc_bound, {3000, 800}},
 	    {msg_store_io_batch_size, 2048},
-	    %% see rabbitmq-server#143
-	    %% and rabbitmq-server#949
+	    %% see rabbitmq-server#143,
+	    %% rabbitmq-server#949, rabbitmq-server#1098
 	    {credit_flow_default_credit, {400, 200}},
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
