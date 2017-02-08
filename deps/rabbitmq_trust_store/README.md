@@ -22,6 +22,10 @@ The list is node-local.
 
 This plugin requires RabbitMQ `3.6.1` or later.
 
+## Erlang Version Requirements
+
+This plugin requires Erlang version 17.3 or later.
+
 ## Installation and Binary Builds
 
 This plugin is now available from the [RabbitMQ community plugins page](http://www.rabbitmq.com/community-plugins.html).

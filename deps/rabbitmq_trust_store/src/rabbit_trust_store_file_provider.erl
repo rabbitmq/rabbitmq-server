@@ -15,7 +15,7 @@
 -type cert_id() :: {FileName :: string(), ChangeTime :: integer()}.
 
 -spec list_certs(Config :: list())
-    -> no_change | {ok, [{cert_id(), map()}], State}
+    -> no_change | {ok, [{cert_id(), list()}], State}
     when State :: #directory_state{}.
 list_certs(Config) ->
     Path = directory_path(Config),
@@ -25,7 +25,7 @@ list_certs(Config) ->
                                  directory_change_time = NewChangeTime}}.
 
 -spec list_certs(Config :: list(), State)
-    -> no_change | {ok, [{cert_id(), map()}], State}
+    -> no_change | {ok, [{cert_id(), list()}], State}
     when State :: #directory_state{}.
 list_certs(Config, #directory_state{directory_path = DirPath,
                                     directory_change_time = ChangeTime}) ->
@@ -40,9 +40,9 @@ list_certs(Config, #directory_state{directory_path = DirPath,
                                          directory_change_time = NewChangeTime}}
     end.
 
--spec load_cert(cert_id(), map(), Config :: list())
+-spec load_cert(cert_id(), list(), Config :: list())
     -> {ok, Cert :: public_key:der_encoded()}.
-load_cert({FileName, _}, #{}, Config) ->
+load_cert({FileName, _}, _, Config) ->
     Path = directory_path(Config),
     Cert = extract_cert(Path, FileName),
     rabbit_log:info(
@@ -64,7 +64,7 @@ list_certs_0(Path) ->
         fun(FileName) ->
             AbsName = filename:absname(FileName, Path),
             CertId = {FileName, modification_time(AbsName)},
-            {CertId, #{name => FileName}}
+            {CertId, [{name, FileName}]}
         end,
         FileNames).
 
@@ -92,9 +92,8 @@ default_directory() ->
     %% directory, then the Mesia database directory, finally the node
     %% directory where we will place the default whitelist in `Full`.
     Table  = filename:split(rabbit_mnesia:dir()),
-    Mnesia = lists:droplast(Table),
-    Node   = lists:droplast(Mnesia),
-    Full = Node ++ ["trust_store", "whitelist"],
+    Node   = lists:sublist(Table, length(Table) - 2),
+    Full   = Node ++ ["trust_store", "whitelist"],
     filename:join(Full).
 
 ensure_directory(Path) ->

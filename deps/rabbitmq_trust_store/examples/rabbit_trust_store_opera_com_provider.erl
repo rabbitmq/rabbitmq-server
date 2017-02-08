@@ -28,12 +28,12 @@ list_certs(_Config) ->
             %% so they should be unique (there is no need to add change time)
             {ok,
              [{CertName,
-               #{name => CertName,
+               [{name, CertName},
                  %% Url can be formed from CertName, so there is no
                  %% need for this attribute.
                  %% But we use it as an example for providers where CertName and
                  %% url are different.
-                 url => <<"https://certs.opera.com/02/roots/", CertName/binary>>}}
+                {url, <<"https://certs.opera.com/02/roots/", CertName/binary>>}]}
               || CertName <- CertNames],
               nostate};
         Other -> {error, {http_error, Other}}
@@ -46,7 +46,8 @@ list_certs(Config, _) -> list_certs(Config).
 %% This function loads a certificate data using certifocate ID and attributes.
 %% We use the url parameter in attributes.
 %% Some providers can ignore attributes and use CertId instead
-load_cert(_CertId, #{url := Url}, _Config) ->
+load_cert(_CertId, Attributes, _Config) ->
+    Url = proplists:get_value(url, Attributes),
     case httpc:request(get, {rabbit_data_coercion:to_list(Url), []},
                        [], [{body_format, binary}]) of
         {ok, {{_,Code,_}, _Headers, Body}} when Code div 100 == 2 ->

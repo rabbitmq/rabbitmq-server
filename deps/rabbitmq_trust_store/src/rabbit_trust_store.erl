@@ -244,7 +244,7 @@ update_certs(CertsList, Provider, Config) ->
     lists:foreach(
         fun(CertId) ->
             Attributes = proplists:get_value(CertId, CertsList),
-            Name = maps:get(name, Attributes, undefined),
+            Name = proplists:get_value(name, Attributes, undefined),
             case load_and_decode_cert(Provider, CertId, Attributes, Config) of
                 {ok, Cert, IssuerId} ->
                     save_cert(CertId, Provider, IssuerId, Cert, Name);
@@ -295,7 +295,7 @@ get_old_cert_ids(Provider) ->
                     when P == Provider ->
                         CId
                     end),
-    lists:append(ets:select(table_name(), MS)).
+    ets:select(table_name(), MS).
 
 providers(Config) ->
     Providers = proplists:get_value(providers, Config, []),
