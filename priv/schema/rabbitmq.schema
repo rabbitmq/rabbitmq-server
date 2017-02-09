@@ -287,7 +287,6 @@ fun(Conf) ->
         (cache)    -> rabbit_auth_backend_cache;
         (amqp)     -> rabbit_auth_backend_amqp;
         (dummy)    -> rabbit_auth_backend_dummy;
-        (cache)    -> rabbit_auth_backend_cache;
         (Other) when is_atom(Other) -> Other;
         (_) -> cuttlefish:invalid("Unknown/unsupported auth backend")
     end,
