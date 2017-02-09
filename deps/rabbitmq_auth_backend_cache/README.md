@@ -16,7 +16,7 @@ It's not an independent auth backend but a caching layer for existing backends
 such as the built-in, [LDAP](github.com/rabbitmq/rabbitmq-auth-backend-ldap), or [HTTP](github.com/rabbitmq/rabbitmq-auth-backend-http)
 ones.
 
-Cache expiration is currently time-based. It is not very useful with the built-in 
+Cache expiration is currently time-based. It is not very useful with the built-in
 (internal) [authn/authz backends](http://rabbitmq.com/access-control.html) but can be very useful for LDAP, HTTP or other backends that
 use network requests.
 
@@ -47,12 +47,18 @@ for the `rabbit` application to include `rabbit_auth_backend_cache`.
 
 So a configuration fragment that enables this plugin *only* would look like:
 
+    auth_backends.1 = cache
+
+Or using the classic config for both parameters:
+
     [{rabbit, [{auth_backends, [rabbit_auth_backend_cache]}]}].
 
 To configure upstream auth backend, you should use `cached_backend` configuration item
 for the `rabbitmq_auth_backend_cache` application.
 
 Configuration that uses LDAP auth backend:
+
+    auth_cache.cached_backend = ldap
 
     [{rabbitmq_auth_backend_cache, [{cached_backend, rabbit_auth_backend_ldap}]}].
 
@@ -61,12 +67,22 @@ It is still possible to [use different backends for authorization and authentica
 The following example configures plugin to use LDAP backend for authentication
 but internal backend for authorisation:
 
+    auth_cache.cached_backend.authn = ldap
+    auth_cache.cached_backend.authz = internal
+
+Or using the classic config for both parameters:
+
     [{rabbitmq_auth_backend_cache, [{cached_backend, {rabbit_auth_backend_ldap,
                                                       rabbit_auth_backend_internal}}]}].
 
 ## Cache Configuration
 
 You can configure TTL for cache items, by using `cache_ttl` configuration item, specified in **milliseconds**
+
+    auth_cache.cached_backend = ldap
+    auth_cache.cache_ttl = 5000
+
+Or using the classic config for both parameters:
 
     [{rabbitmq_auth_backend_cache, [{cached_backend, rabbit_auth_backend_ldap}
                                     {cache_ttl, 5000}]}].
@@ -83,17 +99,28 @@ This repository provides several implementations:
    uses a separate process for garbage collection.
  * `rabbit_auth_cache_ets_segmented_stateless` same as previous, but with minimal use of `gen_server` state, using ets tables to store information about segments.
 
-To specify module for caching you should use `cache_module` configuration item and 
+To specify module for caching you should use `cache_module` configuration item and
 specify start args with `cache_module_args`.
 Start args should be list of arguments passed to module `start_link` function
+
+Cache module can be set via sysctl config format:
+
+    auth_cache.cache_module = rabbit_auth_backend_ets_segmented
+
+Cache module additional arguments can be defined via the classic-style config only:
+
+    [{rabbitmq_auth_backend_cache, [{cache_module_args, [10000]}]}].
+
+The above two snippets used in the classic config format:
 
     [{rabbitmq_auth_backend_cache, [{cache_module, rabbit_auth_backend_ets_segmented},
                                     {cache_module_args, [10000]}]}].
 
-Default values are `rabbit_auth_cache_ets` and `[]`, respectively.
+The default values are `rabbit_auth_cache_ets` and `[]`, respectively.
+
 
 ## License and Copyright
 
-(c) 2016 Pivotal Software Inc.
+(c) 2016-2017 Pivotal Software Inc.
 
 Released under the Mozilla Public License 1.1, same as RabbitMQ.
