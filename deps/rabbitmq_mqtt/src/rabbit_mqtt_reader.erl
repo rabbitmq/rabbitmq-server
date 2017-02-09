@@ -67,7 +67,6 @@ init([KeepaliveSup, Ref, Sock]) ->
     rabbit_net:accept_ack(Ref, RealSocket),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
-            io:format("String ~p~n", [ConnStr]),
             log(debug, "MQTT accepting TCP connection ~p (~s)~n", [self(), ConnStr]),
             rabbit_alarm:register(
               self(), {?MODULE, conserve_resources, []}),
