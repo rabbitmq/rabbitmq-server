@@ -17,18 +17,18 @@
 %%
 %% {servers, ["your-server-name-goes-here"]},
 
-{mapping, "ldap.servers", "rabbitmq_auth_backend_ldap.servers",
+{mapping, "auth_ldap.servers", "rabbitmq_auth_backend_ldap.servers",
     [{datatype, {enum, [none]}}]}.
 
-{mapping, "ldap.servers.$server", "rabbitmq_auth_backend_ldap.servers",
+{mapping, "auth_ldap.servers.$server", "rabbitmq_auth_backend_ldap.servers",
     [{datatype, string}]}.
 
 {translation, "rabbitmq_auth_backend_ldap.servers",
 fun(Conf) ->
-    case cuttlefish:conf_get("ldap.servers", Conf, undefined) of
+    case cuttlefish:conf_get("auth_ldap.servers", Conf, undefined) of
         none -> [];
         _    ->
-            Settings = cuttlefish_variable:filter_by_prefix("ldap.servers", Conf),
+            Settings = cuttlefish_variable:filter_by_prefix("auth_ldap.servers", Conf),
             [ V || {_, V} <- Settings ]
     end
 end}.
@@ -37,21 +37,21 @@ end}.
 %%
 %% {use_ssl, false},
 
-{mapping, "ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl",
+{mapping, "auth_ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl",
     [{datatype, {enum, [true, false]}}]}.
 
 %% Specify the LDAP port to connect to
 %%
 %% {port, 389},
 
-{mapping, "ldap.port", "rabbitmq_auth_backend_ldap.port",
+{mapping, "auth_ldap.port", "rabbitmq_auth_backend_ldap.port",
     [{datatype, integer}]}.
 
 %% LDAP connection timeout, in milliseconds or 'infinity'
 %%
 %% {timeout, infinity},
 
-{mapping, "ldap.timeout", "rabbitmq_auth_backend_ldap.timeout",
+{mapping, "auth_ldap.timeout", "rabbitmq_auth_backend_ldap.timeout",
     [{datatype, [integer, {atom, infinity}]}]}.
 
 %% Enable logging of LDAP queries.
@@ -64,7 +64,7 @@ end}.
 %%
 %% {log, false},
 
-{mapping, "ldap.log", "rabbitmq_auth_backend_ldap.log",
+{mapping, "auth_ldap.log", "rabbitmq_auth_backend_ldap.log",
     [{datatype, {enum, [true, false, network]}}]}.
 
 %%
@@ -77,7 +77,7 @@ end}.
 %%
 %% {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
 
-{mapping, "ldap.user_dn_pattern", "rabbitmq_auth_backend_ldap.user_dn_pattern",
+{mapping, "auth_ldap.user_dn_pattern", "rabbitmq_auth_backend_ldap.user_dn_pattern",
     [{datatype, string}]}.
 
 %% Alternatively, you can convert a username to a Distinguished
@@ -91,28 +91,28 @@ end}.
 %% {dn_lookup_attribute,   "userPrincipalName"},
 %% {dn_lookup_base,        "DC=gopivotal,DC=com"},
 
-{mapping, "ldap.dn_lookup_attribute", "rabbitmq_auth_backend_ldap.dn_lookup_attribute",
+{mapping, "auth_ldap.dn_lookup_attribute", "rabbitmq_auth_backend_ldap.dn_lookup_attribute",
     [{datatype, [{enum, [none]}, string]}]}.
 
-{mapping, "ldap.dn_lookup_base", "rabbitmq_auth_backend_ldap.dn_lookup_base",
+{mapping, "auth_ldap.dn_lookup_base", "rabbitmq_auth_backend_ldap.dn_lookup_base",
     [{datatype, [{enum, [none]}, string]}]}.
 
-{mapping, "ldap.dn_lookup_bind", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+{mapping, "auth_ldap.dn_lookup_bind", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
     [{datatype, [{enum, [as_user]}]}]}.
 
-{mapping, "ldap.dn_lookup_bind.user_dn", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+{mapping, "auth_ldap.dn_lookup_bind.user_dn", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
     [{datatype, [string]}]}.
 
-{mapping, "ldap.dn_lookup_bind.password", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+{mapping, "auth_ldap.dn_lookup_bind.password", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
     [{datatype, [string]}]}.
 
 {translation, "rabbitmq_auth_backend_ldap.dn_lookup_bind",
 fun(Conf) ->
-    case cuttlefish:conf_get("ldap.dn_lookup_bind", Conf, undefined) of
+    case cuttlefish:conf_get("auth_ldap.dn_lookup_bind", Conf, undefined) of
         as_user -> as_user;
         _       ->
-            User = cuttlefish:conf_get("ldap.dn_lookup_bind.user_dn", Conf),
-            Pass = cuttlefish:conf_get("ldap.dn_lookup_bind.password", Conf),
+            User = cuttlefish:conf_get("auth_ldap.dn_lookup_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("auth_ldap.dn_lookup_bind.password", Conf),
             case {User, Pass} of
                 {undefined, _} -> as_user;
                 {_, undefined} -> as_user;
@@ -133,23 +133,23 @@ end}.
 %%
 %% {other_bind, as_user},
 
-{mapping, "ldap.other_bind", "rabbitmq_auth_backend_ldap.other_bind",
+{mapping, "auth_ldap.other_bind", "rabbitmq_auth_backend_ldap.other_bind",
     [{datatype, {enum, [as_user, anon]}}]}.
 
-{mapping, "ldap.other_bind.user_dn", "rabbitmq_auth_backend_ldap.other_bind",
+{mapping, "auth_ldap.other_bind.user_dn", "rabbitmq_auth_backend_ldap.other_bind",
     [{datatype, string}]}.
 
-{mapping, "ldap.other_bind.password", "rabbitmq_auth_backend_ldap.other_bind",
+{mapping, "auth_ldap.other_bind.password", "rabbitmq_auth_backend_ldap.other_bind",
     [{datatype, string}]}.
 
 {translation, "rabbitmq_auth_backend_ldap.other_bind",
 fun(Conf) ->
-    case cuttlefish:conf_get("ldap.other_bind", Conf, undefined) of
+    case cuttlefish:conf_get("auth_ldap.other_bind", Conf, undefined) of
         as_user -> as_user;
         anon    -> anon;
         _       ->
-            User = cuttlefish:conf_get("ldap.other_bind.user_dn", Conf),
-            Pass = cuttlefish:conf_get("ldap.other_bind.password", Conf),
+            User = cuttlefish:conf_get("auth_ldap.other_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("auth_ldap.other_bind.password", Conf),
             case {User, Pass} of
                 {undefined, _} -> as_user;
                 {_, undefined} -> as_user;
