@@ -67,6 +67,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'deps/'			\
 	       --exclude 'ebin/'			\
 	       --exclude 'erl_crash.dump'		\
+	       --exclude 'escript/'			\
 	       --exclude 'MnesiaCore.*'			\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
 	       --exclude 'hexer*'			\
