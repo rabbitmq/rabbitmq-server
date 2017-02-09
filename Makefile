@@ -178,17 +178,12 @@ endif
 
 .PHONY: copy-escripts clean-extra-sources clean-escripts
 
-ESCRIPT_COPIES_DIR = escript
-
-# We want to copy the `escript` directory in rabbitmq_cli locally. We
-# use pax(1) for that. pax(1) is a little weird to use (we need to cd to
-# the source directory) but its behavior is consistent accross systems,
-# unlike cp(1), in particular w.r.t. hardlinks handling.
+CLI_ESCRIPTS_DIR = escript
 
 copy-escripts:
-	$(gen_verbose) mkdir -p $(ESCRIPT_COPIES_DIR)
-	$(verbose) cd $(DEPS_DIR)/rabbitmq_cli/escript && \
-		pax -rw . $(abspath $(ESCRIPT_COPIES_DIR))
+	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
+		PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+		DESTDIR=
 
 clean:: clean-extra-sources clean-escripts
 
@@ -196,7 +191,7 @@ clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
 
 clean-escripts:
-	$(gen_verbose) rm -rf "$(ESCRIPT_COPIES_DIR)"
+	$(gen_verbose) rm -rf "$(CLI_ESCRIPTS_DIR)"
 
 # --------------------------------------------------------------------
 # Documentation.
