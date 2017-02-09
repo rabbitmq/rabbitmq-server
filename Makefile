@@ -288,8 +288,11 @@ install-erlapp: dist
 		$(DEPS_DIR)/rabbit_common/include \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 
+CLI_ESCRIPTS_DIR = escript
+
 install-escripts:
-	$(verbose) cp -r $(DEPS_DIR)/rabbit/escript $(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
+		PREFIX="$(RMQ_ERLAPP_DIR)/$(CLI_ESCRIPTS_DIR)"
 
 install-scripts: install-escripts
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
@@ -354,7 +357,8 @@ install-windows-erlapp: dist
 		$(DESTDIR)$(WINDOWS_PREFIX)
 
 install-windows-escripts:
-	$(verbose) cp -r $(DEPS_DIR)/rabbit/escript $(DESTDIR)$(WINDOWS_PREFIX)
+	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
+		PREFIX="$(WINDOWS_PREFIX)/$(CLI_ESCRIPTS_DIR)"
 
 install-windows-scripts: install-windows-escripts
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
