@@ -430,7 +430,7 @@ audit_topic_permission(Config) ->
     rabbit_ct_broker_helpers:add_user(Config, 0, User, User, ActingUser),
     rabbit_ct_broker_helpers:rpc(
       Config, 0, rabbit_auth_backend_internal, set_topic_permissions,
-      [User, VHost, <<"amq.topic">>, "^a", ActingUser]),
+      [User, VHost, <<"amq.topic">>, "^a", "^a", ActingUser]),
     receive_user_in_event(<<"topic.permission.created">>, ActingUser),
 
     rabbit_ct_broker_helpers:rpc(
