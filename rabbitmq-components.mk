@@ -60,6 +60,7 @@ dep_rabbitmq_federation               = git_rmq rabbitmq-federation $(current_rm
 dep_rabbitmq_federation_management    = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_java_client              = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_jms_client               = git_rmq rabbitmq-jms-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_jms_cts                  = git_rmq rabbitmq-jms-cts $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_jms_topic_exchange       = git_rmq rabbitmq-jms-topic-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_lvc                      = git_rmq rabbitmq-lvc-plugin $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management               = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref) master
@@ -105,6 +106,7 @@ dep_cowboy_commit = 1.1.0
 dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
 dep_ranch_commit = 1.3.1
 dep_webmachine_commit = 1.10.8p2
+dep_ranch_proxy_protocol = git git@github.com:heroku/ranch_proxy_protocol.git 1.4.1
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
@@ -129,6 +131,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_federation_management \
 		      rabbitmq_java_client \
 		      rabbitmq_jms_client \
+		      rabbitmq_jms_cts \
 		      rabbitmq_jms_topic_exchange \
 		      rabbitmq_lvc \
 		      rabbitmq_management \
