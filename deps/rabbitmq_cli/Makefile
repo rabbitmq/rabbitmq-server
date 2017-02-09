@@ -22,9 +22,36 @@ include erlang.mk
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-ESCRIPTS = escript/rabbitmqctl \
-	   escript/rabbitmq-plugins \
-	   escript/rabbitmq-diagnostics
+ACTUAL_ESCRIPTS = escript/rabbitmqctl
+LINKED_ESCRIPTS = escript/rabbitmq-plugins \
+		  escript/rabbitmq-diagnostics
+ESCRIPTS = $(ACTUAL_ESCRIPTS) $(LINKED_ESCRIPTS)
+
+# Record the build and link dependency: the target files are linked to
+# their first dependency.
+rabbitmq-plugins = escript/rabbitmqctl
+rabbitmq-diagnostics = escript/rabbitmqctl
+escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
+
+# We use hardlinks or symlinks in the `escript` directory and
+# install's PREFIX when a single escript can have several names (eg.
+# rabbitmq-plugins, rabbitmq-plugins and rabbitmq-diagnostics).
+#
+# Hardlinks and symlinks work on Windows. However, symlinks require
+# privileges unlike hardlinks. That's why we default to hardlinks,
+# unless USE_SYMLINKS_IN_ESCRIPTS_DIR is set.
+#
+# The link_escript function is called as:
+#     $(call link_escript,source,target)
+#
+# The function assumes all escripts live in the same directory and that
+# the source was previously copied in that directory.
+
+ifdef USE_SYMLINKS_IN_ESCRIPTS_DIR
+link_escript = ln -s "$(notdir $(1))" "$(2)"
+else
+link_escript = ln "$(dir $(2))$(notdir $(1))" "$(2)"
+endif
 
 app:: $(ESCRIPTS)
 	@:
@@ -41,20 +68,11 @@ rabbitmqctl_srcs := mix.exs \
 # it's missing. Another way to do it is to use `mix local.hex` but it
 # can't be integrated in an alias and doing it from the Makefile isn't
 # practical.
-escript/rabbitmqctl: $(rabbitmqctl_srcs) deps
+$(ACTUAL_ESCRIPTS): $(rabbitmqctl_srcs) deps
 	$(gen_verbose) echo y | mix make_all
 
-# We create hard links for rabbitmq-plugins and rabbitmq-diagnostics
-# pointing to rabbitmqctl. We use hard links instead of symlinks because
-# they also work on Windows (symlinks are supported on Windows but
-# apparently require privileges).
-#
-# Also, we change to the `escript` directory to create the link
-# because, on Windows, the target of the link must exist (unlike on
-# Unix). As we want the link to point to `rabbitmqctl` in the same
-# directory, we need to cd first.
-escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
-	$(gen_verbose) cd $(dir $@) && ln -f rabbitmqctl $(notdir $@)
+$(LINKED_ESCRIPTS):
+	$(gen_verbose) $(call link_escript,$<,$@)
 
 rel:: $(ESCRIPTS)
 	@:
@@ -64,6 +82,21 @@ tests:: $(ESCRIPTS)
 
 test:: $(ESCRIPTS)
 	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
+
+.PHONY: install
+
+install: $(ESCRIPTS)
+ifdef PREFIX
+	$(gen_verbose) mkdir -p "$(DESTDIR)$(PREFIX)"
+	$(verbose) $(foreach script,$(ESCRIPTS), \
+		rm -f "$(DESTDIR)$(PREFIX)/$(notdir $(script))";)
+	$(verbose) $(foreach script,$(ACTUAL_ESCRIPTS), \
+		cp "$(script)" "$(DESTDIR)$(PREFIX)";)
+	$(verbose) $(foreach script,$(LINKED_ESCRIPTS), \
+		$(call link_escript,$($(notdir $(script))),$(DESTDIR)$(PREFIX)/$(notdir $(script)));)
+else
+	$(verbose) echo "You must specify a PREFIX" 1>&2; false
+endif
 
 clean:: clean-mix
 
