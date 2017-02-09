@@ -49,7 +49,7 @@ So a configuration fragment that enables this plugin *only* would look like:
 
     auth_backends.1 = cache
 
-Or using erlang config for both parameters:
+Or using the classic config for both parameters:
 
     [{rabbit, [{auth_backends, [rabbit_auth_backend_cache]}]}].
 
@@ -70,7 +70,7 @@ but internal backend for authorisation:
     auth_cache.cached_backend.authn = ldap
     auth_cache.cached_backend.authz = internal
 
-Or using erlang config for both parameters:
+Or using the classic config for both parameters:
 
     [{rabbitmq_auth_backend_cache, [{cached_backend, {rabbit_auth_backend_ldap,
                                                       rabbit_auth_backend_internal}}]}].
@@ -82,7 +82,7 @@ You can configure TTL for cache items, by using `cache_ttl` configuration item, 
     auth_cache.cached_backend = ldap
     auth_cache.cache_ttl = 5000
 
-Or using erlang config for both parameters:
+Or using the classic config for both parameters:
 
     [{rabbitmq_auth_backend_cache, [{cached_backend, rabbit_auth_backend_ldap}
                                     {cache_ttl, 5000}]}].
@@ -107,19 +107,20 @@ Cache module can be set via sysctl config format:
 
     auth_cache.cache_module = rabbit_auth_backend_ets_segmented
 
-Cache module additional arguments can be defined via erlang-style config only:
+Cache module additional arguments can be defined via the classic-style config only:
 
     [{rabbitmq_auth_backend_cache, [{cache_module_args, [10000]}]}].
 
-Or using erlang config for both parameters:
+The above two snippets used in the classic config format:
 
     [{rabbitmq_auth_backend_cache, [{cache_module, rabbit_auth_backend_ets_segmented},
                                     {cache_module_args, [10000]}]}].
 
-Default values are `rabbit_auth_cache_ets` and `[]`, respectively.
+The default values are `rabbit_auth_cache_ets` and `[]`, respectively.
+
 
 ## License and Copyright
 
-(c) 2016 Pivotal Software Inc.
+(c) 2016-2017 Pivotal Software Inc.
 
 Released under the Mozilla Public License 1.1, same as RabbitMQ.
