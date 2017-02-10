@@ -101,6 +101,7 @@
         <th class="horizontal">Unacked</th>
         <th class="horizontal">In memory</th>
         <th class="horizontal">Persistent</th>
+        <th class="horizontal">Transient, Paged Out</th>
       </tr>
       <tr>
         <th>
@@ -122,6 +123,9 @@
         <td class="r">
           <%= fmt_num_thousands(queue.messages_persistent) %>
         </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_paged_out) %>
+        </td>
       </tr>
       <tr>
         <th>
@@ -142,6 +146,9 @@
         </td>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_persistent) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_paged_out) %>
         </td>
       </tr>
       <tr>
