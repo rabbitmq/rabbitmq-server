@@ -1,0 +1,3 @@
+*.pyc
+*.sqlite3
+certs/*
