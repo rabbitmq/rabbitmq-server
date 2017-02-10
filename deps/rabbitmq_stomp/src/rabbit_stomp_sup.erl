@@ -50,11 +50,20 @@ listener_specs(Fun, Args, Listeners) ->
 tcp_listener_spec([Address, SocketOpts, Configuration, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts,
-      ranch_tcp, rabbit_stomp_client_sup, Configuration,
+      transport(stomp), rabbit_stomp_client_sup, Configuration,
       stomp, NumAcceptors, "STOMP TCP Listener").
 
 ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts ++ SslOpts,
-      ranch_ssl, rabbit_stomp_client_sup, Configuration,
+      transport('stomp/ssl'), rabbit_stomp_client_sup, Configuration,
       'stomp/ssl', NumAcceptors, "STOMP SSL Listener").
+
+transport(Protocol) ->
+    ProxyProtocol = application:get_env(rabbitmq_stomp, proxy_protocol, false),
+    case {Protocol, ProxyProtocol} of
+        {stomp, false}       -> ranch_tcp;
+        {stomp, true}        -> ranch_proxy;
+        {'stomp/ssl', false} -> ranch_ssl;
+        {'stomp/ssl', true}  -> ranch_proxy_ssl
+    end.

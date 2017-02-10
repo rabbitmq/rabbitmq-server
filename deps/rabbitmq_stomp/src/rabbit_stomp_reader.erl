@@ -67,7 +67,8 @@ info(Pid, InfoItems) ->
 
 init([SupHelperPid, Ref, Sock, Configuration]) ->
     process_flag(trap_exit, true),
-    rabbit_net:accept_ack(Ref, Sock),
+    RealSocket = rabbit_net:unwrap_socket(Sock),
+    rabbit_net:accept_ack(Ref, RealSocket),
 
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
@@ -83,7 +84,7 @@ init([SupHelperPid, Ref, Sock, Configuration]) ->
             gen_server2:enter_loop(?MODULE, [],
               rabbit_event:init_stats_timer(
                 run_socket(control_throttle(
-                  #reader_state{socket             = Sock,
+                  #reader_state{socket             = RealSocket,
                                 conn_name          = ConnStr,
                                 parse_state        = ParseState,
                                 processor_state    = ProcState,
@@ -94,13 +95,13 @@ init([SupHelperPid, Ref, Sock, Configuration]) ->
                                 recv_outstanding   = false})), #reader_state.stats_timer),
               {backoff, 1000, 1000, 10000});
         {network_error, Reason} ->
-            rabbit_net:fast_close(Sock),
+            rabbit_net:fast_close(RealSocket),
             terminate({shutdown, Reason}, undefined);
         {error, enotconn} ->
-            rabbit_net:fast_close(Sock),
+            rabbit_net:fast_close(RealSocket),
             terminate(shutdown, undefined);
         {error, Reason} ->
-            rabbit_net:fast_close(Sock),
+            rabbit_net:fast_close(RealSocket),
             terminate({network_error, Reason}, undefined)
     end.
 
@@ -339,20 +340,21 @@ log_reason(Reason, #reader_state{ processor_state = ProcState }) ->
 %%----------------------------------------------------------------------------
 
 processor_args(Configuration, Sock) ->
+    RealSocket = rabbit_net:unwrap_socket(Sock),
     SendFun = fun (sync, IoData) ->
                       %% no messages emitted
-                      catch rabbit_net:send(Sock, IoData);
+                      catch rabbit_net:send(RealSocket, IoData);
                   (async, IoData) ->
                       %% {inet_reply, _, _} will appear soon
                       %% We ignore certain errors here, as we will be
                       %% receiving an asynchronous notification of the
                       %% same (or a related) fault shortly anyway. See
                       %% bug 21365.
-                      catch rabbit_net:port_command(Sock, IoData)
+                      catch rabbit_net:port_command(RealSocket, IoData)
               end,
-    {ok, {PeerAddr, _PeerPort}} = rabbit_net:sockname(Sock),
+    {ok, {PeerAddr, _PeerPort}} = rabbit_net:sockname(RealSocket),
     {SendFun, adapter_info(Sock), 
-     ssl_login_name(Sock, Configuration), PeerAddr}.
+     ssl_login_name(RealSocket, Configuration), PeerAddr}.
 
 adapter_info(Sock) ->
     amqp_connection:socket_adapter_info(Sock, {'STOMP', 0}).
