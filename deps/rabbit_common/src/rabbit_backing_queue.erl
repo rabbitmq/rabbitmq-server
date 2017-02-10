@@ -23,7 +23,8 @@
                     message_bytes, message_bytes_ready,
                     message_bytes_unacknowledged, message_bytes_ram,
                     message_bytes_persistent, head_message_timestamp,
-                    disk_reads, disk_writes, backing_queue_status]).
+                    disk_reads, disk_writes, backing_queue_status,
+                    messages_paged_out, message_bytes_paged_out]).
 
 %% We can't specify a per-queue ack/state with callback signatures
 -type ack()   :: any().
