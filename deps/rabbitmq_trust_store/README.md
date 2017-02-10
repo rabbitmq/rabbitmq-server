@@ -95,7 +95,7 @@ Configuration of the HTTP provider:
  ]}.
 ```
 
-You can specify SSL options if you use HTTPS:
+You can specify TLS options if you use HTTPS:
 
 ```
 {rabbitmq_trust_store,
