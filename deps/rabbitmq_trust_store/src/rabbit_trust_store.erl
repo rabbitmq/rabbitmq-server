@@ -229,7 +229,8 @@ refresh_provider_certs(Provider, Config, ProviderState) ->
         {error, Reason} ->
             rabbit_log:error("Unable to load certificate list for provider ~p,"
                              " reason: ~p~n",
-                             [Provider, Reason])
+                             [Provider, Reason]),
+            ProviderState
     end.
 
 list_certs(Provider, Config, nostate) ->

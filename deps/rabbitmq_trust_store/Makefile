@@ -12,8 +12,9 @@ endef
 DEPS = rabbit_common rabbit
 LOCAL_DEPS += ssl crypto public_key
 ## We need the Cowboy's test utilities
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client ct_helper
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client ct_helper trust_store_http
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
+dep_trust_store_http = git https://github.com/hairyhum/trust_store_http.git
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 

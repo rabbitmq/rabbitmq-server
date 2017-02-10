@@ -8,35 +8,39 @@
 -define(SERVER_REJECT_CLIENT, {tls_alert, "unknown ca"}).
 all() ->
     [
+      {group, http_provider_tests},
       {group, file_provider_tests}
     ].
 
 groups() ->
+    CommonTests = [
+        validate_chain,
+        validate_longer_chain,
+        validate_chain_without_whitelisted,
+        whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root,
+        removed_certificate_denied_from_AMQP_client,
+        installed_certificate_accepted_from_AMQP_client,
+        whitelist_directory_DELTA,
+        replaced_whitelisted_certificate_should_be_accepted,
+        ensure_configuration_using_binary_strings_is_handled,
+        ignore_corrupt_cert,
+        ignore_same_cert_with_different_name,
+        list],
     [
       {file_provider_tests, [], [
                                  library,
                                  invasive_SSL_option_change,
                                  validation_success_for_AMQP_client,
                                  validation_failure_for_AMQP_client,
-                                 validate_chain,
-                                 validate_longer_chain,
-                                 validate_chain_without_whitelisted,
-                                 whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root,
-                                 removed_certificate_denied_from_AMQP_client,
-                                 installed_certificate_accepted_from_AMQP_client,
-                                 whitelist_directory_DELTA,
-                                 replaced_whitelisted_certificate_should_be_accepted,
-                                 ensure_configuration_using_binary_strings_is_handled,
-                                 ignore_corrupt_cert,
-                                 ignore_same_cert_with_different_name,
-                                 list,
                                  disabled_provider_removes_certificates,
-                                 enabled_provider_adds_cerificates
-                               ]}
+                                 enabled_provider_adds_cerificates |
+                                 CommonTests
+                               ]},
+      {http_provider_tests, [], CommonTests}
     ].
 
 suite() ->
-    [{timetrap, {seconds, 60}}].
+    [{timetrap, {seconds, 180}}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -59,20 +63,54 @@ end_per_suite(Config) ->
 
 init_per_group(file_provider_tests, Config) ->
     WhitelistDir = filename:join([?config(rmq_certsdir, Config),
-                                  "trust_store",
-                                  "file_provider_tests"]),
-    ok = filelib:ensure_dir(WhitelistDir),
-    ok = file:make_dir(WhitelistDir),
-    Config1 = rabbit_ct_helpers:set_config(Config, {whitelist_dir, WhitelistDir}),
+                                  "trust_store", "file_provider_tests"]),
+    Config1 = init_whitelist_dir(Config, WhitelistDir),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
            ?MODULE,  change_configuration,
            [rabbitmq_trust_store, [{directory, WhitelistDir},
                                    {refresh_interval, interval()},
                                    {providers, [rabbit_trust_store_file_provider]}]]),
-    Config1.
+    Config1;
 
+init_per_group(http_provider_tests, Config) ->
+    WhitelistDir = filename:join([?config(rmq_certsdir, Config),
+                                  "trust_store", "http_provider_tests"]),
+    Config1 = init_whitelist_dir(Config, WhitelistDir),
+    Config2 = init_provider_server(Config1, WhitelistDir),
+    Url = ?config(trust_store_server_url, Config2),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config2, 0,
+           ?MODULE,  change_configuration,
+           [rabbitmq_trust_store, [{url, Url},
+                                   {refresh_interval, interval()},
+                                   {providers, [rabbit_trust_store_http_provider]}]]),
+    Config2.
+
+init_provider_server(Config, WhitelistDir) ->
+    %% Assume we don't have more than 100 ports allocated for tests
+    PortBase = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_ports_base),
+
+    CertServerPort = PortBase + 100,
+    Url = "http://127.0.0.1:" ++ integer_to_list(CertServerPort) ++ "/",
+    application:load(trust_store_http),
+    ok = application:set_env(trust_store_http, directory, WhitelistDir),
+    ok = application:set_env(trust_store_http, port, CertServerPort),
+    ok = application:unset_env(trust_store_http, ssl_options),
+    application:ensure_all_started(trust_store_http),
+    rabbit_ct_helpers:set_config(Config, [{trust_store_server_port, CertServerPort},
+                                          {trust_store_server_url, Url}]).
+
+
+end_per_group(http_provider_tests, Config) ->
+    application:stop(trust_store_http),
+    Config;
 end_per_group(_, Config) ->
     Config.
+
+init_whitelist_dir(Config, WhitelistDir) ->
+    ok = filelib:ensure_dir(WhitelistDir),
+    ok = file:make_dir(WhitelistDir),
+    rabbit_ct_helpers:set_config(Config, {whitelist_dir, WhitelistDir}).
 
 init_per_testcase(Testcase, Config) ->
     WhitelistDir = ?config(whitelist_dir, Config),
@@ -80,7 +118,7 @@ init_per_testcase(Testcase, Config) ->
     ok = file:make_dir(WhitelistDir),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
            ?MODULE,  change_configuration,
-           [rabbitmq_trust_store, [{directory, WhitelistDir}]]),
+           [rabbitmq_trust_store, []]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
