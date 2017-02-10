@@ -260,15 +260,18 @@ opts(Opts) ->
 
 opts([], Acc) ->
     lists:reverse(Acc);
-opts([Head={Name, Value}|Tail], Acc) when is_list(Value) ->
+opts([Head = {Name, Value} | Tail], Acc) when is_list(Value) ->
     case io_lib:printable_unicode_list(Value) of
-        true -> opts(Tail, [{Name, unicode:characters_to_binary(Value)}|Acc]);
-        false -> opts(Tail, [Head|Acc])
+        true -> opts(Tail, [{Name, unicode:characters_to_binary(Value)} | Acc]);
+        false -> opts(Tail, [Head | Acc])
     end;
-opts([{Name, Value}|Tail], Acc) when is_tuple(Value) ->
-    opts(Tail, [{Name, tuple_to_list(Value)}|Acc]);
-opts([Head|Tail], Acc) ->
-    opts(Tail, [Head|Acc]).
+%% exclude functions from JSON encoding
+opts([_Head = {_Name, Value} | Tail], Acc) when is_function(Value) ->
+    opts(Tail, Acc);
+opts([{Name, Value} | Tail], Acc) when is_tuple(Value) ->
+    opts(Tail, [{Name, tuple_to_list(Value)} | Acc]);
+opts([Head | Tail], Acc) ->
+    opts(Tail, [Head | Acc]).
 
 pack_binding_props(<<"">>, []) ->
     <<"~">>;
