@@ -260,16 +260,19 @@ opts(Opts) ->
 
 opts([], Acc) ->
     lists:reverse(Acc);
+%% verify_fun value is a tuple that includes a function
+opts([_Head = {verify_fun, _Value} | Tail], Acc) ->
+    opts(Tail, Acc);
 opts([Head = {Name, Value} | Tail], Acc) when is_list(Value) ->
     case io_lib:printable_unicode_list(Value) of
         true -> opts(Tail, [{Name, unicode:characters_to_binary(Value)} | Acc]);
         false -> opts(Tail, [Head | Acc])
     end;
+opts([{Name, Value} | Tail], Acc) when is_tuple(Value) ->
+    opts(Tail, [{Name, tuple_to_list(Value)} | Acc]);
 %% exclude functions from JSON encoding
 opts([_Head = {_Name, Value} | Tail], Acc) when is_function(Value) ->
     opts(Tail, Acc);
-opts([{Name, Value} | Tail], Acc) when is_tuple(Value) ->
-    opts(Tail, [{Name, tuple_to_list(Value)} | Acc]);
 opts([Head | Tail], Acc) ->
     opts(Tail, [Head | Acc]).
 
