@@ -124,7 +124,9 @@ boot() ->
     ok = record_distribution_listener(),
     _ = application:start(ranch),
     ok = boot_tcp(application:get_env(rabbit, num_tcp_acceptors, 10)),
-    ok = boot_ssl(application:get_env(rabbit, num_ssl_acceptors, 1)).
+    ok = boot_ssl(application:get_env(rabbit, num_ssl_acceptors, 1)),
+    _ = maybe_start_proxy_protocol(),
+    ok.
 
 boot_tcp(NumAcceptors) ->
     {ok, TcpListeners} = application:get_env(tcp_listeners),
@@ -174,6 +176,12 @@ log_poodle_fail(Context) ->
       "set the config item 'ssl_allow_poodle_attack' to 'true' in the~n"
       "'rabbit' section of your configuration file.~n",
       [rabbit_misc:otp_release(), Context]).
+
+maybe_start_proxy_protocol() ->
+    case application:get_env(rabbit, proxy_protocol, false) of
+        false -> ok;
+        true  -> application:start(ranch_proxy_protocol)
+    end.
 
 fix_ssl_options(Config) ->
     fix_verify_fun(fix_ssl_protocol_versions(Config)).
@@ -283,10 +291,7 @@ start_listener(Listener, NumAcceptors, Protocol, Label, Opts) ->
     ok.
 
 start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
-    Transport = case Protocol of
-        amqp -> ranch_tcp;
-        'amqp/ssl' -> ranch_ssl
-    end,
+    Transport = transport(Protocol),
     Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, Opts,
                              Transport, rabbit_connection_sup, [], Protocol,
                              NumAcceptors, Label),
@@ -296,6 +301,16 @@ start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
                                   exit({could_not_start_tcp_listener,
                                         {rabbit_misc:ntoa(IPAddress), Port}})
     end.
+
+transport(Protocol) ->
+    ProxyProtocol = application:get_env(rabbit, proxy_protocol, false),
+    case {Protocol, ProxyProtocol} of
+        {amqp, false}       -> ranch_tcp;
+        {amqp, true}        -> ranch_proxy;
+        {'amqp/ssl', false} -> ranch_ssl;
+        {'amqp/ssl', true}  -> ranch_proxy_ssl
+    end.
+
 
 stop_tcp_listener(Listener) ->
     [stop_tcp_listener0(Address) ||

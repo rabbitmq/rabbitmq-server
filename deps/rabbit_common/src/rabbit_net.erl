@@ -23,7 +23,7 @@
          recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
          setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
          peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
-         accept_ack/2]).
+         accept_ack/2, unwrap_socket/1]).
 
 %%---------------------------------------------------------------------------
 
@@ -77,6 +77,7 @@
                            host_or_ip(), rabbit_networking:ip_port()}).
 -spec is_loopback(socket() | inet:ip_address()) -> boolean().
 -spec accept_ack(any(), socket()) -> ok.
+-spec unwrap_socket(socket() | ranch_proxy:proxy_socket() | ranch_proxy_ssl:ssl_socket()) -> socket().
 
 %%---------------------------------------------------------------------------
 
@@ -212,15 +213,32 @@ connection_string(Sock, Direction) ->
             Error
     end.
 
-socket_ends(Sock, Direction) ->
+socket_ends(Sock, Direction) when ?IS_SSL(Sock);
+    is_port(Sock) ->
     {From, To} = sock_funs(Direction),
     case {From(Sock), To(Sock)} of
         {{ok, {FromAddress, FromPort}}, {ok, {ToAddress, ToPort}}} ->
             {ok, {rdns(FromAddress), FromPort,
-                  rdns(ToAddress),   ToPort}};
+                rdns(ToAddress),   ToPort}};
         {{error, _Reason} = Error, _} ->
             Error;
         {_, {error, _Reason} = Error} ->
+            Error
+    end;
+socket_ends(Sock, Direction = inbound) when is_tuple(Sock) ->
+    %% proxy protocol support
+    %% hack: we have to check the record type
+    {ok, {{FromAddress, FromPort}, {_, _}}} = case element(1, Sock) of
+        proxy_socket -> ranch_proxy_protocol:proxyname(undefined, Sock);
+        ssl_socket   -> ranch_proxy_ssl:proxyname(Sock)
+    end,
+    {_From, To} = sock_funs(Direction),
+    CSocket = unwrap_socket(Sock),
+    case To(CSocket) of
+        {ok, {ToAddress, ToPort}} ->
+            {ok, {rdns(FromAddress), FromPort,
+                rdns(ToAddress),   ToPort}};
+        {error, _Reason} = Error ->
             Error
     end.
 
@@ -265,3 +283,18 @@ tune_buffer_size(Sock) ->
                           setopts(Sock, [{buffer, BufSz}]);
         Error          -> Error
     end.
+
+unwrap_socket(Sock) when ?IS_SSL(Sock);
+                         is_port(Sock) ->
+    Sock;
+unwrap_socket(Sock) when is_tuple(Sock) ->
+    %% proxy protocol support
+    %% hack: we have to check the record type
+    case element(1, Sock) of
+        proxy_socket ->
+            ranch_proxy_protocol:get_csocket(Sock);
+        ssl_socket   ->
+            ranch_proxy_ssl:get_csocket(Sock)
+    end;
+unwrap_socket(Sock) ->
+    Sock.

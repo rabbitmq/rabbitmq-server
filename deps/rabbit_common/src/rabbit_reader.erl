@@ -195,7 +195,8 @@ shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
 init(Parent, HelperSup, Ref, Sock) ->
-    rabbit_net:accept_ack(Ref, Sock),
+    RealSocket = rabbit_net:unwrap_socket(Sock),
+    rabbit_net:accept_ack(Ref, RealSocket),
     Deb = sys:debug_options([]),
     start_connection(Parent, HelperSup, Deb, Sock).
 
@@ -293,21 +294,23 @@ socket_error(Reason) ->
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 socket_op(Sock, Fun) ->
+    RealSocket = rabbit_net:unwrap_socket(Sock),
     case Fun(Sock) of
         {ok, Res}       -> Res;
         {error, Reason} -> socket_error(Reason),
-                           rabbit_net:fast_close(Sock),
+                           rabbit_net:fast_close(RealSocket),
                            exit(normal)
     end.
 
 start_connection(Parent, HelperSup, Deb, Sock) ->
     process_flag(trap_exit, true),
+    RealSocket = rabbit_net:unwrap_socket(Sock),
     Name = case rabbit_net:connection_string(Sock, inbound) of
                {ok, Str}         -> list_to_binary(Str);
-               {error, enotconn} -> rabbit_net:fast_close(Sock),
+               {error, enotconn} -> rabbit_net:fast_close(RealSocket),
                                     exit(normal);
                {error, Reason}   -> socket_error(Reason),
-                                    rabbit_net:fast_close(Sock),
+                                    rabbit_net:fast_close(RealSocket),
                                     exit(normal)
            end,
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
@@ -317,7 +320,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     ?store_proc_name(Name),
     State = #v1{parent              = Parent,
-                sock                = Sock,
+                sock                = RealSocket,
                 connection          = #connection{
                   name               = Name,
                   log_name           = Name,
@@ -369,7 +372,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         %% the socket. However, to keep the file_handle_cache
         %% accounting as accurate as possible we ought to close the
         %% socket w/o delay before termination.
-        rabbit_net:fast_close(Sock),
+        rabbit_net:fast_close(RealSocket),
         rabbit_networking:unregister_connection(self()),
 	rabbit_core_metrics:connection_closed(self()),
         rabbit_event:notify(connection_closed, [{name, Name},
