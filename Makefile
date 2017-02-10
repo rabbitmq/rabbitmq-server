@@ -90,11 +90,11 @@ define PROJECT_ENV
 	    %% setting has no effect because credit_flow is not used when
 	    %% writing to the queue index. See the setting
 	    %% queue_index_embed_msgs_below above.
-	    {msg_store_credit_disc_bound, {2000, 500}},
+	    {msg_store_credit_disc_bound, {3000, 800}},
 	    {msg_store_io_batch_size, 2048},
-	    %% see rabbitmq-server#143
-	    %% and rabbitmq-server#949
-	    {credit_flow_default_credit, {200, 100}},
+	    %% see rabbitmq-server#143,
+	    %% rabbitmq-server#949, rabbitmq-server#1098
+	    {credit_flow_default_credit, {400, 200}},
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
@@ -104,8 +104,9 @@ define PROJECT_ENV
 	                            {passphrase, undefined}
 	                           ]},
 	    %% rabbitmq-server-973
-	    {lazy_queue_explicit_gc_run_operation_threshold, 250},
-	    {background_gc_enabled, true},
+	    {queue_explicit_gc_run_operation_threshold, 1000},
+	    {lazy_queue_explicit_gc_run_operation_threshold, 1000},
+	    {background_gc_enabled, false},
 	    {background_gc_target_interval, 60000}
 	  ]
 endef
@@ -130,8 +131,8 @@ EXTRA_SOURCES += $(USAGES_ERL)
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
+	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be

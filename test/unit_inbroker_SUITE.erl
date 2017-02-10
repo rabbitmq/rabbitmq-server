@@ -250,9 +250,21 @@ orelse Group =:= backing_queue_embed_limit_1024 ->
 end_per_group1(_, Config) ->
     Config.
 
+init_per_testcase(Testcase, Config) when Testcase == variable_queue_requeue;
+                                         Testcase == variable_queue_fold ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, queue_explicit_gc_run_operation_threshold, 0]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(Testcase, Config) when Testcase == variable_queue_requeue;
+                                        Testcase == variable_queue_fold ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, queue_explicit_gc_run_operation_threshold, 1000]),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -1679,24 +1691,18 @@ check_variable_queue_status(VQ0, Props) ->
 %% ---------------------------------------------------------------------------
 
 credit_flow_settings(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+    rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, credit_flow_settings1, [Config]).
 
 credit_flow_settings1(_Config) ->
-    %% default values
-    passed = test_proc(200, 100),
-
-    application:set_env(rabbit, credit_flow_default_credit, {100, 300}),
-    passed = test_proc(100, 300),
-
-    application:unset_env(rabbit, credit_flow_default_credit),
-
-    % back to defaults
-    passed = test_proc(200, 100),
+    passed = test_proc(400, 200, {400, 200}),
+    passed = test_proc(600, 300),
     passed.
 
 test_proc(InitialCredit, MoreCreditAfter) ->
-    Pid = spawn(fun dummy/0),
+    test_proc(InitialCredit, MoreCreditAfter, {InitialCredit, MoreCreditAfter}).
+test_proc(InitialCredit, MoreCreditAfter, Settings) ->
+    Pid = spawn(?MODULE, dummy, [Settings]),
     Pid ! {credit, self()},
     {InitialCredit, MoreCreditAfter} =
         receive
@@ -1704,13 +1710,13 @@ test_proc(InitialCredit, MoreCreditAfter) ->
         end,
     passed.
 
-dummy() ->
+dummy(Settings) ->
     credit_flow:send(self()),
     receive
         {credit, From} ->
-            From ! {credit, get(credit_flow_default_credit)};
+            From ! {credit, Settings};
         _      ->
-            dummy()
+            dummy(Settings)
     end.
 
 %% -------------------------------------------------------------------

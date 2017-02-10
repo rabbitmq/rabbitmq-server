@@ -42,6 +42,7 @@ dep_rabbit                            = git_rmq rabbitmq-server $(current_rmq_re
 dep_rabbit_common                     = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_amqp1_0                  = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_backend_amqp        = git_rmq rabbitmq-auth-backend-amqp $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_auth_backend_cache       = git_rmq rabbitmq-auth-backend-cache $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_backend_http        = git_rmq rabbitmq-auth-backend-http $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_backend_ldap        = git_rmq rabbitmq-auth-backend-ldap $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_mechanism_ssl       = git_rmq rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref) master
@@ -59,6 +60,7 @@ dep_rabbitmq_federation               = git_rmq rabbitmq-federation $(current_rm
 dep_rabbitmq_federation_management    = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_java_client              = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_jms_client               = git_rmq rabbitmq-jms-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_jms_cts                  = git_rmq rabbitmq-jms-cts $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_jms_topic_exchange       = git_rmq rabbitmq-jms-topic-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_lvc                      = git_rmq rabbitmq-lvc-plugin $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management               = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref) master
@@ -102,7 +104,7 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 
 dep_cowboy_commit = 1.0.4
 dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
-dep_ranch_commit = 1.3.0
+dep_ranch_commit = 1.3.1
 dep_webmachine_commit = 1.10.8p2
 
 RABBITMQ_COMPONENTS = amqp_client \
@@ -110,6 +112,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit_common \
 		      rabbitmq_amqp1_0 \
 		      rabbitmq_auth_backend_amqp \
+		      rabbitmq_auth_backend_cache \
 		      rabbitmq_auth_backend_http \
 		      rabbitmq_auth_backend_ldap \
 		      rabbitmq_auth_mechanism_ssl \
@@ -127,6 +130,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_federation_management \
 		      rabbitmq_java_client \
 		      rabbitmq_jms_client \
+		      rabbitmq_jms_cts \
 		      rabbitmq_jms_topic_exchange \
 		      rabbitmq_lvc \
 		      rabbitmq_management \
