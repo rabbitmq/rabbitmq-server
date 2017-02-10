@@ -32,7 +32,8 @@
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
 
 initial_state(Socket, SSLLoginName) ->
-    initial_state(Socket, SSLLoginName,
+    RealSocket = rabbit_net:unwrap_socket(Socket),
+    initial_state(RealSocket, SSLLoginName,
         adapter_info(Socket, 'MQTT'),
         fun send_client/2).
 
