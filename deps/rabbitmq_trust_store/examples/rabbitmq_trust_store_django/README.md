@@ -7,7 +7,7 @@ It's really not designed to be anything other than an example.
 
 ## Running the Example
 
-1. Put the CA certificates in PEM format to `certs` directory.
+1. Put certificates that should be trusted in PEM format into the `certs` directory.
 
 2. Run `python manage.py runserver` to launch it after [installing Django](https://docs.djangoproject.com/en/1.10/topics/install/).
 
