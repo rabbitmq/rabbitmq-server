@@ -32,11 +32,11 @@ list_certs(_, #http_state{url = Url,
     end.
 
 load_cert(_, Attributes, Config) ->
-    CertUrl = proplists:get_value(url, Attributes),
+    CertPath = proplists:get_value(path, Attributes),
     #http_state{url = BaseUrl,
                 http_options = HttpOptions,
                 headers = Headers} = init_state(Config),
-    Url = join_url(BaseUrl, CertUrl),
+    Url = join_url(BaseUrl, CertPath),
     Res = httpc:request(get,
                         {Url, Headers},
                         HttpOptions,
@@ -49,10 +49,10 @@ load_cert(_, Attributes, Config) ->
         {error, Reason}    -> {error, Reason}
     end.
 
-join_url(BaseUrl, CertUrl)  ->
+join_url(BaseUrl, CertPath)  ->
     string:strip(rabbit_data_coercion:to_list(BaseUrl), right, $/)
     ++ "/" ++
-    string:strip(rabbit_data_coercion:to_list(CertUrl), left, $/).
+    string:strip(rabbit_data_coercion:to_list(CertPath), left, $/).
 
 init() ->
     inets:start(),
@@ -72,9 +72,9 @@ decode_cert_list(Body) ->
     [{<<"certificates">>, Certs}] = rabbit_misc:json_to_term(Struct),
     lists:map(
         fun(Cert) ->
-            Url = proplists:get_value(<<"url">>, Cert),
+            Path = proplists:get_value(<<"path">>, Cert),
             CertId = proplists:get_value(<<"id">>, Cert),
-            {CertId, [{url, Url}]}
+            {CertId, [{path, Path}]}
         end,
         Certs).
 

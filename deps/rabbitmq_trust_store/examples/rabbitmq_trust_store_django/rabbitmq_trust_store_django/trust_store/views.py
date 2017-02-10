@@ -28,7 +28,7 @@ def is_pem(file):
     return 'pem' == os.path.splitext(file)[1][1:]
 
 def file_object(file):
-    return {'id': file_id(file), 'url': file_url(file)}
+    return {'id': file_id(file), 'path': path_for_file(file)}
 
 
 def file_id(file):
@@ -36,6 +36,6 @@ def file_id(file):
     basename = os.path.basename(file)
     return basename + ':' + mtime
 
-def file_url(file):
+def path_for_file(file):
     basename = os.path.basename(file)
     return "/certs/" + basename
