@@ -65,8 +65,8 @@ groups() ->
               nodes_policy_should_pick_master_from_its_params
               % FIXME: Re-enable those tests when the know issues are
               % fixed.
-              %failing_random_policies,
-              %random_policy
+              % failing_random_policies,
+              % random_policy
             ]}
         ]}
     ].
@@ -124,17 +124,18 @@ change_policy(Config) ->
 
     %% When we first declare a queue with no policy, it's not HA.
     amqp_channel:call(ACh, #'queue.declare'{queue = ?QNAME}),
+    timer:sleep(100),
     assert_slaves(A, ?QNAME, {A, ''}),
 
     %% Give it policy "all", it becomes HA and gets all mirrors
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY, <<"all">>),
-    assert_slaves(A, ?QNAME, {A, [B, C]}),
+    assert_slaves(A, ?QNAME, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
 
     %% Give it policy "nodes", it gets specific mirrors
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
       {<<"nodes">>, [rabbit_misc:atom_to_binary(A),
                      rabbit_misc:atom_to_binary(B)]}),
-    assert_slaves(A, ?QNAME, {A, [B]}),
+    assert_slaves(A, ?QNAME, {A, [B]}, [{A, [B, C]}]),
 
     %% Now explicitly change the mirrors
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
@@ -150,7 +151,7 @@ change_policy(Config) ->
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
       {<<"nodes">>, [rabbit_misc:atom_to_binary(B),
                      rabbit_misc:atom_to_binary(C)]}),
-    assert_slaves(A, ?QNAME, {A, [B, C]}, [{A, [B]}, {A, [C]}]),
+    assert_slaves(A, ?QNAME, {B, [C]}, [{A, []}, {A, [B]}, {A, [C]}, {A, [B, C]}]),
 
     ok.
 
@@ -166,15 +167,15 @@ change_cluster(Config) ->
     %% Give it policy exactly 4, it should mirror to all 3 nodes
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY,
       {<<"exactly">>, 4}),
-    assert_slaves(A, ?QNAME, {A, [B, C]}),
+    assert_slaves(A, ?QNAME, {A, [B, C]}, [{A, []}, {A, [B]}, {A, [C]}]),
 
     %% Add D and E, D joins in
     rabbit_ct_broker_helpers:cluster_nodes(Config, [A, D, E]),
-    assert_slaves(A, ?QNAME, {A, [B, C, D]}),
+    assert_slaves(A, ?QNAME, {A, [B, C, D]}, [{A, [B, C]}]),
 
     %% Remove D, E joins in
     rabbit_ct_broker_helpers:stop_node(Config, D),
-    assert_slaves(A, ?QNAME, {A, [B, C, E]}),
+    assert_slaves(A, ?QNAME, {A, [B, C, E]}, [{A, [B, C]}]),
 
     ok.
 
@@ -343,15 +344,18 @@ assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate) ->
             %% just wait - of course this means if something does not
             %% change when expected then we time out the test which is
             %% a bit tedious
-            case [found || {PermMNode, PermSNodes} <- PermittedIntermediate,
+            case [{PermMNode, PermSNodes} || {PermMNode, PermSNodes} <- PermittedIntermediate,
                            PermMNode =:= ActMNode,
                            equal_list(PermSNodes, ActSNodes)] of
                 [] -> ct:fail("Expected ~p / ~p, got ~p / ~p~nat ~p~n",
                               [ExpMNode, ExpSNodes, ActMNode, ActSNodes,
                                get_stacktrace()]);
-                _  -> timer:sleep(100),
-                      assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes},
-                                     PermittedIntermediate)
+                State  ->
+                    ct:pal("Waiting to leave state ~p~n Waiting for ~p~n",
+                           [State, {ExpMNode, ExpSNodes}]),
+                    timer:sleep(100),
+                    assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes},
+                                   PermittedIntermediate)
             end;
         true ->
             put(previous_exp_m_node, ExpMNode),
