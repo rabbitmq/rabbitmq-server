@@ -106,6 +106,7 @@ dep_cowboy_commit = 1.1.0
 dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
 dep_ranch_commit = 1.3.1
 dep_webmachine_commit = 1.10.8p2
+dep_ranch_proxy_protocol = git git@github.com:heroku/ranch_proxy_protocol.git 1.4.1
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
