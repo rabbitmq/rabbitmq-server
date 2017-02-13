@@ -141,10 +141,6 @@ EXTRA_SOURCES += $(USAGES_ERL)
 .DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
-copy-escripts:
-	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./
-
-
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
@@ -182,13 +178,22 @@ USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensur
 RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
+.PHONY: copy-escripts clean-extra-sources clean-escripts
+
+CLI_ESCRIPTS_DIR = escript
+
+copy-escripts:
+	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
+		PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+		DESTDIR=
+
 clean:: clean-extra-sources clean-escripts
 
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
 
 clean-escripts:
-	$(gen_verbose) rm -rf escript
+	$(gen_verbose) rm -rf "$(CLI_ESCRIPTS_DIR)"
 
 # --------------------------------------------------------------------
 # Documentation.
