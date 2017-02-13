@@ -40,7 +40,7 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, helper_sup,
-             channel_sup_sup_pid, buf, buf_len, throttle}).
+             channel_sup_sup_pid, buf, buf_len, throttle, proxy_socket}).
 
 -record(v1_connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
                         hostname}).
@@ -55,7 +55,7 @@
 %%--------------------------------------------------------------------------
 
 unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv,
-                   HelperSupPid, Buf, BufLen}) ->
+                   HelperSupPid, Buf, BufLen, ProxySocket}) ->
     #v1{parent              = Parent,
         sock                = Sock,
         callback            = handshake,
@@ -74,7 +74,8 @@ unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv,
                                     timeout_sec    = ?HANDSHAKE_TIMEOUT,
                                     frame_max      = ?FRAME_MIN_SIZE,
                                     auth_mechanism = none,
-                                    auth_state     = none}}.
+                                    auth_state     = none},
+        proxy_socket = ProxySocket}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
@@ -670,7 +671,8 @@ send_to_new_1_0_session(Channel, Frame, State) ->
         channel_sup_sup_pid = ChanSupSup,
         connection = #v1_connection{frame_max = FrameMax,
                                     hostname  = Hostname,
-                                    user      = User}} = State,
+                                    user      = User},
+        proxy_socket = ProxySocket} = State,
     {ok, ChSupPid, ChFrPid} =
         %% Note: the equivalent, start_channel is in channel_sup_sup
         rabbit_amqp1_0_session_sup_sup:start_session(
@@ -680,7 +682,7 @@ send_to_new_1_0_session(Channel, Frame, State) ->
                            unlimited -> unlimited;
                            _         -> FrameMax - 8
                        end,
-                       self(), User, vhost(Hostname), Collector}),
+                       self(), User, vhost(Hostname), Collector, ProxySocket}),
     erlang:monitor(process, ChFrPid),
     put({channel, Channel}, {ch_fr_pid, ChFrPid}),
     put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
