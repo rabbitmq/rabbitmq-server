@@ -23,7 +23,7 @@
          recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
          setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
          peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
-         accept_ack/2, unwrap_socket/1]).
+         accept_ack/2, unwrap_socket/1, maybe_get_proxy_socket/1]).
 
 %%---------------------------------------------------------------------------
 
@@ -298,3 +298,20 @@ unwrap_socket(Sock) when is_tuple(Sock) ->
     end;
 unwrap_socket(Sock) ->
     Sock.
+
+maybe_get_proxy_socket(Sock) when ?IS_SSL(Sock);
+                                  is_port(Sock) ->
+    undefined;
+maybe_get_proxy_socket(Sock) when is_tuple(Sock) ->
+    %% proxy protocol support
+    %% hack: we have to check the record type
+    case element(1, Sock) of
+        proxy_socket ->
+            Sock;
+        ssl_socket   ->
+            Sock;
+        _            ->
+            undefined
+    end;
+maybe_get_proxy_socket(_Sock) ->
+    undefined.
