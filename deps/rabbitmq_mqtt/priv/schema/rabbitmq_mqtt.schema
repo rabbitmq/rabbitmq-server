@@ -95,7 +95,12 @@ end}.
 {mapping, "mqtt.retained_message_store_dets_sync_interval", "rabbitmq_mqtt.retained_message_store_dets_sync_interval",
     [{datatype, integer}]}.
 
+%% Whether or not to enable proxy protocol support.
+%%
+%% {proxy_protocol, false}
 
+{mapping, "mqtt.proxy_protocol", "rabbitmq_mqtt.proxy_protocol",
+    [{datatype, {enum, [true, false]}}]}.
 
 %% TCP/SSL Configuration (as per the broker configuration).
 %%
