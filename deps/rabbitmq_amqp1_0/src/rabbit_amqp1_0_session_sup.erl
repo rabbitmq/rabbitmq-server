@@ -37,7 +37,7 @@
 
 %%----------------------------------------------------------------------------
 start_link({rabbit_amqp1_0_framing, Sock, Channel, FrameMax, ReaderPid,
-            Username, VHost, Collector}) ->
+            Username, VHost, Collector, ProxySocket}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, WriterPid} =
         supervisor2:start_child(
@@ -46,12 +46,16 @@ start_link({rabbit_amqp1_0_framing, Sock, Channel, FrameMax, ReaderPid,
                     [Sock, Channel, FrameMax, rabbit_amqp1_0_framing,
                      ReaderPid]},
            intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_writer]}),
+    SocketForAdapterInfo = case ProxySocket of
+        undefined -> Sock;
+        _         -> ProxySocket
+    end,
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_amqp1_0_session_process, start_link,
                      [{Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
-                       adapter_info(Sock), Collector}]},
+                       adapter_info(SocketForAdapterInfo), Collector}]},
            intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_session_process]}),
     {ok, SupPid, ChannelPid}.
 
