@@ -942,6 +942,13 @@ end}.
 {mapping, "background_gc_target_interval", "rabbit.background_gc_target_interval",
     [{datatype, integer}]}.
 
+%% Whether or not to enable proxy protocol support.
+%%
+%% {proxy_protocol, false}
+
+{mapping, "proxy_protocol", "rabbit.proxy_protocol",
+    [{datatype, {enum, [true, false]}}]}.
+
 % ==========================
 % Lager section
 % ==========================
