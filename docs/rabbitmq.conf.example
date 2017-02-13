@@ -395,6 +395,16 @@
 ##
 # background_gc_target_interval = 60000
 
+## Whether or not to enable proxy protocol support.
+## Once enabled, clients cannot directly connect to the broker
+## anymore. They must connect through a load balancer that sends the
+## proxy protocol header to the broker at connection time.
+## This setting applies only to AMQP clients, other protocols
+## like MQTT or STOMP have their own setting to enable proxy protocol.
+## See the plugins documentation for more information.
+##
+# proxy_protocol = false
+
 ## ----------------------------------------------------------------------------
 ## Advanced Erlang Networking/Clustering Options.
 ##
@@ -515,6 +525,16 @@
 ##
 # stomp.implicit_connect = true
 
+## Whether or not to enable proxy protocol support.
+## Once enabled, clients cannot directly connect to the broker
+## anymore. They must connect through a load balancer that sends the
+## proxy protocol header to the broker at connection time.
+## This setting applies only to STOMP clients, other protocols
+## like MQTT or AMQP have their own setting to enable proxy protocol.
+## See the plugins or broker documentation for more information.
+##
+# stomp.proxy_protocol = false
+
 ## ----------------------------------------------------------------------------
 ## RabbitMQ MQTT Adapter
 ##
@@ -577,6 +597,16 @@
 ##
 # mqtt.tcp_listen_options.backlog = 128
 # mqtt.tcp_listen_options.nodelay = true
+
+## Whether or not to enable proxy protocol support.
+## Once enabled, clients cannot directly connect to the broker
+## anymore. They must connect through a load balancer that sends the
+## proxy protocol header to the broker at connection time.
+## This setting applies only to STOMP clients, other protocols
+## like STOMP or AMQP have their own setting to enable proxy protocol.
+## See the plugins or broker documentation for more information.
+##
+# mqtt.proxy_protocol = false
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ AMQP 1.0 Support
