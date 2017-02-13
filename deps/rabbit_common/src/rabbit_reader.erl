@@ -101,7 +101,8 @@
           channel_count,
           %% throttling state, for both
           %% credit- and resource-driven flow control
-          throttle}).
+          throttle,
+          proxy_socket}).
 
 -record(throttle, {
   %% never | timestamp()
@@ -353,7 +354,8 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
                                          should_block = false,
                                          blocked_by = sets:new(),
                                          connection_blocked_message_sent = false
-                                         }},
+                                         },
+                proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock)},
     try
         run({?MODULE, recvloop,
              [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
@@ -1467,8 +1469,9 @@ pack_for_1_0(Buf, BufLen, #v1{parent       = Parent,
                               sock         = Sock,
                               recv_len     = RecvLen,
                               pending_recv = PendingRecv,
-                              helper_sup   = SupPid}) ->
-    {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen}.
+                              helper_sup   = SupPid,
+                              proxy_socket = ProxySocket}) ->
+    {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen, ProxySocket}.
 
 respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),
