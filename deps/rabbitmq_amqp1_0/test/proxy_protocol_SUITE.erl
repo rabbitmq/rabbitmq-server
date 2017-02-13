@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2011-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(proxy_protocol_SUITE).
@@ -57,8 +57,8 @@ end_per_suite(Config) ->
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
-init_per_testcase(_Testcase, Config) ->
-    Config.
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
