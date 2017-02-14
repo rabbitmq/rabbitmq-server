@@ -23,8 +23,9 @@ gets published, don't allow them access.
 
 ## Installation
 
-### RabbitMQ 3.6.0 or later
+### With RabbitMQ 3.6.0 or Later
 
+Most recent RabbitMQ version ships with this plugin.
 As of RabbitMQ `3.6.0` this plugin is included into the RabbitMQ distribution.
 
 Enable it with the following command:
@@ -33,35 +34,16 @@ Enable it with the following command:
 rabbitmq-plugins enable rabbitmq_event_exchange
 ```
 
-You'd probably want to also enable the Consistent Hash Exchange
-plugin, too.
+### With RabbitMQ 3.5.x
 
-### With Earlier Versions
-
-Install the corresponding .ez files from our
-[Community Plugins archive](http://www.rabbitmq.com/community-plugins/).
+You can download a pre-built binary of this plugin from
+the [RabbitMQ Community Plugins](http://www.rabbitmq.com/community-plugins.html) page.
 
 Then run the following command:
 
 ```bash
 rabbitmq-plugins enable rabbitmq_event_exchange
 ```
-
-## Configuration
-
- * `rabbitmq_event_exchange.vhost`: what vhost should the `amq.rabbitmq.event` exchange be declared in. Default: `rabbit.default_vhost` (`<<"/">>`).
-
-
-## Building From Source
-
-Building is no different from [building other RabbitMQ plugins](http://www.rabbitmq.com/plugin-development.html).
-
-TL;DR:
-
-    git clone https://github.com/rabbitmq/rabbitmq-event-exchange.git
-    cd rabbitmq-event-exchange
-    make -j dist
-    ls plugins/*
 
 ## Event format
 
@@ -145,6 +127,12 @@ Link events:
 
 There is a usage example using the Java client in `examples/java`.
 
+
+## Configuration
+
+ * `rabbitmq_event_exchange.vhost`: what vhost should the `amq.rabbitmq.event` exchange be declared in. Default: `rabbit.default_vhost` (`<<"/">>`).
+
+
 ## Uninstalling
 
 If you want to remove the exchange which this plugin creates, first
@@ -152,6 +140,23 @@ disable the plugin and restart the broker. Then you can delete the exchange,
 e.g. with :
 
     rabbitmqctl eval 'rabbit_exchange:delete(rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.event">>), false).'
+
+
+## Building from Source
+
+Building is no different from [building other RabbitMQ plugins](http://www.rabbitmq.com/plugin-development.html).
+
+TL;DR:
+
+    git clone https://github.com.com/rabbitmq/rabbitmq-public-umbrella.git umbrella
+    cd umbrella
+    make co
+    make up BRANCH=stable
+    cd deps
+    git clone https://github.com/rabbitmq/rabbitmq-event-exchange.git rabbitmq_event_exchange
+    cd rabbitmq_event_exchange
+    make dist
+
 
 ## License
 
