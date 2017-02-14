@@ -275,12 +275,10 @@ match_spec_cq(Id) ->
     [{{{'_', '$1'}, '_', '_', '_', '_', '_', '_'}, [{'==', {Id}, '$1'}], [true]}].
 
 gen_server2_stats(Pid, BufferLength) ->
-    ets:insert(gen_server2_metrics, {Pid, BufferLength}),
-    ok.
+    ets:insert(gen_server2_metrics, {Pid, BufferLength}).
 
 gen_server2_deleted(Pid) ->
-    ets:delete(gen_server2_metrics, Pid),
-    ok.
+    ets:delete(gen_server2_metrics, Pid).
 
 get_gen_server2_stats(Pid) ->
     case ets:lookup(gen_server2_metrics, Pid) of

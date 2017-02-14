@@ -219,7 +219,7 @@
 %% State record
 -record(gs2_state, {parent, name, state, mod, time,
                     timeout_state, queue, debug, prioritisers,
-                    timer}).
+                    timer, init_stats_fun, emit_stats_fun, stop_stats_fun}).
 
 %%%=========================================================================
 %%%  Specs. These exist only to shut up dialyzer's warnings
@@ -536,45 +536,42 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
     Name = name(Name0),
     Debug = debug_options(Name, Options),
     Queue = priority_queue:new(),
+    {InitStatsFun, EmitStatsFun, StopStatsFun} = stats_funs(),
     GS2State = find_prioritisers(
                  #gs2_state { parent  = Parent,
                               name    = Name,
                               mod     = Mod,
                               queue   = Queue,
-                              debug   = Debug }),
+                              debug   = Debug,
+                              init_stats_fun = InitStatsFun,
+                              emit_stats_fun = EmitStatsFun,
+                              stop_stats_fun = StopStatsFun }),
     case catch Mod:init(Args) of
         {ok, State} ->
             proc_lib:init_ack(Starter, {ok, self()}),
-            loop(emit_stats(rabbit_event:init_stats_timer(
-                              GS2State#gs2_state { state         = State,
+            loop(InitStatsFun(GS2State#gs2_state { state         = State,
                                                    time          = infinity,
-                                                   timeout_state = undefined},
-                              #gs2_state.timer)));
+                                                   timeout_state = undefined }));
         {ok, State, Timeout} ->
             proc_lib:init_ack(Starter, {ok, self()}),
-            loop(emit_stats(rabbit_event:init_stats_timer(
-                              GS2State#gs2_state { state         = State,
-                                                   time          = Timeout,
-                                                   timeout_state = undefined },
-                              #gs2_state.timer)));
+            loop(InitStatsFun(
+                   GS2State#gs2_state { state         = State,
+                                        time          = Timeout,
+                                        timeout_state = undefined }));
         {ok, State, Timeout, Backoff = {backoff, _, _, _}} ->
             Backoff1 = extend_backoff(Backoff),
             proc_lib:init_ack(Starter, {ok, self()}),
-            loop(emit_stats(rabbit_event:init_stats_timer(
-                              GS2State#gs2_state { state         = State,
+            loop(InitStatsFun(GS2State#gs2_state { state         = State,
                                                    time          = Timeout,
-                                                   timeout_state = Backoff1 },
-                              #gs2_state.timer)));
+                                                   timeout_state = Backoff1 }));
         {ok, State, Timeout, Backoff = {backoff, _, _, _}, Mod1} ->
             Backoff1 = extend_backoff(Backoff),
             proc_lib:init_ack(Starter, {ok, self()}),
-            loop(emit_stats(find_prioritisers(
-                              rabbit_event:init_stats_timer(
+            loop(InitStatsFun(find_prioritisers(
                                 GS2State#gs2_state { mod           = Mod1,
                                                      state         = State,
                                                      time          = Timeout,
-                                                     timeout_state = Backoff1 },
-                                #gs2_state.timer))));
+                                                     timeout_state = Backoff1 })));
         {stop, Reason} ->
             %% For consistency, we must make sure that the
             %% registered name (if any) is unregistered before
@@ -775,8 +772,8 @@ in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
     in(Input, infinity, GS2State);
 in({system, _From, _Req} = Input, GS2State) ->
     in(Input, infinity, GS2State);
-in(emit_gen_server2_stats, GS2State) ->
-    emit_stats(GS2State);
+in(emit_gen_server2_stats, GS2State = #gs2_state{ emit_stats_fun = EmitStatsFun }) ->
+    EmitStatsFun(GS2State);
 in(Input, GS2State = #gs2_state { prioritisers = {_, _, F} }) ->
     in(Input, F(Input, GS2State), GS2State).
 
@@ -1136,9 +1133,9 @@ print_event(Dev, Event, Name) ->
 terminate(Reason, Msg, #gs2_state { name  = Name,
                                     mod   = Mod,
                                     state = State,
-                                    debug = Debug } = GS2State) ->
-    _ = rabbit_event:stop_stats_timer(GS2State, #gs2_state.timer),
-    rabbit_core_metrics:gen_server2_deleted(self()),
+                                    debug = Debug,
+                                    stop_stats_fun = StopStatsFun} = GS2State) ->
+    StopStatsFun(GS2State),
     case catch Mod:terminate(Reason, State) of
         {'EXIT', R} ->
             error_info(R, Reason, Name, Msg, State, Debug),
@@ -1359,8 +1356,25 @@ callback(Mod, FunName, Args, DefaultThunk) ->
         false -> DefaultThunk()
     end.
 
+stats_funs() ->
+    case ets:info(gen_server2_metrics) of
+        undefined ->
+            {fun(GS2State) -> GS2State end,
+             fun(GS2State) -> GS2State end,
+             fun(GS2State) -> GS2State end};
+        _ ->
+            {fun init_stats/1, fun emit_stats/1, fun stop_stats/1}
+    end.
+
+init_stats(GS2State) ->
+    emit_stats(rabbit_event:init_stats_timer(GS2State, #gs2_state.timer)).
+
 emit_stats(GS2State = #gs2_state{queue = Queue}) ->
     rabbit_core_metrics:gen_server2_stats(self(), priority_queue:len(Queue)),
     rabbit_event:ensure_stats_timer(
       rabbit_event:reset_stats_timer(GS2State, #gs2_state.timer),
       #gs2_state.timer, emit_gen_server2_stats).
+
+stop_stats(GS2State) ->
+    _ = rabbit_event:stop_stats_timer(GS2State, #gs2_state.timer),
+    rabbit_core_metrics:gen_server2_deleted(self()).
