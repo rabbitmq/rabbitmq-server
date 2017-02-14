@@ -30,6 +30,8 @@ dispatcher_add(function(sammy) {
 NAVIGATION['Admin'][0]['Top Processes']  = ['#/top', 'administrator'];
 NAVIGATION['Admin'][0]['Top ETS Tables'] = ['#/top/ets', 'administrator'];
 
+HELP['process-internal-buffer'] = "Some processes drain their Erlang process mailbox (Erlang message queue) into an separate priority queue. \"Queue\" here refers to a data structure and should not be confused with RabbitMQ queues.";
+
 $('select#top-node').live('change', function() {
     go_to('#/top/' + $(this).val());
 });
