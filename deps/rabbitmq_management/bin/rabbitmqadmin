@@ -475,12 +475,13 @@ class Management:
 
     def __initialize_tls_context(self):
         # Python 2.7.9+ only
-        ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ssl_ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         ssl_ctx.options &= ~ssl.OP_NO_SSLv3
         ssl_ctx.verify_mode = ssl.CERT_REQUIRED
         ssl_ctx.check_hostname = not self.options.ssl_disable_hostname_verification
-        ssl_ctx.load_cert_chain(self.options.ssl_cert_file,
-                                self.options.ssl_key_file)
+        if self.options.ssl_key_file:
+            ssl_ctx.load_cert_chain(self.options.ssl_cert_file,
+                                    self.options.ssl_key_file)
         if self.options.ssl_ca_cert_file:
             ssl_ctx.load_verify_locations(self.options.ssl_ca_cert_file)
         return ssl_ctx
