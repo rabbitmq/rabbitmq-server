@@ -102,8 +102,9 @@ procs(OldProcs) ->
                                        {ok, OldProps} -> reductions(OldProps);
                                        error          -> 0
                                    end) div ?EVERY,
-                      dict:store(
-                        Pid, [{reduction_delta, Delta} | Props], Procs)
+                      NewProps = expand_gen_server2_info(
+                                   Pid, [{reduction_delta, Delta} | Props]),
+                      dict:store(Pid, NewProps, Procs)
               end
       end, dict:new(), processes()).
 
@@ -162,3 +163,11 @@ bytes(Words) ->  try
                  catch
                      _:_ -> 0
                  end.
+
+expand_gen_server2_info(Pid, Props) ->
+    case rabbit_core_metrics:get_gen_server2_stats(Pid) of
+        not_found ->
+            Props;
+        BufferLength ->
+            [{buffer_len, BufferLength} | Props]
+    end.
