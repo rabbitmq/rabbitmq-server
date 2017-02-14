@@ -45,6 +45,10 @@
 
 -export([node_node_stats/2]).
 
+-export([gen_server2_stats/2,
+         gen_server2_deleted/1,
+         get_gen_server2_stats/1]).
+
 %% Those functions are exported for internal use only, not for public
 %% consumption.
 -export([
@@ -97,6 +101,9 @@
                   integer()) -> ok.
 -spec node_stats(atom(), rabbit_types:infos()) -> ok.
 -spec node_node_stats({node(), node()}, rabbit_types:infos()) -> ok.
+-spec gen_server2_stats(pid(), integer()) -> ok.
+-spec gen_server2_deleted(pid()) -> ok.
+-spec get_gen_server2_stats(pid()) -> integer() | 'not_found'.
 %%----------------------------------------------------------------------------
 %% Storage of the raw metrics in RabbitMQ core. All the processing of stats
 %% is done by the management plugin.
@@ -106,7 +113,7 @@
 %%----------------------------------------------------------------------------
 init() ->
     [ets:new(Table, [Type, public, named_table, {write_concurrency, true}])
-     || {Table, Type} <- ?CORE_TABLES],
+     || {Table, Type} <- ?CORE_TABLES ++ ?CORE_EXTRA_TABLES],
     ok.
 
 connection_created(Pid, Infos) ->
@@ -266,3 +273,19 @@ match_spec_cqx(Id) ->
 
 match_spec_cq(Id) ->
     [{{{'_', '$1'}, '_', '_', '_', '_', '_', '_'}, [{'==', {Id}, '$1'}], [true]}].
+
+gen_server2_stats(Pid, BufferLength) ->
+    ets:insert(gen_server2_metrics, {Pid, BufferLength}),
+    ok.
+
+gen_server2_deleted(Pid) ->
+    ets:delete(gen_server2_metrics, Pid),
+    ok.
+
+get_gen_server2_stats(Pid) ->
+    case ets:lookup(gen_server2_metrics, Pid) of
+        [{Pid, BufferLength}] ->
+            BufferLength;
+        [] ->
+            not_found
+    end.
