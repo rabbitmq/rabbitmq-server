@@ -37,7 +37,7 @@
 %%
 %%               Master             Syncer                 Slave(s)
 %% sync_mirrors -> ||                                         ||
-%% (from channel)  || -- (spawns) --> ||                      ||
+%%                 || -- (spawns) --> ||                      ||
 %%                 || --------- sync_start (over GM) -------> ||
 %%                 ||                 || <--- sync_ready ---- ||
 %%                 ||                 ||         (or)         ||
