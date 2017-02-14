@@ -44,7 +44,8 @@ groups() ->
                            resume,
                            simple_order,
                            straight_through,
-                           invoke
+                           invoke,
+                           gen_server2_stats
                           ]},
      {cluster_size_3, [], [
                            mirror_queue_auto_ack,
@@ -208,6 +209,29 @@ invoke(Config) ->
        {run_backing_queue, ?MODULE, fun(_, _) -> ok end}]),
     Pid2 = queue_pid(Config, A, rabbit_misc:r(<<"/">>, queue, Q)),
     Pid = Pid2,
+    delete(Ch, Q),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+
+gen_server2_stats(Config) ->
+    %% Synthetic test to check the invoke callback, as the bug tested here
+    %% is only triggered with a race condition.
+    %% When mirroring is stopped, the backing queue of rabbit_amqqueue_process
+    %% changes from rabbit_mirror_queue_master to rabbit_priority_queue,
+    %% which shouldn't receive any invoke call. However, there might
+    %% be pending messages so the priority queue receives the
+    %% `run_backing_queue` cast message sent to the old master.
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
+    Q = <<"gen_server2_stats_queue">>,
+    declare(Ch, Q, 3),
+    Pid = queue_pid(Config, A, rabbit_misc:r(<<"/">>, queue, Q)),
+    Metrics = rabbit_ct_broker_helpers:rpc(
+                Config, A, rabbit_core_metrics, get_gen_server2_stats,
+                [Pid]),
+    true = is_number(Metrics),
     delete(Ch, Q),
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
