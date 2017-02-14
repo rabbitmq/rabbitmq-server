@@ -68,12 +68,12 @@ init_state(Config) ->
     #http_state{url = Url, http_options = HttpOptions, headers = Headers}.
 
 decode_cert_list(Body) ->
-    {ok, Struct} = rabbit_misc:json_decode(Body),
-    [{<<"certificates">>, Certs}] = rabbit_misc:json_to_term(Struct),
+    Struct = rabbit_json:decode(Body),
+    #{<<"certificates">> := Certs} = Struct,
     lists:map(
         fun(Cert) ->
-            Path = proplists:get_value(<<"path">>, Cert),
-            CertId = proplists:get_value(<<"id">>, Cert),
+            Path = maps:get(<<"path">>, Cert),
+            CertId = maps:get(<<"id">>, Cert),
             {CertId, [{path, Path}]}
         end,
         Certs).
