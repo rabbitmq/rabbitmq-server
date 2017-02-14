@@ -30,6 +30,7 @@
     <th><%= fmt_sort('Memory', 'memory') %></th>
     <th><%= fmt_sort('Reductions / sec', 'reduction_delta') %></th>
     <th>Message queue</th>
+    <th>Internal buffer <span class="help" id="process-internal-buffer"></span></th>
     <th>Status</th>
   </tr>
  </thead>
@@ -45,6 +46,7 @@
     <td><%= fmt_bytes(process.memory * 1.0) %></td>
     <td class="r"><%= fmt_reduction_delta(process.reduction_delta) %></td>
     <td class="r"><%= process.message_queue_len %></td>
+    <td class="r"><%= process.buffer_len %></td>
     <td><%= process.status %></td>
   </tr>
 <% } %>

@@ -19,6 +19,10 @@
       <td><%= process.message_queue_len %></td>
     </tr>
     <tr>
+      <th>Internal buffer <span class="help" id="process-internal-buffer"></span></th>
+      <td><pre><%= process.buffer_len %></pre></td>
+    </tr>
+    <tr>
       <th>Reductions / sec</th>
       <td><%= fmt_reduction_delta(process.reduction_delta) %></td>
     </tr>
