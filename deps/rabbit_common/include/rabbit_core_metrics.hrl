@@ -32,6 +32,8 @@
                       {node_metrics, set},
                       {node_node_metrics, set}]).
 
+-define(CORE_EXTRA_TABLES, [{gen_server2_metrics, set}]).
+
 %% connection_created :: {connection_id, proplist}
 %% connection_metrics :: {connection_id, proplist}
 %% connection_coarse_metrics :: {connection_id, recv_oct, send_oct, reductions}
@@ -50,3 +52,4 @@
 %% node_coarse_metrics :: {node_id, proplist}
 %% node_metrics :: {node_id, proplist}
 %% node_node_metrics :: {{node_id, node_id}, proplist}
+%% gen_server2_metrics :: {pid, buffer_length}
