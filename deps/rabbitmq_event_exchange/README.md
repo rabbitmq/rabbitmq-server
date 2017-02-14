@@ -25,24 +25,17 @@ The plugin requires no configuration, just activate it:
     rabbitmq-plugins enable rabbitmq_event_exchange
 
 
-## Downloading
+## Downloading & Installation
+
+### With RabbitMQ 3.6.0 or Later
+
+Most recent RabbitMQ version ships with this plugin.
+
+### With RabbitMQ 3.5.x
 
 You can download a pre-built binary of this plugin from
 the [RabbitMQ Community Plugins](http://www.rabbitmq.com/community-plugins.html) page.
 
-
-## Building
-
-Building is no different from [building other RabbitMQ plugins](http://www.rabbitmq.com/plugin-development.html).
-
-TL;DR:
-
-    git clone https://github.com.com/rabbitmq/rabbitmq-public-umbrella.git
-    cd rabbitmq-public-umbrella
-    make co
-    git clone https://github.com/rabbitmq/rabbitmq-event-exchange.git
-    cd rabbitmq-event-exchange
-    make -j
 
 ## Event format
 
@@ -129,6 +122,23 @@ disable the plugin and restart the broker. Then you can delete the exchange,
 e.g. with :
 
     rabbitmqctl eval 'rabbit_exchange:delete(rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.event">>), false).'
+
+
+## Building from Source
+
+Building is no different from [building other RabbitMQ plugins](http://www.rabbitmq.com/plugin-development.html).
+
+TL;DR:
+
+    git clone https://github.com.com/rabbitmq/rabbitmq-public-umbrella.git
+    cd rabbitmq-public-umbrella
+    make co
+    make up BRANCH=stable
+    cd deps
+    git clone https://github.com/rabbitmq/rabbitmq-event-exchange.git rabbitmq_event_exchange
+    cd rabbitmq_event_exchange
+    make dist
+
 
 ## License
 
