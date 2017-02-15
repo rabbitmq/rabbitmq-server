@@ -1,6 +1,6 @@
 # RabbitMQ Web STOMP Examples Plugin
 
-This project contains few basic examples of RabbitMq-Web-Stomp plugin
+This project contains few basic examples of [RabbitMQ Web STOMP plugin](www.rabbitmq.com/web-stomp.html)
 usage.
 
 Once enabled the server will bind to port 15670 and serve few static
