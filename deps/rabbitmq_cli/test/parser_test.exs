@@ -48,6 +48,7 @@ end
 
 defmodule ParserTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureIO
   import TestHelper
 
   @subject RabbitMQ.CLI.Core.Parser
@@ -293,6 +294,80 @@ defmodule ParserTest do
     # Closest to similar
     assert @subject.parse(["hermaug_gull"]) ==
       {{:suggest, "hermann_gull"}, "hermaug_gull", [], %{}, []}
+  end
+
+  @tag cd: "fixtures"
+  test "parse/1 supports aliases" do
+    aliases = """
+    larus_pacificus = pacific_gull
+    gull_with_herring = herring_gull --herring atlantic
+    flying_gull  = herring_gull fly
+    garbage_gull = herring_gull -g
+    complex_gull = herring_gull --herring pacific -g --formatter=erlang eat
+    invalid_gull = herring_gull --invalid
+    unknown_gull = misterious_gull
+    """
+
+    aliases_file_name = "aliases.ini"
+    File.write(aliases_file_name, aliases)
+    on_exit(fn() ->
+      File.rm(aliases_file_name)
+    end)
+
+    assert @subject.parse(["larus_pacificus", "--aliases-file", aliases_file_name]) ==
+      {RabbitMQ.CLI.Seagull.Commands.PacificGullCommand,
+       "larus_pacificus",
+       [],
+       %{aliases_file: aliases_file_name},
+       []}
+
+    assert @subject.parse(["gull_with_herring", "--aliases-file", aliases_file_name]) ==
+      {RabbitMQ.CLI.Seagull.Commands.HerringGullCommand,
+       "gull_with_herring",
+       [],
+       %{aliases_file: aliases_file_name, herring: "atlantic"},
+       []}
+
+    assert @subject.parse(["flying_gull", "--aliases-file", aliases_file_name]) ==
+      {RabbitMQ.CLI.Seagull.Commands.HerringGullCommand,
+       "flying_gull",
+       ["fly"],
+       %{aliases_file: aliases_file_name},
+       []}
+
+    assert @subject.parse(["garbage_gull", "--aliases-file", aliases_file_name]) ==
+      {RabbitMQ.CLI.Seagull.Commands.HerringGullCommand,
+       "garbage_gull",
+       [],
+       %{aliases_file: aliases_file_name, garbage: true},
+       []}
+
+    assert @subject.parse(["complex_gull", "--aliases-file", aliases_file_name]) ==
+      {RabbitMQ.CLI.Seagull.Commands.HerringGullCommand,
+       "complex_gull",
+       ["eat"],
+       %{aliases_file: aliases_file_name, garbage: true, herring: "pacific", formatter: "erlang"},
+       []}
+
+    assert @subject.parse(["invalid_gull", "--aliases-file", aliases_file_name]) ==
+      {RabbitMQ.CLI.Seagull.Commands.HerringGullCommand,
+       "invalid_gull",
+       [],
+       %{aliases_file: aliases_file_name},
+       [{"--invalid", nil}]}
+
+    assert @subject.parse(["unknown_gull", "--aliases-file", aliases_file_name]) ==
+      {:no_command, "unknown_gull", [], %{aliases_file: aliases_file_name}, []}
+
+    File.rm(aliases_file_name)
+
+
+    assert capture_io(:stderr,
+      fn ->
+        assert @subject.parse(["larus_pacificus", "--aliases-file", aliases_file_name]) ==
+          {:no_command, "larus_pacificus", [], %{aliases_file: aliases_file_name}, []}
+      end) =~ "Error reading aliases file"
+
   end
 
 end
