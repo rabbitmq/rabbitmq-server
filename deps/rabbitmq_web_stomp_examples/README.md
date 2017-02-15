@@ -16,10 +16,6 @@ This plugin ships with RabbitMQ. Enable it like any other plugin:
 
 ## Building from Source
 
-Generic build instructions are at:
+ * [RabbitMQ plugin build instructions](http://www.rabbitmq.com/plugin-development.html).
 
- * http://www.rabbitmq.com/plugin-development.html
-
-Instructions on how to install a plugin into RabbitMQ broker:
-
-  * http://www.rabbitmq.com/plugins.html#installing-plugins
+ * [RabbitMQ plugin installation](http://www.rabbitmq.com/plugins.html#installing-plugins).
