@@ -49,22 +49,6 @@
          gen_server2_deleted/1,
          get_gen_server2_stats/1]).
 
-%% Those functions are exported for internal use only, not for public
-%% consumption.
--export([
-         ets_update_counter/4,
-         ets_update_counter_pre_18/4,
-         ets_update_counter_post_18/4
-        ]).
-
--erlang_version_support([
-                         {18, [
-                               {ets_update_counter, 4,
-                                ets_update_counter_pre_18,
-                                ets_update_counter_post_18}
-                              ]}
-                        ]).
-
 %%----------------------------------------------------------------------------
 %% Types
 %%----------------------------------------------------------------------------
