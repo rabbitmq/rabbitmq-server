@@ -3,10 +3,10 @@
 This project contains few basic examples of [RabbitMQ Web STOMP plugin](www.rabbitmq.com/web-stomp.html)
 usage.
 
-Once enabled the server will bind to port 15670 and serve few static
-html files from there:
-
-  * http://127.0.0.1:15670/
+It starts a server that binds to port 15670 and serves a few static
+HTML files on port 15670 (e.g. [http://127.0.0.1:15670](http://127.0.0.1:15670/)).
+Note that Web MQTT examples use the same port, so these plugins cannot be enabled
+at the same time unless they are configured to use different ports.
 
 ## Installation
 
