@@ -24,7 +24,7 @@ defmodule RabbitMQCtlTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname())
-
+    set_scope(:all)
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname())
 

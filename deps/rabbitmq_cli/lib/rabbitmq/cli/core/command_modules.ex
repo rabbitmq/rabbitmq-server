@@ -115,12 +115,6 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
     end
   end
 
-  defp command_in_scope(_cmd, :none) do
-    case Mix.env do
-      :test -> true;
-      _     -> false
-    end
-  end
   defp command_in_scope(_cmd, :all) do
     true
   end
