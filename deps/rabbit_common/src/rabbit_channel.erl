@@ -750,6 +750,12 @@ check_write_permitted(Resource, #ch{user = User}) ->
 check_read_permitted(Resource, #ch{user = User}) ->
     check_resource_access(User, Resource, read).
 
+check_write_permitted_on_topic(Resource, Channel, RoutingKey) ->
+    check_topic_authorisation(Resource, Channel, RoutingKey, write).
+
+check_read_permitted_on_topic(Resource, Channel, RoutingKey) ->
+    check_topic_authorisation(Resource, Channel, RoutingKey, read).
+
 check_user_id_header(#'P_basic'{user_id = undefined}, _) ->
     ok;
 check_user_id_header(#'P_basic'{user_id = Username},
@@ -783,21 +789,21 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
-check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}, RoutingKey) ->
+check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}, RoutingKey, Permission) ->
     Resource = Name#resource{kind = topic},
     Context = #{routing_key => RoutingKey},
     Cache = case get(topic_permission_cache) of
                 undefined -> [];
                 Other     -> Other
             end,
-    case lists:member({Resource, Context, write}, Cache) of
+    case lists:member({Resource, Context, Permission}, Cache) of
         true  -> ok;
         false -> ok = rabbit_access_control:check_topic_access(
-            User, Resource, write, Context),
+            User, Resource, Permission, Context),
             CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
-            put(topic_permission_cache, [{Resource, Context, write} | CacheTail])
+            put(topic_permission_cache, [{Resource, Context, Permission} | CacheTail])
     end;
-check_topic_authorisation(_, _, _) ->
+check_topic_authorisation(_, _, _, _) ->
     ok.
 
 check_msg_size(Content) ->
@@ -983,7 +989,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     check_internal_exchange(Exchange),
-    check_topic_authorisation(Exchange, State, RoutingKey),
+    check_write_permitted_on_topic(Exchange, State, RoutingKey),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = #content {properties = Props} =
@@ -1695,6 +1701,8 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     [check_not_default_exchange(N) || N <- [DestinationName, ExchangeName]],
     check_read_permitted(ExchangeName, State),
+    Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
+    check_read_permitted_on_topic(Exchange, State, RoutingKey),
     case Fun(#binding{source      = ExchangeName,
                       destination = DestinationName,
                       key         = RoutingKey,
