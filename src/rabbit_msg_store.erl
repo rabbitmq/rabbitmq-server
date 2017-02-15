@@ -472,14 +472,14 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-start_link(Name, Dir, ClientRefs, StartupFunState) when is_atom(Name) ->
+start_link(Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
     gen_server2:start_link(?MODULE,
-                           [Name, Dir, ClientRefs, StartupFunState],
+                           [Type, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
-start_global_store_link(Name, Dir, ClientRefs, StartupFunState) when is_atom(Name) ->
-    gen_server2:start_link({local, Name}, ?MODULE,
-                           [Name, Dir, ClientRefs, StartupFunState],
+start_global_store_link(Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
+    gen_server2:start_link({local, Type}, ?MODULE,
+                           [Type, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
 successfully_recovered_state(Server) ->
@@ -711,16 +711,18 @@ clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([Name, BaseDir, ClientRefs, StartupFunState]) ->
+
+init([Type, BaseDir, ClientRefs, StartupFunState]) ->
     process_flag(trap_exit, true),
 
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
 
-    Dir = filename:join(BaseDir, atom_to_list(Name)),
+    Dir = filename:join(BaseDir, atom_to_list(Type)),
+    Name = filename:join(filename:basename(BaseDir), atom_to_list(Type)),
 
     {ok, IndexModule} = application:get_env(rabbit, msg_store_index_module),
-    rabbit_log:info("~tp: using ~p to provide index~n", [Dir, IndexModule]),
+    rabbit_log:info("~tp: using ~p to provide index~n", [Name, IndexModule]),
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
@@ -730,16 +732,14 @@ init([Name, BaseDir, ClientRefs, StartupFunState]) ->
             _         -> ok = filelib:ensure_dir(filename:join(Dir, "nothing")),
                          recover_crashed_compactions(Dir)
         end,
-
     %% if we found crashed compactions we trust neither the
     %% file_summary nor the location index. Note the file_summary is
     %% left empty here if it can't be recovered.
     {FileSummaryRecovered, FileSummaryEts} =
         recover_file_summary(AttemptFileSummaryRecovery, Dir),
-
     {CleanShutdown, IndexState, ClientRefs1} =
         recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
-                                      ClientRefs, Dir),
+                                      ClientRefs, Dir, Name),
     Clients = dict:from_list(
                 [{CRef, {undefined, undefined, undefined}} ||
                     CRef <- ClientRefs1]),
@@ -793,12 +793,10 @@ init([Name, BaseDir, ClientRefs, StartupFunState]) ->
                        cref_to_msg_ids        = dict:new(),
                        credit_disc_bound      = CreditDiscBound
                      },
-
     %% If we didn't recover the msg location index then we need to
     %% rebuild it now.
     {Offset, State1 = #msstate { current_file = CurFile }} =
         build_index(CleanShutdown, StartupFunState, State),
-
     %% read is only needed so that we can seek
     {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
                              [read | ?WRITE_MODE]),
@@ -1547,16 +1545,16 @@ index_delete_by_file(File, #msstate { index_module = Index,
 %% shutdown and recovery
 %%----------------------------------------------------------------------------
 
-recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir) ->
+recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Name) ->
     {false, IndexModule:new(Dir), []};
-recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir) ->
-    rabbit_log:warning("~tp : rebuilding indices from scratch~n", [Dir]),
+recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Name) ->
+    rabbit_log:warning("~tp : rebuilding indices from scratch~n", [Name]),
     {false, IndexModule:new(Dir), []};
-recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir) ->
+recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Name) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
                     rabbit_log:warning("~tp : " ++ ErrorMsg ++ "~n"
                                        "rebuilding indices from scratch~n",
-                                       [Dir | ErrorArgs]),
+                                       [Name | ErrorArgs]),
                     {false, IndexModule:new(Dir), []}
             end,
     case read_recovery_terms(Dir) of
