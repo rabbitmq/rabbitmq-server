@@ -1,6 +1,6 @@
 # RabbitMQ Web MQTT Examples
 
-This project contains few basic examples of [RabbitMQ Web MQTT plugin](https://github.com/rabbitmq/rabbitmq-web-mqtt)
+This RabbitMQ plugin contains few basic examples of [RabbitMQ Web MQTT plugin](https://github.com/rabbitmq/rabbitmq-web-mqtt)
 usage.
 
 It starts a server that binds to port 15670 and serves a few static
