@@ -1701,8 +1701,15 @@ binding_action(Fun, ExchangeNameBin, DestinationType, DestinationNameBin,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     [check_not_default_exchange(N) || N <- [DestinationName, ExchangeName]],
     check_read_permitted(ExchangeName, State),
-    Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
-    check_read_permitted_on_topic(Exchange, State, RoutingKey),
+    Exchange = rabbit_exchange:lookup(ExchangeName),
+    case Exchange of
+        {error, not_found} ->
+            %% no-op
+            Exchange;
+        _                  ->
+            check_read_permitted_on_topic(Exchange, State, RoutingKey),
+            Exchange
+    end,
     case Fun(#binding{source      = ExchangeName,
                       destination = DestinationName,
                       key         = RoutingKey,
