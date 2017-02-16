@@ -89,11 +89,11 @@ define PROJECT_ENV
 	    %% setting has no effect because credit_flow is not used when
 	    %% writing to the queue index. See the setting
 	    %% queue_index_embed_msgs_below above.
-	    {msg_store_credit_disc_bound, {2000, 500}},
+	    {msg_store_credit_disc_bound, {3000, 800}},
 	    {msg_store_io_batch_size, 2048},
-	    %% see rabbitmq-server#143
-	    %% and rabbitmq-server#949
-	    {credit_flow_default_credit, {200, 100}},
+	    %% see rabbitmq-server#143,
+	    %% rabbitmq-server#949, rabbitmq-server#1098
+	    {credit_flow_default_credit, {400, 200}},
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
@@ -112,8 +112,10 @@ define PROJECT_ENV
 	    %% rabbitmq-server-973
 	    {queue_explicit_gc_run_operation_threshold, 1000},
 	    {lazy_queue_explicit_gc_run_operation_threshold, 1000},
-	    {background_gc_enabled, true},
-	    {background_gc_target_interval, 60000}
+	    {background_gc_enabled, false},
+	    {background_gc_target_interval, 60000},
+	    %% rabbitmq-server-589
+	    {proxy_protocol, false}
 	  ]
 endef
 
@@ -138,10 +140,6 @@ EXTRA_SOURCES += $(USAGES_ERL)
 
 .DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
-
-copy-escripts:
-	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./
-
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
@@ -180,13 +178,22 @@ USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensur
 RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
+.PHONY: copy-escripts clean-extra-sources clean-escripts
+
+CLI_ESCRIPTS_DIR = escript
+
+copy-escripts:
+	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
+		PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
+		DESTDIR=
+
 clean:: clean-extra-sources clean-escripts
 
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
 
 clean-escripts:
-	$(gen_verbose) rm -rf escript
+	$(gen_verbose) rm -rf "$(CLI_ESCRIPTS_DIR)"
 
 # --------------------------------------------------------------------
 # Documentation.

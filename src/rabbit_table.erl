@@ -280,7 +280,7 @@ definitions() ->
        {attributes, record_info(fields, topic_permission)},
        {disc_copies, [node()]},
        {match, #topic_permission{topic_permission_key = #topic_permission_key{_='_'},
-                                 pattern = '_',
+                                 permission = #permission{_='_'},
                                  _='_'}}]},
      {rabbit_vhost,
       [{record_name, vhost},

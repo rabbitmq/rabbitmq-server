@@ -395,6 +395,16 @@
 ##
 # background_gc_target_interval = 60000
 
+## Whether or not to enable proxy protocol support.
+## Once enabled, clients cannot directly connect to the broker
+## anymore. They must connect through a load balancer that sends the
+## proxy protocol header to the broker at connection time.
+## This setting applies only to AMQP clients, other protocols
+## like MQTT or STOMP have their own setting to enable proxy protocol.
+## See the plugins documentation for more information.
+##
+# proxy_protocol = false
+
 ## ----------------------------------------------------------------------------
 ## Advanced Erlang Networking/Clustering Options.
 ##
@@ -515,6 +525,16 @@
 ##
 # stomp.implicit_connect = true
 
+## Whether or not to enable proxy protocol support.
+## Once enabled, clients cannot directly connect to the broker
+## anymore. They must connect through a load balancer that sends the
+## proxy protocol header to the broker at connection time.
+## This setting applies only to STOMP clients, other protocols
+## like MQTT or AMQP have their own setting to enable proxy protocol.
+## See the plugins or broker documentation for more information.
+##
+# stomp.proxy_protocol = false
+
 ## ----------------------------------------------------------------------------
 ## RabbitMQ MQTT Adapter
 ##
@@ -577,6 +597,16 @@
 ##
 # mqtt.tcp_listen_options.backlog = 128
 # mqtt.tcp_listen_options.nodelay = true
+
+## Whether or not to enable proxy protocol support.
+## Once enabled, clients cannot directly connect to the broker
+## anymore. They must connect through a load balancer that sends the
+## proxy protocol header to the broker at connection time.
+## This setting applies only to STOMP clients, other protocols
+## like STOMP or AMQP have their own setting to enable proxy protocol.
+## See the plugins or broker documentation for more information.
+##
+# mqtt.proxy_protocol = false
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ AMQP 1.0 Support
@@ -660,25 +690,25 @@
 ## Specify servers to bind to. You *must* set this in order for the plugin
 ## to work properly.
 ##
-# ldap.servers.1 = your-server-name-goes-here
+# auth_ldap.servers.1 = your-server-name-goes-here
 
 ## You can define multiple servers
-# ldap.servers.2 = your-other-server
+# auth_ldap.servers.2 = your-other-server
 
 ## Connect to the LDAP server using SSL
 ##
-# ldap.use_ssl = false
+# auth_ldap.use_ssl = false
 
 ## Specify the LDAP port to connect to
 ##
-# ldap.port = 389
+# auth_ldap.port = 389
 
 ## LDAP connection timeout, in milliseconds or 'infinity'
 ##
-# ldap.timeout = infinity
+# auth_ldap.timeout = infinity
 
 ## Or number
-# ldap.timeout = 500
+# auth_ldap.timeout = 500
 
 ## Enable logging of LDAP queries.
 ## One of
@@ -688,11 +718,11 @@
 ##
 ## Defaults to false.
 ##
-# ldap.log = false
+# auth_ldap.log = false
 
 ## Also can be true or network
-# ldap.log = true
-# ldap.log = network
+# auth_ldap.log = true
+# auth_ldap.log = network
 
 ##
 ## Authentication
@@ -702,7 +732,7 @@
 ## Pattern to convert the username given through AMQP to a DN before
 ## binding
 ##
-# ldap.user_dn_pattern = cn=${username},ou=People,dc=example,dc=com
+# auth_ldap.user_dn_pattern = cn=${username},ou=People,dc=example,dc=com
 
 ## Alternatively, you can convert a username to a Distinguished
 ## Name via an LDAP lookup after binding. See the documentation for
@@ -712,8 +742,8 @@
 ## the name of the attribute that represents the user name, and the
 ## base DN for the lookup query.
 ##
-# ldap.dn_lookup_attribute = userPrincipalName
-# ldap.dn_lookup_base      = DC=gopivotal,DC=com
+# auth_ldap.dn_lookup_attribute = userPrincipalName
+# auth_ldap.dn_lookup_base      = DC=gopivotal,DC=com
 
 ## Controls how to bind for authorisation queries and also to
 ## retrieve the details of users logging in without presenting a
@@ -725,11 +755,11 @@
 ##
 ## Defaults to 'as_user'.
 ##
-# ldap.other_bind = as_user
+# auth_ldap.other_bind = as_user
 
 ## Or can be more complex:
-# ldap.other_bind.user_dn  = User
-# ldap.other_bind.password = Password
+# auth_ldap.other_bind.user_dn  = User
+# auth_ldap.other_bind.password = Password
 
 ## If user_dn and password defined - other options is ignored.
 

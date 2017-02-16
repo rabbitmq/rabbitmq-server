@@ -95,8 +95,8 @@
                    [{description, "core metrics storage"},
                     {mfa,         {rabbit_sup, start_child,
                                    [rabbit_metrics]}},
-                    {requires,    external_infrastructure},
-                    {enables,     kernel_ready}]}).
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({rabbit_event,
                    [{description, "statistics event manager"},
