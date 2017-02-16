@@ -8,8 +8,9 @@ server.
 As with all [authentication plugins](http://rabbitmq.com/access-control.html), this one requires RabbitMQ server
 2.3.1 or later.
 
-Note: it's at an early stage of development, although it's
-conceptually very simple.
+Under a heavy load this plugin can put a higher than expected amount of load on it's backing service.
+We recommend using it together with [rabbitmq_auth_backend_cache](http://github.com/rabbitmq/rabbitmq-auth-backend-cache)
+with a reasonable caching interval (e.g. 2-3 minutes).
 
 ## Installing
 
