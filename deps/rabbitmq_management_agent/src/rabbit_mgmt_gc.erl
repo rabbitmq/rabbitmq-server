@@ -97,7 +97,11 @@ gc_queues() ->
     gc_process_and_entity(consumer_stats, GbSet),
     gc_process_and_entity(channel_exchange_stats_fine_stats_channel_index, GbSet),
     gc_process_and_entity(channel_queue_stats_deliver_stats, GbSet),
-    gc_process_and_entity(channel_queue_stats_deliver_stats_channel_index, GbSet).
+    gc_process_and_entity(channel_queue_stats_deliver_stats_channel_index, GbSet),
+    ExchangeGbSet = gb_sets:from_list(rabbit_amqqueue:list_names()),
+    gc_entities(queue_exchange_stats_publish, GbSet, ExchangeGbSet),
+    gc_entities(queue_exchange_stats_publish_queue_index, GbSet, ExchangeGbSet),
+    gc_entities(queue_exchange_stats_publish_exchange_index, GbSet, ExchangeGbSet).
 
 gc_exchanges() ->
     Exchanges = rabbit_exchange:list_names(),
@@ -219,3 +223,17 @@ gc_object(Id, Table, Object, GbSet) ->
             ets:delete_object(Table, Object),
             none
     end.
+
+gc_entities(Table, QueueGbSet, ExchangeGbSet) ->
+    ets:foldl(fun({{{Q, X}, _} = Key, _, _, _, _, _, _, _, _}, none) ->
+                      gc_entity(Q, Table, Key, QueueGbSet),
+                      gc_entity(X, Table, Key, ExchangeGbSet);
+                 {Q, {{_, X}, _}} = Object
+                    when Table == queue_exchange_stats_publish_queue_index ->
+                      gc_object(X, Table, Object),
+                      gc_entity(Q, Table, Q, QueueGbSet);
+                 {X, {{Q, _}, _}} = Object
+                    when Table == queue_exchange_stats_publish_exchange_index ->
+                      gc_object(Q, Table, Object),
+                      gc_entity(X, Table, X, ExchangeGbSet),
+              end, none, Table).
