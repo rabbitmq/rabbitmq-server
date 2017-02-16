@@ -225,15 +225,16 @@ gc_object(Id, Table, Object, GbSet) ->
     end.
 
 gc_entities(Table, QueueGbSet, ExchangeGbSet) ->
-    ets:foldl(fun({{{Q, X}, _} = Key, _, _, _, _, _, _, _, _}, none) ->
+    ets:foldl(fun({{{Q, X}, _} = Key, _, _, _, _, _, _, _, _}, none)
+                    when Table == queue_exchange_stats_publish ->
                       gc_entity(Q, Table, Key, QueueGbSet),
                       gc_entity(X, Table, Key, ExchangeGbSet);
-                 {Q, {{_, X}, _}} = Object
+            ({Q, {{_, X}, _}} = Object, none)
                     when Table == queue_exchange_stats_publish_queue_index ->
                       gc_object(X, Table, Object),
                       gc_entity(Q, Table, Q, QueueGbSet);
-                 {X, {{Q, _}, _}} = Object
+        ({X, {{Q, _}, _}} = Object, none)
                     when Table == queue_exchange_stats_publish_exchange_index ->
                       gc_object(Q, Table, Object),
-                      gc_entity(X, Table, X, ExchangeGbSet),
+                      gc_entity(X, Table, X, ExchangeGbSet)
               end, none, Table).
