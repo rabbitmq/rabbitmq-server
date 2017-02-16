@@ -28,9 +28,17 @@
 
 -type delivery_state() :: accepted | rejected | modified | received | released.
 
+-type amqp_error() :: internal_error | not_found | unauthorized_access |
+                      decode_error | resource_limit_exceeded |
+                      not_allowed | invalid_field | not_implemented |
+                      resource_locked | precondition_failed | resource_deleted |
+                      illegal_state | frame_size_too_small.
+
+-type connection_error()  :: connection_forced | framing_error | redirect.
+
 -export_type([amqp10_performative/0, channel/0,
               source/0, target/0, amqp10_msg_record/0,
-              delivery_state/0
+              delivery_state/0, amqp_error/0, connection_error/0
              ]).
 
 

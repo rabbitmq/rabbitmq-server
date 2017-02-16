@@ -52,17 +52,20 @@ groups() ->
                      basic_roundtrip,
                      split_transfer,
                      transfer_unsettled,
-                     subscribe
+                     subscribe,
+                     outgoing_heartbeat
                     ]},
      {activemq, [], [
                      open_close_connection,
                      basic_roundtrip,
                      split_transfer,
                      transfer_unsettled,
-                     subscribe
+                     subscribe,
+                     outgoing_heartbeat
                     ]},
      {mock, [], [
-                 insufficient_credit
+                 insufficient_credit,
+                 incoming_heartbeat
                 ]}
     ].
 
@@ -252,13 +255,11 @@ insufficient_credit(Config) ->
                                               handle = {uint, 99},
                                               role = true}]}
                  end,
-    Steps = [
-             fun mock_server:recv_amqp_header_step/1,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
              fun mock_server:send_amqp_header_step/1,
              mock_server:amqp_step(OpenStep),
              mock_server:amqp_step(BeginStep),
-             mock_server:amqp_step(AttachStep)
-            ],
+             mock_server:amqp_step(AttachStep)],
 
     ok = mock_server:set_steps(?config(mock_server, Config), Steps),
 
@@ -275,6 +276,47 @@ insufficient_credit(Config) ->
     ok.
 
 
+outgoing_heartbeat(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    CConf = #{address => Hostname, port => Port,
+              idle_time_out => 5000},
+    {ok, Connection} = amqp10_client_connection:open(CConf),
+    timer:sleep(35 * 1000), % activemq defaults to 15s I believe
+    % check we can still establish a session
+    {ok, Session} = amqp10_client_session:begin_sync(Connection),
+    ok = amqp10_client_session:'end'(Session),
+    ok = amqp10_client_connection:close(Connection).
+
+incoming_heartbeat(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>},
+                                          idle_time_out = {uint, 0}}]}
+               end,
+
+    CloseStep = fun({0 = Ch, #'v1_0.close'{error = _TODO}, _Pay}) ->
+                         {Ch, [#'v1_0.close'{}]}
+                end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(CloseStep)],
+    Mock = {_, MockPid} = ?config(mock_server, Config),
+    MockRef = monitor(process, MockPid),
+    ok = mock_server:set_steps(Mock, Steps),
+    CConf = #{address => Hostname, port => Port, sasl => none,
+              idle_time_out => 1000, notify => self()},
+    {ok, Connection} = amqp10_client_connection:open(CConf),
+    receive
+        {closed, Connection,
+         {resource_limit_exceeded, <<"remote idle-time-out">>}} ->
+            ok
+    after 5000 ->
+          exit(incoming_heartbeat_assert)
+    end,
+    demonitor(MockRef).
 
 
 %%% HELPERS

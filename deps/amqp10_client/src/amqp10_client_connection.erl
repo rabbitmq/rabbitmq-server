@@ -11,14 +11,16 @@
          open/2,
          open_sync/1,
          open_sync/2,
-         close/1
+         close/1,
+         close/2
         ]).
 
 %% Private API.
 -export([start_link/2,
          socket_ready/2,
          protocol_header_received/5,
-         begin_session/2
+         begin_session/2,
+         heartbeat/1
         ]).
 
 %% gen_fsm callbacks.
@@ -46,6 +48,7 @@
       notify => pid(),
       max_frame_size => non_neg_integer(), % TODO constrain to large than 512
       outgoing_max_frame_size => non_neg_integer() | undefined,
+      idle_time_out => non_neg_integer(),
       sasl => none | anon | {plain, binary(), binary()} % {plain, User, Pwd}
   }.
 
@@ -56,6 +59,8 @@
          pending_session_reqs = [] :: [term()],
          reader :: pid() | undefined,
          socket :: gen_tcp:socket() | undefined,
+         idle_time_out :: non_neg_integer() | undefined,
+         heartbeat_timer :: timer:tref() | undefined,
          config :: connection_config()
         }).
 
@@ -72,7 +77,7 @@
         inet:socket_address() | inet:hostname(),
         inet:port_number()) -> supervisor:startchild_ret().
 open(Addr, Port) ->
-    open(#{address => Addr, port => Port}).
+    open(#{address => Addr, port => Port, notify => self()}).
 
 -spec open_sync(connection_config()) ->
     supervisor:startchild_ret() | connection_timeout.
@@ -111,9 +116,13 @@ open(Config) ->
     end.
 
 -spec close(pid()) -> ok.
-
 close(Pid) ->
-    gen_fsm:send_event(Pid, close).
+    close(Pid, none).
+
+-spec close(pid(), {amqp10_client_types:amqp_error()
+                   | amqp10_client_types:connection_error(), binary()} | none) -> ok.
+close(Pid, Reason) ->
+    gen_fsm:send_event(Pid, {close, Reason}).
 
 %% -------------------------------------------------------------------
 %% Private API.
@@ -140,6 +149,9 @@ protocol_header_received(Pid, Protocol, Maj, Min, Rev) ->
 
 begin_session(Pid, Notify) ->
     gen_fsm:sync_send_all_state_event(Pid, {begin_session, Notify}).
+
+heartbeat(Pid) ->
+    gen_fsm:send_event(Pid, heartbeat).
 
 %% -------------------------------------------------------------------
 %% gen_fsm callbacks.
@@ -186,39 +198,51 @@ hdr_sent({protocol_header_received, Protocol, Maj, Min,
                           [Protocol, Maj, Min, Rev]),
     {stop, normal, State}.
 
-open_sent(
-  #'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
-  #state{pending_session_reqs = PendingSessionReqs, config = Config} = State0) ->
-    ?DBG(
-      "-- CONNECTION OPENED -- Max frame size: ~p Idle timeout ~p~n",
-      [MFSz, Timeout]),
-    State = State0#state{config =
-                         Config#{outgoing_max_frame_size => unpack(MFSz)}},
-    State3 = lists:foldr(
-      fun({From, Notify}, State1) ->
-              {Ret, State2} = handle_begin_session(From, Notify, State1),
-              _ = gen_fsm:reply(From, Ret),
-              State2
-      end, State, PendingSessionReqs),
-    ok = notify_opened(Config),
-    {next_state, opened, State3}.
+open_sent(#'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
+          #state{pending_session_reqs = PendingSessionReqs,
+                 config = Config} = State0) ->
 
-opened(close, State) ->
+    State = case Timeout of
+                undefined -> State0;
+                {uint, T} when T > 0 ->
+                    {ok, Tmr} = start_heartbeat_timer(T),
+                    State0#state{idle_time_out = T,
+                                 heartbeat_timer = Tmr};
+                _ -> State0
+            end,
+    State1 = State#state{config =
+                         Config#{outgoing_max_frame_size => unpack(MFSz)}},
+    State2 = lists:foldr(
+               fun({From, Notify}, S0) ->
+                       {Ret, S2} = handle_begin_session(From, Notify, S0),
+                       _ = gen_fsm:reply(From, Ret),
+                       S2
+               end, State1, PendingSessionReqs),
+    ok = notify_opened(Config),
+    {next_state, opened, State2}.
+
+opened(heartbeat, State = #state{idle_time_out = T}) ->
+    ok = send_heartbeat(State),
+    {ok, Tmr} = start_heartbeat_timer(T),
+    {next_state, opened, State#state{heartbeat_timer = Tmr}};
+opened({close, Reason}, State = #state{config = Config}) ->
     %% We send the first close frame and wait for the reply.
     %% TODO: stop all sessions writing
     %% We could still accept incoming frames (See: 2.4.6)
-    case send_close(State) of
+    ok = notify_closed(Config, Reason),
+    case send_close(State, Reason) of
         ok              -> {next_state, close_sent, State};
         {error, closed} -> {stop, normal, State};
         Error           -> {stop, Error, State}
     end;
-opened(#'v1_0.close'{}, State) ->
+opened(#'v1_0.close'{error = Error}, State = #state{config = Config}) ->
+    ?DBG("close received with ~p~n", [Error]),
     %% We receive the first close frame, reply and terminate.
-    _ = send_close(State),
+    ok = notify_closed(Config, translate_err(Error)),
+    _ = send_close(State, none),
     {stop, normal, State};
 opened(Frame, State) ->
-    ?DBG("UNEXPECTED CONNECTION FRAME ~p~n",
-                          [Frame]),
+    ?DBG("UNEXPECTED CONNECTION FRAME ~p~n", [Frame]),
     {next_state, opened, State}.
 
 close_sent(#'v1_0.close'{}, State) ->
@@ -290,14 +314,12 @@ send_open(#state{socket = Socket, config = Config}) ->
                    {{symbol, <<"platform">>},
                     {utf8, list_to_binary(Platform)}}
                   ]},
-    ContainerId = case Config of
-                      #{container_id := Cid} -> Cid;
-                      _ -> generate_container_id()
-                  end,
+    ContainerId = maps:get(container_id, Config, generate_container_id()),
+    IdleTimeOut = maps:get(idle_time_out, Config, 0),
     Open0 = #'v1_0.open'{container_id = {utf8, ContainerId},
-                         hostname = {utf8, <<"localhost">>},
+                         % hostname = {utf8, <<"localhost">>},
                          channel_max = {ushort, 100},
-                         idle_time_out = {uint, 0},
+                         idle_time_out = {uint, IdleTimeOut},
                          properties = Props},
     Open = case Config of
                #{max_frame_size := MFSz} ->
@@ -309,7 +331,7 @@ send_open(#state{socket = Socket, config = Config}) ->
     ?DBG("CONN <- ~p~n", [Open]),
     gen_tcp:send(Socket, Frame).
 
-send_close(#state{socket = Socket}) ->
+send_close(#state{socket = Socket}, _Reason) ->
     Close = #'v1_0.close'{},
     Encoded = rabbit_amqp1_0_framing:encode_bin(Close),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
@@ -333,10 +355,23 @@ send(Record, FrameType, #state{socket = Socket}) ->
     ?DBG("CONN <- ~p~n", [Record]),
     gen_tcp:send(Socket, Frame).
 
+send_heartbeat(#state{socket = Socket}) ->
+    ?DBG("sending heartbeat~n", []),
+    Frame = rabbit_amqp1_0_binary_generator:build_heartbeat_frame(),
+    gen_tcp:send(Socket, Frame).
+
 notify_opened(#{notify := Pid}) ->
     Pid ! {opened, self()},
     ok;
 notify_opened(_Config) -> ok.
+
+notify_closed(#{notify := Pid}, Reason) ->
+    Pid ! {closed, self(), Reason},
+    ok;
+notify_closed(_Config, _Reason) -> ok.
+
+start_heartbeat_timer(Timeout) ->
+    timer:apply_after(Timeout, ?MODULE, heartbeat, [self()]).
 
 unpack(V) -> amqp10_client_types:unpack(V).
 
@@ -350,3 +385,29 @@ bin_to_hex(Bin) ->
     <<<<if N >= 10 -> N -10 + $a;
            true  -> N + $0 end>>
       || <<N:4>> <= Bin>>.
+
+translate_err(undefined) ->
+    none;
+translate_err(#'v1_0.error'{condition = Cond, description = Desc}) ->
+    Err =
+        case Cond of
+            ?V_1_0_AMQP_ERROR_INTERNAL_ERROR -> internal_error;
+            ?V_1_0_AMQP_ERROR_NOT_FOUND -> not_found;
+            ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS -> unauthorized_access;
+            ?V_1_0_AMQP_ERROR_DECODE_ERROR -> decode_error;
+            ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED -> resource_limit_exceeded;
+            ?V_1_0_AMQP_ERROR_NOT_ALLOWED -> not_allowed;
+            ?V_1_0_AMQP_ERROR_INVALID_FIELD -> invalid_field;
+            ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED -> not_implemented;
+            ?V_1_0_AMQP_ERROR_RESOURCE_LOCKED -> resource_locked;
+            ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED -> precondition_failed;
+            ?V_1_0_AMQP_ERROR_RESOURCE_DELETED -> resource_deleted;
+            ?V_1_0_AMQP_ERROR_ILLEGAL_STATE -> illegal_state;
+            ?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL -> frame_size_too_small;
+            ?V_1_0_CONNECTION_ERROR_CONNECTION_FORCED -> forced;
+            ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR -> framing_error;
+            ?V_1_0_CONNECTION_ERROR_REDIRECT -> redirect;
+            _ -> Cond
+        end,
+    {Err, unpack(Desc)}.
+

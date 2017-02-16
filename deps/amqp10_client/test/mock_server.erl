@@ -15,7 +15,8 @@
 
 start(Port) ->
     {ok, LSock} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, false}]),
-    {LSock, spawn(?MODULE, run, [LSock])}.
+    Pid = spawn(?MODULE, run, [LSock]),
+    {LSock, Pid}.
 
 set_steps({_Sock, Pid}, Steps) ->
     Pid ! {set_steps, Steps},

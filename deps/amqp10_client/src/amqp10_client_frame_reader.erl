@@ -44,6 +44,7 @@
          buffer = <<>> :: binary(),
          frame_state :: #frame_state{} | undefined,
          connection :: pid() | undefined,
+         heartbeat_timer_ref :: timer:tref() | undefined,
          connection_config = #{} :: amqp10_client_connection:connection_config(),
          outgoing_channels = #{},
          incoming_channels = #{}}).
@@ -131,7 +132,8 @@ handle_sync_event(_Event, _From, StateName, State) ->
 handle_info({tcp, _, Packet}, StateName, #state{buffer = Buffer} = State) ->
     Data = <<Buffer/binary, Packet/binary>>,
     case handle_input(StateName, Data, State) of
-        {ok, NextState, Remaining, NewState} ->
+        {ok, NextState, Remaining, NewState0} ->
+            NewState = defer_heartbeat_timer(NewState0),
             set_active_once(NewState),
             {next_state, NextState, NewState#state{buffer = Remaining}};
         {error, Reason, NewState} ->
@@ -145,7 +147,13 @@ handle_info({tcp_closed, _}, StateName, State) ->
                socket = undefined,
                buffer = <<>>,
                frame_state = undefined},
-    {stop, normal, State1}.
+    {stop, normal, State1};
+
+handle_info(heartbeat, StateName, State = #state{connection = Conn}) ->
+    amqp10_client_connection:close(Conn, {resource_limit_exceeded,
+                                          <<"remote idle-time-out">>}),
+    % do not stop as may want to read the peer's close frame
+    {next_state, StateName, State}.
 
 terminate(Reason, _StateName, #state{connection_sup = Sup, socket = Socket}) ->
     case Socket of
@@ -177,6 +185,7 @@ handle_input(expecting_frame_header,
     ok = amqp10_client_connection:protocol_header_received(
            ConnectionPid, Protocol, Maj, Min, Rev),
     handle_input(expecting_frame_header, Rest, State);
+
 handle_input(expecting_frame_header,
              <<Length:32/unsigned, DOff:8/unsigned, Type/unsigned,
                Channel:16/unsigned, Rest/binary>>, State)
@@ -185,9 +194,9 @@ handle_input(expecting_frame_header,
                        type = frame_type(Type), data_offset = DOff},
     handle_input(expecting_extended_frame_header, Rest,
                  State#state{frame_state = AFS});
+
 handle_input(expecting_frame_header, <<_:8/binary, _/binary>>, State) ->
     {error, invalid_protocol_header, State};
-
 
 handle_input(expecting_extended_frame_header, Data,
              #state{frame_state =
@@ -207,8 +216,11 @@ handle_input(expecting_frame_body, Data,
                                                channel = Channel}} = State) ->
     Skip = DOff * 4 - 8,
     BodyLength = Length - Skip - 8,
-    case Data of
-        <<FrameBody:BodyLength/binary, Rest/binary>> ->
+    case {Data, BodyLength} of
+        {<<_:BodyLength/binary, Rest/binary>>, 0} ->
+            % heartbeat
+            handle_input(expecting_frame_header, Rest, State);
+        {<<FrameBody:BodyLength/binary, Rest/binary>>, _} ->
             State1 = State#state{frame_state = undefined},
             {PerfDesc, Payload} = rabbit_amqp1_0_binary_parser:parse(FrameBody),
             Perf = rabbit_amqp1_0_framing:decode(PerfDesc),
@@ -220,6 +232,20 @@ handle_input(expecting_frame_body, Data,
 
 handle_input(StateName, Data, State) ->
     {ok, StateName, Data, State}.
+
+%%% LOCAL
+
+defer_heartbeat_timer(State =
+                      #state{heartbeat_timer_ref = TRef,
+                             connection_config = #{idle_time_out := T}})
+  when is_number(T) andalso T > 0 ->
+    _ = case TRef of
+            undefined -> ok;
+            _ -> {ok, cancel} = timer:cancel(TRef)
+        end,
+    {ok, NewTRef} = timer:send_after(T * 2, self(), heartbeat),
+    State#state{heartbeat_timer_ref = NewTRef};
+defer_heartbeat_timer(State) -> State.
 
 route_frame(Channel, FrameType, {Performative, Payload} = Frame, State0) ->
     {DestinationPid, State} = find_destination(Channel, FrameType, Performative,
