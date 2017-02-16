@@ -46,6 +46,13 @@ Configure the trust store with a directory of whitelisted certificates
 and a refresh interval:
 
 ```
+trust_store.directory        = $HOME/rabbit/whitelist ## trusted certificate directory path
+trust_store.refresh_interval = 30                     ## refresh interval in seconds (only)
+```
+
+In the erlang terms format:
+
+```
     {rabbitmq_trust_store,
      [{directory,        "$HOME/rabbit/whitelist"}, %% trusted certificate directory path
       {refresh_interval, {seconds, 30}}             %% refresh interval in seconds (only)
@@ -87,6 +94,21 @@ Where `<root>` is a configured certificate path, `<id>` - unique certificate ide
 
 Configuration of the HTTP provider:
 
+
+```
+trust_store.providers.1      = http
+trust_store.url              = http://example.cert.url/path
+trust_store.refresh_interval = 30
+```
+
+The example above uses an alias, `http` for `rabbit_trust_store_http_provider`.
+Available aliases are:
+
+- `file` - `rabbit_trust_store_file_provider`
+- `http` - `rabbit_trust_store_http_provider`
+
+In the erlang terms format:
+
 ```
 {rabbitmq_trust_store,
  [{providers, [rabbit_trust_store_http_provider]},
@@ -96,6 +118,17 @@ Configuration of the HTTP provider:
 ```
 
 You can specify TLS options if you use HTTPS:
+
+```
+trust_store.providers.1      = http
+trust_store.url              = https://example.secure.cert.url/path
+trust_store.refresh_interval = 30
+trust_store.ssl_options.certfile   = /client/cert.pem
+trust_store.ssl_options.keyfile    = /client/key.pem
+trust_store.ssl_options.cacertfile = /ca/cert.pem
+```
+
+In the erlang terms format:
 
 ```
 {rabbitmq_trust_store,
@@ -111,6 +144,17 @@ You can specify TLS options if you use HTTPS:
 
 HTTP provider uses `If-Modified-Since` during list request header to avoid updating
 unchanged list of certificates.
+
+You can additionally specify headers (e.g. authorization) using Erlang term format:
+
+```
+{rabbitmq_trust_store,
+ [{providers, [rabbit_trust_store_http_provider]},
+  {url, "http://example.cert.url/path"},
+  {headers, [{"Authorization", "Bearer token"}]},
+  {refresh_interval, {seconds, 30}}
+ ]}.
+```
 
 #### Example
 
