@@ -262,7 +262,7 @@ aggregate_entry(TS, {{_Ch, {Q, X}} = Id, Publish}, NextStats,
                        lookup_exchange = ExchangeFun} = State) ->
     Stats = ?queue_stats_publish(Publish),
     Diff = get_difference(Id, Stats, State),
-    _ = case {QueueFun(Q), ExchangeFun(Q), RatesMode} of
+    _ = case {QueueFun(Q), ExchangeFun(X), RatesMode} of
             {true, false, _} ->
                 [insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true)
                  || {Size, Interval} <- BPolicies];
