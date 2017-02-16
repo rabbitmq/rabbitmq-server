@@ -1,6 +1,6 @@
 # RabbitMQ HTTP Authn/Authz Backend Examples
 
-## Python Django application
+## Python Example
 
 `rabbitmq_auth_backend_django` is a very minimalistic [Django](https://www.djangoproject.com/) 1.10+ application
 that rabbitmq-auth-backend-http can authenticate against. It's really
@@ -20,7 +20,8 @@ resources.
 If you're not familiar with Django, urls.py and auth/views.py may be
 most illuminating.
 
-## Spring Boot application
+
+## Spring Boot Example
 
 `rabbitmq_auth_backend_spring_boot` is a simple [Spring Boot](https://projects.spring.io/spring-boot/)
 application that rabbitmq-auth-backend-http can authenticate against. It's really
@@ -38,5 +39,5 @@ The application listens on the 8080 port.
 
 Have a look at the `AuthBackendHttpController`. There's only one user: `guest`,
 with the `guest` password. This implementation also checks the
-routing key starts by `a` when publishing to a topic exchange 
-or consuming from a topic. (a.k.a. [topic authorisation](http://www.rabbitmq.com/access-control.html#topic-authorisation)).
+routing key starts with an `a` when publishing to a topic exchange 
+or consuming from a topic. (an example of [topic authorisation](http://next.rabbitmq.com/access-control.html#topic-authorisation)).
