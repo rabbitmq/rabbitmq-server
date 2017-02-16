@@ -44,6 +44,7 @@ handle_info(start_gc, State) ->
     gc_queues(),
     gc_exchanges(),
     gc_nodes(),
+    gc_gen_server2(),
     {noreply, start_timer(State)}.
 
 terminate(_Reason, #state{timer = TRef}) ->
@@ -91,6 +92,9 @@ gc_nodes() ->
     gc_entity(node_coarse_metrics, GbSet),
     gc_entity(node_metrics, GbSet),
     gc_entity(node_node_metrics, GbSet).
+
+gc_gen_server2() ->
+    gc_process(gen_server2_metrics).
 
 gc_process(Table) ->
     ets:foldl(fun({Pid = Key, _}, none) ->
