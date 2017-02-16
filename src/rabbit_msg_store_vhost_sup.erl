@@ -45,11 +45,11 @@ start_store_for_vhost(Type, VhostsClientRefs, StartupFunState, VHost) ->
             {error, {already_started, Pid}}
     end.
 
-startup_fun_state_for_vhost({Fun, ok}, _VHost) -> {Fun, ok};
-startup_fun_state_for_vhost({Fun, {start, QNames}}, VHost) ->
+startup_fun_state_for_vhost({Fun, {start, [#resource{}|_] = QNames}}, VHost) ->
     QNamesForVhost = [QName || QName = #resource{virtual_host = VH} <- QNames,
                                VH == VHost ],
-    {Fun, {start, QNamesForVhost}}.
+    {Fun, {start, QNamesForVhost}};
+startup_fun_state_for_vhost(State, _VHost) -> State.
 
 refs_for_vhost(_, undefined) -> undefined;
 refs_for_vhost(VHost, Refs) ->
