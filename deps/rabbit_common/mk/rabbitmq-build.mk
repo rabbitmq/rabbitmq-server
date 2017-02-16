@@ -18,9 +18,9 @@
 
 ELIXIR_LIB_DIR := $(shell elixir -e 'IO.puts(Regex.replace( ~r/^([a-zA-Z]):/, to_string(:code.lib_dir(:elixir)), "/\\1"))')
 ifeq ($(ERL_LIBS),)
-ERL_LIBS := $(ELIXIR_LIB_DIR)
+ERL_LIBS := $(ELIXIR_LIB_DIR):$(abspath plugins)
 else
-ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR)
+ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR):$(abspath plugins)
 endif
 
 # FIXME: We copy Erlang.mk default flags here: rabbitmq-build.mk is
@@ -152,3 +152,6 @@ endif
 hex-publish-docs: $(HEXPM_CLI) app docs
 	$(gen_verbose) trap 'rm -f rebar.lock' EXIT INT; \
 		$(HEXPM_CLI) docs
+
+test-build:: test-dist
+test-dist:: clean
