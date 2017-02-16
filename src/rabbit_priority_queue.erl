@@ -657,7 +657,7 @@ cse(_, lazy)                -> lazy;
 cse(lazy, _)                -> lazy;
 %% numerical stats
 cse(A, B) when is_number(A) -> A + B;
-cse({delta, _, _, _}, _)    -> {delta, todo, todo, todo};
+cse({delta, _, _, _, _}, _)    -> {delta, todo, todo, todo, todo};
 cse(A, B)                   -> exit({A, B}).
 
 %% When asked about 'head_message_timestamp' fro this priority queue, we
