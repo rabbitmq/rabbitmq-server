@@ -144,12 +144,17 @@ Check the RabbitMQ logs if things don't seem to be working
 properly. Look for log messages containing "rabbit_auth_backend_http
 failed".
 
-## Example App (in Python)
+## Example Apps (Python and Spring Boot)
 
 In `examples/rabbitmq_auth_backend_django` there's a very simple
 Django app that can be used for authentication. On Debian / Ubuntu you
 should be able to run start.sh to launch it after installing the
 python-django package. It's really not designed to be anything other
+than an example.
+
+In `examples/rabbitmq_auth_backend_spring_boot` there's a Spring Boot app
+that can be used for authentication. You'll need Java 1.8 and Maven
+to run it. It's really not designed to be anything other
 than an example.
 
 See `examples/README` for slightly more information.
