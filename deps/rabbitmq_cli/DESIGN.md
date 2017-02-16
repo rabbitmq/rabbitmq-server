@@ -73,6 +73,62 @@ CLI core consists of several modules implementing command execution process:
 
  Arguments are then validated using the `validate/2` callback
 
+##### Command aliases
+
+  You can define aliases for commands using an aliases file. The file name can be
+  specified using `RABBITMQCTL_ALIASES` environment variable or `--aliases-file`
+  argument.
+
+  Aliases can be specified using `alias = command [options]` format.
+  For example:
+
+```
+lq = list_queues
+lq_vhost1 = list_queues -p vhost1
+lq_off = list_queues --offline
+```
+
+  Aliases can also contain arguments. But command name should be first word after `=`.
+  Arguments specified in an alias will preceed those passed from the command line.
+
+  For example, if you specify the alias `change_user1_password = change_password user1`,
+  you can call it with `rabbitmqctl change_user1_password new_password`.
+
+  Using `eval` command, aliases can be a powerful tool for users who cannot or don't want
+  to write and distribute their own commands.
+
+  Here is an alias to delete all queues in a vhost:
+
+```
+delete_vhost_queues = eval '[rabbit_amqqueue:delete(Q, false, false, <<"rabbit-cli">>) || Q <- rabbit_amqqueue:list(_1)]'
+```
+
+  This command will require a single unnamed argument for vhost:
+
+```
+rabbitmqctl delete_vhost_queues vhost1
+```
+
+  You can also use a named vhost argument, if you specify your alias like this:
+
+```
+delete_vhost_queues = eval '[rabbit_amqqueue:delete(Q, false, false, <<"rabbit-cli">>) || Q <- rabbit_amqqueue:list(_vhost)]'
+```
+
+  The alias can be called like this:
+
+```
+rabbitmqctl delete_vhost_queues -p vhost1
+# or
+rabbitmqctl delete_vhost_queues ---vhost vhost1
+```
+
+  Please keep in mind that `eval` command can accept only [global arguments](#global-arguments) as named,
+  and it's advised to use numbered arguments instead.
+
+  Numbered arguments will be passed to the eval'd code as binaries.
+  The code should convert them to required types.
+
 #### Command execution
 
  Command is executed with the `run/2` callback, which contains main command logic.
@@ -145,6 +201,7 @@ be shown in usage and available for execution.
  * plugins_dir: string, broker plugins directory
  * enabled_plugins_file: string, broker enabled plugins file
  * longnames (l): boolean, use longnames to communicate with broker erlang node. Should be set to `true` only if broker is started with longnames.
+ * aliases-file: string, a file name to load aliases from
 
 Environment argument defaults are loaded from rabbitmq environment variables (see [Environment configuration](#environment-configuration)).
 
@@ -382,4 +439,5 @@ By default it will be loaded from environment variables, same as used in rabbitm
 | enabled_plugins_file | RABBITMQ_ENABLED_PLUGINS_FILE |
 | longnames            | RABBITMQ_USE_LONGNAME         |
 | node                 | RABBITMQ_NODENAME             |
+| aliases-file         | RABBITMQCTL_ALIASES           |
 

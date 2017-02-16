@@ -41,17 +41,14 @@ defmodule EvalCommandTest do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
   end
 
-  test "validate: providing too many arguments fails validation" do
-    assert @command.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
-    assert @command.validate(["three", "too", "many"], %{}) == {:validation_failure, :too_many_args}
-  end
-
   test "validate: empty expression to eval fails validation" do
     assert @command.validate([""], %{}) == {:validation_failure, "Expression must not be blank"}
+    assert @command.validate(["", "foo"], %{}) == {:validation_failure, "Expression must not be blank"}
   end
 
   test "validate: syntax error in expression to eval fails validation" do
     assert @command.validate(["foo bar"], %{}) == {:validation_failure, "syntax error before: bar"}
+    assert @command.validate(["foo bar", "foo"], %{}) == {:validation_failure, "syntax error before: bar"}
   end
 
   test "run: request to a non-existent node returns nodedown", _context do
@@ -81,5 +78,15 @@ defmodule EvalCommandTest do
     assert capture_io(fn ->
       assert @command.run(["io:format(\"output\")."], context[:opts]) == {:ok, :ok}
     end) == "output"
+  end
+
+  test "run: passes parameters to the expression as numbered variables", context do
+    assert @command.run(["binary_to_atom(_1, utf8).", "foo"], context[:opts]) == {:ok, :foo}
+    assert @command.run(["{_1, _2}.", "foo", "bar"], context[:opts]) == {:ok, {"foo", "bar"}}
+  end
+
+  test "run: passes global options as named variables", context do
+    assert @command.run(["{_vhost, _node}."], Map.put(context[:opts], :vhost, "foo")) ==
+      {:ok, {"foo", context[:opts][:node]}}
   end
 end
