@@ -20,7 +20,7 @@ First, enable the plugin. Then, configure access to UAA:
 where
 
  * `your-resource-server-id` is a resource server ID (e.g. 'rabbitmq')
- * `signing_keys` is a map of keys to sign JWT tokens (see [UAA_JWT](uaa_jwt) library for mode info)
+ * `signing_keys` is a map of keys to sign JWT tokens (see [UAA_JWT](https://github.com/rabbitmq/uaa_jwt) library for mode info)
  * `default_key` is the default value used for the `kid` (key id) header parameter.
 
 To learn more about UAA/OAuth 2 clients, see [UAA docs](https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id73).
@@ -56,7 +56,15 @@ There can be multiple wildcards in a pattern:
 **If you want to use special characters like `*`, `%`, or `/` in a wildacrd pattern,
 the pattern must be [URL-encoded](https://en.wikipedia.org/wiki/Percent-encoding).**
 
-See the [./test/wildcard_match_SUITE.erl](wildcard matching test suite) for more examples.
+These are the typical permissions examples:
+
+- `read:*/*`(`read:*/*/*`) - read permissions to any resource on any vhost
+- `write:*/*`(`write:*/*/*`) - write permissions to any resource on any vhost
+- `read:vhost1/*`(`read:vhost1/*/*`) - read permissions to any resource on the `vhost1` vhost
+- `read:vhost1/some*` - read permissions to all the resources, starting with `some` on the `vhost1` vhost
+- `write:vhsot1/some*/routing*` - topic write permissions to publish to an exchange starting with `some` with a routing key starting with `routing`
+
+See the [./test/wildcard_match_SUITE.erl](wildcard matching test suite) and [./test/scope_SUITE.erl](scopes test suite) for more examples.
 
 ### Authorization Workflow
 
@@ -74,4 +82,3 @@ match the `resource_server_id` configuration (empty by default).
 3. Client passes token as the username when connecting to a RabbitMQ node. The password
 field is not used.
 
-[uaa_jwt](https://github.com/rabbitmq/uaa_jwt)
