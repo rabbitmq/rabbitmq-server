@@ -35,11 +35,23 @@
                       illegal_state | frame_size_too_small.
 
 -type connection_error()  :: connection_forced | framing_error | redirect.
+-type session_error() :: atom(). % TODO
+-type link_error() :: atom(). % TODO
+
+-type connection_event_detail() :: opened | {closed, Reason::any()} | {error, {connection_error(), any()}}.
+-type session_event_detail() :: begun | ended | {error, {session_error(), any()}}.
+-type link_event_detail() :: attached | detached | {error, {link_error(), any()}}.
+-type amqp10_event_detail() :: {connection, pid(), connection_event_detail()} |
+                               {session, pid(), session_event_detail()} |
+                               {link, amqp10_client_link:link_ref(), link_event_detail()}.
+-type amqp10_event() :: {amqp10_event, amqp10_event_detail()}.
 
 -export_type([amqp10_performative/0, channel/0,
               source/0, target/0, amqp10_msg_record/0,
-              delivery_state/0, amqp_error/0, connection_error/0
+              delivery_state/0, amqp_error/0, connection_error/0,
+              amqp10_event_detail/0, amqp10_event/0
              ]).
+
 
 
 unpack(undefined) -> undefined;

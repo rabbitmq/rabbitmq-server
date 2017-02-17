@@ -148,26 +148,30 @@ open_close_connection(Config) ->
     OpnConf = #{address => Hostname, port => Port,
                 notify => self(),
                 container_id => <<"open_close_connection_container">>},
-    {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
-    {ok, Connection2} = amqp10_client_connection:open_sync(OpnConf),
-    ok = amqp10_client_connection:close(Connection2),
-    ok = amqp10_client_connection:close(Connection).
+    {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
+    {ok, Connection2} = amqp10_client:open_connection(OpnConf),
+    receive
+        {amqp10_event, {connection, Connection2, opened}} -> ok
+    after 5000 -> connection_timeout
+    end,
+    ok = amqp10_client:close_connection(Connection2),
+    ok = amqp10_client:close_connection(Connection).
 
 basic_roundtrip(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     ct:pal("Opening connection to ~s:~b", [Hostname, Port]),
-    {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
-    {ok, Session} = amqp10_client_session:'begin'(Connection),
-    {ok, Sender} = amqp10_client_link:sender(Session, <<"banana-sender">>,
+    {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"banana-sender">>,
                                              <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
-    {ok, _} = amqp10_client_link:send(Sender, Msg),
-    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"banana-receiver">>,
+    {ok, _} = amqp10_client:send_msg(Sender, Msg),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"banana-receiver">>,
                                                  <<"test">>),
-    {amqp_msg, OutMsg} = amqp10_client_link:get_one(Receiver),
-    ok = amqp10_client_session:'end'(Session),
-    ok = amqp10_client_connection:close(Connection),
+    {ok, OutMsg} = amqp10_client:get_msg(Receiver),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
     ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)).
 
 split_transfer(Config) ->
@@ -175,65 +179,65 @@ split_transfer(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     ct:pal("Opening connection to ~s:~b", [Hostname, Port]),
     Conf = #{address => Hostname, port => Port, max_frame_size => 512},
-    {ok, Connection} = amqp10_client_connection:open(Conf),
-    {ok, Session} = amqp10_client_session:'begin'(Connection),
+    {ok, Connection} = amqp10_client:open_connection(Conf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
     Data = list_to_binary(string:chars(64, 1000)),
-    {ok, Sender} = amqp10_client_link:sender(Session, <<"data-sender">>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"data-sender">>,
                                              <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, Data, true),
-    {ok, _} = amqp10_client_link:send(Sender, Msg),
-    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"data-receiver">>,
+    {ok, _} = amqp10_client:send_msg(Sender, Msg),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"data-receiver">>,
                                                  <<"test">>),
-    {amqp_msg, OutMsg} = amqp10_client_link:get_one(Receiver),
-    ok = amqp10_client_session:'end'(Session),
-    ok = amqp10_client_connection:close(Connection),
+    {ok, OutMsg} = amqp10_client:get_msg(Receiver),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
     ?assertEqual([Data], amqp10_msg:body(OutMsg)).
 
 transfer_unsettled(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     Conf = #{address => Hostname, port => Port},
-    {ok, Connection} = amqp10_client_connection:open(Conf),
-    {ok, Session} = amqp10_client_session:'begin'(Connection),
+    {ok, Connection} = amqp10_client:open_connection(Conf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
     Data = list_to_binary(string:chars(64, 1000)),
-    {ok, Sender} = amqp10_client_link:sender(Session, <<"data-sender">>,
-                                             <<"test">>, unsettled),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"data-sender">>,
+                                                    <<"test">>, unsettled),
     Msg = amqp10_msg:new(<<"my-tag">>, Data, false),
-    {ok, DeliveryId} = amqp10_client_link:send(Sender, Msg),
+    {ok, DeliveryId} = amqp10_client:send_msg(Sender, Msg),
     ok = await_disposition(DeliveryId),
-    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"data-receiver">>,
-                                                 <<"test">>, unsettled),
-    {amqp_msg, OutMsg} = amqp10_client_link:get_one(Receiver),
-    ok = amqp10_client_link:accept(Receiver, OutMsg),
-    {error, timeout} = amqp10_client_link:get_one(Receiver, 1000),
-    ok = amqp10_client_session:'end'(Session),
-    ok = amqp10_client_connection:close(Connection),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"data-receiver">>,
+                                                        <<"test">>, unsettled),
+    {ok, OutMsg} = amqp10_client:get_msg(Receiver),
+    ok = amqp10_client:accept_msg(Receiver, OutMsg),
+    {error, timeout} = amqp10_client:get_msg(Receiver, 1000),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
     ?assertEqual([Data], amqp10_msg:body(OutMsg)).
 
 subscribe(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     QueueName = <<"test-sub">>,
-    {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
-    {ok, Session} = amqp10_client_session:'begin'(Connection),
-    {ok, Sender} = amqp10_client_link:sender(Session, <<"sub-sender">>,
+    {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sub-sender">>,
                                              QueueName),
     Msg1 = amqp10_msg:new(<<"my-taggy">>, <<"banana">>, false),
     Msg2 = amqp10_msg:new(<<"my-taggy2">>, <<"banana">>, false),
-    {ok, DeliveryId1} = amqp10_client_link:send(Sender, Msg1),
+    {ok, DeliveryId1} = amqp10_client:send_msg(Sender, Msg1),
     ok = await_disposition(DeliveryId1),
-    {ok, DeliveryId2} = amqp10_client_link:send(Sender, Msg2),
+    {ok, DeliveryId2} = amqp10_client:send_msg(Sender, Msg2),
     ok = await_disposition(DeliveryId2),
-    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"sub-receiver">>,
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"sub-receiver">>,
                                                  QueueName, unsettled),
-    ok = amqp10_client_link:flow_credit(Receiver, 2),
+    ok = amqp10_client:flow_link_credit(Receiver, 2),
 
     ok = receive_one(Receiver),
     ok = receive_one(Receiver),
     timeout = receive_one(Receiver),
 
-    ok = amqp10_client_session:'end'(Session),
-    ok = amqp10_client_connection:close(Connection).
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection).
 
 
 insufficient_credit(Config) ->
@@ -263,16 +267,16 @@ insufficient_credit(Config) ->
 
     ok = mock_server:set_steps(?config(mock_server, Config), Steps),
 
-    Cfg = #{address => Hostname, port => Port, sasl => none},
-    {ok, Connection} = amqp10_client_connection:open(Cfg),
-    {ok, Session} = amqp10_client_session:begin_sync(Connection),
-    {ok, Sender} = amqp10_client_link:sender(Session, <<"mock1-sender">>,
-                                             <<"test">>),
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"mock1-sender">>,
+                                                    <<"test">>),
     Msg = amqp10_msg:new(<<"mock-tag">>, <<"banana">>, true),
-    {error, insufficient_credit} = amqp10_client_link:send(Sender, Msg),
+    {error, insufficient_credit} = amqp10_client:send_msg(Sender, Msg),
 
-    ok = amqp10_client_session:'end'(Session),
-    ok = amqp10_client_connection:close(Connection),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
     ok.
 
 
@@ -281,12 +285,12 @@ outgoing_heartbeat(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     CConf = #{address => Hostname, port => Port,
               idle_time_out => 5000},
-    {ok, Connection} = amqp10_client_connection:open(CConf),
+    {ok, Connection} = amqp10_client:open_connection(CConf),
     timer:sleep(35 * 1000), % activemq defaults to 15s I believe
     % check we can still establish a session
-    {ok, Session} = amqp10_client_session:begin_sync(Connection),
-    ok = amqp10_client_session:'end'(Session),
-    ok = amqp10_client_connection:close(Connection).
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection).
 
 incoming_heartbeat(Config) ->
     Hostname = ?config(mock_host, Config),
@@ -308,10 +312,10 @@ incoming_heartbeat(Config) ->
     ok = mock_server:set_steps(Mock, Steps),
     CConf = #{address => Hostname, port => Port, sasl => none,
               idle_time_out => 1000, notify => self()},
-    {ok, Connection} = amqp10_client_connection:open(CConf),
+    {ok, Connection} = amqp10_client:open_connection(CConf),
     receive
-        {closed, Connection,
-         {resource_limit_exceeded, <<"remote idle-time-out">>}} ->
+        {amqp10_event, {connection, Connection,
+         {closed, {resource_limit_exceeded, <<"remote idle-time-out">>}}}} ->
             ok
     after 5000 ->
           exit(incoming_heartbeat_assert)
@@ -320,19 +324,19 @@ incoming_heartbeat(Config) ->
 
 
 %%% HELPERS
-
+%%%
 
 receive_one(Receiver) ->
-    Handle = amqp10_client_link:link_handle(Receiver),
+    Handle = amqp10_client:link_handle(Receiver),
     receive
-        {message, Handle, Msg} ->
-            amqp10_client_link:accept(Receiver, Msg)
+        {amqp10_msg, Handle, Msg} ->
+            amqp10_client:accept_msg(Receiver, Msg)
     after 2000 ->
           timeout
     end.
 
 await_disposition(DeliveryId) ->
     receive
-        {disposition, {DeliveryId, accepted}} -> ok
+        {amqp10_disposition, {accepted, DeliveryId}} -> ok
     after 3000 -> exit(dispostion_timeout)
     end.

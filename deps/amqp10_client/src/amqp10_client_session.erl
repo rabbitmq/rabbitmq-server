@@ -17,7 +17,7 @@
         ]).
 
 %% Private API.
--export([start_link/5,
+-export([start_link/4,
          socket_ready/2
         ]).
 
@@ -83,8 +83,7 @@
          }).
 
 -record(state,
-        {owner :: pid(),
-         channel :: pos_integer(),
+        {channel :: pos_integer(),
          remote_channel :: pos_integer() | undefined,
          next_incoming_id = 0 :: transfer_id(),
          incoming_window = ?MAX_SESSION_WINDOW_SIZE :: non_neg_integer(),
@@ -106,7 +105,7 @@
          % can reference transfers for many different links
          unsettled = #{} :: #{transfer_id() => {link_handle(), any()}}, %TODO: refine as FsmRef
          incoming_unsettled = #{} :: #{transfer_id() => link_handle()},
-         notify :: boolean()
+         notify :: pid()
         }).
 
 
@@ -119,7 +118,7 @@
     %% The connection process is responsible for allocating a channel
     %% number and contact the sessions supervisor to start a new session
     %% process.
-    amqp10_client_connection:begin_session(Connection, false).
+    amqp10_client_connection:begin_session(Connection).
 
 -spec begin_sync(pid()) -> supervisor:startchild_ret().
 begin_sync(Connection) ->
@@ -128,7 +127,7 @@ begin_sync(Connection) ->
 -spec begin_sync(pid(), non_neg_integer()) ->
     supervisor:startchild_ret() | session_timeout.
 begin_sync(Connection, Timeout) ->
-    {ok, Session} = amqp10_client_connection:begin_session(Connection, true),
+    {ok, Session} = amqp10_client_connection:begin_session(Connection),
     receive
         {session_begin, Session} -> {ok, Session}
     after Timeout -> session_timeout
@@ -152,7 +151,7 @@ flow(Session, Handle, Flow) ->
     gen_fsm:send_event(Session, {flow, Handle, Flow}).
 
 -spec disposition(pid(), link_role(), transfer_id(), transfer_id(), boolean(),
-               amqp10_client_types:delivery_state()) -> ok.
+                  amqp10_client_types:delivery_state()) -> ok.
 disposition(Session, Role, First, Last, Settled, DeliveryState) ->
     gen_fsm:sync_send_event(Session, {disposition, Role, First, Last, Settled,
                                       DeliveryState}).
@@ -163,8 +162,8 @@ disposition(Session, Role, First, Last, Settled, DeliveryState) ->
 %% Private API.
 %% -------------------------------------------------------------------
 
-start_link(From, Notify, Channel, Reader, ConnConfig) ->
-    gen_fsm:start_link(?MODULE, [From, Notify, Channel, Reader, ConnConfig], []).
+start_link(From, Channel, Reader, ConnConfig) ->
+    gen_fsm:start_link(?MODULE, [From, Channel, Reader, ConnConfig], []).
 
 -spec socket_ready(pid(), gen_tcp:socket()) -> ok.
 
@@ -175,10 +174,9 @@ socket_ready(Pid, Socket) ->
 %% gen_fsm callbacks.
 %% -------------------------------------------------------------------
 
-init([From, Notify, Channel, Reader, ConnConfig]) ->
+init([FromPid, Channel, Reader, ConnConfig]) ->
     amqp10_client_frame_reader:register_session(Reader, self(), Channel),
-    State = #state{owner = From, channel = Channel, reader = Reader,
-                   notify = Notify,
+    State = #state{notify = FromPid, channel = Channel, reader = Reader,
                    connection_config = ConnConfig},
     {ok, unmapped, State}.
 
@@ -206,7 +204,7 @@ begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                                  send_attach(fun send/2, Attach, From, S)
                          end, State1, EARs),
 
-    ok = notify_session_begin(State2),
+    ok = notify_session_begun(State2),
 
     {next_state, mapped, State2#state{early_attach_requests = [],
                                       next_incoming_id = NOI,
@@ -320,7 +318,7 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
     Msg = decode_as_msg(Transfer, Payload),
 
     % deliver to the registered receiver process
-    TargetPid ! {message, OutHandle, Msg},
+    TargetPid ! {amqp10_msg, OutHandle, Msg},
 
     % stash the DeliveryId - not sure for what yet
     Unsettled = case Settled of
@@ -349,7 +347,7 @@ mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
                             case Acc of
                                 #{Id := {_Handle, Receiver}} ->
                                     S = translate_delivery_state(DeliveryState),
-                                    ok = notify_disposition(Receiver, {Id, S}),
+                                    ok = notify_disposition(Receiver, {S, Id}),
                                     maps:remove(Id, Acc);
                                 _ -> Acc
                             end
@@ -643,13 +641,12 @@ translate_role(sender) -> false;
 translate_role(receiver) -> true.
 
 
-notify_session_begin(#state{owner = Owner, notify = true}) ->
-    Owner ! {session_begin, self()},
-    ok;
-notify_session_begin(_State) -> ok.
+notify_session_begun(#state{notify = Pid}) ->
+    Pid ! amqp10_event(begun),
+    ok.
 
 notify_disposition({Pid, _}, N) ->
-    Pid ! {disposition, N},
+    Pid ! {amqp10_disposition, N},
     ok.
 
 book_transfer_send(#link{output_handle = Handle} = Link,
@@ -701,6 +698,8 @@ decode_as_msg(Transfer, Payload) ->
     Records = rabbit_amqp1_0_framing:decode_bin(Payload),
     amqp10_msg:from_amqp_records([Transfer | Records]).
 
+amqp10_event(Evt) ->
+    {amqp10_event, {session, self(), Evt}}.
 
 
 

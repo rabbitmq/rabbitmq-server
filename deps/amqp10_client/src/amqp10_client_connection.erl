@@ -8,10 +8,6 @@
 %% Public API.
 -export([
          open/1,
-         open/2,
-         open_sync/1,
-         open_sync/2,
-         close/1,
          close/2
         ]).
 
@@ -19,7 +15,7 @@
 -export([start_link/2,
          socket_ready/2,
          protocol_header_received/5,
-         begin_session/2,
+         begin_session/1,
          heartbeat/1
         ]).
 
@@ -72,27 +68,6 @@
 %% Public API.
 %% -------------------------------------------------------------------
 
-
--spec open(
-        inet:socket_address() | inet:hostname(),
-        inet:port_number()) -> supervisor:startchild_ret().
-open(Addr, Port) ->
-    open(#{address => Addr, port => Port, notify => self()}).
-
--spec open_sync(connection_config()) ->
-    supervisor:startchild_ret() | connection_timeout.
-open_sync(Config) ->
-    open_sync(Config, ?DEFAULT_TIMEOUT).
-
--spec open_sync(connection_config(), timeout()) ->
-    supervisor:startchild_ret() | connection_timeout.
-open_sync(Config, Timeout) ->
-    {ok, Conn} = open(Config),
-    receive
-        {opened, Conn} -> {ok, Conn}
-    after Timeout -> connection_timeout
-    end.
-
 -spec open(connection_config()) -> supervisor:startchild_ret().
 open(Config) ->
     %% Start the supervision tree dedicated to that connection. It
@@ -114,10 +89,6 @@ open(Config) ->
         Error ->
             Error
     end.
-
--spec close(pid()) -> ok.
-close(Pid) ->
-    close(Pid, none).
 
 -spec close(pid(), {amqp10_client_types:amqp_error()
                    | amqp10_client_types:connection_error(), binary()} | none) -> ok.
@@ -145,10 +116,10 @@ socket_ready(Pid, Socket) ->
 protocol_header_received(Pid, Protocol, Maj, Min, Rev) ->
     gen_fsm:send_event(Pid, {protocol_header_received, Protocol, Maj, Min, Rev}).
 
--spec begin_session(pid(), boolean()) -> supervisor:startchild_ret().
+-spec begin_session(pid()) -> supervisor:startchild_ret().
 
-begin_session(Pid, Notify) ->
-    gen_fsm:sync_send_all_state_event(Pid, {begin_session, Notify}).
+begin_session(Pid) ->
+    gen_fsm:sync_send_all_state_event(Pid, begin_session).
 
 heartbeat(Pid) ->
     gen_fsm:send_event(Pid, heartbeat).
@@ -213,8 +184,8 @@ open_sent(#'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
     State1 = State#state{config =
                          Config#{outgoing_max_frame_size => unpack(MFSz)}},
     State2 = lists:foldr(
-               fun({From, Notify}, S0) ->
-                       {Ret, S2} = handle_begin_session(From, Notify, S0),
+               fun(From, S0) ->
+                       {Ret, S2} = handle_begin_session(From, S0),
                        _ = gen_fsm:reply(From, Ret),
                        S2
                end, State1, PendingSessionReqs),
@@ -258,18 +229,18 @@ handle_event({set_other_procs, OtherProcs}, StateName, State) ->
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
-handle_sync_event({begin_session, Notify}, From, opened, State) ->
-    {Ret, State1} = handle_begin_session(From, Notify, State),
+handle_sync_event(begin_session, From, opened, State) ->
+    {Ret, State1} = handle_begin_session(From, State),
     {reply, Ret, opened, State1};
-handle_sync_event({begin_session, Notify}, From, StateName,
+handle_sync_event(begin_session, From, StateName,
                   #state{pending_session_reqs = PendingSessionReqs} = State)
   when StateName =/= close_sent ->
     %% The caller already asked for a new session but the connection
     %% isn't fully opened. Let's queue this request until the connection
     %% is ready.
-    State1 = State#state{pending_session_reqs = [{From, Notify} | PendingSessionReqs]},
+    State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {next_state, StateName, State1};
-handle_sync_event({begin_session, _Notify}, _, StateName, State) ->
+handle_sync_event(begin_session, _From, StateName, State) ->
     {reply, {error, connection_closed}, StateName, State};
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
@@ -292,11 +263,11 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Internal functions.
 %% -------------------------------------------------------------------
 
-handle_begin_session({FromPid, _Ref}, Notify,
+handle_begin_session({FromPid, _Ref},
                      #state{sessions_sup = Sup, reader = Reader,
                             next_channel = Channel,
                             config = Config} = State) ->
-    Ret = supervisor:start_child(Sup, [FromPid, Notify, Channel, Reader, Config]),
+    Ret = supervisor:start_child(Sup, [FromPid, Channel, Reader, Config]),
     State1 = case Ret of
                  {ok, _} -> State#state{next_channel = Channel + 1};
                  _       -> State
@@ -361,14 +332,12 @@ send_heartbeat(#state{socket = Socket}) ->
     gen_tcp:send(Socket, Frame).
 
 notify_opened(#{notify := Pid}) ->
-    Pid ! {opened, self()},
-    ok;
-notify_opened(_Config) -> ok.
+    Pid ! amqp10_event(opened),
+    ok.
 
 notify_closed(#{notify := Pid}, Reason) ->
-    Pid ! {closed, self(), Reason},
-    ok;
-notify_closed(_Config, _Reason) -> ok.
+    Pid ! amqp10_event({closed, Reason}),
+    ok.
 
 start_heartbeat_timer(Timeout) ->
     timer:apply_after(Timeout, ?MODULE, heartbeat, [self()]).
@@ -410,4 +379,7 @@ translate_err(#'v1_0.error'{condition = Cond, description = Desc}) ->
             _ -> Cond
         end,
     {Err, unpack(Desc)}.
+
+amqp10_event(Evt) ->
+    {amqp10_event, {connection, self(), Evt}}.
 
