@@ -29,11 +29,11 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init(_) ->
-    Interval = rabbit_misc:get_env(rabbit, core_metrics_gc_interval, 30000),
+    Interval = rabbit_misc:get_env(rabbit, core_metrics_gc_interval, 120000),
     {ok, start_timer(#state{interval = Interval})}.
 
-handle_call(_Request, _From, State) ->
-    {noreply, State}.
+handle_call(test, _From, State) ->
+    {reply, ok, State}.
 
 handle_cast(_Request, State) ->
     {noreply, State}.
@@ -77,7 +77,7 @@ gc_queues() ->
     gc_entity(queue_coarse_metrics, GbSet),
     gc_process_and_entity(channel_queue_metrics, GbSet),
     gc_process_and_entity(consumer_created, GbSet),
-    ExchangeGbSet = gb_sets:from_list(rabbit_amqqueue:list_names()),
+    ExchangeGbSet = gb_sets:from_list(rabbit_exchange:list_names()),
     gc_process_and_entities(channel_queue_exchange_metrics, GbSet, ExchangeGbSet).
 
 gc_exchanges() ->
@@ -88,9 +88,6 @@ gc_exchanges() ->
 gc_nodes() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     GbSet = gb_sets:from_list(Nodes),
-    gc_entity(node_persister_metrics, GbSet),
-    gc_entity(node_coarse_metrics, GbSet),
-    gc_entity(node_metrics, GbSet),
     gc_entity(node_node_metrics, GbSet).
 
 gc_gen_server2() ->
