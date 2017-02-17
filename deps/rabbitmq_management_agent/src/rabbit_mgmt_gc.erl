@@ -31,11 +31,11 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init(_) ->
-    Interval = rabbit_misc:get_env(rabbitmq_management_agent, metrics_gc_interval, 30000),
+    Interval = rabbit_misc:get_env(rabbitmq_management_agent, metrics_gc_interval, 120000),
     {ok, start_timer(#state{interval = Interval})}.
 
-handle_call(_Request, _From, State) ->
-    {noreply, State}.
+handle_call(test, _From, State) ->
+    {reply, ok, State}.
 
 handle_cast(_Request, State) ->
     {noreply, State}.
@@ -98,7 +98,7 @@ gc_queues() ->
     gc_process_and_entity(channel_exchange_stats_fine_stats_channel_index, GbSet),
     gc_process_and_entity(channel_queue_stats_deliver_stats, GbSet),
     gc_process_and_entity(channel_queue_stats_deliver_stats_channel_index, GbSet),
-    ExchangeGbSet = gb_sets:from_list(rabbit_amqqueue:list_names()),
+    ExchangeGbSet = gb_sets:from_list(rabbit_exchange:list_names()),
     gc_entities(queue_exchange_stats_publish, GbSet, ExchangeGbSet),
     gc_entities(queue_exchange_stats_publish_queue_index, GbSet, ExchangeGbSet),
     gc_entities(queue_exchange_stats_publish_exchange_index, GbSet, ExchangeGbSet).
@@ -145,15 +145,13 @@ gc_process(Pid, Table, Key) ->
 gc_entity(Table, GbSet) ->
     ets:foldl(fun({{_, Id} = Key, _}, none) when Table == node_node_stats ->
                       gc_entity(Id, Table, Key, GbSet);
-                 ({{{_, Id} = Key, _}, _}, none) when Table == node_node_coarse_stats ->
+                 ({{{_, Id}, _} = Key, _}, none) when Table == node_node_coarse_stats ->
                       gc_entity(Id, Table, Key, GbSet);
                   ({{Id, _} = Key, _}, none) ->
                       gc_entity(Id, Table, Key, GbSet);
                  ({Id = Key, _}, none) ->
                       gc_entity(Id, Table, Key, GbSet);
-                 ({{Id, _} = Key, _, _, _, _}, none) ->
-                      gc_entity(Id, Table, Key, GbSet);
-                 ({{Id, _} = Key, _, _, _}, none) ->
+                 ({{Id, _} = Key, _}, none) ->
                       gc_entity(Id, Table, Key, GbSet)
               end, none, Table).
 
@@ -188,6 +186,10 @@ gc_process_and_entity(Table, GbSet) ->
                          Table == channel_queue_stats_deliver_stats_channel_index ->
                       gc_object(Id, Table, Object, GbSet),
                       gc_process(Pid, Table, Key);
+                 ({{{Pid, Id}, _} = Key, _}, none)
+                    when Table == channel_queue_stats_deliver_stats;
+                         Table == channel_exchange_stats_fine_stats ->
+                      gc_process_and_entity(Id, Pid, Table, Key, GbSet);
                  ({{{Pid, Id}, _} = Key, _, _, _, _, _, _, _, _}, none) ->
                       gc_process_and_entity(Id, Pid, Table, Key, GbSet);
                  ({{{Pid, Id}, _} = Key, _, _, _, _}, none) ->
@@ -225,16 +227,16 @@ gc_object(Id, Table, Object, GbSet) ->
     end.
 
 gc_entities(Table, QueueGbSet, ExchangeGbSet) ->
-    ets:foldl(fun({{{Q, X}, _} = Key, _, _, _, _, _, _, _, _}, none)
+    ets:foldl(fun({{{Q, X}, _} = Key, _}, none)
                     when Table == queue_exchange_stats_publish ->
                       gc_entity(Q, Table, Key, QueueGbSet),
                       gc_entity(X, Table, Key, ExchangeGbSet);
-            ({Q, {{_, X}, _}} = Object, none)
+                 ({Q, {{_, X}, _}} = Object, none)
                     when Table == queue_exchange_stats_publish_queue_index ->
-                      gc_object(X, Table, Object),
+                      gc_object(X, Table, Object, ExchangeGbSet),
                       gc_entity(Q, Table, Q, QueueGbSet);
-        ({X, {{Q, _}, _}} = Object, none)
+                 ({X, {{Q, _}, _}} = Object, none)
                     when Table == queue_exchange_stats_publish_exchange_index ->
-                      gc_object(Q, Table, Object),
+                      gc_object(Q, Table, Object, QueueGbSet),
                       gc_entity(X, Table, X, ExchangeGbSet)
               end, none, Table).
