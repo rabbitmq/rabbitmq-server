@@ -93,4 +93,3 @@ parse_resource_pattern(Pattern, Permission) ->
         _Other -> ignore
     end.
 
-
