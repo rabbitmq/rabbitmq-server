@@ -141,10 +141,6 @@ test_token_expiration(_) ->
     {refused, _, _} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any).
 
-
-
-
-
 test_command_json(_) ->
     Jwk = fixture_jwk(),
     Json = rabbit_json:encode(Jwk),
