@@ -35,9 +35,9 @@ parameter_validation(_Config) ->
 
     %% IO_BATCH_SIZE must be greater than CREDIT_DISC_BOUND initial credit
     ok = ?T(validate_msg_store_io_batch_size_and_credit_disc_bound,
-            [{2000, 500}, 3000]),
+            [{4000, 800}, 5000]),
     {error, _} = ?T(validate_msg_store_io_batch_size_and_credit_disc_bound,
-                    [{2000, 500}, 1500]),
+                    [{4000, 800}, 1500]),
 
     %% All values must be integers
     {error, _} = ?T(validate_msg_store_io_batch_size_and_credit_disc_bound,
