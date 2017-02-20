@@ -173,7 +173,7 @@ aggregate_entry(TS, {Id, RecvOct, SendOct, Reductions}, NextStats,
                        policies = {BPolicies, _, GPolicies}} = State) ->
     Stats = ?vhost_stats_coarse_conn_stats(RecvOct, SendOct),
     Diff = get_difference(Id, Stats, State),
-    [insert_entry(vhost_stats_coarse_conn_stats, vhost({connection_created_stats, Id}),
+    [insert_entry(vhost_stats_coarse_conn_stats, vhost({connection_created, Id}),
          TS, Diff, Size, Interval, true) || {Size, Interval} <- GPolicies],
     [begin
          insert_entry(connection_stats_coarse_conn_stats, Id, TS,
@@ -421,7 +421,7 @@ vhost(#resource{virtual_host = VHost}) ->
 vhost({queue_stats, #resource{virtual_host = VHost}}) ->
     VHost;
 vhost({TName, Pid}) ->
-    pget(vhost, lookup_element(TName, Pid, 3)).
+    pget(vhost, lookup_element(TName, Pid, 2)).
 
 exchange_exists(Name) ->
     case rabbit_exchange:lookup(Name) of
