@@ -722,7 +722,7 @@ init([Type, BaseDir, ClientRefs, StartupFunState]) ->
     Name = filename:join(filename:basename(BaseDir), atom_to_list(Type)),
 
     {ok, IndexModule} = application:get_env(rabbit, msg_store_index_module),
-    rabbit_log:info("~tp: using ~p to provide index~n", [Name, IndexModule]),
+    rabbit_log:info("Message store ~tp: using ~p to provide index~n", [Name, IndexModule]),
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
@@ -1548,11 +1548,11 @@ index_delete_by_file(File, #msstate { index_module = Index,
 recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Name) ->
     {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Name) ->
-    rabbit_log:warning("~tp : rebuilding indices from scratch~n", [Name]),
+    rabbit_log:warning("Message store ~tp: rebuilding indices from scratch~n", [Name]),
     {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Name) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
-                    rabbit_log:warning("~tp : " ++ ErrorMsg ++ "~n"
+                    rabbit_log:warning("Message store ~tp : " ++ ErrorMsg ++ "~n"
                                        "rebuilding indices from scratch~n",
                                        [Name | ErrorArgs]),
                     {false, IndexModule:new(Dir), []}

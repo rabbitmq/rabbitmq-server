@@ -525,10 +525,10 @@ start_msg_store(Refs, StartFunState) when is_map(Refs); Refs == undefined ->
     ok.
 
 add_vhost_msg_store(VHost) ->
-    rabbit_log:info("Starting message store vor vhost ~p~n", [VHost]),
+    rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
     rabbit_msg_store_vhost_sup:add_vhost(?TRANSIENT_MSG_STORE_SUP, VHost),
     rabbit_msg_store_vhost_sup:add_vhost(?PERSISTENT_MSG_STORE_SUP, VHost),
-    rabbit_log:info("Message store is started vor vhost ~p~n", [VHost]).
+    rabbit_log:info("Message stores for vhost '~s' are started~n", [VHost]).
 
 stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE_SUP),
