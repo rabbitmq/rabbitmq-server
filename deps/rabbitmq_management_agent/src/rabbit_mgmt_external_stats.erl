@@ -28,7 +28,6 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(REFRESH_RATIO, 5000).
 -define(METRICS_KEYS, [fd_used, sockets_used, mem_used, disk_free, proc_used, gc_num,
                        gc_bytes_reclaimed, context_switches]).
 
@@ -46,7 +45,8 @@
     fd_total,
     fhc_stats,
     node_owners,
-    last_ts
+    last_ts,
+    interval
 }).
 
 %%--------------------------------------------------------------------
@@ -329,9 +329,11 @@ format_mochiweb_option(_K, V) ->
 %%--------------------------------------------------------------------
 
 init([]) ->
+    {ok, Interval}   = application:get_env(rabbit, collect_statistics_interval),
     State = #state{fd_total    = file_handle_cache:ulimit(),
                    fhc_stats   = file_handle_cache_stats:get(),
-                   node_owners = sets:new()},
+                   node_owners = sets:new(),
+                   interval    = Interval},
     %% We can update stats straight away as they need to be available
     %% when the mgmt plugin starts a collector
     {ok, emit_update(State)}.
@@ -363,7 +365,7 @@ emit_update(State0) ->
     rabbit_core_metrics:node_stats(coarse_metrics, MStats),
     rabbit_core_metrics:node_stats(node_metrics, OStats0),
     rabbit_event:notify(node_stats, PStats ++ MStats ++ OStats),
-    erlang:send_after(?REFRESH_RATIO, self(), emit_update),
+    erlang:send_after(State#state.interval, self(), emit_update),
     emit_node_node_stats(State).
 
 emit_node_node_stats(State = #state{node_owners = Owners}) ->

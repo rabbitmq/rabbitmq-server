@@ -43,7 +43,9 @@ init([]) ->
     ExternalStats = {rabbit_mgmt_external_stats,
                      {rabbit_mgmt_external_stats, start_link, []},
                      permanent, 5000, worker, [rabbit_mgmt_external_stats]},
-    {ok, {{one_for_one, 100, 10}, [ST, MD, ExternalStats | MC ++ MGC]}}.
+    GC = {rabbit_mgmt_gc, {rabbit_mgmt_gc, start_link, []},
+          permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_gc]},
+    {ok, {{one_for_one, 100, 10}, [ST, MD, ExternalStats, GC | MC ++ MGC]}}.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
