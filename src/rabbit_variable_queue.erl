@@ -514,17 +514,21 @@ start_msg_store(Refs, StartFunState) when is_map(Refs); Refs == undefined ->
                                 [?PERSISTENT_MSG_STORE_SUP, Refs, StartFunState]),
     %% Start message store for all known vhosts
     VHosts = rabbit_vhost:list(),
-    lists:foreach(fun(VHost) ->
-        add_vhost_msg_store(VHost)
+    %% TODO: recovery is limited by queue index recovery
+    %% pool size. There is no point in parallelizing vhost
+    %% recovery until there will be a queue index
+    %% recovery pool per vhost
+    lists:foreach(fun(Vhost) ->
+        add_vhost_msg_store(Vhost)
     end,
-    VHosts),
+    lists:sort(VHosts)),
     ok.
 
 add_vhost_msg_store(VHost) ->
-    rabbit_log:info("Starting message store vor vhost ~p~n", [VHost]),
+    rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
     rabbit_msg_store_vhost_sup:add_vhost(?TRANSIENT_MSG_STORE_SUP, VHost),
     rabbit_msg_store_vhost_sup:add_vhost(?PERSISTENT_MSG_STORE_SUP, VHost),
-    rabbit_log:info("Message store is started vor vhost ~p~n", [VHost]).
+    rabbit_log:info("Message stores for vhost '~s' are started~n", [VHost]).
 
 stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE_SUP),
@@ -2802,8 +2806,8 @@ move_messages_to_vhost_store() ->
     in_batches(MigrationBatchSize,
         {rabbit_variable_queue, migrate_queue, [OldStore, NewStoreSup]},
         QueuesWithTerms,
-        "Migrating batch ~p of ~p queues ~n",
-        "Batch ~p of ~p queues migrated ~n"),
+        "message_store upgrades: Migrating batch ~p of ~p queues. Out of total ~p ~n",
+        "message_store upgrades: Batch ~p of ~p queues migrated ~n. ~p total left"),
 
     log_upgrade("Message store migration finished"),
     delete_old_store(OldStore),
@@ -2817,11 +2821,13 @@ in_batches(Size, MFA, List, MessageStart, MessageEnd) ->
 
 in_batches(_, _, _, [], _, _) -> ok;
 in_batches(Size, BatchNum, MFA, List, MessageStart, MessageEnd) ->
-    {Batch, Tail} = case Size > length(List) of
+    Length = length(List),
+    {Batch, Tail} = case Size > Length of
         true  -> {List, []};
         false -> lists:split(Size, List)
     end,
-    log_upgrade(MessageStart, [BatchNum, Size]),
+    ProcessedLength = (BatchNum - 1) * Size,
+    rabbit_log:info(MessageStart, [BatchNum, Size, ProcessedLength + Length]),
     {M, F, A} = MFA,
     Keys = [ rpc:async_call(node(), M, F, [El | A]) || El <- Batch ],
     lists:foreach(fun(Key) ->
@@ -2831,7 +2837,7 @@ in_batches(Size, BatchNum, MFA, List, MessageStart, MessageEnd) ->
         end
     end,
     Keys),
-    log_upgrade(MessageEnd, [BatchNum, Size]),
+    rabbit_log:info(MessageEnd, [BatchNum, Size, length(Tail)]),
     in_batches(Size, BatchNum + 1, MFA, Tail, MessageStart, MessageEnd).
 
 migrate_queue({QueueName = #resource{virtual_host = VHost, name = Name}, RecoveryTerm}, OldStore, NewStoreSup) ->
