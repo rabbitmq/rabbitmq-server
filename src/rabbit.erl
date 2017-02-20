@@ -213,6 +213,12 @@
                                    [background_gc]}},
                     {enables,     networking}]}).
 
+-rabbit_boot_step({rabbit_core_metrics_gc,
+                   [{description, "background core metrics garbage collection"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_core_metrics_gc]}},
+                    {enables,     networking}]}).
+
 %%---------------------------------------------------------------------------
 
 -include("rabbit_framing.hrl").
