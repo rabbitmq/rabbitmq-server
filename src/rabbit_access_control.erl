@@ -184,7 +184,7 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
         false ->
             rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs);
         {error, E}  ->
-            FullErrStr = ErrStr ++ " by ~s: ~p~n",
+            FullErrStr = ErrStr ++ ", backend ~s returned an error: ~p~n",
             FullErrArgs = ErrArgs ++ [Module, E],
             rabbit_log:error(FullErrStr, FullErrArgs),
             rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)
