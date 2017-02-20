@@ -470,7 +470,7 @@ with_login(Creds, Servers, Opts, Fun) ->
                             ?L1("bind error: ~s ~p",
                                 [scrub_dn(UserDN, env(log)), E]),
                             %% Do not report internal bind error to a client
-                            {error, ldap_binding_error}
+                            {error, ldap_bind_error}
                     end
             end;
         Error ->
@@ -478,7 +478,7 @@ with_login(Creds, Servers, Opts, Fun) ->
             case Error of
                 {error, {gen_tcp_error, closed}} -> Error;
                 %% Do not report internal connection error to a client
-                _Other                           -> {error, ldap_connection_error}
+                _Other                           -> {error, ldap_connect_error}
             end
     end.
 
@@ -489,7 +489,7 @@ call_ldap_fun(Fun, LDAP, UserDN) ->
     case Fun(LDAP) of
         {error, E} ->
             ?L1("evaluate error: ~s ~p", [scrub_dn(UserDN, env(log)), E]),
-            {error, ldap_evaluation_error};
+            {error, ldap_evaluate_error};
         Other -> Other
     end.
 
