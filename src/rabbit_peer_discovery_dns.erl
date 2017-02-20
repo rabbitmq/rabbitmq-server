@@ -72,7 +72,7 @@ discover_hostnames(SeedHostname, LongNamesUsed) ->
     IPs   = inet_res:lookup(SeedHostname, in, a),
     rabbit_log:info("Addresses discovered via A records of ~s: ~s",
       [SeedHostname, string:join([inet_parse:ntoa(IP) || IP <- IPs], ", ")]),
-    Hosts = [extract_host(inet_res:gethostbyaddr(A), LongNamesUsed, A) ||
+    Hosts = [extract_host(inet:gethostbyaddr(A), LongNamesUsed, A) ||
                 A <- IPs],
     lists:filter(fun(E) -> E =/= error end, Hosts).
 
