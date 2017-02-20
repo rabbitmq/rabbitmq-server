@@ -137,7 +137,6 @@ gc_process(Pid, Table, Key) ->
         true ->
             none;
         false ->
-            %% TODO catch?
             ets:delete(Table, Key),
             none
     end.
@@ -160,7 +159,6 @@ gc_entity(Id, Table, Key, GbSet) ->
         true ->
             none;
         false ->
-            %% TODO catch?
             ets:delete(Table, Key),
             none
     end.
@@ -201,7 +199,6 @@ gc_process_and_entity(Id, Pid, Table, Key, GbSet) ->
         true ->
             none;
         false ->
-            %% TODO catch?
             ets:delete(Table, Key),
             none
     end.
@@ -211,7 +208,6 @@ gc_object(Pid, Table, Object) ->
         true ->
             none;
         false ->
-            %% TODO catch?
             ets:delete_object(Table, Object),
             none
     end.
@@ -221,7 +217,6 @@ gc_object(Id, Table, Object, GbSet) ->
         true ->
             none;
         false ->
-            %% TODO catch?
             ets:delete_object(Table, Object),
             none
     end.
