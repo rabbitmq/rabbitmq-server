@@ -455,13 +455,13 @@ with_login(Creds, Servers, Opts, Fun) ->
             case Creds of
                 anon ->
                     ?L1("anonymous bind", []),
-                    Fun(LDAP);
+                    call_ldap_fun(Fun, LDAP);
                 {UserDN, Password} ->
                     case eldap:simple_bind(LDAP, UserDN, Password) of
                         ok ->
                             ?L1("bind succeeded: ~s",
                                 [scrub_dn(UserDN, env(log))]),
-                            Fun(LDAP);
+                            call_ldap_fun(Fun, LDAP, UserDN);
                         {error, invalidCredentials} ->
                             ?L1("bind returned \"invalid credentials\": ~s",
                                 [scrub_dn(UserDN, env(log))]),
@@ -469,12 +469,28 @@ with_login(Creds, Servers, Opts, Fun) ->
                         {error, E} ->
                             ?L1("bind error: ~s ~p",
                                 [scrub_dn(UserDN, env(log)), E]),
-                            {error, E}
+                            %% Do not report internal bind error to a client
+                            {error, ldap_bind_error}
                     end
             end;
         Error ->
             ?L1("connect error: ~p", [Error]),
-            Error
+            case Error of
+                {error, {gen_tcp_error, closed}} -> Error;
+                %% Do not report internal connection error to a client
+                _Other                           -> {error, ldap_connect_error}
+            end
+    end.
+
+call_ldap_fun(Fun, LDAP) ->
+    call_ldap_fun(Fun, LDAP, "").
+
+call_ldap_fun(Fun, LDAP, UserDN) ->
+    case Fun(LDAP) of
+        {error, E} ->
+            ?L1("evaluate error: ~s ~p", [scrub_dn(UserDN, env(log)), E]),
+            {error, ldap_evaluate_error};
+        Other -> Other
     end.
 
 %% Gets either the anonymous or bound (authenticated) connection
