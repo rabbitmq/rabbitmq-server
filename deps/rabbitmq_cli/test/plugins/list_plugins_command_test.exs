@@ -24,7 +24,11 @@ defmodule ListPluginsCommandTest do
   @default_timeout :infinity
 
 
-  #RABBITMQ_PLUGINS_DIR=~/dev/master/deps RABBITMQ_ENABLED_PLUGINS_FILE=/var/folders/cl/jnydxpf92rg76z05m12hlly80000gq/T/rabbitmq-test-instances/rabbit/enabled_plugins RABBITMQ_HOME=~/dev/master/deps/rabbit ./rabbitmq-plugins list_plugins
+  def reset_enabled_plugins_to_preconfigured_defaults(context) do
+    set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],
+      :online,
+      get_rabbit_hostname(), context[:opts])
+  end
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -58,10 +62,7 @@ defmodule ListPluginsCommandTest do
 
   setup context do
     :net_kernel.connect_node(get_rabbit_hostname())
-    set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],
-                        :online,
-                        get_rabbit_hostname(),
-                        context[:opts])
+    reset_enabled_plugins_to_preconfigured_defaults(context)
 
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname())
@@ -231,6 +232,7 @@ defmodule ListPluginsCommandTest do
     plugins_directory = fixture_plugins_path("plugins-subdirectory-01")
     opts = get_opts_with_plugins_directories(context, [plugins_directory])
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+    reset_enabled_plugins_to_preconfigured_defaults(context)
     assert %{status: :running,
                  plugins: [%{name: :amqp_client},
                            %{name: :mock_rabbitmq_plugins_01}, %{name: :mock_rabbitmq_plugins_02},
@@ -239,12 +241,11 @@ defmodule ListPluginsCommandTest do
   end
 
   test "will report list of plugins with latest version picked", context do
-    set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online,
-                        get_rabbit_hostname(), context[:opts])
     plugins_directory_01 = fixture_plugins_path("plugins-subdirectory-01")
     plugins_directory_02 = fixture_plugins_path("plugins-subdirectory-02")
     opts = get_opts_with_plugins_directories(context, [plugins_directory_01, plugins_directory_02])
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+    reset_enabled_plugins_to_preconfigured_defaults(context)
     assert %{status: :running,
              plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
                        %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
