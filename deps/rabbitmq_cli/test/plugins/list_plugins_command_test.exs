@@ -239,6 +239,8 @@ defmodule ListPluginsCommandTest do
   end
 
   test "will report list of plugins with latest version picked", context do
+    set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online,
+                        get_rabbit_hostname(), context[:opts])
     plugins_directory_01 = fixture_plugins_path("plugins-subdirectory-01")
     plugins_directory_02 = fixture_plugins_path("plugins-subdirectory-02")
     opts = get_opts_with_plugins_directories(context, [plugins_directory_01, plugins_directory_02])
