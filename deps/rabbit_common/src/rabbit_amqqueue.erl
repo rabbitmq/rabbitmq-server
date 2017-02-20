@@ -28,7 +28,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
--export([list_down/1, count/1]).
+-export([list_down/1, count/1, list_names/0]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
 -export([basic_get/4, basic_consume/11, basic_cancel/5, notify_decorators/1]).
@@ -111,6 +111,7 @@
           A | rabbit_types:channel_exit().
 -spec list() -> [rabbit_types:amqqueue()].
 -spec list(rabbit_types:vhost()) -> [rabbit_types:amqqueue()].
+-spec list_names() -> [rabbit_amqqueue:name()].
 -spec list_down(rabbit_types:vhost()) -> [rabbit_types:amqqueue()].
 -spec info_keys() -> rabbit_types:info_keys().
 -spec info(rabbit_types:amqqueue()) -> rabbit_types:infos().
@@ -573,6 +574,8 @@ check_queue_mode({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
+
+list_names() -> mnesia:dirty_all_keys(rabbit_queue).
 
 list(VHostPath) -> list(VHostPath, rabbit_queue).
 
