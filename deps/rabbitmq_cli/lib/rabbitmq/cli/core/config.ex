@@ -44,6 +44,7 @@ defmodule RabbitMQ.CLI.Core.Config do
       :plugins_dir          -> "RABBITMQ_PLUGINS_DIR";
       :enabled_plugins_file -> "RABBITMQ_ENABLED_PLUGINS_FILE";
       :node                 -> "RABBITMQ_NODENAME";
+      :aliases_file         -> "RABBITMQ_CLI_ALIASES_FILE"
       _ -> ""
     end
     System.get_env(system_env_option)

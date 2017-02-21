@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
+alias RabbitMQ.CLI.Core.Config, as: Config
 
 defmodule RabbitMQ.CLI.Core.Parser do
 
@@ -31,13 +32,17 @@ defmodule RabbitMQ.CLI.Core.Parser do
     {parsed_args, options, invalid} = parse_global(input)
     CommandModules.load(options)
 
-    {command_name, command_module, arguments} = look_up_command(parsed_args)
+    {command_name, command_module, arguments} = look_up_command(parsed_args, options)
 
     case command_module do
       nil ->
         {:no_command, command_name, arguments, options, invalid};
       {:suggest, _} = suggest ->
         {suggest, command_name, arguments, options, invalid};
+      {:alias, alias_module, alias_content} ->
+        {[_alias_command_name | cmd_arguments], cmd_options, cmd_invalid} =
+          parse_alias(input, command_name, alias_module, alias_content)
+        {alias_module, command_name, cmd_arguments, cmd_options, cmd_invalid};
       command_module when is_atom(command_module) ->
         {[^command_name | cmd_arguments], cmd_options, cmd_invalid} =
           parse_command_specific(input, command_module)
@@ -45,24 +50,57 @@ defmodule RabbitMQ.CLI.Core.Parser do
     end
   end
 
-  defp look_up_command(parsed_args) do
+  defp look_up_command(parsed_args, options) do
     case parsed_args do
       [cmd_name | arguments] ->
         module_map = CommandModules.module_map
-        command = case module_map[cmd_name] do
-          nil     -> closest_similar_command(cmd_name, module_map)
-          command -> command
-        end
+        command = module_map[cmd_name] ||
+                  command_alias(cmd_name, module_map, options) ||
+                  command_suggestion(cmd_name, module_map)
         {cmd_name, command, arguments}
       [] ->
         {"", nil, []}
     end
   end
 
-  defp closest_similar_command(_cmd_name, empty) when empty == %{} do
+  defp command_alias(cmd_name, module_map, options) do
+    aliases = load_aliases(options)
+    case aliases[cmd_name] do
+      nil -> nil;
+      [alias_cmd_name | _] = alias_content ->
+        case module_map[alias_cmd_name] do
+          nil -> nil;
+          module -> {:alias, module, alias_content}
+        end
+    end
+  end
+
+  defp load_aliases(options) do
+    aliases_file = Config.get_option(:aliases_file, options)
+    case aliases_file && File.read(aliases_file) do
+      ## No aliases file
+      nil -> %{};
+      {:ok, content} ->
+        String.split(content, "\n")
+        |>  Enum.reduce(%{},
+              fn(str, acc) ->
+                case String.split(str, "=", parts: 2) do
+                  [alias_name, alias_string] ->
+                    Map.put(acc, String.trim(alias_name), OptionParser.split(alias_string))
+                  _ ->
+                    acc
+                end
+            end);
+      {:error, err} ->
+        IO.puts(:stderr, "Error reading aliases file #{aliases_file}: #{err}")
+        %{}
+    end
+  end
+
+  defp command_suggestion(_cmd_name, empty) when empty == %{} do
     nil
   end
-  defp closest_similar_command(cmd_name, module_map) do
+  defp command_suggestion(cmd_name, module_map) do
     suggestion = module_map
                  |> Map.keys
                  |> Enum.map(fn(cmd) ->
@@ -77,10 +115,32 @@ defmodule RabbitMQ.CLI.Core.Parser do
     end
   end
 
+  def parse_alias(input, command_name, module, alias_content) do
+    {pre_command_options, tail, invalid} =
+      OptionParser.parse_head(input,
+                              strict: default_switches(),
+                              aliases: default_aliases())
+    {pre_command_options, tail, invalid} = parse_global_head(input)
+    [^command_name | other] = tail
+    aliased_input = alias_content ++ other
+    {args, options, command_invalid} = parse_command_specific(aliased_input, module)
+    merged_options = Map.merge(options, pre_command_options)
+    {args, merged_options, command_invalid ++ invalid}
+  end
+
   def parse_command_specific(input, command) do
     switches = build_switches(default_switches(), command)
     aliases = build_aliases(default_aliases(), command)
     parse_generic(input, switches, aliases)
+  end
+
+  def parse_global_head(input) do
+    switches = default_switches()
+    aliases = default_aliases()
+    {options, tail, invalid} =
+      OptionParser.parse_head(input, strict: switches, aliases: aliases)
+    norm_options = normalize_options(options, switches) |> Map.new
+    {norm_options, tail, invalid}
   end
 
   def parse_global(input) do
@@ -113,7 +173,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
      rabbitmq_home: :string,
      mnesia_dir: :string,
      plugins_dir: :string,
-     enabled_plugins_file: :string
+     enabled_plugins_file: :string,
+     aliases_file: :string
     ]
   end
 
