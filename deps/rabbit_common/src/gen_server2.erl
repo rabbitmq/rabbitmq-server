@@ -515,13 +515,13 @@ enter_loop(Mod, Options, State, ServerName, Timeout, Backoff) ->
     Queue = priority_queue:new(),
     Backoff1 = extend_backoff(Backoff),
     {InitStatsFun, EmitStatsFun, StopStatsFun} = stats_funs(),
-    loop(find_prioritisers(
+    loop(InitStatsFun(find_prioritisers(
            #gs2_state { parent = Parent, name = Name, state = State,
                         mod = Mod, time = Timeout, timeout_state = Backoff1,
                         queue = Queue, debug = Debug, 
                         init_stats_fun = InitStatsFun,
                         emit_stats_fun = EmitStatsFun,
-                        stop_stats_fun = StopStatsFun })).
+                        stop_stats_fun = StopStatsFun }))).
 
 %%%========================================================================
 %%% Gen-callback functions
