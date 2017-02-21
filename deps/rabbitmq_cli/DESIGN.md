@@ -73,14 +73,14 @@ CLI core consists of several modules implementing command execution process:
 
  Arguments are then validated using the `validate/2` callback
 
-##### Command aliases
+##### Command Aliases
 
-  You can define aliases for commands using an aliases file. The file name can be
-  specified using `RABBITMQCTL_ALIASES` environment variable or `--aliases-file`
-  argument.
+ It is possible to define aliases for commands using an aliases file. The file name can be
+ specified using `RABBITMQ_CLI_ALIASES_FILE` environment variable or the `--aliases-file`
+ command lineargument.
 
-  Aliases can be specified using `alias = command [options]` format.
-  For example:
+ Aliases can be specified using `alias = command [options]` format.
+ For example:
 
 ```
 lq = list_queues
@@ -439,5 +439,5 @@ By default it will be loaded from environment variables, same as used in rabbitm
 | enabled_plugins_file | RABBITMQ_ENABLED_PLUGINS_FILE |
 | longnames            | RABBITMQ_USE_LONGNAME         |
 | node                 | RABBITMQ_NODENAME             |
-| aliases-file         | RABBITMQCTL_ALIASES           |
+| aliases_file         | RABBITMQ_CLI_ALIASES_FILE     |
 
