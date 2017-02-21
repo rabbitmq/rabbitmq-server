@@ -66,6 +66,9 @@
          sum/5,
          optimize/1]).
 
+%% For testing
+-export([buffer/1]).
+
 -compile(inline).
 -compile(inline_list_funcs).
 
@@ -461,7 +464,8 @@ take_since([{DropTS, drop} | T], Now, Start, N, [{TS, Evt} | _] = Acc,
                                                        -Interval, N)],
             {undefined, lists:reverse(Fill) ++ Acc};
         [{TS0, _} = E | Rest] when TS0 >= Start, N > 0 ->
-            Fill = [{TS1, Evt} || TS1 <- truncated_seq(TS0 + Interval, TS - Interval,
+            Fill = [{TS1, Evt} || TS1 <- truncated_seq(TS0 + Interval,
+                                                       max(TS0 + Interval, TS - Interval),
                                                        Interval, N)],
             take_since(Rest, Now, Start, decr(N), [E | Fill ++ Acc], Interval);
         [Prev | _] -> % next sample is out of range so needs to be filled from Start
@@ -502,3 +506,5 @@ map_timestamp(TS, Start, Interval, Round) ->
     Factor = Round((TS - Start) / Interval),
     Start + Interval * Factor.
 
+buffer(#slide{buf1 = Buf1, buf2 = Buf2}) ->
+    Buf1 ++ Buf2.
