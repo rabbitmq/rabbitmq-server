@@ -465,7 +465,7 @@ take_since([{DropTS, drop} | T], Now, Start, N, [{TS, Evt} | _] = Acc,
                                                        Interval, N)],
             take_since(Rest, Now, Start, decr(N), [E | Fill ++ Acc], Interval);
         [Prev | _] -> % next sample is out of range so needs to be filled from Start
-            Fill = [{TS1, Evt} || TS1 <- truncated_seq(Start, TS - Interval,
+            Fill = [{TS1, Evt} || TS1 <- truncated_seq(Start, max(Start, TS - Interval),
                                                        Interval, N)],
             {Prev, Fill ++ Acc}
     end;
