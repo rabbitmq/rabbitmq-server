@@ -42,6 +42,8 @@ defmodule CloseAllConnectionsCommandTest do
 
   setup context do
     close_all_connections(get_rabbit_hostname())
+    :timer.sleep(100)
+
     {:ok, context}
   end
 
