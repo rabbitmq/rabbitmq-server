@@ -18,7 +18,7 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 include rabbitmq-components.mk
 include erlang.mk
 
-MIX_ERL_LIBS = $(shell echo $$(for i in $(DEPS_DIR)/*/_build/dev/lib; do echo $$sep$$i; sep=:; done))
+MIX_ERL_LIBS = $(subst $(space),:,$(patsubst %,$(DEPS_DIR)/%/_build/dev/lib,$(DEPS)))
 
 # # Space character
 # space := $(subst ,, )
