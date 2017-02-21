@@ -695,6 +695,53 @@ public class MqttTest implements MqttCallback {
         }
     }
 
+    @Test public void lastWillNotSentOnRestrictedTopic() throws Exception {
+        client2.connect(conOpt);
+        // topic authorized for subscription, restricted for publishing
+        String lastWillTopic = "last-will";
+        client2.subscribe(lastWillTopic);
+        client2.setCallback(this);
+
+        final SocketFactory factory = SocketFactory.getDefault();
+        final ArrayList<Socket> sockets = new ArrayList<Socket>();
+        SocketFactory testFactory = new SocketFactory() {
+            public Socket createSocket(String s, int i) throws IOException {
+                Socket sock = factory.createSocket(s, i);
+                sockets.add(sock);
+                return sock;
+            }
+            public Socket createSocket(String s, int i, InetAddress a, int i1) throws IOException {
+                return null;
+            }
+            public Socket createSocket(InetAddress a, int i) throws IOException {
+                return null;
+            }
+            public Socket createSocket(InetAddress a, int i, InetAddress a1, int i1) throws IOException {
+                return null;
+            }
+            @Override
+            public Socket createSocket() throws IOException {
+                Socket sock = new Socket();
+                sockets.add(sock);
+                return sock;
+            }
+        };
+        conOpt.setSocketFactory(testFactory);
+        MqttTopic willTopic = client.getTopic(lastWillTopic);
+        conOpt.setWill(willTopic, payload, 0, false);
+        conOpt.setCleanSession(false);
+        client.connect(conOpt);
+
+        Assert.assertEquals(1, sockets.size());
+        expectConnectionFailure = true;
+        sockets.get(0).close();
+
+        // let some time after disconnection
+        waitForTestDelay();
+        Assert.assertEquals(0, receivedMessages.size());
+        client2.disconnect();
+    }
+
     @Test public void interopM2A() throws MqttException, IOException, InterruptedException, TimeoutException {
         setUpAmqp();
         String queue = ch.queueDeclare().getQueue();

@@ -705,10 +705,17 @@ send_will(PState = #proc_state{will_msg = undefined}) ->
     PState;
 
 send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain, topic = Topic}, retainer_pid = RPid}) ->
-    amqp_pub(WillMsg, PState),
-    case Retain of
-        false -> ok;
-        true  -> hand_off_to_retainer(RPid, Topic, WillMsg)
+    case check_topic_access(Topic, write, PState) of
+        ok ->
+            amqp_pub(WillMsg, PState),
+            case Retain of
+                false -> ok;
+                true  -> hand_off_to_retainer(RPid, Topic, WillMsg)
+            end;
+        Error  ->
+            rabbit_log:warning(
+                "Could not send last will: ~p~n",
+                [Error])
     end,
     PState.
 

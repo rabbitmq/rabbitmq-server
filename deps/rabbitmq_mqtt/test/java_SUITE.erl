@@ -84,7 +84,7 @@ init_per_testcase(Testcase, Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0,
         ["set_topic_permissions",  "-p", "/", "guest", "amq.topic",
             "test-topic|test-retained-topic|.*mid.*|.*topic.*",
-            "test-topic|test-retained-topic|.*mid.*|.*topic.*"]),
+            "test-topic|test-retained-topic|.*mid.*|.*topic.*|last-will"]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
