@@ -87,16 +87,16 @@ end_per_testcase(_Testcase, Config) ->
 
 hostname_discovery_with_long_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT, true),
-    ?assertEqual(["www.rabbitmq.com"], Result).
+    ?assert(lists:member("www.rabbitmq.com", Result)).
 
 hostname_discovery_with_short_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT, false),
-    ?assertEqual(["www"], Result).
+    ?assert(lists:member("www", Result)).
 
 node_discovery_with_long_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT, true),
-    ?assertEqual(['ct_rabbit@www.rabbitmq.com'], Result).
+    ?assert(lists:member('ct_rabbit@www.rabbitmq.com', Result)).
 
 node_discovery_with_short_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT, false),
-    ?assertEqual([ct_rabbit@www], Result).
+    ?assert(lists:member(ct_rabbit@www, Result)).
