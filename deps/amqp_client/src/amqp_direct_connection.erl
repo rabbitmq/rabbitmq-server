@@ -190,8 +190,9 @@ socket_adapter_info(Sock, Protocol) ->
                        additional_info = maybe_ssl_info(Sock)}.
 
 maybe_ssl_info(Sock) ->
-    case rabbit_net:is_ssl(Sock) of
-        true  -> [{ssl, true}] ++ ssl_info(Sock) ++ ssl_cert_info(Sock);
+    RealSocket = rabbit_net:unwrap_socket(Sock),
+    case rabbit_net:is_ssl(RealSocket) of
+        true  -> [{ssl, true}] ++ ssl_info(RealSocket) ++ ssl_cert_info(RealSocket);
         false -> [{ssl, false}]
     end.
 
