@@ -80,13 +80,13 @@ defmodule EvalCommandTest do
     end) == "output"
   end
 
-  test "run: passes parameters to the expression as numbered variables", context do
+  test "run: passes parameters to the expression as positional/numerical variables", context do
     assert @command.run(["binary_to_atom(_1, utf8).", "foo"], context[:opts]) == {:ok, :foo}
     assert @command.run(["{_1, _2}.", "foo", "bar"], context[:opts]) == {:ok, {"foo", "bar"}}
   end
 
-  test "run: passes global options as named variables", context do
-    assert @command.run(["{_vhost, _node}."], Map.put(context[:opts], :vhost, "foo")) ==
-      {:ok, {"foo", context[:opts][:node]}}
+  test "run: passes globally recognised options as named variables", context do
+    assert @command.run(["{_vhost, _node}."], Map.put(context[:opts], :vhost, "a-node")) ==
+      {:ok, {"a-node", context[:opts][:node]}}
   end
 end
