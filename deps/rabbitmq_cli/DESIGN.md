@@ -75,12 +75,12 @@ CLI core consists of several modules implementing command execution process:
 
 ##### Command Aliases
 
- It is possible to define aliases for commands using an aliases file. The file name can be
- specified using `RABBITMQ_CLI_ALIASES_FILE` environment variable or the `--aliases-file`
- command lineargument.
+It is possible to define aliases for commands using an aliases file. The file name can be
+specified using `RABBITMQ_CLI_ALIASES_FILE` environment variable or the `--aliases-file`
+command lineargument.
 
- Aliases can be specified using `alias = command [options]` format.
- For example:
+Aliases can be specified using `alias = command [options]` format.
+For example:
 
 ```
 lq = list_queues
@@ -88,34 +88,69 @@ lq_vhost1 = list_queues -p vhost1
 lq_off = list_queues --offline
 ```
 
-  Aliases can also contain arguments. But command name should be first word after `=`.
-  Arguments specified in an alias will preceed those passed from the command line.
+with such aliases config file running
 
-  For example, if you specify the alias `change_user1_password = change_password user1`,
-  you can call it with `rabbitmqctl change_user1_password new_password`.
+```
+RABBITMQ_CLI_ALIASES_FILE=/path/to/aliases.conf rabbitmqctl lq
+```
 
-  Using `eval` command, aliases can be a powerful tool for users who cannot or don't want
-  to write and distribute their own commands.
+will be equivalent to executing
 
-  Here is an alias to delete all queues in a vhost:
+```
+RABBITMQ_CLI_ALIASES_FILE=/path/to/aliases.conf rabbitmqctl list_queues
+```
+
+while
+
+```
+RABBITMQ_CLI_ALIASES_FILE=/path/to/aliases.conf rabbitmqctl lq_off
+```
+
+is the same as running
+
+```
+RABBITMQ_CLI_ALIASES_FILE=/path/to/aliases.conf rabbitmqctl list_queues --offline
+```
+
+Builtin or plugin-provided commands are looked up first, if that yields no result,
+aliases are inspected. Therefore it's not possible to override a command by
+configuring an alias.
+
+Just like command lookups, alias expansion happens in the `RabbitMQ.CLI.Core.Parser`
+module.
+
+
+##### Command Aliases with Variables
+
+Aliases can also contain arguments. Command name must be the first word after the `=`.
+Arguments specified in an alias will preceed those passed from the command line.
+
+For example, if you specify the alias `passwd_user1 = change_password user1`,
+you can call it with `rabbitmqctl passwd_user1 new_password`.
+
+Combined with the `eval` command, aliases can be a powerful tool for users who cannot or don't want
+to develop, distribute and deploy their own commands via plugins.
+
+For instance, the following alias deletes all queues in a vhost:
 
 ```
 delete_vhost_queues = eval '[rabbit_amqqueue:delete(Q, false, false, <<"rabbit-cli">>) || Q <- rabbit_amqqueue:list(_1)]'
 ```
 
-  This command will require a single unnamed argument for vhost:
+This command will require a single positional argument for the vhost:
 
 ```
 rabbitmqctl delete_vhost_queues vhost1
 ```
 
-  You can also use a named vhost argument, if you specify your alias like this:
+It is also possible to use a named vhost argument by specifying an underscore
+variable that's not an integer:
 
 ```
 delete_vhost_queues = eval '[rabbit_amqqueue:delete(Q, false, false, <<"rabbit-cli">>) || Q <- rabbit_amqqueue:list(_vhost)]'
 ```
 
-  The alias can be called like this:
+Then the alias can be called like this:
 
 ```
 rabbitmqctl delete_vhost_queues -p vhost1
@@ -123,11 +158,12 @@ rabbitmqctl delete_vhost_queues -p vhost1
 rabbitmqctl delete_vhost_queues ---vhost vhost1
 ```
 
-  Please keep in mind that `eval` command can accept only [global arguments](#global-arguments) as named,
-  and it's advised to use numbered arguments instead.
+Keep in mind that `eval` command can accept only [global arguments](#global-arguments) as named,
+and it's advised to use positional arguments instead.
 
-  Numbered arguments will be passed to the eval'd code as binaries.
-  The code should convert them to required types.
+Numbered arguments will be passed to the eval'd code as Elixir strings (or Erlang binaries).
+The code that relies on them should perform type conversion as necessary, e.g. by
+using functions from the [`rabbit_data_coercion` module](https://github.com/rabbitmq/rabbitmq-common/blob/stable/src/rabbit_data_coercion.erl).
 
 #### Command execution
 
