@@ -273,7 +273,7 @@ to_list_from(Now, Start0, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
     case take_since(Buf2, Now, Start, first_max(MaxN, NewN), Buf1_1, Interval) of
         {undefined, Buf1_1} ->
             {Prev0, Buf1_1};
-        {Prev, Buf1_1} = Res ->
+        {_Prev, Buf1_1} = Res ->
             case Prev0 of
                 undefined ->
                     Res;
