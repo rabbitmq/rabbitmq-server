@@ -46,7 +46,10 @@ groups() ->
                   sum_single,
                   to_normalized_list,
                   to_normalized_list_no_padding,
-                  to_list_in_the_past
+                  to_list_in_the_past,
+                  sum_mgmt_352,
+                  sum_mgmt_352_extra,
+                  sum_mgmt_352_peak
                  ]}
     ].
 
@@ -498,8 +501,125 @@ to_list_in_the_past(_Config) ->
     % this could happen if a node with and incorrect clock joins the cluster
     [] = exometer_slide:to_list(50, 10, S).
 
+sum_mgmt_352(_Config) ->
+    %% In bug mgmt#352 all the samples returned have the same vale
+    Slide = sum_mgmt_352_slide(),
+    Last = 1487689330000,
+    First = 1487689270000,
+    Incr = 5000,
+    Empty = {0},
+    Sum = exometer_slide:sum(Last, First, Incr, [Slide], Empty),
+    Values = sets:to_list(sets:from_list(
+                            [V || {_, V} <- exometer_slide:buffer(Sum)])),
+    true = (length(Values) == 12),
+    ok.
+
+sum_mgmt_352_extra(_Config) ->
+    %% Testing previous case clause to the one that fixes mgmt_352
+    %% exometer_slide.erl#L463
+    %% In the buggy version, all but the last sample are the same
+    Slide = sum_mgmt_352_slide_extra(),
+    Last = 1487689330000,
+    First = 1487689260000,
+    Incr = 5000,
+    Empty = {0},
+    Sum = exometer_slide:sum(Last, First, Incr, [Slide], Empty),
+    Values = sets:to_list(sets:from_list(
+                            [V || {_, V} <- exometer_slide:buffer(Sum)])),
+    true = (length(Values) == 13),
+    ok.
+
+sum_mgmt_352_peak(_Config) ->
+    %% When buf2 contains data, we were returning a too old sample that
+    %% created a massive rate peak at the beginning of the graph.
+    %% The sample used was captured during a debug session.
+    Slide = sum_mgmt_352_slide_peak(),
+    Last = 1487752040000,
+    First = 1487751980000,
+    Incr = 5000,
+    Empty = {0},
+    Sum = exometer_slide:sum(Last, First, Incr, [Slide], Empty),
+    [{LastV}, {BLastV} | _] =
+        lists:reverse([V || {_, V} <- exometer_slide:buffer(Sum)]),
+    Rate = (BLastV - LastV) div 5,
+    true = (Rate < 20000),
+    ok.
+
 %% -------------------------------------------------------------------
 %% Util
 %% -------------------------------------------------------------------
 
 ele(TS, V) -> {TS, {V}}.
+
+%% -------------------------------------------------------------------
+%% Data
+%% -------------------------------------------------------------------
+sum_mgmt_352_slide() ->
+    %% Provide slide as is, from a debug session triggering mgmt-352 bug
+    {slide,610000,45,122,true,5000,1487689328468,1487689106834,
+     [{1487689328468,{1574200}},
+      {1487689323467,{1538800}},
+      {1487689318466,{1500800}},
+      {1487689313465,{1459138}},
+      {1487689308463,{1419200}},
+      {1487689303462,{1379600}},
+      {1487689298461,{1340000}},
+      {1487689293460,{1303400}},
+      {1487689288460,{1265600}},
+      {1487689283458,{1231400}},
+      {1487689278457,{1215800}},
+      {1487689273456,{1215200}},
+      {1487689262487,drop},
+      {1487689257486,{1205600}}],
+     [],
+     {1591000}}.
+
+sum_mgmt_352_slide_extra() ->
+    {slide,610000,45,122,true,5000,1487689328468,1487689106834,
+     [{1487689328468,{1574200}},
+      {1487689323467,{1538800}},
+      {1487689318466,{1500800}},
+      {1487689313465,{1459138}},
+      {1487689308463,{1419200}},
+      {1487689303462,{1379600}},
+      {1487689298461,{1340000}},
+      {1487689293460,{1303400}},
+      {1487689288460,{1265600}},
+      {1487689283458,{1231400}},
+      {1487689278457,{1215800}},
+      {1487689273456,{1215200}},
+      {1487689272487,drop},
+      {1487689269486,{1205600}}],
+     [],
+     {1591000}}.
+
+sum_mgmt_352_slide_peak() ->
+    {slide,610000,96,122,true,5000,1487752038481,1487750936863,
+     [{1487752038481,{11994024}},
+      {1487752033480,{11923200}},
+      {1487752028476,{11855800}},
+      {1487752023474,{11765800}},
+      {1487752018473,{11702431}},
+      {1487752013472,{11636200}},
+      {1487752008360,{11579800}},
+      {1487752003355,{11494800}},
+      {1487751998188,{11441400}},
+      {1487751993184,{11381000}},
+      {1487751988180,{11320000}},
+      {1487751983178,{11263000}},
+      {1487751978177,{11187600}},
+      {1487751973172,{11123375}},
+      {1487751968167,{11071800}},
+      {1487751963166,{11006200}},
+      {1487751958162,{10939477}},
+      {1487751953161,{10882400}},
+      {1487751948140,{10819600}},
+      {1487751943138,{10751200}},
+      {1487751938134,{10744400}},
+      {1487751933129,drop},
+      {1487751927807,{10710200}},
+      {1487751922803,{10670000}}],
+     [{1487751553386,{6655800}},
+      {1487751548385,{6580365}},
+      {1487751543384,{6509358}}],
+     {11994024}}.
