@@ -23,7 +23,8 @@
 all() ->
     [
      queue_created,
-     authentication
+     authentication,
+     resource_alarm
     ].
 
 %% -------------------------------------------------------------------
@@ -121,3 +122,49 @@ authentication(Config) ->
 
     amqp_connection:close(Conn2),
     ok.
+
+resource_alarm(Config) ->
+    Ch = declare_event_queue(Config, <<"alarm.*">>),
+
+    Source = disk,
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_alarm, set_alarm,
+                                 [{{resource_limit, Source, Node}, []}]),
+    receive_event(<<"alarm.set">>),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_alarm, clear_alarm,
+                                 [{resource_limit, Source, Node}]),
+    receive_event(<<"alarm.cleared">>),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    ok.
+
+%% -------------------------------------------------------------------
+%% Helpers
+%% -------------------------------------------------------------------
+
+declare_event_queue(Config, RoutingKey) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
+                                        exchange    = <<"amq.rabbitmq.event">>,
+                                        routing_key = RoutingKey}),
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true},
+                           self()),
+    receive
+        #'basic.consume_ok'{} ->
+            ok
+    end,
+    Ch.
+
+receive_event(Event) ->
+    receive
+        {#'basic.deliver'{routing_key = RoutingKey},
+         #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
+            Event = RoutingKey
+    after
+        60000 ->
+            throw({receive_event_timeout, Event})
+    end.
