@@ -246,7 +246,6 @@ channel_stats(Config) ->
     
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
     
-    Q = q(<<"myqueue">>),
     X = x(<<"myexchange">>),    
     
     rabbit_ct_broker_helpers:rpc(Config, A, ets, insert,

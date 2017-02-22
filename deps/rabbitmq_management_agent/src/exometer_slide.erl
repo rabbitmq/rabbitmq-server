@@ -66,6 +66,9 @@
          sum/5,
          optimize/1]).
 
+%% For testing
+-export([buffer/1]).
+
 -compile(inline).
 -compile(inline_list_funcs).
 
@@ -270,6 +273,16 @@ to_list_from(Now, Start0, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
     case take_since(Buf2, Now, Start, first_max(MaxN, NewN), Buf1_1, Interval) of
         {undefined, Buf1_1} ->
             {Prev0, Buf1_1};
+        {Prev, Buf1_1} = Res ->
+            case Prev0 of
+                undefined ->
+                    Res;
+                _ ->
+                    %% If take_since returns the same buffer, that means we don't
+                    %% need Buf2 at all. We might be returning a too old sample
+                    %% in previous, so we must use the one from Buf1
+                    {Prev0, Buf1_1}
+            end;
         Res ->
             Res
     end.
@@ -461,11 +474,12 @@ take_since([{DropTS, drop} | T], Now, Start, N, [{TS, Evt} | _] = Acc,
                                                        -Interval, N)],
             {undefined, lists:reverse(Fill) ++ Acc};
         [{TS0, _} = E | Rest] when TS0 >= Start, N > 0 ->
-            Fill = [{TS1, Evt} || TS1 <- truncated_seq(TS0 + Interval, TS - Interval,
+            Fill = [{TS1, Evt} || TS1 <- truncated_seq(TS0 + Interval,
+                                                       max(TS0 + Interval, TS - Interval),
                                                        Interval, N)],
             take_since(Rest, Now, Start, decr(N), [E | Fill ++ Acc], Interval);
         [Prev | _] -> % next sample is out of range so needs to be filled from Start
-            Fill = [{TS1, Evt} || TS1 <- truncated_seq(Start, TS - Interval,
+            Fill = [{TS1, Evt} || TS1 <- truncated_seq(Start, max(Start, TS - Interval),
                                                        Interval, N)],
             {Prev, Fill ++ Acc}
     end;
@@ -502,3 +516,5 @@ map_timestamp(TS, Start, Interval, Round) ->
     Factor = Round((TS - Start) / Interval),
     Start + Interval * Factor.
 
+buffer(#slide{buf1 = Buf1, buf2 = Buf2}) ->
+    Buf1 ++ Buf2.
