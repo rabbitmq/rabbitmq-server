@@ -128,8 +128,12 @@ handle_call(_Request, State) ->
 
 handle_event({set_alarm, {{resource_limit, Source, Node}, []}}, State) ->
     case is_node_alarmed(Source, Node, State) of
-        true -> {ok, State};
-        false -> handle_set_resource_alarm(Source, Node, State)
+        true ->
+            {ok, State};
+        false ->
+            rabbit_event:notify(alarm_set, [{source, Source},
+                                            {node, Node}]),
+            handle_set_resource_alarm(Source, Node, State)
     end;
 handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
     case lists:member(Alarm, Alarms) of
@@ -141,6 +145,8 @@ handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
 handle_event({clear_alarm, {resource_limit, Source, Node}}, State) ->
     case is_node_alarmed(Source, Node, State) of
         true  ->
+            rabbit_event:notify(alarm_cleared, [{source, Source},
+                                                {node, Node}]),
             handle_clear_resource_alarm(Source, Node, State);
         false ->
             {ok, State}
