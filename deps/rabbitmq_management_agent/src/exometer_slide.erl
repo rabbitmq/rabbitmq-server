@@ -273,6 +273,16 @@ to_list_from(Now, Start0, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
     case take_since(Buf2, Now, Start, first_max(MaxN, NewN), Buf1_1, Interval) of
         {undefined, Buf1_1} ->
             {Prev0, Buf1_1};
+        {Prev, Buf1_1} = Res ->
+            case Prev0 of
+                undefined ->
+                    Res;
+                _ ->
+                    %% If take_since returns the same buffer, that means we don't
+                    %% need Buf2 at all. We might be returning a too old sample
+                    %% in previous, so we must use the one from Buf1
+                    {Prev0, Buf1_1}
+            end;
         Res ->
             Res
     end.
