@@ -45,7 +45,8 @@ all() ->
      audit_user_password,
      audit_user_tags,
      audit_permission,
-     audit_topic_permission
+     audit_topic_permission,
+     resource_alarm
     ].
 
 %% -------------------------------------------------------------------
@@ -442,6 +443,22 @@ audit_topic_permission(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     ok.
 
+resource_alarm(Config) ->
+    Ch = declare_event_queue(Config, <<"alarm.*">>),
+
+    Source = disk,
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_alarm, set_alarm,
+                                 [{{resource_limit, Source, Node}, []}]),
+    receive_event(<<"alarm.set">>),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_alarm, clear_alarm,
+                                 [{resource_limit, Source, Node}]),
+    receive_event(<<"alarm.cleared">>),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    ok.
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
@@ -472,4 +489,15 @@ receive_event(Event, Key, Value) ->
     after
         60000 ->
             throw({receive_event_timeout, Event, Key, Value})
+    end,
+    Ch.
+
+receive_event(Event) ->
+    receive
+        {#'basic.deliver'{routing_key = RoutingKey},
+         #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
+            Event = RoutingKey
+    after
+        60000 ->
+            throw({receive_event_timeout, Event})
     end.

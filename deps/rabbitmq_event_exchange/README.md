@@ -109,6 +109,11 @@ Permission events:
  * `topic.permission.created`
  * `topic.permission.deleted`
 
+Alarm events:
+
+ * `alarm.set`
+ * `alarm.cleared`
+
 ### Shovel Plugin
 
 Worker events:
