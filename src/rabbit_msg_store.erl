@@ -1537,9 +1537,9 @@ index_update_fields(Key, Updates, #msstate { index_module = Index,
 index_delete(Key, #msstate { index_module = Index, index_state = State }) ->
     Index:delete(Key, State).
 
-index_delete_by_file(File, #msstate { index_module = Index,
+index_cleanup_undefined_file(#msstate { index_module = Index,
                                       index_state  = State }) ->
-    Index:delete_by_file(File, State).
+    Index:cleanup_undefined_file(State).
 
 %%----------------------------------------------------------------------------
 %% shutdown and recovery
@@ -1730,7 +1730,7 @@ build_index(Gatherer, Left, [],
         empty ->
             unlink(Gatherer),
             ok = gatherer:stop(Gatherer),
-            ok = index_delete_by_file(undefined, State),
+            ok = index_cleanup_undefined_file(State),
             Offset = case ets:lookup(FileSummaryEts, Left) of
                          []                                       -> 0;
                          [#file_summary { file_size = FileSize }] -> FileSize
