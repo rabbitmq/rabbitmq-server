@@ -50,9 +50,9 @@
 %% Delete an exactly matching entry from the index.
 %% Is called by GC process only.
 -callback delete_object(msg_location(), index_state()) -> 'ok'.
-%% Delte all entries, with the 'file' record field equal to 'undefined'.
+%% Delete temporary reference count entries with the 'file' record field equal to 'undefined'.
 %% Is called during index rebuild from scratch (e.g. after non-clean stop)
--callback cleanup_undefined_file(index_state()) -> 'ok'.
+-callback clean_up_temporary_reference_count_entries_without_file(index_state()) -> 'ok'.
 %% Gracefully shutdown the index.
 %% Should save the index state, which will be loaded by the 'recover' function.
 -callback terminate(index_state()) -> any().
