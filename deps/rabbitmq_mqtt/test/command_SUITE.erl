@@ -148,8 +148,7 @@ run(Config) ->
 
 
 start_amqp_connection(Type, Node, Port) ->
-    Params = amqp_params(Type, Node, Port),
-    {ok, Connection} = amqp_connection:start(Params).
+    amqp_connection:start(amqp_params(Type, Node, Port)).
 
 amqp_params(network, _, Port) ->
     #amqp_params_network{port = Port};
