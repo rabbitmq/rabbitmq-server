@@ -434,7 +434,9 @@ start_it(StartFun) ->
 stop() ->
     case whereis(rabbit_boot) of
         undefined -> ok;
-        _         -> await_startup(true)
+        _         ->
+            rabbit_log:info("Waiting for RabbitMQ to startup before stopping"),
+            await_startup(true)
     end,
     rabbit_log:info("Stopping RabbitMQ~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
@@ -444,8 +446,14 @@ stop() ->
 stop_and_halt() ->
     try
         stop()
+    catch Type:Reason ->
+        rabbit_log:error("Error trying to stop rabbitmq: ~p:~p", [Type, Reason])
     after
-        rabbit_log:info("Halting Erlang VM~n", []),
+        AppsLeft = [ A || {A, _, _} <- application:which_applications() ],
+        rabbit_log:info(
+            lists:flatten(["Halting Erlang VM with the following applications:~n",
+                           ["    ~p~n" || _ <- AppsLeft]]),
+            AppsLeft),
         %% Also duplicate this information to stderr, so console where
         %% foreground broker was running (or systemd journal) will
         %% contain information about graceful termination.
@@ -569,6 +577,10 @@ decrypt_list([Value|Tail], Algo, Acc) ->
     decrypt_list(Tail, Algo, [decrypt(Value, Algo)|Acc]).
 
 stop_apps(Apps) ->
+    rabbit_log:info(
+        lists:flatten(["Stopping RabbitMQ applications in following order: ~n",
+                       ["    ~p~n" || _ <- Apps]]),
+        lists:reverse(Apps)),
     ok = app_utils:stop_applications(
            Apps, handle_app_error(error_during_shutdown)),
     case lists:member(rabbit, Apps) of
