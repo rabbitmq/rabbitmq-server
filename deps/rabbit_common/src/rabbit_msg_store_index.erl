@@ -18,21 +18,41 @@
 
 -include("rabbit_msg_store.hrl").
 
--type(dir() :: any()).
+-type(dir() :: string()).
 -type(index_state() :: any()).
--type(keyvalue() :: any()).
 -type(fieldpos() :: non_neg_integer()).
 -type(fieldvalue() :: any()).
+-type(msg_location() :: #msg_location{}).
 
+%% Initialize a fresh index state for msg store directory.
 -callback new(dir()) -> index_state().
+%% Try to recover gracefully stopped index state.
 -callback recover(dir()) -> rabbit_types:ok_or_error2(index_state(), any()).
--callback lookup(rabbit_types:msg_id(), index_state()) -> ('not_found' | keyvalue()).
--callback insert(keyvalue(), index_state()) -> 'ok'.
--callback update(keyvalue(), index_state()) -> 'ok'.
+%% Lookup an entry in the index.
+%% Is called concurrently by msg_store, it's clients and GC processes.
+-callback lookup(rabbit_types:msg_id(), index_state()) -> ('not_found' | msg_location()).
+%% Insert an entry into the index.
+%% Is called by a msg_store process only.
+%% This function can exit if there is already an entry with the same ID
+-callback insert(msg_location(), index_state()) -> 'ok'.
+%% Update an entry in the index.
+%% Is called by a msg_store process only.
+-callback update(msg_location(), index_state()) -> 'ok'.
+%% Update positional fields in the entry tuple.
+%% Is called by msg_store and GC processes concurrently.
+%% This function can exit if there is no entry with specified ID
 -callback update_fields(rabbit_types:msg_id(), ({fieldpos(), fieldvalue()} |
                                                 [{fieldpos(), fieldvalue()}]),
                         index_state()) -> 'ok'.
+%% Delete an entry from the index by ID.
+%% Is called from a msg_store process only.
 -callback delete(rabbit_types:msg_id(), index_state()) -> 'ok'.
--callback delete_object(keyvalue(), index_state()) -> 'ok'.
--callback delete_by_file(fieldvalue(), index_state()) -> 'ok'.
+%% Delete an exactly matching entry from the index.
+%% Is called by GC process only.
+-callback delete_object(msg_location(), index_state()) -> 'ok'.
+%% Delete temporary reference count entries with the 'file' record field equal to 'undefined'.
+%% Is called during index rebuild from scratch (e.g. after non-clean stop)
+-callback clean_up_temporary_reference_count_entries_without_file(index_state()) -> 'ok'.
+%% Gracefully shutdown the index.
+%% Should save the index state, which will be loaded by the 'recover' function.
 -callback terminate(index_state()) -> any().
