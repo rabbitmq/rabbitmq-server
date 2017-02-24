@@ -231,7 +231,10 @@ queues(Config) ->
 
 queues_unicode(Config) ->
     {ok, _} = run(Config, ["declare", "queue", "name=ööö"]),
-    QUEUE_NAME = binary_to_list(<<"ööö"/utf8>>),
+    %% 'ö' is encoded as 0xC3 0xB6 in UTF-8. We use a a list of
+    %% integers here because a binary literal would not work with Erlang
+    %% R16B03.
+    QUEUE_NAME = [195,182, 195,182, 195,182],
     {ok, [QUEUE_NAME]} = run_list(Config, l("queues")),
     {ok, _} = run(Config, ["delete", "queue", "name=ööö"]).
 
