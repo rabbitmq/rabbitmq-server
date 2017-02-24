@@ -546,7 +546,10 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
                 "~n")
             }
     end,
-    ct:pal(?LOW_IMPORTANCE, Log1, [string:join([Cmd1 | Args1], " "), self()]),
+    %% Because Args1 may contain binaries, we don't use string:join().
+    %% Instead we do a list comprehension.
+    ArgsIoList = [Cmd1, [[$\s, Arg] || Arg <- Args1]],
+    ct:pal(?LOW_IMPORTANCE, Log1, [ArgsIoList, self()]),
     try
         Port = erlang:open_port(
           {spawn_executable, Cmd1}, [
@@ -565,8 +568,6 @@ format_arg({Format, FormatArgs}) ->
     rabbit_misc:format(Format, FormatArgs);
 format_arg(Arg) when is_atom(Arg) ->
     atom_to_list(Arg);
-format_arg(Arg) when is_binary(Arg) ->
-    binary_to_list(Arg);
 format_arg(Arg) ->
     Arg.
 
