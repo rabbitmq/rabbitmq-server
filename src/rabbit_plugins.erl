@@ -22,6 +22,7 @@
 -export([ensure/1]).
 -export([extract_schemas/1]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
+-export([is_strict_plugin/1, strict_plugins/2, strict_plugins/1]).
 
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
@@ -37,6 +38,9 @@
 -spec dependencies(boolean(), [plugin_name()], [#plugin{}]) ->
                              [plugin_name()].
 -spec ensure(string()) -> {'ok', [atom()], [atom()]} | {error, any()}.
+-spec strict_plugins([plugin_name()], [#plugin{}]) -> [plugin_name()].
+-spec strict_plugins([plugin_name()]) -> [plugin_name()].
+-spec is_strict_plugin(#plugin{}) -> boolean().
 
 %%----------------------------------------------------------------------------
 
@@ -174,6 +178,24 @@ dependencies(Reverse, Sources, AllPlugins) ->
     true = digraph:delete(G),
     OrderedDests.
 
+%% Filter real plugins from application dependencies
+is_strict_plugin(#plugin{extra_dependencies = ExtraDeps}) ->
+    lists:member(rabbit, ExtraDeps).
+
+strict_plugins(Plugins, AllPlugins) ->
+    lists:filter(
+      fun(Name) ->
+              is_strict_plugin(lists:keyfind(Name, #plugin.name, AllPlugins))
+      end, Plugins).
+
+strict_plugins(Plugins) ->
+    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+    AllPlugins = list(ExpandDir),
+    lists:filter(
+      fun(Name) ->
+              is_strict_plugin(lists:keyfind(Name, #plugin.name, AllPlugins))
+      end, Plugins).
+
 %% For a few known cases, an externally provided plugin can be trusted.
 %% In this special case, it overrides the plugin.
 plugin_provided_by_otp(#plugin{name = eldap}) ->
@@ -200,7 +222,8 @@ ensure_dependencies(Plugins) ->
                                          end, Deps)],
               throw({error, {missing_dependencies, Missing, Blame}})
     end,
-    [P#plugin{dependencies = Deps -- OTP}
+    [P#plugin{dependencies = Deps -- OTP,
+              extra_dependencies = Deps -- (Deps -- OTP)}
      || P = #plugin{dependencies = Deps} <- Plugins].
 
 is_loadable(App) ->
