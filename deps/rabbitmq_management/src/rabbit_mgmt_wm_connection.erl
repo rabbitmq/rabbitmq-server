@@ -52,7 +52,7 @@ to_json(ReqData, Context) ->
 delete_resource(ReqData, Context) ->
     Conn = conn(ReqData),
     Pid = proplists:get_value(pid, Conn),
-    Reason = case cowboy_req:header(<<"X-Reason">>, ReqData) of
+    Reason = case cowboy_req:header(<<"x-reason">>, ReqData) of
                  {undefined, _} -> "Closed via management plugin";
                  {V, _}         -> binary_to_list(V)
              end,
