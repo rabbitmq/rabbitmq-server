@@ -102,10 +102,10 @@ action(enable, Node, ToEnable0, Opts, State = #cli{all      = All,
                      rabbit_plugins:format_invalid_plugins(Invalid)})
     end,
     NewImplicit = write_enabled_plugins(NewEnabled, State),
-    case rabbit_plugins:strict_plugins(NewEnabled -- Implicit, All) of
+    case rabbit_plugins:strictly_plugins(NewEnabled -- Implicit, All) of
         [] -> io:format("Plugin configuration unchanged.~n");
         _  -> print_list("The following plugins have been enabled:",
-                         rabbit_plugins:strict_plugins(NewImplicit -- Implicit, All))
+                         rabbit_plugins:strictly_plugins(NewImplicit -- Implicit, All))
     end,
     action_change(Opts, Node, Implicit, NewImplicit, State);
 
@@ -124,7 +124,7 @@ action(set, Node, NewEnabled0, Opts, State = #cli{all      = All,
                      rabbit_plugins:format_invalid_plugins(Invalid)})
     end,
     NewImplicit = write_enabled_plugins(NewEnabled, State),
-    case rabbit_plugins:strict_plugins(NewImplicit, All) of
+    case rabbit_plugins:strictly_plugins(NewImplicit, All) of
         [] -> io:format("All plugins are now disabled.~n");
         Plugins  -> print_list("The following plugins are now enabled:",
                                Plugins)
@@ -151,7 +151,7 @@ action(disable, Node, ToDisable0, Opts, State = #cli{all      = All,
     case length(Enabled) =:= length(NewEnabled) of
         true  -> io:format("Plugin configuration unchanged.~n");
         false -> print_list("The following plugins have been disabled:",
-                            rabbit_plugins:strict_plugins(Implicit -- NewImplicit,
+                            rabbit_plugins:strictly_plugins(Implicit -- NewImplicit,
                                                           All))
     end,
     action_change(Opts, Node, Implicit, NewImplicit, State);
@@ -205,7 +205,7 @@ format_plugins(Node, Pattern, Opts, #cli{all      = All,
                                            lists:member(Name,EnabledImplicitly);
                      true           -> true
                   end,
-                  rabbit_plugins:is_strict_plugin(Plugin)],
+                  rabbit_plugins:is_strictly_plugin(Plugin)],
     Plugins1 = usort_plugins(Plugins),
     MaxWidth = lists:max([length(atom_to_list(Name)) ||
                              #plugin{name = Name} <- Plugins1] ++ [0]),
@@ -305,14 +305,14 @@ rpc_call(Node, Online, Mod, Fun, Args, All) ->
         {ok, [], []} ->
             io:format(" nothing to do.~n", []);
         {ok, Start0, []} ->
-            Start = rabbit_plugins:strict_plugins(Start0, All),
+            Start = rabbit_plugins:strictly_plugins(Start0, All),
             io:format(" started ~b plugin~s.~n", [length(Start), plur(Start)]);
         {ok, [], Stop0} ->
-            Stop = rabbit_plugins:strict_plugins(Stop0, All),
+            Stop = rabbit_plugins:strictly_plugins(Stop0, All),
             io:format(" stopped ~b plugin~s.~n", [length(Stop), plur(Stop)]);
         {ok, Start0, Stop0} ->
-            Start = rabbit_plugins:strict_plugins(Start0, All),
-            Stop = rabbit_plugins:strict_plugins(Stop0, All),
+            Start = rabbit_plugins:strictly_plugins(Start0, All),
+            Stop = rabbit_plugins:strictly_plugins(Stop0, All),
             io:format(" stopped ~b plugin~s and started ~b plugin~s.~n",
                       [length(Stop), plur(Stop), length(Start), plur(Start)]);
         {badrpc, nodedown} = Error ->

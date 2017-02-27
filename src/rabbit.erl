@@ -327,7 +327,7 @@ broker_start() ->
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
     maybe_sd_notify(),
-    ok = log_broker_started(rabbit_plugins:strict_plugins(rabbit_plugins:active())).
+    ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())).
 
 %% Try to send systemd ready notification if it makes sense in the
 %% current environment. standard_error is used intentionally in all
