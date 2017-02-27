@@ -72,7 +72,7 @@
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2, get_proc_name/0]).
 -export([moving_average/4]).
--export([get_env/3]).
+-export([get_env/3, lists_droplast/1]).
 -export([get_channel_operation_timeout/0]).
 -export([random/1]).
 -export([rpc_call/4, rpc_call/5, rpc_call/7]).
@@ -1145,6 +1145,10 @@ get_env(Application, Key, Def) ->
         {ok, Val} -> Val;
         undefined -> Def
     end.
+
+%% lists:droplast/1 is only available in Erlang 17.0+.
+lists_droplast([_T])  -> [];
+lists_droplast([H|T]) -> [H|lists_droplast(T)].
 
 get_channel_operation_timeout() ->
     %% Default channel_operation_timeout set to net_ticktime + 10s to
