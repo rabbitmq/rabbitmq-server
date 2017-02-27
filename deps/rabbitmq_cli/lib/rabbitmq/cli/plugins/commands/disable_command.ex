@@ -92,7 +92,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
     case PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), opts) do
       {:ok, enabled_plugins} ->
         {:stream, Stream.concat(
-            [[enabled_plugins],
+            [[:rabbit_plugins.strict_plugins(enabled_plugins, all)],
              RabbitMQ.CLI.Core.Helpers.defer(
                fn() ->
                  :timer.sleep(5000)
@@ -100,12 +100,25 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
                        node_name, opts) do
                    %{set: new_enabled} = result ->
                      disabled = implicit -- new_enabled
-                     Map.put(result, :disabled, disabled);
+                     filter_strict_plugins(Map.put(result, :disabled, :rabbit_plugins.strict_plugins(disabled, all)), all, [:set, :started, :stopped]);
                    other -> other
                  end
                end)])};
       {:error, _} = err ->
         err
+    end
+  end
+
+  defp filter_strict_plugins(map, all, []) do
+    map
+  end
+  defp filter_strict_plugins(map, all, [head | tail]) do
+    case map[head] do
+      nil ->
+        filter_strict_plugins(map, all, tail);
+      other ->
+        value = :rabbit_plugins.strict_plugins(other, all)
+        filter_strict_plugins(Map.put(map, head, value), all, tail)
     end
   end
 

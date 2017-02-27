@@ -120,8 +120,7 @@ defmodule ListPluginsCommandTest do
       :rabbit_misc.rpc_call(node, :application, :start, [:rabbitmq_stomp])
     end)
     assert %{status: :node_down,
-             plugins: [%{name: :amqp_client, enabled: :implicit, running: false},
-                       %{name: :rabbitmq_federation, enabled: :enabled, running: false},
+             plugins: [%{name: :rabbitmq_federation, enabled: :enabled, running: false},
                        %{name: :rabbitmq_stomp, enabled: :enabled, running: false}]} =
            @command.run([".*"], Map.merge(context[:opts], %{node: :nonode}))
   end
@@ -133,23 +132,21 @@ defmodule ListPluginsCommandTest do
       :rabbit_misc.rpc_call(node, :application, :start, [:rabbitmq_stomp])
     end)
     assert %{status: :running,
-             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
-                       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+             plugins: [%{name: :rabbitmq_federation, enabled: :enabled, running: true},
                        %{name: :rabbitmq_stomp, enabled: :enabled, running: false}]} =
       @command.run([".*"], context[:opts])
   end
 
   test "will report description and dependencies for verbose mode", context do
     assert %{status: :running,
-             plugins: [%{name: :amqp_client, enabled: :implicit, running: true, description: _, dependencies: []},
-                       %{name: :rabbitmq_federation, enabled: :enabled, running: true, description: _, dependencies: [:amqp_client]},
+             plugins: [%{name: :rabbitmq_federation, enabled: :enabled, running: true, description: _, dependencies: [:amqp_client]},
                        %{name: :rabbitmq_stomp, enabled: :enabled, running: true, description: _, dependencies: [:amqp_client]}]} =
            @command.run([".*"], Map.merge(context[:opts], %{verbose: true}))
   end
 
   test "will report plugin names in minimal mode", context do
     assert %{status: :running,
-             plugins: [%{name: :amqp_client}, %{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
+             plugins: [%{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
            @command.run([".*"], Map.merge(context[:opts], %{minimal: true}))
   end
 
@@ -160,8 +157,7 @@ defmodule ListPluginsCommandTest do
       set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     end)
     assert %{status: :running,
-             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
-                       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+             plugins: [%{name: :rabbitmq_federation, enabled: :enabled, running: true},
                        %{name: :rabbitmq_stomp, enabled: :not_enabled, running: false}]} =
            @command.run([".*"], context[:opts])
   end
@@ -182,8 +178,7 @@ defmodule ListPluginsCommandTest do
       set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     end)
     assert %{status: :running,
-             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
-                       %{name: :rabbitmq_federation, enabled: :enabled, running: true}]} =
+             plugins: [%{name: :rabbitmq_federation, enabled: :enabled, running: true}]} =
            @command.run([".*"], Map.merge(context[:opts], %{implicitly_enabled: true}))
   end
 
@@ -195,9 +190,6 @@ defmodule ListPluginsCommandTest do
     assert %{status: :running,
              plugins: [%{name: :rabbitmq_federation}]} =
            @command.run(["fede"], Map.merge(context[:opts], %{minimal: true}))
-    assert %{status: :running,
-             plugins: [%{name: :amqp_client}]} =
-           @command.run(["^[a-z]mq"], Map.merge(context[:opts], %{minimal: true}))
     assert %{status: :running,
              plugins: [%{name: :rabbitmq_stomp}]} =
            @command.run(["stomp$"], Map.merge(context[:opts], %{minimal: true}))
@@ -216,7 +208,7 @@ defmodule ListPluginsCommandTest do
   test "should succeed when using multiple plugins directories, one of them does not exist", context do
     opts = get_opts_with_non_existing_plugins_directory(context)
     assert %{status: :running,
-               plugins: [%{name: :amqp_client}, %{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
+               plugins: [%{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
              @command.run([".*"], Map.merge(opts, %{minimal: true}))
   end
 
@@ -224,7 +216,7 @@ defmodule ListPluginsCommandTest do
   test "should succeed when using multiple plugins directories, directories do exist and do contain plugins", context do
     opts = get_opts_with_existing_plugins_directory(context)
     assert %{status: :running,
-               plugins: [%{name: :amqp_client}, %{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
+               plugins: [%{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
              @command.run([".*"], Map.merge(opts, %{minimal: true}))
   end
 
@@ -234,8 +226,7 @@ defmodule ListPluginsCommandTest do
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
     reset_enabled_plugins_to_preconfigured_defaults(context)
     assert %{status: :running,
-                 plugins: [%{name: :amqp_client},
-                           %{name: :mock_rabbitmq_plugins_01}, %{name: :mock_rabbitmq_plugins_02},
+                 plugins: [%{name: :mock_rabbitmq_plugins_01}, %{name: :mock_rabbitmq_plugins_02},
                            %{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
                @command.run([".*"], Map.merge(opts, %{minimal: true}))
   end
@@ -247,8 +238,7 @@ defmodule ListPluginsCommandTest do
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
     reset_enabled_plugins_to_preconfigured_defaults(context)
     assert %{status: :running,
-             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
-                       %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
+             plugins: [%{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
                        %{name: :mock_rabbitmq_plugins_02, enabled: :not_enabled, running: false, version: '0.2.0'},
                        %{name: :rabbitmq_federation, enabled: :enabled, running: true},
                        %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
@@ -263,8 +253,7 @@ defmodule ListPluginsCommandTest do
     set_enabled_plugins([:mock_rabbitmq_plugins_02, :rabbitmq_federation, :rabbitmq_stomp],
                         :online, get_rabbit_hostname(), opts)
     assert %{status: :running,
-             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
-                       %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
+             plugins: [%{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
                        %{name: :mock_rabbitmq_plugins_02, enabled: :enabled, running: true, version: '0.1.0', running_version: '0.1.0'},
                        %{name: :rabbitmq_federation, enabled: :enabled, running: true},
                        %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
@@ -272,8 +261,7 @@ defmodule ListPluginsCommandTest do
     opts = get_opts_with_plugins_directories(context, [plugins_directory_01, plugins_directory_02])
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
     assert %{status: :running,
-             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
-                       %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
+             plugins: [%{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
                        %{name: :mock_rabbitmq_plugins_02, enabled: :enabled, running: true, version: '0.2.0', running_version: '0.1.0'},
                        %{name: :rabbitmq_federation, enabled: :enabled, running: true},
                        %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
