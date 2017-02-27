@@ -534,7 +534,11 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
               begin
                   Key1 = format_arg(Key),
                   Value1 = format_arg(Value),
-                  {Key1, Value1}
+                  Value2 = case is_binary(Value1) of
+                               true  -> binary_to_list(Value1);
+                               false -> Value1
+                           end,
+                  {Key1, Value2}
               end
               || {Key, Value} <- Env
             ],
