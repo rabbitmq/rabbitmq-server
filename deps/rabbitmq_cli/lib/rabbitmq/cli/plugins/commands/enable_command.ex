@@ -104,14 +104,14 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
     case PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), opts) do
       {:ok, enabled_plugins} ->
         {:stream, Stream.concat(
-            [[:rabbit_plugins.strict_plugins(enabled_plugins, all)],
+            [[:rabbit_plugins.strictly_plugins(enabled_plugins, all)],
              RabbitMQ.CLI.Core.Helpers.defer(
                fn() ->
                  case PluginHelpers.update_enabled_plugins(enabled_plugins, mode,
                        node_name, opts) do
                    %{set: new_enabled} = result ->
                      enabled = new_enabled -- implicit
-                     filter_strict_plugins(Map.put(result, :enabled, :rabbit_plugins.strict_plugins(enabled, all)), all, [:set, :started, :stopped]);
+                     filter_strictly_plugins(Map.put(result, :enabled, :rabbit_plugins.strictly_plugins(enabled, all)), all, [:set, :started, :stopped]);
                    other -> other
                  end
                end)])};
@@ -120,16 +120,16 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
     end
   end
 
-  defp filter_strict_plugins(map, all, []) do
+  defp filter_strictly_plugins(map, all, []) do
     map
   end
-  defp filter_strict_plugins(map, all, [head | tail]) do
+  defp filter_strictly_plugins(map, all, [head | tail]) do
     case map[head] do
       nil ->
-        filter_strict_plugins(map, all, tail);
+        filter_strictly_plugins(map, all, tail);
       other ->
-        value = :rabbit_plugins.strict_plugins(other, all)
-        filter_strict_plugins(Map.put(map, head, value), all, tail)
+        value = :rabbit_plugins.strictly_plugins(other, all)
+        filter_strictly_plugins(Map.put(map, head, value), all, tail)
     end
   end
 
