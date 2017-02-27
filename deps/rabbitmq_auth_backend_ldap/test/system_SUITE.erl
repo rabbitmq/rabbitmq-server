@@ -137,7 +137,11 @@ init_per_group(Group, Config) ->
         {rmq_nodename_suffix, ?MODULE},
         {rmq_extra_tcp_ports, [tcp_port_amqp_tls_extra]}
       ]),
-    {LdapPort, _} = string:to_integer(os:getenv("LDAP_PORT", ?DEFAULT_LDAP_PORT)),
+    LdapPortString = case os:getenv("LDAP_PORT") of
+                         false -> ?DEFAULT_LDAP_PORT;
+                         V     -> V
+                     end,
+    {LdapPort, _} = string:to_integer(LdapPortString),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1, ?BASE_CONF_RABBIT),
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
                                               base_conf_ldap(LdapPort,
