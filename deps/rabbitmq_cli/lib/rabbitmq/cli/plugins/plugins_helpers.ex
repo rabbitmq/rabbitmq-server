@@ -82,7 +82,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
     deps_plugins = Enum.filter(all, fn(plugin) ->
       name = plugin_name(plugin)
-      Enum.member?(plugins, name)
+      Enum.member?(deps, name)
     end)
 
     validate_res = :rabbit_plugins.validate_plugins(deps_plugins)
