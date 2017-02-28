@@ -91,8 +91,9 @@
 %% call/3, i.e. a pid, global name, local name, or local name on a
 %% particular node.
 %%
+%% 11) Internal buffer length is emitted as a core [RabbitMQ] metric.
 
-%% All modifications are (C) 2009-2013 GoPivotal, Inc.
+%% All modifications are (C) 2009-2017 Pivotal Software, Inc.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
