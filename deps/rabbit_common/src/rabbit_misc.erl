@@ -799,15 +799,13 @@ gb_trees_foreach(Fun, Tree) ->
     gb_trees_fold(fun (Key, Val, Acc) -> Fun(Key, Val), Acc end, ok, Tree).
 
 module_attributes(Module) ->
-    case catch Module:module_info(attributes) of
-        {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
+    try
+        Module:module_info(attributes)
+    catch
+        _:undef ->
             io:format("WARNING: module ~p not found, so not scanned for boot steps.~n",
                       [Module]),
-            [];
-        {'EXIT', Reason} ->
-            exit(Reason);
-        V ->
-            V
+            []
     end.
 
 all_module_attributes(Name) ->
