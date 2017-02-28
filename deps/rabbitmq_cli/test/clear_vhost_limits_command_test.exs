@@ -20,8 +20,6 @@ defmodule ClearVhostLimitsCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.ClearVhostLimitsCommand
   @vhost "test1"
-  @user "guest"
-  @root   "/"
   @definition "{\"max-connections\":100}"
 
   setup_all do

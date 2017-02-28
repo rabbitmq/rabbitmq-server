@@ -46,13 +46,13 @@ defmodule AddVhostCommandTest do
   @tag vhost: @vhost
   test "run: a valid name to an active RabbitMQ node is successful", context do
     assert @command.run([context[:vhost]], context[:opts]) == :ok
-    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
+    assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
   @tag vhost: ""
   test "run: An empty string to an active RabbitMQ node is still successful", context do
     assert @command.run([context[:vhost]], context[:opts]) == :ok
-    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
+    assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
   test "run: A call to invalid or inactive RabbitMQ node returns a nodedown" do
@@ -68,7 +68,7 @@ defmodule AddVhostCommandTest do
     assert @command.run([context[:vhost]], context[:opts]) ==
         {:error, {:vhost_already_exists, context[:vhost]}}
 
-    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
+    assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
   @tag vhost: @vhost

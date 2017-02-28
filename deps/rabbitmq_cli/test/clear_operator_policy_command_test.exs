@@ -20,13 +20,9 @@ defmodule ClearOperatorPolicyCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.ClearOperatorPolicyCommand
   @vhost "test1"
-  @user "guest"
-  @root   "/"
   @key "message-expiry"
   @pattern "^queue\."
   @value "{\"message-ttl\":10}"
-  @apply_to "all"
-  @priority 0
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()

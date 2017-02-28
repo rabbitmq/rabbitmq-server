@@ -24,10 +24,10 @@ defmodule JoinClusterCommandTest do
     RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname())
 
-    start_rabbitmq_app
+    start_rabbitmq_app()
 
     on_exit([], fn ->
-      start_rabbitmq_app
+      start_rabbitmq_app()
       :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
@@ -67,11 +67,11 @@ defmodule JoinClusterCommandTest do
   #end
 
   test "run: joining self is invalid", context do
-    stop_rabbitmq_app
+    stop_rabbitmq_app()
     assert match?(
       {:error, :cannot_cluster_node_with_itself},
       @command.run([context[:opts][:node]], context[:opts]))
-    start_rabbitmq_app
+    start_rabbitmq_app()
   end
 
   # TODO
@@ -98,11 +98,11 @@ defmodule JoinClusterCommandTest do
   test "run: joining a non-existent node returns nodedown", context do
     target = :jake@thedog
     :net_kernel.connect_node(target)
-    stop_rabbitmq_app
+    stop_rabbitmq_app()
     assert match?(
       {:badrpc_multi, :nodedown, [_]},
       @command.run([target], context[:opts]))
-    start_rabbitmq_app
+    start_rabbitmq_app()
   end
 
   test "banner", context do

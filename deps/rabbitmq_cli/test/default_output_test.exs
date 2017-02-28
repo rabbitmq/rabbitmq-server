@@ -40,14 +40,14 @@ defmodule DefaultOutputTest do
   end
 
   test "badrpc nodedown error" do
-    exit_code = exit_unavailable
+    exit_code = exit_unavailable()
     node = :example@node
     assert match?({:error, ^exit_code, "Error: unable to connect to node 'example@node': nodedown"},
                   ExampleCommand.output({:badrpc, :nodedown}, %{node: node}))
   end
 
   test "badrpc timeout error" do
-    exit_code = exit_tempfail
+    exit_code = exit_tempfail()
     timeout = 1000
     nodename = :node@host
     assert match?({:error, ^exit_code, "Error: operation example on node node@host timed out. Timeout: 1000"},
@@ -55,13 +55,13 @@ defmodule DefaultOutputTest do
   end
 
   test "generic error" do
-    exit_code = exit_software
+    exit_code = exit_software()
     assert match?({:error, ^exit_code, "Error:\nerror message"},
                   ExampleCommand.output({:error, "error message"}, %{}))
   end
 
   test "inspect arbitrary error" do
-    exit_code = exit_software
+    exit_code = exit_software()
     error = %{i: [am: "arbitrary", error: 1]}
     inspected = inspect(error)
     assert match?({:error, ^exit_code, "Error:\n" <> ^inspected},
@@ -69,31 +69,31 @@ defmodule DefaultOutputTest do
   end
 
   test "atom error" do
-    exit_code = exit_software
+    exit_code = exit_software()
     assert match?({:error, ^exit_code, "Error:\nerror_message"},
                   ExampleCommand.output({:error, :error_message}, %{}))
   end
 
   test "unknown atom is error" do
-    exit_code = exit_software
+    exit_code = exit_software()
     assert match?({:error, ^exit_code, "Error:\nerror_message"},
                   ExampleCommand.output(:error_message, %{}))
   end
 
   test "unknown tuple is error" do
-    exit_code = exit_software
+    exit_code = exit_software()
     assert match?({:error, ^exit_code, "Error:\n{:left, :right}"},
                   ExampleCommand.output({:left, :right}, %{}))
   end
 
   test "error_string is error" do
-    exit_code = exit_software
+    exit_code = exit_software()
     assert match?({:error, ^exit_code, "I am string"},
                   ExampleCommand.output({:error_string, "I am string"}, %{}))
   end
 
   test "error_string is converted to string" do
-    exit_code = exit_software
+    exit_code = exit_software()
     assert match?({:error, ^exit_code, "I am charlist"},
                   ExampleCommand.output({:error_string, 'I am charlist'}, %{}))
   end
@@ -122,17 +122,17 @@ defmodule DefaultOutputTest do
     assert match?({:stream, [1,2,3]}, ExampleCommandWithCustomOutput.output({:ok, [1,2,3]}, %{}))
     assert match?({:stream, [1,2,3]}, ExampleCommandWithCustomOutput.output([1,2,3], %{}))
 
-    exit_code = exit_unavailable
+    exit_code = exit_unavailable()
     node = :example@node
     assert match?({:error, ^exit_code, "Error: unable to connect to node 'example@node': nodedown"},
                   ExampleCommandWithCustomOutput.output({:badrpc, :nodedown}, %{node: node}))
 
-    exit_code = exit_tempfail
+    exit_code = exit_tempfail()
     timeout = 1000
     assert match?({:error, ^exit_code, "Error: operation example_command_with_custom_output on node example@node timed out. Timeout: 1000"},
                   ExampleCommandWithCustomOutput.output({:badrpc, :timeout}, %{timeout: timeout, node: node}))
 
-    exit_code = exit_software
+    exit_code = exit_software()
     error = %{i: [am: "arbitrary", error: 1]}
     inspected = inspect(error)
     assert match?({:error, ^exit_code, "Error:\n" <> ^inspected},

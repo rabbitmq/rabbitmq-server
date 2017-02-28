@@ -20,13 +20,9 @@ defmodule ClearPolicyCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand
   @vhost "test1"
-  @user "guest"
-  @root   "/"
   @key "federate"
   @pattern "^fed\."
   @value "{\"federation-upstream-set\":\"all\"}"
-  @apply_to "all"
-  @priority 0
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()

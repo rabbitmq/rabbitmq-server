@@ -52,7 +52,7 @@ defmodule DeleteUserCommandTest do
   test "run: A valid username returns ok", context do
     assert @command.run([context[:user]], context[:opts]) == :ok
 
-    assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 0
+    assert list_users() |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 0
   end
 
   test "run: An invalid Rabbit node returns a bad rpc message" do

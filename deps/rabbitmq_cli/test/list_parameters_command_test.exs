@@ -21,7 +21,6 @@ defmodule ListParametersCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.ListParametersCommand
 
   @vhost "test1"
-  @user "guest"
   @root   "/"
   @component_name "federation-upstream"
   @key "reconnect-delay"

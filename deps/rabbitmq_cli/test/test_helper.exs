@@ -365,7 +365,7 @@ defmodule TestHelper do
   end
 
   def vhost_exists?(vhost) do
-    Enum.any?(list_vhosts, fn(v) -> v[:name] == vhost end)
+    Enum.any?(list_vhosts(), fn(v) -> v[:name] == vhost end)
   end
 
   def set_enabled_plugins(plugins, mode, node, opts) do

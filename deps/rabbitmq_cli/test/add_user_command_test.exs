@@ -64,14 +64,14 @@ defmodule AddUserCommandTest do
   @tag user: "someone", password: "password"
   test "run: default case completes successfully", context do
     assert @command.run([context[:user], context[:password]], context[:opts]) == :ok
-    assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
+    assert list_users() |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
   end
 
   @tag user: "someone", password: "password"
   test "run: adding an existing user returns an error", context do
     add_user(context[:user], context[:password])
     assert @command.run([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
-    assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
+    assert list_users() |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
   end
 
   @tag user: "someone", password: "password"

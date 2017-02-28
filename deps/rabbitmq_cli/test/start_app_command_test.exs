@@ -24,10 +24,10 @@ defmodule StartAppCommandTest do
     RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname())
 
-    start_rabbitmq_app
+    start_rabbitmq_app()
 
     on_exit([], fn ->
-      start_rabbitmq_app
+      start_rabbitmq_app()
       :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
@@ -45,7 +45,7 @@ defmodule StartAppCommandTest do
 
   test "run: request to an active node succeeds", context do
     node = RabbitMQ.CLI.Core.Helpers.parse_node context[:node]
-    stop_rabbitmq_app
+    stop_rabbitmq_app()
     refute :rabbit_misc.rpc_call(node, :rabbit, :is_running, [])
     assert @command.run([], context[:opts])
     assert :rabbit_misc.rpc_call(node, :rabbit, :is_running, [])

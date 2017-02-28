@@ -48,10 +48,10 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
 
   test "run: valid numerical value returns valid", context do
     assert @command.run([0.7], context[:opts]) == :ok
-    assert status[:vm_memory_high_watermark] == 0.7
+    assert status()[:vm_memory_high_watermark] == 0.7
 
     assert @command.run([1], context[:opts]) == :ok
-    assert status[:vm_memory_high_watermark] == 1
+    assert status()[:vm_memory_high_watermark] == 1
   end
 
   test "validate: validate a valid numerical string value returns valid", context do
@@ -100,7 +100,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   end
   test "run: a single absolute integer return ok", context do
     assert @command.run(["absolute","10"], context[:opts]) == :ok
-    assert status[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, "")}
+    assert status()[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, "")}
   end
 
   test "validate: a single absolute integer with an invalid memory unit fails ", context do
@@ -128,12 +128,12 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     |> Enum.each(fn mu ->
       arg = "10#{mu}"
       assert @command.run(["absolute",arg], context[:opts]) == :ok
-      assert status[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, mu)}
+      assert status()[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, mu)}
     end)
   end
 
   test "run: low watermark sets alarm", context do
-    old_watermark = status[:vm_memory_high_watermark]
+    old_watermark = status()[:vm_memory_high_watermark]
     on_exit(fn() ->
       args = case old_watermark do
         {:absolute, val} -> ["absolute", to_string(val)];
@@ -144,7 +144,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     ## this will trigger an alarm
     @command.run(["absolute", "2000"], context[:opts])
 
-    assert [:memory] == status[:alarms]
+    assert [:memory] == status()[:alarms]
   end
 
   test "banner: absolute memory request prints info message", context do

@@ -50,14 +50,14 @@ defmodule DeleteVhostCommandTest do
   test "run: A valid name to an active RabbitMQ node is successful", context do
     assert @command.run([context[:vhost]], context[:opts]) == :ok
 
-    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
+    assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
   end
 
   @tag vhost: ""
   test "run: An empty string to an active RabbitMQ node is successful", context do
     assert @command.run([context[:vhost]], context[:opts]) == :ok
 
-    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
+    assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
   end
 
   test "run: A call to invalid or inactive RabbitMQ node returns a nodedown" do

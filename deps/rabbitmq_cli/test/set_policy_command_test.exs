@@ -21,7 +21,6 @@ defmodule SetPolicyCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand
 
   @vhost "test1"
-  @user "guest"
   @root   "/"
   @key "federate"
   @pattern "^fed\."

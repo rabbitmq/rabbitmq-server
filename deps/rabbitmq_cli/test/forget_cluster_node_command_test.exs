@@ -25,7 +25,7 @@ defmodule ForgetClusterNodeCommandTest do
     node = get_rabbit_hostname()
     :net_kernel.connect_node(node)
 
-    start_rabbitmq_app
+    start_rabbitmq_app()
     {:ok, plugins_dir} = :rabbit_misc.rpc_call(node,
                                                :application, :get_env,
                                                [:rabbit, :plugins_dir])
@@ -33,7 +33,7 @@ defmodule ForgetClusterNodeCommandTest do
     mnesia_dir = :rabbit_misc.rpc_call(node, :rabbit_mnesia, :dir, [])
 
     on_exit([], fn ->
-      start_rabbitmq_app
+      start_rabbitmq_app()
       :erlang.disconnect_node(node)
 
     end)

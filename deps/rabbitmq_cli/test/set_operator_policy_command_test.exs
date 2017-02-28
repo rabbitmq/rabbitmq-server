@@ -21,7 +21,6 @@ defmodule SetOperatorPolicyCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand
 
   @vhost "test1"
-  @user "guest"
   @root   "/"
   @key "message-expiry"
   @pattern "^queue\."

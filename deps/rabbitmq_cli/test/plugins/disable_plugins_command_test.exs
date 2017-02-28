@@ -18,10 +18,6 @@ defmodule DisablePluginsCommandTest do
   import TestHelper
 
   @command RabbitMQ.CLI.Plugins.Commands.DisableCommand
-  @vhost "test1"
-  @user "guest"
-  @root   "/"
-  @default_timeout :infinity
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()

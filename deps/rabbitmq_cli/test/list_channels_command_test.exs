@@ -18,7 +18,6 @@ defmodule ListChannelsCommandTest do
   import TestHelper
 
   @command RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand
-  @user "guest"
   @default_timeout :infinity
 
   setup_all do

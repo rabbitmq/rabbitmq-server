@@ -5,7 +5,6 @@ defmodule ListBindingsCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand
   @vhost "test1"
   @user "guest"
-  @root   "/"
   @default_timeout :infinity
 
   setup_all do

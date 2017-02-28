@@ -37,14 +37,14 @@ defmodule RabbitMQCtlTest do
   test "print error message on a bad connection" do
     command = ["status", "-n", "sandwich@pastrami"]
     assert capture_io(:stderr, fn ->
-      error_check(command, exit_unavailable)
+      error_check(command, exit_unavailable())
     end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
   end
 
   test "print timeout message when an RPC call times out" do
     command = ["list_users", "-t", "0"]
     assert capture_io(:stderr, fn ->
-      error_check(command, exit_tempfail)
+      error_check(command, exit_tempfail())
     end) =~ ~r/Error: operation list_users on node #{get_rabbit_hostname()} timed out. Timeout: 0/
   end
 
@@ -52,7 +52,7 @@ defmodule RabbitMQCtlTest do
     add_user "kirk", "khaaaaaan"
     command = ["authenticate_user", "kirk", "makeitso"]
     assert capture_io(:stderr,
-      fn -> error_check(command, exit_dataerr)
+      fn -> error_check(command, exit_dataerr())
     end) =~ ~r/Error: failed to authenticate user \"kirk\"/
     delete_user "kirk"
   end
@@ -62,67 +62,67 @@ defmodule RabbitMQCtlTest do
   test "Empty command shows usage message" do
     command = []
     assert capture_io(:stderr, fn ->
-      error_check(command, exit_usage)
+      error_check(command, exit_usage())
     end) =~ ~r/Usage:\n/
   end
 
   test "Empty command with options shows usage, and exit with usage exit code" do
     command = ["-n", "sandwich@pastrami"]
     assert capture_io(:stderr, fn ->
-      error_check(command, exit_usage)
+      error_check(command, exit_usage())
     end) =~ ~r/Usage:\n/
   end
 
   test "Short names without host connect properly" do
     command = ["status", "-n", "rabbit"]
-    capture_io(:stderr, fn -> error_check(command, exit_ok) end)
+    capture_io(:stderr, fn -> error_check(command, exit_ok()) end)
   end
 
   test "Unimplemented command shows usage message and returns error" do
     command = ["not_real"]
     assert capture_io(:stderr, fn ->
-      error_check(command, exit_usage)
+      error_check(command, exit_usage())
     end) =~ ~r/Usage\:/
   end
 
   test "Extraneous arguments return a usage error" do
     command = ["status", "extra"]
     assert capture_io(:stderr, fn ->
-      error_check(command, exit_usage)
+      error_check(command, exit_usage())
     end) =~ ~r/Given:\n\t.*\nUsage:\n.* status/
   end
 
   test "Insufficient arguments return a usage error" do
     command = ["list_user_permissions"]
     assert capture_io(:stderr, fn ->
-      error_check(command, exit_usage)
+      error_check(command, exit_usage())
     end) =~ ~r/Given:\n\t.*\nUsage:\n.* list_user_permissions/
   end
 
   test "A bad argument returns a data error" do
     command = ["set_disk_free_limit", "2097152bytes"]
-    capture_io(:stderr, fn -> error_check(command, exit_dataerr) end)
+    capture_io(:stderr, fn -> error_check(command, exit_dataerr()) end)
   end
 
   test "An errored command returns an error code" do
     command = ["delete_user", "voldemort"]
-    capture_io(:stderr, fn -> error_check(command, exit_software) end)
+    capture_io(:stderr, fn -> error_check(command, exit_software()) end)
   end
 
   test "A malformed command with an option as the first command-line arg fails gracefully" do
     command1 = ["--invalid=true", "list_permissions", "-p", "/"]
     assert capture_io(:stderr, fn ->
-      error_check(command1, exit_usage)
+      error_check(command1, exit_usage())
     end) =~ ~r/Error: Invalid options for this command/
 
     command2 = ["--node", "rabbit", "status", "quack"]
     assert capture_io(:stderr, fn ->
-      error_check(command2, exit_usage)
+      error_check(command2, exit_usage())
     end) =~ ~r/Error: too many arguments./
 
     command3 = ["--node", "rabbit", "add_user", "quack"]
     assert capture_io(:stderr, fn ->
-      error_check(command3, exit_usage)
+      error_check(command3, exit_usage())
     end) =~ ~r/Error: not enough arguments./
   end
 
@@ -153,12 +153,12 @@ defmodule RabbitMQCtlTest do
   test "any flags that aren't global or command-specific cause a bad option" do
     command1 = ["status", "--nod=rabbit"]
     assert capture_io(:stderr, fn ->
-      error_check(command1, exit_usage)
+      error_check(command1, exit_usage())
     end) =~ ~r/Error: Invalid options for this command/
 
     command2 = ["list_permissions", "-o", "/"]
     assert capture_io(:stderr, fn ->
-      error_check(command2, exit_usage)
+      error_check(command2, exit_usage())
     end) =~ ~r/Error: Invalid options for this command/
   end
 

@@ -21,8 +21,6 @@ defmodule SetVhostLimitsCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand
 
   @vhost "test1"
-  @user "guest"
-  @root   "/"
   @definition "{\"max-connections\":100}"
 
   setup_all do
@@ -147,7 +145,6 @@ defmodule SetVhostLimitsCommandTest do
   end
 
   defp assert_limits(context) do
-    vhost = context[:vhost]
     limits = get_vhost_limits(context[:vhost])
     assert {:ok, limits} == JSON.decode(context[:definition])
   end

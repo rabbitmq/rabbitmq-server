@@ -12,17 +12,12 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
-alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
 defmodule ListPluginsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
   @command RabbitMQ.CLI.Plugins.Commands.ListCommand
-  @vhost "test1"
-  @user "guest"
-  @root   "/"
-  @default_timeout :infinity
-
 
   def reset_enabled_plugins_to_preconfigured_defaults(context) do
     set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],

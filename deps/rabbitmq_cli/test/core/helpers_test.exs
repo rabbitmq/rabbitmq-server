@@ -93,34 +93,34 @@ test "RabbitMQ hostname is properly formed" do
   end
 
   test "if input is an atom short name, return the atom with hostname" do
-    assert @subject.parse_node(:rabbit_test) == "rabbit_test@#{hostname}" |> String.to_atom
+    assert @subject.parse_node(:rabbit_test) == "rabbit_test@#{hostname()}" |> String.to_atom
   end
 
   test "if input is a string fully qualified node name, return an atom" do
-    assert @subject.parse_node("rabbit_test@#{hostname}") == "rabbit_test@#{hostname}" |> String.to_atom
+    assert @subject.parse_node("rabbit_test@#{hostname()}") == "rabbit_test@#{hostname()}" |> String.to_atom
   end
 
   test "if input is a short node name, host name is added" do
-    assert @subject.parse_node("rabbit_test") == "rabbit_test@#{hostname}" |> String.to_atom
+    assert @subject.parse_node("rabbit_test") == "rabbit_test@#{hostname()}" |> String.to_atom
   end
 
   test "if input is a hostname without a node name, return an atom" do
-    assert @subject.parse_node("@#{hostname}") == "@#{hostname}" |> String.to_atom
+    assert @subject.parse_node("@#{hostname()}") == "@#{hostname()}" |> String.to_atom
   end
 
   test "if input is a short node name with an @ and no hostname, local host name is added" do
-    assert @subject.parse_node("rabbit_test@") == "rabbit_test@#{hostname}" |> String.to_atom
+    assert @subject.parse_node("rabbit_test@") == "rabbit_test@#{hostname()}" |> String.to_atom
   end
 
   test "if input contains more than one @, return an atom" do
-    assert @subject.parse_node("rabbit@rabbit_test@#{hostname}") == "rabbit@rabbit_test@#{hostname}" |>String.to_atom
+    assert @subject.parse_node("rabbit@rabbit_test@#{hostname()}") == "rabbit@rabbit_test@#{hostname()}" |>String.to_atom
   end
 
   ## ------------------- require_rabbit/1 tests --------------------
 
   test "load plugin with version number in filename" do
     plugins_directory_03 = fixture_plugins_path("plugins-subdirectory-03")
-    rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
+    rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
     opts = %{plugins_dir: to_string(plugins_directory_03),
              rabbitmq_home: rabbitmq_home}
     assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, 'New project', '0.1.0'}) == false
@@ -130,7 +130,7 @@ test "RabbitMQ hostname is properly formed" do
 
   test "load plugin without version number in filename" do
     plugins_directory_04 = fixture_plugins_path("plugins-subdirectory-04")
-    rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
+    rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
     opts = %{plugins_dir: to_string(plugins_directory_04),
              rabbitmq_home: rabbitmq_home}
     assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, 'New project', 'rolling'}) == false

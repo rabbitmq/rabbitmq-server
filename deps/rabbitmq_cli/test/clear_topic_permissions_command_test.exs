@@ -18,7 +18,6 @@ defmodule ClearTopicPermissionsTest do
   @command RabbitMQ.CLI.Ctl.Commands. ClearTopicPermissionsCommand
   @user     "user1"
   @password "password"
-  @default_vhost "/"
   @specific_vhost "vhost1"
 
   setup_all do

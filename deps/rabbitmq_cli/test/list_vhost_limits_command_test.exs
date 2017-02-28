@@ -22,8 +22,6 @@ defmodule ListVhostLimitsCommandTest do
 
   @vhost "test_vhost"
   @vhost1 "test_vhost1"
-  @user "guest"
-  @root   "/"
   @definition "{\"max-connections\":100}"
   @definition1 "{\"max-queues\":1000}"
 

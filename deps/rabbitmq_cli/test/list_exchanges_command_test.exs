@@ -6,7 +6,6 @@ defmodule ListExchangesCommandTest do
 
   @vhost "test1"
   @user "guest"
-  @root   "/"
   @default_timeout :infinity
   @default_exchanges [{"amq.direct", :direct},
                       {"amq.fanout", :fanout},

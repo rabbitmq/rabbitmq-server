@@ -63,7 +63,7 @@ defmodule CloseConnectionCommandTest do
 
   test "run: a close connection request on for a non existing connection returns error", context do
     assert match?({:error, {:not_a_connection_pid, _}},
-      @command.run(["<#{node}.2.121.12>", "test"], %{node: @helpers.parse_node(context[:node])}))
+      @command.run(["<#{node()}.2.121.12>", "test"], %{node: @helpers.parse_node(context[:node])}))
   end
 
   test "run: a close_connection request on nonexistent RabbitMQ node returns nodedown" do

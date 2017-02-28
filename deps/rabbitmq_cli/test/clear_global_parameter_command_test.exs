@@ -93,7 +93,7 @@ defmodule ClearGlobalParameterCommandTest do
   end
 
   defp assert_parameter_empty(context) do
-    parameter = list_global_parameters
+    parameter = list_global_parameters()
                 |> Enum.filter(fn(param) ->
                     param[:key] == context[:key]
                     end)

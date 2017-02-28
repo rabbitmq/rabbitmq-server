@@ -6,7 +6,6 @@ defmodule ListQueuesCommandTest do
 
   @vhost "test1"
   @user "guest"
-  @root   "/"
   @default_timeout 15000
 
   setup_all do

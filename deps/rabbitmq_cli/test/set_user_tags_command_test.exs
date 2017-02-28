@@ -64,7 +64,7 @@ defmodule SetUserTagsCommandTest do
     )
 
     result = Enum.find(
-      list_users,
+      list_users(),
       fn(record) -> record[:user] == context[:user] end
     )
 
@@ -87,7 +87,7 @@ defmodule SetUserTagsCommandTest do
     )
 
     result = Enum.find(
-      list_users,
+      list_users(),
       fn(record) -> record[:user] == context[:user] end
     )
 
@@ -102,7 +102,7 @@ defmodule SetUserTagsCommandTest do
     @command.run([context[:user]], context[:opts])
 
     result = Enum.find(
-      list_users,
+      list_users(),
       fn(record) -> record[:user] == context[:user] end
     )
 
@@ -120,7 +120,7 @@ defmodule SetUserTagsCommandTest do
     ) == :ok
 
     result = Enum.find(
-      list_users,
+      list_users(),
       fn(record) -> record[:user] == context[:user] end
     )
 
@@ -138,7 +138,7 @@ defmodule SetUserTagsCommandTest do
     ) == :ok
 
     result = Enum.find(
-      list_users,
+      list_users(),
       fn(record) -> record[:user] == context[:user] end
     )
 

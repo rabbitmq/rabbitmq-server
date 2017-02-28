@@ -24,10 +24,10 @@ defmodule UpdateClusterNodesCommandTest do
     RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname())
 
-    start_rabbitmq_app
+    start_rabbitmq_app()
 
     on_exit([], fn ->
-      start_rabbitmq_app
+      start_rabbitmq_app()
       :erlang.disconnect_node(get_rabbit_hostname())
 
     end)
@@ -52,11 +52,11 @@ defmodule UpdateClusterNodesCommandTest do
   end
 
   test "run: specifying self as seed node fails validation", context do
-    stop_rabbitmq_app
+    stop_rabbitmq_app()
     assert match?(
       {:error, :cannot_cluster_node_with_itself},
       @command.run([context[:opts][:node]], context[:opts]))
-    start_rabbitmq_app
+    start_rabbitmq_app()
   end
 
   test "run: request to an unreachable node returns nodedown", context do
@@ -74,11 +74,11 @@ defmodule UpdateClusterNodesCommandTest do
   test "run: specifying an unreachable node as seed returns nodedown", context do
     target = :jake@thedog
     :net_kernel.connect_node(target)
-    stop_rabbitmq_app
+    stop_rabbitmq_app()
     assert match?(
       {:badrpc_multi, :nodedown, [_]},
       @command.run([target], context[:opts]))
-    start_rabbitmq_app
+    start_rabbitmq_app()
   end
 
   test "banner", context do

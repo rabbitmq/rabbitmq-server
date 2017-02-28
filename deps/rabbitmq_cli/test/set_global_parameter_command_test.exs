@@ -89,7 +89,7 @@ defmodule SetGlobalParameterCommandTest do
 
   # Checks each element of the first parameter against the expected context values
   defp assert_parameter_fields(context) do
-    result_param = list_global_parameters |> List.first
+    result_param = list_global_parameters() |> List.first
 
     assert result_param[:value] == context[:value]
     assert result_param[:name] == context[:key]

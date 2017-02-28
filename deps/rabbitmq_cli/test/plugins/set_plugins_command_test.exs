@@ -18,11 +18,6 @@ defmodule SetPluginsCommandTest do
   import TestHelper
 
   @command RabbitMQ.CLI.Plugins.Commands.SetCommand
-  @vhost "test1"
-  @user "guest"
-  @root   "/"
-  @default_timeout :infinity
-
 
   #RABBITMQ_PLUGINS_DIR=~/dev/master/deps RABBITMQ_ENABLED_PLUGINS_FILE=/var/folders/cl/jnydxpf92rg76z05m12hlly80000gq/T/rabbitmq-test-instances/rabbit/enabled_plugins RABBITMQ_HOME=~/dev/master/deps/rabbit ./rabbitmq-plugins list_plugins
 

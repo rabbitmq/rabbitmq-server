@@ -20,7 +20,6 @@ defmodule ClearParameterCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand
   @vhost "test1"
-  @user "guest"
   @root   "/"
   @component_name "federation-upstream"
   @key "reconnect-delay"
