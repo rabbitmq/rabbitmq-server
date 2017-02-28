@@ -101,6 +101,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
       fn(plugin) ->
         name = PluginHelpers.plugin_name(plugin)
 
+        :rabbit_plugins.is_strictly_plugin(plugin) and
         Regex.match?(re, to_string(name)) and
         cond do
           only_enabled -> Enum.member?(enabled, name);

@@ -70,6 +70,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   def do_run(plugins, %{node: node_name} = opts) do
     %{online: online, offline: offline} = opts
 
+    all = PluginHelpers.list(opts)
     mode = case {online, offline} do
       {true, false}  -> :online;
       {false, true}  -> :offline;
@@ -79,14 +80,27 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
     case PluginHelpers.set_enabled_plugins(plugins, opts) do
       {:ok, enabled_plugins} ->
         {:stream, Stream.concat(
-            [[enabled_plugins],
+            [[:rabbit_plugins.strictly_plugins(enabled_plugins, all)],
              RabbitMQ.CLI.Core.Helpers.defer(
                fn() ->
-                 PluginHelpers.update_enabled_plugins(enabled_plugins, mode,
-                   node_name, opts)
+                 map = PluginHelpers.update_enabled_plugins(enabled_plugins, mode, node_name, opts)
+                 filter_strictly_plugins(map, all, [:set, :started, :stopped])
                end)])};
       {:error, _} = err ->
         err
+    end
+  end
+
+  defp filter_strictly_plugins(map, all, []) do
+    map
+  end
+  defp filter_strictly_plugins(map, all, [head | tail]) do
+    case map[head] do
+      nil ->
+        filter_strictly_plugins(map, all, tail);
+      other ->
+        value = :rabbit_plugins.strictly_plugins(other, all)
+        filter_strictly_plugins(Map.put(map, head, value), all, tail)
     end
   end
 
