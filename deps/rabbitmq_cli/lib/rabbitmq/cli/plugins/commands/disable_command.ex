@@ -109,7 +109,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
     end
   end
 
-  defp filter_strictly_plugins(map, all, []) do
+  defp filter_strictly_plugins(map, _all, []) do
     map
   end
   defp filter_strictly_plugins(map, all, [head | tail]) do
