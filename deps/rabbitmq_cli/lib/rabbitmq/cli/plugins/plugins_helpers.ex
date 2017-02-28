@@ -85,7 +85,6 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
       Enum.member?(deps, name)
     end)
 
-    validate_res = :rabbit_plugins.validate_plugins(deps_plugins)
     case :rabbit_plugins.validate_plugins(deps_plugins) do
       {_, []}     -> :ok;
       {_, invalid} -> {:error, :rabbit_plugins.format_invalid_plugins(invalid)}
