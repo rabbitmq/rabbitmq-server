@@ -200,7 +200,8 @@
                  %% e.g. [{rabbitmq_management, ["3.5.7", "3.6.1"]},
                  %%       {rabbitmq_federation, ["3.5.7", "3.6.1"]},
                  %%       {rabbitmq_email,      ["0.1.0"]}]
-                 dependency_version_requirements %% [{atom(), [string()]}]
+                 dependency_version_requirements, %% [{atom(), [string()]}]
+                 extra_dependencies %% string()
                 }).
 
 %% used to track connections across virtual hosts
