@@ -89,7 +89,6 @@ remove_connection(Id, BIntervals, GIntervals) ->
     ets:delete(connection_created_stats, Id),
     ets:delete(connection_stats, Id),
     delete_samples(connection_stats_coarse_conn_stats, Id, BIntervals),
-    delete_samples(vhost_stats_coarse_conn_stats, Id, GIntervals),
     ok.
 
 remove_channel(Id, BIntervals) ->
