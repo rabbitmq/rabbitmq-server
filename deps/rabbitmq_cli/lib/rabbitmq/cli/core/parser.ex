@@ -116,10 +116,6 @@ defmodule RabbitMQ.CLI.Core.Parser do
   end
 
   def parse_alias(input, command_name, module, alias_content) do
-    {pre_command_options, tail, invalid} =
-      OptionParser.parse_head(input,
-                              strict: default_switches(),
-                              aliases: default_aliases())
     {pre_command_options, tail, invalid} = parse_global_head(input)
     [^command_name | other] = tail
     aliased_input = alias_content ++ other
