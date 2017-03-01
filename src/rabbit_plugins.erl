@@ -284,7 +284,8 @@ format_invalid_plugin_error({missing_dependency, Dep}) ->
 %% a plugin doesn't support the effective broker version
 format_invalid_plugin_error({broker_version_mismatch, Version, Required}) ->
     io_lib:format("        Plugin doesn't support current server version."
-                  " Actual broker version: ~p, supported by the plugin: ~p~n", [Version, Required]);
+                  " Actual broker version: ~p, supported by the plugin: ~p~n",
+                  [Version, format_required_versions(Required)]);
 %% one of dependencies of a plugin doesn't match its version requirements
 format_invalid_plugin_error({{dependency_version_mismatch, Version, Required}, Name}) ->
     io_lib:format("        Version '~p' of dependency '~p' is unsupported."
@@ -292,6 +293,16 @@ format_invalid_plugin_error({{dependency_version_mismatch, Version, Required}, N
                   [Version, Name, Required]);
 format_invalid_plugin_error(Err) ->
     io_lib:format("        Unknown error ~p~n", [Err]).
+
+format_required_versions(Versions) ->
+    lists:map(fun(V) ->
+                      case re:run(V, "^[0-9]*\.[0-9]*\.", [{capture, all, list}]) of
+                          {match, [Sub]} ->
+                              lists:flatten(io_lib:format("~s-~sx", [V, Sub]));
+                          _ ->
+                              V
+                      end
+              end, Versions).
 
 validate_plugins(Plugins) ->
     application:load(rabbit),
