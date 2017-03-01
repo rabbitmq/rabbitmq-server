@@ -87,9 +87,9 @@ delete(VHostPath, ActingUser) ->
     %% notifications which must be sent outside the TX
     rabbit_log:info("Deleting vhost '~s'~n", [VHostPath]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
-    [assert_benign(rabbit_amqqueue:with(Name, QDelFun)) ||
+    [assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser) ||
         #amqqueue{name = Name} <- rabbit_amqqueue:list(VHostPath)],
-    [assert_benign(rabbit_exchange:delete(Name, false, ActingUser)) ||
+    [assert_benign(rabbit_exchange:delete(Name, false, ActingUser), ActingUser) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
     Funs = rabbit_misc:execute_mnesia_transaction(
           with(VHostPath, fun () -> internal_delete(VHostPath, ActingUser) end)),
@@ -108,13 +108,13 @@ purge_messages(VHost) ->
     %% above.
     rabbit_variable_queue:stop_vhost_msg_store(VHost).
 
-assert_benign(ok)                 -> ok;
-assert_benign({ok, _})            -> ok;
-assert_benign({error, not_found}) -> ok;
-assert_benign({error, {absent, Q, _}}) ->
+assert_benign(ok, _)                 -> ok;
+assert_benign({ok, _}, _)            -> ok;
+assert_benign({error, not_found}, _) -> ok;
+assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the mnesia entries here is safe. If/when the down node
     %% restarts, it will clear out the on-disk storage of the queue.
-    case rabbit_amqqueue:internal_delete(Q#amqqueue.name) of
+    case rabbit_amqqueue:internal_delete(Q#amqqueue.name, ActingUser) of
         ok                 -> ok;
         {error, not_found} -> ok
     end.
