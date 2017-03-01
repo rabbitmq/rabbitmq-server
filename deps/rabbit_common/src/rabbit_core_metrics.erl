@@ -260,7 +260,7 @@ ets_update_element_pre_18(Tab, Key, {Pos, Value}) ->
         [] ->
             ok;
         [Tuple] ->
-            ets:insert(Tab, Key, erlang:set_element(Pos, Tuple, Value))
+            ets:insert(Tab, setelement(Pos, Tuple, Value))
     end.
 
 ets_update_element_post_18(Tab, Key, ElementSpec) ->
