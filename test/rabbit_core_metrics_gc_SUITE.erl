@@ -106,6 +106,7 @@ queue_metrics(Config) ->
                                        [queue_metrics, Q]),
     [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
                                        [queue_coarse_metrics, Q]),
+
     %% Trigger gc. When the gen_server:call returns, the gc has already finished.
     rabbit_ct_broker_helpers:rpc(Config, A, erlang, send, [rabbit_core_metrics_gc, start_gc]),
     rabbit_ct_broker_helpers:rpc(Config, A, gen_server, call, [rabbit_core_metrics_gc, test]),
