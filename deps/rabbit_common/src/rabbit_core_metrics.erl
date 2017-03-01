@@ -49,6 +49,8 @@
          gen_server2_deleted/1,
          get_gen_server2_stats/1]).
 
+-export([delete/2]).
+
 %% Those functions are exported for internal use only, not for public
 %% consumption.
 -export([
@@ -57,11 +59,20 @@
          ets_update_counter_post_18/4
         ]).
 
+-export([
+         ets_update_element/3,
+         ets_update_element_pre_18/3,
+         ets_update_element_post_18/3
+        ]).
+
 -erlang_version_support([
                          {18, [
                                {ets_update_counter, 4,
                                 ets_update_counter_pre_18,
-                                ets_update_counter_post_18}
+                                ets_update_counter_post_18},
+                               {ets_update_element, 3,
+                                ets_update_element_pre_18,
+                                ets_update_element_post_18}
                               ]}
                         ]).
 
@@ -104,6 +115,7 @@
 -spec gen_server2_stats(pid(), integer()) -> ok.
 -spec gen_server2_deleted(pid()) -> ok.
 -spec get_gen_server2_stats(pid()) -> integer() | 'not_found'.
+-spec delete(atom(), any()) -> ok.
 %%----------------------------------------------------------------------------
 %% Storage of the raw metrics in RabbitMQ core. All the processing of stats
 %% is done by the management plugin.
@@ -123,7 +135,8 @@ connection_created(Pid, Infos) ->
 connection_closed(Pid) ->
     ets:delete(connection_created, Pid),
     ets:delete(connection_metrics, Pid),
-    ets:delete(connection_coarse_metrics, Pid),
+    %% Delete marker
+    ets_update_element(connection_coarse_metrics, Pid, {5, 1}),
     ok.
 
 connection_stats(Pid, Infos) ->
@@ -131,7 +144,8 @@ connection_stats(Pid, Infos) ->
     ok.
 
 connection_stats(Pid, Recv_oct, Send_oct, Reductions) ->
-    ets:insert(connection_coarse_metrics, {Pid, Recv_oct, Send_oct, Reductions}),
+    %% Includes delete marker
+    ets:insert(connection_coarse_metrics, {Pid, Recv_oct, Send_oct, Reductions, 0}),
     ok.
 
 channel_created(Pid, Infos) ->
@@ -153,35 +167,48 @@ channel_stats(reductions, Id, Value) ->
     ok.
 
 channel_stats(exchange_stats, publish, Id, Value) ->
-    ets_update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, confirm, Id, Value) ->
-    ets_update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, return_unroutable, Id, Value) ->
-    ets_update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_exchange_stats, publish, Id, Value) ->
-    ets_update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0, 0}),
     ok;
 channel_stats(queue_stats, get, Id, Value) ->
-    ets_update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, get_no_ack, Id, Value) ->
-    ets_update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver, Id, Value) ->
-    ets_update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver_no_ack, Id, Value) ->
-    ets_update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, redeliver, Id, Value) ->
-    ets_update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, ack, Id, Value) ->
-    ets_update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    %% Includes delete marker
+    ets_update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok.
+
+delete(Table, Key) ->
+    ets:delete(Table, Key).
 
 %% ets:update_counter(Tab, Key, Incr, Default) appeared in Erlang 18.x.
 %% We need a wrapper for Erlang R16B03 and Erlang 17.x.
@@ -221,16 +248,37 @@ ets_update_counter_pre_18(Tab, Key, Incr, Default) ->
 ets_update_counter_post_18(Tab, Key, Incr, Default) ->
     ets:update_counter(Tab, Key, Incr, Default).
 
+%% ets:update_element(Tab, Key, ElementSpec) appeared in Erlang 18.x.
+%% We need a wrapper for Erlang R16B03 and Erlang 17.x.
+
+ets_update_element(Tab, Key, ElementSpec) ->
+    code_version:update(?MODULE),
+    ?MODULE:ets_update_element(Tab, Key, ElementSpec).
+
+ets_update_element_pre_18(Tab, Key, {Pos, Value}) ->
+    case ets:lookup(Tab, Key) of
+        [] ->
+            ok;
+        [Tuple] ->
+            ets:insert(Tab, Key, erlang:set_element(Pos, Tuple, Value))
+    end.
+
+ets_update_element_post_18(Tab, Key, ElementSpec) ->
+    ets:update_element(Tab, Key, ElementSpec).
+
 channel_queue_down(Id) ->
-    ets:delete(channel_queue_metrics, Id),
+    %% Delete marker
+    ets_update_element(channel_queue_metrics, Id, {8, 1}),
     ok.
 
 channel_queue_exchange_down(Id) ->
-    ets:delete(channel_queue_exchange_metrics, Id),
+    %% Delete marker
+    ets_update_element(channel_queue_exchange_metrics, Id, {3, 1}),
     ok.
 
 channel_exchange_down(Id) ->
-    ets:delete(channel_exchange_metrics, Id),
+    %% Delete marker
+    ets_update_element(channel_exchange_metrics, Id, {5, 1}),
     ok.
 
 consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
@@ -244,7 +292,8 @@ consumer_deleted(ChPid, ConsumerTag, QName) ->
     ok.
 
 queue_stats(Name, Infos) ->
-    ets:insert(queue_metrics, {Name, Infos}),
+    %% Includes delete marker
+    ets:insert(queue_metrics, {Name, Infos, 0}),
     ok.
 
 queue_stats(Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions) ->
@@ -253,10 +302,17 @@ queue_stats(Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions) ->
     ok.
 
 queue_deleted(Name) ->
-    ets:delete(queue_metrics, Name),
     ets:delete(queue_coarse_metrics, Name),
-    ets:select_delete(channel_queue_exchange_metrics, match_spec_cqx(Name)),
-    ets:select_delete(channel_queue_metrics, match_spec_cq(Name)).
+    %% Delete markers
+    ets_update_element(queue_metrics, Name, {3, 1}),
+    CQX = ets:select(channel_queue_exchange_metrics, match_spec_cqx(Name)),
+    lists:foreach(fun(Key) ->
+                          ets_update_element(channel_queue_exchange_metrics, Key, {3, 1})
+                  end, CQX),
+    CQ = ets:select(channel_queue_metrics, match_spec_cq(Name)),
+    lists:foreach(fun(Key) ->
+                          ets_update_element(channel_queue_metrics, Key, {8, 1})
+                  end, CQ).
 
 node_stats(persister_metrics, Infos) ->
     ets:insert(node_persister_metrics, {node(), Infos});
@@ -269,10 +325,10 @@ node_node_stats(Id, Infos) ->
     ets:insert(node_node_metrics, {Id, Infos}).
 
 match_spec_cqx(Id) ->
-    [{{{'_', {'$1', '_'}}, '_'}, [{'==', {Id}, '$1'}], [true]}].
+    [{{{'$2', {'$1', '$3'}}, '_', '_'}, [{'==', {Id}, '$1'}], [{{'$2', {{'$1', '$3'}}}}]}].
 
 match_spec_cq(Id) ->
-    [{{{'_', '$1'}, '_', '_', '_', '_', '_', '_'}, [{'==', {Id}, '$1'}], [true]}].
+    [{{{'$2', '$1'}, '_', '_', '_', '_', '_', '_', '_'}, [{'==', {Id}, '$1'}], [{{'$2', '$1'}}]}].
 
 gen_server2_stats(Pid, BufferLength) ->
     ets:insert(gen_server2_metrics, {Pid, BufferLength}).
