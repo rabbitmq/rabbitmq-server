@@ -44,9 +44,9 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast({event, #event{type  = connection_closed, props = Props}},
-            State = #state{basic_i = BIntervals, global_i = GIntervals}) ->
+            State = #state{basic_i = BIntervals}) ->
     Pid = pget(pid, Props),
-    remove_connection(Pid, BIntervals, GIntervals),
+    remove_connection(Pid, BIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = channel_closed, props = Props}},
             State = #state{basic_i = BIntervals}) ->
@@ -85,7 +85,7 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-remove_connection(Id, BIntervals, GIntervals) ->
+remove_connection(Id, BIntervals) ->
     ets:delete(connection_created_stats, Id),
     ets:delete(connection_stats, Id),
     delete_samples(connection_stats_coarse_conn_stats, Id, BIntervals),
