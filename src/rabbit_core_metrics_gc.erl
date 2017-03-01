@@ -96,6 +96,8 @@ gc_gen_server2() ->
 gc_process(Table) ->
     ets:foldl(fun({Pid = Key, _}, none) ->
                       gc_process(Pid, Table, Key);
+                 ({Pid = Key, _, _, _, _}, none) ->
+                      gc_process(Pid, Table, Key);
                  ({Pid = Key, _, _, _}, none) ->
                       gc_process(Pid, Table, Key)
               end, none, Table).
@@ -115,6 +117,8 @@ gc_entity(Table, GbSet) ->
                       gc_entity(Id, Table, Key, GbSet);
                  ({Id = Key, _}, none) ->
                       gc_entity(Id, Table, Key, GbSet);
+                 ({Id = Key, _, _}, none) ->
+                      gc_entity(Id, Table, Key, GbSet);
                  ({Id = Key, _, _, _, _}, none) ->
                       gc_entity(Id, Table, Key, GbSet)
               end, none, Table).
@@ -130,11 +134,11 @@ gc_entity(Id, Table, Key, GbSet) ->
     end.
 
 gc_process_and_entity(Table, GbSet) ->
-    ets:foldl(fun({{Pid, Id} = Key, _, _, _, _, _, _}, none)
+    ets:foldl(fun({{Pid, Id} = Key, _, _, _, _, _, _, _}, none)
                   when Table == channel_queue_metrics ->
                       gc_entity(Id, Table, Key, GbSet),
                       gc_process(Pid, Table, Key);
-                 ({{Pid, Id} = Key, _, _, _}, none)
+                 ({{Pid, Id} = Key, _, _, _, _}, none)
                     when Table == channel_exchange_metrics ->
                       gc_entity(Id, Table, Key, GbSet),
                       gc_process(Pid, Table, Key);
@@ -157,7 +161,7 @@ gc_process_and_entity(Id, Pid, Table, Key, GbSet) ->
     end.
 
 gc_process_and_entities(Table, QueueGbSet, ExchangeGbSet) ->
-    ets:foldl(fun({{Pid, {Q, X}} = Key, _}, none) ->
+    ets:foldl(fun({{Pid, {Q, X}} = Key, _, _}, none) ->
                       gc_process(Pid, Table, Key),
                       gc_entity(Q, Table, Key, QueueGbSet),
                       gc_entity(X, Table, Key, ExchangeGbSet)
