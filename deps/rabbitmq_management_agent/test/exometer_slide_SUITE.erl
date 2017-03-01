@@ -27,6 +27,7 @@ groups() ->
     [
      {parallel_tests, [parallel], [
                   incremental_add_element_basics,
+                  last_two_normalises_old_sample_timestamp,
                   incremental_last_two_returns_last_two_completed_samples,
                   incremental_sum,
                   incremental_sum_stale,
@@ -110,6 +111,17 @@ incremental_add_element_basics(_Config) ->
     % contains single element with incremented value
     [{Then, {2}}] = exometer_slide:to_list(Then, S2).
 
+last_two_normalises_old_sample_timestamp(_Config) ->
+    Now = 0,
+    S0 = exometer_slide:new(Now, 10, [{incremental, true},
+                                      {interval, 100}]),
+
+    S1 = exometer_slide:add_element(100, {1}, S0),
+    S2 = exometer_slide:add_element(500, {1}, S1),
+
+    [{500, {2}}, {400, {1}}] = exometer_slide:last_two(S2).
+
+
 incremental_last_two_returns_last_two_completed_samples(_Config) ->
     Now = exometer_slide:timestamp(),
     S0 = exometer_slide:new(Now, 10, [{incremental, true},
@@ -121,7 +133,7 @@ incremental_last_two_returns_last_two_completed_samples(_Config) ->
     S1 = exometer_slide:add_element(Now100, {1}, S0),
     S2 = exometer_slide:add_element(Now200, {1}, S1),
     S3 = exometer_slide:add_element(Now + 210, {1}, S2),
-    %% to_list is empty
+
     [{Now200, {2}}, {Now100, {1}}] = exometer_slide:last_two(S3).
 
 incremental_sum(_Config) ->

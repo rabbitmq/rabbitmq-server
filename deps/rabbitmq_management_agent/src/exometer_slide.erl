@@ -294,20 +294,23 @@ first_max(_, X) -> X.
 %% @doc Returns the newest 2 elements on the sample
 last_two(#slide{buf1 = [{TS, Evt} = H1, {_, drop} | _], interval = Interval}) ->
     [H1, {TS - Interval, Evt}];
-last_two(#slide{buf1 = [H1, H2 | _]}) ->
+last_two(#slide{buf1 = [H1, H2_0 | _], interval = Interval}) ->
+    H2 = adjust_timestamp(H1, H2_0, Interval),
     [H1, H2];
-last_two(#slide{buf1 = [H1], buf2 = [H2 | _]}) ->
+last_two(#slide{buf1 = [H1], buf2 = [H2_0 | _],
+                interval = Interval}) ->
+    H2 = adjust_timestamp(H1, H2_0, Interval),
     [H1, H2];
 last_two(#slide{buf1 = [H1], buf2 = []}) ->
     [H1];
-last_two(#slide{buf1 = [], buf2 = [{TS, Evt} = H1, {_, drop} | _], interval = Interval}) ->
-    [H1, {TS - Interval, Evt}];
-last_two(#slide{buf1 = [], buf2 = [H1, H2 | _]}) ->
-    [H1, H2];
-last_two(#slide{buf1 = [], buf2 = [H1]}) ->
-    [H1];
 last_two(_) ->
     [].
+
+adjust_timestamp({TS1, _}, {TS2, V2}, Interval) ->
+    case TS1 - TS2 > Interval of
+        true -> {TS1 - Interval, V2};
+        false -> {TS2, V2}
+    end.
 
 -spec last(slide()) -> value() | undefined.
 last(#slide{total = T}) when T =/= undefined ->
@@ -331,7 +334,7 @@ last(_) ->
 foldl(_Now, _Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
 foldl(Now, Start0, Fun, Acc, #slide{max_n = _MaxN, buf2 = _Buf2,
-                                   interval = _Interval} = Slide) ->
+                                    interval = _Interval} = Slide) ->
     lists:foldl(Fun, Acc, element(2, to_list_from(Now, Start0, Slide)) ++ [last]).
 
 maybe_add_last_sample(_Now, #slide{total = T, n = N,
