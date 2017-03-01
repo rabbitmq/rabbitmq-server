@@ -2129,7 +2129,9 @@ rates_test(Config) ->
     Fun = fun() ->
           Overview = http_get(Config, "/overview"),
           MsgStats = pget(message_stats, Overview, []),
-          pget(rate, pget(publish_details, MsgStats, []), 0) > 0
+          HasPub = pget(rate, pget(publish_details, MsgStats, []), 0) > 0,
+          QueueTotals = pget(queue_totals, Overview),
+          HasPub andalso pget(messages_ready, QueueTotals) > 0
       end,
     wait_until(Fun, 60),
     Overview = http_get(Config, "/overview"),
