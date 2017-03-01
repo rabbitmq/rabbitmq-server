@@ -385,7 +385,7 @@ to_basic_properties({struct, P}) ->
     to_basic_properties(P);
 
 to_basic_properties(Props) ->
-    E = fun (A, B) -> throw({error, {A, B}}) end,
+    E = fun err/2,
     Fmt = fun (headers,       H)                    -> to_amqp_table(H);
               (delivery_mode, V) when is_integer(V) -> V;
               (delivery_mode, _V)                   -> E(not_int,delivery_mode);
@@ -405,6 +405,10 @@ to_basic_properties(Props) ->
                    end, {#'P_basic'{}, 2},
                    record_info(fields, 'P_basic')),
     Res.
+
+-spec err(term(), term()) -> no_return().
+err(A, B) ->
+    throw({error, {A, B}}).
 
 a2b(A) ->
     list_to_binary(atom_to_list(A)).
