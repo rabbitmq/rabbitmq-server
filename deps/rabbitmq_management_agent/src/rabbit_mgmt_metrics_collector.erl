@@ -463,10 +463,10 @@ insert_entry(Table, Id, TS, Entry, Size, Interval0, Incremental) ->
             [{Key, S}] ->
                 S;
             [] ->
-                Interval = Interval0 * 1000,
+                IntervalMs = Interval0 * 1000,
                 % add some margin to Size and max_n to reduce chances of off-by-one errors
-                exometer_slide:new(TS-Interval, (Size + Interval0) * 1000,
-                                   [{interval, Interval},
+                exometer_slide:new(TS - IntervalMs, (Size + Interval0) * 1000,
+                                   [{interval, IntervalMs},
                                     {max_n, ceil(Size / Interval0) + 1},
                                     {incremental, Incremental}])
         end,
