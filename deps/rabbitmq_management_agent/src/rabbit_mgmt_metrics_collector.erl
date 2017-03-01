@@ -456,17 +456,18 @@ aggregate_entry(TS, {Id, Metrics}, NextStats,
      || {Size, Interval} <- GPolicies],
     {NextStats, State}.
 
-insert_entry(Table, Id, TS, Entry, Size, Interval, Incremental) ->
-    Key = {Id, Interval},
+insert_entry(Table, Id, TS, Entry, Size, Interval0, Incremental) ->
+    Key = {Id, Interval0},
     Slide =
         case ets:lookup(Table, Key) of
             [{Key, S}] ->
                 S;
             [] ->
+                Interval = Interval0 * 1000,
                 % add some margin to Size and max_n to reduce chances of off-by-one errors
-                exometer_slide:new((Size + Interval) * 1000,
-                                   [{interval, Interval * 1000},
-                                    {max_n, ceil(Size / Interval) + 1},
+                exometer_slide:new(TS-Interval, (Size + Interval0) * 1000,
+                                   [{interval, Interval},
+                                    {max_n, ceil(Size / Interval0) + 1},
                                     {incremental, Incremental}])
         end,
     insert_with_index(Table, Key, {Key, exometer_slide:add_element(TS, Entry, Slide)}).
