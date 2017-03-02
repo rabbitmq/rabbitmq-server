@@ -134,7 +134,7 @@ new(TS, Size, Opts) ->
 %% @doc Empty the buffer
 %%
 reset(Slide) ->
-    Slide#slide{n = 0, buf1 = [], buf2 = [], last = 0}.
+    Slide#slide{n = 0, buf1 = [], buf2 = [], last = 0, first = undefined}.
 
 %% @doc Add an element to the buffer, tagged with the given timestamp.
 %%
@@ -240,7 +240,7 @@ is_zeros({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) ->
 is_zeros(_) ->
     false.
 
--spec optimize(#slide{}) -> #slide{}.
+-spec optimize(slide()) -> slide().
 optimize(#slide{buf2 = []} = Slide) ->
     Slide;
 optimize(#slide{buf1 = Buf1, buf2 = Buf2, max_n = MaxN, n = N} = Slide)
@@ -253,7 +253,7 @@ snd(T) when is_tuple(T) ->
     element(2, T).
 
 
--spec to_list(timestamp(), #slide{}) -> [{timestamp(), value()}].
+-spec to_list(timestamp(), slide()) -> [{timestamp(), value()}].
 %% @doc Convert the sliding window into a list of timestamped values.
 %% @end
 to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
@@ -294,20 +294,23 @@ first_max(_, X) -> X.
 %% @doc Returns the newest 2 elements on the sample
 last_two(#slide{buf1 = [{TS, Evt} = H1, {_, drop} | _], interval = Interval}) ->
     [H1, {TS - Interval, Evt}];
-last_two(#slide{buf1 = [H1, H2 | _]}) ->
+last_two(#slide{buf1 = [H1, H2_0 | _], interval = Interval}) ->
+    H2 = adjust_timestamp(H1, H2_0, Interval),
     [H1, H2];
-last_two(#slide{buf1 = [H1], buf2 = [H2 | _]}) ->
+last_two(#slide{buf1 = [H1], buf2 = [H2_0 | _],
+                interval = Interval}) ->
+    H2 = adjust_timestamp(H1, H2_0, Interval),
     [H1, H2];
 last_two(#slide{buf1 = [H1], buf2 = []}) ->
     [H1];
-last_two(#slide{buf1 = [], buf2 = [{TS, Evt} = H1, {_, drop} | _], interval = Interval}) ->
-    [H1, {TS - Interval, Evt}];
-last_two(#slide{buf1 = [], buf2 = [H1, H2 | _]}) ->
-    [H1, H2];
-last_two(#slide{buf1 = [], buf2 = [H1]}) ->
-    [H1];
 last_two(_) ->
     [].
+
+adjust_timestamp({TS1, _}, {TS2, V2}, Interval) ->
+    case TS1 - TS2 > Interval of
+        true -> {TS1 - Interval, V2};
+        false -> {TS2, V2}
+    end.
 
 -spec last(slide()) -> value() | undefined.
 last(#slide{total = T}) when T =/= undefined ->
@@ -330,8 +333,8 @@ last(_) ->
 %% @end
 foldl(_Now, _Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
-foldl(Now, Start0, Fun, Acc, #slide{max_n = _MaxN, buf2 = _Buf2, first = _FirstTS,
-                                   interval = _Interval} = Slide) ->
+foldl(Now, Start0, Fun, Acc, #slide{max_n = _MaxN, buf2 = _Buf2,
+                                    interval = _Interval} = Slide) ->
     lists:foldl(Fun, Acc, element(2, to_list_from(Now, Start0, Slide)) ++ [last]).
 
 maybe_add_last_sample(_Now, #slide{total = T, n = N,
@@ -358,8 +361,8 @@ create_normalized_lookup(Start, Interval, RoundFun, Samples) ->
                         (_, Dict) -> Dict end, orddict:new(),
                      Samples).
 
--spec to_normalized_list(timestamp(), timestamp(), integer(), slide(), no_pad | tuple()) ->
-    [tuple()].
+-spec to_normalized_list(timestamp(), timestamp(), integer(), slide(),
+                         no_pad | tuple()) -> [tuple()].
 to_normalized_list(Now, Start, Interval, Slide, Empty) ->
     to_normalized_list(Now, Start, Interval, Slide, Empty, fun ceil/1).
 
@@ -382,7 +385,7 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                   [{T, snd(Prev)}
                    || T <- lists:seq(RoundTSFun(TS) - Interval, Start,
                                      -Interval)];
-              [{TS, _} | _] when Start < FirstTS0 ->
+              [{TS, _} | _] when is_number(FirstTS0) andalso Start < FirstTS0 ->
                   % only if we know there is nothing in the past can we
                   % generate a 0 pad
                   [{T, Empty} || T <- lists:seq(RoundTSFun(TS) - Interval, Start,

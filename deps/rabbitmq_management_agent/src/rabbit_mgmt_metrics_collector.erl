@@ -168,7 +168,7 @@ aggregate_entry(_TS, {Id, Metrics}, NextStats, #state{table = connection_created
 aggregate_entry(_TS, {Id, Metrics}, NextStats, #state{table = connection_metrics} = State) ->
     ets:insert(connection_stats, ?connection_stats(Id, Metrics)),
     {NextStats, State};
-aggregate_entry(TS, {Id, RecvOct, SendOct, Reductions}, NextStats,
+aggregate_entry(TS, {Id, RecvOct, SendOct, Reductions, 0}, NextStats,
                 #state{table = connection_coarse_metrics,
                        policies = {BPolicies, _, GPolicies}} = State) ->
     Stats = ?vhost_stats_coarse_conn_stats(RecvOct, SendOct),
@@ -181,6 +181,15 @@ aggregate_entry(TS, {Id, RecvOct, SendOct, Reductions}, NextStats,
                       Size, Interval, false)
      end || {Size, Interval} <- BPolicies],
     {insert_old_aggr_stats(NextStats, Id, Stats), State};
+aggregate_entry(TS, {Id, RecvOct, SendOct, _Reductions, 1}, NextStats,
+                #state{table = connection_coarse_metrics,
+                       policies = {_BPolicies, _, GPolicies}} = State) ->
+    Stats = ?vhost_stats_coarse_conn_stats(RecvOct, SendOct),
+    Diff = get_difference(Id, Stats, State),
+    [insert_entry(vhost_stats_coarse_conn_stats, vhost({connection_created, Id}),
+         TS, Diff, Size, Interval, true) || {Size, Interval} <- GPolicies],
+    rabbit_core_metrics:delete(connection_coarse_metrics, Id),
+    {NextStats, State};
 aggregate_entry(_TS, {Id, Metrics}, NextStats, #state{table = channel_created} = State) ->
     Ftd = rabbit_mgmt_format:format(Metrics, {[], false}),
     ets:insert(channel_created_stats,
@@ -191,7 +200,7 @@ aggregate_entry(_TS, {Id, Metrics}, NextStats, #state{table = channel_metrics} =
                     {fun rabbit_mgmt_format:format_channel_stats/1, true}),
     ets:insert(channel_stats, ?channel_stats(Id, Ftd)),
     {NextStats, State};
-aggregate_entry(TS, {{Ch, X} = Id, Publish0, Confirm, ReturnUnroutable}, NextStats,
+aggregate_entry(TS, {{Ch, X} = Id, Publish0, Confirm, ReturnUnroutable, 0}, NextStats,
                 #state{table = channel_exchange_metrics,
                        policies = {BPolicies, DPolicies, GPolicies},
                        rates_mode = RatesMode,
@@ -222,7 +231,27 @@ aggregate_entry(TS, {{Ch, X} = Id, Publish0, Confirm, ReturnUnroutable}, NextSta
                 ok
         end,
     {insert_old_aggr_stats(NextStats, Id, Stats), State};
-aggregate_entry(TS, {{Ch, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck, Redeliver, Ack},
+aggregate_entry(TS, {{_Ch, X} = Id, Publish0, Confirm, ReturnUnroutable, 1}, NextStats,
+                #state{table = channel_exchange_metrics,
+                       policies = {_BPolicies, DPolicies, GPolicies},
+                       lookup_exchange = ExchangeFun} = State) ->
+    Stats = ?channel_stats_fine_stats(Publish0, Confirm, ReturnUnroutable),
+    {Publish, _, _} = Diff = get_difference(Id, Stats, State),
+    [begin
+         insert_entry(vhost_stats_fine_stats, vhost(X), TS, Diff, Size,
+                      Interval, true)
+     end || {Size, Interval} <- GPolicies],
+    _ = case ExchangeFun(X) of
+            true ->
+                [insert_entry(exchange_stats_publish_in, X, TS,
+                              ?exchange_stats_publish_in(Publish), Size, Interval, true)
+                 || {Size, Interval} <- DPolicies];
+            _ ->
+                ok
+        end,
+    rabbit_core_metrics:delete(channel_exchange_metrics, Id),
+    {NextStats, State};
+aggregate_entry(TS, {{Ch, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck, Redeliver, Ack, 0},
                 NextStats,
                 #state{table = channel_queue_metrics,
                        policies = {BPolicies, DPolicies, GPolicies},
@@ -254,7 +283,29 @@ aggregate_entry(TS, {{Ch, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck, Redeliv
                 ok
         end,
      {insert_old_aggr_stats(NextStats, Id, Stats), State};
-aggregate_entry(TS, {{_Ch, {Q, X}} = Id, Publish}, NextStats,
+aggregate_entry(TS, {{_, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck, Redeliver, Ack, 1},
+                NextStats,
+                #state{table = channel_queue_metrics,
+                       policies = {BPolicies, _, GPolicies},
+                       lookup_queue = QueueFun} = State) ->
+    Stats = ?vhost_stats_deliver_stats(Get, GetNoAck, Deliver, DeliverNoAck,
+                                       Redeliver, Ack,
+				       Deliver + DeliverNoAck + Get + GetNoAck),
+    Diff = get_difference(Id, Stats, State),
+    [begin
+     insert_entry(vhost_stats_deliver_stats, vhost(Q), TS, Diff, Size,
+              Interval, true)
+     end || {Size, Interval} <- GPolicies],
+     _ = case QueueFun(Q) of
+             true ->
+                [insert_entry(queue_stats_deliver_stats, Q, TS, Diff, Size, Interval,
+                      true) || {Size, Interval} <- BPolicies];
+            _ ->
+                ok
+        end,
+    rabbit_core_metrics:delete(channel_queue_metrics, Id),
+    {NextStats, State};
+aggregate_entry(TS, {{_Ch, {Q, X}} = Id, Publish, ToDelete}, NextStats,
                 #state{table = channel_queue_exchange_metrics,
                        policies = {BPolicies, _, _},
                        rates_mode = RatesMode,
@@ -262,28 +313,39 @@ aggregate_entry(TS, {{_Ch, {Q, X}} = Id, Publish}, NextStats,
                        lookup_exchange = ExchangeFun} = State) ->
     Stats = ?queue_stats_publish(Publish),
     Diff = get_difference(Id, Stats, State),
-    _ = case {QueueFun(Q), ExchangeFun(X), RatesMode} of
-            {true, false, _} ->
+    _ = case {QueueFun(Q), ExchangeFun(X), RatesMode, ToDelete} of
+            {true, false, _, _} ->
                 [insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true)
                  || {Size, Interval} <- BPolicies];
-            {false, true, _} ->
+            {false, true, _, _} ->
                 [insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
                  || {Size, Interval} <- BPolicies];
-            {true, true, basic} ->
+            {true, true, basic, _} ->
                 [begin
                  insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
                  insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
                  end || {Size, Interval} <- BPolicies];
-            {true, true, _} ->
+            {true, true, _, 0} ->
                 [begin
                  insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
                  insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true),
                  insert_entry(queue_exchange_stats_publish, {Q, X}, TS, Diff, Size, Interval, true)
                  end || {Size, Interval} <- BPolicies];
+            {true, true, _, 1} ->
+                [begin
+                 insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
+                 insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
+                 end || {Size, Interval} <- BPolicies];
             _ ->
                 ok
         end,
-    {insert_old_aggr_stats(NextStats, Id, Stats), State};
+    case ToDelete of
+        0 ->
+            {insert_old_aggr_stats(NextStats, Id, Stats), State};
+        1 ->
+            rabbit_core_metrics:delete(channel_queue_exchange_metrics, Id),
+            {NextStats, State}
+    end;
 aggregate_entry(TS, {Id, Reductions}, NextStats,
                 #state{table = channel_process_metrics,
                        policies = {BPolicies, _, _}} = State) ->
@@ -300,9 +362,10 @@ aggregate_entry(_TS, {Id, Exclusive, AckRequired, PrefetchCount, Args}, NextStat
                                      {arguments, Args}], {[], false}),
     insert_with_index(consumer_stats, Id, ?consumer_stats(Id, Fmt)),
     {NextStats, State};
-aggregate_entry(TS, {Id, Metrics}, NextStats, #state{table = queue_metrics,
-                                                     policies = {BPolicies, _, GPolicies},
-                                                     lookup_queue = QueueFun} = State) ->
+aggregate_entry(TS, {Id, Metrics, 0}, NextStats,
+                #state{table = queue_metrics,
+                       policies = {BPolicies, _, GPolicies},
+                       lookup_queue = QueueFun} = State) ->
     Stats = ?queue_msg_rates(pget(disk_reads, Metrics, 0), pget(disk_writes, Metrics, 0)),
     Diff = get_difference(Id, Stats, State),
     [insert_entry(vhost_msg_rates, vhost(Id), TS, Diff, Size, Interval, true)
@@ -319,6 +382,15 @@ aggregate_entry(TS, {Id, Metrics}, NextStats, #state{table = queue_metrics,
             ok
     end,
     {insert_old_aggr_stats(NextStats, Id, Stats), State};
+aggregate_entry(TS, {Id, Metrics, 1}, NextStats,
+                #state{table = queue_metrics,
+                       policies = {_, _, GPolicies}} = State) ->
+    Stats = ?queue_msg_rates(pget(disk_reads, Metrics, 0), pget(disk_writes, Metrics, 0)),
+    Diff = get_difference(Id, Stats, State),
+    [insert_entry(vhost_msg_rates, vhost(Id), TS, Diff, Size, Interval, true)
+     || {Size, Interval} <- GPolicies],
+    rabbit_core_metrics:delete(queue_metrics, Id),
+    {NextStats, State};
 aggregate_entry(TS, {Name, Ready, Unack, Msgs, Red}, NextStats,
                 #state{table = queue_coarse_metrics,
                        old_aggr_stats = Old,
@@ -384,17 +456,18 @@ aggregate_entry(TS, {Id, Metrics}, NextStats,
      || {Size, Interval} <- GPolicies],
     {NextStats, State}.
 
-insert_entry(Table, Id, TS, Entry, Size, Interval, Incremental) ->
-    Key = {Id, Interval},
+insert_entry(Table, Id, TS, Entry, Size, Interval0, Incremental) ->
+    Key = {Id, Interval0},
     Slide =
         case ets:lookup(Table, Key) of
             [{Key, S}] ->
                 S;
             [] ->
+                IntervalMs = Interval0 * 1000,
                 % add some margin to Size and max_n to reduce chances of off-by-one errors
-                exometer_slide:new((Size + Interval) * 1000,
-                                   [{interval, Interval * 1000},
-                                    {max_n, ceil(Size / Interval) + 1},
+                exometer_slide:new(TS - IntervalMs, (Size + Interval0) * 1000,
+                                   [{interval, IntervalMs},
+                                    {max_n, ceil(Size / Interval0) + 1},
                                     {incremental, Incremental}])
         end,
     insert_with_index(Table, Key, {Key, exometer_slide:add_element(TS, Entry, Slide)}).

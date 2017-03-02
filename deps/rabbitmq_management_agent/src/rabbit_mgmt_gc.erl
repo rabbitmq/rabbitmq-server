@@ -50,7 +50,7 @@ handle_info(start_gc, State) ->
     {noreply, start_timer(State)}.
 
 terminate(_Reason, #state{timer = TRef}) ->
-    erlang:cancel_timer(TRef),
+    _ = erlang:cancel_timer(TRef),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
