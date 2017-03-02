@@ -2,6 +2,7 @@
 .*.sw?
 *.beam
 .erlang.mk/
+*.plt
 cover/
 deps/
 doc/
