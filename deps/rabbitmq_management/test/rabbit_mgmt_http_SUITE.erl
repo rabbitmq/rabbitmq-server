@@ -2347,8 +2347,10 @@ rates_test(Config) ->
     Pid = spawn_link(fun() -> publish(Ch) end),
     Fun = fun() ->
                   Overview = http_get(Config, "/overview"),
-                  MsgStats = maps:get(message_stats, Overview, []),
-                  maps:get(rate, maps:get(publish_details, MsgStats, #{}), 0) > 0
+                  MsgStats = maps:get(message_stats, Overview, #{}),
+                  HasPub = maps:get(rate, maps:get(publish_details, MsgStats, #{}), 0) > 0,
+                  QueueTotals = maps:get(queue_totals, Overview, #{}),
+                  HasPub andalso maps:get(messages_ready, QueueTotals, 0) > 0
           end,
     wait_until(Fun, 60),
     Overview = http_get(Config, "/overview"),
