@@ -203,8 +203,17 @@
   %% optimisation
   delivered_cache}).
 
--record(segment, {num, path, journal_entries,
-                  entries_to_segment, unacked}).
+-record(segment, {
+  %% segment ID (an integer)
+  num,
+  %% segment file path (see also ?SEGMENT_EXTENSION)
+  path,
+  %% index operation log entries in this segment
+  journal_entries,
+  entries_to_segment,
+  %% counter of unacknowledged messages
+  unacked
+}).
 
 -include("rabbit.hrl").
 
