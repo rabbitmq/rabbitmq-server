@@ -489,13 +489,12 @@ receive_event(Event, Key, Value) ->
     after
         60000 ->
             throw({receive_event_timeout, Event, Key, Value})
-    end,
-    Ch.
+    end.
 
 receive_event(Event) ->
     receive
         {#'basic.deliver'{routing_key = RoutingKey},
-         #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
+         #amqp_msg{props = #'P_basic'{}}} ->
             Event = RoutingKey
     after
         60000 ->
