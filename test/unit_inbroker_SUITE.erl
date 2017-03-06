@@ -2314,33 +2314,53 @@ channel_statistics1(_Config) ->
 
     %% Check the stats reflect that
     Check2 = fun() ->
-                 [{{Ch, QRes}, 1, 0, 0, 0, 0, 0}] = ets:lookup(
-                                                      channel_queue_metrics,
-                                                      {Ch, QRes}),
-                 [{{Ch, X}, 1, 0, 0}] = ets:lookup(
-                                          channel_exchange_metrics,
-                                          {Ch, X}),
-                 [{{Ch, {QRes, X}}, 1}] = ets:lookup(
-                                            channel_queue_exchange_metrics,
-                                            {Ch, {QRes, X}})
+                 [{{Ch, QRes}, 1, 0, 0, 0, 0, 0, 0}] = ets:lookup(
+                                                         channel_queue_metrics,
+                                                         {Ch, QRes}),
+                 [{{Ch, X}, 1, 0, 0, 0}] = ets:lookup(
+                                             channel_exchange_metrics,
+                                             {Ch, X}),
+                 [{{Ch, {QRes, X}}, 1, 0}] = ets:lookup(
+                                               channel_queue_exchange_metrics,
+                                               {Ch, {QRes, X}})
              end,
     test_ch_metrics(Check2, ?TIMEOUT),
 
-    %% Check the stats remove stuff on queue deletion
+    %% Check the stats are marked for removal on queue deletion.
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
     Check3 = fun() ->
+                 [{{Ch, QRes}, 1, 0, 0, 0, 0, 0, 1}] = ets:lookup(
+                                                         channel_queue_metrics,
+                                                         {Ch, QRes}),
+                 [{{Ch, X}, 1, 0, 0, 0}] = ets:lookup(
+                                             channel_exchange_metrics,
+                                             {Ch, X}),
+                 [{{Ch, {QRes, X}}, 1, 1}] = ets:lookup(
+                                               channel_queue_exchange_metrics,
+                                               {Ch, {QRes, X}})
+             end,
+    test_ch_metrics(Check3, ?TIMEOUT),
+
+    %% Check the garbage collection removes stuff.
+    force_metric_gc(),
+    Check4 = fun() ->
                  [] = ets:lookup(channel_queue_metrics, {Ch, QRes}),
-                 [{{Ch, X}, 1, 0, 0}] = ets:lookup(
-                                          channel_exchange_metrics,
-                                          {Ch, X}),
+                 [{{Ch, X}, 1, 0, 0, 0}] = ets:lookup(
+                                             channel_exchange_metrics,
+                                             {Ch, X}),
                  [] = ets:lookup(channel_queue_exchange_metrics,
                                  {Ch, {QRes, X}})
              end,
-    test_ch_metrics(Check3, ?TIMEOUT),
+    test_ch_metrics(Check4, ?TIMEOUT),
 
     rabbit_channel:shutdown(Ch),
     dummy_event_receiver:stop(),
     passed.
+
+force_metric_gc() ->
+    timer:sleep(300),
+    rabbit_core_metrics_gc ! start_gc,
+    gen_server:call(rabbit_core_metrics_gc, test).
 
 test_ch_metrics(Fun, Timeout) when Timeout =< 0 ->
     Fun();
