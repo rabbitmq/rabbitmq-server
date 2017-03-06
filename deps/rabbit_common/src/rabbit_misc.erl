@@ -861,6 +861,8 @@ ntoab(IP) ->
 %% See also rabbit_mnesia:is_process_alive/1 which also requires the
 %% process be in the same running cluster as us (i.e. not partitioned
 %% or some random node).
+is_process_alive(Pid) when node(Pid) =:= node() ->
+    erlang:is_process_alive(Pid);
 is_process_alive(Pid) ->
     Node = node(Pid),
     lists:member(Node, [node() | nodes()]) andalso
