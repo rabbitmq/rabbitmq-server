@@ -146,7 +146,7 @@ connection_metric_idemp(Config, {N, R}) ->
     Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
     % referesh stats 'R' times
     [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
-    timer:sleep(100),
+    force_metric_gc(Config),
     TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_metrics)],
     TableAfter2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
     [rabbit_ct_client_helpers:close_connection(Conn) || Conn <- Conns],
@@ -160,7 +160,7 @@ channel_metric_idemp(Config, {N, R}) ->
     Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_process_metrics)],
     % referesh stats 'R' times
     [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
-    timer:sleep(100),
+    force_metric_gc(Config),
     TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_metrics)],
     TableAfter2 = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_process_metrics)],
     rabbit_ct_client_helpers:close_connection(Conn),
@@ -184,7 +184,7 @@ queue_metric_idemp(Config, {N, R}) ->
     % referesh stats 'R' times
     ChanTable = read_table_rpc(Config, channel_created),
     [[Pid ! emit_stats || {Pid, _, _} <- ChanTable ] || _ <- lists:seq(1, R)],
-    timer:sleep(100),
+    force_metric_gc(Config),
     TableAfter = [ Pid || {Pid, _, _} <- read_table_rpc(Config,  queue_metrics)],
     TableAfter2 = [ Pid || {Pid, _, _} <- read_table_rpc(Config, queue_coarse_metrics)],
     [ delete_queue(Chan, Q) || Q <- Queues],
@@ -398,7 +398,7 @@ read_table(Table) ->
     ets:tab2list(Table).
 
 force_metric_gc(Config) ->
-    timer:sleep(100),
+    timer:sleep(300),
     rabbit_ct_broker_helpers:rpc(Config, 0, erlang, send,
                                  [rabbit_core_metrics_gc, start_gc]),
     rabbit_ct_broker_helpers:rpc(Config, 0, gen_server, call,
