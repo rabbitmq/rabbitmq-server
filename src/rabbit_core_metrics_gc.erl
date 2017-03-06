@@ -103,7 +103,7 @@ gc_process(Table) ->
               end, none, Table).
 
 gc_process(Pid, Table, Key) ->
-    case is_process_alive_in_cluster(Pid) of
+    case rabbit_misc:is_process_alive(Pid) of
         true ->
             none;
         false ->
@@ -151,7 +151,7 @@ gc_process_and_entity(Table, GbSet) ->
               end, none, Table).
 
 gc_process_and_entity(Id, Pid, Table, Key, GbSet) ->
-    case is_process_alive_in_cluster(Pid) orelse gb_sets:is_member(Id, GbSet) of
+    case rabbit_misc:is_process_alive(Pid) orelse gb_sets:is_member(Id, GbSet) of
         true ->
             none;
         false ->
@@ -166,18 +166,3 @@ gc_process_and_entities(Table, QueueGbSet, ExchangeGbSet) ->
                       gc_entity(Q, Table, Key, QueueGbSet),
                       gc_entity(X, Table, Key, ExchangeGbSet)
               end, none, Table).
-
-is_process_alive_in_cluster(Pid) ->
-    Local = node(),
-    case node(Pid) of
-        Local ->
-            is_process_alive(Pid);
-        Remote ->
-            case rabbit_misc:rpc_call(Remote, erlang, is_process_alive, [Pid]) of
-                Bool when is_boolean(Bool) ->
-                    Bool;
-                {badrpc, _} ->
-                    %% If the node is unreachable, the process might be dead
-                    false
-            end
-    end.
