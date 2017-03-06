@@ -298,7 +298,7 @@ format_required_versions(Versions) ->
     lists:map(fun(V) ->
                       case re:run(V, "^[0-9]*\.[0-9]*\.", [{capture, all, list}]) of
                           {match, [Sub]} ->
-                              lists:flatten(io_lib:format("~s.0-~s.x", [V, Sub]));
+                              lists:flatten(io_lib:format("~s-~sx", [V, Sub]));
                           _ ->
                               V
                       end
