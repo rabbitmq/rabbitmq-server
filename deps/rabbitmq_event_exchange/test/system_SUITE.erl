@@ -162,7 +162,7 @@ declare_event_queue(Config, RoutingKey) ->
 receive_event(Event) ->
     receive
         {#'basic.deliver'{routing_key = RoutingKey},
-         #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
+         #amqp_msg{props = #'P_basic'{}}} ->
             Event = RoutingKey
     after
         60000 ->
