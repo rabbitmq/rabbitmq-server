@@ -103,7 +103,7 @@ gc_process(Table) ->
               end, none, Table).
 
 gc_process(Pid, Table, Key) ->
-    case erlang:is_process_alive(Pid) of
+    case rabbit_misc:is_process_alive(Pid) of
         true ->
             none;
         false ->
@@ -151,7 +151,7 @@ gc_process_and_entity(Table, GbSet) ->
               end, none, Table).
 
 gc_process_and_entity(Id, Pid, Table, Key, GbSet) ->
-    case erlang:is_process_alive(Pid) orelse gb_sets:is_member(Id, GbSet) of
+    case rabbit_misc:is_process_alive(Pid) orelse gb_sets:is_member(Id, GbSet) of
         true ->
             none;
         false ->
