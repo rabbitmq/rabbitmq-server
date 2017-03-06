@@ -38,6 +38,8 @@ all: packages
 	package-rpm-opensuse package-rpm-suse \
 	package-rpm-rhel6 package-rpm-rhel7 \
 	package-windows package-standalone-macosx \
+	package-standalone-linux-x86_64 \
+	package-standalone-freebsd-x86_64 \
 	package-generic-unix
 
 PACKAGES_DIR ?= ../PACKAGES
@@ -93,6 +95,20 @@ package-windows: $(SOURCE_DIST_FILE)
 
 package-generic-unix: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C generic-unix $(VARS) all $(DO_CLEAN)
+
+ifeq ($(PLATFORM),linux)
+ifeq ($(shell uname -m),x86_64)
+package-standalone-linux-x86_64: $(SOURCE_DIST_FILE)
+	$(gen_verbose) $(MAKE) -C standalone $(VARS) OS=linux-x86_64 all $(DO_CLEAN)
+endif
+endif
+
+ifeq ($(PLATFORM),freebsd)
+ifeq ($(shell uname -m),amd64)
+package-standalone-freebsd-x86_64: $(SOURCE_DIST_FILE)
+	$(gen_verbose) $(MAKE) -C standalone $(VARS) OS=freebsd-x86_64 all $(DO_CLEAN)
+endif
+endif
 
 ifeq ($(PLATFORM),darwin)
 packages: package-standalone-macosx

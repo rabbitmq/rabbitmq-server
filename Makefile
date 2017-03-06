@@ -85,8 +85,10 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '/amqp_client/rebar.config'	\
 	       --exclude '/cowboy/doc/'			\
 	       --exclude '/cowboy/examples/'		\
+	       --exclude '/rabbit/escript/'		\
 	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/build/'\
 	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/swiftmq*'\
+	       --exclude '/rabbitmq_cli/escript/'	\
 	       --exclude '/rabbitmq_mqtt/test/build/'	\
 	       --exclude '/rabbitmq_mqtt/test/test_client/'\
 	       --exclude '/ranch/doc/'			\
@@ -203,6 +205,8 @@ clean-unpacked-source-dist:
 .PHONY: packages package-deb \
 	package-rpm package-rpm-fedora package-rpm-suse \
 	package-windows package-standalone-macosx \
+	package-standalone-linux-x86_64 \
+	package-standalone-freebsd-x86_64 \
 	package-generic-unix
 
 # This variable is exported so sub-make instances know where to find the
@@ -211,6 +215,8 @@ PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 
 packages package-deb package-rpm package-rpm-fedora \
 package-rpm-suse package-windows package-standalone-macosx \
+package-standalone-linux-x86_64 \
+package-standalone-freebsd-x86_64 \
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
