@@ -6120,6 +6120,8 @@ CT_OPTS ?=
 ifneq ($(wildcard $(TEST_DIR)),)
 ifndef CT_SUITES
 CT_SUITES := $(sort $(subst _SUITE.erl,,$(notdir $(call core_find,$(TEST_DIR)/,*_SUITE.erl))))
+SLOW_CT_SUITES := $(sort cluster_rename clustering_management dynamic_ha eager_sync health_check partitions priority_queue simple_ha queue_master_location unit_inbroker_backing_queue)
+FAST_CT_SUITES := $(filter-out $(SLOW_CT_SUITES),$(CT_SUITES))
 endif
 endif
 CT_SUITES ?=
@@ -6153,6 +6155,12 @@ else
 ct: test-build $(if $(IS_APP),,apps-ct)
 	$(verbose) mkdir -p $(CURDIR)/logs/
 	$(gen_verbose) $(CT_RUN) -sname ct_$(PROJECT) -suite $(addsuffix _SUITE,$(CT_SUITES)) $(CT_OPTS)
+ct-slow: test-build $(if $(IS_APP),,apps-ct)
+	$(verbose) mkdir -p $(CURDIR)/logs/
+	$(gen_verbose) $(CT_RUN) -sname ct_$(PROJECT) -suite $(addsuffix _SUITE,$(SLOW_CT_SUITES)) $(CT_OPTS)
+ct-fast: test-build $(if $(IS_APP),,apps-ct)
+	$(verbose) mkdir -p $(CURDIR)/logs/
+	$(gen_verbose) $(CT_RUN) -sname ct_$(PROJECT) -suite $(addsuffix _SUITE,$(FAST_CT_SUITES)) $(CT_OPTS)
 endif
 
 ifneq ($(ALL_APPS_DIRS),)
