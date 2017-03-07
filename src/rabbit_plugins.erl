@@ -61,10 +61,36 @@ ensure(FileJustChanged0) ->
             {error, {enabled_plugins_mismatch, FileJustChanged, OurFile}}
     end.
 
+-spec plugins_expand_dir() -> file:filename().
+plugins_expand_dir() ->
+    case application:get_env(rabbit, plugins_expand_dir) of
+        {ok, ExpandDir} ->
+            ExpandDir;
+        _ ->
+            filename:join([rabbit_mnesia:dir(), "plugins_expand_dir"])
+    end.
+
+-spec plugins_dist_dir() -> file:filename().
+plugins_dist_dir() ->
+    case application:get_env(rabbit, plugins_dir) of
+        {ok, PluginsDistDir} ->
+            PluginsDistDir;
+        _ ->
+            filename:join([rabbit_mnesia:dir(), "fake_plugins_dir"])
+    end.
+
+-spec enabled_plugins() -> [atom()].
+enabled_plugins() ->
+    case application:get_env(rabbit, enabled_plugins_file) of
+        {ok, EnabledFile} ->
+            read_enabled(EnabledFile);
+        _ ->
+            []
+    end.
+
 %% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
-    {ok, ExpandDir}   = application:get_env(rabbit, plugins_expand_dir),
-
+    ExpandDir = plugins_expand_dir(),
     %% Eliminate the contents of the destination directory
     case delete_recursively(ExpandDir) of
         ok          -> ok;
@@ -72,14 +98,12 @@ setup() ->
                                       [ExpandDir, E1]}})
     end,
 
-    {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
-    Enabled = read_enabled(EnabledFile),
+    Enabled = enabled_plugins(),
     prepare_plugins(Enabled).
 
 %% @doc Lists the plugins which are currently running.
 active() ->
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-    InstalledPlugins = plugin_names(list(ExpandDir)),
+    InstalledPlugins = plugin_names(list(plugins_expand_dir())),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
             lists:member(App, InstalledPlugins)].
 
@@ -163,10 +187,9 @@ is_loadable(App) ->
 %%----------------------------------------------------------------------------
 
 prepare_plugins(Enabled) ->
-    {ok, PluginsDistDir} = application:get_env(rabbit, plugins_dir),
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+    ExpandDir = plugins_expand_dir(),
 
-    AllPlugins = list(PluginsDistDir),
+    AllPlugins = list(plugins_dist_dir()),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
 
