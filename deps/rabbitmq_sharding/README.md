@@ -1,4 +1,4 @@
-# RabbitMQ Sharding Plugin #
+# RabbitMQ Sharding Plugin
 
 This plugin introduces the concept of sharded queues for
 RabbitMQ. Sharding is performed by exchanges, that is, messages
@@ -8,6 +8,12 @@ defining an exchange that will partition, or shard messages across
 queues. The partitioning will be done automatically for you, i.e: once
 you define an exchange as _sharded_, then the supporting queues will
 be automatically created on every cluster node and messages will be sharded across them.
+
+## Project Maturity
+
+This plugin is reasonably mature and known to have production users.
+
+## Overview
 
 The following graphic depicts how the plugin works from the standpoint
 of a publisher and a consumer:
@@ -150,7 +156,8 @@ definition has while routing messages.
 
 The `routing-key` policy definition is optional.
 
-## Building the plugin ##
+
+## Building from Source
 
 Get the RabbitMQ Public Umbrella ready as explained in the
 [RabbitMQ Plugin Development Guide](http://www.rabbitmq.com/plugin-development.html).
@@ -160,14 +167,9 @@ fetch dependencies:
 
 ```bash
 make up
-cd ../rabbitmq-sharding
-make
+cd deps/rabbitmq-sharding
+make dist
 ```
-
-## Plugin Status ##
-
-At the moment the plugin is __experimental__ in order to receive
-feedback from the community.
 
 ## LICENSE ##
 
