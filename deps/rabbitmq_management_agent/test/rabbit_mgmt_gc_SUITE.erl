@@ -507,13 +507,13 @@ consumer_stats(Config) ->
     timer:sleep(1150),
 
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
-    Q = q(<<"myqueue">>),
+    Q = q(<<"queue_stats">>),
 
+    Id = {Q, DeadPid, tag},
     rabbit_ct_broker_helpers:rpc(Config, A, ets, insert,
-                                 [consumer_stats, {{Q, DeadPid, tag}, infos}]),
+                                 [consumer_stats, {Id, infos}]),
 
-    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                       [consumer_stats, {Q, DeadPid, tag}]),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup, [consumer_stats, Id]),
 
     %% Trigger gc. When the gen_server:call returns, the gc has already finished.
     rabbit_ct_broker_helpers:rpc(Config, A, erlang, send, [rabbit_mgmt_gc, start_gc]),
@@ -522,8 +522,7 @@ consumer_stats(Config) ->
     [_|_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, tab2list,
                                          [consumer_stats]),
 
-    [] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                      [consumer_stats, {Q, DeadPid, tag}]),
+    [] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup, [consumer_stats, Id]),
 
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"queue_stats">>}),
     rabbit_ct_client_helpers:close_channel(Ch),

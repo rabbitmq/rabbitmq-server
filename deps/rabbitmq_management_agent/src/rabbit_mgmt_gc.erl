@@ -195,7 +195,7 @@ gc_process_and_entity(Table, GbSet) ->
               end, none, Table).
 
 gc_process_and_entity(Id, Pid, Table, Key, GbSet) ->
-    case rabbit_misc:is_process_alive(Pid) orelse gb_sets:is_member(Id, GbSet) of
+    case rabbit_misc:is_process_alive(Pid) andalso gb_sets:is_member(Id, GbSet) of
         true ->
             none;
         false ->
