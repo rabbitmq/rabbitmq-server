@@ -17,7 +17,7 @@ define PROJECT_ENV
 	    {use_ssl,               false},
 	    {use_starttls,          false},
 	    {ssl_options,           []},
-	    {port,                  3890},
+	    {port,                  389},
 	    {timeout,               infinity},
 	    {log,                   false},
 	    {pool_size,             64},
