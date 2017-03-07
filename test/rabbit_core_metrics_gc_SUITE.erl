@@ -34,7 +34,8 @@ groups() ->
         connection_metrics,
         channel_metrics,
         node_metrics,
-        gen_server2_metrics
+        gen_server2_metrics,
+        consumer_metrics
       ]
      }
     ].
@@ -283,6 +284,36 @@ gen_server2_metrics(Config) ->
 
     [] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
                                       [gen_server2_metrics, DeadPid]),
+
+    ok.
+
+consumer_metrics(Config) ->
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_metrics">>}),
+    amqp_channel:call(Ch, #'basic.consume'{queue = <<"queue_metrics">>}),
+    timer:sleep(200),
+
+    DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
+
+    QName = q(<<"queue_metrics">>),
+    CTag = <<"tag">>,
+    rabbit_ct_broker_helpers:rpc(Config, A, rabbit_core_metrics,
+                                 consumer_created, [DeadPid, CTag, true, true,
+                                                    QName, 1, []]),
+    Id = {QName, DeadPid, CTag},
+    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup, [consumer_created, Id]),
+
+    %% Trigger gc. When the gen_server:call returns, the gc has already finished.
+    rabbit_ct_broker_helpers:rpc(Config, A, erlang, send, [rabbit_core_metrics_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, A, gen_server, call, [rabbit_core_metrics_gc, test]),
+
+    [_|_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, tab2list, [consumer_created]),
+    [] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup, [consumer_created, Id]),
+
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"queue_metrics">>}),
+    rabbit_ct_client_helpers:close_channel(Ch),
 
     ok.
 

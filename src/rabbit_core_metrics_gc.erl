@@ -64,7 +64,6 @@ gc_connections() ->
     gc_process(connection_coarse_metrics).
 
 gc_channels() ->
-    %% TODO channel stats
     gc_process(channel_created),
     gc_process(channel_metrics),
     gc_process(channel_process_metrics),
@@ -107,7 +106,6 @@ gc_process(Pid, Table, Key) ->
         true ->
             none;
         false ->
-            %% TODO catch?
             ets:delete(Table, Key),
             none
     end.
@@ -128,7 +126,6 @@ gc_entity(Id, Table, Key, GbSet) ->
         true ->
             none;
         false ->
-            %% TODO catch?
             ets:delete(Table, Key),
             none
     end.
@@ -136,26 +133,22 @@ gc_entity(Id, Table, Key, GbSet) ->
 gc_process_and_entity(Table, GbSet) ->
     ets:foldl(fun({{Pid, Id} = Key, _, _, _, _, _, _, _}, none)
                   when Table == channel_queue_metrics ->
-                      gc_entity(Id, Table, Key, GbSet),
-                      gc_process(Pid, Table, Key);
+                      gc_process_and_entity(Id, Pid, Table, Key, GbSet);
                  ({{Pid, Id} = Key, _, _, _, _}, none)
                     when Table == channel_exchange_metrics ->
-                      gc_entity(Id, Table, Key, GbSet),
-                      gc_process(Pid, Table, Key);
+                      gc_process_and_entity(Id, Pid, Table, Key, GbSet);
                  ({{Id, Pid, _} = Key, _, _, _, _}, none)
                     when Table == consumer_created ->
-                      gc_entity(Id, Table, Key, GbSet),
-                      gc_process(Pid, Table, Key);
+                      gc_process_and_entity(Id, Pid, Table, Key, GbSet);
                  ({{{Pid, Id}, _} = Key, _, _, _, _}, none) ->
                       gc_process_and_entity(Id, Pid, Table, Key, GbSet)
               end, none, Table).
 
 gc_process_and_entity(Id, Pid, Table, Key, GbSet) ->
-    case rabbit_misc:is_process_alive(Pid) orelse gb_sets:is_member(Id, GbSet) of
+    case rabbit_misc:is_process_alive(Pid) andalso gb_sets:is_member(Id, GbSet) of
         true ->
             none;
         false ->
-            %% TODO catch?
             ets:delete(Table, Key),
             none
     end.
