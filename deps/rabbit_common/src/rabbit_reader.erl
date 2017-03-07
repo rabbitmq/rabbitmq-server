@@ -1202,16 +1202,17 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
              queue_collector = Collector,
              heartbeater = Heartbeater};
 
-handle_method0(#'connection.open'{virtual_host = VHostPath},
+handle_method0(#'connection.open'{virtual_host = VHost},
                State = #v1{connection_state = opening,
                            connection       = Connection = #connection{
-                                                user = User,
+                                                log_name = ConnName,
+                                                user = User = #user{username = Username},
                                                 protocol = Protocol},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
-    ok = rabbit_access_control:check_vhost_access(User, VHostPath, Sock),
-    NewConnection = Connection#connection{vhost = VHostPath},
+    ok = rabbit_access_control:check_vhost_access(User, VHost, Sock),
+    NewConnection = Connection#connection{vhost = VHost},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     Throttle1 = Throttle#throttle{alarmed_by = Conserve},
@@ -1227,6 +1228,8 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                                            Infos),
     rabbit_event:notify(connection_created, Infos),
     maybe_emit_stats(State1),
+    log(info, "connection ~p (~s): user '~s' authenticated and granted access to vhost '~s' ~n",
+        [self(), ConnName, Username, VHost]),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
