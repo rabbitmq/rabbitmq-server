@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2011-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2011-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(unit_inbroker_list_consumers_sanity_check_SUITE).
@@ -55,7 +55,7 @@ init_per_group(Group, Config) ->
                                 rabbit_ct_broker_helpers:setup_steps() ++
                                 rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(Group, Config) ->
+end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
               rabbit_ct_client_helpers:teardown_steps() ++
               rabbit_ct_broker_helpers:teardown_steps()).
