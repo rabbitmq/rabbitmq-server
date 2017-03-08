@@ -48,8 +48,8 @@ groups() ->
           {cluster_size_3, [], [
               autoheal,
               autoheal_after_pause_if_all_down,
-	      autoheal_multiple_partial_partitions,
-	      autoheal_unexpected_finish,
+              autoheal_multiple_partial_partitions,
+              autoheal_unexpected_finish,
               ignore,
               pause_if_all_down_on_blocked,
               pause_if_all_down_on_down,
