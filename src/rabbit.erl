@@ -475,7 +475,7 @@ start_apps(Apps) ->
         prompt ->
             IoDevice = get_input_iodevice(),
             io:setopts(IoDevice, [{echo, false}]),
-            PP = lists:droplast(io:get_line(IoDevice,
+            PP = rabbit_misc:lists_droplast(io:get_line(IoDevice,
                 "\nPlease enter the passphrase to unlock encrypted "
                 "configuration entries.\n\nPassphrase: ")),
             io:setopts(IoDevice, [{echo, true}]),

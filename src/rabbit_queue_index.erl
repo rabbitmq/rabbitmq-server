@@ -176,13 +176,40 @@
 
 %%----------------------------------------------------------------------------
 
--record(qistate, {dir, segments, journal_handle, dirty_count,
-                  max_journal_entries, on_sync, on_sync_msg,
-                  unconfirmed, unconfirmed_msg,
-                  pre_publish_cache, delivered_cache}).
+-record(qistate, {
+  %% queue directory where segment and journal files are stored
+  dir,
+  %% map of #segment records
+  segments,
+  %% journal file handle obtained from/used by file_handle_cache
+  journal_handle,
+  %% how many not yet flushed entries are there
+  dirty_count,
+  %% this many not yet flushed journal entries will force a flush
+  max_journal_entries,
+  %% callback function invoked when a message is "handled"
+  %% by the index and potentially can be confirmed to the publisher
+  on_sync,
+  on_sync_msg,
+  %% set of IDs of unconfirmed [to publishers] messages
+  unconfirmed,
+  unconfirmed_msg,
+  %% optimisation
+  pre_publish_cache,
+  %% optimisation
+  delivered_cache}).
 
--record(segment, {num, path, journal_entries,
-                  entries_to_segment, unacked}).
+-record(segment, {
+  %% segment ID (an integer)
+  num,
+  %% segment file path (see also ?SEGMENT_EXTENSION)
+  path,
+  %% index operation log entries in this segment
+  journal_entries,
+  entries_to_segment,
+  %% counter of unacknowledged messages
+  unacked
+}).
 
 -include("rabbit.hrl").
 

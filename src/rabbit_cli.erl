@@ -277,7 +277,7 @@ mutually_exclusive_flags(CurrentOptionValues, Default, FlagsAndValues) ->
             {ok, Value};
         _ ->
             Names = [ [$', N, $']  || {N, _} <- PresentFlags ],
-            CommaSeparated = string:join(lists:droplast(Names), ", "),
+            CommaSeparated = string:join(rabbit_misc:lists_droplast(Names), ", "),
             AndOneMore = lists:last(Names),
             Msg = io_lib:format("Options ~s and ~s are mutually exclusive", [CommaSeparated, AndOneMore]),
             {error, lists:flatten(Msg)}

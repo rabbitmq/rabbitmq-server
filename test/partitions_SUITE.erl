@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2011-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2011-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(partitions_SUITE).
@@ -21,10 +21,6 @@
 
 -compile(export_all).
 
--import(rabbit_ct_broker_helpers, [enable_dist_proxy_manager/1,
-                                   enable_dist_proxy/1,
-                                   enable_dist_proxy_on_node/3]).
-
 %% We set ticktime to 1s and setuptime is 7s so to make sure it
 %% passes...
 -define(DELAY, 8000).
@@ -32,6 +28,9 @@
 %% We wait for 5 minutes for nodes to be running/blocked.
 %% It's a lot, but still better than timetrap_timeout
 -define(AWAIT_TIMEOUT, 300000).
+
+suite() ->
+    [{timetrap, 5 * 60000}].
 
 all() ->
     [
@@ -49,8 +48,8 @@ groups() ->
           {cluster_size_3, [], [
               autoheal,
               autoheal_after_pause_if_all_down,
-	      autoheal_multiple_partial_partitions,
-	      autoheal_unexpected_finish,
+              autoheal_multiple_partial_partitions,
+              autoheal_unexpected_finish,
               ignore,
               pause_if_all_down_on_blocked,
               pause_if_all_down_on_down,
