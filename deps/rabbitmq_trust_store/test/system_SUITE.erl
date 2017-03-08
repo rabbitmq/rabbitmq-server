@@ -740,7 +740,7 @@ wait_for_file_system_time() ->
     timer:sleep(timer:seconds(1)).
 
 wait_for_trust_store_refresh() ->
-    timer:sleep(2 * timer:seconds(interval())).
+    timer:sleep(5 * timer:seconds(interval())).
 
 cfg() ->
     {ok, Cfg} = application:get_env(rabbit, ssl_options),
