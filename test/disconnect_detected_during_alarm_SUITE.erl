@@ -14,7 +14,7 @@
 %% Copyright (c) 2011-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(unit_inbroker_disconnect_detected_during_alarm_SUITE).
+-module(disconnect_detected_during_alarm_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").

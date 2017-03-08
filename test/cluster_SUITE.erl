@@ -14,7 +14,7 @@
 %% Copyright (c) 2011-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(unit_inbroker_cluster_SUITE).
+-module(cluster_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
