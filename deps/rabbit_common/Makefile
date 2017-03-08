@@ -38,8 +38,8 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 -include development.pre.mk
 
 include mk/rabbitmq-components.mk
-include erlang.mk
 include mk/rabbitmq-build.mk
+include erlang.mk
 include mk/rabbitmq-dist.mk
 include mk/rabbitmq-tools.mk
 
