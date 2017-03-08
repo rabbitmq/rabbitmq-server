@@ -1228,7 +1228,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                                            Infos),
     rabbit_event:notify(connection_created, Infos),
     maybe_emit_stats(State1),
-    log(info, "connection ~p (~s): user '~s' authenticated and granted access to vhost '~s' ~n",
+    log(info, "connection ~p (~s): user '~s' authenticated and granted access to vhost '~s'~n",
         [self(), ConnName, Username, VHost]),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
