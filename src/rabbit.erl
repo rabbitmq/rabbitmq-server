@@ -435,7 +435,7 @@ stop() ->
     case whereis(rabbit_boot) of
         undefined -> ok;
         _         ->
-            rabbit_log:info("Waiting for RabbitMQ to startup before stopping"),
+            rabbit_log:info("RabbitMQ hasn't finished starting yet. Waiting for startup to finish before stopping..."),
             await_startup(true)
     end,
     rabbit_log:info("Stopping RabbitMQ~n", []),
@@ -447,7 +447,7 @@ stop_and_halt() ->
     try
         stop()
     catch Type:Reason ->
-        rabbit_log:error("Error trying to stop rabbitmq: ~p:~p", [Type, Reason])
+        rabbit_log:error("Error trying to stop RabbitMQ: ~p:~p", [Type, Reason])
     after
         AppsLeft = [ A || {A, _, _} <- application:which_applications() ],
         rabbit_log:info(
