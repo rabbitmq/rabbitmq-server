@@ -39,6 +39,7 @@
 %% are: 'scheme', 'userinfo', 'host', 'port', 'path', 'query',
 %% 'fragment'.
 
+-spec parse(AbsURI :: string() | binary(), Defaults :: list()) -> string().
 parse(AbsURI, Defaults) ->
     AbsUriString = rabbit_data_coercion:to_list(AbsURI),
     case parse_scheme(AbsUriString) of

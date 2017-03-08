@@ -26,8 +26,10 @@
 
 %% Reformat a URI to remove authentication secrets from it (before we
 %% log it or display it anywhere).
+-spec remove_credentials(URI :: string() | binary()) -> string().
 remove_credentials(URI) ->
-    Props = uri_parser:parse(URI,
+    UriString = rabbit_data_coercion:to_list(URI),
+    Props = uri_parser:parse(UriString,
                              [{host, undefined}, {path, undefined},
                               {port, undefined}, {'query', []}]),
     PortPart = case proplists:get_value(port, Props) of
@@ -62,8 +64,14 @@ remove_credentials(URI) ->
 %% than once).  The extra parameters that may be specified for an SSL
 %% connection are cacertfile, certfile, keyfile, verify,
 %% fail_if_no_peer_cert, password, and depth.
+-type parse_result() :: {ok, #amqp_params_network{}} |
+                        {ok, #amqp_params_direct{}} |
+                        {error, {any(), string()}}.
+
+-spec parse(Uri :: string() | binary()) -> parse_result().
 parse(Uri) -> parse(Uri, <<"/">>).
 
+-spec parse(Uri :: string() | binary(), DefaultVHost :: binary()) -> parse_result().
 parse(Uri, DefaultVHost) ->
     try return(parse1(Uri, DefaultVHost))
     catch throw:Err -> {error, {Err, Uri}};
