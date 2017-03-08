@@ -103,6 +103,10 @@ CT_OPTS += -ct_hooks cth_surefire
 export RABBITMQ_CT_SKIP_AS_ERROR = true
 endif
 
+TEST_DEPS += cth_fail_fast
+dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
+CT_OPTS += -ct_hooks cth_fail_fast
+
 # --------------------------------------------------------------------
 # Hex.pm.
 # --------------------------------------------------------------------
