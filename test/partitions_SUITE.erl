@@ -21,10 +21,6 @@
 
 -compile(export_all).
 
--import(rabbit_ct_broker_helpers, [enable_dist_proxy_manager/1,
-                                   enable_dist_proxy/1,
-                                   enable_dist_proxy_on_node/3]).
-
 %% We set ticktime to 1s and setuptime is 7s so to make sure it
 %% passes...
 -define(DELAY, 8000).
