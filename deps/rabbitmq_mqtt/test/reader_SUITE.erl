@@ -144,7 +144,8 @@ stats(Config) ->
     [{Pid, Props}] = rpc(Config, ets, lookup, [connection_metrics, Pid]),
     true = proplists:is_defined(garbage_collection, Props),
     %% If the coarse entry is present, stats were successfully emitted
-    [{Pid, _, _, _}] = rpc(Config, ets, lookup, [connection_coarse_metrics, Pid]),
+    [{Pid, _, _, _, _}] = rpc(Config, ets, lookup,
+                              [connection_coarse_metrics, Pid]),
     emqttc:disconnect(C).
 
 expect_publishes(_Topic, []) -> ok;
