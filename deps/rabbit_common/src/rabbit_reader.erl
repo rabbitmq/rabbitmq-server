@@ -1166,7 +1166,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     rabbit_log_connection:info(
         "connection ~p (~s): "
         "user '~s' authenticated and granted access to vhost '~s'~n",
-        [self(), ConnName, Username, VHost]),
+        [self(), dynamic_connection_name(ConnName), Username, VHost]),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
