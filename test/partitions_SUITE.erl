@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2011-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2011-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(partitions_SUITE).
@@ -32,6 +32,9 @@
 %% We wait for 5 minutes for nodes to be running/blocked.
 %% It's a lot, but still better than timetrap_timeout
 -define(AWAIT_TIMEOUT, 300000).
+
+suite() ->
+    [{timetrap, 5 * 60000}].
 
 all() ->
     [
