@@ -147,8 +147,8 @@ stats(Config) ->
     true = proplists:is_defined(garbage_collection, Props),
     0 = proplists:get_value(timeout, Props),
     %% If the coarse entry is present, stats were successfully emitted
-    [{Pid, _, _, _}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
-                                                    [connection_coarse_metrics, Pid]),
+    [{Pid, _, _, _, _}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
+                                                       [connection_coarse_metrics, Pid]),
     rabbit_stomp_client:disconnect(Client),
     ok.
 
