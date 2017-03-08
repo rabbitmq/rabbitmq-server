@@ -26,6 +26,9 @@
 all() ->
     [
       amqp_uri_parsing,
+      amqp_uri_accepts_string_and_binaries,
+      amqp_uri_remove_credentials,
+      uri_parser_accepts_string_and_binaries,
       route_destination_parsing
     ].
 
@@ -167,6 +170,38 @@ amqp_uri_parsing(_Config) ->
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo%xy")),
 
     ok.
+
+amqp_uri_accepts_string_and_binaries(_Config) ->
+    [?assertMatch({ok, #amqp_params_network{username     = <<"user">>,
+                                            password     = <<"pass">>,
+                                            host         = "host",
+                                            port         = 10000,
+                                            virtual_host = <<"vhost">>,
+                                            heartbeat    = 5}},
+                  amqp_uri:parse(Uri))
+             || Uri <- string_binaries_uris()],
+    ok.
+
+amqp_uri_remove_credentials(_Config) ->
+    [?assertMatch("amqp://host:10000/vhost",
+                  amqp_uri:remove_credentials(Uri))
+        || Uri <- string_binaries_uris()],
+    ok.
+
+uri_parser_accepts_string_and_binaries(_Config) ->
+    [?assertMatch([{fragment,[]},
+                   {host,"host"},
+                   {path,"/vhost"},
+                   {port,10000},
+                   {query,[{"heartbeat","5"}]},
+                   {scheme,"amqp"},
+                   {userinfo,["user","pass"]}],
+                   uri_parser:parse(Uri, []))
+        || Uri <- string_binaries_uris()],
+    ok.
+
+string_binaries_uris() ->
+    ["amqp://user:pass@host:10000/vhost?heartbeat=5", <<"amqp://user:pass@host:10000/vhost?heartbeat=5">>].
 
 %% -------------------------------------------------------------------
 %% Route destination parsing.
