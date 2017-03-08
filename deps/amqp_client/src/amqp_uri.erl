@@ -70,8 +70,9 @@ parse(Uri, DefaultVHost) ->
           error:Err -> {error, {Err, Uri}}
     end.
 
-parse1(Uri, DefaultVHost) when is_list(Uri) ->
-    case uri_parser:parse(Uri, [{host, undefined}, {path, undefined},
+parse1(Uri, DefaultVHost) when is_list(Uri); is_binary(Uri) ->
+    UriString = rabbit_data_coercion:to_list(Uri),
+    case uri_parser:parse(UriString, [{host, undefined}, {path, undefined},
                                 {port, undefined}, {'query', []}]) of
         {error, Err} ->
             throw({unable_to_parse_uri, Err});

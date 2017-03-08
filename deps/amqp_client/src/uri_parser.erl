@@ -40,7 +40,8 @@
 %% 'fragment'.
 
 parse(AbsURI, Defaults) ->
-    case parse_scheme(AbsURI) of
+    AbsUriString = rabbit_data_coercion:to_list(AbsURI),
+    case parse_scheme(AbsUriString) of
 	{error, Reason} ->
 	    {error, Reason};
 	{Scheme, Rest} ->
