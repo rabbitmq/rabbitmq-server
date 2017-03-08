@@ -77,10 +77,25 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 # Common test flags.
 # --------------------------------------------------------------------
 
+# Enable the cth_fail_fast common_test hook on Concourse.
+#
+# This hook will make sure the first failure puts an end to the
+# testsuites; ie. all remaining tests are skipped.
+
+ifdef CONCOURSE
+TEST_DEPS += cth_fail_fast
+dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
+CT_OPTS += -ct_hooks cth_fail_fast
+endif
+
 # Disable most messages on Travis and Concourse.
 #
 # On CI, set $RABBITMQ_CT_SKIP_AS_ERROR so that any skipped
 # testsuite/testgroup/testcase is considered an error.
+#
+# CAUTION: All arguments after -erl_args are passed to the emulator and
+# common_test doesn't interpret them! Therefore, all common_test flags
+# *MUST* appear before.
 
 CT_QUIET_FLAGS = -verbosity 50 \
 		 -erl_args \
@@ -102,10 +117,6 @@ ifdef JENKINS_HOME
 CT_OPTS += -ct_hooks cth_surefire
 export RABBITMQ_CT_SKIP_AS_ERROR = true
 endif
-
-TEST_DEPS += cth_fail_fast
-dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
-CT_OPTS += -ct_hooks cth_fail_fast
 
 # --------------------------------------------------------------------
 # Hex.pm.
