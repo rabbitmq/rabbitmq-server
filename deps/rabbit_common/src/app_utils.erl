@@ -59,7 +59,7 @@ start_applications(Apps, ErrorHandler) ->
 stop_applications(Apps, ErrorHandler) ->
     manage_applications(fun lists:foldr/3,
                         fun(App) ->
-                            rabbit_log:info("Stopping application: ~p", [App]),
+                            rabbit_log:info("Stopping application '~s'", [App]),
                             application:stop(App)
                         end,
                         fun application:start/1,
