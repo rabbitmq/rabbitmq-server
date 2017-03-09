@@ -50,7 +50,7 @@
     bq_queue_index_props,
     {variable_queue_default, [parallel], ?VARIABLE_QUEUE_TESTCASES},
     {variable_queue_lazy, [parallel], ?VARIABLE_QUEUE_TESTCASES ++
-                              [variable_queue_mode_change]},
+                                      [variable_queue_mode_change]},
     bq_variable_queue_delete_msg_store_files_callback,
     bq_queue_recover
   ]).
