@@ -41,7 +41,7 @@ Assuming you have:
  * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing),
    e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'` from a [server release repository](https://github.com/rabbitmq/rabbitmq-server-release) clone
 
-you can simply run `make tests` within the project root directory. To run a single test: `make tests TEST_FILE=test/help_command_test.exs`. And if you want to run in verbose mode, specify `V=1` make variable.
+you can simply run `make tests` within the project root directory. To run a single test: `make test TEST_FILE=test/help_command_test.exs`. And if you want to run in verbose mode, specify `V=1` make variable.
 
 NOTE: You may see the following message several times:
 
