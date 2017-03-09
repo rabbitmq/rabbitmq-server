@@ -16,6 +16,7 @@
 
 defmodule HelpCommandTest do
   use ExUnit.Case, async: false
+  import TestHelper
 
   alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
   alias RabbitMQ.CLI.Core.ExitCodes,   as: ExitCodes
@@ -23,6 +24,7 @@ defmodule HelpCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
   setup_all do
+    set_scope(:all)
     :ok
   end
 
