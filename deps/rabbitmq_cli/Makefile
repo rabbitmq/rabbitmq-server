@@ -78,10 +78,14 @@ rel:: $(ESCRIPTS)
 	@:
 
 tests:: $(ESCRIPTS)
-	$(gen_verbose) $(MIX_TEST)
+	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
 
 test:: $(ESCRIPTS)
+ifdef TEST_FILE
 	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
+else
+	$(verbose) echo "TEST_FILE must be set, e.g. TEST_FILE=./test/close_all_connections_command_test.exs" 1>&2; false
+endif
 
 .PHONY: install
 
