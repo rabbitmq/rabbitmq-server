@@ -45,19 +45,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
 
   def validate(_plugins, opts) do
     :ok
-    |> validate_step(fn() -> Helpers.require_rabbit(opts) end)
-    |> validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
-    |> validate_step(fn() -> Helpers.plugins_dir(opts) end)
-  end
-
-  def validate_step(:ok, step) do
-    case step.() do
-      {:error, err} -> {:validation_failure, err};
-      _             -> :ok
-    end
-  end
-  def validate_step({:validation_failure, err}, _) do
-    {:validation_failure, err}
+    |> Helpers.validate_step(fn() -> Helpers.require_rabbit_and_plugins(opts) end)
+    |> Helpers.validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
+    |> Helpers.validate_step(fn() -> Helpers.plugins_dir(opts) end)
   end
 
   def usage, do: "enable <plugin>|--all [--offline] [--online]"

@@ -51,5 +51,4 @@ defmodule RabbitMQ.CLI.Ctl.Validators do
       {:error, err} -> {:validation_failure, err}
     end
   end
-
 end
