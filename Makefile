@@ -145,8 +145,17 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 include rabbitmq-components.mk
 include erlang.mk
 
-SLOW_CT_SUITES := $(sort cluster_rename clustering_management dynamic_ha eager_sync health_check partitions priority_queue simple_ha queue_master_location backing_queue)
-FAST_CT_SUITES := $(filter-out $(SLOW_CT_SUITES),$(CT_SUITES))
+SLOW_CT_SUITES := backing_queue \
+		  cluster_rename \
+		  clustering_management \
+		  dynamic_ha \
+		  eager_sync \
+		  health_check \
+		  partitions \
+		  priority_queue \
+		  queue_master_location \
+		  simple_ha
+FAST_CT_SUITES := $(filter-out $(sort $(SLOW_CT_SUITES)),$(CT_SUITES))
 
 ct-fast: CT_SUITES = $(FAST_CT_SUITES)
 ct-slow: CT_SUITES = $(SLOW_CT_SUITES)

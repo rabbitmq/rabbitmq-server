@@ -75,6 +75,7 @@ end_per_testcase(Testcase, Config) ->
 %% ---------------------------------------------------------------------------
 %% Testcase
 %% ---------------------------------------------------------------------------
+
 disconnect_detected_during_alarm(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 

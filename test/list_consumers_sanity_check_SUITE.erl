@@ -39,6 +39,7 @@ group(_) ->
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
+
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config).
@@ -69,6 +70,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testcase
 %% -------------------------------------------------------------------
+
 list_consumers_sanity_check(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Chan = rabbit_ct_client_helpers:open_channel(Config, A),

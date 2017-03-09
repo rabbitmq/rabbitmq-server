@@ -359,4 +359,3 @@ queue_name(Config, Name) ->
 
 queue_name(Name) ->
     rabbit_misc:r(<<"/">>, queue, Name).
-
