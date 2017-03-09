@@ -78,6 +78,9 @@ rel:: $(ESCRIPTS)
 	@:
 
 tests:: $(ESCRIPTS)
+	$(gen_verbose) $(MIX_TEST)
+
+test:: $(ESCRIPTS)
 	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
 
 .PHONY: install
