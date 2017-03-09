@@ -985,6 +985,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                                       flying_ets          = FlyingEts,
                                       clients             = Clients,
                                       dir                 = Dir }) ->
+    rabbit_log:info("Stopping message store for directory '~s'", [Dir]),
     %% stop the gc first, otherwise it could be working and we pull
     %% out the ets tables from under it.
     ok = rabbit_msg_store_gc:stop(GCPid),
@@ -1001,6 +1002,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
     IndexModule:terminate(IndexState),
     ok = store_recovery_terms([{client_refs, dict:fetch_keys(Clients)},
                                {index_module, IndexModule}], Dir),
+    rabbit_log:info("Message store for directory '~s' is stopped", [Dir]),
     State3 #msstate { index_state         = undefined,
                       current_file_handle = undefined }.
 
