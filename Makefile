@@ -144,6 +144,7 @@ $(PROJECT).d:: $(EXTRA_SOURCES)
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
+	      rabbit_common/mk/rabbitmq-test.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
@@ -154,6 +155,21 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
+
+SLOW_CT_SUITES := backing_queue \
+		  cluster_rename \
+		  clustering_management \
+		  dynamic_ha \
+		  eager_sync \
+		  health_check \
+		  partitions \
+		  priority_queue \
+		  queue_master_location \
+		  simple_ha
+FAST_CT_SUITES := $(filter-out $(sort $(SLOW_CT_SUITES)),$(CT_SUITES))
+
+ct-fast: CT_SUITES = $(FAST_CT_SUITES)
+ct-slow: CT_SUITES = $(SLOW_CT_SUITES)
 
 # --------------------------------------------------------------------
 # Compilation.
