@@ -18,6 +18,9 @@
 
 -export([init/0]).
 
+%% for testing purposes
+-export([get_binding_address/1, get_tcp_port/1, get_tcp_conf/2]).
+
 -include_lib("rabbitmq_stomp/include/rabbit_stomp.hrl").
 
 
@@ -25,16 +28,9 @@
 
 -spec init() -> ok.
 init() ->
-    %% The 'tcp_config' option may include the port, but we already have
-    %% a 'port' option, so we prioritize the 'port' option over the one
-    %% found in 'tcp_config', if any.
-    TCPConf0 = get_env(tcp_config, []),
-    {TCPConf, Port} = case application:get_env(rabbitmq_web_stomp, port) of
-        undefined ->
-            {TCPConf0, proplists:get_value(port, TCPConf0, 15674)};
-        {ok, Port0} ->
-            {[{port, Port0}|TCPConf0], Port0}
-    end,
+    Port = get_tcp_port(application:get_all_env(rabbitmq_web_stomp)),
+
+    TcpConf = get_tcp_conf(get_env(tcp_config, []), Port),
 
     WsFrame = get_env(ws_frame, text),
     CowboyOpts = get_env(cowboy_opts, []),
@@ -53,27 +49,28 @@ init() ->
         {ok, NumTcp}  -> NumTcp
     end,
     {ok, _} = cowboy:start_http(http, NumTcpAcceptors,
-                                TCPConf,
+                                TcpConf,
                                 [{env, [{dispatch, Routes}]}|CowboyOpts]),
-    listener_started('http/web-stomp', TCPConf),
+    listener_started('http/web-stomp', TcpConf),
     rabbit_log:info("rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
-                    ["0.0.0.0", Port]),
+                    [get_binding_address(TcpConf), Port]),
     case get_env(ssl_config, []) of
         [] ->
             ok;
-        TLSConf ->
+        TLSConf0 ->
             rabbit_networking:ensure_ssl(),
-            TLSPort = proplists:get_value(port, TLSConf),
+            TLSPort = proplists:get_value(port, TLSConf0),
+            TLSConf = maybe_parse_ip(TLSConf0),
             NumSslAcceptors = case application:get_env(rabbitmq_web_stomp, num_ssl_acceptors) of
-                undefined -> get_env(num_acceptors, 1);
+                undefined     -> get_env(num_acceptors, 1);
                 {ok, NumSsl}  -> NumSsl
             end,
             {ok, _} = cowboy:start_https(https, NumSslAcceptors,
                                          TLSConf,
-                                         [{env, [{dispatch, Routes}]}|CowboyOpts]),
-            listener_started('https/web-stomp', TCPConf),
+                                         [{env, [{dispatch, Routes}]} | CowboyOpts]),
+            listener_started('https/web-stomp', TLSConf),
             rabbit_log:info("rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
-                            ["0.0.0.0", TLSPort])
+                            [get_binding_address(TLSConf), TLSPort])
     end,
     ok.
 
@@ -91,6 +88,43 @@ get_env(Key, Default) ->
         {ok, V}   -> V
     end.
 
+
+get_tcp_port(Configuration) ->
+    %% The 'tcp_config' option may include the port, and we already have
+    %% a 'port' option. We prioritize the 'port' option  in 'tcp_config' (if any)
+    %% over the one found at the root of the env proplist.
+    TcpConfiguration = proplists:get_value(tcp_config, Configuration, []),
+    case proplists:get_value(port, TcpConfiguration) of
+        undefined ->
+            proplists:get_value(port, Configuration, 15674);
+        Port ->
+            Port
+    end.
+
+get_tcp_conf(TcpConfiguration, Port0) ->
+    Port = [{port, Port0} | proplists:delete(port, TcpConfiguration)],
+    maybe_parse_ip(Port).
+
+maybe_parse_ip(Configuration) ->
+    case proplists:get_value(ip, Configuration) of
+        undefined ->
+            Configuration;
+        IP when is_tuple(IP) ->
+            Configuration;
+        IP when is_list(IP) ->
+            {ok, ParsedIP} = inet_parse:address(IP),
+            [{ip, ParsedIP} | proplists:delete(ip, Configuration)]
+    end.
+
+get_binding_address(Configuration) ->
+    case proplists:get_value(ip, Configuration) of
+        undefined ->
+            "0.0.0.0";
+        IP when is_tuple(IP) ->
+            inet:ntoa(IP);
+        IP when is_list(IP) ->
+            IP
+    end.
 
 %% Don't print sockjs logs
 logger(_Service, Req, _Type) ->
