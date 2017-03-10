@@ -57,20 +57,20 @@ init() ->
     case get_env(ssl_config, []) of
         [] ->
             ok;
-        TLSConf ->
+        TLSConf0 ->
             rabbit_networking:ensure_ssl(),
-            TLSPort = proplists:get_value(port, TLSConf),
-            TLSConfWithParsedIp = maybe_parse_ip(TLSConf),
+            TLSPort = proplists:get_value(port, TLSConf0),
+            TLSConf = maybe_parse_ip(TLSConf0),
             NumSslAcceptors = case application:get_env(rabbitmq_web_stomp, num_ssl_acceptors) of
-                undefined -> get_env(num_acceptors, 1);
+                undefined     -> get_env(num_acceptors, 1);
                 {ok, NumSsl}  -> NumSsl
             end,
             {ok, _} = cowboy:start_https(https, NumSslAcceptors,
-                                         TLSConfWithParsedIp,
-                                         [{env, [{dispatch, Routes}]}|CowboyOpts]),
-            listener_started('https/web-stomp', TLSConfWithParsedIp),
+                                         TLSConf,
+                                         [{env, [{dispatch, Routes}]} | CowboyOpts]),
+            listener_started('https/web-stomp', TLSConf),
             rabbit_log:info("rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
-                            [get_binding_address(TLSConfWithParsedIp), TLSPort])
+                            [get_binding_address(TLSConf), TLSPort])
     end,
     ok.
 
@@ -101,9 +101,9 @@ get_tcp_port(Configuration) ->
             Port
     end.
 
-get_tcp_conf(TcpConfiguration, Port) ->
-    TcpConfigurationWithFinalPort = [{port, Port}|proplists:delete(port, TcpConfiguration)],
-    maybe_parse_ip(TcpConfigurationWithFinalPort).
+get_tcp_conf(TcpConfiguration, Port0) ->
+    Port = [{port, Port0} | proplists:delete(port, TcpConfiguration)],
+    maybe_parse_ip(Port).
 
 maybe_parse_ip(Configuration) ->
     case proplists:get_value(ip, Configuration) of
@@ -113,7 +113,7 @@ maybe_parse_ip(Configuration) ->
             Configuration;
         IP when is_list(IP) ->
             {ok, ParsedIP} = inet_parse:address(IP),
-            [{ip, ParsedIP}|proplists:delete(ip, Configuration)]
+            [{ip, ParsedIP} | proplists:delete(ip, Configuration)]
     end.
 
 get_binding_address(Configuration) ->
