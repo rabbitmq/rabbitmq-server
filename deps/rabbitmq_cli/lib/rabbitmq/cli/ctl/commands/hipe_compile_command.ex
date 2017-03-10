@@ -15,13 +15,15 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
     {args, opts}
   end
+
+  def switches(), do: [rabbitmq_home: :string]
 
   def usage, do: "hipe_compile <directory>"
 
