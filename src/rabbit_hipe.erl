@@ -37,7 +37,7 @@ hipe_compile() ->
     hipe_compile(fun compile_and_load/1, false).
 
 compile_to_directory(Dir0) ->
-    Dir = rabbit_file:filename_as_a_directory(Dir0),
+    Dir = rabbit_file:filename_as_a_directory(rabbit_data_coercion:to_list(Dir0)),
     ok = prepare_ebin_directory(Dir),
     hipe_compile(fun (Mod) -> compile_and_save(Mod, Dir) end, true).
 
