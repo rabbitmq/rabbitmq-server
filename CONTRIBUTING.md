@@ -43,6 +43,12 @@ for example, to run the `backing_queue` suite:
 
     make ct-backing_queue
 
+Finally,
+
+    make tests
+
+will run all suites.
+
 
 ## Contributor Agreement
 
