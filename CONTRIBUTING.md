@@ -25,6 +25,31 @@ of their opinion on [RabbitMQ mailing list](https://groups.google.com/forum/#!fo
 See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 
+## Running Tests
+
+To run a "fast suite" (a subset of tests):
+
+    make ct-fast
+
+To run a "slow suite" (a subset of tests that take much longer to run):
+
+    make ct-slow
+
+To run a particular suite:
+
+    make ct-$suite_name
+
+for example, to run the `backing_queue` suite:
+
+    make ct-backing_queue
+
+Finally,
+
+    make tests
+
+will run all suites.
+
+
 ## Contributor Agreement
 
 If you want to contribute a non-trivial change, please submit a signed copy of our
