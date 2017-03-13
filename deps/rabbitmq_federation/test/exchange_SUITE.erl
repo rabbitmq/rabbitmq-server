@@ -60,9 +60,9 @@ groups() ->
               binding_recovery
             ]},
           {cluster_size_2, [], [
+              cycle_detection,
               user_id,
-              restart_upstream,
-              cycle_detection
+              restart_upstream
             ]},
           {cluster_size_3, [], [
               max_hops,
