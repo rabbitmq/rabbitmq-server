@@ -206,11 +206,25 @@ validation_failure_for_AMQP_client1(Config) ->
 
     %% Then: a client presenting a certificate rooted with another
     %% authority is REJECTED.
-    {error, ?SERVER_REJECT_CLIENT} =
-     amqp_connection:start(#amqp_params_network{host = Host,
-                                                port = Port,
-                                                ssl_options = [{cert, CertOther},
-                                                               {key, KeyOther}]}),
+    Error = amqp_connection:start(
+              #amqp_params_network{host = Host,
+                                   port = Port,
+                                   ssl_options = [{cert, CertOther},
+                                                  {key, KeyOther}]}),
+    case Error of
+        %% Expected error from amqp_client.
+        {error, ?SERVER_REJECT_CLIENT} -> ok;
+
+        %% With Erlang 18.3, there is a regression which causes the SSL
+        %% connection to crash with the following exception:
+        %% ** {badarg,[{ets,update_counter,[1507362,#Ref<0.0.3.9>,-1],[]},
+        %%             {ssl_pkix_db,ref_count,3,...
+        %%
+        %% When this exception reaches the connection process before the
+        %% expected TLS error, amqp_connection:start() returns {error,
+        %% closed} instead.
+        {error, closed} -> expected_erlang_18_ssl_regression
+    end,
 
     %% Clean: server TLS/TCP.
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -304,22 +318,37 @@ validate_longer_chain1(Config) ->
 
     % %% When: a client connects and present `CertInter` and `RootCA` but NOT `CertTrusted`
     % %% Then: the connection is not succcessful
-    {error, ?SERVER_REJECT_CLIENT} =
-        amqp_connection:start(#amqp_params_network{host = Host,
-                                                   port = Port,
-                                                   ssl_options = [{cacerts, [RootCA]},
-                                                                  {cert, CertInter},
-                                                                  {key, KeyInter}]}),
+    Error1 = amqp_connection:start(
+               #amqp_params_network{host = Host,
+                                    port = Port,
+                                    ssl_options = [{cacerts, [RootCA]},
+                                                   {cert, CertInter},
+                                                   {key, KeyInter}]}),
+    case Error1 of
+        %% Expected error from amqp_client.
+        {error, ?SERVER_REJECT_CLIENT} -> ok;
+
+        %% See previous comment in validation_failure_for_AMQP_client1/1.
+        {error, closed} -> expected_erlang_18_ssl_regression
+    end,
 
     %% When: a client connects and present `CertUntrusted` and `RootCA` and `CertInter`
     %% Then: the connection is not succcessful
     %% TODO: for some reason this returns `bad certifice` rather than `unknown ca`
-    {error, {tls_alert, "bad certificate"}} =
-        amqp_connection:start(#amqp_params_network{host = Host,
-                                                   port = Port,
-                                                   ssl_options = [{cacerts, [RootCA, CertInter]},
-                                                                  {cert, CertUntrusted},
-                                                                  {key, KeyUntrusted}]}),
+    Error2 = amqp_connection:start(
+               #amqp_params_network{host = Host,
+                                    port = Port,
+                                    ssl_options = [{cacerts, [RootCA, CertInter]},
+                                                   {cert, CertUntrusted},
+                                                   {key, KeyUntrusted}]}),
+    case Error2 of
+        %% Expected error from amqp_client.
+        {error, {tls_alert, "bad certificate"}} -> ok;
+
+        %% See previous comment in validation_failure_for_AMQP_client1/1.
+        {error, closed} -> expected_erlang_18_ssl_regression
+    end,
+        
     %% Clean: client & server TLS/TCP
     ok = amqp_connection:close(Con),
     ok = amqp_connection:close(Con2),
@@ -347,12 +376,19 @@ validate_chain_without_whitelisted1(Config) ->
     %% When: Rabbit validates paths
     %% Then: a client presenting the non-whitelisted certificate `CertUntrusted` and `RootUntrusted`
     %% is rejected
-    {error, ?SERVER_REJECT_CLIENT} =
-        amqp_connection:start(#amqp_params_network{host = Host,
-                                                   port = Port,
-                                                   ssl_options = [{cacerts, [RootUntrusted]},
-                                                                  {cert, CertUntrusted},
-                                                                  {key, KeyUntrusted}]}),
+    Error = amqp_connection:start(
+              #amqp_params_network{host = Host,
+                                   port = Port,
+                                   ssl_options = [{cacerts, [RootUntrusted]},
+                                                  {cert, CertUntrusted},
+                                                  {key, KeyUntrusted}]}),
+    case Error of
+        %% Expected error from amqp_client.
+        {error, ?SERVER_REJECT_CLIENT} -> ok;
+
+        %% See previous comment in validation_failure_for_AMQP_client1/1.
+        {error, closed} -> expected_erlang_18_ssl_regression
+    end,
 
     ok = rabbit_networking:stop_tcp_listener(Port).
 
@@ -418,11 +454,18 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
 
     %% Then: a client presenting the removed whitelisted
     %% certificate `CertOther` is denied.
-    {error, ?SERVER_REJECT_CLIENT} =
-       amqp_connection:start(#amqp_params_network{host = Host,
-                                                  port = Port,
-                                                  ssl_options = [{cert, CertOther},
-                                                                 {key, KeyOther}]}),
+    Error = amqp_connection:start(
+              #amqp_params_network{host = Host,
+                                   port = Port,
+                                   ssl_options = [{cert, CertOther},
+                                                  {key, KeyOther}]}),
+    case Error of
+        %% Expected error from amqp_client.
+        {error, ?SERVER_REJECT_CLIENT} -> ok;
+
+        %% See previous comment in validation_failure_for_AMQP_client1/1.
+        {error, closed} -> expected_erlang_18_ssl_regression
+    end,
 
     %% Clean: server TLS/TCP
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -505,11 +548,18 @@ whitelist_directory_DELTA1(Config) ->
                                                             port = Port,
                                                             ssl_options = [{cert, CertListed1},
                                                                            {key, KeyListed1}]}),
-    {error, ?SERVER_REJECT_CLIENT} =
-        amqp_connection:start(#amqp_params_network{host = Host,
-                                                   port = Port,
-                                                   ssl_options = [{cert, CertRevoked},
-                                                                  {key, KeyRevoked}]}),
+    Error = amqp_connection:start(
+              #amqp_params_network{host = Host,
+                                   port = Port,
+                                   ssl_options = [{cert, CertRevoked},
+                                                  {key, KeyRevoked}]}),
+    case Error of
+        %% Expected error from amqp_client.
+        {error, ?SERVER_REJECT_CLIENT} -> ok;
+
+        %% See previous comment in validation_failure_for_AMQP_client1/1.
+        {error, closed} -> expected_erlang_18_ssl_regression
+    end,
 
     {ok, Conn2} = amqp_connection:start(#amqp_params_network{host = Host,
                                                             port = Port,
@@ -553,11 +603,18 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
                                                 ssl_options = [{cert, CertFirst},
                                                                {key, KeyFirst} ]}),
     %% verify the other certificate is not accepted
-    {error, ?SERVER_REJECT_CLIENT} =
-     amqp_connection:start(#amqp_params_network{host = Host,
-                                                port = Port,
-                                                ssl_options = [{cert, CertUpdated},
-                                                               {key, KeyUpdated} ]}),
+    Error1 = amqp_connection:start(
+               #amqp_params_network{host = Host,
+                                    port = Port,
+                                    ssl_options = [{cert, CertUpdated},
+                                                   {key, KeyUpdated} ]}),
+    case Error1 of
+        %% Expected error from amqp_client.
+        {error, ?SERVER_REJECT_CLIENT} -> ok;
+
+        %% See previous comment in validation_failure_for_AMQP_client1/1.
+        {error, closed} -> expected_erlang_18_ssl_regression
+    end,
     ok = amqp_connection:close(Con),
 
     %% When: a whitelisted certicate is replaced with one with the same name
@@ -566,16 +623,23 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     wait_for_trust_store_refresh(),
 
     %% Then: the first certificate should be rejected
-    {error, ?SERVER_REJECT_CLIENT} =
-     amqp_connection:start(#amqp_params_network{host = Host,
-                                                port = Port,
-                                                ssl_options = [{cert, CertFirst},
-                                                               %% disable ssl session caching
-                                                               %% as this ensures the cert
-                                                               %% will be re-verified by the
-                                                               %% server
-                                                               {reuse_sessions, false},
-                                                               {key, KeyFirst} ]}),
+    Error2 = amqp_connection:start(
+               #amqp_params_network{host = Host,
+                                    port = Port,
+                                    ssl_options = [{cert, CertFirst},
+                                                   %% disable ssl session caching
+                                                   %% as this ensures the cert
+                                                   %% will be re-verified by the
+                                                   %% server
+                                                   {reuse_sessions, false},
+                                                   {key, KeyFirst} ]}),
+    case Error2 of
+        %% Expected error from amqp_client.
+        {error, ?SERVER_REJECT_CLIENT} -> ok;
+
+        %% See previous comment in validation_failure_for_AMQP_client1/1.
+        {error, closed} -> expected_erlang_18_ssl_regression
+    end,
 
     %% And: the updated certificate should allow the user to connect
     {ok, Con2} =
