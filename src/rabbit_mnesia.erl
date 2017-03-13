@@ -146,11 +146,14 @@ init_from_config() ->
         _  ->
             rabbit_log:info("Discovered peer nodes: ~s~n",
                 [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
-            auto_cluster(DiscoveredNodes, NodeType)
+            join_discovered_peers(DiscoveredNodes, NodeType)
     end.
 
-auto_cluster(TryNodes, NodeType) ->
-    case find_auto_cluster_node(nodes_excl_me(TryNodes)) of
+%% Attempts to join discovered,
+%% reachable and compatible (in terms of Mnesia internal protocol version and such)
+%% cluster peers in order.
+join_discovered_peers(TryNodes, NodeType) ->
+    case find_reachable_peer_to_cluster_with(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
             rabbit_log:info("Node '~p' selected for auto-clustering~n", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
@@ -894,13 +897,13 @@ is_virgin_node() ->
             false
     end.
 
-find_auto_cluster_node([]) ->
+find_reachable_peer_to_cluster_with([]) ->
     none;
-find_auto_cluster_node([Node | Nodes]) ->
+find_reachable_peer_to_cluster_with([Node | Nodes]) ->
     Fail = fun (Fmt, Args) ->
                    rabbit_log:warning(
                      "Could not auto-cluster with node ~s: " ++ Fmt, [Node | Args]),
-                   find_auto_cluster_node(Nodes)
+                   find_reachable_peer_to_cluster_with(Nodes)
            end,
     case remote_node_info(Node) of
         {badrpc, _} = Reason ->
