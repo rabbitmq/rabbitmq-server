@@ -32,15 +32,32 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   def usage, do: "hipe_compile <directory>"
 
   def validate([], _),  do: {:validation_failure, :not_enough_args}
-  def validate([_], opts) do
+  def validate([target_dir], opts) do
     :ok
+    |> Helpers.validate_step(fn() ->
+      case acceptable_path?(target_dir) do
+        true  -> :ok
+        false -> {:error, {:bad_argument, "Target directory path cannot be blank"}}
+      end
+    end)
+    |> Helpers.validate_step(fn() ->
+      case File.dir?(target_dir) do
+        true  -> :ok
+        false ->
+          case File.mkdir_p(target_dir) do
+            :ok              -> :ok
+            {:error, :eperm} ->
+              {:error, {:bad_argument, "Cannot create target directory #{target_dir}: insufficient permissions"}}
+          end
+      end
+    end)
     |> Helpers.validate_step(fn() -> Helpers.require_rabbit(opts) end)
   end
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
   def run([target_dir], _opts) do
     Code.ensure_loaded(:rabbit_hipe)
-    hipe_compile(target_dir)
+    hipe_compile(String.trim(target_dir))
   end
 
   def banner([target_dir], _) do
@@ -50,6 +67,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   #
   # Implementation
   #
+
+  # Accepts any non-blank path
+  defp acceptable_path?(value) do
+    String.length(String.trim(value)) != 0
+  end
 
   defp hipe_compile(target_dir) do
     case :rabbit_hipe.can_hipe_compile() do

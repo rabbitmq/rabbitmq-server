@@ -100,7 +100,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   def require_rabbit(opts) do
     try_load_rabbit_code(opts)
   end
-  
+
   def require_rabbit_and_plugins(opts) do
     with :ok <- try_load_rabbit_code(opts),
          :ok <- try_load_rabbit_plugins(opts),
