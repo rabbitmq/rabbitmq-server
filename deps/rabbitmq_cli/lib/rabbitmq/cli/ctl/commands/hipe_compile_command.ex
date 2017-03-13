@@ -39,20 +39,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
   def run([target_dir], _opts) do
-    case Application.load(:rabbit) do
-      :ok ->
-        Code.ensure_loaded(:rabbit_hipe)
-        hipe_compile(target_dir)
-      {:error, {:already_loaded, :rabbit}} ->
-        Code.ensure_loaded(:rabbit_hipe)
-        hipe_compile(target_dir)
-        :ok;
-      {:error, {'no such file or directory', 'rabbit.app'}} ->
-         {:error, "Failed to load RabbitMQ server app metadata. Cannot proceed with HiPE compilation."}
-      {:error, _reason} ->
-         {:error, "Failed to load RabbitMQ modules or app metadata. Cannot proceed with HiPE compilation."}
-    end
-
+    Code.ensure_loaded(:rabbit_hipe)
+    hipe_compile(target_dir)
   end
 
   def banner([target_dir], _) do
@@ -66,8 +54,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   defp hipe_compile(target_dir) do
     case :rabbit_hipe.can_hipe_compile() do
       true ->
-        {:ok, _, _} = :rabbit_hipe.compile_to_directory(target_dir)
-        :ok
+        case :rabbit_hipe.compile_to_directory(target_dir) do
+          {:ok, _, _}              -> :ok
+          {:ok, :already_compiled} -> {:ok, "already compiled"}
+          {:error, message}        -> {:error, message}
+        end
       false ->
         {:error, "HiPE compilation is not supported"}
     end
