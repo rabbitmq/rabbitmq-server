@@ -85,6 +85,8 @@ dist:
 # Required by rabbit_nodes:ensure_epmd/0
 	mkdir -p $(RLS_DIR)/bin/
 	cp $(ERTS_ROOT_DIR)/bin/start.boot $(RLS_DIR)/bin/
+# We also copy `start_clean.boot` which is required by escript(1).
+	cp $(ERTS_ROOT_DIR)/bin/start_clean.boot $(RLS_DIR)/bin/
 
 # move rabbitmq files to top level folder
 	mv $(RLS_DIR)/lib/rabbit-$(VERSION)/* $(RLS_DIR)
