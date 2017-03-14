@@ -29,4 +29,4 @@ set -a
 # shellcheck source=./rabbitmq-env
 . "${0%/*}"/rabbitmq-env
 
-escript "${ESCRIPT_DIR:?must be defined}"/rabbitmq-diagnostics "$@"
+"${ERL_DIR}escript" "${ESCRIPT_DIR:?must be defined}"/rabbitmq-diagnostics "$@"
