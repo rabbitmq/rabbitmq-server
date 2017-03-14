@@ -97,8 +97,11 @@ dist:
 	rm -f $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.orig
 
 	cd $(TARGET_DIR)/release && \
-		find $(TARGET_DIR) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 tar --no-recursion -cf - | \
+		find $(TARGET_DIR) -print0 | \
+		LC_COLLATE=C sort -z > $(CURDIR)/manifest
+
+	cd $(TARGET_DIR)/release && \
+		tar -T $(CURDIR)/manifest --no-recursion -cf - | \
 		xz > $(CURDIR)/$(TARGET_TARBALL).tar.xz
 
 	if test "$(PACKAGES_DIR)"; then \
@@ -107,7 +110,7 @@ dist:
 	fi
 
 clean:
-	rm -rf rabbitmq-server-* rabbitmq_server-*
+	rm -rf rabbitmq-server-* rabbitmq_server-* manifest
 
 .PHONY : generate_release
 generate_release:
