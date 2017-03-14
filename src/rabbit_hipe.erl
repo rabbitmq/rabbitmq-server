@@ -37,9 +37,13 @@ hipe_compile() ->
     hipe_compile(fun compile_and_load/1, false).
 
 compile_to_directory(Dir0) ->
-    Dir = rabbit_file:filename_as_a_directory(Dir0),
-    ok = prepare_ebin_directory(Dir),
-    hipe_compile(fun (Mod) -> compile_and_save(Mod, Dir) end, true).
+    Dir = rabbit_file:filename_as_a_directory(rabbit_data_coercion:to_list(Dir0)),
+    case prepare_ebin_directory(Dir) of
+        ok ->
+            hipe_compile(fun (Mod) -> compile_and_save(Mod, Dir) end, true);
+        {error, Err} ->
+            {error, Err}
+    end.
 
 needs_compilation(Mod, Force) ->
     Exists = code:which(Mod) =/= non_existing,
@@ -110,9 +114,13 @@ split0([],       Ls)       -> Ls;
 split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
 
 prepare_ebin_directory(Dir) ->
-    ok = rabbit_file:ensure_dir(Dir),
-    ok = delete_beam_files(Dir),
-    ok.
+    case rabbit_file:ensure_dir(Dir) of
+        ok ->
+            ok = delete_beam_files(Dir),
+            ok;
+        {error, eperm} ->
+            {error, eperm}
+    end.
 
 delete_beam_files(Dir) ->
     {ok, Files} = file:list_dir(Dir),
