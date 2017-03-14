@@ -46,7 +46,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
         false ->
           case File.mkdir_p(target_dir) do
             :ok              -> :ok
-            {:error, :eperm} ->
+            {:error, perm} when perm == :eperm or perm == :eacces ->
               {:error, {:bad_argument, "Cannot create target directory #{target_dir}: insufficient permissions"}}
           end
       end
