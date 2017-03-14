@@ -70,6 +70,7 @@ dist:
 
 	mkdir -p $(RLS_DIR)
 	tar -C $(RLS_DIR) -xzf $(RABBITMQ_HOME)/rabbit.tar.gz
+	rm -rf $(RLS_DIR)/lib/rabbit-$(VERSION)/plugins/expand
 
 # add minimal boot file
 	cp $(ERTS_ROOT_DIR)/bin/start_clean.boot $(RLS_DIR)/releases/$(VERSION)
