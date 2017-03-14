@@ -55,7 +55,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   def ctl_and_plugin_modules(opts) do
-    Helpers.require_rabbit(opts)
+    Helpers.require_rabbit_and_plugins(opts)
     enabled_plugins = PluginsHelpers.read_enabled(opts)
     [:rabbitmqctl | enabled_plugins]
     |> Enum.flat_map(fn(app) -> Application.spec(app, :modules) || [] end)

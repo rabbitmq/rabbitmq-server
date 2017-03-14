@@ -106,6 +106,7 @@ defmodule RabbitMQCtl.MixfileBase do
         override: true
       },
       {:amqp, "~> 0.1.5", only: :test},
+      {:temp, "~> 0.4", only: :test},
       {:json, "~> 1.0.0"},
       {:csv, "~> 1.4.2"},
       {:simetric, "~> 0.1.0"}

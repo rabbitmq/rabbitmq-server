@@ -47,6 +47,16 @@ defmodule RabbitMQ.CLI.Core.Helpers do
 
   def hostname, do: :inet.gethostname() |> elem(1) |> List.to_string
 
+  def validate_step(:ok, step) do
+    case step.() do
+      {:error, err} -> {:validation_failure, err};
+      _             -> :ok
+    end
+  end
+  def validate_step({:validation_failure, err}, _) do
+    {:validation_failure, err}
+  end
+
   def memory_units do
     ["k", "kiB", "M", "MiB", "G", "GiB", "kB", "MB", "GB", ""]
   end
@@ -88,6 +98,10 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   end
 
   def require_rabbit(opts) do
+    try_load_rabbit_code(opts)
+  end
+
+  def require_rabbit_and_plugins(opts) do
     with :ok <- try_load_rabbit_code(opts),
          :ok <- try_load_rabbit_plugins(opts),
          do: :ok
