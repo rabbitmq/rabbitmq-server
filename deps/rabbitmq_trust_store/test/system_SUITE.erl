@@ -736,6 +736,19 @@ ignore_same_cert_with_different_name1(Config) ->
     ok = rabbit_networking:stop_tcp_listener(Port).
 
 list(Config) ->
+    %% FIXME: The file provider calls stat(2) on the certificate
+    %% directory to detect any new certificates. Unfortunately, the
+    %% modification time has a resolution of one second. Thus, it can
+    %% miss certificates added within the same second after a refresh.
+    %% To workaround this, we force a refresh, wait for two seconds,
+    %% write the test certificate and call refresh again.
+    %%
+    %% Once this is fixed, the two lines below can be removed.
+    %%
+    %% See rabbitmq/rabbitmq-trust-store#58.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_trust_store, refresh, []),
+    timer:sleep(2000),
+
     {_Root,  Cert, Key}    = ct_helper:make_certs(),
     ok = whitelist(Config, "alice", Cert,  Key),
     % wait_for_trust_store_refresh(),
