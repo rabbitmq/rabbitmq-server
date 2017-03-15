@@ -1243,18 +1243,19 @@ trim_msg_status(MsgStatus) ->
         queue_index -> MsgStatus
     end.
 
-with_msg_store_state({MSCStateP, MSCStateT},  true, Fun) ->
-    {Result, MSCStateP1} = Fun(MSCStateP),
-    {Result, {MSCStateP1, MSCStateT}};
-with_msg_store_state({MSCStateP, MSCStateT}, false, Fun) ->
-    {Result, MSCStateT1} = Fun(MSCStateT),
-    {Result, {MSCStateP, MSCStateT1}}.
+with_msg_store_state({{Mod, MSCStatePInternal}, MSCStateT},  true, Fun) ->
+    {Result, MSCStatePInternal1} = Fun(Mod, MSCStatePInternal),
+    {Result, {{Mod, MSCStatePInternal1}, MSCStateT}};
+with_msg_store_state({MSCStateP, {Mod, MSCStateTInternal}}, false, Fun) ->
+    {Result, MSCStateTInternal1} = Fun(Mod, MSCStateTInternal),
+    {Result, {MSCStateP, {Mod, MSCStateTInternal1}}}.
 
 with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
-    {Res, MSCState} = with_msg_store_state(MSCState, IsPersistent,
-                                           fun (MSCState1) ->
-                                                   {Fun(MSCState1), MSCState1}
-                                           end),
+    {Res, MSCState} = with_msg_store_state(
+        MSCState, IsPersistent,
+        fun (Mod, MSCState1) ->
+            {Fun(Mod, MSCState1), MSCState1}
+        end),
     Res.
 
 msg_store_client_init(MsgStore, MsgOnDiskFun, Callback, VHost) ->
@@ -1272,28 +1273,30 @@ msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback, VHost) ->
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun ({Mod, MSCState1}) ->
-              Mod:write_flow(MsgId, Msg, MSCState1)
+      fun (Mod, MSCStateInternal) ->
+          Mod:write_flow(MsgId, Msg, MSCStateInternal)
       end).
 
 msg_store_read(MSCState, IsPersistent, MsgId) ->
     with_msg_store_state(
       MSCState, IsPersistent,
-      fun ({Mod, MSCState1}) ->
-              Mod:read(MsgId, MSCState1)
+      fun (Mod, MSCStateInternal) ->
+          Mod:read(MsgId, MSCStateInternal)
       end).
 
 msg_store_remove(MSCState, IsPersistent, MsgIds) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun ({Mod, MSCState1}) ->
-              Mod:remove(MsgIds, MSCState1)
+      fun (Mod, MSCStateInternal) ->
+              Mod:remove(MsgIds, MSCStateInternal)
       end).
 
 msg_store_close_fds(MSCState, IsPersistent) ->
     with_msg_store_state(
       MSCState, IsPersistent,
-      fun ({Mod, MSCState1}) -> Mod:close_all_indicated(MSCState1) end).
+      fun (Mod, MSCStateInternal) ->
+          Mod:close_all_indicated(MSCStateInternal)
+      end).
 
 msg_store_close_fds_fun(IsPersistent) ->
     fun (?MODULE, State = #vqstate { msg_store_clients = MSCState }) ->
