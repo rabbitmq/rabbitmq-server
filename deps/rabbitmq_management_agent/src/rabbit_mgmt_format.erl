@@ -262,7 +262,7 @@ opts([], Acc) ->
     lists:reverse(Acc);
 %% single atom options, e.g. `binary`
 opts([Head | Tail], Acc) when is_atom(Head) ->
-    opts([{Head, true} | Tail], Acc);
+    opts(Tail, [{Head, true} | Acc]);
 %% verify_fun value is a tuple that includes a function
 opts([_Head = {verify_fun, _Value} | Tail], Acc) ->
     opts(Tail, Acc);
