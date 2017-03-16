@@ -648,6 +648,8 @@ with_channel(VHost, ReqData,
             end;
         {error, {auth_failure, Msg}} ->
             not_authorised(Msg, ReqData, Context);
+        {error, not_allowed} ->
+            not_authorised(<<"Access refused.">>, ReqData, Context);
         {error, access_refused} ->
             not_authorised(<<"Access refused.">>, ReqData, Context);
         {error, {nodedown, N}} ->
