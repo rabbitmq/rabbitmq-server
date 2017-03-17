@@ -1,0 +1,38 @@
+[{ldap_servers,
+  "auth_ldap.servers.1 = DC1.domain.com
+   auth_ldap.servers.2 = DC1.eng.domain.com",
+  [{rabbitmq_auth_backend_ldap,
+       [{servers,["DC1.domain.com","DC1.eng.domain.com"]}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {ldap_servers_short,
+  "auth_ldap.servers.1 = hostname1
+   auth_ldap.servers.2 = hostname2",
+  [{rabbitmq_auth_backend_ldap,[{servers,["hostname1","hostname2"]}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {dn_lookup,
+  "auth_ldap.dn_lookup_attribute = userPrincipalName
+   auth_ldap.dn_lookup_base = DC=gopivotal,DC=com
+   auth_ldap.dn_lookup_bind = as_user",
+  [{rabbitmq_auth_backend_ldap,
+       [{dn_lookup_attribute,"userPrincipalName"},
+        {dn_lookup_base,"DC=gopivotal,DC=com"},
+        {dn_lookup_bind,as_user}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {db_lookup_bind,
+  "auth_ldap.dn_lookup_bind.user_dn = username
+   auth_ldap.dn_lookup_bind.password = password",
+  [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,{"username","password"}}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {other_bind_anon,
+  "auth_ldap.other_bind = anon",
+  [{rabbitmq_auth_backend_ldap,[{other_bind,anon}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {other_bind_as_user,
+  "auth_ldap.other_bind = as_user",
+  [{rabbitmq_auth_backend_ldap,[{other_bind,as_user}]}],
+  [rabbitmq_auth_backend_ldap]},
+ {other_bind_pass,
+  "auth_ldap.other_bind.user_dn = username
+   auth_ldap.other_bind.password = password",
+  [{rabbitmq_auth_backend_ldap,[{other_bind,{"username","password"}}]}],
+  [rabbitmq_auth_backend_ldap]}].
