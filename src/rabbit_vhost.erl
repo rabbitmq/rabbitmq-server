@@ -20,11 +20,12 @@
 
 %%----------------------------------------------------------------------------
 
+-export([recover/0, recover/1]).
 -export([add/2, delete/2, exists/1, list/0, with/2, assert/1, update/2,
          set_limits/2, limits_of/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
--export([purge_messages/1]).
+-export([delete_storage/1]).
 
 -spec add(rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
 -spec delete(rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
@@ -41,6 +42,36 @@
 -spec info_all(rabbit_types:info_keys()) -> [rabbit_types:infos()].
 -spec info_all(rabbit_types:info_keys(), reference(), pid()) ->
                          'ok'.
+
+recover() ->
+    %% Clear out remnants of old incarnation, in case we restarted
+    %% faster than other nodes handled DOWN messages from us.
+    rabbit_amqqueue:on_node_down(node()),
+
+    rabbit_amqqueue:warn_file_limit(),
+    %% rabbit_vhost_sup_sup will start the actual recovery.
+    %% So recovery will be run every time a vhost supervisor is restarted.
+    ok = rabbit_vhost_sup_sup:start(),
+    [{ok, _} = rabbit_vhost_sup_sup:vhost_sup(VHost)
+     || VHost <- rabbit_vhost:list()],
+    ok.
+
+recover(VHost) ->
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    rabbit_log:info("Making sure data directory '~s' for vhost '~s' exists~n",
+                    [VHostDir, VHost]),
+    VHostStubFile = filename:join(VHostDir, ".vhost"),
+    ok = rabbit_file:ensure_dir(VHostStubFile),
+    ok = file:write_file(VHostStubFile, VHost),
+rabbit_log:info("Starting vhost ~p~n", [VHost]),
+    Qs = rabbit_amqqueue:recover(VHost),
+rabbit_log:info("Queues recovered for vhost ~p~n", [VHost]),
+    ok = rabbit_binding:recover(rabbit_exchange:recover(VHost),
+                                [QName || #amqqueue{name = QName} <- Qs]),
+rabbit_log:info("Bindings recovered for vhost ~p~n", [VHost]),
+    ok = rabbit_amqqueue:start(Qs),
+rabbit_log:info("Queues started for vhost ~p~n", [VHost]),
+    ok.
 
 %%----------------------------------------------------------------------------
 
@@ -96,17 +127,16 @@ delete(VHostPath, ActingUser) ->
     ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath},
                                              {user_who_performed_action, ActingUser}]),
     [ok = Fun() || Fun <- Funs],
+    %% After vhost was deleted from mnesia DB, we try to stop vhost supervisors
+    %% on all the nodes.
+    rabbit_vhost_sup_sup:delete_on_all_nodes(VHostPath),
     ok.
 
-purge_messages(VHost) ->
+delete_storage(VHost) ->
     VhostDir = msg_store_dir_path(VHost),
     rabbit_log:info("Deleting message store directory for vhost '~s' at '~s'~n", [VHost, VhostDir]),
-    %% Message store is stopped to close file handles
-    rabbit_variable_queue:stop_vhost_msg_store(VHost),
-    ok = rabbit_file:recursive_delete([VhostDir]),
-    %% Ensure the store is terminated even if it was restarted during the delete operation
-    %% above.
-    rabbit_variable_queue:stop_vhost_msg_store(VHost).
+    %% Message store should be closed when vhost supervisor is closed.
+    ok = rabbit_file:recursive_delete([VhostDir]).
 
 assert_benign(ok, _)                 -> ok;
 assert_benign({ok, _}, _)            -> ok;
@@ -134,7 +164,6 @@ internal_delete(VHostPath, ActingUser) ->
     Fs2 = [rabbit_policy:delete(VHostPath, proplists:get_value(name, Info), ActingUser)
            || Info <- rabbit_policy:list(VHostPath)],
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
-    purge_messages(VHostPath),
     Fs1 ++ Fs2.
 
 exists(VHostPath) ->

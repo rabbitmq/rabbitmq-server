@@ -144,7 +144,7 @@ bytes(Words) ->  try
                  catch
                      _:_ -> 0
                  end.
-
+%% TODO: per-vhost supervisor
 interesting_sups() ->
     [[rabbit_amqqueue_sup_sup], conn_sups() | interesting_sups0()].
 

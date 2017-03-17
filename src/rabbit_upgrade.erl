@@ -262,7 +262,8 @@ maybe_upgrade_local() ->
 maybe_migrate_queues_to_per_vhost_storage() ->
     Result = case rabbit_version:upgrades_required(message_store) of
         {error, version_not_available} -> version_not_available;
-        {error, starting_from_scratch} -> starting_from_scratch;
+        {error, starting_from_scratch} ->
+        starting_from_scratch;
         {error, _} = Err               -> throw(Err);
         {ok, []}                       -> ok;
         {ok, Upgrades}                 -> apply_upgrades(message_store,

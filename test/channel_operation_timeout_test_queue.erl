@@ -28,10 +28,10 @@
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          zip_msgs_and_acks/4,  multiple_routing_keys/0]).
 
--export([start/1, stop/0]).
+-export([start/2, stop/1]).
 
 %% exported for testing only
--export([start_msg_store/2, stop_msg_store/0, init/6]).
+-export([start_msg_store/3, stop_msg_store/1, init/6]).
 
 %%----------------------------------------------------------------------------
 %% This test backing queue follows the variable queue implementation, with
@@ -87,7 +87,8 @@
           io_batch_size,
 
           %% default queue or lazy queue
-          mode
+          mode,
+          virtual_host
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -111,10 +112,11 @@
         }).
 
 -define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
--define(PERSISTENT_MSG_STORE, msg_store_persistent_vhost).
--define(TRANSIENT_MSG_STORE,  msg_store_transient_vhost).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(QUEUE, lqueue).
 -define(TIMEOUT_TEST_MSG, <<"timeout_test_msg!">>).
+-define(EMPTY_START_FUN_STATE, {fun (ok) -> finished end, ok}).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -184,7 +186,8 @@
              disk_write_count      :: non_neg_integer(),
 
              io_batch_size         :: pos_integer(),
-             mode                  :: 'default' | 'lazy' }.
+             mode                  :: 'default' | 'lazy',
+             virtual_host          :: rabbit_types:vhost() }.
 %% Duplicated from rabbit_backing_queue
 -spec ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
 
@@ -213,55 +216,39 @@
 %% Public API
 %%----------------------------------------------------------------------------
 
-start(DurableQueues) ->
-    {AllTerms, StartFunState} = rabbit_queue_index:start(DurableQueues),
+start(VHost, DurableQueues) ->
+    {AllTerms, StartFunState} = rabbit_queue_index:start(VHost, DurableQueues),
     %% Group recovery terms by vhost.
-    {[], VhostRefs} = lists:foldl(
-        fun
-        %% We need to skip a queue name
-        (non_clean_shutdown, {[_|QNames], VhostRefs}) ->
-            {QNames, VhostRefs};
-        (Terms, {[QueueName | QNames], VhostRefs}) ->
-            case proplists:get_value(persistent_ref, Terms) of
-                undefined -> {QNames, VhostRefs};
-                Ref       ->
-                    #resource{virtual_host = VHost} = QueueName,
-                    Refs = case maps:find(VHost, VhostRefs) of
-                        {ok, Val} -> Val;
-                        error -> []
-                    end,
-                    {QNames, maps:put(VHost, [Ref|Refs], VhostRefs)}
-            end
-        end,
-        {DurableQueues, #{}},
-        AllTerms),
-    start_msg_store(VhostRefs, StartFunState),
+    ClientRefs = [Ref || Terms <- AllTerms,
+                      Terms /= non_clean_shutdown,
+                      begin
+                          Ref = proplists:get_value(persistent_ref, Terms),
+                          Ref =/= undefined
+                      end],
+    start_msg_store(VHost, ClientRefs, StartFunState),
     {ok, AllTerms}.
 
-stop() ->
-    ok = stop_msg_store(),
-    ok = rabbit_queue_index:stop().
+stop(VHost) ->
+    ok = stop_msg_store(VHost),
+    ok = rabbit_queue_index:stop(VHost).
 
-start_msg_store(Refs, StartFunState) ->
-    ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store_vhost_sup,
-                                [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 undefined,  {fun (ok) -> finished end, ok}]),
-    ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store_vhost_sup,
-                                [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 Refs, StartFunState]),
-    %% Start message store for all known vhosts
-    VHosts = rabbit_vhost:list(),
-    lists:foreach(
-        fun(VHost) ->
-            rabbit_msg_store_vhost_sup:add_vhost(?TRANSIENT_MSG_STORE, VHost),
-            rabbit_msg_store_vhost_sup:add_vhost(?PERSISTENT_MSG_STORE, VHost)
-        end,
-        VHosts),
+start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
+    rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
+    {ok, _} = rabbit_vhost_msg_store:start(VHost,
+                                           ?TRANSIENT_MSG_STORE,
+                                           undefined,
+                                           ?EMPTY_START_FUN_STATE),
+    {ok, _} = rabbit_vhost_msg_store:start(VHost,
+                                           ?PERSISTENT_MSG_STORE,
+                                           Refs,
+                                           StartFunState),
+    rabbit_log:info("Message stores for vhost '~s' are started~n", [VHost]).
+
+stop_msg_store(VHost) ->
+    rabbit_vhost_msg_store:stop(VHost, ?TRANSIENT_MSG_STORE),
+    rabbit_vhost_msg_store:stop(VHost, ?PERSISTENT_MSG_STORE),
     ok.
 
-stop_msg_store() ->
-    ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
-    ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
 
 init(Queue, Recover, Callback) ->
     init(
@@ -284,7 +271,7 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, new,
                                             VHost);
              false -> undefined
          end,
-         msg_store_client_init(?TRANSIENT_MSG_STORE, undefined, AsyncCallback, VHost));
+         msg_store_client_init(?TRANSIENT_MSG_STORE, undefined, AsyncCallback, VHost), VHost);
 
 %% We can be recovering a transient queue if it crashed
 init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
@@ -309,10 +296,10 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
     {DeltaCount, DeltaBytes, IndexState} =
         rabbit_queue_index:recover(
           QueueName, RecoveryTerms,
-          rabbit_msg_store_vhost_sup:successfully_recovered_state(?PERSISTENT_MSG_STORE, VHost),
+          rabbit_vhost_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE, VHost),
           ContainsCheckFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     init(IsDurable, IndexState, DeltaCount, DeltaBytes, RecoveryTerms,
-         PersistentClient, TransientClient).
+         PersistentClient, TransientClient, VHost).
 
 process_recovery_terms(Terms=non_clean_shutdown) ->
     {rabbit_guid:gen(), Terms};
@@ -326,7 +313,8 @@ terminate(_Reason, State) ->
     State1 = #vqstate { persistent_count  = PCount,
                         persistent_bytes  = PBytes,
                         index_state       = IndexState,
-                        msg_store_clients = {MSCStateP, MSCStateT} } =
+                        msg_store_clients = {MSCStateP, MSCStateT},
+                        virtual_host      = VHost } =
         purge_pending_ack(true, State),
     PRef = case MSCStateP of
                undefined -> undefined;
@@ -338,7 +326,7 @@ terminate(_Reason, State) ->
              {persistent_count, PCount},
              {persistent_bytes, PBytes}],
     a(State1 #vqstate { index_state       = rabbit_queue_index:terminate(
-                                              Terms, IndexState),
+                                              VHost, Terms, IndexState),
                         msg_store_clients = undefined }).
 
 %% the only difference between purge and delete is that delete also
@@ -990,10 +978,9 @@ msg_store_client_init(MsgStore, MsgOnDiskFun, Callback, VHost) ->
 
 msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback, VHost) ->
     CloseFDsFun = msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE),
-    rabbit_msg_store_vhost_sup:client_init(
+    rabbit_vhost_msg_store:client_init(VHost,
         MsgStore, Ref, MsgOnDiskFun,
-        fun () -> Callback(?MODULE, CloseFDsFun) end,
-        VHost).
+        fun () -> Callback(?MODULE, CloseFDsFun) end).
 
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
@@ -1084,7 +1071,7 @@ expand_delta(_SeqId, #delta { count       = Count } = Delta) ->
 %%----------------------------------------------------------------------------
 
 init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
-     PersistentClient, TransientClient) ->
+     PersistentClient, TransientClient, VHost) ->
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     {DeltaCount1, DeltaBytes1} =
@@ -1148,7 +1135,8 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
 
       io_batch_size       = IoBatchSize,
 
-      mode                = default },
+      mode                = default,
+      virtual_host        = VHost },
     a(maybe_deltas_to_betas(State)).
 
 blank_rates(Now) ->

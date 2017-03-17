@@ -21,9 +21,9 @@
 
 -behaviour(gen_server).
 
--export([start/0, stop/0, store/2, read/1, clear/0]).
+-export([start/1, stop/1, store/3, read/2, clear/1]).
 
--export([start_link/0]).
+-export([start_link/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -32,40 +32,55 @@
 -rabbit_upgrade({upgrade_recovery_terms, local, []}).
 -rabbit_upgrade({persistent_bytes, local, [upgrade_recovery_terms]}).
 
-%%----------------------------------------------------------------------------
-
--spec start() -> rabbit_types:ok_or_error(term()).
--spec stop() -> rabbit_types:ok_or_error(term()).
--spec store(file:filename(), term()) -> rabbit_types:ok_or_error(term()).
--spec read(file:filename()) -> rabbit_types:ok_or_error2(term(), not_found).
--spec clear() -> 'ok'.
+-include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
--define(SERVER, ?MODULE).
+-spec start(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
+-spec stop(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
+-spec store(rabbit_types:vhost(), file:filename(), term()) -> rabbit_types:ok_or_error(term()).
+-spec read(rabbit_types:vhost(), file:filename()) -> rabbit_types:ok_or_error2(term(), not_found).
+-spec clear(rabbit_types:vhost()) -> 'ok'.
 
-start() -> rabbit_sup:start_child(?MODULE).
+%%----------------------------------------------------------------------------
 
-stop() -> rabbit_sup:stop_child(?MODULE).
+start(VHost) ->
+    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
+    {ok, _} = supervisor2:start_child(
+        VHostSup,
+        {?MODULE,
+         {?MODULE, start_link, [VHost]},
+         transient, ?WORKER_WAIT, worker,
+         [?MODULE]}),
+    ok.
 
-store(DirBaseName, Terms) -> dets:insert(?MODULE, {DirBaseName, Terms}).
+stop(VHost) ->
+    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
+    case supervisor:terminate_child(VHostSup, ?MODULE) of
+        ok -> supervisor:delete_child(VHostSup, ?MODULE);
+        E  -> E
+    end.
 
-read(DirBaseName) ->
-    case dets:lookup(?MODULE, DirBaseName) of
+store(VHost, DirBaseName, Terms) ->
+    dets:insert(VHost, {DirBaseName, Terms}).
+
+read(VHost, DirBaseName) ->
+    case dets:lookup(VHost, DirBaseName) of
         [{_, Terms}] -> {ok, Terms};
         _            -> {error, not_found}
     end.
 
-clear() ->
-    ok = dets:delete_all_objects(?MODULE),
-    flush().
+clear(VHost) ->
+    ok = dets:delete_all_objects(VHost),
+    flush(VHost).
 
-start_link() -> gen_server:start_link(?MODULE, [], []).
+start_link(VHost) ->
+    gen_server:start_link(?MODULE, [VHost], []).
 
 %%----------------------------------------------------------------------------
 
 upgrade_recovery_terms() ->
-    open_table(),
+    open_global_table(),
     try
         QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
         Dirs = case rabbit_file:list_dir(QueuesDir) of
@@ -75,37 +90,47 @@ upgrade_recovery_terms() ->
         [begin
              File = filename:join([QueuesDir, Dir, "clean.dot"]),
              case rabbit_file:read_term_file(File) of
-                 {ok, Terms} -> ok  = store(Dir, Terms);
+                 {ok, Terms} -> ok  = store(?MODULE, Dir, Terms);
                  {error, _}  -> ok
              end,
              file:delete(File)
          end || Dir <- Dirs],
         ok
     after
-        close_table()
+        close_global_table()
     end.
 
 persistent_bytes()      -> dets_upgrade(fun persistent_bytes/1).
 persistent_bytes(Props) -> Props ++ [{persistent_bytes, 0}].
 
 dets_upgrade(Fun)->
-    open_table(),
+    open_global_table(),
     try
         ok = dets:foldl(fun ({DirBaseName, Terms}, Acc) ->
-                                store(DirBaseName, Fun(Terms)),
+                                store(?MODULE, DirBaseName, Fun(Terms)),
                                 Acc
                         end, ok, ?MODULE),
         ok
     after
-        close_table()
+        close_global_table()
     end.
+
+open_global_table() ->
+    File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
+    {ok, _} = dets:open_file(?MODULE, [{file,      File},
+                                       {ram_file,  true},
+                                       {auto_save, infinity}]).
+
+close_global_table() ->
+    ok = dets:sync(?MODULE),
+    ok = dets:close(?MODULE).
 
 %%----------------------------------------------------------------------------
 
-init(_) ->
+init([VHost]) ->
     process_flag(trap_exit, true),
-    open_table(),
-    {ok, undefined}.
+    open_table(VHost),
+    {ok, VHost}.
 
 handle_call(Msg, _, State) -> {stop, {unexpected_call, Msg}, State}.
 
@@ -113,22 +138,23 @@ handle_cast(Msg, State) -> {stop, {unexpected_cast, Msg}, State}.
 
 handle_info(_Info, State) -> {noreply, State}.
 
-terminate(_Reason, _State) ->
-    close_table().
+terminate(_Reason, VHost) ->
+    close_table(VHost).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%----------------------------------------------------------------------------
 
-open_table() ->
-    File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
-    {ok, _} = dets:open_file(?MODULE, [{file,      File},
-                                       {ram_file,  true},
-                                       {auto_save, infinity}]).
+open_table(VHost) ->
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    File = filename:join(VHostDir, "recovery.dets"),
+    {ok, _} = dets:open_file(VHost, [{file,      File},
+                                     {ram_file,  true},
+                                     {auto_save, infinity}]).
 
-flush() -> ok = dets:sync(?MODULE).
+flush(VHost) -> ok = dets:sync(VHost).
 
-close_table() ->
-    ok = flush(),
-    ok = dets:close(?MODULE).
+close_table(VHost) ->
+    ok = flush(VHost),
+    ok = dets:close(VHost).

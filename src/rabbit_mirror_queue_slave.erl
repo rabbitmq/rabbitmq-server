@@ -194,6 +194,7 @@ stop_pending_slaves(QName, Pids) ->
     [begin
          rabbit_mirror_queue_misc:log_warning(
            QName, "Detected stale HA slave, stopping it: ~p~n", [Pid]),
+        %TODO: per-vhost supervisor
          case erlang:process_info(Pid, dictionary) of
              undefined -> ok;
              {dictionary, Dict} ->

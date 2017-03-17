@@ -819,10 +819,7 @@ boot_delegate() ->
 
 recover() ->
     rabbit_policy:recover(),
-    Qs = rabbit_amqqueue:recover(),
-    ok = rabbit_binding:recover(rabbit_exchange:recover(),
-                                [QName || #amqqueue{name = QName} <- Qs]),
-    rabbit_amqqueue:start(Qs).
+    rabbit_vhost:recover().
 
 maybe_insert_default_data() ->
     case rabbit_table:needs_default_data() of
