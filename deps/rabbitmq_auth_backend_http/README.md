@@ -15,7 +15,8 @@ with a reasonable caching interval (e.g. 2-3 minutes).
 ## Installing
 
 Install the corresponding .ez files from our
-[Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
+[Community Plugins page](http://www.rabbitmq.com/community-plugins.html). Note that different
+releases of this plugin support different versions of RabbitMQ.
 
 ## Enabling the Plugin
 
