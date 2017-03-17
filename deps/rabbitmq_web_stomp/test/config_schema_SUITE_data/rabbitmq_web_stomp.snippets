@@ -1,0 +1,35 @@
+[{port,
+  "web_stomp.port = 12345",
+  [{rabbitmq_web_stomp,[{port,12345}]}],
+  [rabbitmq_web_stomp]},
+ {ssl,
+  "web_stomp.ssl.port = 15671
+   web_stomp.ssl.backlog    = 1024
+   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_stomp.ssl.password   = changeme",
+  [{rabbitmq_web_stomp,
+       [{ssl_config,
+            [{port,15671},
+             {backlog,1024},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {password,"changeme"}]}]}],
+  [rabbitmq_web_stomp]},
+ {ws_frame,
+  "web_stomp.ws_frame = binary",
+  [{rabbitmq_web_stomp,[{ws_frame,binary}]}],
+  [rabbitmq_web_stomp]},
+ {cowboy_max_keepalive,
+  "web_stomp.cowboy_opts.max_keepalive = 10",
+  [{rabbitmq_web_stomp,[{cowboy_opts,[{max_keepalive,10}]}]}],
+  [rabbitmq_web_stomp]},
+ {sockjs_opts,
+  "web_stomp.sockjs_opts.url = https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js",
+  [{rabbitmq_web_stomp,
+       [{sockjs_opts,
+            [{sockjs_url,
+                 "https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js"}]}]}],
+  [rabbitmq_web_stomp]}].
