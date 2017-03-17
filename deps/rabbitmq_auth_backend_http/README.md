@@ -5,23 +5,18 @@ authentication (determining who can log in) and authorisation
 (determining what permissions they have) by making requests to an HTTP
 server.
 
-As with all authentication plugins, this one requires rabbitmq-server
+As with all [authentication plugins](http://rabbitmq.com/access-control.html), this one requires RabbitMQ server
 2.3.1 or later.
 
-Note: it's at an early stage of development, although it's
-conceptually very simple.
+Under a heavy load this plugin can put a higher than expected amount of load on it's backing service.
+We recommend using it together with [rabbitmq_auth_backend_cache](http://github.com/rabbitmq/rabbitmq-auth-backend-cache)
+with a reasonable caching interval (e.g. 2-3 minutes).
 
-## Downloading
+## Installing
 
-You can download a pre-built binary of this plugin from
-http://www.rabbitmq.com/community-plugins.html.
-
-## Building
-
-You can build and install it like any other plugin (see
-[the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
-
-This plugin depends on the Erlang client (just to grab a URI parser).
+Install the corresponding .ez files from our
+[Community Plugins page](http://www.rabbitmq.com/community-plugins.html). Note that different
+releases of this plugin support different versions of RabbitMQ.
 
 ## Enabling the Plugin
 
