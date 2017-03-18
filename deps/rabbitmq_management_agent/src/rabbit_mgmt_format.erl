@@ -260,8 +260,9 @@ format_socket_opts(Opts) ->
 
 format_socket_opts([], Acc) ->
     lists:reverse(Acc);
-%% exclude certain used options that have values that are nested
-%% data structures or may include functions
+%% exclude options that have values that are nested
+%% data structures or may include functions. They are fairly
+%% obscure and not worth reporting via HTTP API.
 format_socket_opts([{verify_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
 format_socket_opts([{crl_cache, _Value} | Tail], Acc) ->
