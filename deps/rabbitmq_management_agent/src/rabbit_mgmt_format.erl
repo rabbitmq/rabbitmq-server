@@ -271,6 +271,10 @@ format_socket_opts([{partial_chain, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
 format_socket_opts([{user_lookup_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
+format_socket_opts([{sni_fun, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
+format_socket_opts([{reuse_session, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
 %% single atom options, e.g. `binary`
 format_socket_opts([Head | Tail], Acc) when is_atom(Head) ->
     format_socket_opts(Tail, [{Head, true} | Acc]);
