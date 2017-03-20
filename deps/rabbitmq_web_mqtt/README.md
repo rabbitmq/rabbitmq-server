@@ -7,7 +7,7 @@ RabbitMQ.
 
 ## Supported RabbitMQ Versions
 
-This plugin supports RabbitMQ `3.6.x` and later releases starting with `3.6.1` (pending).
+This plugin supports RabbitMQ `3.6.x` and later releases starting with `3.6.1`.
 
 
 ## Installation
