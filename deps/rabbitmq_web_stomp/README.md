@@ -1,5 +1,4 @@
-RabbitMQ Web STOMP plugin
-=========================
+# RabbitMQ Web STOMP plugin
 
 This project is a minimalistic bridge between the [RabbitMQ STOMP plugin](http://rabbitmq.com/stomp.html) and
 WebSockets (directly or via SockJS emulation).
@@ -21,6 +20,15 @@ Please refer to the [RabbitMQ Web STOMP guide](http://www.rabbitmq.com/web-stomp
 
 See [Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
 
+TL;DR: running
+
+    make dist
+
+will build the plugin and put build artifacts under the `./plugins` directory.
+
+
+## Copyright and License
+
 (c) Pivotal Software Inc, 2007-2017
 
-
+Released under the MPL, the same license as RabbitMQ.
