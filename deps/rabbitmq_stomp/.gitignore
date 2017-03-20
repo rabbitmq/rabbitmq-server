@@ -19,3 +19,5 @@ test/python_SUITE_data/deps/pika/pika/
 test/python_SUITE_data/deps/pika/pika-git/
 test/python_SUITE_data/deps/stomppy/stomppy/
 test/python_SUITE_data/deps/stomppy/stomppy-git/
+
+test/config_schema_SUITE_data/schema/
