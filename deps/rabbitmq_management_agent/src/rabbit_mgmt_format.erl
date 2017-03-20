@@ -253,31 +253,46 @@ listener(#listener{node = Node, protocol = Protocol,
      {protocol, Protocol},
      {ip_address, ip(IPAddress)},
      {port, Port},
-     {socket_opts, opts(Opts)}].
+     {socket_opts, format_socket_opts(Opts)}].
 
-opts(Opts) ->
-    opts(Opts, []).
+format_socket_opts(Opts) ->
+    format_socket_opts(Opts, []).
 
-opts([], Acc) ->
+format_socket_opts([], Acc) ->
     lists:reverse(Acc);
+%% exclude options that have values that are nested
+%% data structures or may include functions. They are fairly
+%% obscure and not worth reporting via HTTP API.
+format_socket_opts([{verify_fun, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
+format_socket_opts([{crl_cache, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
+format_socket_opts([{partial_chain, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
+format_socket_opts([{user_lookup_fun, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
+format_socket_opts([{sni_fun, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
+format_socket_opts([{reuse_session, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
 %% single atom options, e.g. `binary`
-opts([Head | Tail], Acc) when is_atom(Head) ->
-    opts(Tail, [{Head, true} | Acc]);
+format_socket_opts([Head | Tail], Acc) when is_atom(Head) ->
+    format_socket_opts(Tail, [{Head, true} | Acc]);
 %% verify_fun value is a tuple that includes a function
-opts([_Head = {verify_fun, _Value} | Tail], Acc) ->
-    opts(Tail, Acc);
-opts([Head = {Name, Value} | Tail], Acc) when is_list(Value) ->
+format_socket_opts([_Head = {verify_fun, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
+format_socket_opts([Head = {Name, Value} | Tail], Acc) when is_list(Value) ->
     case io_lib:printable_unicode_list(Value) of
-        true -> opts(Tail, [{Name, unicode:characters_to_binary(Value)} | Acc]);
-        false -> opts(Tail, [Head | Acc])
+        true -> format_socket_opts(Tail, [{Name, unicode:characters_to_binary(Value)} | Acc]);
+        false -> format_socket_opts(Tail, [Head | Acc])
     end;
-opts([{Name, Value} | Tail], Acc) when is_tuple(Value) ->
-    opts(Tail, [{Name, tuple_to_list(Value)} | Acc]);
+format_socket_opts([{Name, Value} | Tail], Acc) when is_tuple(Value) ->
+    format_socket_opts(Tail, [{Name, tuple_to_list(Value)} | Acc]);
 %% exclude functions from JSON encoding
-opts([_Head = {_Name, Value} | Tail], Acc) when is_function(Value) ->
-    opts(Tail, Acc);
-opts([Head | Tail], Acc) ->
-    opts(Tail, [Head | Acc]).
+format_socket_opts([_Head = {_Name, Value} | Tail], Acc) when is_function(Value) ->
+    format_socket_opts(Tail, Acc);
+format_socket_opts([Head | Tail], Acc) ->
+    format_socket_opts(Tail, [Head | Acc]).
 
 pack_binding_props(<<"">>, []) ->
     <<"~">>;
