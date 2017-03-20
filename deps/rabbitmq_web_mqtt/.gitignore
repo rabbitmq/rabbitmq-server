@@ -6,3 +6,5 @@ plugins/
 test/*.beam
 rabbitmq_web_mqtt.d
 *.swp
+
+test/config_schema_SUITE_data/schema/
