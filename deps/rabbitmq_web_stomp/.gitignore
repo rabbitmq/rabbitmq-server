@@ -10,3 +10,5 @@ logs/
 plugins/
 
 rabbitmq_web_stomp.d
+
+test/config_schema_SUITE_data/schema/
