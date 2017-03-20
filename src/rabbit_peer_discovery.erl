@@ -21,7 +21,8 @@
 %%
 
 -export([discover_cluster_nodes/0, backend/0, node_type/0,
-         normalize/1, format_discovered_nodes/1, log_configured_backend/0]).
+         normalize/1, format_discovered_nodes/1, log_configured_backend/0,
+         unregister/0]).
 -export([append_node_prefix/1, node_prefix/0]).
 
 -define(DEFAULT_BACKEND,   rabbit_peer_discovery_classic_config).
@@ -72,6 +73,24 @@ discover_cluster_nodes() ->
     normalize(Backend:list_nodes()).
 
 
+-spec unregister() -> ok.
+
+unregister() ->
+  Backend = backend(),
+  rabbit_log:info("Will unregister with peer discovery backend ~s", [Backend]),
+  case Backend:unregister() of
+    ok             -> ok;
+    {error, Error} ->
+      rabbit_log:error("Failed to unregister with peer discovery backend ~s: ~p",
+        [Backend, Error]),
+      ok
+  end.
+
+
+%%
+%% Implementation
+%%
+
 -spec normalize(Nodes :: list() |
                 {Nodes :: list(), NodeType :: rabbit_types:node_type()} |
                 {ok, Nodes :: list()} |
@@ -89,7 +108,6 @@ normalize({ok, {Nodes, NodeType}}) when is_list(Nodes) andalso is_atom(NodeType)
   {ok, {Nodes, NodeType}};
 normalize({error, Reason}) ->
   {error, Reason}.
-
 
 -spec format_discovered_nodes(Nodes :: list()) -> string().
 
