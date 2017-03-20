@@ -9,4 +9,6 @@
 /logs/
 /plugins/
 
+test/config_schema_SUITE_data/schema/
+
 /rabbitmq_auth_backend_cache.d
