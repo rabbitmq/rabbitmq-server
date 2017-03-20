@@ -1,45 +1,26 @@
 RabbitMQ Web STOMP plugin
 =========================
 
-This project is a simple bridge between "RabbitMQ-stomp" plugin and
-SockJS.
+This project is a minimalistic bridge between the [RabbitMQ STOMP plugin](http://rabbitmq.com/stomp.html) and
+WebSockets (directly or via SockJS emulation).
 
-Once started the plugin opens a SockJS endpoint on prefix "/stomp" on
-port 15674, for example a valid SockJS endpoint url may look like:
-"http://127.0.0.1:15674/stomp".
+## RabbitMQ Version Requirements
 
-Once the server is started you should be able to establish a SockJS
-connection to this url. You will be able to communicate using the
-usual STOMP protocol over it. For example, a page using Jeff Mesnil's
-"stomp-websocket" project and SockJS may look like this:
+The most recent version of this plugin requires RabbitMQ `3.6.1` or later.
 
+## Installation and Binary Builds
 
-    <script src="sockjs-0.3.min.js"></script>
-    <script src="stomp.js"></script>
-    <script>
-        Stomp.WebSocketClass = SockJS;
+This plugin is now available from the [RabbitMQ community plugins page](http://www.rabbitmq.com/community-plugins.html).
+Please consult the docs on [how to install RabbitMQ plugins](http://www.rabbitmq.com/plugins.html#installing-plugins).
 
-        var client = Stomp.client('http://127.0.0.1:15674/stomp');
-        var on_connect = function() {
-            console.log('connected');
-        };
-        var on_error =  function() {
-           console.log('error');
-        };
-        client.connect('guest', 'guest', on_connect, on_error, '/');
-        [...]
+## Documentation
 
-See the "RabbitMQ-Web-Stomp-examples" plugin for more details.
+Please refer to the [RabbitMQ Web STOMP guide](http://www.rabbitmq.com/web-stomp.html).
 
+## Building from Source
 
-Installation
-------------
+See [Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
 
-Generic build instructions are at:
+(c) Pivotal Software Inc, 2007-2017
 
- * http://www.rabbitmq.com/plugin-development.html
-
-Instructions on how to install a plugin into RabbitMQ broker:
-
-  * http://www.rabbitmq.com/plugins.html#installing-plugins
 
