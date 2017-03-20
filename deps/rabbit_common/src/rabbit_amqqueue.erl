@@ -16,7 +16,8 @@
 
 -module(rabbit_amqqueue).
 
--export([recover/0, stop/0, start/1, declare/6, declare/7,
+-export([warn_file_limit/0]).
+-export([recover/1, stop/1, start/1, declare/6, declare/7,
          delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
          forget_all_durable/1, delete_crashed/1, delete_crashed/2,
          delete_crashed_internal/2]).
@@ -70,8 +71,8 @@
                            {'absent', rabbit_types:amqqueue(),absent_reason()}.
 -type not_found_or_absent() ::
         'not_found' | {'absent', rabbit_types:amqqueue(), absent_reason()}.
--spec recover() -> [rabbit_types:amqqueue()].
--spec stop() -> 'ok'.
+-spec recover(rabbit_types:vhost()) -> [rabbit_types:amqqueue()].
+-spec stop(rabbit_types:vhost()) -> 'ok'.
 -spec start([rabbit_types:amqqueue()]) -> 'ok'.
 -spec declare
         (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
@@ -212,10 +213,7 @@
         [queue_name, channel_pid, consumer_tag, ack_required, prefetch_count,
          arguments]).
 
-recover() ->
-    %% Clear out remnants of old incarnation, in case we restarted
-    %% faster than other nodes handled DOWN messages from us.
-    on_node_down(node()),
+warn_file_limit() ->
     DurableQueues = find_durable_queues(),
     L = length(DurableQueues),
 
@@ -228,27 +226,23 @@ recover() ->
               [L, file_handle_cache:get_limit(), L]);
         false ->
             ok
-    end,
+    end.
 
+recover(VHost) ->
+    Queues = find_durable_queues(VHost),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
-
     %% We rely on BQ:start/1 returning the recovery terms in the same
     %% order as the supplied queue names, so that we can zip them together
     %% for further processing in recover_durable_queues.
     {ok, OrderedRecoveryTerms} =
-        BQ:start([QName || #amqqueue{name = QName} <- DurableQueues]),
-    {ok,_} = supervisor:start_child(
-               rabbit_sup,
-               {rabbit_amqqueue_sup_sup,
-                {rabbit_amqqueue_sup_sup, start_link, []},
-                transient, infinity, supervisor, [rabbit_amqqueue_sup_sup]}),
-    recover_durable_queues(lists:zip(DurableQueues, OrderedRecoveryTerms)).
+        BQ:start(VHost, [QName || #amqqueue{name = QName} <- Queues]),
+    {ok, _} = rabbit_amqqueue_sup_sup:start_for_vhost(VHost),
+    recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms)).
 
-stop() ->
-    ok = supervisor:terminate_child(rabbit_sup, rabbit_amqqueue_sup_sup),
-    ok = supervisor:delete_child(rabbit_sup, rabbit_amqqueue_sup_sup),
+stop(VHost) ->
+    ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
-    ok = BQ:stop().
+    ok = BQ:stop(VHost).
 
 start(Qs) ->
     %% At this point all recovered queues and their bindings are
@@ -258,6 +252,24 @@ start(Qs) ->
     [Pid ! {self(), go} || #amqqueue{pid = Pid} <- Qs],
     ok.
 
+find_durable_queues(VHost) ->
+    Node = node(),
+    mnesia:async_dirty(
+      fun () ->
+              qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
+                                              vhost = VH,
+                                              pid  = Pid}
+                                    <- mnesia:table(rabbit_durable_queue),
+                                VH =:= VHost,
+                                node(Pid) == Node andalso
+                %% Terminations on node down will not remove the rabbit_queue
+                %% record if it is a mirrored queue (such info is now obtained from
+                %% the policy). Thus, we must check if the local pid is alive
+                %% - if the record is present - in order to restart.
+                            (mnesia:read(rabbit_queue, Name, read) =:= []
+                             orelse not erlang:is_process_alive(Pid))]))
+      end).
+
 find_durable_queues() ->
     Node = node(),
     mnesia:async_dirty(
@@ -266,12 +278,12 @@ find_durable_queues() ->
                                               pid  = Pid}
                                     <- mnesia:table(rabbit_durable_queue),
                                 node(Pid) == Node andalso
-				%% Terminations on node down will not remove the rabbit_queue
-				%% record if it is a mirrored queue (such info is now obtained from
-				%% the policy). Thus, we must check if the local pid is alive
-				%% - if the record is present - in order to restart.
-						    (mnesia:read(rabbit_queue, Name, read) =:= []
-						     orelse not erlang:is_process_alive(Pid))]))
+                %% Terminations on node down will not remove the rabbit_queue
+                %% record if it is a mirrored queue (such info is now obtained from
+                %% the policy). Thus, we must check if the local pid is alive
+                %% - if the record is present - in order to restart.
+                            (mnesia:read(rabbit_queue, Name, read) =:= []
+                             orelse not erlang:is_process_alive(Pid))]))
       end).
 
 recover_durable_queues(QueuesAndRecoveryTerms) ->
