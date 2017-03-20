@@ -91,7 +91,6 @@ dep_rabbitmq_web_stomp_examples       = git_rmq rabbitmq-web-stomp-examples $(cu
 dep_rabbitmq_web_mqtt                 = git_rmq rabbitmq-web-mqtt $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_web_mqtt_examples        = git_rmq rabbitmq-web-mqtt-examples $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live master
-dep_sockjs                            = git_rmq sockjs-erlang $(current_rmq_ref) $(base_rmq_ref) master
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref) master
 
 dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(current_rmq_ref) $(base_rmq_ref) master
@@ -104,7 +103,11 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 
 dep_cowboy_commit = 1.0.4
 dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
+# Last commit of PropEr supporting Erlang R16B03.
+dep_proper_commit = 735d972758d8bd85b12483626fe1b66450d6a6fe
 dep_ranch_commit = 1.3.1
+# Last commit of sockjs support Erlang R16B03 and 17.x.
+dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 5af2b588c812c318b19bc105b577a759c71c3e0a
 dep_webmachine_commit = 1.10.8p2
 
 RABBITMQ_COMPONENTS = amqp_client \
