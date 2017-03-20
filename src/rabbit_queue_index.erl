@@ -26,7 +26,10 @@
 -export([scan_queue_segments/3]).
 
 %% Migrates from global to per-vhost message stores
--export([move_to_per_vhost_stores/1, update_recovery_term/2]).
+-export([move_to_per_vhost_stores/1,
+         update_recovery_term/2,
+         read_global_recovery_terms/1,
+         cleanup_global_recovery_terms/0]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -515,6 +518,33 @@ start(VHost, DurableQueueNames) ->
     %% which come back from start/1 are in the same order as DurableQueueNames
     OrderedTerms = lists:reverse(DurableTerms),
     {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
+
+
+read_global_recovery_terms(DurableQueueNames) ->
+    ok = rabbit_recovery_terms:open_global_table(),
+
+    DurableTerms =
+        lists:foldl(
+          fun(QName, RecoveryTerms) ->
+                  DirName = queue_name_to_dir_name(QName),
+                  RecoveryInfo = case rabbit_recovery_terms:read_global(DirName) of
+                                     {error, _}  -> non_clean_shutdown;
+                                     {ok, Terms} -> Terms
+                                 end,
+                  [RecoveryInfo | RecoveryTerms]
+          end, [], DurableQueueNames),
+
+    ok = rabbit_recovery_terms:close_global_table(),
+    %% The backing queue interface requires that the queue recovery terms
+    %% which come back from start/1 are in the same order as DurableQueueNames
+    OrderedTerms = lists:reverse(DurableTerms),
+    {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
+
+cleanup_global_recovery_terms() ->
+    rabbit_file:recursive_delete([filename:join([queues_base_dir(), "queues"])]),
+    rabbit_recovery_terms:delete_global_table(),
+    ok.
+
 
 stop(VHost) -> rabbit_recovery_terms:stop(VHost).
 

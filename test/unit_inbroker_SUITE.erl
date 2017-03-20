@@ -829,7 +829,7 @@ bq_queue_recover1(Config) ->
         rabbit_amqqueue:declare(queue_name(Config, <<"bq_queue_recover-q">>),
                                 true, false, [], none, <<"acting-user">>),
     publish_and_confirm(Q, <<>>, Count),
-%% TODO: per-vhost supervisor
+
     SupPid = rabbit_ct_broker_helpers:get_queue_sup_pid(Q),
     true = is_pid(SupPid),
     exit(SupPid, kill),

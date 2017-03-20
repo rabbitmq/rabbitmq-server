@@ -64,7 +64,6 @@ stop_and_delete_vhost(VHost) ->
     end.
 
 delete_on_all_nodes(VHost) ->
-%% TODO: failing nodes
     [ stop_and_delete_vhost(VHost, Node) || Node <- rabbit_nodes:all_running() ],
     ok.
 

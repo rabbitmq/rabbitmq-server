@@ -194,12 +194,13 @@ stop_pending_slaves(QName, Pids) ->
     [begin
          rabbit_mirror_queue_misc:log_warning(
            QName, "Detected stale HA slave, stopping it: ~p~n", [Pid]),
-        %TODO: per-vhost supervisor
          case erlang:process_info(Pid, dictionary) of
              undefined -> ok;
              {dictionary, Dict} ->
+                 Vhost = QName#resource.virtual_host,
+                 {ok, AmqQSup} = rabbit_amqqueue_sup_sup:find_for_vhost(Vhost),
                  case proplists:get_value('$ancestors', Dict) of
-                     [Sup, rabbit_amqqueue_sup_sup | _] ->
+                     [Sup, AmqQSup | _] ->
                          exit(Sup, kill),
                          exit(Pid, kill);
                      _ ->

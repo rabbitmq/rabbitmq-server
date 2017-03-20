@@ -28,6 +28,9 @@
          terminate/2, code_change/3]).
 
 -export([upgrade_recovery_terms/0, persistent_bytes/0]).
+-export([open_global_table/0, close_global_table/0,
+         read_global/1, delete_global_table/0]).
+-export([open_table/1, close_table/1]).
 
 -rabbit_upgrade({upgrade_recovery_terms, local, []}).
 -rabbit_upgrade({persistent_bytes, local, [upgrade_recovery_terms]}).
@@ -119,11 +122,18 @@ open_global_table() ->
     File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
     {ok, _} = dets:open_file(?MODULE, [{file,      File},
                                        {ram_file,  true},
-                                       {auto_save, infinity}]).
+                                       {auto_save, infinity}]),
+    ok.
 
 close_global_table() ->
     ok = dets:sync(?MODULE),
     ok = dets:close(?MODULE).
+
+read_global(DirBaseName) ->
+    read(?MODULE, DirBaseName).
+
+delete_global_table() ->
+    file:delete(filename:join(rabbit_mnesia:dir(), "recovery.dets")).
 
 %%----------------------------------------------------------------------------
 

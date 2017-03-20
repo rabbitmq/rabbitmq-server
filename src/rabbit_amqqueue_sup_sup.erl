@@ -19,7 +19,8 @@
 -behaviour(supervisor2).
 
 -export([start_link/0, start_queue_process/3]).
--export([start_for_vhost/1, stop_for_vhost/1, find_for_vhost/2]).
+-export([start_for_vhost/1, stop_for_vhost/1,
+         find_for_vhost/2, find_for_vhost/1]).
 
 -export([init/1]).
 
@@ -50,6 +51,11 @@ init([]) ->
           [{rabbit_amqqueue_sup, {rabbit_amqqueue_sup, start_link, []},
             temporary, ?SUPERVISOR_WAIT, supervisor, [rabbit_amqqueue_sup]}]}}.
 
+-spec find_for_vhost(rabbit_types:vhost()) -> {ok, pid()} | {error, term()}.
+find_for_vhost(VHost) ->
+    find_for_vhost(VHost, node()).
+
+-spec find_for_vhost(rabbit_types:vhost(), atom()) -> {ok, pid()} | {error, term()}.
 find_for_vhost(VHost, Node) ->
     {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost, Node),
     case supervisor2:find_child(VHostSup, rabbit_amqqueue_sup_sup) of
@@ -57,6 +63,7 @@ find_for_vhost(VHost, Node) ->
         Result -> {error, {queue_supervisor_not_found, Result}}
     end.
 
+-spec start_for_vhost(rabbit_types:vhost()) -> {ok, pid()} | {error, term()}.
 start_for_vhost(VHost) ->
     {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
     supervisor2:start_child(
@@ -65,6 +72,7 @@ start_for_vhost(VHost) ->
          {rabbit_amqqueue_sup_sup, start_link, []},
          transient, infinity, supervisor, [rabbit_amqqueue_sup_sup]}).
 
+-spec stop_for_vhost(rabbit_types:vhost()) -> ok.
 stop_for_vhost(VHost) ->
     {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
     ok = supervisor2:terminate_child(VHostSup, rabbit_amqqueue_sup_sup),
