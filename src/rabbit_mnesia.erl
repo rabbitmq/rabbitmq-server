@@ -862,12 +862,11 @@ with_running_or_clean_mnesia(Fun) ->
     case IsMnesiaRunning of
         true  -> Fun();
         false ->
-            {ok, MnesiaDir} = application:get_env(mnesia, dir),
             application:unset_env(mnesia, dir),
             mnesia:start(),
             Result = Fun(),
             application:stop(mnesia),
-            application:set_env(mnesia, dir, MnesiaDir),
+            application:set_env(mnesia, dir, dir()),
             Result
     end.
 
