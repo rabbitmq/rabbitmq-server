@@ -10,4 +10,6 @@ logs/
 plugins/
 .vagrant
 
+test/config_schema_SUITE_data/schema/
+
 rabbitmq_auth_backend_ldap.d
