@@ -25,12 +25,9 @@ Note that release branches (`stable` vs. `master`) and target RabbitMQ version n
 when building plugins from source.
 
 
-## Usage
+## Documentation
 
-Once the server is started you should be able to establish a Websocket
-connection to `ws://127.0.0.1:15675/ws`. You will be able to communicate using the
-usual MQTT protocol over it.
-
+Please refer to the [RabbitMQ Web MQTT guide](http://www.rabbitmq.com/web-mqtt.html).
 
 ## Copyright and License
 
