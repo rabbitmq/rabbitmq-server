@@ -29,8 +29,9 @@ when building plugins from source.
 
 Please refer to the [RabbitMQ Web MQTT guide](http://www.rabbitmq.com/web-mqtt.html).
 
+
 ## Copyright and License
 
-(c) Pivotal Software Inc, 2007-2016.
+(c) Pivotal Software Inc, 2007-2017.
 
 Released under the same license as RabbitMQ. See LICENSE for details.
