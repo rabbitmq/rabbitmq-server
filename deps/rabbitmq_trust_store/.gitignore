@@ -12,3 +12,5 @@ logs/
 plugins/
 
 rabbitmq_trust_store.d
+
+test/config_schema_SUITE_data/schema/
