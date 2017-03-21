@@ -275,6 +275,10 @@ format_socket_opts([{sni_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
 format_socket_opts([{reuse_session, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
+%% we do not want to report configured cipher suites, even
+%% though formatting them is straightforward
+format_socket_opts([{ciphers, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
 %% single atom options, e.g. `binary`
 format_socket_opts([Head | Tail], Acc) when is_atom(Head) ->
     format_socket_opts(Tail, [{Head, true} | Acc]);
