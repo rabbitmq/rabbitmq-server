@@ -106,6 +106,7 @@ add(VHostPath, ActingUser) ->
                            {<<"amq.rabbitmq.trace">>, topic,   true}]],
                   ok
           end),
+    ok = rabbit_vhost_sup_sup:start_on_all_nodes(VHostPath),
     rabbit_event:notify(vhost_created, info(VHostPath)
                         ++ [{user_who_performed_action, ActingUser}]),
     R.

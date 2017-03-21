@@ -161,14 +161,23 @@ msg_stores() ->
     all_vhosts_children(msg_store_persistent).
 
 all_vhosts_children(Name) ->
-    lists:filter_map(
-        fun({_, VHostSup, _, _}) ->
-            case supervisor2:find_child(VHostSup, Name) of
-                [QSup] -> {true, QSup};
-                []     -> false
-            end
-        end,
-        supervisor:which_children(rabbit_vhost_sup_sup)).
+    case whereis(rabbit_vhost_sup_sup) of
+        undefined -> [];
+        Pid when is_pid(Pid) ->
+            lists:filtermap(
+                fun({_, VHostSupWrapper, _, _}) ->
+                    case supervisor2:find_child(VHostSupWrapper,
+                                                rabbit_vhost_sup) of
+                        []         -> false;
+                        [VHostSup] ->
+                            case supervisor2:find_child(VHostSup, Name) of
+                                [QSup] -> {true, QSup};
+                                []     -> false
+                            end
+                    end
+                end,
+                supervisor:which_children(rabbit_vhost_sup_sup))
+    end.
 
 interesting_sups0() ->
     MsgIndexProcs = msg_stores(),
