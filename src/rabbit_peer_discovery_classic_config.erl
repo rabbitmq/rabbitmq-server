@@ -19,7 +19,7 @@
 
 -include("rabbit.hrl").
 
--export([list_nodes/0, register/0, unregister/0]).
+-export([list_nodes/0, supports_registration/0, register/0, unregister/0]).
 
 %%
 %% API
@@ -33,6 +33,11 @@ list_nodes() ->
         Nodes when is_list(Nodes)  -> {Nodes, disc};
         undefined                  -> {[], disc}
     end.
+
+-spec supports_registration() -> boolean().
+
+supports_registration() ->
+    false.
 
 -spec register() -> ok.
 

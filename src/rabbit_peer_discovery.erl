@@ -22,7 +22,7 @@
 
 -export([discover_cluster_nodes/0, backend/0, node_type/0,
          normalize/1, format_discovered_nodes/1, log_configured_backend/0,
-         unregister/0]).
+         register/0, unregister/0, maybe_register/0, maybe_unregister/0]).
 -export([append_node_prefix/1, node_prefix/0]).
 
 -define(DEFAULT_BACKEND,   rabbit_peer_discovery_classic_config).
@@ -71,6 +71,46 @@ log_configured_backend() ->
 discover_cluster_nodes() ->
     Backend = backend(),
     normalize(Backend:list_nodes()).
+
+
+-spec maybe_register() -> ok.
+
+maybe_register() ->
+  Backend = backend(),
+  case Backend:supports_registration() of
+    true  ->
+      register();
+    false ->
+      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping registration.", [Backend]),
+      ok
+  end.
+
+
+-spec maybe_unregister() -> ok.
+
+maybe_unregister() ->
+  Backend = backend(),
+  case Backend:supports_registration() of
+    true  ->
+      unregister();
+    false ->
+      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping unregistration.", [Backend]),
+      ok
+  end.
+
+
+-spec register() -> ok.
+
+register() ->
+  Backend = backend(),
+  rabbit_log:info("Will register with peer discovery backend ~s", [Backend]),
+  case Backend:register() of
+    ok             -> ok;
+    {error, Error} ->
+      rabbit_log:error("Failed to register with peer discovery backend ~s: ~p",
+        [Backend, Error]),
+      ok
+  end.
 
 
 -spec unregister() -> ok.

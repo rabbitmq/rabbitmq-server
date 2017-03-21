@@ -327,7 +327,9 @@ broker_start() ->
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
     maybe_sd_notify(),
-    ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())).
+    ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())),
+    rabbit_peer_discovery:maybe_register(),
+    ok.
 
 %% Try to send systemd ready notification if it makes sense in the
 %% current environment. standard_error is used intentionally in all
@@ -472,7 +474,7 @@ stop() ->
     rabbit_log:info("RabbitMQ is asked to stop...~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
     stop_apps(app_utils:app_dependency_order(Apps, true)),
-    rabbit_peer_discovery:unregister(),
+    rabbit_peer_discovery:maybe_unregister(),
     rabbit_log:info("Successfully stopped RabbitMQ and its dependencies~n", []).
 
 stop_and_halt() ->
@@ -755,7 +757,7 @@ start(normal, []) ->
     end.
 
 prep_stop(State) ->
-  rabbit_peer_discovery:unregister(),
+  rabbit_peer_discovery:maybe_unregister(),
   State.
 
 stop(_State) ->

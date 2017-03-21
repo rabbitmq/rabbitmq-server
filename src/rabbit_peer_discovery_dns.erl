@@ -19,7 +19,7 @@
 
 -include("rabbit.hrl").
 
--export([list_nodes/0, register/0, unregister/0]).
+-export([list_nodes/0, supports_registration/0, register/0, unregister/0]).
 %% for tests
 -export([discover_nodes/2, discover_hostnames/2]).
 
@@ -47,6 +47,13 @@ list_nodes() ->
               {discover_nodes(Hostname, net_kernel:longnames()), rabbit_peer_discovery:node_type()}
         end
     end.
+
+
+-spec supports_registration() -> boolean().
+
+supports_registration() ->
+    false.
+
 
 -spec register() -> ok.
 
