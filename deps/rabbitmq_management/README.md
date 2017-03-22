@@ -10,7 +10,7 @@ it, use <href="http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html">rabbitmq
 ## Documentation
 
  * [RabbitMQ management UI documentation](http://www.rabbitmq.com/management.html).
- * [HTTP API documentation](http://www.rabbitmq.com/management.html#http-api) and [reference](https://raw.githack.com/rabbitmq/rabbitmq-management/rabbitmq_v3_6_1/priv/www/api/index.html)
+ * [HTTP API documentation](http://www.rabbitmq.com/management.html#http-api) and [reference](https://raw.githack.com/rabbitmq/rabbitmq-management/rabbitmq_v3_6_8/priv/www/api/index.html)
 
 ## Continuous Integration
 
