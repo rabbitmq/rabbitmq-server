@@ -67,7 +67,7 @@ dispatcher_add(function(sammy) {
 
 
     sammy.get('#/exchanges', function() {
-            renderExchanges()
+            renderExchanges();
         });
 
 
@@ -238,7 +238,9 @@ dispatcher_add(function(sammy) {
         });
 
     sammy.put('#/logout', function() {
+            // clear a local storage value used by earlier versions
             clear_pref('auth');
+            clear_cookie_value('auth');
             location.reload();
         });
 

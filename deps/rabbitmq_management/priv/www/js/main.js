@@ -17,8 +17,14 @@ function dispatcher() {
 }
 
 function set_auth_pref(userinfo) {
+    // clear a local storage value used by earlier versions
+    clear_local_pref('auth');
+
     var b64 = b64_encode_utf8(userinfo);
-    store_pref('auth', encodeURIComponent(b64));
+    var date  = new Date();
+    // 8 hours from now
+    date.setHours(date.getHours() + 8);
+    store_cookie_value_with_expiration('auth', encodeURIComponent(b64), date);
 }
 
 function login_route () {
@@ -58,7 +64,7 @@ function start_app_login() {
         this.get(/\#\/login\/(.*)/, login_route_with_path);
     });
     app.run();
-    if (get_pref('auth') != null) {
+    if (get_cookie_value('auth') != null) {
         check_login();
     }
 }
@@ -66,7 +72,9 @@ function start_app_login() {
 function check_login() {
     user = JSON.parse(sync_get('/whoami'));
     if (user == false) {
+        // clear a local storage value used by earlier versions
         clear_pref('auth');
+        clear_cookie_value('auth');
         replace_content('login-status', '<p>Login failed</p>');
     }
     else {
@@ -513,9 +521,9 @@ function show_popup(type, text, mode) {
 
 
    function submit_import(form) {
-       var idx = $("select[name='vhost-upload'] option:selected").index()
+       var idx = $("select[name='vhost-upload'] option:selected").index();
        var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-upload'] option:selected").val()));
-       form.action ="api/definitions" + vhost + '?auth=' + get_pref('auth');
+       form.action ="api/definitions" + vhost + '?auth=' + get_cookie_value('auth');
        form.submit();
      };
 
@@ -546,11 +554,11 @@ function postprocess() {
             }
         });
     $('#download-definitions').click(function() {
-            var idx = $("select[name='vhost-download'] option:selected").index()
+            var idx = $("select[name='vhost-download'] option:selected").index();
             var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
             var path = 'api/definitions' + vhost + '?download=' +
                 esc($('#download-filename').val()) +
-                '&auth=' + get_pref('auth');
+                '&auth=' + get_cookie_value('auth');
             window.location = path;
             setTimeout('app.run()');
             return false;
@@ -1024,11 +1032,25 @@ function update_status(status) {
     replace_content('status', html);
 }
 
+function has_auth_cookie_value() {
+    return get_cookie_value('auth') != null;
+}
+
 function auth_header() {
-    return "Basic " + decodeURIComponent(get_pref('auth'));
+    if(has_auth_cookie_value()) {
+        return "Basic " + decodeURIComponent(get_cookie_value('auth'));    
+    } else {
+        return null;
+    }
 }
 
 function with_req(method, path, body, fun) {
+    if(!has_auth_cookie_value()) {
+        // navigate to the login form
+        location.reload();
+        return;
+    }
+
     var json;
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
