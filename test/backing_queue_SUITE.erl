@@ -21,10 +21,11 @@
 
 -compile(export_all).
 
--define(PERSISTENT_MSG_STORE, msg_store_persistent_vhost).
--define(TRANSIENT_MSG_STORE,  msg_store_transient_vhost).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
 -define(TIMEOUT, 30000).
+-define(VHOST, <<"/">>).
 
 -define(VARIABLE_QUEUE_TESTCASES, [
     variable_queue_dynamic_duration_change,
@@ -253,9 +254,9 @@ msg_store1(_Config) ->
     MSCState4 = msg_store_read(MsgIds2ndHalf, MSCState3),
     ok = rabbit_msg_store:client_terminate(MSCState4),
     %% stop and restart, preserving every other msg in 2nd half
-    ok = rabbit_variable_queue:stop_msg_store(),
-    ok = rabbit_variable_queue:start_msg_store(
-           #{}, {fun ([]) -> finished;
+    ok = rabbit_variable_queue:stop_msg_store(?VHOST),
+    ok = rabbit_variable_queue:start_msg_store(?VHOST,
+           [], {fun ([]) -> finished;
                     ([MsgId|MsgIdsTail])
                       when length(MsgIdsTail) rem 2 == 0 ->
                         {MsgId, 1, MsgIdsTail};
@@ -330,8 +331,8 @@ msg_store1(_Config) ->
     passed.
 
 restart_msg_store_empty() ->
-    ok = rabbit_variable_queue:stop_msg_store(),
-    ok = rabbit_variable_queue:start_msg_store(
+    ok = rabbit_variable_queue:stop_msg_store(?VHOST),
+    ok = rabbit_variable_queue:start_msg_store(?VHOST,
            undefined, {fun (ok) -> finished end, ok}).
 
 msg_id_bin(X) ->
@@ -376,10 +377,10 @@ on_disk_stop(Pid) ->
 
 msg_store_client_init_capture(MsgStore, Ref) ->
     Pid = spawn(fun on_disk_capture/0),
-    {Pid, rabbit_msg_store_vhost_sup:client_init(
-            MsgStore, Ref, fun (MsgIds, _ActionTaken) ->
-                                   Pid ! {on_disk, MsgIds}
-                           end, undefined, <<"/">>)}.
+    {Pid, rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,
+                                             fun (MsgIds, _ActionTaken) ->
+                                                 Pid ! {on_disk, MsgIds}
+                                             end, undefined)}.
 
 msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
@@ -456,14 +457,16 @@ test_msg_store_confirm_timer() ->
     Ref = rabbit_guid:gen(),
     MsgId  = msg_id_bin(1),
     Self = self(),
-    MSCState = rabbit_msg_store_vhost_sup:client_init(
-                 ?PERSISTENT_MSG_STORE, Ref,
-                 fun (MsgIds, _ActionTaken) ->
-                         case gb_sets:is_member(MsgId, MsgIds) of
-                             true  -> Self ! on_disk;
-                             false -> ok
-                         end
-                 end, undefined, <<"/">>),
+    MSCState = rabbit_vhost_msg_store:client_init(
+        ?VHOST,
+        ?PERSISTENT_MSG_STORE,
+        Ref,
+        fun (MsgIds, _ActionTaken) ->
+            case gb_sets:is_member(MsgId, MsgIds) of
+                true  -> Self ! on_disk;
+                false -> ok
+            end
+        end, undefined),
     ok = msg_store_write([MsgId], MSCState),
     ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], MSCState, false),
     ok = msg_store_remove([MsgId], MSCState),
@@ -651,8 +654,8 @@ bq_queue_index1(_Config) ->
               Qi8
       end),
 
-    ok = rabbit_variable_queue:stop(),
-    {ok, _} = rabbit_variable_queue:start([]),
+    ok = rabbit_variable_queue:stop(?VHOST),
+    {ok, _} = rabbit_variable_queue:start(?VHOST, []),
 
     passed.
 
@@ -672,8 +675,8 @@ bq_queue_index_props1(_Config) ->
               Qi2
       end),
 
-    ok = rabbit_variable_queue:stop(),
-    {ok, _} = rabbit_variable_queue:start([]),
+    ok = rabbit_variable_queue:stop(?VHOST),
+    {ok, _} = rabbit_variable_queue:start(?VHOST, []),
 
     passed.
 
@@ -718,7 +721,7 @@ bq_queue_recover1(Config) ->
                                 true, false, [], none, <<"acting-user">>),
     publish_and_confirm(Q, <<>>, Count),
 
-    SupPid = rabbit_ct_broker_helpers:get_queue_sup_pid(QPid),
+    SupPid = rabbit_ct_broker_helpers:get_queue_sup_pid(Q),
     true = is_pid(SupPid),
     exit(SupPid, kill),
     exit(QPid, kill),
@@ -726,8 +729,8 @@ bq_queue_recover1(Config) ->
     receive {'DOWN', MRef, process, QPid, _Info} -> ok
     after 10000 -> exit(timeout_waiting_for_queue_death)
     end,
-    rabbit_amqqueue:stop(),
-    rabbit_amqqueue:start(rabbit_amqqueue:recover()),
+    rabbit_amqqueue:stop(?VHOST),
+    rabbit_amqqueue:start(rabbit_amqqueue:recover(?VHOST)),
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
     rabbit_amqqueue:with_or_die(
       QName,
@@ -1275,14 +1278,14 @@ init_test_queue(QName) ->
     Res.
 
 restart_test_queue(Qi, QName) ->
-    _ = rabbit_queue_index:terminate([], Qi),
-    ok = rabbit_variable_queue:stop(),
-    {ok, _} = rabbit_variable_queue:start([QName]),
+    _ = rabbit_queue_index:terminate(?VHOST, [], Qi),
+    ok = rabbit_variable_queue:stop(?VHOST),
+    {ok, _} = rabbit_variable_queue:start(?VHOST, [QName]),
     init_test_queue(QName).
 
 empty_test_queue(QName) ->
-    ok = rabbit_variable_queue:stop(),
-    {ok, _} = rabbit_variable_queue:start([]),
+    ok = rabbit_variable_queue:stop(?VHOST),
+    {ok, _} = rabbit_variable_queue:start(?VHOST, []),
     {0, 0, Qi} = init_test_queue(QName),
     _ = rabbit_queue_index:delete_and_terminate(Qi),
     ok.
@@ -1337,7 +1340,7 @@ nop(_) -> ok.
 nop(_, _) -> ok.
 
 msg_store_client_init(MsgStore, Ref) ->
-    rabbit_msg_store_vhost_sup:client_init(MsgStore, Ref, undefined, undefined, <<"/">>).
+    rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,  undefined, undefined).
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
