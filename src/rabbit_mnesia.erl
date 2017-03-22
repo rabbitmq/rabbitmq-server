@@ -139,14 +139,15 @@ init_from_config() ->
             {ok, _} ->
                 e(invalid_cluster_nodes_conf)
         end,
-    case DiscoveredNodes of
+    Peers = nodes_excl_me(DiscoveredNodes),
+    case Peers of
         [] ->
             rabbit_log:info("Discovered no peer nodes to cluster with"),
             init_db_and_upgrade([node()], disc, false, _Retry = true);
         _  ->
             rabbit_log:info("Discovered peer nodes: ~s~n",
-                [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
-            join_discovered_peers(DiscoveredNodes, NodeType)
+                [rabbit_peer_discovery:format_discovered_nodes(Peers)]),
+            join_discovered_peers(Peers, NodeType)
     end.
 
 %% Attempts to join discovered,
