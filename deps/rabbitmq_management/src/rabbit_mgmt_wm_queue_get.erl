@@ -66,9 +66,7 @@ do_it(ReqData, Context) ->
                         Enc = case EncBin of
                                   <<"auto">>   -> auto;
                                   <<"base64">> -> base64;
-                                  _            -> throw({error,
-                                                         {bad_encoding,
-                                                          EncBin}})
+                                  _            -> throw({error, <<"Unsupported encoding. Please use auto or base64.">>})
                               end,
                         Trunc = case proplists:get_value(truncate, Body) of
                                     undefined -> none;
