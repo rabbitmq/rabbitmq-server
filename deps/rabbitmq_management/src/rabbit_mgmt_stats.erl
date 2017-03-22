@@ -21,7 +21,6 @@
 
 -export([format_range/6]).
 
--define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 -define(MICRO_TO_MILLI, 1000).
 
 -type maybe_range() :: no_range | #range{}.
