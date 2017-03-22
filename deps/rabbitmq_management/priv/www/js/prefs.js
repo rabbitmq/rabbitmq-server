@@ -8,6 +8,30 @@ function local_storage_available() {
     }
 }
 
+function store_cookie_value(k, v) {
+    var d = parse_cookie();
+    d[short_key(k)] = v;
+    store_cookie(d);
+}
+
+function store_cookie_value_with_expiration(k, v, expiration_date) {
+    var d = parse_cookie();
+    d[short_key(k)] = v;
+    store_cookie_with_expiration(d, expiration_date);
+}
+
+function clear_cookie_value(k) {
+    var d = parse_cookie();
+    delete d[short_key(k)];
+    store_cookie(d);
+}
+
+function get_cookie_value(k) {
+    var r;
+    r = parse_cookie()[short_key(k)];
+    return r == undefined ? default_pref(k) : r;
+}
+
 function store_pref(k, v) {
     if (local_storage_available()) {
         window.localStorage['rabbitmq.' + k] = v;
@@ -28,7 +52,12 @@ function clear_pref(k) {
         delete d[short_key(k)];
         store_cookie(d);
     }
+}
 
+function clear_local_pref(k) {
+    if (local_storage_available()) {
+        window.localStorage.removeItem('rabbitmq.' + k);
+    }
 }
 
 function get_pref(k) {
@@ -95,13 +124,17 @@ function parse_cookie() {
 }
 
 function store_cookie(dict) {
+    var date = new Date();
+    date.setFullYear(date.getFullYear() + 1);
+    store_cookie_with_expiration(dict, date);
+}
+
+function store_cookie_with_expiration(dict, expiration_date) {
     var enc = [];
     for (var k in dict) {
         enc.push(k + ':' + escape(dict[k]));
     }
-    var date = new Date();
-    date.setFullYear(date.getFullYear() + 1);
-    document.cookie = 'm=' + enc.join('|') + '; expires=' + date.toUTCString();
+    document.cookie = 'm=' + enc.join('|') + '; expires=' + expiration_date.toUTCString();
 }
 
 function get_cookie(key) {
