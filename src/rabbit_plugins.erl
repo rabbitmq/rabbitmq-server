@@ -76,7 +76,7 @@ plugins_dist_dir() ->
         {ok, PluginsDistDir} ->
             PluginsDistDir;
         _ ->
-            filename:join([rabbit_mnesia:dir(), "fake_plugins_dir"])
+            filename:join([rabbit_mnesia:dir(), "plugins_dir_stub"])
     end.
 
 -spec enabled_plugins() -> [atom()].
