@@ -126,11 +126,11 @@ function args_to_features(obj) {
     var res = {};
     for (var k in obj.arguments) {
         if (k in KNOWN_ARGS) {
-            res[k] = obj.arguments[k];
+            res[k] = fmt_escape_html(obj.arguments[k]);
         }
         else {
             if (res.arguments == undefined) res.arguments = {};
-            res.arguments[k] = obj.arguments[k];
+            res.arguments[fmt_escape_html(k)] = fmt_escape_html(obj.arguments[k]);
         }
     }
     if (obj.durable) {
@@ -150,7 +150,7 @@ function fmt_mirrors(queue) {
     var unsynced = queue.slave_nodes || [];
     unsynced = jQuery.grep(unsynced,
                            function (node, i) {
-                               return jQuery.inArray(node, synced) == -1
+                               return jQuery.inArray(node, synced) == -1;
                            });
     var res = '';
     if (synced.length > 0) {
