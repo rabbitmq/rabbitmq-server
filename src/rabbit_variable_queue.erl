@@ -516,8 +516,6 @@ start_msg_store(VHost, Refs, StartFunState, IsEmpty) when is_list(Refs); Refs ==
         Other ->
             error(Other)
     end,
-    rabbit_file:read_term_file(msg_store_module_file(),
-                                [MsgStoreModule]),
     rabbit_log:info("Using ~p to provide message store", [MsgStoreModule]),
     do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE, MsgStoreModule),
     do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState, MsgStoreModule),
