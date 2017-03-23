@@ -31,7 +31,7 @@
 -export([start/2, stop/1]).
 
 %% exported for testing only
--export([start_msg_store/3, stop_msg_store/1, init/6]).
+-export([start_msg_store/4, stop_msg_store/1, init/6]).
 
 -export([move_messages_to_vhost_store/0]).
 
@@ -43,6 +43,7 @@
 
 -define(QUEUE_MIGRATION_BATCH_SIZE, 100).
 -define(EMPTY_START_FUN_STATE, {fun (ok) -> finished end, ok}).
+-define(MSG_STORE_MODULE_FILE, "msg_store_module").
 
 %%----------------------------------------------------------------------------
 %% Messages, and their position in the queue, can be in memory or on
@@ -480,26 +481,47 @@ explicit_gc_run_operation_threshold_for_mode(Mode) ->
 
 start(VHost, DurableQueues) ->
     {AllTerms, StartFunState} = rabbit_queue_index:start(VHost, DurableQueues),
-    %% Group recovery terms by vhost.
     ClientRefs = [Ref || Terms <- AllTerms,
                       Terms /= non_clean_shutdown,
                       begin
                           Ref = proplists:get_value(persistent_ref, Terms),
                           Ref =/= undefined
                       end],
-    start_msg_store(VHost, ClientRefs, StartFunState),
+    IsEmpty = DurableQueues == [],
+    start_msg_store(VHost, ClientRefs, StartFunState, IsEmpty),
     {ok, AllTerms}.
 
 stop(VHost) ->
     ok = stop_msg_store(VHost),
     ok = rabbit_queue_index:stop(VHost).
 
-start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
+start_msg_store(VHost, Refs, StartFunState, IsEmpty) when is_list(Refs); Refs == undefined ->
     rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
     MsgStoreModule = application:get_env(rabbit, msg_store_module, rabbit_msg_store),
+    case rabbit_file:read_term_file(msg_store_module_file()) of
+        %% The same message store module
+        {ok, [MsgStoreModule]} -> ok;
+        %% Fresh message store
+        {error, enoent} -> ok;
+        {ok, [OldModule]} ->
+            case IsEmpty of
+                %% There is no data in the old message store.
+                %% So it's safe to start with the new one
+                true  -> ok;
+                false ->
+                    error({msg_store_module_mismatch,
+                           MsgStoreModule,
+                           OldModule})
+            end;
+        Other ->
+            error(Other)
+    end,
+    rabbit_file:read_term_file(msg_store_module_file(),
+                                [MsgStoreModule]),
     rabbit_log:info("Using ~p to provide message store", [MsgStoreModule]),
     do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE, MsgStoreModule),
     do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState, MsgStoreModule),
+    rabbit_file:write_term_file(msg_store_module_file(), [MsgStoreModule]),
     ok.
 
 do_start_msg_store(VHost, Type, Refs, StartFunState, MsgStoreModule) ->
@@ -515,6 +537,9 @@ do_start_msg_store(VHost, Type, Refs, StartFunState, MsgStoreModule) ->
                              [Type, VHost, Error]),
             exit({error, Error})
     end.
+
+msg_store_module_file() ->
+    filename:join(rabbit_mnesia:dir(), ?MSG_STORE_MODULE_FILE).
 
 abbreviated_type(?TRANSIENT_MSG_STORE)  -> transient;
 abbreviated_type(?PERSISTENT_MSG_STORE) -> persistent.
@@ -2816,6 +2841,8 @@ move_messages_to_vhost_store(Queues) ->
     ok = rabbit_queue_index:cleanup_global_recovery_terms(),
     [ok= rabbit_recovery_terms:close_table(VHost) || VHost <- VHosts],
     ok = stop_new_store(NewMsgStore).
+    rabbit_file:write_term_file(msg_store_module_file(), [rabbit_msg_store]),
+    ok.
 
 in_batches(Size, MFA, List, MessageStart, MessageEnd) ->
     in_batches(Size, 1, MFA, List, MessageStart, MessageEnd).

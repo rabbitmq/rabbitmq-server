@@ -262,7 +262,7 @@ msg_store1(_Config) ->
                         {MsgId, 1, MsgIdsTail};
                     ([MsgId|MsgIdsTail]) ->
                         {MsgId, 0, MsgIdsTail}
-                end, MsgIds2ndHalf}),
+                end, MsgIds2ndHalf}, true),
     MSCState5 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we have the right msgs left
     lists:foldl(
@@ -333,7 +333,7 @@ msg_store1(_Config) ->
 restart_msg_store_empty() ->
     ok = rabbit_variable_queue:stop_msg_store(?VHOST),
     ok = rabbit_variable_queue:start_msg_store(?VHOST,
-           undefined, {fun (ok) -> finished end, ok}).
+           undefined, {fun (ok) -> finished end, ok}, true).
 
 msg_id_bin(X) ->
     erlang:md5(term_to_binary(X)).
