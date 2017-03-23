@@ -1409,8 +1409,11 @@ ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
     case Get(Sock) of
-        {ok,    T} -> Select(T);
-        {error, _} -> ''
+        {ok,    T} -> case Select(T) of
+                          N when is_number(N) -> N;
+                          _ -> 0
+                      end;
+        {error, _} -> 0
     end.
 
 ssl_info(F, #v1{sock = Sock}) ->
