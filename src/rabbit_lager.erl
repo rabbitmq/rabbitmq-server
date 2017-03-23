@@ -185,7 +185,7 @@ configure_lager() ->
             %% Setting env var to 'undefined' is different from not
             %% setting it at all, and lager is sensitive to this
             %% difference.
-            case application:get_env(rabbit, lager_log_root, undefined) of
+            case application:get_env(rabbit, lager_log_root) of
                 {ok, FromRabbitConfig} ->
                     application:set_env(lager, log_root, FromRabbitConfig);
                 _ ->
