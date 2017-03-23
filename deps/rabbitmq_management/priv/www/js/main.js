@@ -925,7 +925,16 @@ function toggle_visibility(item) {
 }
 
 function publish_msg(params0) {
-    var params = params_magic(params0);
+    try {
+        var params = params_magic(params0);
+        publish_msg0(params);
+    } catch (e) {
+        show_popup('warn', fmt_escape_html(e));
+        return false;
+    }
+}
+
+function publish_msg0(params) {
     var path = fill_path_template('/exchanges/:vhost/:name/publish', params);
     params['payload_encoding'] = 'string';
     params['properties'] = {};
@@ -1095,7 +1104,7 @@ function sync_req(type, params0, path_template, options) {
         params = params_magic(params0);
         path = fill_path_template(path_template, params);
     } catch (e) {
-        show_popup('warn', e);
+        show_popup('warn', fmt_escape_html(e));
         return false;
     }
     var req = xmlHttpRequest();
@@ -1154,7 +1163,7 @@ function check_bad_response(req, full_page_404) {
         if (typeof(error) != 'string') error = JSON.stringify(error);
 
         if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised') {
-            show_popup('warn', reason);
+            show_popup('warn', fmt_escape_html(reason));
         } else if (error == 'page_out_of_range') {
             var seconds = 60;
             if (last_page_out_of_range_error > 0)

@@ -52,7 +52,9 @@ to_json(ReqData, Context) ->
         {badrpc, Err} ->
             failure(rabbit_mgmt_format:print("~p", Err), ReqData, Context);
         {error_string, Err} ->
-            failure(rabbit_mgmt_format:print(Err), ReqData, Context)
+            S = rabbit_mgmt_format:escape_html_tags(
+                  rabbit_data_coercion:to_list(rabbit_mgmt_format:print(Err))),
+            failure(S, ReqData, Context)
     end.
 
 failure(Message, ReqData, Context) ->

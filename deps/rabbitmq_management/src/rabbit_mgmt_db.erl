@@ -381,10 +381,10 @@ detail_queue_stats(Ranges, Objs, Interval) ->
        Consumers = [{consumer_details, dict:fetch(consumer_stats, QueueData)}],
        StatsD = [{deliveries,
                   detail_stats(QueueData, channel_queue_stats_deliver_stats,
-                                         deliver_get, second(Id), Ranges, Interval)},
+                               deliver_get, second(Id), Ranges, Interval)},
                  {incoming,
                   detail_stats(QueueData, queue_exchange_stats_publish,
-                                         fine_stats, first(Id), Ranges, Interval)}],
+                               fine_stats, first(Id), Ranges, Interval)}],
        {Pid, combine(Props, Obj) ++ Stats ++ StatsD ++ Consumers}
        end || Obj <- Objs]),
 

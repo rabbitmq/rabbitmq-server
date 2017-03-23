@@ -54,7 +54,8 @@ to_json(ReqData, Context) ->
     try
         [Q] = rabbit_mgmt_db:augment_queues(
                 [queue(ReqData)], rabbit_mgmt_util:range_ceil(ReqData), full),
-        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q), ReqData, Context)
+        Payload = rabbit_mgmt_format:clean_consumer_details(rabbit_mgmt_format:strip_pids(Q)),
+        rabbit_mgmt_util:reply(Payload, ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
