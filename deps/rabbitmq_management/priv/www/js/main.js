@@ -504,7 +504,7 @@ function show_popup(type, text, mode) {
         $(cssClass).text().indexOf(text.replace(/<[^>]*>/g, '')) != -1 ) {
         return;
     }
-    $('h1').after(format('error-popup', {'type': type, 'text': text}));
+    $('h1').after(format('error-popup', {'type': type, 'text': fmt_escape_html(text)}));
     if (mode == 'fade') {
         $(cssClass).fadeIn(200);
     }
