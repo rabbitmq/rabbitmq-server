@@ -54,7 +54,7 @@ to_json(ReqData, Context) ->
         none ->
             all_definitions(ReqData, Context);
         not_found ->
-            rabbit_mgmt_util:bad_request(list_to_binary("vhost_not_found"),
+            rabbit_mgmt_util:bad_request(rabbit_data_coercion:to_binary("vhost_not_found"),
                                          ReqData, Context);
         _VHost ->
             vhost_definitions(ReqData, Context)
@@ -70,7 +70,7 @@ all_definitions(ReqData, Context) ->
                export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
-      [{rabbit_version, list_to_binary(Vsn)}] ++
+      [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)}] ++
       filter(
         [{users,             rabbit_mgmt_wm_users:users()},
          {vhosts,            rabbit_mgmt_wm_vhosts:basic()},
@@ -101,7 +101,7 @@ vhost_definitions(ReqData, Context) ->
                             export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     rabbit_mgmt_util:reply(
-      [{rabbit_version, list_to_binary(Vsn)}] ++
+      [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)}] ++
           filter(
             [{policies,    rabbit_mgmt_wm_policies:basic(ReqData)},
              {queues,      Qs},
@@ -154,7 +154,7 @@ accept(Body, ReqData, Context) ->
             apply_defs(Body, fun() -> {true, ReqData, Context} end,
                        fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end);
         not_found ->
-            rabbit_mgmt_util:bad_request(list_to_binary("vhost_not_found"),
+            rabbit_mgmt_util:bad_request(rabbit_data_coercion:to_binary("vhost_not_found"),
                                          ReqData, Context);
         VHost ->
             apply_defs(Body, fun() -> {true, ReqData, Context} end,
@@ -205,9 +205,9 @@ apply_defs(Body, SuccessFun, ErrorFun, VHost) ->
     end.
 
 format(#amqp_error{name = Name, explanation = Explanation}) ->
-    list_to_binary(rabbit_misc:format("~s: ~s", [Name, Explanation]));
+    rabbit_data_coercion:to_binary(rabbit_misc:format("~s: ~s", [Name, Explanation]));
 format(E) ->
-    list_to_binary(rabbit_misc:format("~p", [E])).
+    rabbit_data_coercion:to_binary(rabbit_misc:format("~p", [E])).
 
 get_all_parts(ReqData) ->
     get_all_parts(ReqData, []).
@@ -296,7 +296,7 @@ for_all(Name, All, VHost, Fun) ->
                      ok
     end.
 
-atomise_name(N) -> list_to_atom(binary_to_list(N)).
+atomise_name(N) -> rabbit_data_coercion:to_atom(N).
 
 %%--------------------------------------------------------------------
 
@@ -307,9 +307,8 @@ add_parameter(Param) ->
     Term  = rabbit_misc:json_to_term(pget(value, Param)),
     case rabbit_runtime_parameters:set(VHost, Comp, Key, Term, none) of
         ok                -> ok;
-        {error_string, E} -> S = rabbit_misc:format(" (~s/~s/~s)",
-                                                    [VHost, Comp, Key]),
-                             exit(list_to_binary(E ++ S))
+        {error_string, E} -> S = rabbit_misc:format(" (~s/~s/~s)", [VHost, Comp, Key]),
+                             exit(rabbit_data_coercion:to_binary(rabbit_mgmt_format:escape_html_tags(E ++ S)))
     end.
 
 add_global_parameter(Param) ->
@@ -330,7 +329,7 @@ add_policy(VHost, Param) ->
            pget('apply-to', Param, <<"all">>)) of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [VHost, Key]),
-                             exit(list_to_binary(E ++ S))
+                             exit(rabbit_data_coercion:to_binary(rabbit_mgmt_format:escape_html_tags(E ++ S)))
     end.
 
 add_vhost(VHost) ->
