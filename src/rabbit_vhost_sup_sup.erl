@@ -33,16 +33,23 @@
 -record(vhost_sup, {vhost, vhost_sup_pid, wrapper_pid}).
 
 start() ->
-    rabbit_sup:start_supervisor_child(?MODULE).
+    supervisor:start_child(rabbit_sup,
+                           {?MODULE, {?MODULE, start_link, []},
+                           permanent, infinity, supervisor, [?MODULE]}).
 
 start_link() ->
     supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
+    VhostRestart = case application:get_env(rabbit, vhost_restart_strategy, stop_rabbit) of
+        give_up     -> transient;
+        stop_rabbit -> permanent
+    end,
+
     ets:new(?MODULE, [named_table, public, {keypos, #vhost_sup.vhost}]),
     {ok, {{simple_one_for_one, 0, 5},
           [{rabbit_vhost, {rabbit_vhost_sup_wrapper, start_link, []},
-            permanent, infinity, supervisor,
+            VhostRestart, infinity, supervisor,
             [rabbit_vhost_sup_wrapper, rabbit_vhost_sup]}]}}.
 
 start_on_all_nodes(VHost) ->
