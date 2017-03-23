@@ -43,8 +43,10 @@ resource_exists(ReqData, Context) ->
     end.
 
 to_json(ReqData, Context) ->
+    Payload = rabbit_mgmt_format:clean_consumer_details(
+                rabbit_mgmt_format:strip_pids(channel(ReqData))),
     rabbit_mgmt_util:reply(
-      {struct, rabbit_mgmt_format:strip_pids(channel(ReqData))},
+      {struct, Payload},
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->
