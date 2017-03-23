@@ -538,7 +538,7 @@ clean_consumer_details(Obj) ->
      case pget(consumer_details, Obj) of
          undefined -> Obj;
          Cds ->
-             Cons = [clean_channel_details(Con) || Con <- Cds],
+             Cons = [format_consumer_arguments(clean_channel_details(Con)) || Con <- Cds],
              pset(consumer_details, Cons, Obj)
      end.
 
@@ -553,6 +553,16 @@ clean_channel_details(Obj) ->
                   Obj0)
      end.
 
+-spec format_consumer_arguments(proplists:proplist()) -> proplists:proplist().
+format_consumer_arguments(Obj) ->
+    case pget(arguments, Obj) of
+         undefined -> Obj;
+         []        -> Obj;
+         Args      -> pset(arguments, amqp_table(Args), Obj)
+     end.
+
+%% Converts a proplist into an AMQP 0-9-1 table.
+%% For JSON serialisation formatting see amqp_table/1.
 args({struct, L}) -> args(L);
 args(L)           -> to_amqp_table(L).
 
