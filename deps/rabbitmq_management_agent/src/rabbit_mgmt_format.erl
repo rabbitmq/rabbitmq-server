@@ -530,7 +530,7 @@ clean_consumer_details(Obj) ->
      case pget(consumer_details, Obj) of
          undefined -> Obj;
          Cds ->
-             Cons = [clean_channel_details(Con) || Con <- Cds],
+             Cons = [format_consumer_arguments(clean_channel_details(Con)) || Con <- Cds],
              pset(consumer_details, Cons, Obj)
      end.
 
@@ -544,6 +544,15 @@ clean_channel_details(Obj) ->
                   lists:keydelete(pid, 1, Chd),
                   Obj0)
      end.
+
+-spec format_consumer_arguments(proplists:proplist()) -> proplists:proplist().
+format_consumer_arguments(Obj) ->
+    case pget(arguments, Obj) of
+         undefined -> Obj;
+         []        -> Obj;
+         Args      -> pset(arguments, amqp_table(Args), Obj)
+     end.
+
 
 parse_bool(<<"true">>)  -> true;
 parse_bool(<<"false">>) -> false;
