@@ -28,7 +28,8 @@
 -export([with_decode/4, not_found/3, amqp_request/4]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
--export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
+-export([all_or_one_vhost/2, http_to_amqp/5, reply/3, json_like_handlers/1,
+         filter_vhost/3]).
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
          args/1]).
@@ -193,14 +194,29 @@ destination_type(ReqData) ->
         <<"q">> -> queue
     end.
 
+%% Prepares a list of Content-Types that are supported by
+%% reply/3. This list can be used in content_types_provided/2 callback
+%% of module implementing cowboy_rest. FunctionName/2 should be
+%% exported from this module and this function should use reply/3
+%% under the hood.
+json_like_handlers(FunctionName) ->
+    [{<<"application/json">>, FunctionName}
+    ,{<<"application/bert">>, FunctionName}
+    ].
+
 reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
 reply0(Facts, ReqData, Context) ->
     ReqData1 = set_resp_header(<<"Cache-Control">>, "no-cache", ReqData),
     try
-        {mochijson2:encode(rabbit_mgmt_format:format_nulls(Facts)), ReqData1,
-         Context}
+        case cowboy_req:meta(media_type, ReqData1) of
+            {{<<"application">>, <<"bert">>, _}, _} ->
+                {term_to_binary(Facts), ReqData1, Context};
+            _ ->
+                {mochijson2:encode(rabbit_mgmt_format:format_nulls(Facts)), ReqData1,
+                 Context}
+        end
     catch exit:{json_encode, E} ->
             Error = iolist_to_binary(
                       io_lib:format("JSON encode error: ~p", [E])),
