@@ -504,7 +504,7 @@ function show_popup(type, text, mode) {
         $(cssClass).text().indexOf(text.replace(/<[^>]*>/g, '')) != -1 ) {
         return;
     }
-    $('h1').after(format('error-popup', {'type': type, 'text': fmt_escape_html(text)}));
+    $('h1').after(format('error-popup', {'type': type, 'text': text}));
     if (mode == 'fade') {
         $(cssClass).fadeIn(200);
     }
@@ -929,7 +929,7 @@ function publish_msg(params0) {
         var params = params_magic(params0);
         publish_msg0(params);
     } catch (e) {
-        show_popup('warn', e);
+        show_popup('warn', fmt_escape_html(e));
         return false;
     }
 }
@@ -1104,7 +1104,7 @@ function sync_req(type, params0, path_template, options) {
         params = params_magic(params0);
         path = fill_path_template(path_template, params);
     } catch (e) {
-        show_popup('warn', e);
+        show_popup('warn', fmt_escape_html(e));
         return false;
     }
     var req = xmlHttpRequest();
@@ -1163,7 +1163,7 @@ function check_bad_response(req, full_page_404) {
         if (typeof(error) != 'string') error = JSON.stringify(error);
 
         if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised') {
-            show_popup('warn', reason);
+            show_popup('warn', fmt_escape_html(reason));
         } else if (error == 'page_out_of_range') {
             var seconds = 60;
             if (last_page_out_of_range_error > 0)
