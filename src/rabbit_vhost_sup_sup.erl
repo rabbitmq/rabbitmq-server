@@ -33,9 +33,11 @@
 -record(vhost_sup, {vhost, vhost_sup_pid, wrapper_pid}).
 
 start() ->
-    supervisor:start_child(rabbit_sup,
-                           {?MODULE, {?MODULE, start_link, []},
-                           permanent, infinity, supervisor, [?MODULE]}).
+    case supervisor:start_child(rabbit_sup, {?MODULE, {?MODULE, start_link, []},
+                                permanent, infinity, supervisor, [?MODULE]}) of
+        {ok, _}      -> ok;
+        {error, Err} -> {error, Err}
+    end.
 
 start_link() ->
     supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
