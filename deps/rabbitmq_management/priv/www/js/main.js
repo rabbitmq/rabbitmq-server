@@ -925,7 +925,16 @@ function toggle_visibility(item) {
 }
 
 function publish_msg(params0) {
-    var params = params_magic(params0);
+    try {
+        var params = params_magic(params0);
+        publish_msg0(params);
+    } catch (e) {
+        show_popup('warn', e);
+        return false;
+    }
+}
+
+function publish_msg0(params) {
     var path = fill_path_template('/exchanges/:vhost/:name/publish', params);
     params['payload_encoding'] = 'string';
     params['properties'] = {};
