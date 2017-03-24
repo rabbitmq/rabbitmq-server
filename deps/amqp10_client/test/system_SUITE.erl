@@ -168,6 +168,8 @@ basic_roundtrip(Config) ->
                                                     <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
     ok = amqp10_client:send_msg(Sender, Msg),
+    ok = amqp10_client:detach_link(Sender),
+    not_found = amqp10_client:detach_link(Sender),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"banana-receiver">>,
                                                         <<"test">>),

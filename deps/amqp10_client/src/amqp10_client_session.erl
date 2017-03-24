@@ -11,6 +11,7 @@
          begin_sync/2,
          'end'/1,
          attach/2,
+         detach/2,
          transfer/3,
          flow/3,
          disposition/6
@@ -70,6 +71,7 @@
 
 -record(link,
         {name :: link_name(),
+         state = detached :: detached | attach_sent | attached | detach_sent,
          output_handle :: link_handle(),
          input_handle :: link_handle() | undefined,
          role :: link_role(),
@@ -94,12 +96,15 @@
          reader :: pid(),
          socket :: gen_tcp:socket() | undefined,
          links = #{} :: #{link_handle() => #link{}},
-         link_index = #{} :: #{link_name() => link_handle()}, % maps incoming handle to outgoing
-         link_handle_index = #{} :: #{link_handle() => link_handle()}, % maps incoming handle to outgoing
+         % maps link name to outgoing link handle
+         link_index = #{} :: #{link_name() => link_handle()},
+         % maps incoming handle to outgoing
+         link_handle_index = #{} :: #{link_handle() => link_handle()},
          next_link_handle = 0 :: link_handle(),
          next_delivery_id = 0 :: non_neg_integer(),
          early_attach_requests = [] :: [term()],
          pending_attach_requests = #{} :: #{link_name() => {pid(), any()}},
+         pending_detach_requests = #{} :: #{link_handle() => {pid(), any()}},
          connection_config = #{} :: amqp10_client_connection:connection_config(),
          % the unsettled map needs to go in the session state as a disposition
          % can reference transfers for many different links
@@ -140,6 +145,10 @@ begin_sync(Connection, Timeout) ->
 -spec attach(pid(), attach_args()) -> {ok, link_handle()}.
 attach(Session, Args) ->
     gen_fsm:sync_send_event(Session, {attach, Args}).
+
+-spec detach(pid(), link_handle()) -> ok.
+detach(Session, Handle) ->
+    gen_fsm:sync_send_event(Session, {detach, Handle}).
 
 -spec transfer(pid(), amqp10_msg:amqp10_msg(), timeout()) ->
     ok | {error, insufficient_credit | link_not_found}.
@@ -268,12 +277,25 @@ mapped(#'v1_0.attach'{name = {utf8, Name},
                         #link{role = sender, delivery_count = DC} -> DC;
                         _ -> unpack(IDC)
                     end,
-    Link = Link0#link{input_handle = InHandle,
+    Link = Link0#link{input_handle = InHandle, state = attached,
                       delivery_count = DeliveryCount},
     {next_state, mapped,
      State#state{links = Links#{OutHandle => Link},
+                 link_index = maps:remove(Name, LinkIndex),
                  link_handle_index = LHI#{InHandle => OutHandle},
                  pending_attach_requests = maps:remove(Name, PARs)}};
+
+mapped(#'v1_0.detach'{handle = {uint, InHandle}, closed = true},
+        #state{links = Links, link_handle_index = LHI,
+               pending_detach_requests = PDRs} = State) ->
+    {ok, #link{output_handle = OutHandle}} =
+        find_link_by_input_handle(InHandle, State),
+    #{InHandle := Detacher} = PDRs,
+    _ = gen_server:reply(Detacher, ok),
+    {next_state, mapped,
+     State#state{links = maps:remove(OutHandle, Links),
+                 link_handle_index = maps:remove(InHandle, LHI),
+                 pending_detach_requests = maps:remove(InHandle, PDRs)}};
 
 mapped(#'v1_0.flow'{handle = undefined} = Flow, State0) ->
     State = handle_session_flow(Flow, State0),
@@ -420,8 +442,15 @@ mapped({disposition, Role, First, Last, Settled, DeliveryState}, _From,
 
 mapped({attach, Attach}, From, State) ->
     State1 = send_attach(fun send/2, Attach, From, State),
-    {next_state, mapped, State1}.
+    {next_state, mapped, State1};
 
+mapped({detach, Handle}, From, State) ->
+    case send_detach(fun send/2, Handle, From, State) of
+        {ok, State1} ->
+            {next_state, mapped, State1};
+        not_found ->
+            {reply, not_found, mapped, State}
+    end.
 
 end_sent(#'v1_0.end'{}, State) ->
     {stop, normal, State}.
@@ -521,6 +550,21 @@ make_target(#{role := {receiver, _Source, _Pid}}) ->
 make_target(#{role := {sender, #{address := Address}}}) ->
     #'v1_0.target'{address = {utf8, Address}}.
 
+send_detach(Send, OutHandle, From,
+            State = #state{links = Links,
+                           pending_detach_requests = PDRs}) ->
+    case Links of
+        #{OutHandle := Link = #link{input_handle = InHandle}} ->
+            Detach = #'v1_0.detach'{handle = uint(OutHandle),
+                                    closed = true},
+            ok = Send(Detach, State),
+            Links1 = Links#{OutHandle => Link#link{state = detached_sent}},
+            {ok, State#state{links = Links1,
+                             pending_detach_requests = PDRs#{InHandle => From}}};
+        _ ->
+            not_found
+    end.
+
 send_attach(Send, #{name := Name, role := Role} = Args, From,
       #state{next_link_handle = Handle, links = Links,
              pending_attach_requests = PARs,
@@ -529,10 +573,12 @@ send_attach(Send, #{name := Name, role := Role} = Args, From,
     Source = make_source(Args),
     Target = make_target(Args),
 
-    RoleAsBool = case Role of
-                     {receiver, _, _} -> true;
-                     _ -> false
-                 end,
+    {LinkTarget, RoleAsBool} = case Role of
+                                   {receiver, _, Pid} ->
+                                       {{pid, Pid}, true};
+                                   {sender, #{address := TargetAddr}} ->
+                                       {TargetAddr, false}
+                               end,
 
     % create attach performative
     Attach = #'v1_0.attach'{name = {utf8, Name},
@@ -545,13 +591,10 @@ send_attach(Send, #{name := Name, role := Role} = Args, From,
                             rcv_settle_mode = rcv_settle_mode(Args),
                             target = Target},
     ok = Send(Attach, State),
-    {T, S} = case Role of
-                 {receiver, _, Pid} -> {{pid, Pid}, undefined};
-                 {sender, #{address := TargetAddr}} ->
-                     {TargetAddr, undefined}
-             end,
+
     Link = #link{name = Name, output_handle = Handle,
-                 role = element(1, Role), source = S, target = T},
+                 state = attach_sent, role = element(1, Role),
+                 target = LinkTarget},
 
     % stash the From pid
     State#state{links = Links#{Handle => Link},

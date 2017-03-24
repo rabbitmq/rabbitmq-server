@@ -15,6 +15,7 @@
          attach_sender_link/4,
          attach_receiver_link/3,
          attach_receiver_link/4,
+         detach_link/1,
          send_msg/2,
          accept_msg/2,
          flow_link_credit/2,
@@ -115,6 +116,10 @@ attach_receiver_link(Session, Name, Source, SettleMode) ->
                    rcv_settle_mode => first},
     {ok, Attach} = amqp10_client_session:attach(Session, AttachArgs),
     {ok, make_link_ref(receiver, Session, Name, Attach)}.
+
+-spec detach_link(link_ref()) -> ok | {error, not_found}.
+detach_link(#link_ref{link_handle = Handle, session = Session}) ->
+    amqp10_client_session:detach(Session, Handle).
 
 -spec flow_link_credit(link_ref(), non_neg_integer()) -> ok.
 flow_link_credit(#link_ref{role = receiver, session = Session,
