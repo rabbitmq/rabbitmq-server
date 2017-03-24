@@ -250,7 +250,7 @@ update_certs(CertsList, Provider, Config) ->
                 {ok, Cert, IssuerId} ->
                     save_cert(CertId, Provider, IssuerId, Cert, Name);
                 {error, Reason} ->
-                    rabbit_log:error("Unable to load CA sertificate ~p"
+                    rabbit_log:error("Unable to load CA certificate ~p"
                                      " with provider ~p,"
                                      " reason: ~p",
                                      [CertId, Provider, Reason])
