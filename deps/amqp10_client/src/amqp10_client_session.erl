@@ -146,7 +146,7 @@ begin_sync(Connection, Timeout) ->
 attach(Session, Args) ->
     gen_fsm:sync_send_event(Session, {attach, Args}).
 
--spec detach(pid(), link_handle()) -> ok.
+-spec detach(pid(), link_handle()) -> ok | not_found.
 detach(Session, Handle) ->
     gen_fsm:sync_send_event(Session, {detach, Handle}).
 
@@ -285,9 +285,10 @@ mapped(#'v1_0.attach'{name = {utf8, Name},
                  link_handle_index = LHI#{InHandle => OutHandle},
                  pending_attach_requests = maps:remove(Name, PARs)}};
 
-mapped(#'v1_0.detach'{handle = {uint, InHandle}, closed = true},
+mapped(#'v1_0.detach'{handle = {uint, InHandle}, closed = Closed},
         #state{links = Links, link_handle_index = LHI,
-               pending_detach_requests = PDRs} = State) ->
+               pending_detach_requests = PDRs} = State)
+  when Closed =:= true orelse Closed =:= undefined ->
     {ok, #link{output_handle = OutHandle}} =
         find_link_by_input_handle(InHandle, State),
     #{InHandle := Detacher} = PDRs,
@@ -558,7 +559,7 @@ send_detach(Send, OutHandle, From,
             Detach = #'v1_0.detach'{handle = uint(OutHandle),
                                     closed = true},
             ok = Send(Detach, State),
-            Links1 = Links#{OutHandle => Link#link{state = detached_sent}},
+            Links1 = Links#{OutHandle => Link#link{state = detach_sent}},
             {ok, State#state{links = Links1,
                              pending_detach_requests = PDRs#{InHandle => From}}};
         _ ->
