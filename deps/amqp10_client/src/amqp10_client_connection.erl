@@ -106,18 +106,15 @@ set_other_procs(Pid, OtherProcs) ->
     gen_fsm:send_all_state_event(Pid, {set_other_procs, OtherProcs}).
 
 -spec socket_ready(pid(), gen_tcp:socket()) -> ok.
-
 socket_ready(Pid, Socket) ->
     gen_fsm:send_event(Pid, {socket_ready, Socket}).
 
--spec protocol_header_received(pid(), 0 | 3, non_neg_integer(), non_neg_integer(),
-                               non_neg_integer()) -> ok.
-
+-spec protocol_header_received(pid(), 0 | 3, non_neg_integer(),
+                               non_neg_integer(), non_neg_integer()) -> ok.
 protocol_header_received(Pid, Protocol, Maj, Min, Rev) ->
     gen_fsm:send_event(Pid, {protocol_header_received, Protocol, Maj, Min, Rev}).
 
 -spec begin_session(pid()) -> supervisor:startchild_ret().
-
 begin_session(Pid) ->
     gen_fsm:sync_send_all_state_event(Pid, begin_session).
 

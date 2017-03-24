@@ -31,6 +31,7 @@
 
 -type maybe(T) :: T | undefined.
 
+-type delivery_tag() :: binary().
 -type content_type() :: term(). % TODO: refine
 -type content_encoding() :: term(). % TODO: refine
 
@@ -82,7 +83,8 @@
 -export_type([amqp10_msg/0,
               amqp10_header/0,
               amqp10_properties/0,
-              amqp10_body/0
+              amqp10_body/0,
+              delivery_tag/0
              ]).
 
 -define(record_to_tuplelist(Rec, Ref),
@@ -101,7 +103,7 @@ from_amqp_records([#'v1_0.transfer'{} = Transfer | Records]) ->
 to_amqp_records(#amqp10_msg{transfer = T, body = B}) ->
     lists:flatten([T, B]).
 
--spec delivery_tag(amqp10_msg()) -> binary().
+-spec delivery_tag(amqp10_msg()) -> delivery_tag().
 delivery_tag(#amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = Tag}}) ->
     unpack(Tag).
 
@@ -211,7 +213,7 @@ body(#amqp10_msg{body = [#'v1_0.data'{} | _] = Data}) ->
 body(#amqp10_msg{body = Body}) -> Body.
 
 
--spec new(binary(), amqp10_body() | binary(), boolean()) -> amqp10_msg().
+-spec new(delivery_tag(), amqp10_body() | binary(), boolean()) -> amqp10_msg().
 new(DeliveryTag, Body, Settled) when is_binary(Body) ->
     #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
                                             settled = Settled},
@@ -221,7 +223,7 @@ new(DeliveryTag, Body, Settled) ->
                                             settled = Settled},
                 body = Body}.
 
--spec new(binary(), amqp10_body() | binary()) -> amqp10_msg().
+-spec new(delivery_tag(), amqp10_body() | binary()) -> amqp10_msg().
 new(DeliveryTag, Body) ->
     new(DeliveryTag, Body, false).
 

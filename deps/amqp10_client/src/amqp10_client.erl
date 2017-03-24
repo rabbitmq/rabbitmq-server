@@ -31,8 +31,12 @@
                    link_handle :: non_neg_integer(), link_name :: binary()}).
 -opaque link_ref() :: #link_ref{}.
 
--export_type([link_ref/0
+-type result(Succ, Err) :: {ok, Succ} | {error, Err}.
+
+-export_type([link_ref/0,
+              result/2
              ]).
+
 -spec open_connection(
         inet:socket_address() | inet:hostname(),
         inet:port_number()) -> supervisor:startchild_ret().
@@ -92,6 +96,7 @@ attach_sender_link(Session, Name, Target, SettleMode) ->
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first},
 
+    % TODO: work out what kind of errors may happen during attach
     {ok, Attach} = amqp10_client_session:attach(Session, AttachArgs),
     {ok, make_link_ref(sender, Session, Name, Attach)}.
 
@@ -124,7 +129,7 @@ flow_link_credit(#link_ref{role = receiver, session = Session,
 % else it returns the delivery state from the disposition
 % TODO: timeouts
 -spec send_msg(link_ref(), amqp10_msg:amqp10_msg()) ->
-    {ok, non_neg_integer()} | {error, insufficient_credit | link_not_found}.
+    ok | {error, insufficient_credit | link_not_found}.
 send_msg(#link_ref{role = sender, session = Session,
                    link_handle = Handle}, Msg0) ->
     Msg = amqp10_msg:set_handle(Handle, Msg0),
@@ -136,8 +141,7 @@ accept_msg(#link_ref{role = receiver, session = Session}, Msg) ->
     amqp10_client_session:disposition(Session, receiver, DeliveryId,
                                       DeliveryId, true, accepted).
 
--spec get_msg(link_ref()) ->
-    {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.
+-spec get_msg(link_ref()) -> {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.
 get_msg(LinkRef) ->
     get_msg(LinkRef, ?DEFAULT_TIMEOUT).
 

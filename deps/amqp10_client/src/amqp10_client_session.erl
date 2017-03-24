@@ -103,7 +103,7 @@
          connection_config = #{} :: amqp10_client_connection:connection_config(),
          % the unsettled map needs to go in the session state as a disposition
          % can reference transfers for many different links
-         unsettled = #{} :: #{transfer_id() => {link_handle(), any()}}, %TODO: refine as FsmRef
+         unsettled = #{} :: #{transfer_id() => {amqp10_client:delivery_tag(), any()}}, %TODO: refine as FsmRef
          incoming_unsettled = #{} :: #{transfer_id() => link_handle()},
          notify :: pid()
         }).
@@ -142,7 +142,7 @@ attach(Session, Args) ->
     gen_fsm:sync_send_event(Session, {attach, Args}).
 
 -spec transfer(pid(), amqp10_msg:amqp10_msg(), timeout()) ->
-    {ok, non_neg_integer()} | {error, insufficient_credit | link_not_found}.
+    ok | {error, insufficient_credit | link_not_found}.
 transfer(Session, Amqp10Msg, Timeout) ->
     [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
     gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}, Timeout).
@@ -345,9 +345,10 @@ mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
     Unsettled =
         lists:foldl(fun(Id, Acc) ->
                             case Acc of
-                                #{Id := {_Handle, Receiver}} ->
+                                #{Id := {DeliveryTag, Receiver}} ->
                                     S = translate_delivery_state(DeliveryState),
-                                    ok = notify_disposition(Receiver, {S, Id}),
+                                    ok = notify_disposition(Receiver,
+                                                            {S, DeliveryTag}),
                                     maps:remove(Id, Acc);
                                 _ -> Acc
                             end
@@ -365,6 +366,7 @@ mapped(Frame, State) ->
 %%
 %% Transfer. See spec section: 2.6.12
 mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
+                                   delivery_tag = {binary, DeliveryTag},
                                    settled = false} = Transfer0, Parts}, From,
        #state{next_delivery_id = NDI, links = Links} = State) ->
 
@@ -375,9 +377,9 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
             ok = send_transfer(Transfer, Parts, State),
             % delay reply to caller until disposition frame is received
-            State1 = State#state{unsettled = #{NDI => {OutHandle, From}}},
+            State1 = State#state{unsettled = #{NDI => {DeliveryTag, From}}},
             % {next_state, mapped, book_transfer_send(Link, State1)};
-            {reply, {ok, NDI}, mapped, book_transfer_send(Link, State1)};
+            {reply, ok, mapped, book_transfer_send(Link, State1)};
         _ ->
             {reply, {error, link_not_found}, mapped, State}
     end;
@@ -393,7 +395,7 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
             ok = send_transfer(Transfer, Parts, State),
             % TODO look into if erlang will correctly wrap integers during
             % binary conversion.
-            {reply, {ok, NDI}, mapped, book_transfer_send(Link, State)};
+            {reply, ok, mapped, book_transfer_send(Link, State)};
         _ ->
             {reply, {error, link_not_found}, mapped, State}
     end;

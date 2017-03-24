@@ -167,9 +167,10 @@ basic_roundtrip(Config) ->
                                                     <<"banana-sender">>,
                                                     <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
-    {ok, _} = amqp10_client:send_msg(Sender, Msg),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"banana-receiver">>,
-                                                 <<"test">>),
+    ok = amqp10_client:send_msg(Sender, Msg),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
+                                                        <<"banana-receiver">>,
+                                                        <<"test">>),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
@@ -185,11 +186,12 @@ split_transfer(Config) ->
     {ok, Session} = amqp10_client:begin_session(Connection),
     Data = list_to_binary(string:chars(64, 1000)),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"data-sender">>,
-                                             <<"test">>),
+                                                    <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, Data, true),
-    {ok, _} = amqp10_client:send_msg(Sender, Msg),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"data-receiver">>,
-                                                 <<"test">>),
+    ok = amqp10_client:send_msg(Sender, Msg),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
+                                                        <<"data-receiver">>,
+                                                        <<"test">>),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
@@ -204,9 +206,10 @@ transfer_unsettled(Config) ->
     Data = list_to_binary(string:chars(64, 1000)),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"data-sender">>,
                                                     <<"test">>, unsettled),
-    Msg = amqp10_msg:new(<<"my-tag">>, Data, false),
-    {ok, DeliveryId} = amqp10_client:send_msg(Sender, Msg),
-    ok = await_disposition(DeliveryId),
+    DeliveryTag = <<"my-tag">>,
+    Msg = amqp10_msg:new(DeliveryTag, Data, false),
+    ok = amqp10_client:send_msg(Sender, Msg),
+    ok = await_disposition(DeliveryTag),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"data-receiver">>,
                                                         <<"test">>, unsettled),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver),
@@ -224,12 +227,14 @@ subscribe(Config) ->
     {ok, Session} = amqp10_client:begin_session(Connection),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sub-sender">>,
                                              QueueName),
-    Msg1 = amqp10_msg:new(<<"my-taggy">>, <<"banana">>, false),
-    Msg2 = amqp10_msg:new(<<"my-taggy2">>, <<"banana">>, false),
-    {ok, DeliveryId1} = amqp10_client:send_msg(Sender, Msg1),
-    ok = await_disposition(DeliveryId1),
-    {ok, DeliveryId2} = amqp10_client:send_msg(Sender, Msg2),
-    ok = await_disposition(DeliveryId2),
+    Tag1 = <<"t1">>,
+    Tag2 = <<"t2">>,
+    Msg1 = amqp10_msg:new(Tag1, <<"banana">>, false),
+    Msg2 = amqp10_msg:new(Tag2, <<"banana">>, false),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = await_disposition(Tag1),
+    ok = amqp10_client:send_msg(Sender, Msg2),
+    ok = await_disposition(Tag2),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"sub-receiver">>,
                                                  QueueName, unsettled),
     ok = amqp10_client:flow_link_credit(Receiver, 2),
@@ -337,8 +342,8 @@ receive_one(Receiver) ->
           timeout
     end.
 
-await_disposition(DeliveryId) ->
+await_disposition(DeliveryTag) ->
     receive
-        {amqp10_disposition, {accepted, DeliveryId}} -> ok
+        {amqp10_disposition, {accepted, DeliveryTag}} -> ok
     after 3000 -> exit(dispostion_timeout)
     end.

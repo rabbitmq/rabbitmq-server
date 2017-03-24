@@ -7,9 +7,7 @@ DEPS = amqp10_common
 TEST_DEPS = rabbit rabbitmq_amqp1_0 rabbitmq_ct_helpers
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk elvis_mk
-
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
-
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
@@ -19,6 +17,9 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
+
+# dialyze the tests
+DIALYZER_OPTS += --src -r test
 
 # --------------------------------------------------------------------
 # ActiveMQ for the testsuite.
