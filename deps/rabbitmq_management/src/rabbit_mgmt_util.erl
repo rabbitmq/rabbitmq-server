@@ -30,7 +30,8 @@
 -export([with_decode/4, not_found/3, amqp_request/4]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
--export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
+-export([all_or_one_vhost/2, http_to_amqp/5, reply/3, responder_map/1,
+         filter_vhost/3]).
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
          args/1]).
@@ -209,14 +210,30 @@ destination_type(ReqData) ->
         <<"q">> -> queue
     end.
 
+%% Provides a map of content type-to-responder that are supported by
+%% reply/3. The map can be used in the content_types_provided/2 callback
+%% used by cowboy_rest. Responder functions must be
+%% exported from the caller module and must use reply/3
+%% under the hood.
+responder_map(FunctionName) ->
+    [
+      {<<"application/json">>, FunctionName}
+    , {<<"application/bert">>, FunctionName}
+    ].
+
 reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
 reply0(Facts, ReqData, Context) ->
     ReqData1 = set_resp_header(<<"Cache-Control">>, "no-cache", ReqData),
     try
-        {rabbit_json:encode(rabbit_mgmt_format:format_nulls(Facts)), ReqData1,
-	 Context}
+        case cowboy_req:meta(media_type, ReqData1) of
+            {{<<"application">>, <<"bert">>, _}, _} ->
+                {term_to_binary(Facts), ReqData1, Context};
+            _ ->
+                {rabbit_json:encode(rabbit_mgmt_format:format_nulls(Facts)), ReqData1,
+                 Context}
+        end
     catch exit:{json_encode, E} ->
             Error = iolist_to_binary(
                       io_lib:format("JSON encode error: ~p", [E])),
@@ -271,6 +288,11 @@ reply_list_or_paginate(Facts, ReqData, Context) ->
 sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false,
   undefined).
 
+sort_list(Facts, _, [], _, _) ->
+    %% Do not sort when we are explicitly requsted to sort with an
+    %% empty sort columns list. Note that this clause won't match when
+    %% 'sort' parameter is not provided in a HTTP request at all.
+    Facts;
 sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
     SortList = case Sort of
            undefined -> DefaultSorts;

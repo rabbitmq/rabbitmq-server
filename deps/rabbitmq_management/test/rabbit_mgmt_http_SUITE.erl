@@ -2191,7 +2191,7 @@ cors_test(Config) ->
     io:format("CORS test HdNoCORS: ~p~n", [HdNoCORS]),
     false = lists:keymember("access-control-allow-origin", 1, HdNoCORS),
     %% The Vary header should include "Origin" regardless of CORS configuration.
-    {_, "accept-encoding, origin"} = lists:keyfind("vary", 1, HdNoCORS),
+    {_, "accept, accept-encoding, origin"} = lists:keyfind("vary", 1, HdNoCORS),
     %% Enable CORS.
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_allow_origins, ["http://rabbitmq.com"]]),
     %% We should only receive allow-origin and allow-credentials from GET.
