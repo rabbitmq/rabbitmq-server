@@ -2,11 +2,14 @@ PROJECT = amqp10_client
 PROJECT_DESCRIPTION = AMQP 1.0 client from the RabbitMQ Project
 PROJECT_MOD = amqp10_client_app
 
-BUILD_DEPS = rabbit_common
+BUILD_DEPS = rabbit_common elvis_mk
 DEPS = amqp10_common
 TEST_DEPS = rabbit rabbitmq_amqp1_0 rabbitmq_ct_helpers
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk elvis_mk
+
+dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
+
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.

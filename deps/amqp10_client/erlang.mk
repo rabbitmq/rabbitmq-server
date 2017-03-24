@@ -6199,7 +6199,7 @@ DIALYZER_PLT ?= $(CURDIR)/.$(PROJECT).plt
 export DIALYZER_PLT
 
 PLT_APPS ?=
-DIALYZER_DIRS ?= --src -r $(wildcard src) $(ALL_APPS_DIRS)
+DIALYZER_DIRS ?= --src -r $(wildcard src) $(ALL_APPS_DIRS) $(ADD_DIALYZER_DIRS)
 DIALYZER_OPTS ?= -Werror_handling -Wrace_conditions -Wunmatched_returns # -Wunderspecs
 
 # Core targets.

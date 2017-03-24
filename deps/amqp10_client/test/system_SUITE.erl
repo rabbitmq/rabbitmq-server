@@ -163,8 +163,9 @@ basic_roundtrip(Config) ->
     ct:pal("Opening connection to ~s:~b", [Hostname, Port]),
     {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
     {ok, Session} = amqp10_client:begin_session(Connection),
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"banana-sender">>,
-                                             <<"test">>),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    <<"banana-sender">>,
+                                                    <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
     {ok, _} = amqp10_client:send_msg(Sender, Msg),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"banana-receiver">>,
@@ -172,7 +173,8 @@ basic_roundtrip(Config) ->
     {ok, OutMsg} = amqp10_client:get_msg(Receiver),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
-    ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)).
+    ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)),
+    ok.
 
 split_transfer(Config) ->
     Hostname = ?config(rmq_hostname, Config),

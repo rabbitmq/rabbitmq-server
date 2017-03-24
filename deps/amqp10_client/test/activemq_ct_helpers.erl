@@ -85,7 +85,7 @@ start_activemq_nodes(Config) ->
 wait_for_activemq_nodes(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Ports = rabbit_ct_broker_helpers:get_node_configs(Config, tcp_port_amqp),
-    [wait_for_activemq_port(Hostname, Port, 20) || Port <- Ports],
+    _ = [wait_for_activemq_port(Hostname, Port, 20) || Port <- Ports],
     Config.
 
 wait_for_activemq_port(_, _, 0) ->

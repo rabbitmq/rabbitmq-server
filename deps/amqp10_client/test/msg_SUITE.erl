@@ -200,9 +200,9 @@ new_amqp_value(_Config) ->
 new_amqp_sequence(_Config) ->
     Tag = <<"tag">>,
     Body = #'v1_0.amqp_sequence'{content = {list, [utf8("hi"), utf8("there")]}},
-    Msg = amqp10_msg:new(Tag, Body),
+    Msg = amqp10_msg:new(Tag, [Body]),
     Tag = amqp10_msg:delivery_tag(Msg),
-    Body = amqp10_msg:body(Msg).
+    [Body] = amqp10_msg:body(Msg).
 
 set_message_format(_Config) ->
     MsgFormat = {103, 3},

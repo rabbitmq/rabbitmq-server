@@ -1,0 +1,2 @@
+{incl_mods,[amqp10_client,amqp10_client_app,amqp10_client_connection,amqp10_client_connection_sup,amqp10_client_connections_sup,amqp10_client_frame_reader,amqp10_client_link,amqp10_client_session,amqp10_client_sessions_sup,amqp10_client_sup,amqp10_client_types,amqp10_msg]}.
+{export,"/Users/knilsson/code/rabbitmq/amqp10_client/ct.coverdata"}.

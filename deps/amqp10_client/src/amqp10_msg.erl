@@ -109,9 +109,11 @@ delivery_tag(#amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = Tag}}) ->
 delivery_id(#amqp10_msg{transfer = #'v1_0.transfer'{delivery_id = Id}}) ->
     unpack(Id).
 
+-spec handle(amqp10_msg()) -> non_neg_integer().
 handle(#amqp10_msg{transfer = #'v1_0.transfer'{handle = Handle}}) ->
     unpack(Handle).
 
+-spec settled(amqp10_msg()) -> boolean().
 settled(#amqp10_msg{transfer = #'v1_0.transfer'{settled = Settled}}) ->
     Settled.
 
@@ -209,7 +211,7 @@ body(#amqp10_msg{body = [#'v1_0.data'{} | _] = Data}) ->
 body(#amqp10_msg{body = Body}) -> Body.
 
 
--spec new(binary(), amqp10_body(), boolean()) -> amqp10_msg().
+-spec new(binary(), amqp10_body() | binary(), boolean()) -> amqp10_msg().
 new(DeliveryTag, Body, Settled) when is_binary(Body) ->
     #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
                                             settled = Settled},
@@ -219,10 +221,16 @@ new(DeliveryTag, Body, Settled) ->
                                             settled = Settled},
                 body = Body}.
 
--spec new(binary(), amqp10_body()) -> amqp10_msg().
+-spec new(binary(), amqp10_body() | binary()) -> amqp10_msg().
 new(DeliveryTag, Body) ->
     new(DeliveryTag, Body, false).
 
+
+% First 3 octets are the format
+% the last 1 octet is the version
+% See 2.8.11 in the spec
+-spec set_message_format({non_neg_integer(), non_neg_integer()},
+                         amqp10_msg()) -> amqp10_msg().
 set_message_format({Format, Version}, #amqp10_msg{transfer = T} = Msg) ->
     <<MsgFormat:32/unsigned>> = <<Format:24/unsigned, Version:8/unsigned>>,
     Msg#amqp10_msg{transfer = T#'v1_0.transfer'{message_format =
@@ -253,6 +261,7 @@ set_headers(Headers, #amqp10_msg{header = Current} = Msg) ->
                   end, Current, Headers),
     Msg#amqp10_msg{header = H}.
 
+-spec set_properties(amqp10_properties(), amqp10_msg()) -> amqp10_msg().
 set_properties(Props, #amqp10_msg{properties = undefined} = Msg) ->
     set_properties(Props, Msg#amqp10_msg{properties = #'v1_0.properties'{}});
 set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->

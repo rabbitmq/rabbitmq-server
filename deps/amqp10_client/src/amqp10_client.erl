@@ -78,15 +78,14 @@ end_session(Pid) ->
     gen_fsm:send_event(Pid, 'end').
 
 
--spec attach_sender_link(pid(), binary(), binary()) ->
-    {ok, amqp10_client_link:link_ref()}.
+-spec attach_sender_link(pid(), binary(), binary()) -> {ok, link_ref()}.
 attach_sender_link(Session, Name, Target) ->
     % mixed should work with any type of msg
     attach_sender_link(Session, Name, Target, mixed).
 
 -spec attach_sender_link(pid(), binary(), binary(),
                          amqp10_client_session:snd_settle_mode()) ->
-    {ok, amqp10_client_link:link_ref()}.
+    {ok, link_ref()}.
 attach_sender_link(Session, Name, Target, SettleMode) ->
     AttachArgs = #{name => Name,
                    role => {sender, #{address => Target}},
@@ -97,13 +96,13 @@ attach_sender_link(Session, Name, Target, SettleMode) ->
     {ok, make_link_ref(sender, Session, Name, Attach)}.
 
 -spec attach_receiver_link(pid(), binary(), binary()) ->
-    {ok, amqp10_client_link:link_ref()}.
+    {ok, link_ref()}.
 attach_receiver_link(Session, Name, Source) ->
     attach_receiver_link(Session, Name, Source, settled).
 
 -spec attach_receiver_link(pid(), binary(), binary(),
                            amqp10_client_session:snd_settle_mode()) ->
-    {ok, amqp10_client_link:link_ref()}.
+    {ok, link_ref()}.
 attach_receiver_link(Session, Name, Source, SettleMode) ->
     AttachArgs = #{name => Name,
                    role => {receiver, #{address => Source}, self()},
@@ -137,14 +136,17 @@ accept_msg(#link_ref{role = receiver, session = Session}, Msg) ->
     amqp10_client_session:disposition(Session, receiver, DeliveryId,
                                       DeliveryId, true, accepted).
 
+-spec get_msg(link_ref()) ->
+    {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.
 get_msg(LinkRef) ->
     get_msg(LinkRef, ?DEFAULT_TIMEOUT).
 
-get_msg(#link_ref{role = receiver, session = Session, link_handle = Handle},
+-spec get_msg(link_ref(), non_neg_integer()) ->
+    {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.
+get_msg(#link_ref{role = receiver, link_handle = Handle} = Ref,
         Timeout) ->
     %flow 1
-    Flow = #'v1_0.flow'{link_credit = {uint, 1}},
-    ok = amqp10_client_session:flow(Session, Handle, Flow),
+    ok = flow_link_credit(Ref, 1),
     % wait for transfer
     receive
         {amqp10_msg, Handle, Message} -> {ok, Message}
@@ -152,10 +154,12 @@ get_msg(#link_ref{role = receiver, session = Session, link_handle = Handle},
               {error, timeout}
     end.
 
+-spec link_handle(link_ref()) -> non_neg_integer().
 link_handle(#link_ref{link_handle = Handle}) -> Handle.
 
 
 %%% Helpers
+-spec make_link_ref(_, _, _, _) -> link_ref().
 make_link_ref(Role, Session, Name, Handle) ->
     #link_ref{role = Role, session = Session, link_name = Name,
               link_handle = Handle}.
