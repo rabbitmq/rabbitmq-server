@@ -28,7 +28,7 @@
 -export([with_decode/4, not_found/3, amqp_request/4]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
--export([all_or_one_vhost/2, http_to_amqp/5, reply/3, json_like_handlers/1,
+-export([all_or_one_vhost/2, http_to_amqp/5, reply/3, responder_map/1,
          filter_vhost/3]).
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
@@ -194,14 +194,15 @@ destination_type(ReqData) ->
         <<"q">> -> queue
     end.
 
-%% Prepares a list of Content-Types that are supported by
-%% reply/3. This list can be used in content_types_provided/2 callback
-%% of module implementing cowboy_rest. FunctionName/2 should be
-%% exported from this module and this function should use reply/3
+%% Provides a map of content type-to-responder that are supported by
+%% reply/3. The map can be used in the content_types_provided/2 callback
+%% used by cowboy_rest. Responder functions must be
+%% exported from the caller module and must use reply/3
 %% under the hood.
-json_like_handlers(FunctionName) ->
-    [{<<"application/json">>, FunctionName}
-    ,{<<"application/bert">>, FunctionName}
+responder_map(FunctionName) ->
+    [
+      {<<"application/json">>, FunctionName}
+    , {<<"application/bert">>, FunctionName}
     ].
 
 reply(Facts, ReqData, Context) ->

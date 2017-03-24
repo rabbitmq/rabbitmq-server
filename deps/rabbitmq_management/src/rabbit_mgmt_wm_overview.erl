@@ -35,7 +35,7 @@ variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {rabbit_mgmt_util:json_like_handlers(to_json), ReqData, Context}.
+   {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     RatesMode = rabbit_mgmt_agent_config:get_env(rates_mode),
