@@ -272,6 +272,11 @@ reply_list_or_paginate(Facts, ReqData, Context) ->
 sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false,
   undefined).
 
+sort_list(Facts, _, [], _, _) ->
+    %% Do not sort when we are explicitly requsted to sort with an
+    %% empty sort columns list. Note that this clause won't match when
+    %% 'sort' parameter is not provided in a HTTP request at all.
+    Facts;
 sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
     SortList = case Sort of
            undefined -> DefaultSorts;
