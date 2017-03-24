@@ -440,6 +440,10 @@ function fmt_rabbit_version(applications) {
     return 'unknown';
 }
 
+function fmt_strip_tags(txt) {
+    return txt.replace(/<(?:.|\n)*?>/gm, '');
+}
+
 function fmt_escape_html(txt) {
     return fmt_escape_html0(txt).replace(/\n/g, '<br/>');
 }

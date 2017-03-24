@@ -654,8 +654,8 @@ function url_pagination_template(template, defaultPage, defaultPageSize){
 
 
 function stored_page_info(template, page_start){
-    var pageSize = $('#' + template+'-pagesize').val();
-    var filterName = $('#' + template+'-name').val();
+    var pageSize = fmt_strip_tags($('#' + template+'-pagesize').val());
+    var filterName = fmt_strip_tags($('#' + template+'-name').val());
 
     store_pref(template + '_current_page_number', page_start);
     if (filterName != null && filterName != undefined) {
@@ -711,7 +711,10 @@ function renderChannels() {
 
 
 function update_pages_from_ui(sender) {
-    update_pages(current_template, !!$(sender).attr('data-page-start') ? $(sender).attr('data-page-start') : $(sender).val());
+    var val = $(sender).val();
+    var raw = !!$(sender).attr('data-page-start') ? $(sender).attr('data-page-start') : val;
+    var s   = fmt_strip_tags(raw);
+    update_pages(current_template, s);
 }
 
 function postprocess_partial() {
@@ -842,7 +845,7 @@ function update_filter_regex(jElem) {
             current_filter_regex = new RegExp(current_filter,'i');
         } catch (e) {
             jElem.parents('.filter').append('<p class="status-error">' +
-                                            e.message + '</p>');
+                                            fmt_escape_html(e.message) + '</p>');
         }
     }
 }
