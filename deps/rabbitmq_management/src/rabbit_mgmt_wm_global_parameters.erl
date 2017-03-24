@@ -33,7 +33,7 @@ variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{<<"application/json">>, to_json}], ReqData, Context}.
+   {rabbit_mgmt_util:json_like_handlers(to_json), ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list(basic(), ReqData, Context).
