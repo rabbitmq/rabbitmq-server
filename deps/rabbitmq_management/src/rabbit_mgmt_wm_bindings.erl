@@ -36,7 +36,7 @@ variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{<<"application/json">>, to_json}], ReqData, Context}.
+   {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 %% The current version of Cowboy forces us to report the resource doesn't
 %% exist here in order to get a 201 response. It seems Cowboy confuses the
