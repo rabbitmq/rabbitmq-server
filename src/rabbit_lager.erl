@@ -186,8 +186,8 @@ configure_lager() ->
             %% setting it at all, and lager is sensitive to this
             %% difference.
             case application:get_env(rabbit, lager_log_root) of
-                {ok, FromRabbitConfig} ->
-                    application:set_env(lager, log_root, FromRabbitConfig);
+                {ok, Value} ->
+                    application:set_env(lager, log_root, Value);
                 _ ->
                     ok
             end;
