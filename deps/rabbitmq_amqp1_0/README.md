@@ -12,7 +12,7 @@ not a revision of the original protocol that will eventually supersede it.
 This plugin is considered to be young and experimental but it is supported. We describe it as a
 prototype since the amount of real world use and thus battle-testing
 it has received is not so large as that of the STOMP or MQTT
-plugins. Howver, bugs do get fixed as they are reported.
+plugins. However, bugs do get fixed as they are reported.
 
 You can send and receive messages between 0-9-1 clients and 1.0
 clients with broadly the same semantics as you would get with 0-9-1.
