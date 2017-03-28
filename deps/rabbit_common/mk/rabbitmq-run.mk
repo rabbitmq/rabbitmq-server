@@ -165,7 +165,20 @@ define test_rabbitmq_config_with_tls
           {verify, verify_peer},
           {fail_if_no_peer_cert, false},
           {honor_cipher_order, true}]}
-    ]}
+    ]},
+  {rabbitmq_management, [
+      {listener, [
+          {port, 15671},
+          {ssl,  true},
+          {ssl_opts, [
+	    {cacertfile, "$(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem"},
+            {certfile,   "$(TEST_TLS_CERTS_DIR_in_config)/server/cert.pem"},
+            {keyfile,    "$(TEST_TLS_CERTS_DIR_in_config)/server/key.pem"},
+            {verify, verify_peer},
+            {fail_if_no_peer_cert, false},
+            {honor_cipher_order, true}]}
+        ]}
+  ]}
 ].
 endef
 
