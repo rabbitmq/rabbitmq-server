@@ -6,7 +6,7 @@ endif
 ZIP = $(notdir $(wildcard $(ZIP_DIR)/rabbitmq-server-windows-*.zip))
 
 VERSION = $(patsubst rabbitmq-server-windows-%.zip,%,$(ZIP))
-PRODUCT_VERSION ?= $(VERSION).0
+PRODUCT_VERSION ?= $(shell echo "$(VERSION)" | sed -E 's/([0-9]+\.[0-9]+\.[0-9]+).*/\1.0/')
 
 unexport DEPS_DIR
 unexport ERL_LIBS
