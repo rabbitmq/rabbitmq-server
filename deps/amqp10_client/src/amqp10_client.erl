@@ -13,6 +13,8 @@
          end_session/1,
          attach_sender_link/3,
          attach_sender_link/4,
+         attach_sender_link_sync/3,
+         attach_sender_link_sync/4,
          attach_receiver_link/3,
          attach_receiver_link/4,
          detach_link/1,
@@ -22,13 +24,11 @@
          link_handle/1,
          get_msg/1,
          get_msg/2
-         % get_msg/1,
-         % get_msg/2,
         ]).
 
 -define(DEFAULT_TIMEOUT, 5000).
 
--record(link_ref, {role :: sender | receiver,session :: pid(),
+-record(link_ref, {role :: sender | receiver, session :: pid(),
                    link_handle :: non_neg_integer(), link_name :: binary()}).
 -opaque link_ref() :: #link_ref{}.
 
@@ -82,6 +82,21 @@ begin_session_sync(Connection, Timeout) when is_pid(Connection) ->
 end_session(Pid) ->
     gen_fsm:send_event(Pid, 'end').
 
+attach_sender_link_sync(Session, Name, Target) ->
+    attach_sender_link_sync(Session, Name, Target, mixed).
+
+-spec attach_sender_link_sync(pid(), binary(), binary(),
+                              amqp10_client_session:snd_settle_mode()) ->
+    {ok, link_ref()} | link_timeout.
+attach_sender_link_sync(Session, Name, Target, SettleMode) ->
+    {ok, Ref} = attach_sender_link(Session, Name, Target, SettleMode),
+    receive
+        {amqp10_event, {link, {sender, Name}, attached}} ->
+            {ok, Ref};
+        {amqp10_event, {link, {sender, Name}, {error, Err}}} ->
+            {error, Err}
+    after ?DEFAULT_TIMEOUT -> link_timeout
+    end.
 
 -spec attach_sender_link(pid(), binary(), binary()) -> {ok, link_ref()}.
 attach_sender_link(Session, Name, Target) ->
@@ -96,7 +111,6 @@ attach_sender_link(Session, Name, Target, SettleMode) ->
                    role => {sender, #{address => Target}},
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first},
-
     % TODO: work out what kind of errors may happen during attach
     {ok, Attach} = amqp10_client_session:attach(Session, AttachArgs),
     {ok, make_link_ref(sender, Session, Name, Attach)}.
@@ -117,7 +131,7 @@ attach_receiver_link(Session, Name, Source, SettleMode) ->
     {ok, Attach} = amqp10_client_session:attach(Session, AttachArgs),
     {ok, make_link_ref(receiver, Session, Name, Attach)}.
 
--spec detach_link(link_ref()) -> ok | {error, not_found}.
+-spec detach_link(link_ref()) -> _.
 detach_link(#link_ref{link_handle = Handle, session = Session}) ->
     amqp10_client_session:detach(Session, Handle).
 
@@ -134,7 +148,7 @@ flow_link_credit(#link_ref{role = receiver, session = Session,
 % else it returns the delivery state from the disposition
 % TODO: timeouts
 -spec send_msg(link_ref(), amqp10_msg:amqp10_msg()) ->
-    ok | {error, insufficient_credit | link_not_found}.
+    ok | {error, insufficient_credit | link_not_found | half_attached}.
 send_msg(#link_ref{role = sender, session = Session,
                    link_handle = Handle}, Msg0) ->
     Msg = amqp10_msg:set_handle(Handle, Msg0),

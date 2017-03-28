@@ -12,6 +12,7 @@
 /xrefr
 
 amqp10_client.d
+/*.coverdata
 
 # Generated source files.
 /include/rabbit_amqp1_0_framing.hrl

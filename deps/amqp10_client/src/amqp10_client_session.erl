@@ -43,6 +43,8 @@
 -define(INITIAL_OUTGOING_ID, 65535).
 -define(INITIAL_DELIVERY_COUNT, 0).
 
+% -type from() :: {pid(), term()}.
+
 -type transfer_id() :: non_neg_integer().
 -type link_handle() :: non_neg_integer().
 -type link_name() :: binary().
@@ -72,6 +74,7 @@
 -record(link,
         {name :: link_name(),
          state = detached :: detached | attach_sent | attached | detach_sent,
+         notify :: pid(),
          output_handle :: link_handle(),
          input_handle :: link_handle() | undefined,
          role :: link_role(),
@@ -103,8 +106,6 @@
          next_link_handle = 0 :: link_handle(),
          next_delivery_id = 0 :: non_neg_integer(),
          early_attach_requests = [] :: [term()],
-         pending_attach_requests = #{} :: #{link_name() => {pid(), any()}},
-         pending_detach_requests = #{} :: #{link_handle() => {pid(), any()}},
          connection_config = #{} :: amqp10_client_connection:connection_config(),
          % the unsettled map needs to go in the session state as a disposition
          % can reference transfers for many different links
@@ -146,12 +147,12 @@ begin_sync(Connection, Timeout) ->
 attach(Session, Args) ->
     gen_fsm:sync_send_event(Session, {attach, Args}).
 
--spec detach(pid(), link_handle()) -> ok | not_found.
+-spec detach(pid(), link_handle()) -> ok | {error, link_not_found | half_attached}.
 detach(Session, Handle) ->
     gen_fsm:sync_send_event(Session, {detach, Handle}).
 
 -spec transfer(pid(), amqp10_msg:amqp10_msg(), timeout()) ->
-    ok | {error, insufficient_credit | link_not_found}.
+    ok | {error, insufficient_credit | link_not_found | half_attached}.
 transfer(Session, Amqp10Msg, Timeout) ->
     [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
     gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}, Timeout).
@@ -210,7 +211,9 @@ begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
 
     State1 = State#state{remote_channel = RemoteChannel},
     State2 = lists:foldr(fun({From, Attach}, S) ->
-                                 send_attach(fun send/2, Attach, From, S)
+                                 {S2, H} = send_attach(fun send/2, Attach, From, S),
+                                 gen_fsm:reply(From, {ok, H}),
+                                 S2
                          end, State1, EARs),
 
     ok = notify_session_begun(State2),
@@ -265,13 +268,12 @@ mapped(#'v1_0.attach'{name = {utf8, Name},
                       initial_delivery_count = IDC,
                       handle = {uint, InHandle}},
         #state{links = Links, link_index = LinkIndex,
-               link_handle_index = LHI,
-               pending_attach_requests = PARs} = State) ->
+               link_handle_index = LHI} = State0) ->
 
-    #{Name := From} = PARs,
     #{Name := OutHandle} = LinkIndex,
     #{OutHandle := Link0} = Links,
-    gen_fsm:reply(From, {ok, OutHandle}),
+    ok = notify_link_attached(Link0),
+
     % TODO there coudl be many differnt things to do depending on link role
     DeliveryCount = case Link0 of
                         #link{role = sender, delivery_count = DC} -> DC;
@@ -279,24 +281,20 @@ mapped(#'v1_0.attach'{name = {utf8, Name},
                     end,
     Link = Link0#link{input_handle = InHandle, state = attached,
                       delivery_count = DeliveryCount},
-    {next_state, mapped,
-     State#state{links = Links#{OutHandle => Link},
-                 link_index = maps:remove(Name, LinkIndex),
-                 link_handle_index = LHI#{InHandle => OutHandle},
-                 pending_attach_requests = maps:remove(Name, PARs)}};
+    State = State0#state{links = Links#{OutHandle => Link},
+                         link_index = maps:remove(Name, LinkIndex),
+                         link_handle_index = LHI#{InHandle => OutHandle}},
+    {next_state, mapped, State};
 
 mapped(#'v1_0.detach'{handle = {uint, InHandle}, closed = Closed},
-        #state{links = Links, link_handle_index = LHI,
-               pending_detach_requests = PDRs} = State)
+        #state{links = Links, link_handle_index = LHI} = State)
   when Closed =:= true orelse Closed =:= undefined ->
-    {ok, #link{output_handle = OutHandle}} =
+    {ok, #link{output_handle = OutHandle} = Link} =
         find_link_by_input_handle(InHandle, State),
-    #{InHandle := Detacher} = PDRs,
-    _ = gen_server:reply(Detacher, ok),
+    ok = notify_link_detached(Link),
     {next_state, mapped,
      State#state{links = maps:remove(OutHandle, Links),
-                 link_handle_index = maps:remove(InHandle, LHI),
-                 pending_detach_requests = maps:remove(InHandle, PDRs)}};
+                 link_handle_index = maps:remove(InHandle, LHI)}};
 
 mapped(#'v1_0.flow'{handle = undefined} = Flow, State0) ->
     State = handle_session_flow(Flow, State0),
@@ -311,6 +309,7 @@ mapped(#'v1_0.flow'{handle = {uint, InHandle}} = Flow,
 
      % TODO: handle `send_flow` return tag
     {ok, Link} = handle_link_flow(Flow, Link0),
+    ok = maybe_notify_link_credit(Link0, Link),
     Links1 = Links#{OutHandle => Link},
     State1 = State#state{links = Links1},
     {next_state, mapped, State1};
@@ -355,6 +354,7 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
     State = book_transfer_received(State0#state{incoming_unsettled = Unsettled},
                                    Link),
     {next_state, mapped, State};
+
 % role=true indicates the disposition is from a `receiver`. i.e. from the
 % clients point of view these are dispositions relating to `sender`links
 mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
@@ -390,10 +390,11 @@ mapped(Frame, State) ->
 %% Transfer. See spec section: 2.6.12
 mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
                                    delivery_tag = {binary, DeliveryTag},
-                                   settled = false} = Transfer0, Parts}, From,
-       #state{next_delivery_id = NDI, links = Links} = State) ->
-
+                                   settled = false} = Transfer0, Parts},
+       From, #state{next_delivery_id = NDI, links = Links} = State) ->
     case Links of
+        #{OutHandle := #link{input_handle = undefined}} ->
+            {reply, {error, half_attached}, mapped, State};
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
             {reply, {error, insufficient_credit}, mapped, State};
         #{OutHandle := Link} ->
@@ -409,8 +410,9 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
 mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
         Parts}, _From, #state{next_delivery_id = NDI,
                               links = Links} = State) ->
-
     case Links of
+        #{OutHandle := #link{input_handle = undefined}} ->
+            {reply, {error, half_attached}, mapped, State};
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
             {reply, {error, insufficient_credit}, mapped, State};
         #{OutHandle := Link} ->
@@ -442,16 +444,12 @@ mapped({disposition, Role, First, Last, Settled, DeliveryState}, _From,
     {reply, Res, mapped, State#state{incoming_unsettled = Unsettled}};
 
 mapped({attach, Attach}, From, State) ->
-    State1 = send_attach(fun send/2, Attach, From, State),
-    {next_state, mapped, State1};
+    {State1, LinkOutHandle} = send_attach(fun send/2, Attach, From, State),
+    {reply, {ok, LinkOutHandle}, mapped, State1};
 
-mapped({detach, Handle}, From, State) ->
-    case send_detach(fun send/2, Handle, From, State) of
-        {ok, State1} ->
-            {next_state, mapped, State1};
-        not_found ->
-            {reply, not_found, mapped, State}
-    end.
+mapped(Msg, From, State) ->
+    {Reply, State1} = send_detach(fun send/2, Msg, From, State),
+    {reply, Reply, mapped, State1}.
 
 end_sent(#'v1_0.end'{}, State) ->
     {stop, normal, State}.
@@ -551,24 +549,24 @@ make_target(#{role := {receiver, _Source, _Pid}}) ->
 make_target(#{role := {sender, #{address := Address}}}) ->
     #'v1_0.target'{address = {utf8, Address}}.
 
-send_detach(Send, OutHandle, From,
-            State = #state{links = Links,
-                           pending_detach_requests = PDRs}) ->
+send_detach(Send, {detach, OutHandle}, _From, State = #state{links = Links}) ->
     case Links of
-        #{OutHandle := Link = #link{input_handle = InHandle}} ->
+        #{OutHandle := #link{input_handle = undefined}} ->
+            % Link = stash_link_request(Link0, From, Msg),
+            % not fully attached yet - stash the request for later processing
+            {{error, half_attached}, State};
+        #{OutHandle := Link} ->
             Detach = #'v1_0.detach'{handle = uint(OutHandle),
                                     closed = true},
             ok = Send(Detach, State),
             Links1 = Links#{OutHandle => Link#link{state = detach_sent}},
-            {ok, State#state{links = Links1,
-                             pending_detach_requests = PDRs#{InHandle => From}}};
+            {ok, State#state{links = Links1}};
         _ ->
-            not_found
+            {{error, link_not_found}, State}
     end.
 
-send_attach(Send, #{name := Name, role := Role} = Args, From,
-      #state{next_link_handle = Handle, links = Links,
-             pending_attach_requests = PARs,
+send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
+      #state{next_link_handle = OutHandle, links = Links,
              link_index = LinkIndex} = State) ->
 
     Source = make_source(Args),
@@ -584,7 +582,7 @@ send_attach(Send, #{name := Name, role := Role} = Args, From,
     % create attach performative
     Attach = #'v1_0.attach'{name = {utf8, Name},
                             role = RoleAsBool,
-                            handle = {uint, Handle},
+                            handle = {uint, OutHandle},
                             source = Source,
                             initial_delivery_count =
                                 {uint, ?INITIAL_DELIVERY_COUNT},
@@ -593,15 +591,16 @@ send_attach(Send, #{name := Name, role := Role} = Args, From,
                             target = Target},
     ok = Send(Attach, State),
 
-    Link = #link{name = Name, output_handle = Handle,
-                 state = attach_sent, role = element(1, Role),
+    Link = #link{name = Name,
+                 output_handle = OutHandle,
+                 state = attach_sent,
+                 role = element(1, Role),
+                 notify = FromPid,
                  target = LinkTarget},
 
-    % stash the From pid
-    State#state{links = Links#{Handle => Link},
-                next_link_handle = Handle + 1,
-                pending_attach_requests = PARs#{Name => From},
-                link_index = LinkIndex#{Name => Handle}}.
+    {State#state{links = Links#{OutHandle => Link},
+                 next_link_handle = OutHandle + 1,
+                 link_index = LinkIndex#{Name => OutHandle}}, OutHandle}.
 
 -spec handle_session_flow(#'v1_0.flow'{}, #state{}) -> #state{}.
 handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
@@ -686,13 +685,29 @@ translate_delivery_state(received) -> #'v1_0.received'{}.
 translate_role(sender) -> false;
 translate_role(receiver) -> true.
 
-
-notify_session_begun(#state{notify = Pid}) ->
-    Pid ! amqp10_event(begun),
+maybe_notify_link_credit(#link{link_credit = 0}, #link{link_credit = Credit} = Link)
+  when Credit > 0 ->
+    notify_link(Link, credited);
+maybe_notify_link_credit(_Old, _New) ->
     ok.
 
-notify_disposition({Pid, _}, N) ->
-    Pid ! {amqp10_disposition, N},
+notify_link_attached(Link) ->
+    notify_link(Link, attached).
+
+notify_link_detached(Link) ->
+    notify_link(Link, detached).
+
+notify_link(#link{notify = Pid, name = Name, role = Role}, What) ->
+    Evt = {amqp10_event, {link, {Role, Name}, What}},
+    Pid ! Evt,
+    ok.
+
+notify_session_begun(#state{notify = Pid}) ->
+    Pid ! amqp10_session_event(begun),
+    ok.
+
+notify_disposition({Pid, _}, SessionDeliveryTag) ->
+    Pid ! {amqp10_disposition, SessionDeliveryTag},
     ok.
 
 book_transfer_send(#link{output_handle = Handle} = Link,
@@ -744,10 +759,8 @@ decode_as_msg(Transfer, Payload) ->
     Records = rabbit_amqp1_0_framing:decode_bin(Payload),
     amqp10_msg:from_amqp_records([Transfer | Records]).
 
-amqp10_event(Evt) ->
+amqp10_session_event(Evt) ->
     {amqp10_event, {session, self(), Evt}}.
-
-
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

@@ -47,26 +47,23 @@ all() ->
 
 groups() ->
     [
-     {rabbitmq, [], [
-                     open_close_connection,
-                     basic_roundtrip,
-                     split_transfer,
-                     transfer_unsettled,
-                     subscribe,
-                     outgoing_heartbeat
-                    ]},
-     {activemq, [], [
-                     open_close_connection,
-                     basic_roundtrip,
-                     split_transfer,
-                     transfer_unsettled,
-                     subscribe,
-                     outgoing_heartbeat
-                    ]},
+     {rabbitmq, [], shared()},
+     {activemq, [], shared()},
      {mock, [], [
                  insufficient_credit,
                  incoming_heartbeat
                 ]}
+    ].
+
+shared() ->
+    [
+     open_close_connection,
+     basic_roundtrip,
+     early_transfer,
+     split_transfer,
+     transfer_unsettled,
+     subscribe,
+     outgoing_heartbeat
     ].
 
 %% -------------------------------------------------------------------
@@ -166,10 +163,14 @@ basic_roundtrip(Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session,
                                                     <<"banana-sender">>,
                                                     <<"test">>),
+    await_link({sender, <<"banana-sender">>}, attached, link_attach_timeout),
+
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = amqp10_client:detach_link(Sender),
-    not_found = amqp10_client:detach_link(Sender),
+    await_link({sender, <<"banana-sender">>}, detached, link_detach_timeout),
+
+    {error, link_not_found} = amqp10_client:detach_link(Sender),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"banana-receiver">>,
                                                         <<"test">>),
@@ -177,6 +178,34 @@ basic_roundtrip(Config) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)),
+    ok.
+
+% a message is sent before the link attach is guaranteed to
+% have completed and link credit granted
+% also queue a link detached immediately after transfer
+early_transfer(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    <<"early-transfer">>,
+                                                    <<"test">>),
+
+    Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
+    % TODO: this is a timing issue - should use mock here really
+    {error, half_attached} = amqp10_client:send_msg(Sender, Msg),
+    % wait for credit
+    await_link({sender, <<"early-transfer">>}, credited, credited_timeout),
+    ok = amqp10_client:detach_link(Sender),
+    % attach then immediately detach
+    LinkName = <<"early-transfer2">>,
+    {ok, Sender2} = amqp10_client:attach_sender_link(Session, LinkName,
+                                                    <<"test">>),
+    {error, half_attached} = amqp10_client:detach_link(Sender2),
+    await_link({sender, <<"early-transfer2">>}, credited, credited_timeout),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
     ok.
 
 split_transfer(Config) ->
@@ -187,8 +216,8 @@ split_transfer(Config) ->
     {ok, Connection} = amqp10_client:open_connection(Conf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     Data = list_to_binary(string:chars(64, 1000)),
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"data-sender">>,
-                                                    <<"test">>),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session, <<"data-sender">>,
+                                                         <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, Data, true),
     ok = amqp10_client:send_msg(Sender, Msg),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
@@ -206,13 +235,15 @@ transfer_unsettled(Config) ->
     {ok, Connection} = amqp10_client:open_connection(Conf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     Data = list_to_binary(string:chars(64, 1000)),
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"data-sender">>,
-                                                    <<"test">>, unsettled),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
+                                                         <<"data-sender">>,
+                                                         <<"test">>, unsettled),
     DeliveryTag = <<"my-tag">>,
     Msg = amqp10_msg:new(DeliveryTag, Data, false),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = await_disposition(DeliveryTag),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"data-receiver">>,
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
+                                                        <<"data-receiver">>,
                                                         <<"test">>, unsettled),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver),
     ok = amqp10_client:accept_msg(Receiver, OutMsg),
@@ -227,8 +258,9 @@ subscribe(Config) ->
     QueueName = <<"test-sub">>,
     {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
     {ok, Session} = amqp10_client:begin_session(Connection),
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sub-sender">>,
-                                             QueueName),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
+                                                         <<"sub-sender">>,
+                                                         QueueName),
     Tag1 = <<"t1">>,
     Tag2 = <<"t2">>,
     Msg1 = amqp10_msg:new(Tag1, <<"banana">>, false),
@@ -348,4 +380,11 @@ await_disposition(DeliveryTag) ->
     receive
         {amqp10_disposition, {accepted, DeliveryTag}} -> ok
     after 3000 -> exit(dispostion_timeout)
+    end.
+
+await_link(Who, What, Err) ->
+    receive
+        {amqp10_event, {link, Who, What}} ->
+            ok
+    after 5000 -> exit(Err)
     end.

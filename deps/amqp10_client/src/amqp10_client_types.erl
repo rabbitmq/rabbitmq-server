@@ -43,7 +43,8 @@
 -type link_event_detail() :: attached | detached | {error, {link_error(), any()}}.
 -type amqp10_event_detail() :: {connection, pid(), connection_event_detail()} |
                                {session, pid(), session_event_detail()} |
-                               {link, amqp10_client_link:link_ref(), link_event_detail()}.
+                               {link, {sender | receiver, Name :: binary()},
+                                link_event_detail()}.
 -type amqp10_event() :: {amqp10_event, amqp10_event_detail()}.
 
 -export_type([amqp10_performative/0, channel/0,
