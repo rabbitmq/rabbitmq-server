@@ -268,7 +268,8 @@ function partial_update() {
                 var befores = $('#main .updatable');
                 var afters = $('#scratch .updatable');
                 if (befores.length != afters.length) {
-                    throw("before/after mismatch");
+                    console.log("before/after mismatch! Doing a full reload...");
+                    full_refresh();
                 }
                 for (var i = 0; i < befores.length; i++) {
                     $(befores[i]).empty().append($(afters[i]).contents());
@@ -1023,7 +1024,9 @@ function format(template, json) {
         return tmpl.render(json);
     } catch (err) {
         clearInterval(timer);
-        debug(err['name'] + ": " + err['message']);
+        console.log("Uncaught error: " + err);
+        console.log("Stack: " + err['stack']);
+        debug(err['name'] + ": " + err['message'] + "\n" + err['stack'] + "\n");
     }
 }
 
