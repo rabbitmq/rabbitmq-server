@@ -456,7 +456,13 @@ function fmt_rabbit_version(applications) {
 }
 
 function fmt_strip_tags(txt) {
-    return txt.replace(/<(?:.|\n)*?>/gm, '');
+    if(txt === null) {
+        return "";
+    }
+    if(txt === undefined) {
+        return "";
+    }
+    return ("" + txt).replace(/<(?:.|\n)*?>/gm, '');
 }
 
 function fmt_escape_html(txt) {
@@ -468,7 +474,14 @@ function fmt_escape_html_one_line(txt) {
 }
 
 function fmt_escape_html0(txt) {
-    return txt.replace(/&/g, '&amp;')
+    if(txt === null) {
+        return "";
+    }
+    if(txt === undefined) {
+        return "";
+    }
+
+    return ("" + txt).replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/\"/g, '&quot;');
@@ -715,7 +728,7 @@ function filter_ui_pg(items, truncate, appendselect) {
     var selected = current_filter == '' ? (items_desc(items.length)) :
         (items.length + ' of ' + items_desc(total) + ' selected');
 
-    
+
     selected += appendselect;
 
     res += '<p id="filter-truncate"><span class="updatable">' + selected +
@@ -731,7 +744,7 @@ function filter_ui(items) {
         parseInt(get_pref('truncate')) : current_truncate;
      var truncate_input = '<input type="text" id="truncate" value="' +
         current_truncate + '">';
-     var selected = '';    
+     var selected = '';
     if (items.length > current_truncate) {
         selected += '<span id="filter-warning-show"> ' +
             '(only showing first</span> ';
@@ -778,9 +791,9 @@ function pagiante_ui(pages, context){
     res +=   '</input></th></span>' ;
 
     res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class pagination_class_checkbox" id="'+ context +'-filter-regex-mode"' ;
-        
-    res += fmt_regex_request(context, "") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>' ;  
-    
+
+    res += fmt_regex_request(context, "") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>' ;
+
     res +=' </table>' ;
     res += '<p id="filter-truncate"><span class="updatable">';
     res += '<span><label for="'+ context +'-pagesize"> Displaying ' + pages.item_count + '  item'+ ((pages.item_count > 1) ? 's' : '' ) + ' , page size up to: </label> ';
@@ -875,20 +888,20 @@ function properties_size(obj) {
         if (obj.hasOwnProperty(k)) count++;
     }
     return count;
-}   
+}
 
 function frm_default_value(template, defaultValue){
     var store_value = get_pref(template);
-    var result = (((store_value == null) 
-      || (store_value == undefined) 
-      || (store_value == '')) ? defaultValue : 
+    var result = (((store_value == null)
+      || (store_value == undefined)
+      || (store_value == '')) ? defaultValue :
     store_value);
 
    return ((result == undefined) ? defaultValue : result);
 }
 
 function fmt_page_number_request(template, defaultPage){
-     if  ((defaultPage == undefined) || (defaultPage <= 0)) 
+     if  ((defaultPage == undefined) || (defaultPage <= 0))
          defaultPage = 1;
     return frm_default_value(template + '_current_page_number', defaultPage);
 }
