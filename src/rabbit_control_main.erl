@@ -31,6 +31,7 @@
 
 -define(COMMANDS,
         [stop,
+         shutdown,
          stop_app,
          start_app,
          wait,
@@ -116,7 +117,7 @@
          {"Parameters", rabbit_runtime_parameters, list_formatted, info_keys}]).
 
 -define(COMMANDS_NOT_REQUIRING_APP,
-        [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
+        [stop, shutdown, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
          environment, eval, force_boot, help, hipe_compile, encode]).
