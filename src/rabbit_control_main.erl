@@ -269,6 +269,22 @@ do_action(Command, Node, Args, Opts, Inform, Timeout) ->
             action(Command, Node, Args, Opts, Inform)
     end.
 
+shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform) ->
+    Inform("Shutting down RabbitMQ node ~p running at PID ~p", [Node, Pid]),
+    Res = call(Node, {rabbit, stop_and_halt, []}),
+    case Res of
+        ok -> wait_for_process_death(Pid);
+        _  -> ok
+    end,
+    Res.
+
+action(shutdown, Node, [], _Opts, Inform) ->
+    case rpc:call(Node, os, getpid, []) of
+        Pid when is_list(Pid) ->
+            shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform);
+        Error -> Error
+    end;
+
 action(stop, Node, Args, _Opts, Inform) ->
     Inform("Stopping and halting node ~p", [Node]),
     Res = call(Node, {rabbit, stop_and_halt, []}),
@@ -290,14 +306,14 @@ action(start_app, Node, [], _Opts, Inform) ->
 
 action(reset, Node, [], _Opts, Inform) ->
     Inform("Resetting node ~p", [Node]),
-    require_mnesia_stopped(Node, 
+    require_mnesia_stopped(Node,
                            fun() ->
                                    call(Node, {rabbit_mnesia, reset, []})
                            end);
 
 action(force_reset, Node, [], _Opts, Inform) ->
     Inform("Forcefully resetting node ~p", [Node]),
-    require_mnesia_stopped(Node, 
+    require_mnesia_stopped(Node,
                            fun() ->
                                    call(Node, {rabbit_mnesia, force_reset, []})
                            end);
@@ -309,21 +325,21 @@ action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
                    false -> disc
                end,
     Inform("Clustering node ~p with ~p", [Node, ClusterNode]),
-    require_mnesia_stopped(Node, 
+    require_mnesia_stopped(Node,
                            fun() ->
                                    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, NodeType])
                            end);
 
 action(change_cluster_node_type, Node, ["ram"], _Opts, Inform) ->
     Inform("Turning ~p into a ram node", [Node]),
-    require_mnesia_stopped(Node, 
+    require_mnesia_stopped(Node,
                            fun() ->
                                    rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [ram])
                            end);
 action(change_cluster_node_type, Node, [Type], _Opts, Inform)
   when Type =:= "disc" orelse Type =:= "disk" ->
     Inform("Turning ~p into a disc node", [Node]),
-    require_mnesia_stopped(Node, 
+    require_mnesia_stopped(Node,
                            fun() ->
                                    rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [disc])
                            end);
@@ -331,7 +347,7 @@ action(change_cluster_node_type, Node, [Type], _Opts, Inform)
 action(update_cluster_nodes, Node, [ClusterNodeS], _Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     Inform("Updating cluster nodes for ~p from ~p", [Node, ClusterNode]),
-    require_mnesia_stopped(Node, 
+    require_mnesia_stopped(Node,
                           fun() ->
                                   rpc_call(Node, rabbit_mnesia, update_cluster_nodes, [ClusterNode])
                           end);
@@ -496,9 +512,9 @@ action(set_disk_free_limit, Node, ["mem_relative", Arg], _Opts, Inform) ->
                              _ -> Arg
                          end),
     Inform("Setting disk free limit on ~p to ~p of total RAM", [Node, Frac]),
-    rpc_call(Node, 
-             rabbit_disk_monitor, 
-             set_disk_free_limit, 
+    rpc_call(Node,
+             rabbit_disk_monitor,
+             set_disk_free_limit,
              [{mem_relative, Frac}]);
 
 
@@ -962,7 +978,7 @@ escape(Bin, IsEscaped)  when is_binary(Bin) ->
 escape(L, false) when is_list(L) ->
     escape_char(lists:reverse(L), []);
 escape(L, true) when is_list(L) ->
-    L. 
+    L.
 
 escape_char([$\\ | T], Acc) ->
     escape_char(T, [$\\, $\\ | Acc]);
