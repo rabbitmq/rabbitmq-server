@@ -125,7 +125,9 @@ heartbeat(Pid) ->
 %% gen_fsm callbacks.
 %% -------------------------------------------------------------------
 
-init([Sup, Config]) ->
+init([Sup, Config0]) ->
+    process_flag(trap_exit, true),
+    Config = maps:merge(config_defaults(), Config0),
     {ok, expecting_socket, #state{connection_sup = Sup,
                                   config = Config}}.
 
@@ -143,17 +145,26 @@ expecting_socket({socket_ready, Socket}, State = #state{config = Cfg}) ->
 sasl_hdr_sent({protocol_header_received, 3, 1, 0, 0}, State) ->
     {next_state, sasl_hdr_rcvds, State}.
 
-sasl_hdr_rcvds(#'v1_0.sasl_mechanisms'{
-                  sasl_server_mechanisms = {array, _Mechs}}, State) ->
-    % TODO validate anon is a returned mechanism
-    ok = send_sasl_init(State, <<"ANONYMOUS">>),
-    {next_state, sasl_init_sent, State}.
+sasl_hdr_rcvds(#'v1_0.sasl_mechanisms'{sasl_server_mechanisms = {array, Mechs}},
+               State = #state{config = #{sasl := Sasl}}) ->
+    SaslBin = sasl_to_bin(Sasl),
+    case lists:any(fun({symbol, S}) when S =:= SaslBin -> true;
+                      (_) -> false
+                   end, Mechs) of
+        true ->
+            ok = send_sasl_init(State, Sasl),
+            {next_state, sasl_init_sent, State};
+        false ->
+            {stop, {sasl_not_supported, Sasl}, State}
+    end.
 
-sasl_init_sent(#'v1_0.sasl_outcome'{code = _Code},
+sasl_init_sent(#'v1_0.sasl_outcome'{code = {ubyte, 0}},
                #state{socket = Socket} = State) ->
-    % TODO validate anon is a returned mechanism
     ok = gen_tcp:send(Socket, ?AMQP_PROTOCOL_HEADER),
-    {next_state, hdr_sent, State}.
+    {next_state, hdr_sent, State};
+sasl_init_sent(#'v1_0.sasl_outcome'{code = {ubyte, 1}},
+               #state{} = State) ->
+    {stop, sasl_auth_failure, State}.
 
 hdr_sent({protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
@@ -246,7 +257,9 @@ handle_sync_event(_Event, _From, StateName, State) ->
 handle_info(_Info, StateName, State) ->
     {next_state, StateName, State}.
 
-terminate(Reason, _StateName, #state{connection_sup = Sup}) ->
+terminate(Reason, _StateName, #state{connection_sup = Sup,
+                                     config = Config}) ->
+    ok = notify_closed(Config, Reason),
     case Reason of
         normal -> sys:terminate(Sup, normal);
         _      -> ok
@@ -313,8 +326,13 @@ send_close(#state{socket = Socket}, _Reason) ->
     end,
     Ret.
 
-send_sasl_init(State, Mechanism) ->
-    Frame = #'v1_0.sasl_init'{mechanism = {symbol, Mechanism}},
+send_sasl_init(State, anon) ->
+    Frame = #'v1_0.sasl_init'{mechanism = {symbol, <<"ANONYMOUS">>}},
+    send(Frame, 1, State);
+send_sasl_init(State, {plain, User, Pass}) ->
+    Response = <<0:8, User/binary, 0:8, Pass/binary>>,
+    Frame = #'v1_0.sasl_init'{mechanism = {symbol, <<"PLAIN">>},
+                              initial_response = {binary, Response}},
     send(Frame, 1, State).
 
 send(Record, FrameType, #state{socket = Socket}) ->
@@ -380,3 +398,8 @@ translate_err(#'v1_0.error'{condition = Cond, description = Desc}) ->
 amqp10_event(Evt) ->
     {amqp10_event, {connection, self(), Evt}}.
 
+sasl_to_bin({plain, _, _}) -> <<"PLAIN">>;
+sasl_to_bin(anon) -> <<"ANONYMOUS">>.
+
+config_defaults() ->
+    #{sasl => none}.

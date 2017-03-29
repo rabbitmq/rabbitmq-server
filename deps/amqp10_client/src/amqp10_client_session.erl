@@ -185,6 +185,7 @@ socket_ready(Pid, Socket) ->
 %% -------------------------------------------------------------------
 
 init([FromPid, Channel, Reader, ConnConfig]) ->
+    process_flag(trap_exit, true),
     amqp10_client_frame_reader:register_session(Reader, self(), Channel),
     State = #state{notify = FromPid, channel = Channel, reader = Reader,
                    connection_config = ConnConfig},
@@ -252,8 +253,7 @@ mapped({flow, OutHandle, #'v1_0.flow'{link_credit = {uint, LinkCredit}} = Flow0}
                              outgoing_window = uint(OutWin),
                              incoming_window = uint(InWin),
                              delivery_count = uint(DeliveryCount),
-                             available = uint(Available)
-                             },
+                             available = uint(Available)},
     ok = send(Flow, State),
     {next_state, mapped,
      State#state{links = Links#{OutHandle =>
@@ -362,9 +362,6 @@ mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
        #state{unsettled = Unsettled0} = State) ->
 
     % TODO: no good if the range becomes very large!! refactor
-    % TODO: use range {first, last} to notify caller coudl be tricky
-    % as a disposition could refer to many different links and thus
-    % different processes
     Unsettled =
         lists:foldl(fun(Id, Acc) ->
                             case Acc of
@@ -399,11 +396,10 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
             {reply, {error, insufficient_credit}, mapped, State};
         #{OutHandle := Link} ->
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
-            ok = send_transfer(Transfer, Parts, State),
+            {ok, NumFrames} = send_transfer(Transfer, Parts, State),
             % delay reply to caller until disposition frame is received
             State1 = State#state{unsettled = #{NDI => {DeliveryTag, From}}},
-            % {next_state, mapped, book_transfer_send(Link, State1)};
-            {reply, ok, mapped, book_transfer_send(Link, State1)};
+            {reply, ok, mapped, book_transfer_send(NumFrames, Link, State1)};
         _ ->
             {reply, {error, link_not_found}, mapped, State}
     end;
@@ -417,10 +413,10 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
             {reply, {error, insufficient_credit}, mapped, State};
         #{OutHandle := Link} ->
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
-            ok = send_transfer(Transfer, Parts, State),
+            {ok, NumFrames} = send_transfer(Transfer, Parts, State),
             % TODO look into if erlang will correctly wrap integers during
             % binary conversion.
-            {reply, ok, mapped, book_transfer_send(Link, State)};
+            {reply, ok, mapped, book_transfer_send(NumFrames, Link, State)};
         _ ->
             {reply, {error, link_not_found}, mapped, State}
     end;
@@ -525,8 +521,9 @@ send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
     MaxPayloadSize = OutMaxFrameSize - TSize - ?FRAME_HEADER_SIZE,
 
     Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
-    ?DBG("SESSION SEND ~p~n", [Transfer0]),
-    ok = gen_tcp:send(Socket, Frames).
+    ?DBG("SESSION SEND ~p Frames count ~p~n", [Transfer0, length(Frames)]),
+    ok = gen_tcp:send(Socket, Frames),
+    {ok, length(Frames)}.
 
 build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)
   when byte_size(Bin) =< MaxPayloadSize ->
@@ -710,14 +707,14 @@ notify_disposition({Pid, _}, SessionDeliveryTag) ->
     Pid ! {amqp10_disposition, SessionDeliveryTag},
     ok.
 
-book_transfer_send(#link{output_handle = Handle} = Link,
+book_transfer_send(Num, #link{output_handle = Handle} = Link,
               #state{next_outgoing_id = NOI,
                      next_delivery_id = NDI,
                      remote_incoming_window = RIW,
                      links = Links} = State) ->
-    State#state{next_delivery_id = NDI+1,
-                next_outgoing_id = NOI+1,
-                remote_incoming_window = RIW-1,
+    State#state{next_delivery_id = NDI+Num,
+                next_outgoing_id = NOI+Num,
+                remote_incoming_window = RIW-Num,
                 links = Links#{Handle => incr_link_counters(Link)}}.
 
 book_partial_transfer_received(#state{next_incoming_id = NID,

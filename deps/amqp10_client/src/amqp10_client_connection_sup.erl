@@ -31,6 +31,6 @@ init(Args) ->
                             worker, [self() | Args]),
     SessionsSupSpec = ?CHILD(sessions, amqp10_client_sessions_sup,
                              supervisor, []),
-    {ok, {{one_for_all, 0, 1}, [ReaderSpec,
-                                ConnectionSpec,
+    {ok, {{one_for_all, 0, 1}, [ConnectionSpec,
+                                ReaderSpec,
                                 SessionsSupSpec]}}.

@@ -119,7 +119,7 @@
         </shutdownHooks>
 
 	<plugins>
-        <simpleAuthenticationPlugin anonymousAccessAllowed="true">
+          <simpleAuthenticationPlugin>
             <users>
               <authenticationUser username="system" password="manager"
                 groups="users,admins"/>

@@ -42,13 +42,24 @@
 all() ->
     [
      {group, rabbitmq},
-     {group, activemq}
+     {group, rabbitmq_strict},
+     {group, activemq},
+     {group, activemq_no_anon}
     ].
 
 groups() ->
     [
      {rabbitmq, [], shared()},
      {activemq, [], shared()},
+     {rabbitmq_strict, [], [
+                            open_connection_plain_sasl,
+                            open_connection_plain_sasl_failure
+                           ]},
+     {activemq_no_anon, [],
+      [
+       open_connection_plain_sasl,
+       open_connection_plain_sasl_failure
+      ]},
      {mock, [], [
                  insufficient_credit,
                  incoming_heartbeat
@@ -95,27 +106,42 @@ stop_amqp10_client_app(Config) ->
 %% Groups.
 %% -------------------------------------------------------------------
 
-init_per_group(rabbitmq, Config) ->
-      rabbit_ct_helpers:run_steps(
-        Config,
-        rabbit_ct_broker_helpers:setup_steps());
-init_per_group(activemq, Config) ->
-      rabbit_ct_helpers:run_steps(
-        Config,
-        activemq_ct_helpers:setup_steps());
+init_per_group(rabbitmq, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0,
+                                          {sasl, {plain, <<"guest">>, <<"guest">>}}),
+    Config1 = rabbit_ct_helpers:merge_app_env(Config,
+                                              [{rabbitmq_amqp1_0,
+                                                [{protocol_strict_mode, true}]}]),
+    rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps());
+init_per_group(rabbitmq_strict, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0,
+                                          {sasl, {plain, <<"guest">>, <<"guest">>}}),
+    Config1 = rabbit_ct_helpers:merge_app_env(Config,
+                                              [{rabbitmq_amqp1_0,
+                                                [{default_user, none},
+                                                 {protocol_strict_mode, true}]}]),
+    rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps());
+init_per_group(activemq, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, {sasl, anon}),
+    rabbit_ct_helpers:run_steps(Config,
+                                activemq_ct_helpers:setup_steps("activemq.xml"));
+init_per_group(activemq_no_anon, Config0) ->
+    Config = rabbit_ct_helpers:set_config(
+               Config0, {sasl, {plain, <<"user">>, <<"password">>}}),
+    rabbit_ct_helpers:run_steps(Config,
+                                activemq_ct_helpers:setup_steps("activemq_no_anon.xml"));
 init_per_group(mock, Config) ->
     rabbit_ct_helpers:set_config(Config, [{mock_port, 21000},
                                           {mock_host, "localhost"}
                                          ]).
-
 end_per_group(rabbitmq, Config) ->
-      rabbit_ct_helpers:run_steps(
-        Config,
-        rabbit_ct_broker_helpers:teardown_steps());
+    rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:teardown_steps());
+end_per_group(rabbitmq_strict, Config) ->
+    rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:teardown_steps());
 end_per_group(activemq, Config) ->
-      rabbit_ct_helpers:run_steps(
-        Config,
-        activemq_ct_helpers:teardown_steps());
+    rabbit_ct_helpers:run_steps(Config, activemq_ct_helpers:teardown_steps());
+end_per_group(activemq_no_anon, Config) ->
+    rabbit_ct_helpers:run_steps(Config, activemq_ct_helpers:teardown_steps());
 end_per_group(mock, Config) ->
     Config.
 
@@ -144,14 +170,49 @@ open_close_connection(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     OpnConf = #{address => Hostname, port => Port,
                 notify => self(),
-                container_id => <<"open_close_connection_container">>},
+                container_id => <<"open_close_connection_container">>,
+                sasl => ?config(sasl, Config)},
     {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
     {ok, Connection2} = amqp10_client:open_connection(OpnConf),
     receive
         {amqp10_event, {connection, Connection2, opened}} -> ok
-    after 5000 -> connection_timeout
+    after 5000 -> exit(connection_timeout)
     end,
     ok = amqp10_client:close_connection(Connection2),
+    ok = amqp10_client:close_connection(Connection).
+
+open_connection_plain_sasl_failure(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => Hostname,
+                port => Port,
+                notify => self(),
+                container_id => <<"open_connection_plain_sasl_container">>,
+                % anonymous access is not allowed
+                sasl => {plain, <<"WORNG">>, <<"WARBLE">>}},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive
+        {amqp10_event, {connection, Connection,
+                        {closed, sasl_auth_failure}}} -> ok;
+        % some implementation may simply close the tcp_connection
+        {amqp10_event, {connection, Connection, {closed, shutdown}}} -> ok
+    after 5000 -> exit(connection_timeout)
+    end,
+    ok = amqp10_client:close_connection(Connection).
+
+open_connection_plain_sasl(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => Hostname,
+                port => Port,
+                notify => self(),
+                container_id => <<"open_connection_plain_sasl_container">>,
+                sasl =>  ?config(sasl, Config)},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive
+        {amqp10_event, {connection, Connection, opened}} -> ok
+    after 5000 -> exit(connection_timeout)
+    end,
     ok = amqp10_client:close_connection(Connection).
 
 basic_roundtrip(Config) ->
@@ -212,11 +273,14 @@ split_transfer(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     ct:pal("Opening connection to ~s:~b", [Hostname, Port]),
-    Conf = #{address => Hostname, port => Port, max_frame_size => 512},
+    Conf = #{address => Hostname, port => Port,
+             max_frame_size => 512,
+             sasl => ?config(sasl, Config)},
     {ok, Connection} = amqp10_client:open_connection(Conf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     Data = list_to_binary(string:chars(64, 1000)),
-    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session, <<"data-sender">>,
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
+                                                         <<"data-sender">>,
                                                          <<"test">>),
     Msg = amqp10_msg:new(<<"my-tag">>, Data, true),
     ok = amqp10_client:send_msg(Sender, Msg),
@@ -231,7 +295,8 @@ split_transfer(Config) ->
 transfer_unsettled(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    Conf = #{address => Hostname, port => Port},
+    Conf = #{address => Hostname, port => Port,
+             sasl => ?config(sasl, Config)},
     {ok, Connection} = amqp10_client:open_connection(Conf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     Data = list_to_binary(string:chars(64, 1000)),
@@ -325,7 +390,7 @@ outgoing_heartbeat(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     CConf = #{address => Hostname, port => Port,
-              idle_time_out => 5000},
+              idle_time_out => 5000, sasl => ?config(sasl, Config)},
     {ok, Connection} = amqp10_client:open_connection(CConf),
     timer:sleep(35 * 1000), % activemq defaults to 15s I believe
     % check we can still establish a session
@@ -351,7 +416,7 @@ incoming_heartbeat(Config) ->
     Mock = {_, MockPid} = ?config(mock_server, Config),
     MockRef = monitor(process, MockPid),
     ok = mock_server:set_steps(Mock, Steps),
-    CConf = #{address => Hostname, port => Port, sasl => none,
+    CConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config),
               idle_time_out => 1000, notify => self()},
     {ok, Connection} = amqp10_client:open_connection(CConf),
     receive

@@ -42,7 +42,8 @@
         inet:socket_address() | inet:hostname(),
         inet:port_number()) -> supervisor:startchild_ret().
 open_connection(Addr, Port) ->
-    open_connection(#{address => Addr, port => Port, notify => self()}).
+    open_connection(#{address => Addr, port => Port, notify => self(),
+                      sasl => anon}).
 
 -spec open_connection(amqp10_client_connection:connection_config()) ->
     supervisor:startchild_ret().

@@ -156,12 +156,17 @@ handle_info(heartbeat, StateName, State = #state{connection = Conn}) ->
     {next_state, StateName, State}.
 
 terminate(Reason, _StateName, #state{connection_sup = Sup, socket = Socket}) ->
+    error_logger:warning_msg("terminating reader with '~p'~n",
+                             [Reason]),
     case Socket of
         undefined -> ok;
         _         -> gen_tcp:close(Socket)
     end,
     case Reason of
-        normal -> sys:terminate(Sup, normal);
+        normal ->
+            error_logger:warning_msg("terminating sup from reader with~n",
+                                     []),
+            sys:terminate(Sup, normal);
         _      -> ok
     end,
     ok.

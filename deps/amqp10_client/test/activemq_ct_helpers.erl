@@ -18,17 +18,17 @@
 
 -include_lib("common_test/include/ct.hrl").
 
--export([setup_steps/0,
+-export([setup_steps/1,
          teardown_steps/0,
          ensure_activemq_cmd/1,
-         init_config_filename/1,
+         init_config_filename/2,
          init_tcp_port_numbers/1,
          start_activemq_nodes/1,
          stop_activemq_nodes/1]).
 
-setup_steps() ->
+setup_steps(ConfigFileName) ->
     [fun ensure_activemq_cmd/1,
-     fun init_config_filename/1,
+     fun(Config) -> init_config_filename(Config, ConfigFileName) end,
      fun init_tcp_port_numbers/1,
      fun start_activemq_nodes/1].
 
@@ -54,9 +54,9 @@ ensure_activemq_cmd(Config) ->
                     "please set ACTIVEMQ or 'activemq_cmd' in ct config"}
     end.
 
-init_config_filename(Config) ->
+init_config_filename(Config, FileName) ->
     ConfigFile = filename:join([?config(data_dir, Config),
-                                "conf", "activemq.xml"]),
+                                "conf", FileName]),
     rabbit_ct_helpers:set_config(Config, {activemq_config_filename, ConfigFile}).
 
 init_tcp_port_numbers(Config) ->
