@@ -354,8 +354,7 @@ update_binding(Args, #state{downstream_exchange = X,
     Hops = case rabbit_misc:table_lookup(Args, ?BINDING_HEADER) of
                undefined    -> MaxHops;
                {array, All} -> [{table, Prev} | _] = All,
-                               {short, PrevHops} =
-                                   rabbit_misc:table_lookup(Prev, <<"hops">>),
+                               PrevHops = get_hops(Prev),
                                case rabbit_federation_util:already_seen(
                                       UName, All) of
                                    true  -> 0;
@@ -375,6 +374,8 @@ update_binding(Args, #state{downstream_exchange = X,
                      {<<"hops">>,         short,   Hops}],
              rabbit_basic:prepend_table_header(?BINDING_HEADER, Info, Args)
     end.
+
+
 
 key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
@@ -551,3 +552,16 @@ update_headers(#upstream_params{table = Table}, UName, Redelivered, Headers) ->
 
 header_for_name(unknown) -> [];
 header_for_name(Name)    -> [{<<"cluster-name">>, longstr, Name}].
+
+get_hops(Table) ->
+  case rabbit_misc:table_lookup(Table, <<"hops">>) of
+    %% see rabbit_binary_generator
+    {short, N}         -> N;
+    {long, N}          -> N;
+    {byte, N}          -> N;
+    {signedint, N}     -> N;
+    {unsignedbyte, N}  -> N;
+    {unsignedshort, N} -> N;
+    {unsignedint, N}   -> N;
+    {_, N} when is_integer(N) andalso N >= 0 -> N
+  end.
