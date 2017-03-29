@@ -22,7 +22,9 @@ parse_node(#xmlElement{name=Name, content=Content}) ->
 
 flatten_text([], Value) -> Value;
 flatten_text([{K,V}|T], Accum) when is_list(V) ->
-  flatten_text(T, lists:append([{K, V}], Accum)).
+    flatten_text(T, lists:append([{K, V}], Accum));
+flatten_text([H | T], Accum) when is_list(H) ->
+    flatten_text(T, lists:append(T, Accum)).
 
 
 flatten_value([L], _) when is_list(L) -> L;
