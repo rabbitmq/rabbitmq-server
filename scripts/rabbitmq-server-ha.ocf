@@ -50,6 +50,7 @@ OCF_RESKEY_max_rabbitmqctl_timeouts_default=3
 OCF_RESKEY_policy_file_default="/usr/local/sbin/set_rabbitmq_policy"
 OCF_RESKEY_rmq_feature_health_check_default=true
 OCF_RESKEY_rmq_feature_local_list_queues_default=true
+OCF_RESKEY_limit_nofile_default=65535
 
 : ${HA_LOGTAG="lrmd"}
 : ${HA_LOGFACILITY="daemon"}
@@ -74,6 +75,7 @@ OCF_RESKEY_rmq_feature_local_list_queues_default=true
 : ${OCF_RESKEY_policy_file=${OCF_RESKEY_policy_file_default}}
 : ${OCF_RESKEY_rmq_feature_health_check=${OCF_RESKEY_rmq_feature_health_check_default}}
 : ${OCF_RESKEY_rmq_feature_local_list_queues=${OCF_RESKEY_rmq_feature_local_list_queues_default}}
+: ${OCF_RESKEY_limit_nofile=${OCF_RESKEY_limit_nofile_default}}
 
 #######################################################################
 
@@ -332,6 +334,14 @@ stopped/demoted.
 <content type="boolean" default="${OCF_RESKEY_rmq_feature_local_list_queues_default}" />
 </parameter>
 
+<parameter name="limit_nofile" unique="0" required="0">
+<longdesc lang="en">
+Soft and hard limit for NOFILE
+</longdesc>
+<shortdesc lang="en">NOFILE limit</shortdesc>
+<content type="string" default="${OCF_RESKEY_limit_nofile_default}" />
+</parameter>
+
 $EXTENDED_OCF_PARAMS
 
 </parameters>
@@ -554,6 +564,10 @@ su_rabbit_cmd() {
 
 now() {
     date -u +%s
+}
+
+set_limits() {
+    [ ! -z $OCF_RESKEY_limit_nofile ] && ulimit -n $OCF_RESKEY_limit_nofile
 }
 
 master_score() {
@@ -1165,6 +1179,9 @@ start_beam_process() {
     fi
 
     [ -f /etc/default/rabbitmq-server ] && . /etc/default/rabbitmq-server
+
+    # RabbitMQ requires high soft and hard limits for NOFILE
+    set_limits
 
     # run beam process
     command="${OCF_RESKEY_binary} >> \"${OCF_RESKEY_log_dir}/startup_log\" 2>/dev/null"
