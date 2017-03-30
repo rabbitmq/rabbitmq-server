@@ -169,10 +169,24 @@ teardown_steps() ->
     ].
 
 run_make_dist(Config) ->
-    SrcDir = ?config(current_srcdir, Config),
-    case rabbit_ct_helpers:make(Config, SrcDir, ["test-dist"]) of
-        {ok, _} -> Config;
-        _       -> {skip, "Failed to run \"make test-dist\""}
+    case os:getenv("SKIP_MAKE_TEST_DIST") of
+        false ->
+            SrcDir = ?config(current_srcdir, Config),
+            case rabbit_ct_helpers:make(Config, SrcDir, ["test-dist"]) of
+                {ok, _} ->
+                    %% The caller can set $SKIP_MAKE_TEST_DIST to
+                    %% manually skip this step which can be time
+                    %% consuming. But we also use this variable to
+                    %% record the fact we went through it already so we
+                    %% save redundant calls.
+                    os:putenv("SKIP_MAKE_TEST_DIST", "true"),
+                    Config;
+                _ ->
+                    {skip, "Failed to run \"make test-dist\""}
+            end;
+        _ ->
+            ct:pal(?LOW_IMPORTANCE, "(skip `$MAKE test-dist`)", []),
+            Config
     end.
 
 start_rabbitmq_nodes(Config) ->
