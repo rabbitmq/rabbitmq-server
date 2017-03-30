@@ -22,7 +22,8 @@
 
 all() ->
     [
-        {group, running_node}
+        {group, running_node},
+        {group, non_running_node}
     ].
 
 groups() ->
@@ -30,6 +31,9 @@ groups() ->
         {running_node, [], [
             successful_shutdown,
             error_during_shutdown
+        ]},
+        {non_running_node, [], [
+            nothing_to_shutdown
         ]}
     ].
 
@@ -92,10 +96,18 @@ error_during_shutdown(Config) ->
     ok = rabbit_control_main:action(stop_app, Node, [], [], fun ct:pal/2),
     ok = rpc:call(Node, application, unload, [os_mon]),
 
-    {
-     badrpc, {'EXIT',
-      {{error, {badmatch, {error,{edge,{bad_vertex,os_mon},os_mon,rabbit}}}}, _}}
-    } = rabbit_control_main:action(shutdown, Node, [], [], fun ct:pal/2).
+    {badrpc,
+        {'EXIT', {
+            {error, {badmatch, {error,{edge,{bad_vertex,os_mon},os_mon,rabbit}}}},
+            _}}} =
+        rabbit_control_main:action(shutdown, Node, [], [], fun ct:pal/2).
+
+
+nothing_to_shutdown(Config) ->
+    Node = ?config(node, Config),
+
+    { badrpc, nodedown } =
+        rabbit_control_main:action(shutdown, Node, [], [], fun ct:pal/2).
 
 node_pid(Node) ->
     Val = rpc:call(Node, os, getpid, []),
