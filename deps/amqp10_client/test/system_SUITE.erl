@@ -52,7 +52,7 @@ groups() ->
      {rabbitmq, [], shared()},
      {activemq, [], shared()},
      {rabbitmq_strict, [], [
-                            open_connection_tls,
+                            basic_roundtrip_tls,
                             open_connection_plain_sasl,
                             open_connection_plain_sasl_failure
                            ]},
@@ -182,29 +182,6 @@ open_close_connection(Config) ->
     ok = amqp10_client:close_connection(Connection2),
     ok = amqp10_client:close_connection(Connection).
 
-open_connection_tls(Config) ->
-    Hostname = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
-    CACertFile = ?config(rmq_certsdir, Config) ++ "/testca/cacert.pem",
-    CertFile = ?config(rmq_certsdir, Config) ++ "/client/cert.pem",
-    KeyFile = ?config(rmq_certsdir, Config) ++ "/client/key.pem",
-    OpnConf = #{address => Hostname,
-                port => Port,
-                tls_opts => {secure_port, [{cacertfile, CACertFile},
-                                           {certfile, CertFile},
-                                           {keyfile, KeyFile}]},
-                notify => self(),
-                container_id => <<"open_connection_tls_container">>,
-                sasl => ?config(sasl, Config)},
-    {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
-    {ok, Connection2} = amqp10_client:open_connection(OpnConf),
-    receive
-        {amqp10_event, {connection, Connection2, opened}} -> ok
-    after 5000 -> exit(connection_timeout)
-    end,
-    ok = amqp10_client:close_connection(Connection2),
-    ok = amqp10_client:close_connection(Connection).
-
 open_connection_plain_sasl(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
@@ -242,8 +219,27 @@ open_connection_plain_sasl_failure(Config) ->
 basic_roundtrip(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    ct:pal("Opening connection to ~s:~b", [Hostname, Port]),
-    {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
+    OpenConf = #{address => Hostname, port => Port, sasl => anon},
+    roundtrip(OpenConf).
+
+basic_roundtrip_tls(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
+    CACertFile = ?config(rmq_certsdir, Config) ++ "/testca/cacert.pem",
+    CertFile = ?config(rmq_certsdir, Config) ++ "/client/cert.pem",
+    KeyFile = ?config(rmq_certsdir, Config) ++ "/client/key.pem",
+    OpnConf = #{address => Hostname,
+                port => Port,
+                tls_opts => {secure_port, [{cacertfile, CACertFile},
+                                           {certfile, CertFile},
+                                           {keyfile, KeyFile}]},
+                notify => self(),
+                container_id => <<"open_connection_tls_container">>,
+                sasl => ?config(sasl, Config)},
+    roundtrip(OpnConf).
+
+roundtrip(OpenConf) ->
+    {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     {ok, Sender} = amqp10_client:attach_sender_link(Session,
                                                     <<"banana-sender">>,
