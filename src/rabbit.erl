@@ -447,7 +447,8 @@ stop_and_halt() ->
     try
         stop()
     catch Type:Reason ->
-        rabbit_log:error("Error trying to stop RabbitMQ: ~p:~p", [Type, Reason])
+        rabbit_log:error("Error trying to stop RabbitMQ: ~p:~p", [Type, Reason]),
+        error({Type, Reason})
     after
         AppsLeft = [ A || {A, _, _} <- application:which_applications() ],
         rabbit_log:info(
