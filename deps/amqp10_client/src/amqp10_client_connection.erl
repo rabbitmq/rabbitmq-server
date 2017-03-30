@@ -37,10 +37,13 @@
          opened/2,
          close_sent/2]).
 
+-type amqp10_socket() :: {tcp, gen_tcp:socket()} | {ssl, ssl:socket()}.
+
 -type connection_config() ::
     #{container_id => binary(),
       address => inet:socket_address() | inet:hostname(),
       port => inet:port_number(),
+      tls_opts => {secure_port, [ssl:ssl_option()]},
       notify => pid(),
       max_frame_size => non_neg_integer(), % TODO constrain to large than 512
       outgoing_max_frame_size => non_neg_integer() | undefined,
@@ -54,13 +57,14 @@
          sessions_sup :: pid() | undefined,
          pending_session_reqs = [] :: [term()],
          reader :: pid() | undefined,
-         socket :: gen_tcp:socket() | undefined,
+         socket :: amqp10_socket() | undefined,
          idle_time_out :: non_neg_integer() | undefined,
          heartbeat_timer :: timer:tref() | undefined,
          config :: connection_config()
         }).
 
--export_type([connection_config/0]).
+-export_type([connection_config/0,
+              amqp10_socket/0]).
 
 -define(DEFAULT_TIMEOUT, 5000).
 
@@ -105,7 +109,7 @@ start_link(Sup, Config) ->
 set_other_procs(Pid, OtherProcs) ->
     gen_fsm:send_all_state_event(Pid, {set_other_procs, OtherProcs}).
 
--spec socket_ready(pid(), gen_tcp:socket()) -> ok.
+-spec socket_ready(pid(), amqp10_socket()) -> ok.
 socket_ready(Pid, Socket) ->
     gen_fsm:send_event(Pid, {socket_ready, Socket}).
 
@@ -135,10 +139,10 @@ expecting_socket({socket_ready, Socket}, State = #state{config = Cfg}) ->
     State1 = State#state{socket = Socket},
     case Cfg of
         #{sasl := none} ->
-            ok = gen_tcp:send(Socket, ?AMQP_PROTOCOL_HEADER),
+            ok = socket_send(Socket, ?AMQP_PROTOCOL_HEADER),
             {next_state, hdr_sent, State1};
         _ -> % assume anonymous TODO: PLAIN
-            ok = gen_tcp:send(Socket, ?SASL_PROTOCOL_HEADER),
+            ok = socket_send(Socket, ?SASL_PROTOCOL_HEADER),
             {next_state, sasl_hdr_sent, State1}
     end.
 
@@ -160,7 +164,7 @@ sasl_hdr_rcvds(#'v1_0.sasl_mechanisms'{sasl_server_mechanisms = {array, Mechs}},
 
 sasl_init_sent(#'v1_0.sasl_outcome'{code = {ubyte, 0}},
                #state{socket = Socket} = State) ->
-    ok = gen_tcp:send(Socket, ?AMQP_PROTOCOL_HEADER),
+    ok = socket_send(Socket, ?AMQP_PROTOCOL_HEADER),
     {next_state, hdr_sent, State};
 sasl_init_sent(#'v1_0.sasl_outcome'{code = {ubyte, 1}},
                #state{} = State) ->
@@ -310,17 +314,17 @@ send_open(#state{socket = Socket, config = Config}) ->
     Encoded = rabbit_amqp1_0_framing:encode_bin(Open),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
     ?DBG("CONN <- ~p~n", [Open]),
-    gen_tcp:send(Socket, Frame).
+    socket_send(Socket, Frame).
 
 send_close(#state{socket = Socket}, _Reason) ->
     Close = #'v1_0.close'{},
     Encoded = rabbit_amqp1_0_framing:encode_bin(Close),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
     ?DBG("CONN <- ~p~n", [Close]),
-    Ret = gen_tcp:send(Socket, Frame),
+    Ret = socket_send(Socket, Frame),
     case Ret of
         ok -> _ =
-              gen_tcp:shutdown(Socket, write),
+              socket_shutdown(Socket, write),
               ok;
         _  -> ok
     end,
@@ -339,12 +343,22 @@ send(Record, FrameType, #state{socket = Socket}) ->
     Encoded = rabbit_amqp1_0_framing:encode_bin(Record),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, FrameType, Encoded),
     ?DBG("CONN <- ~p~n", [Record]),
-    gen_tcp:send(Socket, Frame).
+    socket_send(Socket, Frame).
 
 send_heartbeat(#state{socket = Socket}) ->
     ?DBG("sending heartbeat~n", []),
     Frame = rabbit_amqp1_0_binary_generator:build_heartbeat_frame(),
-    gen_tcp:send(Socket, Frame).
+    socket_send(Socket, Frame).
+
+socket_send({tcp, Socket}, Data) ->
+    gen_tcp:send(Socket, Data);
+socket_send({ssl, Socket}, Data) ->
+    ssl:send(Socket, Data).
+
+socket_shutdown({tcp, Socket}, Data) ->
+    gen_tcp:shutdown(Socket, Data);
+socket_shutdown({ssl, Socket}, Data) ->
+    ssl:shutdown(Socket, Data).
 
 notify_opened(#{notify := Pid}) ->
     Pid ! amqp10_event(opened),

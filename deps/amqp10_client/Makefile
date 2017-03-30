@@ -5,6 +5,7 @@ PROJECT_MOD = amqp10_client_app
 BUILD_DEPS = rabbit_common elvis_mk
 DEPS = amqp10_common
 TEST_DEPS = rabbit rabbitmq_amqp1_0 rabbitmq_ct_helpers
+LOCAL_DEPS = ssl inets
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk elvis_mk
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master

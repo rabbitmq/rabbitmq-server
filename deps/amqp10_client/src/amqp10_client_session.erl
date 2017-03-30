@@ -97,7 +97,7 @@
          remote_incoming_window = 0 :: non_neg_integer(),
          remote_outgoing_window = 0 :: non_neg_integer(),
          reader :: pid(),
-         socket :: gen_tcp:socket() | undefined,
+         socket :: amqp10_client_connection:amqp10_socket() | undefined,
          links = #{} :: #{link_handle() => #link{}},
          % maps link name to outgoing link handle
          link_index = #{} :: #{link_name() => link_handle()},
@@ -175,8 +175,7 @@ disposition(Session, Role, First, Last, Settled, DeliveryState) ->
 start_link(From, Channel, Reader, ConnConfig) ->
     gen_fsm:start_link(?MODULE, [From, Channel, Reader, ConnConfig], []).
 
--spec socket_ready(pid(), gen_tcp:socket()) -> ok.
-
+-spec socket_ready(pid(), amqp10_client_connection:amqp10_socket()) -> ok.
 socket_ready(Pid, Socket) ->
     gen_fsm:send_event(Pid, {socket_ready, Socket}).
 
@@ -487,12 +486,12 @@ send_begin(#state{socket = Socket,
                outgoing_window = uint(OutWin)
               },
     Frame = encode_frame(Begin, State),
-    gen_tcp:send(Socket, Frame).
+    socket_send(Socket, Frame).
 
 send_end(#state{socket = Socket} = State) ->
     End = #'v1_0.end'{},
     Frame = encode_frame(End, State),
-    gen_tcp:send(Socket, Frame).
+    socket_send(Socket, Frame).
 
 encode_frame(Record, #state{channel = Channel}) ->
     Encoded = rabbit_amqp1_0_framing:encode_bin(Record),
@@ -501,7 +500,7 @@ encode_frame(Record, #state{channel = Channel}) ->
 send(Record, #state{socket = Socket} = State) ->
     ?DBG("SESSION SEND ~p~n", [Record]),
     Frame = encode_frame(Record, State),
-    gen_tcp:send(Socket, Frame).
+    socket_send(Socket, Frame).
 
 send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
                                         connection_config = Config}) ->
@@ -522,7 +521,7 @@ send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
 
     Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
     ?DBG("SESSION SEND ~p Frames count ~p~n", [Transfer0, length(Frames)]),
-    ok = gen_tcp:send(Socket, Frames),
+    ok = socket_send(Socket, Frames),
     {ok, length(Frames)}.
 
 build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)
@@ -758,6 +757,11 @@ decode_as_msg(Transfer, Payload) ->
 
 amqp10_session_event(Evt) ->
     {amqp10_event, {session, self(), Evt}}.
+
+socket_send({tcp, Socket}, Data) ->
+    gen_tcp:send(Socket, Data);
+socket_send({ssl, Socket}, Data) ->
+    ssl:send(Socket, Data).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

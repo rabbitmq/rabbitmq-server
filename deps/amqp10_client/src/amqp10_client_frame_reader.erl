@@ -40,7 +40,7 @@
 
 -record(state,
         {connection_sup :: pid(),
-         socket :: gen_tcp:socket() | undefined,
+         socket :: amqp10_client_connection:amqp10_socket() | undefined,
          buffer = <<>> :: binary(),
          frame_state :: #frame_state{} | undefined,
          connection :: pid() | undefined,
@@ -90,7 +90,13 @@ unregister_session(Reader, Session, OutgoingChannel, IncomingChannel) ->
 
 init([Sup, #{address := Host, port := Port} = ConnConfig]) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
-        {ok, Socket} ->
+        {ok, Socket0} ->
+            Socket = case ConnConfig of
+                         #{tls_opts := {secure_port, Opts}} ->
+                             {ok, SslSock} = ssl:connect(Socket0, Opts),
+                             {ssl, SslSock};
+                         _ -> {tcp, Socket0}
+                     end,
             State = #state{connection_sup = Sup, socket = Socket,
                            connection_config = ConnConfig},
             {ok, expecting_connection_pid, State};
@@ -129,7 +135,8 @@ handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.
 
-handle_info({tcp, _, Packet}, StateName, #state{buffer = Buffer} = State) ->
+handle_info({Tcp, _, Packet}, StateName, #state{buffer = Buffer} = State)
+  when Tcp == tcp orelse Tcp == ssl ->
     Data = <<Buffer/binary, Packet/binary>>,
     case handle_input(StateName, Data, State) of
         {ok, NextState, Remaining, NewState0} ->
@@ -140,7 +147,9 @@ handle_info({tcp, _, Packet}, StateName, #state{buffer = Buffer} = State) ->
             {stop, Reason, NewState}
     end;
 
-handle_info({tcp_closed, _}, StateName, State) ->
+% TODO: handle tcp_error
+handle_info({TcpClosed, _}, StateName, State)
+  when TcpClosed == tcp_closed orelse TcpClosed == ssl_closed ->
     error_logger:warning_msg("Socket closed while in state '~s'~n",
                              [StateName]),
     State1 = State#state{
@@ -160,14 +169,13 @@ terminate(Reason, _StateName, #state{connection_sup = Sup, socket = Socket}) ->
                              [Reason]),
     case Socket of
         undefined -> ok;
-        _         -> gen_tcp:close(Socket)
+        _ -> close_socket(Socket)
     end,
     case Reason of
         normal ->
-            error_logger:warning_msg("terminating sup from reader with~n",
-                                     []),
+            error_logger:warning_msg("terminating sup from reader with~n", []),
             sys:terminate(Sup, normal);
-        _      -> ok
+        _ -> ok
     end,
     ok.
 
@@ -178,9 +186,16 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Internal functions.
 %% -------------------------------------------------------------------
 
-set_active_once(#state{socket = Socket}) ->
+close_socket({tcp, Socket}) ->
+    gen_tcp:close(Socket);
+close_socket({ssl, Socket}) ->
+    ssl:close(Socket).
+
+set_active_once(#state{socket = {tcp, Socket}}) ->
     %TODO: handle return value
-    ok = inet:setopts(Socket, [{active, once}]).
+    ok = inet:setopts(Socket, [{active, once}]);
+set_active_once(#state{socket = {ssl, Socket}}) ->
+    ok = ssl:setopts(Socket, [{active, once}]).
 
 handle_input(expecting_frame_header,
              <<"AMQP", Protocol/unsigned, Maj/unsigned, Min/unsigned,
