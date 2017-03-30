@@ -148,7 +148,6 @@
               Unlike the stop command, the shutdown command:
               * does not require a pid_file to wait for the Erlang process to exit
               * if RabbitMQ node is not running, it will return a non-zero exit code
-              * it will refuse to stop a remote RabbitMQ node and return a non-zero exit code
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl shutdown</screen>
