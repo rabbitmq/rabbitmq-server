@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2017 Pivotal Software, Inc.  All rights reserved.
 %%
 -module(rabbitmqctl_shutdown_SUITE).
 
@@ -22,20 +22,15 @@
 
 all() ->
     [
-        {group, shutdown_running_node}%,
-        % {group, shutdown_not_running_node}
+        {group, running_node}
     ].
 
 groups() ->
-    StopTests = [
-        shutdown_fails_if_unable_to_contact_node,
-        shutdown_fails_if_unable_to_stop
-    ],
     [
-        {shutdown_running_node, [],
-        % StopTests ++
-        [shutdown_running_node_ok]},
-        {shutdown_not_running_node, [], StopTests}
+        {running_node, [], [
+            successful_shutdown,
+            error_during_shutdown
+        ]}
     ].
 
 init_per_suite(Config) ->
@@ -45,19 +40,19 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(shutdown_running_node, Config) ->
+init_per_group(running_node, Config) ->
     rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
         {need_start, true}
     ]);
-init_per_group(shutdown_not_running_node, Config) ->
+init_per_group(non_running_node, Config) ->
     rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE}
     ]).
 
-end_per_group(shutdown_running_node, Config) ->
+end_per_group(running_node, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, []);
-end_per_group(shutdown_not_running_node, Config) ->
+end_per_group(non_running_node, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, []).
 
 init_per_testcase(Testcase, Config0) ->
@@ -85,12 +80,22 @@ save_node(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     rabbit_ct_helpers:set_config(Config, [{node, Node}]).
 
-shutdown_running_node_ok(Config) ->
+successful_shutdown(Config) ->
     Node = ?config(node, Config),
     Pid = node_pid(Node),
     ok = rabbit_control_main:action(shutdown, Node, [], [], fun ct:pal/2),
     false = erlang_pid_is_running(Pid),
     false = node_is_running(Node).
+
+error_during_shutdown(Config) ->
+    Node = ?config(node, Config),
+    ok = rabbit_control_main:action(stop_app, Node, [], [], fun ct:pal/2),
+    ok = rpc:call(Node, application, unload, [os_mon]),
+
+    {
+     badrpc, {'EXIT',
+      {{error, {badmatch, {error,{edge,{bad_vertex,os_mon},os_mon,rabbit}}}}, _}}
+    } = rabbit_control_main:action(shutdown, Node, [], [], fun ct:pal/2).
 
 node_pid(Node) ->
     Val = rpc:call(Node, os, getpid, []),
