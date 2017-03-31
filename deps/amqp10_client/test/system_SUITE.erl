@@ -61,6 +61,10 @@ groups() ->
        open_connection_plain_sasl,
        open_connection_plain_sasl_failure
       ]},
+      {azure, [],
+      [
+       basic_roundtrip_service_bus
+      ]},
      {mock, [], [
                  insufficient_credit,
                  incoming_heartbeat
@@ -131,6 +135,14 @@ init_per_group(activemq_no_anon, Config0) ->
                Config0, {sasl, {plain, <<"user">>, <<"password">>}}),
     rabbit_ct_helpers:run_steps(Config,
                                 activemq_ct_helpers:setup_steps("activemq_no_anon.xml"));
+init_per_group(azure, Config) ->
+    rabbit_ct_helpers:set_config(Config,
+                                        [
+                                         {sb_endpoint, os:getenv("SB_ENDPOINT")},
+                                         {sb_keyname, to_bin(os:getenv("SB_KEYNAME"))},
+                                         {sb_key, to_bin(os:getenv("SB_KEY"))},
+                                         {sb_port, 5671}
+                                        ]);
 init_per_group(mock, Config) ->
     rabbit_ct_helpers:set_config(Config, [{mock_port, 21000},
                                           {mock_host, "localhost"}
@@ -143,7 +155,7 @@ end_per_group(activemq, Config) ->
     rabbit_ct_helpers:run_steps(Config, activemq_ct_helpers:teardown_steps());
 end_per_group(activemq_no_anon, Config) ->
     rabbit_ct_helpers:run_steps(Config, activemq_ct_helpers:teardown_steps());
-end_per_group(mock, Config) ->
+end_per_group(_, Config) ->
     Config.
 
 %% -------------------------------------------------------------------
@@ -169,7 +181,8 @@ end_per_testcase(_Test, Config) ->
 open_close_connection(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    OpnConf = #{address => Hostname, port => Port,
+    OpnConf = #{address => Hostname,
+                port => Port,
                 notify => self(),
                 container_id => <<"open_close_connection_container">>,
                 sasl => ?config(sasl, Config)},
@@ -238,13 +251,27 @@ basic_roundtrip_tls(Config) ->
                 sasl => ?config(sasl, Config)},
     roundtrip(OpnConf).
 
+basic_roundtrip_service_bus(Config) ->
+    Hostname = ?config(sb_endpoint, Config),
+    Port = ?config(sb_port, Config),
+    User = ?config(sb_keyname, Config),
+    Password = ?config(sb_key, Config),
+    OpnConf = #{address => Hostname,
+                hostname => to_bin(Hostname),
+                port => Port,
+                tls_opts => {secure_port, [{versions, ['tlsv1.1']}]},
+                notify => self(),
+                container_id => <<"basic_roundtrip_service_bus">>,
+                sasl => {plain, User, Password}},
+    roundtrip(OpnConf).
+
 roundtrip(OpenConf) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     {ok, Sender} = amqp10_client:attach_sender_link(Session,
                                                     <<"banana-sender">>,
-                                                    <<"test">>),
-    await_link({sender, <<"banana-sender">>}, attached, link_attach_timeout),
+                                                    <<"test1">>),
+    await_link({sender, <<"banana-sender">>}, credited, link_credit_timeout),
 
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
     ok = amqp10_client:send_msg(Sender, Msg),
@@ -254,7 +281,7 @@ roundtrip(OpenConf) ->
     {error, link_not_found} = amqp10_client:detach_link(Sender),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"banana-receiver">>,
-                                                        <<"test">>),
+                                                        <<"test1">>),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
@@ -292,8 +319,8 @@ early_transfer(Config) ->
 split_transfer(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    ct:pal("Opening connection to ~s:~b", [Hostname, Port]),
-    Conf = #{address => Hostname, port => Port,
+    Conf = #{address => Hostname,
+             port => Port,
              max_frame_size => 512,
              sasl => ?config(sasl, Config)},
     {ok, Connection} = amqp10_client:open_connection(Conf),
@@ -470,6 +497,11 @@ await_disposition(DeliveryTag) ->
 await_link(Who, What, Err) ->
     receive
         {amqp10_event, {link, Who, What}} ->
-            ok
+            ok;
+        {amqp10_event, {link, Who, {detached, Why}}} ->
+            exit(Why)
     after 5000 -> exit(Err)
     end.
+
+to_bin(X) when is_list(X) ->
+    list_to_binary(X).
