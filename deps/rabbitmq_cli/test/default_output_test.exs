@@ -42,8 +42,19 @@ defmodule DefaultOutputTest do
   test "badrpc nodedown error" do
     exit_code = exit_unavailable()
     node = :example@node
-    assert match?({:error, ^exit_code, "Error: unable to connect to node 'example@node': nodedown"},
-                  ExampleCommand.output({:badrpc, :nodedown}, %{node: node}))
+    {:error, ^exit_code,
+     "Error: unable to connect to node 'example@node': nodedown" <> diag} =
+        ExampleCommand.output({:badrpc, :nodedown}, %{node: node})
+    assert diag =~ ~r/DIAGNOSTICS/
+    assert diag =~ ~r/attempted to contact/
+
+    localnode = :non_existent_node@localhost
+    {:error, ^exit_code,
+     "Error: unable to connect to node 'non_existent_node@localhost': nodedown" <> diag} =
+        ExampleCommand.output({:badrpc, :nodedown}, %{node: localnode})
+    assert diag =~ ~r/DIAGNOSTICS/
+    assert diag =~ ~r/attempted to contact/
+    assert diag =~ ~r/suggestion: start the node/
   end
 
   test "badrpc timeout error" do
@@ -124,8 +135,11 @@ defmodule DefaultOutputTest do
 
     exit_code = exit_unavailable()
     node = :example@node
-    assert match?({:error, ^exit_code, "Error: unable to connect to node 'example@node': nodedown"},
-                  ExampleCommandWithCustomOutput.output({:badrpc, :nodedown}, %{node: node}))
+    {:error, ^exit_code,
+     "Error: unable to connect to node 'example@node': nodedown" <> diag} =
+        ExampleCommandWithCustomOutput.output({:badrpc, :nodedown}, %{node: node})
+    assert diag =~ ~r/DIAGNOSTICS/
+    assert diag =~ ~r/attempted to contact/
 
     exit_code = exit_tempfail()
     timeout = 1000

@@ -54,8 +54,10 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output(result) when not is_atom(result), do: {:ok, result}
 
   defp format_output({:badrpc, :nodedown} = result, opts, _) do
+    diagnostics = get_node_diagnostics(opts[:node])
     {:error, ExitCodes.exit_code_for(result),
-     "Error: unable to connect to node '#{opts[:node]}': nodedown"}
+     "Error: unable to connect to node '#{opts[:node]}': nodedown\n" <>
+     diagnostics}
   end
   defp format_output({:badrpc, :timeout} = result, opts, module) do
     op = CommandModules.module_to_command(module)
@@ -79,6 +81,13 @@ defmodule RabbitMQ.CLI.DefaultOutput do
       Enumerable.Map -> {:ok, output};
       _              -> {:stream, output}
     end
+  end
+
+  defp get_node_diagnostics(nil) do
+    "Node is not defined"
+  end
+  defp get_node_diagnostics(node_name) do
+    to_string(:rabbit_nodes.diagnostics([node_name]))
   end
 
   defp string_or_inspect(val) do
