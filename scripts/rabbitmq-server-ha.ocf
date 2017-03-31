@@ -85,6 +85,7 @@ OCF_RESKEY_command_timeout_default=""
 : ${OCF_RESKEY_command_timeout=${OCF_RESKEY_command_timeout_default}}
 TIMEOUT_ARG=$((OCF_RESKEY_CRM_meta_timeout / 6000 + 30))
 COMMAND_TIMEOUT="/usr/bin/timeout ${OCF_RESKEY_command_timeout} ${TIMEOUT_ARG}"
+RESOURCE_NAME=`echo $OCF_RESOURCE_INSTANCE | cut -d ":" -f 1`
 
 #######################################################################
 
@@ -623,7 +624,7 @@ get_node_start_time() {
 }
 
 get_node_master_score() {
-    get_integer_node_attr $1 'master-p_rabbitmq-server'
+    get_integer_node_attr $1 "master-${RESOURCE_NAME}"
 }
 
 # Return either rabbit node name as FQDN or shortname, depends on the OCF_RESKEY_use_fqdn.
