@@ -216,11 +216,13 @@ body(#amqp10_msg{body = Body}) -> Body.
 -spec new(delivery_tag(), amqp10_body() | binary(), boolean()) -> amqp10_msg().
 new(DeliveryTag, Body, Settled) when is_binary(Body) ->
     #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
-                                            settled = Settled},
+                                            settled = Settled,
+                                            message_format = {uint, 0}},
                 body = [#'v1_0.data'{content = Body}]};
-new(DeliveryTag, Body, Settled) ->
+new(DeliveryTag, Body, Settled) -> % TODO: constrain to amqp types
     #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
-                                            settled = Settled},
+                                            settled = Settled,
+                                            message_format = {uint, 0}},
                 body = Body}.
 
 -spec new(delivery_tag(), amqp10_body() | binary()) -> amqp10_msg().

@@ -42,6 +42,7 @@
 -type connection_config() ::
     #{container_id => binary(),
       address => inet:socket_address() | inet:hostname(),
+      hostname => binary(),
       port => inet:port_number(),
       tls_opts => {secure_port, [ssl:ssl_option()]},
       notify => pid(),
