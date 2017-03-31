@@ -92,6 +92,6 @@ check_epmd(#state{mod  = Mod,
                     "epmd does not know us, re-registering ~s at port ~b~n",
                     [Me, Port]),
                   rabbit_nodes:ensure_epmd(),
-                  erl_epmd:register_node(Me, Port);
+                  Mod:register_node(Me, Port);
         _      -> ok
     end.
