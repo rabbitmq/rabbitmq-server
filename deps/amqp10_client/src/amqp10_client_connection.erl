@@ -184,12 +184,11 @@ hdr_sent({protocol_header_received, Protocol, Maj, Min,
 open_sent(#'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
           #state{pending_session_reqs = PendingSessionReqs,
                  config = Config} = State0) ->
-
     State = case Timeout of
                 undefined -> State0;
                 {uint, T} when T > 0 ->
-                    {ok, Tmr} = start_heartbeat_timer(T),
-                    State0#state{idle_time_out = T,
+                    {ok, Tmr} = start_heartbeat_timer(T div 2),
+                    State0#state{idle_time_out = T div 2,
                                  heartbeat_timer = Tmr};
                 _ -> State0
             end,
@@ -302,19 +301,24 @@ send_open(#state{socket = Socket, config = Config}) ->
     ContainerId = maps:get(container_id, Config, generate_container_id()),
     IdleTimeOut = maps:get(idle_time_out, Config, 0),
     Open0 = #'v1_0.open'{container_id = {utf8, ContainerId},
-                         % hostname = {utf8, <<"localhost">>},
                          channel_max = {ushort, 100},
                          idle_time_out = {uint, IdleTimeOut},
                          properties = Props},
-    Open = case Config of
+    Open1 = case Config of
                #{max_frame_size := MFSz} ->
                    Open0#'v1_0.open'{max_frame_size = {uint, MFSz}};
                _ -> Open0
+           end,
+    Open = case Config of
+               #{hostname := Hostname} ->
+                   Open1#'v1_0.open'{hostname = {utf8, Hostname}};
+               _ -> Open1
            end,
     Encoded = rabbit_amqp1_0_framing:encode_bin(Open),
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
     ?DBG("CONN <- ~p~n", [Open]),
     socket_send(Socket, Frame).
+
 
 send_close(#state{socket = Socket}, _Reason) ->
     Close = #'v1_0.close'{},

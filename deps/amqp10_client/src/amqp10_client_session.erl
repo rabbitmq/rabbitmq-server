@@ -40,7 +40,7 @@
 -define(MAX_SESSION_WINDOW_SIZE, 65535).
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
 -define(DEFAULT_TIMEOUT, 5000).
--define(INITIAL_OUTGOING_ID, 65535).
+-define(INITIAL_OUTGOING_ID, 0).
 -define(INITIAL_DELIVERY_COUNT, 0).
 
 % -type from() :: {pid(), term()}.
@@ -104,7 +104,6 @@
          % maps incoming handle to outgoing
          link_handle_index = #{} :: #{link_handle() => link_handle()},
          next_link_handle = 0 :: link_handle(),
-         next_delivery_id = 0 :: non_neg_integer(),
          early_attach_requests = [] :: [term()],
          connection_config = #{} :: amqp10_client_connection:connection_config(),
          % the unsettled map needs to go in the session state as a disposition
@@ -205,8 +204,7 @@ unmapped({attach, Attach}, From,
 begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                          next_outgoing_id = {uint, NOI},
                          incoming_window = {uint, InWindow},
-                         outgoing_window = {uint, OutWindow}
-                        },
+                         outgoing_window = {uint, OutWindow}},
            #state{early_attach_requests = EARs} = State) ->
 
     State1 = State#state{remote_channel = RemoteChannel},
@@ -221,8 +219,7 @@ begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
     {next_state, mapped, State2#state{early_attach_requests = [],
                                       next_incoming_id = NOI,
                                       remote_incoming_window = InWindow,
-                                      remote_outgoing_window = OutWindow
-                                     }}.
+                                      remote_outgoing_window = OutWindow}}.
 
 begin_sent({attach, Attach}, From,
                       #state{early_attach_requests = EARs} = State) ->
@@ -357,9 +354,12 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
 % role=true indicates the disposition is from a `receiver`. i.e. from the
 % clients point of view these are dispositions relating to `sender`links
 mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
-                           last = {uint, Last}, state = DeliveryState},
+                           last = Last0, state = DeliveryState},
        #state{unsettled = Unsettled0} = State) ->
-
+    Last = case Last0 of
+               undefined -> First;
+               {uint, L} -> L
+           end,
     % TODO: no good if the range becomes very large!! refactor
     Unsettled =
         lists:foldl(fun(Id, Acc) ->
@@ -387,23 +387,25 @@ mapped(Frame, State) ->
 mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
                                    delivery_tag = {binary, DeliveryTag},
                                    settled = false} = Transfer0, Parts},
-       From, #state{next_delivery_id = NDI, links = Links} = State) ->
+       From, #state{next_outgoing_id = NOI, links = Links} = State) ->
     case Links of
         #{OutHandle := #link{input_handle = undefined}} ->
             {reply, {error, half_attached}, mapped, State};
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
             {reply, {error, insufficient_credit}, mapped, State};
         #{OutHandle := Link} ->
-            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
+            ?DBG("transfer delivery_id ~p~n", [NOI]),
+            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NOI),
+                                                 resume = false},
             {ok, NumFrames} = send_transfer(Transfer, Parts, State),
             % delay reply to caller until disposition frame is received
-            State1 = State#state{unsettled = #{NDI => {DeliveryTag, From}}},
+            State1 = State#state{unsettled = #{NOI => {DeliveryTag, From}}},
             {reply, ok, mapped, book_transfer_send(NumFrames, Link, State1)};
         _ ->
             {reply, {error, link_not_found}, mapped, State}
     end;
 mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
-        Parts}, _From, #state{next_delivery_id = NDI,
+        Parts}, _From, #state{next_outgoing_id = NOI,
                               links = Links} = State) ->
     case Links of
         #{OutHandle := #link{input_handle = undefined}} ->
@@ -411,7 +413,7 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
             {reply, {error, insufficient_credit}, mapped, State};
         #{OutHandle := Link} ->
-            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NDI)},
+            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NOI)},
             {ok, NumFrames} = send_transfer(Transfer, Parts, State),
             % TODO look into if erlang will correctly wrap integers during
             % binary conversion.
@@ -480,11 +482,9 @@ send_begin(#state{socket = Socket,
                   next_outgoing_id = NextOutId,
                   incoming_window = InWin,
                   outgoing_window = OutWin} = State) ->
-    Begin = #'v1_0.begin'{
-               next_outgoing_id = uint(NextOutId),
-               incoming_window = uint(InWin),
-               outgoing_window = uint(OutWin)
-              },
+    Begin = #'v1_0.begin'{next_outgoing_id = uint(NextOutId),
+                          incoming_window = uint(InWin),
+                          outgoing_window = uint(OutWin) },
     Frame = encode_frame(Begin, State),
     socket_send(Socket, Frame).
 
@@ -520,7 +520,7 @@ send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
     MaxPayloadSize = OutMaxFrameSize - TSize - ?FRAME_HEADER_SIZE,
 
     Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
-    ?DBG("SESSION SEND ~p Frames count ~p~n", [Transfer0, length(Frames)]),
+    ?DBG("SESSION SEND ~p Frames ~p~n", [Transfer0, length(Frames)]),
     ok = socket_send(Socket, Frames),
     {ok, length(Frames)}.
 
@@ -609,6 +609,8 @@ handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
               {uint, N} -> N;
               undefined -> ?INITIAL_OUTGOING_ID + 1 % TODO: should it be +1?
           end,
+
+    ?DBG("handling session flow, setting next_incoming_id to ~p~n", [NOI]),
 
     State#state{next_incoming_id = NOI,
                 remote_incoming_window = NII + InWin - OurNOI, % see: 2.5.6
@@ -708,11 +710,9 @@ notify_disposition({Pid, _}, SessionDeliveryTag) ->
 
 book_transfer_send(Num, #link{output_handle = Handle} = Link,
               #state{next_outgoing_id = NOI,
-                     next_delivery_id = NDI,
                      remote_incoming_window = RIW,
                      links = Links} = State) ->
-    State#state{next_delivery_id = NDI+Num,
-                next_outgoing_id = NOI+Num,
+    State#state{next_outgoing_id = NOI+Num,
                 remote_incoming_window = RIW-Num,
                 links = Links#{Handle => incr_link_counters(Link)}}.
 
