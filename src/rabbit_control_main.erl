@@ -156,7 +156,7 @@ start() ->
               Inform = case Quiet of
                            true  -> fun (_Format, _Args1) -> ok end;
                            false -> fun (Format, Args1) ->
-                                            io:format(Format ++ " ...~n", Args1)
+                                            io:format(Format ++ "~n", Args1)
                                     end
                        end,
               try
@@ -271,10 +271,12 @@ do_action(Command, Node, Args, Opts, Inform, Timeout) ->
     end.
 
 shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform) ->
-    Inform("Shutting down RabbitMQ node ~p running at PID ~p", [Node, Pid]),
     Res = call(Node, {rabbit, stop_and_halt, []}),
     case Res of
-        ok -> wait_for_process_death(Pid);
+        ok ->
+            Inform("Waiting for PID ~s to terminate", [Pid]),
+            wait_for_process_death(Pid),
+            Inform("RabbitMQ node running at PID ~s successfully shut down", [Pid]);
         _  -> ok
     end,
     Res.
@@ -282,6 +284,7 @@ shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform) ->
 action(shutdown, Node, [], _Opts, Inform) ->
     case rpc:call(Node, os, getpid, []) of
         Pid when is_list(Pid) ->
+            Inform("Shutting down RabbitMQ node ~p running at PID ~s", [Node, Pid]),
             shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform);
         Error -> Error
     end;
