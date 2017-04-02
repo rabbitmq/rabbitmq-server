@@ -34,6 +34,7 @@ docs/rabbitmq-server.1.man.xml
 docs/rabbitmq-service.man.xml
 docs/rabbitmqctl.1
 docs/rabbitmqctl.1.man.xml
+docs/*.tmp
 
 # Dialyzer
 *.plt
