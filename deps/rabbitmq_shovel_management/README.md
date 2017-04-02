@@ -31,4 +31,4 @@ The HTTP API is very small:
 
 Released under [the same license as RabbitMQ](https://www.rabbitmq.com/mpl.html).
 
-2007-2016 (c) Pivotal Software Inc.
+2007-2017 (c) Pivotal Software Inc.
