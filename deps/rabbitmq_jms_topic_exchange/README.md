@@ -46,6 +46,6 @@ TL;DR:
     
 ## Copyright and License
 
-(c) Pivotal Software Inc., 2007-2016.
+(c) Pivotal Software Inc., 2007-2017.
 
 See [LICENSE](./LICENSE) for license information.
