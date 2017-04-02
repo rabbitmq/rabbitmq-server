@@ -10,7 +10,7 @@
 %%
 %%   The Original Code is RabbitMQ.
 %%
-%%   Copyright (c) 2007-2016 Pivotal Software, Inc. All rights reserved.
+%%   Copyright (c) 2007-2017 Pivotal Software, Inc. All rights reserved.
 %%
 
 -module(rabbit_mgmt_agent_sup_sup).
