@@ -213,6 +213,13 @@ body(#amqp10_msg{body = [#'v1_0.data'{} | _] = Data}) ->
 body(#amqp10_msg{body = Body}) -> Body.
 
 
+%% @doc Create a new amqp10 message using the specified delivery tag, body
+%% and settlement state. Settled=true means the message is considered settled
+%% as soon as sent and no disposition will be issued by the receiver.
+%% Settled=false will delay settlement until a disposition has been received.
+%% A disposition will be notified to the sender by a message of the
+%% following stucture:
+%% {amqp10_disposition, {accepted | rejected, DeliveryTag}}
 -spec new(delivery_tag(), amqp10_body() | binary(), boolean()) -> amqp10_msg().
 new(DeliveryTag, Body, Settled) when is_binary(Body) ->
     #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
@@ -225,6 +232,8 @@ new(DeliveryTag, Body, Settled) -> % TODO: constrain to amqp types
                                             message_format = {uint, 0}},
                 body = Body}.
 
+%% @doc Create a new settled amqp10 message using the specified delivery tag
+%% and body.
 -spec new(delivery_tag(), amqp10_body() | binary()) -> amqp10_msg().
 new(DeliveryTag, Body) ->
     new(DeliveryTag, Body, false).
@@ -233,6 +242,7 @@ new(DeliveryTag, Body) ->
 % First 3 octets are the format
 % the last 1 octet is the version
 % See 2.8.11 in the spec
+%% @doc Set the message format.
 -spec set_message_format({non_neg_integer(), non_neg_integer()},
                          amqp10_msg()) -> amqp10_msg().
 set_message_format({Format, Version}, #amqp10_msg{transfer = T} = Msg) ->
@@ -240,14 +250,23 @@ set_message_format({Format, Version}, #amqp10_msg{transfer = T} = Msg) ->
     Msg#amqp10_msg{transfer = T#'v1_0.transfer'{message_format =
                                                 {uint, MsgFormat}}}.
 
+%% @doc Set the link handle used for the message transfer.
 -spec set_handle(non_neg_integer(), amqp10_msg()) -> amqp10_msg().
 set_handle(Handle, #amqp10_msg{transfer = T} = Msg) ->
     Msg#amqp10_msg{transfer = T#'v1_0.transfer'{handle = {uint, Handle}}}.
 
+%% @doc Set the settledment mode.
+%% Settled=true means the message is considered settled
+%% as soon as sent and no disposition will be issued by the receiver.
+%% Settled=false will delay settlement until a disposition has been received.
+%% A disposition will be notified to the sender by a message of the
+%% following stucture:
+%% {amqp10_disposition, {accepted | rejected, DeliveryTag}}
 -spec set_settled(boolean(), amqp10_msg()) -> amqp10_msg().
 set_settled(Settled, #amqp10_msg{transfer = T} = Msg) ->
     Msg#amqp10_msg{transfer = T#'v1_0.transfer'{settled = Settled}}.
 
+%% @doc Set amqp message headers.
 -spec set_headers(#{atom() => any()}, amqp10_msg()) -> amqp10_msg().
 set_headers(Headers, #amqp10_msg{header = undefined} = Msg) ->
     set_headers(Headers, Msg#amqp10_msg{header = #'v1_0.header'{}});
@@ -265,6 +284,7 @@ set_headers(Headers, #amqp10_msg{header = Current} = Msg) ->
                   end, Current, Headers),
     Msg#amqp10_msg{header = H}.
 
+%% @doc Set amqp message properties.
 -spec set_properties(amqp10_properties(), amqp10_msg()) -> amqp10_msg().
 set_properties(Props, #amqp10_msg{properties = undefined} = Msg) ->
     set_properties(Props, Msg#amqp10_msg{properties = #'v1_0.properties'{}});

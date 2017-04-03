@@ -109,7 +109,8 @@
          connection_config = #{} :: amqp10_client_connection:connection_config(),
          % the unsettled map needs to go in the session state as a disposition
          % can reference transfers for many different links
-         unsettled = #{} :: #{transfer_id() => {amqp10_client:delivery_tag(), any()}}, %TODO: refine as FsmRef
+         unsettled = #{} :: #{transfer_id() => {amqp10_client:delivery_tag(),
+                                                any()}}, %TODO: refine as FsmRef
          incoming_unsettled = #{} :: #{transfer_id() => link_handle()},
          notify :: pid()
         }).
@@ -237,10 +238,15 @@ mapped('end', State) ->
 mapped({flow, OutHandle, Flow0, RenewAfter}, State0) ->
     State = send_flow(fun send/2, OutHandle, Flow0, RenewAfter, State0),
     {next_state, mapped, State};
-mapped(#'v1_0.end'{}, State) ->
+mapped(#'v1_0.end'{error = Err}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
     % TODO: send notifications for links?
+    Reason = case Err of
+                 undefined -> normal;
+                 _ -> Err
+             end,
+    ok = notify_session_ended(State, Reason),
     {stop, normal, State};
 mapped(#'v1_0.attach'{name = {utf8, Name},
                       initial_delivery_count = IDC,
@@ -738,6 +744,10 @@ notify_link(#link{notify = Pid, name = Name, role = Role}, What) ->
 
 notify_session_begun(#state{notify = Pid}) ->
     Pid ! amqp10_session_event(begun),
+    ok.
+
+notify_session_ended(#state{notify = Pid}, Reason) ->
+    Pid ! amqp10_session_event({ended, Reason}),
     ok.
 
 notify_disposition({Pid, _}, SessionDeliveryTag) ->
