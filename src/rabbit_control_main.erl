@@ -277,7 +277,9 @@ shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform) ->
         ok ->
             Inform("Waiting for PID ~s to terminate", [Pid]),
             wait_for_process_death(Pid),
-            Inform("RabbitMQ node running at PID ~s successfully shut down", [Pid]);
+            Inform(
+              "RabbitMQ node ~p running at PID ~s successfully shut down",
+              [Node, Pid]);
         _  -> ok
     end,
     Res.
