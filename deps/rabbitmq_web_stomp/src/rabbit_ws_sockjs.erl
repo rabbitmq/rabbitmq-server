@@ -54,7 +54,7 @@ init() ->
         {ok, _}                       -> ok;
         {error, {already_started, _}} -> ok;
         {error, Err}                  ->
-            rabbit_log:error("Failed to start an HTTP listener for SockJS. Error: ~p, listener settings: ~p~n", [TcpConf, Err]),
+            rabbit_log:error("Failed to start an HTTP listener for SockJS. Error: ~p, listener settings: ~p~n", [Err, TcpConf]),
             throw(Err)
     end,
     listener_started('http/web-stomp', TcpConf),
