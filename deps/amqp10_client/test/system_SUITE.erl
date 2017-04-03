@@ -276,7 +276,8 @@ roundtrip(OpenConf) ->
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = amqp10_client:detach_link(Sender),
-    await_link({sender, <<"banana-sender">>}, detached, link_detach_timeout),
+    await_link({sender, <<"banana-sender">>}, {detached, normal},
+               link_detach_timeout),
 
     {error, link_not_found} = amqp10_client:detach_link(Sender),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,

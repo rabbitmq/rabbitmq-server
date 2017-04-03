@@ -282,12 +282,16 @@ mapped(#'v1_0.attach'{name = {utf8, Name},
                          link_handle_index = LHI#{InHandle => OutHandle}},
     {next_state, mapped, State};
 
-mapped(#'v1_0.detach'{handle = {uint, InHandle}, closed = Closed},
+mapped(#'v1_0.detach'{handle = {uint, InHandle}, closed = Closed, error = Err},
         #state{links = Links, link_handle_index = LHI} = State)
   when Closed =:= true orelse Closed =:= undefined ->
     {ok, #link{output_handle = OutHandle} = Link} =
         find_link_by_input_handle(InHandle, State),
-    ok = notify_link_detached(Link),
+    Reason = case Err of
+                 undefined -> normal;
+                 Err -> Err
+             end,
+    ok = notify_link_detached(Link, Reason),
     {next_state, mapped,
      State#state{links = maps:remove(OutHandle, Links),
                  link_handle_index = maps:remove(InHandle, LHI)}};
@@ -692,8 +696,8 @@ maybe_notify_link_credit(_Old, _New) ->
 notify_link_attached(Link) ->
     notify_link(Link, attached).
 
-notify_link_detached(Link) ->
-    notify_link(Link, detached).
+notify_link_detached(Link, Reason) ->
+    notify_link(Link, {detached, Reason}).
 
 notify_link(#link{notify = Pid, name = Name, role = Role}, What) ->
     Evt = {amqp10_event, {link, {Role, Name}, What}},
