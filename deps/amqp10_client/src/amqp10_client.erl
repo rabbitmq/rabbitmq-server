@@ -29,7 +29,7 @@
 -define(DEFAULT_TIMEOUT, 5000).
 
 -record(link_ref, {role :: sender | receiver, session :: pid(),
-                   link_handle :: non_neg_integer(), link_name :: binary()}).
+                   link_handle :: non_neg_integer()}).
 -opaque link_ref() :: #link_ref{}.
 
 -type result(Succ, Err) :: {ok, Succ} | {error, Err}.
@@ -153,7 +153,7 @@ attach_sender_link(Session, Name, Target, SettleMode) ->
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first},
     {ok, Attach} = amqp10_client_session:attach(Session, AttachArgs),
-    {ok, make_link_ref(sender, Session, Name, Attach)}.
+    {ok, make_link_ref(sender, Session, Attach)}.
 
 %% @doc Attaches a receiver link to a source.
 %% This is asynchronous and will notify completion of the attach request to the
@@ -177,7 +177,7 @@ attach_receiver_link(Session, Name, Source, SettleMode) ->
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first},
     {ok, Attach} = amqp10_client_session:attach(Session, AttachArgs),
-    {ok, make_link_ref(receiver, Session, Name, Attach)}.
+    {ok, make_link_ref(receiver, Session, Attach)}.
 
 %% @doc Detaches a link.
 %% This is asynchronous and will notify completion of the attach request to the
@@ -247,7 +247,6 @@ link_handle(#link_ref{link_handle = Handle}) -> Handle.
 
 
 %%% Helpers
--spec make_link_ref(_, _, _, _) -> link_ref().
-make_link_ref(Role, Session, Name, Handle) ->
-    #link_ref{role = Role, session = Session, link_name = Name,
-              link_handle = Handle}.
+-spec make_link_ref(_, _, _) -> link_ref().
+make_link_ref(Role, Session, Handle) ->
+    #link_ref{role = Role, session = Session, link_handle = Handle}.
