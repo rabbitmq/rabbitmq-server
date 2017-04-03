@@ -49,7 +49,7 @@
       max_frame_size => non_neg_integer(), % TODO constrain to large than 512
       outgoing_max_frame_size => non_neg_integer() | undefined,
       idle_time_out => non_neg_integer(),
-      sasl => none | anon | {plain, binary(), binary()} % {plain, User, Pwd}
+      sasl => none | anon | {plain, User :: binary(), Pwd :: binary()}
   }.
 
 -record(state,

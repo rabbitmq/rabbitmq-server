@@ -28,11 +28,7 @@
 
 -define(DEFAULT_TIMEOUT, 5000).
 
--record(link_ref, {role :: sender | receiver, session :: pid(),
-                   link_handle :: non_neg_integer()}).
 -opaque link_ref() :: #link_ref{}.
-
--type result(Succ, Err) :: {ok, Succ} | {error, Err}.
 
 -export_type([link_ref/0,
               result/2

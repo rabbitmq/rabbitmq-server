@@ -1,20 +1,48 @@
-## AMQP 1.0 client
+# AMQP 1.0 client
 
 This is an erlang client for the [AMQP 1.0](https://www.amqp.org/resources/specifications) protocol.
 
 It's primary purpose is to be used in RabbitMQ related projects but it is a
 generic client.
 
-### Status
+## Status
 
 Incomplete but usable.
 
-### API
+## API
 
-## Sending and receiving a message example
+### Connection config
+
+The `connection_config` map contains various configuration properties.
 
 ```
-% create a configuration map (look ma - no header imports).
+-type connection_config() ::
+    #{container_id => binary(), % mandatory
+      address => inet:socket_address() | inet:hostname(), % mandatory
+      hostname => binary(), % required by some brokers such as Azure ServiceBus
+      port => inet:port_number(), % mandatory
+      tls_opts => {secure_port, [ssl:ssl_option()]}, % optional
+      notify => pid(), % Pid to receive protocol notifications. Set to self() if not provided
+      max_frame_size => non_neg_integer(), % incoming max frame size
+      idle_time_out => non_neg_integer(), % heartbeat
+      sasl => none | anon | {plain, User :: binary(), Password :: binary()}
+  }.
+
+```
+
+### TLS
+
+TLS is enabled by setting the `tls_opts` connection configuration property.
+Currently the only valid value is `{secure_port, [ssl_option]}` where the port
+specified only accepts TLS. It is possible that tls negotiation as described
+in the amqp 1.0 protocol will be supported in the future. If no value is provided
+for `tls_opt` then a plain socket will be used.
+
+
+### Sending and receiving a message example
+
+```
+% create a configuration map
 OpnConf = #{address => Hostname,
             port => Port,
             container_id => <<"test-container">>,
@@ -60,7 +88,7 @@ ok = amqp10_client:close_connection(Connection),
 ```
 
 
-## Events
+### Events
 
 The `ampq10_client` API is mostly asynchronous with respect to the AMQP 1.0
 protocol. Functions such as `amqp10_client:open_connection` typically return
