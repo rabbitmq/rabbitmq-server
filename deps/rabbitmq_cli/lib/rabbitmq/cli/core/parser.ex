@@ -170,7 +170,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
      mnesia_dir: :string,
      plugins_dir: :string,
      enabled_plugins_file: :string,
-     aliases_file: :string
+     aliases_file: :string,
+     erlang_cookie: :atom
     ]
   end
 

@@ -22,8 +22,13 @@ defmodule RabbitMQ.CLI.Core.Config do
     normalize(name, raw_option)
   end
 
+  def normalize(:node, nil), do: nil
   def normalize(:node, node) when not is_atom(node) do
     Rabbitmq.Atom.Coerce.to_atom(node)
+  end
+  def normalize(:erlang_cookie, nil), do: nil
+  def normalize(:erlang_cookie, c) when not is_atom(c) do
+    Rabbitmq.Atom.Coerce.to_atom(c)
   end
   def normalize(:longnames, true),   do: :longnames
   def normalize(:longnames, "true"), do: :longnames
@@ -44,7 +49,8 @@ defmodule RabbitMQ.CLI.Core.Config do
       :plugins_dir          -> "RABBITMQ_PLUGINS_DIR";
       :enabled_plugins_file -> "RABBITMQ_ENABLED_PLUGINS_FILE";
       :node                 -> "RABBITMQ_NODENAME";
-      :aliases_file         -> "RABBITMQ_CLI_ALIASES_FILE"
+      :aliases_file         -> "RABBITMQ_CLI_ALIASES_FILE";
+      :erlang_cookie        -> "RABBITMQ_ERLANG_COOKIE";
       _ -> ""
     end
     System.get_env(system_env_option)

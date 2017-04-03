@@ -27,13 +27,24 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   def start(options) do
     node_name_type = Config.get_option(:longnames, options)
     :rabbit_nodes.ensure_epmd()
-    start(node_name_type, 10, :undefined)
+    distribution = start(node_name_type, 10, :undefined)
+    ensure_cookie(options)
+    distribution
   end
 
-  def start_as(node_name, opts) do
+  def start_as(node_name, options) do
     :rabbit_nodes.ensure_epmd()
-    node_name_type = Config.get_option(:longnames, opts)
-    :net_kernel.start([node_name, node_name_type])
+    node_name_type = Config.get_option(:longnames, options)
+    distribution = :net_kernel.start([node_name, node_name_type])
+    ensure_cookie(options)
+    distribution
+  end
+
+  def ensure_cookie(options) do
+    case Config.get_option(:erlang_cookie, options) do
+      nil    -> :ok;
+      cookie -> Node.set_cookie(cookie)
+    end
   end
 
   #
