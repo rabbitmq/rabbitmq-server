@@ -48,9 +48,15 @@ init() ->
         undefined -> get_env(num_acceptors, 10);
         {ok, NumTcp}  -> NumTcp
     end,
-    {ok, _} = cowboy:start_http(http, NumTcpAcceptors,
-                                TcpConf,
-                                [{env, [{dispatch, Routes}]}|CowboyOpts]),
+    case cowboy:start_http(http, NumTcpAcceptors,
+                           TcpConf,
+                           [{env, [{dispatch, Routes}]}|CowboyOpts]) of
+        {ok, _}                       -> ok;
+        {error, {already_started, _}} -> ok;
+        {error, Err}                  ->
+            rabbit_log:error("Failed to start an HTTP listener for SockJS. Error: ~p, listener settings: ~p~n", [TcpConf, Err]),
+            throw(Err)
+    end,
     listener_started('http/web-stomp', TcpConf),
     rabbit_log:info("rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
                     [get_binding_address(TcpConf), Port]),
