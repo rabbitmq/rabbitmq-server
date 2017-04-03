@@ -147,7 +147,7 @@ flow_link_credit(#link_ref{role = receiver, session = Session,
 
 % Returns ok for "async" transfers when messages are send with settled=true
 % else it returns the delivery state from the disposition
-% TODO: timeouts
+% TODO: timeout overload
 -spec send_msg(link_ref(), amqp10_msg:amqp10_msg()) ->
     ok | {error, insufficient_credit | link_not_found | half_attached}.
 send_msg(#link_ref{role = sender, session = Session,

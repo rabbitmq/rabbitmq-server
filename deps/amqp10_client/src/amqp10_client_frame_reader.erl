@@ -147,15 +147,21 @@ handle_info({Tcp, _, Packet}, StateName, #state{buffer = Buffer} = State)
             {stop, Reason, NewState}
     end;
 
-% TODO: handle tcp_error
+handle_info({TcpError, _, Reason}, StateName, State)
+  when TcpError == tcp_error orelse TcpError == ssl_error ->
+    error_logger:warning_msg("Socket errored while in state '~s' with reason '~p'~n",
+                             [StateName, Reason]),
+    State1 = State#state{socket = undefined,
+                         buffer = <<>>,
+                         frame_state = undefined},
+    {stop, {error, Reason}, State1};
 handle_info({TcpClosed, _}, StateName, State)
   when TcpClosed == tcp_closed orelse TcpClosed == ssl_closed ->
     error_logger:warning_msg("Socket closed while in state '~s'~n",
                              [StateName]),
-    State1 = State#state{
-               socket = undefined,
-               buffer = <<>>,
-               frame_state = undefined},
+    State1 = State#state{socket = undefined,
+                         buffer = <<>>,
+                         frame_state = undefined},
     {stop, normal, State1};
 
 handle_info(heartbeat, StateName, State = #state{connection = Conn}) ->
@@ -192,7 +198,6 @@ close_socket({ssl, Socket}) ->
     ssl:close(Socket).
 
 set_active_once(#state{socket = {tcp, Socket}}) ->
-    %TODO: handle return value
     ok = inet:setopts(Socket, [{active, once}]);
 set_active_once(#state{socket = {ssl, Socket}}) ->
     ok = ssl:setopts(Socket, [{active, once}]).

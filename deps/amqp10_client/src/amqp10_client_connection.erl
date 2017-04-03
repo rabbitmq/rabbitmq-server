@@ -142,7 +142,7 @@ expecting_socket({socket_ready, Socket}, State = #state{config = Cfg}) ->
         #{sasl := none} ->
             ok = socket_send(Socket, ?AMQP_PROTOCOL_HEADER),
             {next_state, hdr_sent, State1};
-        _ -> % assume anonymous TODO: PLAIN
+        _ ->
             ok = socket_send(Socket, ?SASL_PROTOCOL_HEADER),
             {next_state, sasl_hdr_sent, State1}
     end.
