@@ -13,7 +13,7 @@
          attach/2,
          detach/2,
          transfer/3,
-         flow/3,
+         flow/4,
          disposition/6
         ]).
 
@@ -84,7 +84,8 @@
          link_credit = 0 :: non_neg_integer(),
          available = 0 :: non_neg_integer(),
          drain = false :: boolean(),
-         partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()]}
+         partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()]},
+         auto_flow :: never | {auto, non_neg_integer(), non_neg_integer()}
          }).
 
 -record(state,
@@ -156,8 +157,8 @@ transfer(Session, Amqp10Msg, Timeout) ->
     [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
     gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}, Timeout).
 
-flow(Session, Handle, Flow) ->
-    gen_fsm:send_event(Session, {flow, Handle, Flow}).
+flow(Session, Handle, Flow, RenewAfter) ->
+    gen_fsm:send_event(Session, {flow, Handle, Flow, RenewAfter}).
 
 -spec disposition(pid(), link_role(), transfer_id(), transfer_id(), boolean(),
                   amqp10_client_types:delivery_state()) -> ok.
@@ -233,28 +234,9 @@ mapped('end', State) ->
         {error, closed} -> {stop, normal, State};
         Error           -> {stop, Error, State}
     end;
-mapped({flow, OutHandle, #'v1_0.flow'{link_credit = {uint, LinkCredit}} = Flow0},
-       #state{links = Links,
-              next_incoming_id = NII,
-              next_outgoing_id = NOI,
-              outgoing_window = OutWin,
-              incoming_window = InWin} = State) ->
-    #{OutHandle := #link{output_handle = H,
-                         role = receiver,
-                         delivery_count = DeliveryCount,
-                         available = Available} = Link} = Links,
-    Flow = Flow0#'v1_0.flow'{handle = uint(H),
-                             next_incoming_id = uint(NII),
-                             next_outgoing_id = uint(NOI),
-                             outgoing_window = uint(OutWin),
-                             incoming_window = uint(InWin),
-                             delivery_count = uint(DeliveryCount),
-                             available = uint(Available)},
-    ok = send(Flow, State),
-    {next_state, mapped,
-     State#state{links = Links#{OutHandle =>
-                                Link#link{link_credit = LinkCredit}}}};
-
+mapped({flow, OutHandle, Flow0, RenewAfter}, State0) ->
+    State = send_flow(fun send/2, OutHandle, Flow0, RenewAfter, State0),
+    {next_state, mapped, State};
 mapped(#'v1_0.end'{}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
@@ -336,12 +318,7 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
         find_link_by_input_handle(InHandle, State0),
 
     {Transfer, Payload} = complete_partial_transfer(Transfer0, Payload0, Link),
-
     Msg = decode_as_msg(Transfer, Payload),
-
-    % deliver to the registered receiver process
-    TargetPid ! {amqp10_msg, OutHandle, Msg},
-
     % stash the DeliveryId - not sure for what yet
     Unsettled = case Settled of
                    true -> Unsettled0;
@@ -349,11 +326,29 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
                 end,
 
     % link bookkeeping
-    % TODO: what to do if LC-1 is negative?
-    % detach the Link with a transfer-limit-exceeded error code
-    State = book_transfer_received(State0#state{incoming_unsettled = Unsettled},
-                                   Link),
-    {next_state, mapped, State};
+    % notify when credit is exhausted (link_credit = 0)
+    % detach the Link with a transfer-limit-exceeded error code if further
+    % transfers are received
+    case book_transfer_received(State0#state{incoming_unsettled = Unsettled},
+                                Link) of
+        {ok, State} ->
+            % deliver
+            TargetPid ! {amqp10_msg, OutHandle, Msg},
+            {next_state, mapped, State};
+        {auto_flow, State} ->
+            TargetPid ! {amqp10_msg, OutHandle, Msg},
+            State1 = auto_flow(OutHandle, State),
+            {next_state, mapped, State1};
+        {credit_exhausted, State} ->
+            TargetPid ! {amqp10_msg, OutHandle, Msg},
+            ok = notify_link(Link, credit_exhausted),
+            {next_state, mapped, State};
+        {transfer_limit_exceeded, State} ->
+            Link1 = detach_with_error_cond(Link, State,
+                                           ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED),
+            {next_state, mapped, update_link(Link1, State)}
+    end;
+
 
 % role=true indicates the disposition is from a `receiver`. i.e. from the
 % clients point of view these are dispositions relating to `sender`links
@@ -528,6 +523,33 @@ send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
     ok = socket_send(Socket, Frames),
     {ok, length(Frames)}.
 
+send_flow(Send, OutHandle,
+          #'v1_0.flow'{link_credit = {uint, LinkCredit}} = Flow0, RenewAfter,
+          #state{links = Links,
+                 next_incoming_id = NII,
+                 next_outgoing_id = NOI,
+                 outgoing_window = OutWin,
+                 incoming_window = InWin} = State) ->
+    AutoFlow = case RenewAfter of
+                   never -> never;
+                   Limit -> {auto, Limit, LinkCredit}
+               end,
+    #{OutHandle := #link{output_handle = H,
+                         role = receiver,
+                         delivery_count = DeliveryCount,
+                         available = Available} = Link} = Links,
+    Flow = Flow0#'v1_0.flow'{handle = uint(H),
+                             next_incoming_id = uint(NII),
+                             next_outgoing_id = uint(NOI),
+                             outgoing_window = uint(OutWin),
+                             incoming_window = uint(InWin),
+                             delivery_count = uint(DeliveryCount),
+                             available = uint(Available)},
+    ok = Send(Flow, State),
+    State#state{links = Links#{OutHandle =>
+                               Link#link{link_credit = LinkCredit,
+                                         auto_flow = AutoFlow}}}.
+
 build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)
   when byte_size(Bin) =< MaxPayloadSize ->
     T = rabbit_amqp1_0_framing:encode_bin(Trf#'v1_0.transfer'{more = false}),
@@ -565,6 +587,14 @@ send_detach(Send, {detach, OutHandle}, _From, State = #state{links = Links}) ->
             {{error, link_not_found}, State}
     end.
 
+detach_with_error_cond(Link = #link{output_handle = OutHandle}, State, Cond) ->
+    Err = #'v1_0.error'{condition = Cond},
+    Detach = #'v1_0.detach'{handle = uint(OutHandle),
+                            closed = true,
+                            error = Err},
+    ok = send(Detach, State),
+    Link#link{state = detach_sent}.
+
 send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
       #state{next_link_handle = OutHandle, links = Links,
              link_index = LinkIndex} = State) ->
@@ -596,6 +626,7 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
                  state = attach_sent,
                  role = element(1, Role),
                  notify = FromPid,
+                 auto_flow = never,
                  target = LinkTarget},
 
     {State#state{links = Links#{OutHandle => Link},
@@ -687,7 +718,8 @@ translate_delivery_state(received) -> #'v1_0.received'{}.
 translate_role(sender) -> false;
 translate_role(receiver) -> true.
 
-maybe_notify_link_credit(#link{link_credit = 0}, #link{link_credit = Credit} = Link)
+maybe_notify_link_credit(#link{link_credit = 0, role = sender},
+                         #link{link_credit = Credit} = Link)
   when Credit > 0 ->
     notify_link(Link, credited);
 maybe_notify_link_credit(_Old, _New) ->
@@ -725,6 +757,8 @@ book_partial_transfer_received(#state{next_incoming_id = NID,
     State#state{next_incoming_id = NID+1,
                 remote_outgoing_window = ROW-1}.
 
+book_transfer_received(State, #link{link_credit = 0}) ->
+    {transfer_limit_exceeded, State};
 book_transfer_received(#state{next_incoming_id = NID,
                               remote_outgoing_window = ROW,
                               links = Links} = State,
@@ -733,10 +767,32 @@ book_transfer_received(#state{next_incoming_id = NID,
                              link_credit = LC} = Link) ->
     Link1 = Link#link{delivery_count = DC+1,
                       link_credit = LC-1},
+    State1 = State#state{links = Links#{OutHandle => Link1},
+                         next_incoming_id = NID+1,
+                         remote_outgoing_window = ROW-1},
+    ?DBG("Link1 ~p~n", [Link1]),
+    case Link1 of
+        #link{link_credit = Credit,
+              auto_flow = {auto, Limit, _}} when Credit =< Limit ->
+            {auto_flow, State1};
+        #link{link_credit = 0} ->
+            {credit_exhausted, State1};
+        _ -> {ok, State1}
+    end.
 
-    State#state{links = Links#{OutHandle => Link1},
-                next_incoming_id = NID+1,
-                remote_outgoing_window = ROW-1}.
+
+auto_flow(OutHandle, State) ->
+    case State#state.links of
+        #{OutHandle := #link{auto_flow = {auto, Limit, Credit}}} ->
+            send_flow(fun send/2, OutHandle,
+                      #'v1_0.flow'{link_credit = {uint, Credit}},
+                      Limit, State);
+        _ -> State
+    end.
+
+update_link(Link = #link{output_handle = OutHandle},
+            State = #state{links = Links}) ->
+            State#state{links = Links#{OutHandle => Link}}.
 
 incr_link_counters(#link{link_credit = LC, delivery_count = DC} = Link) ->
     Link#link{delivery_count = DC+1, link_credit = LC+1}.

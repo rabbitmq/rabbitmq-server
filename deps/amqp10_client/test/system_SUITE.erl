@@ -79,6 +79,7 @@ shared() ->
      split_transfer,
      transfer_unsettled,
      subscribe,
+     subscribe_with_auto_flow,
      outgoing_heartbeat
     ].
 
@@ -374,25 +375,47 @@ subscribe(Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
                                                          <<"sub-sender">>,
                                                          QueueName),
-    Tag1 = <<"t1">>,
-    Tag2 = <<"t2">>,
-    Msg1 = amqp10_msg:new(Tag1, <<"banana">>, false),
-    Msg2 = amqp10_msg:new(Tag2, <<"banana">>, false),
-    ok = amqp10_client:send_msg(Sender, Msg1),
-    ok = await_disposition(Tag1),
-    ok = amqp10_client:send_msg(Sender, Msg2),
-    ok = await_disposition(Tag2),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"sub-receiver">>,
-                                                 QueueName, unsettled),
-    ok = amqp10_client:flow_link_credit(Receiver, 2),
+    _ = publish_messages(Sender, <<"banana">>, 10),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
+                                                        <<"sub-receiver">>,
+                                                        QueueName, unsettled),
+    ok = amqp10_client:flow_link_credit(Receiver, 10, never),
 
-    ok = receive_one(Receiver),
-    ok = receive_one(Receiver),
+    _ = receive_messages(Receiver, 10),
+    % assert no further messages are delivered
     timeout = receive_one(Receiver),
+    receive
+        {amqp10_event, {link, {receiver, <<"sub-receiver">>},
+                        credit_exhausted}} ->
+            ok
+    after 5000 ->
+          exit(credit_exhausted_assert)
+    end,
 
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
+subscribe_with_auto_flow(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    QueueName = <<"test-sub">>,
+    {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
+                                                         <<"sub-sender">>,
+                                                         QueueName),
+    _ = publish_messages(Sender, <<"banana">>, 10),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
+                                                        <<"sub-receiver">>,
+                                                        QueueName, unsettled),
+    ok = amqp10_client:flow_link_credit(Receiver, 5, 2),
+
+    _ = receive_messages(Receiver, 10),
+
+    % assert no further messages are delivered
+    timeout = receive_one(Receiver),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection).
 
 insufficient_credit(Config) ->
     Hostname = ?config(mock_host, Config),
@@ -479,6 +502,17 @@ incoming_heartbeat(Config) ->
 
 %%% HELPERS
 %%%
+
+receive_messages(Receiver, Num) ->
+    [ok = receive_one(Receiver) || _T <- lists:seq(1, Num)].
+
+publish_messages(Sender, Data, Num) ->
+    [begin
+        Tag = integer_to_binary(T),
+        Msg = amqp10_msg:new(Tag, Data, false),
+        ok = amqp10_client:send_msg(Sender, Msg),
+        ok = await_disposition(Tag)
+     end || T <- lists:seq(1, Num)].
 
 receive_one(Receiver) ->
     Handle = amqp10_client:link_handle(Receiver),

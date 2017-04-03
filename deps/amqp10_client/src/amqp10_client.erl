@@ -20,7 +20,7 @@
          detach_link/1,
          send_msg/2,
          accept_msg/2,
-         flow_link_credit/2,
+         flow_link_credit/3,
          link_handle/1,
          get_msg/1,
          get_msg/2
@@ -136,11 +136,11 @@ attach_receiver_link(Session, Name, Source, SettleMode) ->
 detach_link(#link_ref{link_handle = Handle, session = Session}) ->
     amqp10_client_session:detach(Session, Handle).
 
--spec flow_link_credit(link_ref(), non_neg_integer()) -> ok.
+-spec flow_link_credit(link_ref(), non_neg_integer(), never | non_neg_integer()) -> ok.
 flow_link_credit(#link_ref{role = receiver, session = Session,
-                           link_handle = Handle}, Credit) ->
+                           link_handle = Handle}, Credit, AutoFlowAfter) ->
     Flow = #'v1_0.flow'{link_credit = {uint, Credit}},
-    ok = amqp10_client_session:flow(Session, Handle, Flow).
+    ok = amqp10_client_session:flow(Session, Handle, Flow, AutoFlowAfter).
 
 
 %%% messages
@@ -170,7 +170,7 @@ get_msg(LinkRef) ->
 get_msg(#link_ref{role = receiver, link_handle = Handle} = Ref,
         Timeout) ->
     %flow 1
-    ok = flow_link_credit(Ref, 1),
+    ok = flow_link_credit(Ref, 1, never),
     % wait for transfer
     receive
         {amqp10_msg, Handle, Message} -> {ok, Message}
