@@ -56,7 +56,7 @@ SenderLinkName = <<"test-sender">>,
 
 % wait for credit to be received
 receive
-    {amqp10_event, {link, {sender, SenderLinkName}, credited}} -> ok
+    {amqp10_event, {link, LinkRef, credited}} -> ok
 after 2000 ->
       exit(credited_timeout)
 end.
@@ -78,7 +78,7 @@ ok = amqp10_client:flow_link_credit(Receiver, 5, never),
 
 % wait for a delivery
 receive
-    {amqp10_msg, _LinkHandle, Msg} -> ok
+    {amqp10_msg, LinkRef, Msg} -> ok
 after 2000 ->
       exit(delivery_timeout)
 end.
@@ -117,14 +117,14 @@ Likewise sessions and links have similar events using a similar format.
 %% success events
 {amqp10_event, {connection, ConnectionPid, opened}}
 {amqp10_event, {session, SessionPid, begun}}
-{amqp10_event, {link, {sende | receiver, LinkName}, attached}}
+{amqp10_event, {link, LinkRef, attached}}
 ```
 
 ```
 %% error events
 {amqp10_event, {connection, ConnectionPid, {closed, Why}}}
 {amqp10_event, {session, SessionPid, {ended, Why}}}
-{amqp10_event, {link, {sender | receiver, LinkName}, {detached, Why}}}
+{amqp10_event, {link, LinkRef, {detached, Why}}}
 ```
 
 In addition the client may notify the initiator of certain protocol
@@ -133,9 +133,9 @@ to a sender.
 
 ```
 %% no more credit available to sender
-{amqp10_event, {link, {receiver, LinkName}, credit_exhausted}}
+{amqp10_event, {link, LinkRef, credit_exhausted}}
 %% sender credit received
-{amqp10_event, {link, {sender, LinkName}, credited}}
+{amqp10_event, {link, LinkRef, credited}}
 ```
 
 Other events may be declared as necessary, Hence it makes sense for a user

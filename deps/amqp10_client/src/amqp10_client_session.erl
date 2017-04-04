@@ -68,11 +68,14 @@
                          rcv_settle_mode => rcv_settle_mode()
                         }.
 
+-type link_ref() :: #link_ref{}.
+
 -export_type([snd_settle_mode/0,
               rcv_settle_mode/0]).
 
 -record(link,
         {name :: link_name(),
+         ref :: link_ref(),
          state = detached :: detached | attach_sent | attached | detach_sent,
          notify :: pid(),
          output_handle :: link_handle(),
@@ -144,7 +147,7 @@ begin_sync(Connection, Timeout) ->
 'end'(Pid) ->
     gen_fsm:send_event(Pid, 'end').
 
--spec attach(pid(), attach_args()) -> {ok, link_handle()}.
+-spec attach(pid(), attach_args()) -> {ok, link_ref()}.
 attach(Session, Args) ->
     gen_fsm:sync_send_event(Session, {attach, Args}).
 
@@ -320,7 +323,8 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
                          #state{incoming_unsettled = Unsettled0} = State0) ->
 
     {ok, #link{target = {pid, TargetPid},
-               output_handle = OutHandle} = Link} =
+               output_handle = OutHandle,
+               ref = LinkRef} = Link} =
         find_link_by_input_handle(InHandle, State0),
 
     {Transfer, Payload} = complete_partial_transfer(Transfer0, Payload0, Link),
@@ -339,14 +343,14 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
                                 Link) of
         {ok, State} ->
             % deliver
-            TargetPid ! {amqp10_msg, OutHandle, Msg},
+            TargetPid ! {amqp10_msg, LinkRef, Msg},
             {next_state, mapped, State};
         {auto_flow, State} ->
-            TargetPid ! {amqp10_msg, OutHandle, Msg},
+            TargetPid ! {amqp10_msg, LinkRef, Msg},
             State1 = auto_flow(OutHandle, State),
             {next_state, mapped, State1};
         {credit_exhausted, State} ->
-            TargetPid ! {amqp10_msg, OutHandle, Msg},
+            TargetPid ! {amqp10_msg, LinkRef, Msg},
             ok = notify_link(Link, credit_exhausted),
             {next_state, mapped, State};
         {transfer_limit_exceeded, State} ->
@@ -403,7 +407,6 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NOI),
                                                  resume = false},
             {ok, NumFrames} = send_transfer(Transfer, Parts, State),
-            % delay reply to caller until disposition frame is received
             State1 = State#state{unsettled = #{NOI => {DeliveryTag, From}}},
             {reply, ok, mapped, book_transfer_send(NumFrames, Link, State1)};
         _ ->
@@ -446,8 +449,8 @@ mapped({disposition, Role, First, Last, Settled, DeliveryState}, _From,
     {reply, Res, mapped, State#state{incoming_unsettled = Unsettled}};
 
 mapped({attach, Attach}, From, State) ->
-    {State1, LinkOutHandle} = send_attach(fun send/2, Attach, From, State),
-    {reply, {ok, LinkOutHandle}, mapped, State1};
+    {State1, LinkRef} = send_attach(fun send/2, Attach, From, State),
+    {reply, {ok, LinkRef}, mapped, State1};
 
 mapped(Msg, From, State) ->
     {Reply, State1} = send_detach(fun send/2, Msg, From, State),
@@ -628,6 +631,7 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
     ok = Send(Attach, State),
 
     Link = #link{name = Name,
+                 ref = make_link_ref(element(1, Role), self(), OutHandle),
                  output_handle = OutHandle,
                  state = attach_sent,
                  role = element(1, Role),
@@ -637,7 +641,7 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
 
     {State#state{links = Links#{OutHandle => Link},
                  next_link_handle = OutHandle + 1,
-                 link_index = LinkIndex#{Name => OutHandle}}, OutHandle}.
+                 link_index = LinkIndex#{Name => OutHandle}}, Link#link.ref}.
 
 -spec handle_session_flow(#'v1_0.flow'{}, #state{}) -> #state{}.
 handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
@@ -737,8 +741,9 @@ notify_link_attached(Link) ->
 notify_link_detached(Link, Reason) ->
     notify_link(Link, {detached, Reason}).
 
-notify_link(#link{notify = Pid, name = Name, role = Role}, What) ->
-    Evt = {amqp10_event, {link, {Role, Name}, What}},
+notify_link(#link{notify = Pid, ref = Ref}, What) ->
+    Evt = {amqp10_event, {link, Ref, What}},
+    ?DBG("notify link ~p~n", [Evt]),
     Pid ! Evt,
     ok.
 
@@ -832,6 +837,10 @@ socket_send({tcp, Socket}, Data) ->
     gen_tcp:send(Socket, Data);
 socket_send({ssl, Socket}, Data) ->
     ssl:send(Socket, Data).
+
+-spec make_link_ref(_, _, _) -> link_ref().
+make_link_ref(Role, Session, Handle) ->
+    #link_ref{role = Role, session = Session, link_handle = Handle}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

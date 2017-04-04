@@ -21,7 +21,7 @@
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--include("amqp10_client.hrl").
+-include_lib("src/amqp10_client.hrl").
 
 -compile(export_all).
 
@@ -272,13 +272,12 @@ roundtrip(OpenConf) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session,
                                                     <<"banana-sender">>,
                                                     <<"test1">>),
-    await_link({sender, <<"banana-sender">>}, credited, link_credit_timeout),
+    await_link(Sender, credited, link_credit_timeout),
 
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = amqp10_client:detach_link(Sender),
-    await_link({sender, <<"banana-sender">>}, {detached, normal},
-               link_detach_timeout),
+    await_link(Sender, {detached, normal}, link_detach_timeout),
 
     {error, link_not_found} = amqp10_client:detach_link(Sender),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
@@ -306,14 +305,14 @@ early_transfer(Config) ->
     % TODO: this is a timing issue - should use mock here really
     {error, half_attached} = amqp10_client:send_msg(Sender, Msg),
     % wait for credit
-    await_link({sender, <<"early-transfer">>}, credited, credited_timeout),
+    await_link(Sender, credited, credited_timeout),
     ok = amqp10_client:detach_link(Sender),
     % attach then immediately detach
     LinkName = <<"early-transfer2">>,
     {ok, Sender2} = amqp10_client:attach_sender_link(Session, LinkName,
                                                     <<"test">>),
     {error, half_attached} = amqp10_client:detach_link(Sender2),
-    await_link({sender, <<"early-transfer2">>}, credited, credited_timeout),
+    await_link(Sender2, credited, credited_timeout),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ok.
@@ -385,8 +384,7 @@ subscribe(Config) ->
     % assert no further messages are delivered
     timeout = receive_one(Receiver),
     receive
-        {amqp10_event, {link, {receiver, <<"sub-receiver">>},
-                        credit_exhausted}} ->
+        {amqp10_event, {link, Receiver, credit_exhausted}} ->
             ok
     after 5000 ->
           exit(credit_exhausted_assert)
@@ -515,9 +513,8 @@ publish_messages(Sender, Data, Num) ->
      end || T <- lists:seq(1, Num)].
 
 receive_one(Receiver) ->
-    Handle = amqp10_client:link_handle(Receiver),
     receive
-        {amqp10_msg, Handle, Msg} ->
+        {amqp10_msg, Receiver, Msg} ->
             amqp10_client:accept_msg(Receiver, Msg)
     after 2000 ->
           timeout

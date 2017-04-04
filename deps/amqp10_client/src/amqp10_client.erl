@@ -120,9 +120,9 @@ attach_sender_link_sync(Session, Name, Target) ->
 attach_sender_link_sync(Session, Name, Target, SettleMode) ->
     {ok, Ref} = attach_sender_link(Session, Name, Target, SettleMode),
     receive
-        {amqp10_event, {link, {sender, Name}, attached}} ->
+        {amqp10_event, {link, Ref, attached}} ->
             {ok, Ref};
-        {amqp10_event, {link, {sender, Name}, {detached, Err}}} ->
+        {amqp10_event, {link, Ref, {detached, Err}}} ->
             {error, Err}
     after ?DEFAULT_TIMEOUT -> link_timeout
     end.
@@ -130,7 +130,7 @@ attach_sender_link_sync(Session, Name, Target, SettleMode) ->
 %% @doc Attaches a sender link to a target.
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
-%% {amqp10_event, {link, {sender, Name}, attached | {detached, Why}}}
+%% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
 -spec attach_sender_link(pid(), binary(), binary()) -> {ok, link_ref()}.
 attach_sender_link(Session, Name, Target) ->
     % mixed should work with any type of msg
@@ -139,7 +139,7 @@ attach_sender_link(Session, Name, Target) ->
 %% @doc Attaches a sender link to a target.
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
-%% {amqp10_event, {link, {sender, Name}, attached | {detached, Why}}}
+%% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
 -spec attach_sender_link(pid(), binary(), binary(),
                          amqp10_client_session:snd_settle_mode()) ->
     {ok, link_ref()}.
@@ -148,13 +148,12 @@ attach_sender_link(Session, Name, Target, SettleMode) ->
                    role => {sender, #{address => Target}},
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first},
-    {ok, Attach} = amqp10_client_session:attach(Session, AttachArgs),
-    {ok, make_link_ref(sender, Session, Attach)}.
+    amqp10_client_session:attach(Session, AttachArgs).
 
 %% @doc Attaches a receiver link to a source.
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
-%% {amqp10_event, {link, {receiver, Name}, attached | {detached, Why}}}
+%% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
 -spec attach_receiver_link(pid(), binary(), binary()) ->
     {ok, link_ref()}.
 attach_receiver_link(Session, Name, Source) ->
@@ -163,7 +162,7 @@ attach_receiver_link(Session, Name, Source) ->
 %% @doc Attaches a receiver link to a source.
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
-%% {amqp10_event, {link, {receiver, Name}, attached | {detached, Why}}}
+%% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
 -spec attach_receiver_link(pid(), binary(), binary(),
                            amqp10_client_session:snd_settle_mode()) ->
     {ok, link_ref()}.
@@ -172,13 +171,12 @@ attach_receiver_link(Session, Name, Source, SettleMode) ->
                    role => {receiver, #{address => Source}, self()},
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first},
-    {ok, Attach} = amqp10_client_session:attach(Session, AttachArgs),
-    {ok, make_link_ref(receiver, Session, Attach)}.
+    amqp10_client_session:attach(Session, AttachArgs).
 
 %% @doc Detaches a link.
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
-%% {amqp10_event, {link, {sender | receiver, Name}, {detached, Why}}}
+%% {amqp10_event, {link, LinkRef, {detached, Why}}}
 -spec detach_link(link_ref()) -> _.
 detach_link(#link_ref{link_handle = Handle, session = Session}) ->
     amqp10_client_session:detach(Session, Handle).
@@ -189,7 +187,7 @@ detach_link(#link_ref{link_handle = Handle, session = Session}) ->
 %% If RenewWhenBelow is 'never' the client will never grant new credit. Instead
 %% the caller will be notified when the link_credit reaches 0 with an
 %% amqp10_event of the following format:
-%% {amqp10_event, {link, {receiver, Name}, credit_exhausted}}
+%% {amqp10_event, {link, LinkRef, credit_exhausted}}
 -spec flow_link_credit(link_ref(), non_neg_integer(), never | non_neg_integer()) -> ok.
 flow_link_credit(#link_ref{role = receiver, session = Session,
                            link_handle = Handle}, Credit, RenewWhenBelow) ->
@@ -226,13 +224,13 @@ get_msg(LinkRef) ->
 %% Flows a single link credit then awaits delivery or timeout.
 -spec get_msg(link_ref(), non_neg_integer()) ->
     {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.
-get_msg(#link_ref{role = receiver, link_handle = Handle} = Ref,
+get_msg(#link_ref{role = receiver} = Ref,
         Timeout) ->
     %flow 1
     ok = flow_link_credit(Ref, 1, never),
     % wait for transfer
     receive
-        {amqp10_msg, Handle, Message} -> {ok, Message}
+        {amqp10_msg, Ref, Message} -> {ok, Message}
     after Timeout ->
               {error, timeout}
     end.
@@ -240,9 +238,3 @@ get_msg(#link_ref{role = receiver, link_handle = Handle} = Ref,
 %% @doc Get the link handle from a LinkRef
 -spec link_handle(link_ref()) -> non_neg_integer().
 link_handle(#link_ref{link_handle = Handle}) -> Handle.
-
-
-%%% Helpers
--spec make_link_ref(_, _, _) -> link_ref().
-make_link_ref(Role, Session, Handle) ->
-    #link_ref{role = Role, session = Session, link_handle = Handle}.
