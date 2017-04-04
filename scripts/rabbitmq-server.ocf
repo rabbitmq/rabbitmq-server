@@ -217,7 +217,10 @@ export_vars() {
 }
 
 set_limits() {
-    [ ! -z $RABBITMQ_LIMIT_NOFILE ] && ulimit -n $RABBITMQ_LIMIT_NOFILE
+    local current_limit=$(su rabbitmq -s /bin/sh -c "ulimit -n")
+    if [ ! -z $RABBITMQ_LIMIT_NOFILE -a $RABBITMQ_LIMIT_NOFILE -gt $current_limit ] ; then
+        ulimit -n $RABBITMQ_LIMIT_NOFILE
+    fi
 }
 
 rabbit_validate_partial() {

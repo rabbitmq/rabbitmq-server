@@ -567,7 +567,10 @@ now() {
 }
 
 set_limits() {
-    [ ! -z $OCF_RESKEY_limit_nofile ] && ulimit -n $OCF_RESKEY_limit_nofile
+    local current_limit=$(su $OCF_RESKEY_username -s /bin/sh -c "ulimit -n")
+    if [ ! -z $OCF_RESKEY_limit_nofile -a $OCF_RESKEY_limit_nofile -gt $current_limit ] ; then
+        ulimit -n $OCF_RESKEY_limit_nofile
+    fi
 }
 
 master_score() {
