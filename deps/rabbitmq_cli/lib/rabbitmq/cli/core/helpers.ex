@@ -97,17 +97,13 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
-  def require_rabbit(opts) do
-    try_load_rabbit_code(opts)
-  end
-
   def require_rabbit_and_plugins(opts) do
-    with :ok <- try_load_rabbit_code(opts),
-         :ok <- try_load_rabbit_plugins(opts),
+    with :ok <- require_rabbit(opts),
+         :ok <- add_plugins_to_load_path(opts),
          do: :ok
   end
 
-  defp try_load_rabbit_code(opts) do
+  def require_rabbit(opts) do
     home = Config.get_option(:rabbitmq_home, opts)
     case home do
       nil ->
@@ -128,50 +124,56 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
-  defp try_load_rabbit_plugins(opts) do
+  def add_plugins_to_load_path(opts) do
     with {:ok, plugins_dir} <- plugins_dir(opts)
     do
       String.split(to_string(plugins_dir), separator())
       |>
-      Enum.map(&try_load_plugins_from_directory/1)
+      Enum.map(&add_directory_plugins_to_load_path/1)
       :ok
     end
   end
 
-  defp try_load_plugins_from_directory(directory_with_plugins_inside_it) do
+  def add_directory_plugins_to_load_path(directory_with_plugins_inside_it) do
     with {:ok, files} <- File.ls(directory_with_plugins_inside_it)
     do
-        Enum.filter_map(files,
-            fn(filename) -> String.ends_with?(filename, [".ez"]) end,
-          fn(archive) ->
-            ## Check that the .app file is present and take the app name from there
-            {:ok, ez_files} = :zip.list_dir(String.to_charlist(Path.join([directory_with_plugins_inside_it, archive])))
-            case find_dot_app(ez_files) do
-              :not_found -> :ok
-              dot_app ->
-                app_name = Path.basename(dot_app, ".app")
-                ebin_dir = Path.join([directory_with_plugins_inside_it, Path.dirname(dot_app)])
-                ebin_dir |> Code.append_path()
-                app_name |> String.to_atom() |> Application.load()
-            end
-          end)
+      Enum.map(files,
+        fn(filename) ->
+          cond do
+            String.ends_with?(filename, [".ez"]) ->
+              Path.join([directory_with_plugins_inside_it, filename])
+              |> String.to_charlist
+              |> add_archive_code_path();
+            File.dir?(filename) ->
+              Path.join([directory_with_plugins_inside_it, filename])
+              |> add_dir_code_path();
+            true ->
+              {:error, {:not_a_plugin, filename}}
+          end
+        end)
     end
   end
 
-  defp find_dot_app([head | tail]) when Record.is_record(head, :zip_file) do
-    name = :erlang.element(2, head)
-    case Regex.match?(~r/(.+)\/ebin\/(.+)\.app$/, to_string name) do
-      true ->
-        name
-      false ->
-        find_dot_app(tail)
+  defp add_archive_code_path(ez_dir) do
+    case :erl_prim_loader.list_dir(ez_dir) do
+      {:ok, [app_dir]} ->
+        app_in_ez = :filename.join(ez_dir, app_dir)
+        add_dir_code_path(app_in_ez);
+      _ -> {:error, :no_app_dir}
     end
   end
-  defp find_dot_app([_head | tail]) do
-    find_dot_app(tail)
-  end
-  defp find_dot_app([]) do
-    :not_found
+
+  defp add_dir_code_path(app_dir) do
+    case :erl_prim_loader.list_dir(app_dir) do
+      {:ok, list} ->
+        case Enum.member?(list, 'ebin') do
+          true ->
+            ebin_dir = :filename.join(app_dir, 'ebin')
+            Code.append_path(ebin_dir)
+          false -> {:error, :no_ebin}
+        end;
+      _ -> {:error, :app_dir_empty}
+    end
   end
 
   def require_mnesia_dir(opts) do

@@ -30,8 +30,6 @@ defmodule RabbitMQ.CLI.Core.Parser do
 
   def parse(input) do
     {parsed_args, options, invalid} = parse_global(input)
-    CommandModules.load(options)
-
     {command_name, command_module, arguments} = look_up_command(parsed_args, options)
 
     case command_module do
@@ -53,10 +51,20 @@ defmodule RabbitMQ.CLI.Core.Parser do
   defp look_up_command(parsed_args, options) do
     case parsed_args do
       [cmd_name | arguments] ->
-        module_map = CommandModules.module_map
-        command = module_map[cmd_name] ||
-                  command_alias(cmd_name, module_map, options) ||
-                  command_suggestion(cmd_name, module_map)
+        ## This is an optimisation for pluggable command discovery.
+        ## Most of the time a command will be from rabbitmqctl application
+        ## so there is not point in scanning plugins for potential commands
+        CommandModules.load_core(options)
+        core_commands = CommandModules.module_map_core
+        command = case core_commands[cmd_name] do
+          nil ->
+            CommandModules.load(options)
+            module_map = CommandModules.module_map
+            module_map[cmd_name] ||
+              command_alias(cmd_name, module_map, options) ||
+              command_suggestion(cmd_name, module_map);
+          c -> c
+        end
         {cmd_name, command, arguments}
       [] ->
         {"", nil, []}

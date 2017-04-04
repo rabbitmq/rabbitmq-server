@@ -35,8 +35,7 @@ defmodule RabbitMQCtl do
     auto_complete(script_basename, args)
   end
   def main(unparsed_command) do
-    unparsed_command
-    |> exec_command(fn(command, output, options) ->
+    exec_command(unparsed_command, fn(command, output, options) ->
         formatter = get_formatter(command, options)
         printer = get_printer(options)
 

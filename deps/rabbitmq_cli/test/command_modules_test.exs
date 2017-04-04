@@ -110,45 +110,6 @@ defmodule CommandModulesTest do
 
   end
 
-  ## ------------------- is_command?/1 tests --------------------
-
-  test "a valid implemented command returns true" do
-    set_scope(:ctl)
-    @subject.load(%{})
-    assert @subject.is_command?("status") == true
-  end
-
-  test "an invalid command returns false" do
-    set_scope(:ctl)
-    @subject.load(%{})
-    assert @subject.is_command?("quack") == false
-  end
-
-  test "a nil returns false" do
-    set_scope(:ctl)
-    @subject.load(%{})
-    assert @subject.is_command?(nil) == false
-  end
-
-  test "an empty array returns false" do
-    set_scope(:ctl)
-    @subject.load(%{})
-    assert @subject.is_command?([]) == false
-  end
-
-  test "an non-empty array tests the first element" do
-    set_scope(:ctl)
-    @subject.load(%{})
-    assert @subject.is_command?(["status", "quack"]) == true
-    assert @subject.is_command?(["quack", "status"]) == false
-  end
-
-  test "a non-string list returns false" do
-    set_scope(:ctl)
-    @subject.load(%{})
-    assert @subject.is_command?([{"status", "quack"}, {4, "Fantastic"}]) == false
-  end
-
   ## ------------------- commands/0 tests --------------------
 
   test "command_modules has existing commands" do

@@ -20,12 +20,20 @@ alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 defmodule RabbitMQ.CLI.Core.CommandModules do
   @commands_ns ~r/RabbitMQ.CLI.(.*).Commands/
 
-  def module_map do
-    Application.get_env(:rabbitmqctl, :commands) || load(%{})
+  def module_map(opts \\ %{}) do
+    Application.get_env(:rabbitmqctl, :commands) || load(opts)
   end
 
-  def is_command?([head | _]), do: is_command?(head)
-  def is_command?(str), do: module_map()[str] != nil
+  def module_map_core(opts \\ %{}) do
+    Application.get_env(:rabbitmqctl, :commands_core) || load_core(opts)
+  end
+
+  def load_core(opts) do
+    scope = script_scope(opts)
+    commands = load_commands_core(scope)
+    Application.put_env(:rabbitmqctl, :commands_core, commands)
+    commands
+  end
 
   def load(opts) do
     scope = script_scope(opts)
@@ -39,8 +47,47 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
     scopes[Config.get_option(:script_name, opts)] || :none
   end
 
+  def load_commands_core(scope) do
+    make_module_map(ctl_modules(), scope)
+  end
+
   def load_commands(scope, opts) do
-    ctl_and_plugin_modules(opts)
+    make_module_map(plugin_modules(opts) ++ ctl_modules(), scope)
+  end
+
+  def ctl_modules() do
+    Application.spec(:rabbitmqctl, :modules)
+  end
+
+  def plugin_modules(opts) do
+    Helpers.require_rabbit(opts)
+
+    partitioned =
+      Enum.group_by(PluginsHelpers.read_enabled(opts), fn(app) ->
+        case Application.load(app) do
+          :ok -> :loaded;
+          {:error, {:already_loaded, ^app}} -> :loaded;
+          _ -> :not_found
+        end
+      end)
+
+    loaded = partitioned[:loaded] || []
+    missing = partitioned[:not_found] || []
+    ## If plugins are not in ERL_LIBS, they should be loaded from plugins_dir
+    case missing do
+      [] -> :ok;
+      _  ->
+        Helpers.add_plugins_to_load_path(opts)
+        Enum.each(missing, fn(app) -> Application.load(app) end)
+    end
+
+    Enum.flat_map(loaded ++ missing, fn(app) ->
+      Application.spec(app, :modules) || []
+    end)
+  end
+
+  defp make_module_map(modules, scope) do
+    modules
     |> Enum.filter(fn(mod) ->
                      to_string(mod) =~ @commands_ns
                      and
@@ -52,13 +99,6 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
                    end)
     |> Enum.map(&command_tuple/1)
     |> Map.new
-  end
-
-  def ctl_and_plugin_modules(opts) do
-    Helpers.require_rabbit_and_plugins(opts)
-    enabled_plugins = PluginsHelpers.read_enabled(opts)
-    [:rabbitmqctl | enabled_plugins]
-    |> Enum.flat_map(fn(app) -> Application.spec(app, :modules) || [] end)
   end
 
   defp module_exists?(nil) do

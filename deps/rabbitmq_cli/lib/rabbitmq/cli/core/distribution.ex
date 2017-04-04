@@ -26,14 +26,25 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
   def start(options) do
     node_name_type = Config.get_option(:longnames, options)
-    :rabbit_nodes.ensure_epmd()
     start(node_name_type, 10, :undefined)
   end
 
-  def start_as(node_name, opts) do
-    :rabbit_nodes.ensure_epmd()
-    node_name_type = Config.get_option(:longnames, opts)
-    :net_kernel.start([node_name, node_name_type])
+  def start_as(node_name, options) do
+    node_name_type = Config.get_option(:longnames, options)
+    start_with_epmd(node_name, node_name_type)
+  end
+
+  ## Optimization. We try to start EPMD only if distribution fails
+  def start_with_epmd(node_name, node_name_type) do
+    case :net_kernel.start([node_name, node_name_type]) do
+      {:ok, _} = ok -> ok;
+      {:error, {:already_started, _}} = started -> started;
+      {:error, {{:already_started, _}, _}} = started -> started;
+      ## EPMD can be stopped. Retry with EPMD
+      {:error, _} ->
+        :rabbit_nodes.ensure_epmd()
+        :net_kernel.start([node_name, node_name_type])
+    end
   end
 
   #
@@ -46,7 +57,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
   defp start(node_name_type, attempts, _last_err) do
     candidate = generate_cli_node_name(node_name_type)
-    case :net_kernel.start([candidate, node_name_type]) do
+    case start_with_epmd(candidate, node_name_type) do
       {:ok, _} -> :ok
       {:error, {:already_started, pid}}      -> {:ok, pid};
       {:error, {{:already_started, pid}, _}} -> {:ok, pid};
