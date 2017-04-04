@@ -85,8 +85,9 @@ defmodule RabbitMQCtl do
       true  -> :stdio;
       false -> :stderr
     end
+
     for line <- List.flatten([output]) do
-      IO.puts(output_device, line)
+      IO.puts(output_device, Helpers.string_or_inspect(line))
     end
     exit_program(exit_code)
   end

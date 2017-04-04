@@ -25,6 +25,9 @@ defmodule RabbitMQ.CLI.Formatters.ErlangString do
   end
 
   def format_stream(stream, options) do
-    E.format_stream(stream, options)
+    Stream.map(stream,
+      fn({:error, msg}) -> {:error, msg};
+        (element) -> format_output(element, options)
+      end)
   end
 end

@@ -17,6 +17,7 @@
 defmodule RabbitMQ.CLI.DefaultOutput do
   alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
   alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
   # When `use RabbitMQ.CLI.DefaultOutput` is invoked,
   # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/3.
   defmacro __using__(_) do
@@ -40,6 +41,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
 
   defp normalize_output(:ok), do: :ok
   defp normalize_output({:ok, _} = input), do: input
+  defp normalize_output({:stream, _} = input), do: input
   defp normalize_output({:badrpc_multi, err, _}), do: {:badrpc, err}
   defp normalize_output({:badrpc, :nodedown} = input), do: input
   defp normalize_output({:badrpc, :timeout} = input), do: input
@@ -65,7 +67,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
      "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{opts[:timeout]}"}
   end
   defp format_output({:error, err} = result, _, _) do
-    string_err = string_or_inspect(err)
+    string_err = Helpers.string_or_inspect(err)
     {:error, ExitCodes.exit_code_for(result), "Error:\n#{string_err}"}
   end
   defp format_output({:error_string, error_string}, _, _) do
@@ -82,18 +84,14 @@ defmodule RabbitMQ.CLI.DefaultOutput do
       _              -> {:stream, output}
     end
   end
+  defp format_output({:stream, stream}, _, _) do
+    {:stream, stream}
+  end
 
   defp get_node_diagnostics(nil) do
     "Node is not defined"
   end
   defp get_node_diagnostics(node_name) do
     to_string(:rabbit_nodes.diagnostics([node_name]))
-  end
-
-  defp string_or_inspect(val) do
-    case String.Chars.impl_for(val) do
-      nil -> inspect(val);
-      _   -> to_string(val)
-    end
   end
 end
