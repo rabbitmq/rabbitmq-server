@@ -42,6 +42,7 @@ OCF_RESKEY_mnesia_base_default="/var/lib/rabbitmq/mnesia"
 OCF_RESKEY_mnesia_schema_base_default="/var/lib/rabbitmq"
 OCF_RESKEY_host_ip_default="127.0.0.1"
 OCF_RESKEY_node_port_default=5672
+OCF_RESKEY_default_vhost_default="/"
 OCF_RESKEY_erlang_cookie_default=false
 OCF_RESKEY_erlang_cookie_file_default="/var/lib/rabbitmq/.erlang.cookie"
 OCF_RESKEY_use_fqdn_default=false
@@ -66,6 +67,7 @@ OCF_RESKEY_rmq_feature_local_list_queues_default=true
 : ${OCF_RESKEY_mnesia_schema_base=${OCF_RESKEY_mnesia_schema_base_default}}
 : ${OCF_RESKEY_pid_file=${OCF_RESKEY_pid_file_default}}
 : ${OCF_RESKEY_node_port=${OCF_RESKEY_node_port_default}}
+: ${OCF_RESKEY_default_vhost=${OCF_RESKEY_default_vhost_default}}
 : ${OCF_RESKEY_erlang_cookie=${OCF_RESKEY_erlang_cookie_default}}
 : ${OCF_RESKEY_erlang_cookie_file=${OCF_RESKEY_erlang_cookie_file_default}}
 : ${OCF_RESKEY_use_fqdn=${OCF_RESKEY_use_fqdn_default}}
@@ -259,6 +261,18 @@ ${OCF_RESKEY_binary} should listen on this port
 </longdesc>
 <shortdesc lang="en">${OCF_RESKEY_binary} should listen on this port</shortdesc>
 <content type="boolean" default="${OCF_RESKEY_node_port_default}" />
+</parameter>
+
+<parameter name="default_vhost" unique="0" required="0">
+<longdesc lang="en">
+Default virtual host used for monitoring if a node is fully synchronized with
+the rest of the cluster. In normal operation, the resource agent will wait for
+queues from this virtual host on this node to be synchronized elsewhere before
+stopping RabbitMQ. This also means queues in other virtual hosts may not be
+fully synchronized on stop operations.
+</longdesc>
+<shortdesc lang="en">Default virtual host used for waiting for synchronization</shortdesc>
+<content type="string" default="${OCF_RESKEY_default_vhost_default}" />
 </parameter>
 
 <parameter name="erlang_cookie" unique="0" required="0">
@@ -1472,7 +1486,7 @@ wait_sync() {
         opt_arg="--local"
     fi
 
-    queues="${COMMAND_TIMEOUT} ${OCF_RESKEY_ctl} list_queues $opt_arg name state"
+    queues="${COMMAND_TIMEOUT} ${OCF_RESKEY_ctl} -p ${OCF_RESKEY_default_vhost} list_queues $opt_arg name state"
 
     su_rabbit_cmd -t "${wait_time}" "sh -c \"while ${queues} | grep -q 'syncing,'; \
           do sleep 2; done\""
@@ -1774,7 +1788,7 @@ node_health_check_legacy() {
     local queues
     local rc_queues
     local timeout_queues
-    queues=`su_rabbit_cmd "${OCF_RESKEY_ctl} -q list_queues memory messages consumer_utilisation"`
+    queues=`su_rabbit_cmd "${OCF_RESKEY_ctl} -q -p ${OCF_RESKEY_default_vhost} list_queues memory messages consumer_utilisation"`
     rc_queues=$?
     check_timeouts $rc_queues "rabbit_list_queues_timeouts" "list_queues"
     timeout_queues=$?
