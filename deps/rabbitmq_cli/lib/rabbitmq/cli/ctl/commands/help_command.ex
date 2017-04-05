@@ -28,14 +28,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def scopes(), do: [:ctl, :diagnostics, :plugins]
 
   def run([command_name], opts) do
-    case CommandModules.is_command?(command_name) do
-      true  ->
-        command = CommandModules.module_map[command_name]
+    CommandModules.load(opts)
+    case CommandModules.module_map[command_name] do
+      nil ->
+        all_usage(opts);
+      command ->
         Enum.join([base_usage(command, opts)] ++
                   options_usage() ++
-                  input_types(command), "\n");
-      false ->
-        all_usage(opts)
+                  input_types(command), "\n")
     end
   end
   def run(_, opts) do
@@ -51,6 +51,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   end
 
   def all_usage(opts) do
+    CommandModules.load(opts)
     Enum.join(tool_usage(program_name(opts)) ++
               options_usage() ++
               commands() ++
