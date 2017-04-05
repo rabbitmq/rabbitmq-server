@@ -26,7 +26,7 @@ DIALYZER_OPTS += --src -r test
 # ActiveMQ for the testsuite.
 # --------------------------------------------------------------------
 
-ACTIVEMQ_VERSION := 5.14.3
+ACTIVEMQ_VERSION := 5.14.4
 ACTIVEMQ_URL := 'http://www.apache.org/dyn/closer.cgi?filename=/activemq/$(ACTIVEMQ_VERSION)/apache-activemq-$(ACTIVEMQ_VERSION)-bin.tar.gz&action=download'
 
 ACTIVEMQ := $(abspath test/system_SUITE_data/apache-activemq-$(ACTIVEMQ_VERSION)/bin/activemq)

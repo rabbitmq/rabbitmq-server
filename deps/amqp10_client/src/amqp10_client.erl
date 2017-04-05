@@ -23,7 +23,8 @@
          flow_link_credit/3,
          link_handle/1,
          get_msg/1,
-         get_msg/2
+         get_msg/2,
+         parse_uri/1
         ]).
 
 -define(DEFAULT_TIMEOUT, 5000).
@@ -238,3 +239,87 @@ get_msg(#link_ref{role = receiver} = Ref,
 %% @doc Get the link handle from a LinkRef
 -spec link_handle(link_ref()) -> non_neg_integer().
 link_handle(#link_ref{link_handle = Handle}) -> Handle.
+
+
+-spec parse_uri(string()) -> amqp10_client_connection:connection_config().
+parse_uri(Uri) ->
+    case http_uri:parse(Uri) of
+        {ok, {Scheme, UserInfo, Host, Port, "/", Query0}} ->
+            Query = lists:foldl(fun (W, Acc) ->
+                                        [K, V] = string:tokens(W, "="),
+                                        Acc#{K => V}
+                                end, #{},
+                                string:tokens(safe_substr(Query0, 2), "&")),
+            Sasl = case Query of
+                       #{"sasl" := "anon"} -> anon;
+                       #{"sasl" := "plain"} ->
+                           case UserInfo of
+                               [] -> exit(plain_sasl_missing_userinfo);
+                               U ->
+                                   [User, Pass] = string:tokens(U, ":"),
+                                   {plain, User, Pass}
+                           end;
+                       _ -> none
+                   end,
+            Ret0 = maps:fold(fun("idle_time_out", V, Acc) ->
+                                     Acc#{idle_time_out => list_to_integer(V)};
+                                ("max_frame_size", V, Acc) ->
+                                     Acc#{max_frame_size => list_to_integer(V)};
+                                ("hostname", V, Acc) ->
+                                     Acc#{hostname => list_to_binary(V)};
+                                (_, _, Acc) -> Acc
+                             end, #{address => Host,
+                                     port => Port,
+                                     sasl => Sasl}, Query),
+
+            case Scheme of
+                amqp -> {ok, Ret0};
+                amqps ->
+                    TlsOpts = parse_tls_opts(Query),
+                    {ok, Ret0#{tls_opts => {secure_port, TlsOpts}}}
+            end;
+        Err -> Err
+    end.
+
+
+safe_substr(Str, Start) when length(Str) >= Start ->
+    string:substr(Str, Start);
+safe_substr(_Str, _Start) -> "".
+
+% TODO: should we pass tls options on the query string?
+parse_tls_opts(_M) -> [].
+%     maps:fold(fun(K, V, Acc) ->
+%                         case re:run(K, "^tls_opts.(.+)") of
+%                             {match, [_, {Start, _}]} ->
+%                                 Opt = parse_tls_opt(string:substr(K, Start+1), V),
+%                                 [Opt | Acc];
+%                             nomatch -> Acc
+%                         end
+%               end, [], M).
+
+% parse_tls_opt("versions", V) ->
+%     Versions = lists:map(fun to_atom/1, string:tokens(V, ",")),
+%     {versions, Versions}.
+% parse_tls_opt("ca", V) ->
+%     Versions = lists:map(fun to_atom/1, string:tokens(V, ",")),
+%     {versions, Versions}.
+
+% to_atom(X) when is_list(X) -> list_to_atom(X).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+parse_uri_test_() ->
+    [
+     ?_assertMatch({ok, #{address := "my_host", port := 9876,
+                     sasl := none}}, parse_uri("amqp://my_host:9876")),
+     ?_assertMatch({ok, #{address := "my_proxy",
+                          port := 9876,
+                          hostname := <<"my_host">>,
+                          idle_time_out := 60000,
+                          max_frame_size := 512,
+                          tls_opts := {secure_port, []}, sasl := {plain, "fred", "passw"}}},
+                   parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&hostname=my_host&max_frame_size=512&idle_time_out=60000"))
+    ].
+
+-endif.

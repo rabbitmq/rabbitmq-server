@@ -351,6 +351,7 @@ transfer_unsettled(Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
                                                          <<"data-sender">>,
                                                          <<"test">>, unsettled),
+    await_link(Sender, credited, credited_timeout),
     DeliveryTag = <<"my-tag">>,
     Msg = amqp10_msg:new(DeliveryTag, Data, false),
     ok = amqp10_client:send_msg(Sender, Msg),

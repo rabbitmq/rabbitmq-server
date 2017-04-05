@@ -107,5 +107,5 @@ stop_activemq_nodes(Config) ->
     case rabbit_ct_helpers:exec(Cmd, []) of
         {ok, _} -> Config;
         Error   -> ct:pal("Error: ~p", [Error]),
-                   {skip, "Failed to start ActiveMQ"}
+                   {skip, "Failed to stop ActiveMQ"}
     end.
