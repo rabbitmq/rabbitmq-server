@@ -21,8 +21,8 @@ defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.Core.Output, as: Output
   alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
 
-  import RabbitMQ.CLI.Core.Helpers
-  import  RabbitMQ.CLI.Core.Parser
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Parser, as: Parser
 
   @type options() :: Map.t
   @type command_result() :: {:error, ExitCodes.exit_code, term()} | term()
@@ -47,7 +47,8 @@ defmodule RabbitMQCtl do
   end
 
   def exec_command(unparsed_command, output_fun) do
-    {command, command_name, arguments, parsed_options, invalid} = parse(unparsed_command)
+    {command, command_name, arguments, parsed_options, invalid} =
+      Parser.parse(unparsed_command)
     case {command, invalid} do
       {:no_command, _} ->
         command_not_found_string = case command_name do
@@ -108,7 +109,9 @@ defmodule RabbitMQCtl do
     |> merge_defaults_longnames
   end
 
-  defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname()}, opts)
+  defp merge_defaults_node(%{} = opts) do
+    Map.merge(%{node: Helpers.get_rabbit_hostname()}, opts)
+  end
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
@@ -121,7 +124,7 @@ defmodule RabbitMQCtl do
   end
 
   defp normalize_node(%{node: node} = opts) do
-    Map.merge(opts, %{node: parse_node(node)})
+    Map.merge(opts, %{node: Helpers.parse_node(node)})
   end
 
   defp normalize_timeout(%{timeout: timeout} = opts)
@@ -135,7 +138,7 @@ defmodule RabbitMQCtl do
 
   defp maybe_connect_to_rabbitmq(HelpCommand, _), do: nil
   defp maybe_connect_to_rabbitmq(_, node) do
-    connect_to_rabbitmq(node)
+    Helpers.connect_to_rabbitmq(node)
   end
 
   defp execute_command(options, command, arguments) do

@@ -17,7 +17,6 @@
 # to format values instead of "~p~".
 defmodule RabbitMQ.CLI.Formatters.ErlangString do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
-  alias RabbitMQ.CLI.Formatters.Erlang, as: E
 
   def format_output(output, _) do
     :io_lib.format("~s", [output])
