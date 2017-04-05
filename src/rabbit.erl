@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit).
@@ -481,7 +481,8 @@ stop_and_halt() ->
     try
         stop()
     catch Type:Reason ->
-        rabbit_log:error("Error trying to stop RabbitMQ: ~p:~p", [Type, Reason])
+        rabbit_log:error("Error trying to stop RabbitMQ: ~p:~p", [Type, Reason]),
+        error({Type, Reason})
     after
         AppsLeft = [ A || {A, _, _} <- application:which_applications() ],
         rabbit_log:info(

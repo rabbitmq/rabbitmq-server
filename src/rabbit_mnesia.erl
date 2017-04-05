@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mnesia).
@@ -863,12 +863,12 @@ with_running_or_clean_mnesia(Fun) ->
     case IsMnesiaRunning of
         true  -> Fun();
         false ->
-            {ok, MnesiaDir} = application:get_env(mnesia, dir),
+            SavedMnesiaDir = dir(),
             application:unset_env(mnesia, dir),
             mnesia:start(),
             Result = Fun(),
             application:stop(mnesia),
-            application:set_env(mnesia, dir, MnesiaDir),
+            application:set_env(mnesia, dir, SavedMnesiaDir),
             Result
     end.
 

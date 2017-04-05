@@ -135,6 +135,28 @@
           </listitem>
         </varlistentry>
 
+        <varlistentry>
+          <term><cmdsynopsis><command>shutdown</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Shuts down the Erlang process on which RabbitMQ is running. The
+              command is blocking and will return after the Erlang process
+              exits. If RabbitMQ fails to stop, it will return a non-zero exit
+              code.
+            </para>
+            <para>
+              Unlike the stop command, the shutdown command:
+              * does not require a pid_file to wait for the Erlang process to exit
+              * if RabbitMQ node is not running, it will return a non-zero exit code
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl shutdown</screen>
+            <para role="example">
+              This command shuts down the Erlang process on which RabbitMQ is running.
+            </para>
+          </listitem>
+        </varlistentry>
+
         <varlistentry id="stop_app">
           <term><cmdsynopsis><command>stop_app</command></cmdsynopsis></term>
           <listitem>

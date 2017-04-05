@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_epmd_monitor).
@@ -92,6 +92,6 @@ check_epmd(#state{mod  = Mod,
                     "epmd does not know us, re-registering ~s at port ~b~n",
                     [Me, Port]),
                   rabbit_nodes:ensure_epmd(),
-                  erl_epmd:register_node(Me, Port);
+                  Mod:register_node(Me, Port);
         _      -> ok
     end.
