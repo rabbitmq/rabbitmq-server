@@ -473,8 +473,9 @@ stop() ->
     end,
     rabbit_log:info("RabbitMQ is asked to stop...~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
+    %% this will also perform unregistration with the peer discovery backend
+    %% as needed
     stop_apps(app_utils:app_dependency_order(Apps, true)),
-    rabbit_peer_discovery:maybe_unregister(),
     rabbit_log:info("Successfully stopped RabbitMQ and its dependencies~n", []).
 
 stop_and_halt() ->
