@@ -28,7 +28,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2014-2015 AWeber Communications
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_backend).
