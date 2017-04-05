@@ -241,7 +241,8 @@ get_msg(#link_ref{role = receiver} = Ref,
 link_handle(#link_ref{link_handle = Handle}) -> Handle.
 
 
--spec parse_uri(string()) -> amqp10_client_connection:connection_config().
+-spec parse_uri(string()) ->
+    {ok, amqp10_client_connection:connection_config()} | {error, any()}.
 parse_uri(Uri) ->
     case http_uri:parse(Uri) of
         {ok, {Scheme, UserInfo, Host, Port, "/", Query0}} ->
