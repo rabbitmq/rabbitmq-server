@@ -14,7 +14,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](
 
 ## License
 
-RabbitMQ server is [licensed under the MPL](LICENSE-MPL-RabbitMQ).
+[Licensed under the MPL](LICENSE-MPL-RabbitMQ), same as RabbitMQ server.
 
 
 ## Copyright
