@@ -232,9 +232,10 @@ specify the path to the Zip archive using the `ZIP` variable:
 make -C packaging/windows-exe ZIP=/path/to/rabbitmq-server-windows.zip
 ```
 
-By default, the *product version* is the version with `.0` appended.
-Thus it's only fine if the version is a semver-based final version (eg.
-3.8.1). If the version doesn't conform to that, you need to set the
+By default, the *product version* is the project version where
+everything following the third integer was replaced by `.0`. Thus it's
+only fine if the version is a semver-based version (eg. 3.8.1-pre.3 or
+3.8.2). If the version doesn't conform to that, you need to set the
 `PRODUCT_VERSION` variable:
 ```
 make package-windows PROJECT_VERSION=3.8.1-rc.1 PRODUCT_VERSION=3.8.1.0
