@@ -379,7 +379,7 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
                             fun() -> emit_stats(State) end).
 
-emit_stats(State=#state{connection = undefined}) ->
+emit_stats(State=#state{connection = C}) when C == none; C == undefined ->
     %% Avoid emitting stats on terminate when the connection has not yet been
     %% established, as this causes orphan entries on the stats database
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
