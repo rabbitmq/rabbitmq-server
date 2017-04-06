@@ -63,8 +63,8 @@ get_location(Queue=#amqqueue{})->
     end.
 
 get_location_mod_by_args(#amqqueue{arguments=Args}) ->
-    case proplists:lookup(<<"x-queue-master-locator">> , Args) of
-        {<<"x-queue-master-locator">> , Strategy}  ->
+    case rabbit_misc:table_lookup(Args, <<"x-queue-master-locator">>) of
+        {_Type, Strategy}  ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
                 Reply = {ok, _CB} -> Reply;
                 Error             -> Error

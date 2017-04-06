@@ -112,7 +112,7 @@ declare_args(Config) ->
     setup_test_environment(Config),
     unset_location_config(Config),
     QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
-    Args = [{<<"x-queue-master-locator">>, <<"min-masters">>}],
+    Args = [{<<"x-queue-master-locator">>, longstr, <<"min-masters">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_min_master(Config, Q).
 
@@ -140,7 +140,7 @@ declare_config(Config) ->
 calculate_min_master(Config) ->
     setup_test_environment(Config),
     QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
-    Args = [{<<"x-queue-master-locator">>, <<"min-masters">>}],
+    Args = [{<<"x-queue-master-locator">>, longstr, <<"min-masters">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_min_master(Config, Q),
     ok.
@@ -148,7 +148,7 @@ calculate_min_master(Config) ->
 calculate_random(Config) ->
     setup_test_environment(Config),
     QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
-    Args = [{<<"x-queue-master-locator">>, <<"random">>}],
+    Args = [{<<"x-queue-master-locator">>, longstr, <<"random">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_random(Config, Q),
     ok.
@@ -156,7 +156,7 @@ calculate_random(Config) ->
 calculate_client_local(Config) ->
     setup_test_environment(Config),
     QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
-    Args = [{<<"x-queue-master-locator">>, <<"client-local">>}],
+    Args = [{<<"x-queue-master-locator">>, longstr, <<"client-local">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_client_local(Config, Q),
     ok.
@@ -251,6 +251,7 @@ declare(Config, QueueName, Durable, AutoDelete, Args, Owner) ->
 verify_min_master(Config, Q) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     MinMaster = min_master_node(Config),
+    ct:pal("Expecting min master ~p~n", [MinMaster]),
     {ok, MinMaster} = rpc:call(Node, rabbit_queue_master_location_misc,
                                lookup_master, [Q, ?DEFAULT_VHOST_PATH]).
 
