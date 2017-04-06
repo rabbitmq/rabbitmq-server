@@ -242,44 +242,50 @@ link_handle(#link_ref{link_handle = Handle}) -> Handle.
 
 
 -spec parse_uri(string()) ->
-    {ok, amqp10_client_connection:connection_config()} | {error, any()}.
+    {ok, amqp10_client_connection:connection_config()} | {error, term()}.
 parse_uri(Uri) ->
     case http_uri:parse(Uri) of
-        {ok, {Scheme, UserInfo, Host, Port, "/", Query0}} ->
-            Query = lists:foldl(fun (W, Acc) ->
-                                        [K, V] = string:tokens(W, "="),
-                                        Acc#{K => V}
-                                end, #{},
-                                string:tokens(safe_substr(Query0, 2), "&")),
-            Sasl = case Query of
-                       #{"sasl" := "anon"} -> anon;
-                       #{"sasl" := "plain"} ->
-                           case UserInfo of
-                               [] -> exit(plain_sasl_missing_userinfo);
-                               U ->
-                                   [User, Pass] = string:tokens(U, ":"),
-                                   {plain, User, Pass}
-                           end;
-                       _ -> none
-                   end,
-            Ret0 = maps:fold(fun("idle_time_out", V, Acc) ->
-                                     Acc#{idle_time_out => list_to_integer(V)};
-                                ("max_frame_size", V, Acc) ->
-                                     Acc#{max_frame_size => list_to_integer(V)};
-                                ("hostname", V, Acc) ->
-                                     Acc#{hostname => list_to_binary(V)};
-                                (_, _, Acc) -> Acc
-                             end, #{address => Host,
-                                     port => Port,
-                                     sasl => Sasl}, Query),
-
-            case Scheme of
-                amqp -> {ok, Ret0};
-                amqps ->
-                    TlsOpts = parse_tls_opts(Query),
-                    {ok, Ret0#{tls_opts => {secure_port, TlsOpts}}}
+        {ok, Result} ->
+            try
+                {ok, parse_result(Result)}
+            catch
+                throw:Err -> {error, Err}
             end;
         Err -> Err
+    end.
+
+parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
+    Query = lists:foldl(fun (W, Acc) ->
+                                [K, V] = string:tokens(W, "="),
+                                Acc#{K => V}
+                        end, #{},
+                        string:tokens(safe_substr(Query0, 2), "&")),
+    Sasl = case Query of
+               #{"sasl" := "anon"} -> anon;
+               #{"sasl" := "plain"} ->
+                   case UserInfo of
+                       [] -> throw(plain_sasl_missing_userinfo);
+                       U ->
+                           [User, Pass] = string:tokens(U, ":"),
+                           {plain, User, Pass}
+                   end;
+               _ -> none
+           end,
+    Ret0 = maps:fold(fun("idle_time_out", V, Acc) ->
+                             Acc#{idle_time_out => list_to_integer(V)};
+                        ("max_frame_size", V, Acc) ->
+                             Acc#{max_frame_size => list_to_integer(V)};
+                        ("hostname", V, Acc) ->
+                             Acc#{hostname => list_to_binary(V)};
+                        (_, _, Acc) -> Acc
+                     end, #{address => Host,
+                            port => Port,
+                            sasl => Sasl}, Query),
+    case Scheme of
+        amqp -> Ret0;
+        amqps ->
+            TlsOpts = parse_tls_opts(Query),
+            Ret0#{tls_opts => {secure_port, TlsOpts}}
     end.
 
 
@@ -287,40 +293,69 @@ safe_substr(Str, Start) when length(Str) >= Start ->
     string:substr(Str, Start);
 safe_substr(_Str, _Start) -> "".
 
-% TODO: should we pass tls options on the query string?
-parse_tls_opts(_M) -> [].
-%     maps:fold(fun(K, V, Acc) ->
-%                         case re:run(K, "^tls_opts.(.+)") of
-%                             {match, [_, {Start, _}]} ->
-%                                 Opt = parse_tls_opt(string:substr(K, Start+1), V),
-%                                 [Opt | Acc];
-%                             nomatch -> Acc
-%                         end
-%               end, [], M).
+parse_tls_opts(M) ->
+    lists:sort(maps:fold(fun parse_tls_opt/3, [], M)).
 
-% parse_tls_opt("versions", V) ->
-%     Versions = lists:map(fun to_atom/1, string:tokens(V, ",")),
-%     {versions, Versions}.
-% parse_tls_opt("ca", V) ->
-%     Versions = lists:map(fun to_atom/1, string:tokens(V, ",")),
-%     {versions, Versions}.
+parse_tls_opt(K, V, Acc)
+  when K =:= "cacertfile" orelse
+       K =:= "certfile" orelse
+       K =:= "keyfile" ->
+    [{to_atom(K), V} | Acc];
+parse_tls_opt("verify", V, Acc)
+  when V =:= "verify_none" orelse
+       V =:= "verify_peer" ->
+    [{verify, to_atom(V)} | Acc];
+parse_tls_opt("verify", _V, _Acc) ->
+    throw({invalid_option, verify});
+parse_tls_opt("fail_if_no_peer_cert", V, Acc)
+  when V =:= "true" orelse
+       V =:= "false" ->
+    [{fail_if_no_peer_cert, to_atom(V)} | Acc];
+parse_tls_opt("fail_if_no_peer_cert", _V, _Acc) ->
+    throw({invalid_option, fail_if_no_peer_cert});
+parse_tls_opt(_K, _V, Acc) ->
+    Acc.
 
-% to_atom(X) when is_list(X) -> list_to_atom(X).
+to_atom(X) when is_list(X) -> list_to_atom(X).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
 parse_uri_test_() ->
-    [
-     ?_assertMatch({ok, #{address := "my_host", port := 9876,
-                     sasl := none}}, parse_uri("amqp://my_host:9876")),
+    [?_assertMatch({ok, #{address := "my_host", port := 9876,
+                          sasl := none}}, parse_uri("amqp://my_host:9876")),
      ?_assertMatch({ok, #{address := "my_proxy",
                           port := 9876,
                           hostname := <<"my_host">>,
                           idle_time_out := 60000,
                           max_frame_size := 512,
-                          tls_opts := {secure_port, []}, sasl := {plain, "fred", "passw"}}},
-                   parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&hostname=my_host&max_frame_size=512&idle_time_out=60000"))
+                          tls_opts := {secure_port, []},
+                          sasl := {plain, "fred", "passw"}}},
+                   parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
+                             "hostname=my_host&max_frame_size=512&idle_time_out=60000")),
+     ?_assertMatch(
+        {ok, #{address := "my_proxy", port := 9876,
+               tls_opts := {secure_port, [{cacertfile, "/etc/cacertfile.pem"},
+                                          {certfile, "/etc/certfile.pem"},
+                                          {fail_if_no_peer_cert, true},
+                                          {keyfile, "/etc/keyfile.key"},
+                                          {verify, verify_none}
+                                         ]},
+               sasl := {plain, "fred", "passw"}}},
+        parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
+                  "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
+                  "keyfile=/etc/keyfile.key&verify=verify_none&" ++
+                  "fail_if_no_peer_cert=true")),
+     ?_assertMatch({error, {invalid_option, verify}},
+                   parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
+                  "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
+                  "keyfile=/etc/keyfile.key&verify=verify_bananas&")),
+     ?_assertMatch({error, {invalid_option, fail_if_no_peer_cert}},
+                   parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
+                  "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
+                  "keyfile=/etc/keyfile.key&fail_if_no_peer_cert=banana&")),
+     ?_assertMatch({error, plain_sasl_missing_userinfo},
+                   parse_uri("amqp://my_host:9876?sasl=plain"))
     ].
 
 -endif.

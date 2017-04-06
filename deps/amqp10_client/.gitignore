@@ -10,6 +10,7 @@
 /logs/
 /plugins/
 /xrefr
+elvis
 
 amqp10_client.d
 /*.coverdata
