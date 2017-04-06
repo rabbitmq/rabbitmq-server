@@ -14,7 +14,6 @@ define PROJECT_APP_EXTRA_KEYS
 	  ]},
 	{build_tools, ["make", "rebar3"]},
 	{files, [
-	    $(RABBITMQ_HEXPM_DEFAULT_FILES),
 	    "mk"
 	  ]}
 endef
