@@ -1,7 +1,7 @@
 <h1>Connections</h1>
 <div class="section">
  <%= pagiante_ui(connections, 'connections') %>
-</div> 
+</div>
 <div class="updatable">
 <% if (connections.items.length > 0) { %>
 <table class="list">
@@ -16,7 +16,7 @@
 <% if (vhosts_interesting) { %>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
 <% } %>
-    <th><%= fmt_sort('Name',           'client_properties.connection_name;name') %></th>
+    <th><%= fmt_sort('Name',           'client_properties.connection_name') %></th>
 <% if (nodes_interesting) { %>
     <th><%= fmt_sort('Node',           'node') %></th>
 <% } %>
