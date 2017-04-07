@@ -27,9 +27,7 @@ defmodule RabbitMQCtlTest do
     set_scope(:all)
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname())
-
     end)
-
     :ok
   end
 

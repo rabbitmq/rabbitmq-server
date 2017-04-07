@@ -26,12 +26,16 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
   def start(options) do
     node_name_type = Config.get_option(:longnames, options)
-    start(node_name_type, 10, :undefined)
+    result = start(node_name_type, 10, :undefined)
+    ensure_cookie(options)
+    result
   end
 
   def start_as(node_name, options) do
     node_name_type = Config.get_option(:longnames, options)
-    start_with_epmd(node_name, node_name_type)
+    result = start_with_epmd(node_name, node_name_type)
+    ensure_cookie(options)
+    result
   end
 
   ## Optimization. We try to start EPMD only if distribution fails
@@ -50,6 +54,14 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   #
   # Implementation
   #
+
+  def ensure_cookie(options) do
+    case Config.get_option(:erlang_cookie, options) do
+      nil    -> :ok;
+      cookie -> Node.set_cookie(cookie)
+                :ok
+    end
+  end
 
   defp start(_opt, 0, last_err) do
     {:error, last_err}

@@ -231,13 +231,14 @@ be shown in usage and available for execution.
 
 #### Environment Arguments
 
- * script_name: atom, configurable tool name (`rabbitmq-plugins`, `rabbitmqctl`) to select command scope (see [Command scopes](#command-scopes))
- * rabbitmq_home: string, broker install directory
- * mnesia_dir: string, broker mnesia data directory
- * plugins_dir: string, broker plugins directory
- * enabled_plugins_file: string, broker enabled plugins file
+ * script-name: atom, configurable tool name (`rabbitmq-plugins`, `rabbitmqctl`) to select command scope (see [Command scopes](#command-scopes))
+ * rabbitmq-home: string, broker install directory
+ * mnesia-dir: string, broker mnesia data directory
+ * plugins-dir: string, broker plugins directory
+ * enabled-plugins-file: string, broker enabled plugins file
  * longnames (l): boolean, use longnames to communicate with broker erlang node. Should be set to `true` only if broker is started with longnames.
  * aliases-file: string, a file name to load aliases from
+ * erlang-cookie: atom, an [erlang distribution cookie](http://erlang.org/doc/reference_manual/distributed.html)
 
 Environment argument defaults are loaded from rabbitmq environment variables (see [Environment configuration](#environment-configuration)).
 
@@ -469,11 +470,12 @@ By default it will be loaded from environment variables, same as used in rabbitm
 
 | Argument name        | Environment variable          |
 |----------------------|-------------------------------|
-| rabbitmq_home        | RABBITMQ_HOME                 |
-| mnesia_dir           | RABBITMQ_MNESIA_DIR           |
-| plugins_dir          | RABBITMQ_PLUGINS_DIR          |
-| enabled_plugins_file | RABBITMQ_ENABLED_PLUGINS_FILE |
+| rabbitmq-home        | RABBITMQ_HOME                 |
+| mnesia-dir           | RABBITMQ_MNESIA_DIR           |
+| plugins-dir          | RABBITMQ_PLUGINS_DIR          |
+| enabled-plugins-file | RABBITMQ_ENABLED_PLUGINS_FILE |
 | longnames            | RABBITMQ_USE_LONGNAME         |
 | node                 | RABBITMQ_NODENAME             |
-| aliases_file         | RABBITMQ_CLI_ALIASES_FILE     |
+| aliases-file         | RABBITMQ_CLI_ALIASES_FILE     |
+| erlang-cookie        | RABBITMQ_ERLANG_COOKIE        |
 
