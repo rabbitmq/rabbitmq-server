@@ -437,7 +437,9 @@ get_dotted_value0([Key], Item) ->
 get_dotted_value0([Key | Keys], Item) ->
     get_dotted_value0(Keys, pget_bin(list_to_binary(Key), Item, [])).
 
-pget_bin(Key, List, Default) ->
+pget_bin(Key, Map, Default) when is_map(Map) ->
+    maps:get(Key, Map, Default);
+pget_bin(Key, List, Default) when is_list(List) ->
     case lists:partition(fun ({K, _V}) -> a2b(K) =:= Key end, List) of
         {[{_K, V}], _} -> V;
         {[],        _} -> Default
