@@ -70,7 +70,7 @@ reset_lookups(Table) ->
 init([Table]) ->
     {RatesMode, Policies} = load_config(),
     Policy = retention_policy(Table),
-    Interval = take_smaller(proplists:get_value(Policy, Policies)) * 1000,
+    Interval = take_smaller(proplists:get_value(Policy, Policies, [])) * 1000,
     erlang:send_after(Interval, self(), collect_metrics),
     {ok, #state{table = Table, interval = Interval,
                 policies = {proplists:get_value(basic, Policies),
@@ -132,7 +132,11 @@ retention_policy(node_metrics) -> basic;
 retention_policy(node_node_metrics) -> global.
 
 take_smaller(Policies) ->
-    lists:min([I || {_, I} <- Policies]).
+    Intervals = [I || {_, I} <- Policies],
+    case Intervals of
+        [] -> throw(missing_sample_retention_policies);
+        _ -> lists:min(Intervals)
+    end.
 
 insert_old_aggr_stats(NextStats, Id, Stat) ->
     dict:store(Id, Stat, NextStats).
@@ -618,7 +622,7 @@ index_table(node_node_coarse_stats, node) -> node_node_coarse_stats_node_index.
 
 load_config() ->
     RatesMode = rabbit_mgmt_agent_config:get_env(rates_mode),
-    Policies = rabbit_mgmt_agent_config:get_env(sample_retention_policies),
+    Policies = rabbit_mgmt_agent_config:get_env(sample_retention_policies, []),
     {RatesMode, Policies}.
 
 ceil(X) when X < 0 ->
