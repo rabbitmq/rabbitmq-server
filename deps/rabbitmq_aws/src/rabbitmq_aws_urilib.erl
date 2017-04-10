@@ -52,6 +52,11 @@ parse(Value) ->
         path=Path,
         query=parse_query(Query),
         fragment=parse_fragment(Fragment)};
+    {ok, {Scheme, UserInfo, Host, Port, Path, Query}} ->
+      #uri{scheme=Scheme,
+        authority={parse_userinfo(UserInfo), Host, Port},
+        path=Path,
+        query=parse_query(Query)};
     {error, Reason} ->
       {error, Reason}
   end.
