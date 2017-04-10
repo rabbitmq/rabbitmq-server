@@ -229,8 +229,9 @@ endpoint_host(Region, Service) ->
 format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
   {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
-  {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}}.
-
+  {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
+format_response({error, Reason}) ->
+  {error, Reason, undefined}.
 
 -spec get_content_type(Headers :: headers()) -> {Type :: string(), Subtype :: string()}.
 %% @doc Fetch the content type from the headers and return it as a tuple of
