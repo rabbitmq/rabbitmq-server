@@ -450,16 +450,21 @@ stop_and_halt() ->
         rabbit_log:error("Error trying to stop RabbitMQ: ~p:~p", [Type, Reason]),
         error({Type, Reason})
     after
-        AppsLeft = [ A || {A, _, _} <- application:which_applications() ],
-        rabbit_log:info(
-            lists:flatten(["Halting Erlang VM with the following applications:~n",
-                           ["    ~p~n" || _ <- AppsLeft]]),
-            AppsLeft),
-        %% Also duplicate this information to stderr, so console where
-        %% foreground broker was running (or systemd journal) will
-        %% contain information about graceful termination.
-        io:format(standard_error, "Gracefully halting Erlang VM~n", []),
-        init:stop()
+        %% Enclose all the logging in the try block.
+        %% init:stop() will be called regardless of any errors.
+        try
+            AppsLeft = [ A || {A, _, _} <- application:which_applications() ],
+            rabbit_log:info(
+                lists:flatten(["Halting Erlang VM with the following applications:~n",
+                               ["    ~p~n" || _ <- AppsLeft]]),
+                AppsLeft),
+            %% Also duplicate this information to stderr, so console where
+            %% foreground broker was running (or systemd journal) will
+            %% contain information about graceful termination.
+            io:format(standard_error, "Gracefully halting Erlang VM~n", [])
+        after
+            init:stop()
+        end
     end,
     ok.
 
