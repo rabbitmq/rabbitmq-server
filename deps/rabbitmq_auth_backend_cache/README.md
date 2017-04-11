@@ -31,7 +31,6 @@ the `stable` branch.
 
 This plugin requires Erlang `18.3` or a later version.
 
-
 ## Binary Builds
 
 Binary builds can be obtained [from project releases](https://github.com/rabbitmq/rabbitmq-auth-backend-cache/releases/) on GitHub.
