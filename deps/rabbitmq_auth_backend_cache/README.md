@@ -5,7 +5,8 @@ performed by RabbitMQ nodes.
 
 ## Project Maturity
 
-This plugin is very young and considered experimental.
+This plugin is relatively young but has known production users.
+It's a candidate for inclusion into the RabbitMQ distribution.
 
 ## Overview
 
@@ -15,13 +16,20 @@ It's not an independent auth backend but a caching layer for existing backends
 such as the built-in, [LDAP](github.com/rabbitmq/rabbitmq-auth-backend-ldap), or [HTTP](github.com/rabbitmq/rabbitmq-auth-backend-http)
 ones.
 
-Cache expiration is currently time-based. It is not very useful with the built-in 
+Cache expiration is currently time-based. It is not very useful with the built-in
 (internal) [authn/authz backends](http://rabbitmq.com/access-control.html) but can be very useful for LDAP, HTTP or other backends that
 use network requests.
 
 ## RabbitMQ Version Requirements
 
 As with all authentication plugins, this plugin requires requires 2.3.1 or later.
+
+`master` branch targest RabbitMQ master (future `3.7.0`). To use this plugin with RabbitMQ 3.6.x, see
+the `stable` branch.
+
+## Erlang Version Requirements
+
+This plugin requires Erlang `18.3` or a later version.
 
 ## Binary Builds
 
