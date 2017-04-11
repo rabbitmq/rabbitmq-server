@@ -155,7 +155,7 @@
 -type client_msstate() :: #client_msstate {
                       server             :: server(),
                       client_ref         :: client_ref(),
-                      file_handle_cache  :: dict:dict(),
+                      file_handle_cache  :: map(),
                       index_state        :: any(),
                       index_module       :: atom(),
                       dir                :: file:filename(),
@@ -495,7 +495,7 @@ client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) when is_pid(Server); is_atom
                                           ?CREDIT_DISC_BOUND),
     #client_msstate { server             = Server,
                       client_ref         = Ref,
-                      file_handle_cache  = dict:new(),
+                      file_handle_cache  = #{},
                       index_state        = IState,
                       index_module       = IModule,
                       dir                = Dir,
@@ -776,7 +776,7 @@ init([Type, BaseDir, ClientRefs, StartupFunState]) ->
                        index_state            = IndexState,
                        current_file           = 0,
                        current_file_handle    = undefined,
-                       file_handle_cache      = dict:new(),
+                       file_handle_cache      = #{},
                        sync_timer_ref         = undefined,
                        sum_valid_data         = 0,
                        sum_file_size          = 0,
@@ -1403,9 +1403,9 @@ close_handle(Key, State = #msstate { file_handle_cache = FHC }) ->
     State #msstate { file_handle_cache = close_handle(Key, FHC) };
 
 close_handle(Key, FHC) ->
-    case dict:find(Key, FHC) of
+    case maps:find(Key, FHC) of
         {ok, Hdl} -> ok = file_handle_cache:close(Hdl),
-                     dict:erase(Key, FHC);
+                     maps:remove(Key, FHC);
         error     -> FHC
     end.
 
@@ -1457,16 +1457,16 @@ close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts,
 close_all_handles(CState = #client_msstate { file_handles_ets  = FileHandlesEts,
                                              file_handle_cache = FHC,
                                              client_ref        = Ref }) ->
-    ok = dict:fold(fun (File, Hdl, ok) ->
+    ok = maps:fold(fun (File, Hdl, ok) ->
                            true = ets:delete(FileHandlesEts, {Ref, File}),
                            file_handle_cache:close(Hdl)
                    end, ok, FHC),
-    CState #client_msstate { file_handle_cache = dict:new() };
+    CState #client_msstate { file_handle_cache = #{} };
 
 close_all_handles(State = #msstate { file_handle_cache = FHC }) ->
-    ok = dict:fold(fun (_Key, Hdl, ok) -> file_handle_cache:close(Hdl) end,
+    ok = maps:fold(fun (_Key, Hdl, ok) -> file_handle_cache:close(Hdl) end,
                    ok, FHC),
-    State #msstate { file_handle_cache = dict:new() }.
+    State #msstate { file_handle_cache = #{} }.
 
 get_read_handle(FileNum, CState = #client_msstate { file_handle_cache = FHC,
                                                     dir = Dir }) ->
@@ -1479,11 +1479,11 @@ get_read_handle(FileNum, State = #msstate { file_handle_cache = FHC,
     {Hdl, State #msstate { file_handle_cache = FHC2 }}.
 
 get_read_handle(FileNum, FHC, Dir) ->
-    case dict:find(FileNum, FHC) of
+    case maps:find(FileNum, FHC) of
         {ok, Hdl} -> {Hdl, FHC};
         error     -> {ok, Hdl} = open_file(Dir, filenum_to_name(FileNum),
                                            ?READ_MODE),
-                     {Hdl, dict:store(FileNum, Hdl, FHC)}
+                     {Hdl, maps:put(FileNum, Hdl, FHC)}
     end.
 
 preallocate(Hdl, FileSizeLimit, FinalPos) ->
