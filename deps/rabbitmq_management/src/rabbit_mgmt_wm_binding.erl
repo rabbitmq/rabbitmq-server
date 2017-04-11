@@ -25,7 +25,6 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
-
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
 rest_init(Req, _Config) ->
@@ -129,15 +128,30 @@ with_binding(ReqData, Context, Fun) ->
             Fun(Binding)
     end.
 
+method(MethodName, #binding{source = #resource{name = S},
+                            destination = #resource{name = D},
+                            key = K,
+                            args = A}) ->
+    case MethodName of
+        'exchange.unbind' ->
+            #'exchange.unbind'{
+                source = S,
+                destination = D,
+                routing_key = K,
+                arguments = A};
+        'queue.unbind' ->
+            #'queue.unbind'{
+                queue = D,
+                exchange = S,
+                routing_key = K,
+                arguments = A}
+    end.
+
 sync_resource(MethodName, ReqData, Context) ->
     with_binding(
       ReqData, Context,
       fun(Binding) ->
-              Props0 = rabbit_mgmt_format:binding(Binding),
-              Props = Props0 ++
-                  [{exchange, proplists:get_value(source,      Props0)},
-                   {queue,    proplists:get_value(destination, Props0)}],
-              rabbit_mgmt_util:amqp_request(
+            rabbit_mgmt_util:amqp_request(
                 rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
-                rabbit_mgmt_util:props_to_method(MethodName, Props))
+                method(MethodName, Binding))
       end).
