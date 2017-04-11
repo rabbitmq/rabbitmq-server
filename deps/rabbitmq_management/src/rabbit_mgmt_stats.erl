@@ -612,40 +612,42 @@ rate_from_last_increment(Total, [H | _T]) ->
 
 rate_from_difference({TS0, {A0, A1, A2}}, {TS1, {B0, B1, B2}}) ->
     Interval = TS0 - TS1,
-    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval)};
+    {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval)};
 rate_from_difference({TS0, {A0, A1}}, {TS1, {B0, B1}}) ->
     Interval = TS0 - TS1,
-    {rate(A0 - B0, Interval), rate(A1 - B1, Interval)};
+    {rate(A0, B0, Interval), rate(A1, B1, Interval)};
 rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6}},
              {TS1, {B0, B1, B2, B3, B4, B5, B6}}) ->
     Interval = TS0 - TS1,
-    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
-     rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
-     rate(A6 - B6, Interval)};
+    {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval),
+     rate(A3, B3, Interval), rate(A4, B4, Interval), rate(A5, B5, Interval),
+     rate(A6, B6, Interval)};
 rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6, A7}},
              {TS1, {B0, B1, B2, B3, B4, B5, B6, B7}}) ->
     Interval = TS0 - TS1,
-    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
-     rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
-     rate(A6 - B6, Interval), rate(A7 - B7, Interval)};
+    {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval),
+     rate(A3, B3, Interval), rate(A4, B4, Interval), rate(A5, B5, Interval),
+     rate(A6, B6, Interval), rate(A7, B7, Interval)};
 rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13,
                 A14, A15, A16, A17, A18, A19}},
              {TS1, {B0, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13,
                 B14, B15, B16, B17, B18, B19}}) ->
     Interval = TS0 - TS1,
-    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
-     rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
-     rate(A6 - B6, Interval), rate(A7 - B7, Interval), rate(A8 - B8, Interval),
-     rate(A9 - B9, Interval), rate(A10 - B10, Interval), rate(A11 - B11, Interval),
-     rate(A12 - B12, Interval), rate(A13 - B13, Interval), rate(A14 - B14, Interval),
-     rate(A15 - B15, Interval), rate(A16 - B16, Interval), rate(A17 - B17, Interval),
-     rate(A18 - B18, Interval), rate(A19 - B19, Interval)};
+    {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval),
+     rate(A3, B3, Interval), rate(A4, B4, Interval), rate(A5, B5, Interval),
+     rate(A6, B6, Interval), rate(A7, B7, Interval), rate(A8, B8, Interval),
+     rate(A9, B9, Interval), rate(A10, B10, Interval), rate(A11, B11, Interval),
+     rate(A12, B12, Interval), rate(A13, B13, Interval), rate(A14, B14, Interval),
+     rate(A15, B15, Interval), rate(A16, B16, Interval), rate(A17, B17, Interval),
+     rate(A18, B18, Interval), rate(A19, B19, Interval)};
 rate_from_difference({TS0, {A0}}, {TS1, {B0}}) ->
     Interval = TS0 - TS1,
-    {rate(A0 - B0, Interval)}.
+    {rate(A0, B0, Interval)}.
 
-rate(V, Interval) ->
-    V * 1000 / Interval.
+rate(V1, V2, Interval) when is_number(V1), is_number(V2) ->
+    (V1 - V2) * 1000 / Interval;
+rate(_, _, _) ->
+    0.
 
 append_sample(S, TS, List) ->
     [[{sample, S}, {timestamp, TS}] | List].
