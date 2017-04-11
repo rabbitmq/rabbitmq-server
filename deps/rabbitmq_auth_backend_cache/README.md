@@ -24,6 +24,9 @@ use network requests.
 
 As with all authentication plugins, this plugin requires requires 2.3.1 or later.
 
+`master` branch targest RabbitMQ master (future `3.7.0`). To use this plugin with RabbitMQ 3.6.x, see
+the `stable` branch.
+
 ## Erlang Version Requirements
 
 This plugin requires Erlang `18.3` or a later version.
