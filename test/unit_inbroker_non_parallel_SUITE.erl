@@ -761,8 +761,8 @@ disk_monitor_enable1(_Config) ->
 disk_monitor_enable1() ->
     ok = meck:new(rabbit_misc, [passthrough]),
     ok = meck:expect(rabbit_misc, os_cmd, fun(_) -> "\n" end),
-    application:set_env(rabbit, disk_monitor_enable_retries, 20000),
-    application:set_env(rabbit, disk_monitor_enable_interval, 100),
+    application:set_env(rabbit, disk_monitor_failure_retries, 20000),
+    application:set_env(rabbit, disk_monitor_failure_retry_interval, 100),
     ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup),
     ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [1000]),
     undefined = rabbit_disk_monitor:get_disk_free(),
@@ -772,8 +772,8 @@ disk_monitor_enable1() ->
     Bytes = 740758908 * 1024,
     Bytes = rabbit_disk_monitor:get_disk_free(),
     meck:unload(rabbit_misc),
-    application:set_env(rabbit, disk_monitor_enable_retries, 10),
-    application:set_env(rabbit, disk_monitor_enable_interval, 120000),
+    application:set_env(rabbit, disk_monitor_failure_retries, 10),
+    application:set_env(rabbit, disk_monitor_failure_retry_interval, 120000),
     passed.
 
 %% ---------------------------------------------------------------------------

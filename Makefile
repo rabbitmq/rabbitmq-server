@@ -108,8 +108,8 @@ define PROJECT_ENV
 	    {lazy_queue_explicit_gc_run_operation_threshold, 1000},
 	    {background_gc_enabled, false},
 	    {background_gc_target_interval, 60000},
-	    {disk_monitor_enable_retries, 10},
-	    {disk_monitor_enable_interval, 120000}
+	    {disk_monitor_failure_retries, 10},
+	    {disk_monitor_failure_retry_interval, 120000}
 	  ]
 endef
 

@@ -119,8 +119,8 @@ start_link(Args) ->
 
 init([Limit]) ->
     Dir = dir(),
-    {ok, Retries} = application:get_env(rabbit, disk_monitor_enable_retries),
-    {ok, Interval} = application:get_env(rabbit, disk_monitor_enable_interval),
+    {ok, Retries} = application:get_env(rabbit, disk_monitor_failure_retries),
+    {ok, Interval} = application:get_env(rabbit, disk_monitor_failure_retry_interval),
     State = #state{dir          = Dir,
                    min_interval = ?DEFAULT_MIN_DISK_CHECK_INTERVAL,
                    max_interval = ?DEFAULT_MAX_DISK_CHECK_INTERVAL,
