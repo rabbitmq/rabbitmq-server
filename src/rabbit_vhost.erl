@@ -63,14 +63,10 @@ recover(VHost) ->
     VHostStubFile = filename:join(VHostDir, ".vhost"),
     ok = rabbit_file:ensure_dir(VHostStubFile),
     ok = file:write_file(VHostStubFile, VHost),
-rabbit_log:info("Starting vhost ~p~n", [VHost]),
     Qs = rabbit_amqqueue:recover(VHost),
-rabbit_log:info("Queues recovered for vhost ~p~n", [VHost]),
     ok = rabbit_binding:recover(rabbit_exchange:recover(VHost),
                                 [QName || #amqqueue{name = QName} <- Qs]),
-rabbit_log:info("Bindings recovered for vhost ~p~n", [VHost]),
     ok = rabbit_amqqueue:start(Qs),
-rabbit_log:info("Queues started for vhost ~p~n", [VHost]),
     ok.
 
 %%----------------------------------------------------------------------------
