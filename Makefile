@@ -115,7 +115,9 @@ define PROJECT_ENV
 	    {background_gc_enabled, false},
 	    {background_gc_target_interval, 60000},
 	    %% rabbitmq-server-589
-	    {proxy_protocol, false}
+	    {proxy_protocol, false},
+	    {disk_monitor_failure_retries, 10},
+	    {disk_monitor_failure_retry_interval, 120000}
 	  ]
 endef
 
