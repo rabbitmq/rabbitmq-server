@@ -7,7 +7,7 @@ define PROJECT_ENV
 []
 endef
 
-DEPS =
+LOCAL_DEPS = crypto ssl inets
 TEST_DEPS =
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
