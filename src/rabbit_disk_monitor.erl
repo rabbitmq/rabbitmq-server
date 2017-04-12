@@ -250,7 +250,7 @@ interpret_limit(Absolute) ->
 
 emit_update_info(StateStr, CurrentFree, Limit) ->
     rabbit_log:info(
-      "Disk free space ~s. Free bytes:~p Limit:~p~n",
+      "Free disk space is ~s. Free bytes: ~p. Limit: ~p~n",
       [StateStr, CurrentFree, Limit]).
 
 start_timer(State) ->
