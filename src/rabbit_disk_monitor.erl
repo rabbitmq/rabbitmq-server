@@ -65,7 +65,12 @@
           alarmed,
           %% is monitoring enabled? false on unsupported
           %% platforms
-          enabled
+          enabled,
+          %% number of retries to enable monitoring if it fails
+          %% on start-up
+          retries,
+          %% Interval between retries
+          interval
 }).
 
 %%----------------------------------------------------------------------------
@@ -114,20 +119,17 @@ start_link(Args) ->
 
 init([Limit]) ->
     Dir = dir(),
+    {ok, Retries} = application:get_env(rabbit, disk_monitor_enable_retries),
+    {ok, Interval} = application:get_env(rabbit, disk_monitor_enable_interval),
     State = #state{dir          = Dir,
                    min_interval = ?DEFAULT_MIN_DISK_CHECK_INTERVAL,
                    max_interval = ?DEFAULT_MAX_DISK_CHECK_INTERVAL,
                    alarmed      = false,
-                   enabled      = true},
-    case {catch get_disk_free(Dir),
-          vm_memory_monitor:get_total_memory()} of
-        {N1, N2} when is_integer(N1), is_integer(N2) ->
-            {ok, start_timer(set_disk_limits(State, Limit))};
-        Err ->
-            rabbit_log:info("Disabling disk free space monitoring "
-                            "on unsupported platform:~n~p~n", [Err]),
-            {ok, State#state{enabled = false}}
-    end.
+                   enabled      = true,
+                   limit        = Limit,
+                   retries      = Retries,
+                   interval     = Interval},
+    {ok, enable(State)}.
 
 handle_call(get_disk_free_limit, _From, State = #state{limit = Limit}) ->
     {reply, Limit, State};
@@ -161,6 +163,8 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
+handle_info(try_enable, #state{retries = Retries} = State) ->
+    {noreply, enable(State#state{retries = Retries - 1})};
 handle_info(update, State) ->
     {noreply, start_timer(internal_update(State))};
 
@@ -261,3 +265,20 @@ interval(#state{limit        = Limit,
                 max_interval = MaxInterval}) ->
     IdealInterval = 2 * (Actual - Limit) / ?FAST_RATE,
     trunc(erlang:max(MinInterval, erlang:min(MaxInterval, IdealInterval))).
+
+enable(#state{retries = 0} = State) ->
+    State;
+enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries}
+       = State) ->
+    case {catch get_disk_free(Dir),
+          vm_memory_monitor:get_total_memory()} of
+        {N1, N2} when is_integer(N1), is_integer(N2) ->
+            rabbit_log:info("Enabling disk free space monitoring~n", []),
+            start_timer(set_disk_limits(State, Limit));
+        Err ->
+            rabbit_log:info("Disabling disk free space monitoring "
+                            "on unsupported platform, ~p retries left:~n~p~n",
+                            [Retries, Err]),
+            timer:send_after(Interval, self(), try_enable),
+            State#state{enabled = false}
+    end.

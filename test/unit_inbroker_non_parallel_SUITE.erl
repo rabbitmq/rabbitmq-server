@@ -35,6 +35,7 @@ groups() ->
           app_management, %% Restart RabbitMQ.
           channel_statistics, %% Expect specific statistics.
           disk_monitor, %% Replace rabbit_misc module.
+          disk_monitor_enable,
           file_handle_cache, %% Change FHC limit.
           head_message_timestamp_statistics, %% Expect specific statistics.
           log_management, %% Check log files.
@@ -742,6 +743,37 @@ disk_monitor1(_Config) ->
     ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup),
     ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [1000]),
     meck:unload(rabbit_misc),
+    passed.
+
+disk_monitor_enable(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, disk_monitor_enable1, [Config]).
+
+disk_monitor_enable1(_Config) ->
+    case os:type() of
+        {unix, _} ->
+            disk_monitor_enable1();
+        _ ->
+            %% skip windows testing
+            skipped
+    end.
+
+disk_monitor_enable1() ->
+    ok = meck:new(rabbit_misc, [passthrough]),
+    ok = meck:expect(rabbit_misc, os_cmd, fun(_) -> "\n" end),
+    application:set_env(rabbit, disk_monitor_enable_retries, 20000),
+    application:set_env(rabbit, disk_monitor_enable_interval, 100),
+    ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup),
+    ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [1000]),
+    undefined = rabbit_disk_monitor:get_disk_free(),
+    Cmd = "Filesystem 1024-blocks      Used Available Capacity  iused     ifree %iused  Mounted on\n/dev/disk1   975798272 234783364 740758908    25% 58759839 185189727   24%   /\n",
+    ok = meck:expect(rabbit_misc, os_cmd, fun(_) -> Cmd end),
+    timer:sleep(1000),
+    Bytes = 740758908 * 1024,
+    Bytes = rabbit_disk_monitor:get_disk_free(),
+    meck:unload(rabbit_misc),
+    application:set_env(rabbit, disk_monitor_enable_retries, 10),
+    application:set_env(rabbit, disk_monitor_enable_interval, 120000),
     passed.
 
 %% ---------------------------------------------------------------------------
