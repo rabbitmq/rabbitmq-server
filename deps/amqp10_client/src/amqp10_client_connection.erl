@@ -1,3 +1,19 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(amqp10_client_connection).
 
 -behaviour(gen_fsm).
@@ -6,18 +22,15 @@
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 %% Public API.
--export([
-         open/1,
-         close/2
-        ]).
+-export([open/1,
+         close/2]).
 
 %% Private API.
 -export([start_link/2,
          socket_ready/2,
          protocol_header_received/5,
          begin_session/1,
-         heartbeat/1
-        ]).
+         heartbeat/1]).
 
 %% gen_fsm callbacks.
 -export([init/1,
@@ -46,7 +59,7 @@
       port => inet:port_number(),
       tls_opts => {secure_port, [ssl:ssl_option()]},
       notify => pid(),
-      max_frame_size => non_neg_integer(), % TODO constrain to large than 512
+      max_frame_size => non_neg_integer(), % TODO: constrain to large than 512
       outgoing_max_frame_size => non_neg_integer() | undefined,
       idle_time_out => non_neg_integer(),
       sasl => none | anon | {plain, User :: binary(), Pwd :: binary()}
@@ -219,7 +232,6 @@ opened({close, Reason}, State = #state{config = Config}) ->
         Error           -> {stop, Error, State}
     end;
 opened(#'v1_0.close'{error = Error}, State = #state{config = Config}) ->
-    ?DBG("close received with ~p~n", [Error]),
     %% We receive the first close frame, reply and terminate.
     ok = notify_closed(Config, translate_err(Error)),
     _ = send_close(State, none),
@@ -351,7 +363,6 @@ send(Record, FrameType, #state{socket = Socket}) ->
     socket_send(Socket, Frame).
 
 send_heartbeat(#state{socket = Socket}) ->
-    ?DBG("sending heartbeat~n", []),
     Frame = rabbit_amqp1_0_binary_generator:build_heartbeat_frame(),
     socket_send(Socket, Frame).
 

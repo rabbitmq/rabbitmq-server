@@ -1,10 +1,25 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(amqp10_client).
 
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--export([
-         open_connection/1,
+-export([open_connection/1,
          open_connection/2,
          close_connection/1,
          begin_session/1,
@@ -31,9 +46,7 @@
 
 -opaque link_ref() :: #link_ref{}.
 
--export_type([link_ref/0,
-              result/2
-             ]).
+-export_type([link_ref/0]).
 
 %% @doc Convenience function for opening a connection providing only an
 %% address and port. This uses anonymous sasl authentication.
@@ -225,8 +238,7 @@ get_msg(LinkRef) ->
 %% Flows a single link credit then awaits delivery or timeout.
 -spec get_msg(link_ref(), non_neg_integer()) ->
     {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.
-get_msg(#link_ref{role = receiver} = Ref,
-        Timeout) ->
+get_msg(#link_ref{role = receiver} = Ref, Timeout) ->
     %flow 1
     ok = flow_link_credit(Ref, 1, never),
     % wait for transfer

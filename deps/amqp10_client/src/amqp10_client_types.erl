@@ -1,12 +1,25 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%
 -module(amqp10_client_types).
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--export([
-         unpack/1,
+-export([unpack/1,
          utf8/1,
-         uint/1
-        ]).
+         uint/1]).
 
 -type amqp10_performative() :: #'v1_0.open'{} | #'v1_0.begin'{} | #'v1_0.attach'{} |
                                #'v1_0.flow'{} | #'v1_0.transfer'{} |
@@ -38,7 +51,9 @@
 -type session_error() :: atom(). % TODO
 -type link_error() :: atom(). % TODO
 
--type connection_event_detail() :: opened | {closed, Reason::any()} | {error, {connection_error(), any()}}.
+-type connection_event_detail() :: opened |
+                                   {closed, Reason::any()} |
+                                   {error, {connection_error(), any()}}.
 -type session_event_detail() :: begun | ended | {error, {session_error(), any()}}.
 -type link_event_detail() :: attached | detached | {error, {link_error(), any()}}.
 -type amqp10_event_detail() :: {connection, pid(), connection_event_detail()} |
@@ -50,9 +65,7 @@
 -export_type([amqp10_performative/0, channel/0,
               source/0, target/0, amqp10_msg_record/0,
               delivery_state/0, amqp_error/0, connection_error/0,
-              amqp10_event_detail/0, amqp10_event/0
-             ]).
-
+              amqp10_event_detail/0, amqp10_event/0]).
 
 
 unpack(undefined) -> undefined;

@@ -1,3 +1,18 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%
 -module(amqp10_client_session).
 
 -behaviour(gen_fsm).
@@ -403,7 +418,6 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
             {reply, {error, insufficient_credit}, mapped, State};
         #{OutHandle := Link} ->
-            ?DBG("transfer delivery_id ~p~n", [NOI]),
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NOI),
                                                  resume = false},
             {ok, NumFrames} = send_transfer(Transfer, Parts, State),
@@ -506,7 +520,6 @@ encode_frame(Record, #state{channel = Channel}) ->
     rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded).
 
 send(Record, #state{socket = Socket} = State) ->
-    ?DBG("SESSION SEND ~p~n", [Record]),
     Frame = encode_frame(Record, State),
     socket_send(Socket, Frame).
 
@@ -528,7 +541,6 @@ send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
     MaxPayloadSize = OutMaxFrameSize - TSize - ?FRAME_HEADER_SIZE,
 
     Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
-    ?DBG("SESSION SEND ~p Frames ~p~n", [Transfer0, length(Frames)]),
     ok = socket_send(Socket, Frames),
     {ok, length(Frames)}.
 
@@ -649,14 +661,10 @@ handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
                                  incoming_window = {uint, InWin},
                                  outgoing_window = {uint, OutWin}},
        #state{next_outgoing_id = OurNOI} = State) ->
-
     NII = case MaybeNII of
               {uint, N} -> N;
-              undefined -> ?INITIAL_OUTGOING_ID + 1 % TODO: should it be +1?
+              undefined -> ?INITIAL_OUTGOING_ID + 1
           end,
-
-    ?DBG("handling session flow, setting next_incoming_id to ~p~n", [NOI]),
-
     State#state{next_incoming_id = NOI,
                 remote_incoming_window = NII + InWin - OurNOI, % see: 2.5.6
                 remote_outgoing_window = OutWin}.
@@ -743,7 +751,6 @@ notify_link_detached(Link, Reason) ->
 
 notify_link(#link{notify = Pid, ref = Ref}, What) ->
     Evt = {amqp10_event, {link, Ref, What}},
-    ?DBG("notify link ~p~n", [Evt]),
     Pid ! Evt,
     ok.
 
@@ -785,7 +792,6 @@ book_transfer_received(#state{next_incoming_id = NID,
     State1 = State#state{links = Links#{OutHandle => Link1},
                          next_incoming_id = NID+1,
                          remote_outgoing_window = ROW-1},
-    ?DBG("Link1 ~p~n", [Link1]),
     case Link1 of
         #link{link_credit = Credit,
               auto_flow = {auto, Limit, _}} when Credit =< Limit ->
