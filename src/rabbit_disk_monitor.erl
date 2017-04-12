@@ -273,12 +273,12 @@ enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries}
     case {catch get_disk_free(Dir),
           vm_memory_monitor:get_total_memory()} of
         {N1, N2} when is_integer(N1), is_integer(N2) ->
-            rabbit_log:info("Enabling disk free space monitoring~n", []),
+            rabbit_log:info("Enabling free disk space monitoring~n", []),
             start_timer(set_disk_limits(State, Limit));
         Err ->
-            rabbit_log:info("Disabling disk free space monitoring "
-                            "on unsupported platform, ~p retries left:~n~p~n",
-                            [Retries, Err]),
+            rabbit_log:info("Free disk space monitor encountered an error "
+                            "(e.g. failed to parse output from OS tools): ~p, retries left: ~s~n",
+                            [Err, Retries]),
             timer:send_after(Interval, self(), try_enable),
             State#state{enabled = false}
     end.
