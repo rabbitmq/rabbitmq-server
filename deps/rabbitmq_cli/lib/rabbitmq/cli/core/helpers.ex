@@ -198,6 +198,23 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     |> Stream.take(1)
   end
 
+  # Streamify function sequence.
+  # Execution can be terminated by an error {:error, _}.
+  # The error will be the last element in the stream.
+  def stream_until_error(funs) do
+    Stream.transform(
+      funs, :just,
+      fn
+        (f, :just) ->
+          case f.() do
+            {:error, _} = err -> {[err], :nothing};
+            other             -> {[other], :just}
+          end;
+        (_, :nothing) ->
+          {:halt, :nothing}
+    end)
+  end
+
   def apply_if_exported(mod, fun, args, default) do
     case function_exported?(mod, fun, length(args)) do
       true  -> apply(mod, fun, args);
@@ -213,5 +230,15 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   end
 
   def cli_acting_user, do: "rmq-cli"
+
+  def string_or_inspect(val) do
+    case String.Chars.impl_for(val) do
+      nil -> inspect(val);
+      _   ->
+        try do to_string(val)
+        catch _, _ -> inspect(val)
+        end
+    end
+  end
 
 end

@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
 
   def validate([], _), do: :ok
   def validate([_pidfile_path], _), do: :ok
-  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
+  def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
@@ -44,7 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
 
   end
 
-  def usage, do: "stop"
+  def usage, do: "stop [<pidfile>]"
 
   def banner([pidfile_path], %{node: node_name}) do
     "Stopping and halting node #{node_name} (will monitor pid file #{pidfile_path}) ..."
