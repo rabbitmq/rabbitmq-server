@@ -110,10 +110,17 @@ decode_map(Fields) ->
 encode_described(list, CodeNumber, Frame) ->
     {described, {ulong, CodeNumber},
      {list, lists:map(fun encode/1, tl(tuple_to_list(Frame)))}};
-encode_described(map, CodeNumber, Frame) ->
-    {described, {ulong, CodeNumber},
-     {map, lists:zip(keys(Frame),
-                     lists:map(fun encode/1, tl(tuple_to_list(Frame))))}};
+encode_described(map, CodeNumber,
+                 #'v1_0.application_properties'{content = Content}) ->
+    {described, {ulong, CodeNumber}, {map, Content}};
+encode_described(map, CodeNumber,
+                 #'v1_0.delivery_annotations'{content = Content}) ->
+    {described, {ulong, CodeNumber}, {map, Content}};
+encode_described(map, CodeNumber,
+                 #'v1_0.message_annotations'{content = Content}) ->
+    {described, {ulong, CodeNumber}, {map, Content}};
+encode_described(map, CodeNumber, #'v1_0.footer'{content = Content}) ->
+    {described, {ulong, CodeNumber}, {map, Content}};
 encode_described(binary, CodeNumber, #'v1_0.data'{content = Content}) ->
     {described, {ulong, CodeNumber}, {binary, Content}};
 encode_described('*', CodeNumber, #'v1_0.amqp_value'{content = Content}) ->
@@ -145,3 +152,17 @@ pprint(Thing) when is_tuple(Thing) ->
                    {T, lists:zip(Names, [pprint(I) || I <- L])}
     end;
 pprint(Other) -> Other.
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+encode_decode_test_() ->
+    Data = [{{utf8, <<"k">>}, {binary, <<"v">>}}],
+    Test = fun(M) -> [M] = decode_bin(iolist_to_binary(encode_bin(M))) end,
+    [fun() -> Test(#'v1_0.application_properties'{content = Data}) end,
+     fun() -> Test(#'v1_0.delivery_annotations'{content = Data}) end,
+     fun() -> Test(#'v1_0.message_annotations'{content = Data}) end,
+     fun() -> Test(#'v1_0.footer'{content = Data}) end].
+
+
+-endif.
