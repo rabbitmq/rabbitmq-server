@@ -174,6 +174,7 @@ detach(Session, Handle) ->
     ok | {error, insufficient_credit | link_not_found | half_attached}.
 transfer(Session, Amqp10Msg, Timeout) ->
     [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
+    error_logger:info_msg("Transfer: ~p Records ~p~n", [Transfer, Records]),
     gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}, Timeout).
 
 flow(Session, Handle, Flow, RenewAfter) ->
@@ -517,8 +518,8 @@ send_end(#state{socket = Socket} = State) ->
     socket_send(Socket, Frame).
 
 encode_frame(Record, #state{channel = Channel}) ->
-    Encoded = rabbit_amqp1_0_framing:encode_bin(Record),
-    rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded).
+    Encoded = amqp10_framing:encode_bin(Record),
+    amqp10_binary_generator:build_frame(Channel, Encoded).
 
 send(Record, #state{socket = Socket} = State) ->
     Frame = encode_frame(Record, State),
@@ -532,9 +533,10 @@ send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
                           #{outgoing_max_frame_size := Sz} -> Sz;
                           _ -> ?MAX_MAX_FRAME_SIZE
                       end,
-    Transfer = rabbit_amqp1_0_framing:encode_bin(Transfer0),
+    Transfer = amqp10_framing:encode_bin(Transfer0),
     TSize = iolist_size(Transfer),
-    Parts = [rabbit_amqp1_0_framing:encode_bin(P) || P <- Parts0],
+    error_logger:info_msg("Parts ~p~n", [Parts0]),
+    Parts = [amqp10_framing:encode_bin(P) || P <- Parts0],
     PartsBin = iolist_to_binary(Parts),
 
     % TODO: this does not take the extended header into account
@@ -574,13 +576,13 @@ send_flow(Send, OutHandle,
 
 build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)
   when byte_size(Bin) =< MaxPayloadSize ->
-    T = rabbit_amqp1_0_framing:encode_bin(Trf#'v1_0.transfer'{more = false}),
-    Frame = rabbit_amqp1_0_binary_generator:build_frame(Channel, [T, Bin]),
+    T = amqp10_framing:encode_bin(Trf#'v1_0.transfer'{more = false}),
+    Frame = amqp10_binary_generator:build_frame(Channel, [T, Bin]),
     lists:reverse([Frame | Acc]);
 build_frames(Channel, Trf, Payload, MaxPayloadSize, Acc) ->
     <<Bin:MaxPayloadSize/binary, Rest/binary>> = Payload,
-    T = rabbit_amqp1_0_framing:encode_bin(Trf#'v1_0.transfer'{more = true}),
-    Frame = rabbit_amqp1_0_binary_generator:build_frame(Channel, [T, Bin]),
+    T = amqp10_framing:encode_bin(Trf#'v1_0.transfer'{more = true}),
+    Frame = amqp10_binary_generator:build_frame(Channel, [T, Bin]),
     build_frames(Channel, Trf, Rest, MaxPayloadSize, [Frame | Acc]).
 
 make_source(#{role := {sender, _}}) ->
@@ -834,7 +836,7 @@ complete_partial_transfer(_Transfer, Payload,
     {T, iolist_to_binary(lists:reverse([Payload | Payloads]))}.
 
 decode_as_msg(Transfer, Payload) ->
-    Records = rabbit_amqp1_0_framing:decode_bin(Payload),
+    Records = amqp10_framing:decode_bin(Payload),
     amqp10_msg:from_amqp_records([Transfer | Records]).
 
 amqp10_session_event(Evt) ->

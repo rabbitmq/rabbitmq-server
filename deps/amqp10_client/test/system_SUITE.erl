@@ -274,7 +274,8 @@ roundtrip(OpenConf) ->
                                                     <<"test1">>),
     await_link(Sender, credited, link_credit_timeout),
 
-    Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
+    Msg0 = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
+    Msg = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg0),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = amqp10_client:detach_link(Sender),
     await_link(Sender, {detached, normal}, link_detach_timeout),
@@ -286,6 +287,8 @@ roundtrip(OpenConf) ->
     {ok, OutMsg} = amqp10_client:get_msg(Receiver),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
+    ct:pal("rondtrip message Out: ~p~nIn: ~p~n", [OutMsg, Msg]),
+    #{<<"a_key">> := <<"a_value">>} = amqp10_msg:application_properties(OutMsg),
     ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)),
     ok.
 

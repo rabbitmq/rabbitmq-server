@@ -261,8 +261,8 @@ handle_input(expecting_frame_body, Data,
             handle_input(expecting_frame_header, Rest, State);
         {<<FrameBody:BodyLength/binary, Rest/binary>>, _} ->
             State1 = State#state{frame_state = undefined},
-            {PerfDesc, Payload} = rabbit_amqp1_0_binary_parser:parse(FrameBody),
-            Perf = rabbit_amqp1_0_framing:decode(PerfDesc),
+            {PerfDesc, Payload} = amqp10_binary_parser:parse(FrameBody),
+            Perf = amqp10_framing:decode(PerfDesc),
             State2 = route_frame(Channel, FrameType, {Perf, Payload}, State1),
             handle_input(expecting_frame_header, Rest, State2);
         _ ->

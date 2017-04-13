@@ -328,16 +328,16 @@ send_open(#state{socket = Socket, config = Config}) ->
                    Open1#'v1_0.open'{hostname = {utf8, Hostname}};
                _ -> Open1
            end,
-    Encoded = rabbit_amqp1_0_framing:encode_bin(Open),
-    Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
+    Encoded = amqp10_framing:encode_bin(Open),
+    Frame = amqp10_binary_generator:build_frame(0, Encoded),
     ?DBG("CONN <- ~p~n", [Open]),
     socket_send(Socket, Frame).
 
 
 send_close(#state{socket = Socket}, _Reason) ->
     Close = #'v1_0.close'{},
-    Encoded = rabbit_amqp1_0_framing:encode_bin(Close),
-    Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
+    Encoded = amqp10_framing:encode_bin(Close),
+    Frame = amqp10_binary_generator:build_frame(0, Encoded),
     ?DBG("CONN <- ~p~n", [Close]),
     Ret = socket_send(Socket, Frame),
     case Ret of
@@ -358,13 +358,13 @@ send_sasl_init(State, {plain, User, Pass}) ->
     send(Frame, 1, State).
 
 send(Record, FrameType, #state{socket = Socket}) ->
-    Encoded = rabbit_amqp1_0_framing:encode_bin(Record),
-    Frame = rabbit_amqp1_0_binary_generator:build_frame(0, FrameType, Encoded),
+    Encoded = amqp10_framing:encode_bin(Record),
+    Frame = amqp10_binary_generator:build_frame(0, FrameType, Encoded),
     ?DBG("CONN <- ~p~n", [Record]),
     socket_send(Socket, Frame).
 
 send_heartbeat(#state{socket = Socket}) ->
-    Frame = rabbit_amqp1_0_binary_generator:build_heartbeat_frame(),
+    Frame = amqp10_binary_generator:build_heartbeat_frame(),
     socket_send(Socket, Frame).
 
 socket_send({tcp, Socket}, Data) ->

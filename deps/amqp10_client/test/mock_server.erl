@@ -53,16 +53,16 @@ run(Listener) ->
 
 
 send(Socket, Ch, Records) ->
-    Encoded = [rabbit_amqp1_0_framing:encode_bin(R) || R <- Records],
-    Frame = rabbit_amqp1_0_binary_generator:build_frame(Ch, Encoded),
+    Encoded = [amqp10_framing:encode_bin(R) || R <- Records],
+    Frame = amqp10_binary_generator:build_frame(Ch, Encoded),
     ok = gen_tcp:send(Socket, Frame).
 
 recv(Sock) ->
     {ok, <<Length:32/unsigned, 2:8/unsigned,
            _/unsigned, Ch:16/unsigned>>} = gen_tcp:recv(Sock, 8),
     {ok, Data} = gen_tcp:recv(Sock, Length - 8),
-    {PerfDesc, Payload} = rabbit_amqp1_0_binary_parser:parse(Data),
-    Perf = rabbit_amqp1_0_framing:decode(PerfDesc),
+    {PerfDesc, Payload} = amqp10_binary_parser:parse(Data),
+    Perf = amqp10_framing:decode(PerfDesc),
     {Ch, Perf, Payload}.
 
 amqp_step(Fun) ->
