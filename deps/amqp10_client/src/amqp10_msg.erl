@@ -38,7 +38,8 @@
          set_settled/2,
          set_message_format/2,
          set_headers/2,
-         set_properties/2]).
+         set_properties/2,
+         set_application_properties/2]).
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
@@ -113,8 +114,17 @@ from_amqp_records([#'v1_0.transfer'{} = Transfer | Records]) ->
                                                    body = unset}, Records).
 
 -spec to_amqp_records(amqp10_msg()) -> [amqp10_client_types:amqp10_msg_record()].
-to_amqp_records(#amqp10_msg{transfer = T, body = B}) ->
-    lists:flatten([T, B]).
+to_amqp_records(#amqp10_msg{transfer = T,
+                            header = H,
+                            delivery_annotations = DAs,
+                            message_annotations = MAs,
+                            properties = Ps,
+                            application_properties = APs,
+                            body = B,
+                            footer = F
+                            }) ->
+    L = lists:flatten([T, H, DAs, MAs, Ps, APs, B, F]),
+    lists:filter(fun has_value/1, L).
 
 -spec delivery_tag(amqp10_msg()) -> delivery_tag().
 delivery_tag(#amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = Tag}}) ->
@@ -333,6 +343,24 @@ set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->
                   end, Current, Props),
     Msg#amqp10_msg{properties = P}.
 
+-spec set_application_properties(#{binary() | string()  => binary() | string()},
+                                 amqp10_msg()) -> amqp10_msg().
+set_application_properties(Props,
+                           #amqp10_msg{application_properties = undefined} =
+                           Msg) ->
+    APs = #'v1_0.application_properties'{content = []},
+    set_application_properties(Props,
+                               Msg#amqp10_msg{application_properties = APs});
+set_application_properties(
+  Props0, #amqp10_msg{application_properties =
+                      #'v1_0.application_properties'{content = APs0}} = Msg) ->
+    Props = maps:fold(fun (K, V, S) ->
+                              S#{utf8(K) => utf8(V)}
+                      end, maps:from_list(APs0), Props0),
+    APs = #'v1_0.application_properties'{content = maps:to_list(Props)},
+    Msg#amqp10_msg{application_properties = APs}.
+
+
 %% LOCAL
 
 header_value(durable, undefined) -> false;
@@ -366,3 +394,5 @@ utf8(V) -> amqp10_client_types:utf8(V).
 sym(B) -> {symbol, B}.
 uint(B) -> {uint, B}.
 
+has_value(undefined) -> false;
+has_value(_) -> true.

@@ -25,25 +25,26 @@
 
 
 all() ->
-    [{group, parallel_tests}].
+    [{group, tests}].
 
 groups() ->
     [
-     {parallel_tests, [parallel], [
-                                   minimal_input,
-                                   amqp_bodies,
-                                   full_input,
-                                   new,
-                                   new_with_options,
-                                   new_amqp_value,
-                                   new_amqp_sequence,
-                                   set_message_format,
-                                   set_headers,
-                                   update_headers,
-                                   set_properties,
-                                   to_amqp_records,
-                                   set_handle
-                                  ]}
+     {tests, [parallel], [
+                          minimal_input,
+                          amqp_bodies,
+                          full_input,
+                          new,
+                          new_with_options,
+                          new_amqp_value,
+                          new_amqp_sequence,
+                          set_message_format,
+                          set_headers,
+                          update_headers,
+                          set_properties,
+                          set_application_properties,
+                          to_amqp_records,
+                          set_handle
+                         ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -248,9 +249,21 @@ set_properties(_Config) ->
     Msg1 = amqp10_msg:set_properties(Props, Msg0),
     Props = amqp10_msg:properties(Msg1).
 
+set_application_properties(_Config) ->
+    Props = #{"key" => "value",
+              <<"key2">> => <<"value2">>},
+    Msg0 = amqp10_msg:new(<<"tag">>,  <<"hi">>),
+    Msg1 = amqp10_msg:set_application_properties(Props, Msg0),
+    #{<<"key">> := <<"value">>,
+      <<"key2">> := <<"value2">>} = amqp10_msg:application_properties(Msg1).
+
+
 to_amqp_records(_Config) ->
-    Msg = amqp10_msg:new(<<"tag">>, <<"data">>),
-    [#'v1_0.transfer'{}, #'v1_0.data'{content = <<"data">>}] =
+    Msg0 = amqp10_msg:new(<<"tag">>, <<"data">>),
+    Msg = amqp10_msg:set_headers(#{durable => true}, Msg0),
+    [#'v1_0.transfer'{},
+     #'v1_0.header'{durable = true},
+     #'v1_0.data'{content = <<"data">>}] =
      amqp10_msg:to_amqp_records(Msg).
 %% -------------------------------------------------------------------
 %% Utilities
