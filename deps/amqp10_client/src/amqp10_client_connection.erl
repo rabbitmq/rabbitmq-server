@@ -191,8 +191,8 @@ hdr_sent({protocol_header_received, 0, 1, 0, 0}, State) ->
     end;
 hdr_sent({protocol_header_received, Protocol, Maj, Min,
                                 Rev}, State) ->
-    ?DBG("Unsupported protocol version: ~b ~b.~b.~b~n",
-                          [Protocol, Maj, Min, Rev]),
+    error_logger:warning_msg("Unsupported protocol version: ~b ~b.~b.~b~n",
+                             [Protocol, Maj, Min, Rev]),
     {stop, normal, State}.
 
 open_sent(#'v1_0.open'{max_frame_size = MFSz, idle_time_out = Timeout},
@@ -237,7 +237,8 @@ opened(#'v1_0.close'{error = Error}, State = #state{config = Config}) ->
     _ = send_close(State, none),
     {stop, normal, State};
 opened(Frame, State) ->
-    ?DBG("UNEXPECTED CONNECTION FRAME ~p~n", [Frame]),
+    error_logger:warning_msg("Unexpected connection frame ~p when in state ~p ~n",
+                             [Frame, State]),
     {next_state, opened, State}.
 
 close_sent(#'v1_0.close'{}, State) ->

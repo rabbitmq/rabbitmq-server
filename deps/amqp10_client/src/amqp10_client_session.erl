@@ -399,7 +399,8 @@ mapped(#'v1_0.disposition'{role = true, settled = true, first = {uint, First},
 
     {next_state, mapped, State#state{unsettled = Unsettled}};
 mapped(Frame, State) ->
-    ?DBG("UNHANDLED FRAME ~p~n", [Frame]),
+    error_logger:warning_msg("Unhandled session frame ~p in state ~p~n",
+                             [Frame, State]),
     {next_state, mapped, State}.
 
 %% mapped/3
