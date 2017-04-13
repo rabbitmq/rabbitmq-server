@@ -4,6 +4,7 @@
 /.erlang.mk/
 /deps/
 /plugins/
+.envrc
 
 PACKAGES/
 
