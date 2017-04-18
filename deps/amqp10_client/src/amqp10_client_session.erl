@@ -174,7 +174,6 @@ detach(Session, Handle) ->
     ok | {error, insufficient_credit | link_not_found | half_attached}.
 transfer(Session, Amqp10Msg, Timeout) ->
     [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
-    error_logger:info_msg("Transfer: ~p Records ~p~n", [Transfer, Records]),
     gen_fsm:sync_send_event(Session, {transfer, Transfer, Records}, Timeout).
 
 flow(Session, Handle, Flow, RenewAfter) ->
@@ -535,7 +534,6 @@ send_transfer(Transfer0, Parts0, #state{socket = Socket, channel = Channel,
                       end,
     Transfer = amqp10_framing:encode_bin(Transfer0),
     TSize = iolist_size(Transfer),
-    error_logger:info_msg("Parts ~p~n", [Parts0]),
     Parts = [amqp10_framing:encode_bin(P) || P <- Parts0],
     PartsBin = iolist_to_binary(Parts),
 

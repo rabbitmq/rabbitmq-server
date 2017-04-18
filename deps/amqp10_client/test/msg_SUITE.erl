@@ -42,6 +42,8 @@ groups() ->
                           update_headers,
                           set_properties,
                           set_application_properties,
+                          set_delivery_annotations,
+                          set_message_annotations,
                           to_amqp_records,
                           set_handle
                          ]}
@@ -255,8 +257,24 @@ set_application_properties(_Config) ->
     Msg0 = amqp10_msg:new(<<"tag">>,  <<"hi">>),
     Msg1 = amqp10_msg:set_application_properties(Props, Msg0),
     #{<<"key">> := <<"value">>,
-      <<"key2">> := <<"value2">>} = amqp10_msg:application_properties(Msg1).
+      <<"key2">> := <<"value2">>} = amqp10_msg:application_properties(Msg1),
+    ok.
 
+set_delivery_annotations(_Config) ->
+    Props = #{<<"x-key">> => "value",
+              <<"x-key2">> => 9},
+    Msg0 = amqp10_msg:new(<<"tag">>,  <<"hi">>),
+    Msg1 = amqp10_msg:set_delivery_annotations(Props, Msg0),
+    #{<<"x-key">> := <<"value">>,
+      <<"x-key2">> := 9} = amqp10_msg:delivery_annotations(Msg1).
+
+set_message_annotations(_Config) ->
+    Props = #{<<"x-key">> => "value",
+              <<"x-key2">> => 9},
+    Msg0 = amqp10_msg:new(<<"tag">>,  <<"hi">>),
+    Msg1 = amqp10_msg:set_message_annotations(Props, Msg0),
+    #{<<"x-key">> := <<"value">>,
+      <<"x-key2">> := 9} = amqp10_msg:message_annotations(Msg1).
 
 to_amqp_records(_Config) ->
     Msg0 = amqp10_msg:new(<<"tag">>, <<"data">>),
