@@ -335,9 +335,9 @@ set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->
                      (content_encoding, V, Acc) ->
                           Acc#'v1_0.properties'{content_encoding = sym(V)};
                      (absolute_expiry_time, V, Acc) ->
-                          Acc#'v1_0.properties'{absolute_expiry_time = uint(V)};
+                          Acc#'v1_0.properties'{absolute_expiry_time = {timestamp, V}};
                      (creation_time, V, Acc) ->
-                          Acc#'v1_0.properties'{creation_time = uint(V)};
+                          Acc#'v1_0.properties'{creation_time = {timestamp, V}};
                      (group_id, V, Acc) ->
                           Acc#'v1_0.properties'{group_id = utf8(V)};
                      (group_sequence, V, Acc) ->

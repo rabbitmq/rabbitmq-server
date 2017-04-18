@@ -129,8 +129,8 @@ full_input(_Config) ->
                                 correlation_id = utf8("correlation_id"),
                                 content_type = {symbol, <<"utf8">>},
                                 content_encoding = {symbol, <<"gzip">>},
-                                absolute_expiry_time = {uint, 1000},
-                                creation_time = {uint, 10},
+                                absolute_expiry_time = {timestamp, 1000},
+                                creation_time = {timestamp, 10},
                                 group_id = utf8("group-id"),
                                 group_sequence = {uint, 33},
                                 reply_to_group_id = utf8("reply-to-group-id")

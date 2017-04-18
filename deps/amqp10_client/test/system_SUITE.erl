@@ -274,7 +274,11 @@ roundtrip(OpenConf) ->
                                                     <<"test1">>),
     await_link(Sender, credited, link_credit_timeout),
 
-    Msg0 = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
+    Now = os:system_time(millisecond),
+    Props = #{creation_time => Now},
+    Msg0 =  amqp10_msg:set_properties(Props,
+                                      amqp10_msg:new(<<"my-tag">>, <<"banana">>,
+                                                     true)),
     Msg1 = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg0),
     Msg = amqp10_msg:set_message_annotations(#{<<"x_key">> => "x_value"}, Msg1),
     % RabbitMQ AMQP 1.0 does not yet support delivery annotations
@@ -291,6 +295,7 @@ roundtrip(OpenConf) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~p~nIn: ~p~n", [OutMsg, Msg]),
+    #{creation_time := Now} = amqp10_msg:properties(OutMsg),
     #{<<"a_key">> := <<"a_value">>} = amqp10_msg:application_properties(OutMsg),
     #{<<"x_key">> := <<"x_value">>} = amqp10_msg:message_annotations(OutMsg),
     % #{<<"x_key">> := <<"x_value">>} = amqp10_msg:delivery_annotations(OutMsg),
