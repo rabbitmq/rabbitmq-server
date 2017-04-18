@@ -29,8 +29,7 @@ all() ->
 groups() ->
     [
         {running_node, [], [
-            successful_shutdown,
-            error_during_shutdown
+            successful_shutdown
         ]},
         {non_running_node, [], [
             nothing_to_shutdown
@@ -91,16 +90,6 @@ successful_shutdown(Config) ->
     false = erlang_pid_is_running(Pid),
     false = node_is_running(Node).
 
-error_during_shutdown(Config) ->
-    Node = ?config(node, Config),
-    ok = rabbit_ct_broker_helpers:control_action(stop_app, Node, []),
-    ok = rpc:call(Node, application, unload, [os_mon]),
-
-    {badrpc,
-        {'EXIT', {
-            {error, {badmatch, {error,{edge,{bad_vertex,os_mon},os_mon,rabbit}}}},
-            _}}} = shutdown_error(Node).
-
 
 nothing_to_shutdown(Config) ->
     Node = ?config(node, Config),
@@ -118,14 +107,6 @@ erlang_pid_is_running(Pid) ->
 
 node_is_running(Node) ->
     net_adm:ping(Node) == pong.
-
-shutdown_error(Node) ->
-    %% Start a command
-    {stream, Stream} = rabbit_ct_broker_helpers:control_action(shutdown, Node, []),
-    %% Execute command steps. The last one should be error
-    Lines = 'Elixir.Enum':to_list(Stream),
-    {error, Err} = lists:last(Lines),
-    Err.
 
 shutdown_ok(Node) ->
     %% Start a command
