@@ -31,7 +31,7 @@ endef
 define get_mix_project_version
 $(shell cd $(1) && \
 	$(MIX) do deps.get, deps.compile, compile >/dev/null && \
-	$(MIX) run -e "IO.puts(Mix.Project.config[:version])")
+	$(MIX) run --no-start -e "IO.puts(Mix.Project.config[:version])")
 endef
 
 # Define the target to create an .ez plugin archive for an
