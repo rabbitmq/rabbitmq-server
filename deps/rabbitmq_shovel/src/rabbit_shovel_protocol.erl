@@ -4,16 +4,26 @@
 
 -type uri() :: string() | binary().
 
--type endpoint_config() :: #{module => atom(),
-                             uris => [uri()]}.
+-type ack_mode() :: 'no_ack' | 'on_confirm' | 'on_publish'.
 
--type state() :: #{source => endpoint_config(),
-                   dest => endpoint_config()}.
+-type source_config() :: #{module => atom(),
+                           uris => [uri()],
+                           atom() => term()
+                          }.
 
--export_type([state/0, endpoint_config/0, uri/0]).
+-type dest_config() :: #{module => atom(),
+                         uris => [uri()],
+                         atom() => term()
+                        }.
+-type state() :: #{source => source_config(),
+                   dest => dest_config(),
+                   ack_mode => ack_mode(),
+                   atom() => term()}.
+
+-export_type([state/0, source_config/0, dest_config/0, uri/0]).
 
 -callback parse(binary(), {source | destination, Conf :: proplists:proplist()}) ->
-    endpoint_config().
+    source_config() | dest_config().
 
 -callback connect_source(state()) -> state().
 -callback connect_dest(state()) -> state().

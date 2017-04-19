@@ -1,4 +1,4 @@
--module(rabbit_amqp0_9_1_node).
+-module(rabbit_amqp091_shovel).
 
 -behaviour(rabbit_shovel_protocol).
 
@@ -59,7 +59,7 @@ init_source(Conf = #{ack_mode := AckMode,
                      source := #{queue := Queue,
                                  current := {Conn, Chan, _},
                                  prefetch_count := Prefetch,
-                                 resource_decl := Decl}}) ->
+                                 resource_decl := Decl} = Src}) ->
 
     Decl(Conn, Chan),
 
@@ -67,8 +67,9 @@ init_source(Conf = #{ack_mode := AckMode,
     case NoAck of
         false ->
             #'basic.qos_ok'{} =
-                amqp_channel:call(Chan, #'basic.qos'{
-                                           prefetch_count = Prefetch});
+            amqp_channel:call(Chan, #'basic.qos'{
+                                       prefetch_count = Prefetch}),
+            ok;
         true  -> ok
     end,
     Remaining = remaining(Chan, Conf),
@@ -79,8 +80,8 @@ init_source(Conf = #{ack_mode := AckMode,
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Chan, #'basic.consume'{queue = Queue,
                                                       no_ack = NoAck}, self()),
-    Conf#{remaining => Remaining,
-          remaining_unacked => Remaining}.
+    Conf#{source => Src#{remaining => Remaining,
+                         remaining_unacked => Remaining}}.
 
 connect_dest(Conf = #{name := Name,
                    dest := #{uris := Uris} = Dst}) ->
@@ -286,18 +287,18 @@ get_connection_name({_, Name}) when is_binary(Name) ->
 get_connection_name(_) ->
     <<"Shovel">>.
 
-decr_remaining_unacked(State = #{remaining_unacked := unlimited}) ->
+decr_remaining_unacked(State = #{source := #{remaining_unacked := unlimited}}) ->
     State;
-decr_remaining_unacked(State = #{remaining_unacked := 0}) ->
+decr_remaining_unacked(State = #{source := #{remaining_unacked := 0}}) ->
     State;
-decr_remaining_unacked(State = #{remaining_unacked := N}) ->
+decr_remaining_unacked(State = #{source := #{remaining_unacked := N}}) ->
     State#{remaining_unacked =>  N - 1}.
 
-decr_remaining(_N, State = #{remaining := unlimited}) ->
+decr_remaining(_N, State = #{source := #{remaining := unlimited}}) ->
     State;
-decr_remaining(N, State = #{remaining := M}) ->
+decr_remaining(N, State = #{source := #{remaining := M} = Src}) ->
     case M > N of
-        true  -> State#{remaining => M - N};
+        true  -> State#{source => Src#{remaining => M - N}};
         false -> exit({shutdown, autodelete})
     end.
 
@@ -362,6 +363,7 @@ field_map(Fields, Idx0) ->
                     end, {dict:new(), Idx0}, Fields),
     Dict.
 
+-spec fail(term()) -> no_return().
 fail(Reason) -> throw({error, Reason}).
 
 add_forward_headers_fun(Name, true, PubProps) ->

@@ -27,7 +27,8 @@
 -type state() :: rabbit_shovel_protocol:state().
 -type uri() :: rabbit_shovel_protocol:uri().
 -type tag() :: rabbit_shovel_protocol:tag().
--type endpoint_config() :: rabbit_shovel_protocol:endpoint_config().
+-type endpoint_config() :: rabbit_shovel_protocol:source_config()
+                           | rabbit_shovel_protocol:dest_config().
 
 -spec parse(binary(), {source | destination, proplists:proplist()}) ->
     endpoint_config().
@@ -96,11 +97,11 @@ connect_dest(State = #{name := Name,
 
 -spec init_source(state()) -> state().
 init_source(State = #{source := #{current := #{link := Link},
-                                  prefetch_count := Prefetch}}) ->
+                                  prefetch_count := Prefetch} = Src}) ->
     ?INFO("flowing credit", []),
     ok = amqp10_client:flow_link_credit(Link, Prefetch, round(Prefetch/10)),
-    State#{remaining => unlimited,
-           remaining_unacked => unlimited}. % TODO remaining?
+    State#{source => Src#{remaining => unlimited,
+                          remaining_unacked => unlimited}}. % TODO remaining?
 
 -spec init_dest(state()) -> state().
 init_dest(State) -> State.

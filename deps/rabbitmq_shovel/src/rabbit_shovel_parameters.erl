@@ -227,14 +227,14 @@ parse({VHost, Name}, Def) ->
                       end
                   end,
     {ok, #{name => Name,
-           source => #{module => rabbit_amqp0_9_1_node,
+           source => #{module => rabbit_amqp091_shovel,
                        uris => SrcURIs,
                        resource_decl => SrcDeclFun,
                        queue => Queue,
                        delete_after => opt_b2a(pget(<<"delete-after">>, Def, <<"never">>)),
                        prefetch_count => pget(<<"prefetch-count">>, Def, 1000)
                       },
-           dest => #{module => rabbit_amqp0_9_1_node,
+           dest => #{module => rabbit_amqp091_shovel,
                      uris => DestURIs,
                      resource_decl => DestDeclFun,
                      fields_fun => PubFun,
