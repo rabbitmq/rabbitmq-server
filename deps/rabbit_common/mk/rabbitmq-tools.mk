@@ -73,14 +73,3 @@ show-branch: $(READY_DEPS:%=$(DEPS_DIR)/%+show-branch)
 	$(verbose) printf '%-34s %s\n' $(notdir $*): "$$(cd $* && (git symbolic-ref -q --short HEAD || git describe --tags --exact-match))"
 
 endif # ($(wildcard .git),)
-
-.PHONY: show-ERL_LIBS show-ERLC_OPTS show-TEST_ERLC_OPTS
-
-show-ERL_LIBS:
-	@echo $(ERL_LIBS)
-
-show-ERLC_OPTS:
-	@$(foreach opt,$(ERLC_OPTS) -pa ebin -I include,echo "$(opt)";)
-
-show-TEST_ERLC_OPTS:
-	@$(foreach opt,$(TEST_ERLC_OPTS) -pa ebin -I include,echo "$(opt)";)
