@@ -224,7 +224,15 @@ responder_map(FunctionName) ->
 reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
-reply0(Facts, ReqData, Context) ->
+reply0(Facts, ReqData0, Context) ->
+    ReqData =
+        case cowboy_req:method(ReqData0) of
+            {<<"POST">>, _} ->
+                % after a state changing operation it is best to close
+                % the keep-alive connection
+                set_resp_header(<<"Connection">>, "close", ReqData0);
+            _ -> ReqData0
+        end,
     ReqData1 = set_resp_header(<<"Cache-Control">>, "no-cache", ReqData),
     try
         case cowboy_req:meta(media_type, ReqData1) of
