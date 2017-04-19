@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-207-g9e9b7d2
+ERLANG_MK_VERSION = 2.0.0-pre.2-220-g7a200f5
 
 # Make 3.81 and 3.82 are deprecated.
 
@@ -4203,17 +4203,16 @@ endif
 # in practice only Makefile is needed so far.
 define dep_autopatch
 	if [ -f $(DEPS_DIR)/$(1)/erlang.mk ]; then \
+		rm -rf $(DEPS_DIR)/$1/ebin/; \
 		$(call erlang,$(call dep_autopatch_appsrc.erl,$(1))); \
 		$(call dep_autopatch_erlang_mk,$(1)); \
 	elif [ -f $(DEPS_DIR)/$(1)/Makefile ]; then \
 		if [ 0 != `grep -c "include ../\w*\.mk" $(DEPS_DIR)/$(1)/Makefile` ]; then \
 			$(call dep_autopatch2,$(1)); \
-		elif [ 0 != `grep -ci rebar $(DEPS_DIR)/$(1)/Makefile` ]; then \
+		elif [ 0 != `grep -ci "^[^#].*rebar" $(DEPS_DIR)/$(1)/Makefile` ]; then \
 			$(call dep_autopatch2,$(1)); \
-		elif [ -n "`find $(DEPS_DIR)/$(1)/ -type f -name \*.mk -not -name erlang.mk -exec grep -i rebar '{}' \;`" ]; then \
+		elif [ -n "`find $(DEPS_DIR)/$(1)/ -type f -name \*.mk -not -name erlang.mk -exec grep -i "^[^#].*rebar" '{}' \;`" ]; then \
 			$(call dep_autopatch2,$(1)); \
-		else \
-			$(call erlang,$(call dep_autopatch_app.erl,$(1))); \
 		fi \
 	else \
 		if [ ! -d $(DEPS_DIR)/$(1)/src/ ]; then \
@@ -4225,6 +4224,8 @@ define dep_autopatch
 endef
 
 define dep_autopatch2
+	mv -n $(DEPS_DIR)/$1/ebin/$1.app $(DEPS_DIR)/$1/src/$1.app.src; \
+	rm -f $(DEPS_DIR)/$1/ebin/$1.app; \
 	if [ -f $(DEPS_DIR)/$1/src/$1.app.src.script ]; then \
 		$(call erlang,$(call dep_autopatch_appsrc_script.erl,$(1))); \
 	fi; \
@@ -4536,22 +4537,6 @@ define dep_autopatch_rebar.erl
 	halt()
 endef
 
-define dep_autopatch_app.erl
-	UpdateModules = fun(App) ->
-		case filelib:is_regular(App) of
-			false -> ok;
-			true ->
-				{ok, [{application, '$(1)', L0}]} = file:consult(App),
-				Mods = filelib:fold_files("$(call core_native_path,$(DEPS_DIR)/$1/src)", "\\\\.erl$$", true,
-					fun (F, Acc) -> [list_to_atom(filename:rootname(filename:basename(F)))|Acc] end, []),
-				L = lists:keystore(modules, 1, L0, {modules, Mods}),
-				ok = file:write_file(App, io_lib:format("~p.~n", [{application, '$(1)', L}]))
-		end
-	end,
-	UpdateModules("$(call core_native_path,$(DEPS_DIR)/$1/ebin/$1.app)"),
-	halt()
-endef
-
 define dep_autopatch_appsrc_script.erl
 	AppSrc = "$(call core_native_path,$(DEPS_DIR)/$1/src/$1.app.src)",
 	AppSrcScript = AppSrc ++ ".script",
@@ -4828,6 +4813,8 @@ COMPILE_FIRST_PATHS = $(addprefix src/,$(addsuffix .erl,$(COMPILE_FIRST)))
 ERLC_EXCLUDE ?=
 ERLC_EXCLUDE_PATHS = $(addprefix src/,$(addsuffix .erl,$(ERLC_EXCLUDE)))
 
+ERLC_ASN1_OPTS ?=
+
 ERLC_MIB_OPTS ?=
 COMPILE_MIB_FIRST ?=
 COMPILE_MIB_FIRST_PATHS = $(addprefix mibs/,$(addsuffix .mib,$(COMPILE_MIB_FIRST)))
@@ -4877,7 +4864,7 @@ endif
 
 ifeq ($(wildcard src/$(PROJECT_MOD).erl),)
 define app_file
-{application, $(PROJECT), [
+{application, '$(PROJECT)', [
 	{description, "$(PROJECT_DESCRIPTION)"},
 	{vsn, "$(PROJECT_VERSION)"},$(if $(IS_DEP),
 	{id$(comma)$(space)"$(1)"}$(comma))
@@ -4889,7 +4876,7 @@ define app_file
 endef
 else
 define app_file
-{application, $(PROJECT), [
+{application, '$(PROJECT)', [
 	{description, "$(PROJECT_DESCRIPTION)"},
 	{vsn, "$(PROJECT_VERSION)"},$(if $(IS_DEP),
 	{id$(comma)$(space)"$(1)"}$(comma))
@@ -4920,7 +4907,7 @@ ERL_FILES += $(addprefix src/,$(patsubst %.asn1,%.erl,$(notdir $(ASN1_FILES))))
 
 define compile_asn1
 	$(verbose) mkdir -p include/
-	$(asn1_verbose) erlc -v -I include/ -o asn1/ +noobj $(1)
+	$(asn1_verbose) erlc -v -I include/ -o asn1/ +noobj $(ERLC_ASN1_OPTS) $(1)
 	$(verbose) mv asn1/*.erl src/
 	$(verbose) mv asn1/*.hrl include/
 	$(verbose) mv asn1/*.asn1db include/
@@ -5052,7 +5039,7 @@ $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES):
 ebin/$(PROJECT).app:: $(ERLANG_MK_TMP)/last-makefile-change
 endif
 
--include $(PROJECT).d
+include $(wildcard $(PROJECT).d)
 
 ebin/$(PROJECT).app:: ebin/
 
@@ -5277,6 +5264,7 @@ MAN_VERSION ?= $(PROJECT_VERSION)
 define asciidoc2man.erl
 try
 	[begin
+		io:format(" ADOC   ~s~n", [F]),
 		ok = asciideck:to_manpage(asciideck:parse_file(F), #{
 			compress => gzip,
 			outdir => filename:dirname(F),
@@ -5285,7 +5273,8 @@ try
 		})
 	end || F <- [$(shell echo $(addprefix $(comma)\",$(addsuffix \",$1)) | sed 's/^.//')]],
 	halt(0)
-catch _:_ ->
+catch C:E ->
+	io:format("Exception ~p:~p~nStacktrace: ~p~n", [C, E, erlang:get_stacktrace()]),
 	halt(1)
 end.
 endef
@@ -6123,6 +6112,7 @@ CT_SUITES := $(sort $(subst _SUITE.erl,,$(notdir $(call core_find,$(TEST_DIR)/,*
 endif
 endif
 CT_SUITES ?=
+CT_LOGS_DIR ?= $(CURDIR)/logs
 
 # Core targets.
 
@@ -6145,13 +6135,13 @@ CT_RUN = ct_run \
 	-noinput \
 	-pa $(CURDIR)/ebin $(DEPS_DIR)/*/ebin $(APPS_DIR)/*/ebin $(TEST_DIR) \
 	-dir $(TEST_DIR) \
-	-logdir $(CURDIR)/logs
+	-logdir $(CT_LOGS_DIR)
 
 ifeq ($(CT_SUITES),)
 ct: $(if $(IS_APP),,apps-ct)
 else
 ct: test-build $(if $(IS_APP),,apps-ct)
-	$(verbose) mkdir -p $(CURDIR)/logs/
+	$(verbose) mkdir -p $(CT_LOGS_DIR)
 	$(gen_verbose) $(CT_RUN) -sname ct_$(PROJECT) -suite $(addsuffix _SUITE,$(CT_SUITES)) $(CT_OPTS)
 endif
 
@@ -6179,14 +6169,14 @@ endif
 
 define ct_suite_target
 ct-$(1): test-build
-	$(verbose) mkdir -p $(CURDIR)/logs/
+	$(verbose) mkdir -p $(CT_LOGS_DIR)
 	$(gen_verbose) $(CT_RUN) -sname ct_$(PROJECT) -suite $(addsuffix _SUITE,$(1)) $(CT_EXTRA) $(CT_OPTS)
 endef
 
 $(foreach test,$(CT_SUITES),$(eval $(call ct_suite_target,$(test))))
 
 distclean-ct:
-	$(gen_verbose) rm -rf $(CURDIR)/logs/
+	$(gen_verbose) rm -rf $(CT_LOGS_DIR)
 
 # Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
@@ -6232,8 +6222,10 @@ define filter_opts.erl
 endef
 
 $(DIALYZER_PLT): deps app
-	$(verbose) dialyzer --build_plt --apps erts kernel stdlib $(PLT_APPS) $(OTP_DEPS) $(LOCAL_DEPS) \
-		`test -f $(ERLANG_MK_TMP)/deps.log && cat $(ERLANG_MK_TMP)/deps.log`
+	$(eval DEPS_LOG := $(shell test -f $(ERLANG_MK_TMP)/deps.log && \
+		while read p; do test -d $$p/ebin && echo $$p/ebin; done <$(ERLANG_MK_TMP)/deps.log))
+	$(verbose) dialyzer --build_plt --apps erts kernel stdlib \
+		$(PLT_APPS) $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS_LOG)
 
 plt: $(DIALYZER_PLT)
 
@@ -6319,7 +6311,7 @@ escript:: escript-zip
 	$(verbose) chmod +x $(ESCRIPT_FILE)
 
 distclean-escript:
-	$(gen_verbose) rm -f $(ESCRIPT_NAME)
+	$(gen_verbose) rm -f $(ESCRIPT_FILE)
 
 # Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # Copyright (c) 2014, Enrique Fernandez <enrique.fernandez@erlang-solutions.com>
@@ -6494,6 +6486,20 @@ build-shell-deps: $(ALL_SHELL_DEPS_DIRS)
 
 shell: build-shell-deps
 	$(gen_verbose) $(SHELL_ERL) -pa $(SHELL_PATHS) $(SHELL_OPTS)
+
+# Copyright (c) 2017, Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>
+# This file is contributed to erlang.mk and subject to the terms of the ISC License.
+
+.PHONY: show-ERL_LIBS show-ERLC_OPTS show-TEST_ERLC_OPTS
+
+show-ERL_LIBS:
+	@echo $(ERL_LIBS)
+
+show-ERLC_OPTS:
+	@$(foreach opt,$(ERLC_OPTS) -pa ebin -I include,echo "$(opt)";)
+
+show-TEST_ERLC_OPTS:
+	@$(foreach opt,$(TEST_ERLC_OPTS) -pa ebin -I include,echo "$(opt)";)
 
 # Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
