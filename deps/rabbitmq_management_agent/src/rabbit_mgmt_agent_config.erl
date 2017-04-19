@@ -13,4 +13,4 @@ get_env(Key) ->
 get_env(Key, Default) ->
     rabbit_misc:get_env(rabbitmq_management, Key,
                         rabbit_misc:get_env(rabbitmq_management_agent, Key,
-                                            [])).
+                                            Default)).
