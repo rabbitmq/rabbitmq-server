@@ -36,7 +36,7 @@ init([VHost]) ->
     {ok, {{one_for_all, 1, 10000000},
           [{rabbit_vhost_sup,
             {rabbit_vhost_sup_wrapper, start_vhost_sup, [VHost]},
-             intrinsic, infinity, supervisor,
+             permanent, infinity, supervisor,
              [rabbit_vhost_sup]}]}}.
 
 start_vhost_sup(VHost) ->
