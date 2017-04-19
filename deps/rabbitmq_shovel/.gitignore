@@ -9,5 +9,6 @@
 /logs/
 /plugins/
 /xrefr
+*.plt
 
 /rabbitmq_shovel.d

@@ -105,6 +105,7 @@ run_state_monad(FunList, State) ->
 
 return(V) -> V.
 
+-spec fail(term()) -> no_return().
 fail(Reason) -> throw({error, Reason}).
 %% --=: end :=--
 

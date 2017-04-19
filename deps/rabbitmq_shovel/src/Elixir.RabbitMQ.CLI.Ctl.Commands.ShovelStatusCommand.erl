@@ -86,7 +86,7 @@ fmt_name({Vhost, Name}, Map) ->
 
 fmt_ts({{YY, MM, DD}, {Hour, Min, Sec}}) ->
     erlang:list_to_binary(
-      io_lib:format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w", 
+      io_lib:format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w",
                     [YY, MM, DD, Hour, Min, Sec])).
 
 fmt_status({'running' = St, Proplist}, Map) ->

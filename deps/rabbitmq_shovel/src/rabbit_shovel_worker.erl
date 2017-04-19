@@ -74,10 +74,13 @@ handle_cast(init, State = #state{config = Config}) ->
 
     NoAck = Config#shovel.ack_mode =:= no_ack,
     case NoAck of
-        false -> Prefetch = Config#shovel.prefetch_count,
-                 #'basic.qos_ok'{} =
-                     amqp_channel:call(
-                       InboundChan, #'basic.qos'{prefetch_count = Prefetch});
+        false ->
+            Prefetch = Config#shovel.prefetch_count,
+            #'basic.qos_ok'{} =
+            amqp_channel:call(
+              InboundChan, #'basic.qos'{prefetch_count = Prefetch}),
+            ok;
+
         true  -> ok
     end,
 
@@ -165,7 +168,7 @@ terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
     close_connections(State),
     %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
     put(shovel_worker_autodelete, true),
-    rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ?SHOVEL_USER),
+    _ = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ?SHOVEL_USER),
     rabbit_shovel_status:remove({VHost, Name}),
     ok;
 terminate(Reason, State) ->
