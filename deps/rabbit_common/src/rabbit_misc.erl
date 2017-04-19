@@ -906,18 +906,21 @@ pmerge(Key, Val, List) ->
 
 %% proplists merge
 plmerge(P1, P2) ->
-    dict:to_list(dict:merge(fun(_, V, _) ->
-                                V
-                            end,
-                            dict:from_list(P1),
-                            dict:from_list(P2))).
+    %% Value from P1 suppresses value from P2
+    maps:to_list(maps:merge(maps:from_list(P2),
+                            maps:from_list(P1))).
 
 %% groups a list of proplists by a key function
 group_proplists_by(KeyFun, ListOfPropLists) ->
     Res = lists:foldl(fun(P, Agg) ->
-                        dict:update(KeyFun(P), fun (O) -> [P|O] end, [P], Agg)
-                      end, dict:new(), ListOfPropLists),
-    [ X || {_, X} <- dict:to_list(Res)].
+                        Key = KeyFun(P),
+                        Val = case maps:find(Key, Agg) of
+                            {ok, O} -> [P|O];
+                            error   -> [P]
+                        end,
+                        maps:put(Key, Val, Agg)
+                      end, #{}, ListOfPropLists),
+    [ X || {_, X} <- maps:to_list(Res)].
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 
