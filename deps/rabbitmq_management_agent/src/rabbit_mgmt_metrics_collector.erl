@@ -31,7 +31,6 @@
 -export([index_table/2]).
 -export([reset_all/0]).
 
--import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_data, [lookup_element/3]).
 
 -record(state, {table, interval, policies, rates_mode, lookup_queue,
@@ -635,3 +634,13 @@ ceil(X) ->
     end.
 
 pget(Key, List) -> pget(Key, List, unknown).
+
+pget(Key, List, Default) when is_number(Default) ->
+    case rabbit_misc:pget(Key, List) of
+        Number when is_number(Number) ->
+            Number;
+        _Other ->
+            Default
+    end;
+pget(Key, List, Default) ->
+    rabbit_misc:pget(Key, List, Default).
