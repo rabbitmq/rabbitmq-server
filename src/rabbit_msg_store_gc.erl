@@ -70,7 +70,7 @@ set_maximum_since_use(Pid, Age) ->
 init([MsgStoreState]) ->
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
-    {ok, #state { pending_no_readers = dict:new(),
+    {ok, #state { pending_no_readers = #{},
                   on_action          = [],
                   msg_store_state    = MsgStoreState }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -89,11 +89,11 @@ handle_cast({delete, File}, State) ->
 
 handle_cast({no_readers, File},
             State = #state { pending_no_readers = Pending }) ->
-    {noreply, case dict:find(File, Pending) of
+    {noreply, case maps:find(File, Pending) of
                   error ->
                       State;
                   {ok, {Action, Files}} ->
-                      Pending1 = dict:erase(File, Pending),
+                      Pending1 = maps:remove(File, Pending),
                       attempt_action(
                         Action, Files,
                         State #state { pending_no_readers = Pending1 })
@@ -123,7 +123,7 @@ attempt_action(Action, Files,
                                       fun (Thunk) -> not Thunk() end,
                                       [do_action(Action, Files, MsgStoreState) |
                                        Thunks]) };
-        [File | _] -> Pending1 = dict:store(File, {Action, Files}, Pending),
+        [File | _] -> Pending1 = maps:put(File, {Action, Files}, Pending),
                       State #state { pending_no_readers = Pending1 }
     end.
 
