@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-207-g9e9b7d2
+ERLANG_MK_VERSION = 2.0.0-pre.2-220-g7a200f5-dirty
 
 # Make 3.81 and 3.82 are deprecated.
 
@@ -4203,17 +4203,16 @@ endif
 # in practice only Makefile is needed so far.
 define dep_autopatch
 	if [ -f $(DEPS_DIR)/$(1)/erlang.mk ]; then \
+		rm -rf $(DEPS_DIR)/$1/ebin/; \
 		$(call erlang,$(call dep_autopatch_appsrc.erl,$(1))); \
 		$(call dep_autopatch_erlang_mk,$(1)); \
 	elif [ -f $(DEPS_DIR)/$(1)/Makefile ]; then \
 		if [ 0 != `grep -c "include ../\w*\.mk" $(DEPS_DIR)/$(1)/Makefile` ]; then \
 			$(call dep_autopatch2,$(1)); \
-		elif [ 0 != `grep -ci rebar $(DEPS_DIR)/$(1)/Makefile` ]; then \
+		elif [ 0 != `grep -ci "^[^#].*rebar" $(DEPS_DIR)/$(1)/Makefile` ]; then \
 			$(call dep_autopatch2,$(1)); \
-		elif [ -n "`find $(DEPS_DIR)/$(1)/ -type f -name \*.mk -not -name erlang.mk -exec grep -i rebar '{}' \;`" ]; then \
+		elif [ -n "`find $(DEPS_DIR)/$(1)/ -type f -name \*.mk -not -name erlang.mk -exec grep -i "^[^#].*rebar" '{}' \;`" ]; then \
 			$(call dep_autopatch2,$(1)); \
-		else \
-			$(call erlang,$(call dep_autopatch_app.erl,$(1))); \
 		fi \
 	else \
 		if [ ! -d $(DEPS_DIR)/$(1)/src/ ]; then \
@@ -4225,6 +4224,8 @@ define dep_autopatch
 endef
 
 define dep_autopatch2
+	mv -n $(DEPS_DIR)/$1/ebin/$1.app $(DEPS_DIR)/$1/src/$1.app.src; \
+	rm -f $(DEPS_DIR)/$1/ebin/$1.app; \
 	if [ -f $(DEPS_DIR)/$1/src/$1.app.src.script ]; then \
 		$(call erlang,$(call dep_autopatch_appsrc_script.erl,$(1))); \
 	fi; \
@@ -4536,22 +4537,6 @@ define dep_autopatch_rebar.erl
 	halt()
 endef
 
-define dep_autopatch_app.erl
-	UpdateModules = fun(App) ->
-		case filelib:is_regular(App) of
-			false -> ok;
-			true ->
-				{ok, [{application, '$(1)', L0}]} = file:consult(App),
-				Mods = filelib:fold_files("$(call core_native_path,$(DEPS_DIR)/$1/src)", "\\\\.erl$$", true,
-					fun (F, Acc) -> [list_to_atom(filename:rootname(filename:basename(F)))|Acc] end, []),
-				L = lists:keystore(modules, 1, L0, {modules, Mods}),
-				ok = file:write_file(App, io_lib:format("~p.~n", [{application, '$(1)', L}]))
-		end
-	end,
-	UpdateModules("$(call core_native_path,$(DEPS_DIR)/$1/ebin/$1.app)"),
-	halt()
-endef
-
 define dep_autopatch_appsrc_script.erl
 	AppSrc = "$(call core_native_path,$(DEPS_DIR)/$1/src/$1.app.src)",
 	AppSrcScript = AppSrc ++ ".script",
@@ -4828,6 +4813,8 @@ COMPILE_FIRST_PATHS = $(addprefix src/,$(addsuffix .erl,$(COMPILE_FIRST)))
 ERLC_EXCLUDE ?=
 ERLC_EXCLUDE_PATHS = $(addprefix src/,$(addsuffix .erl,$(ERLC_EXCLUDE)))
 
+ERLC_ASN1_OPTS ?=
+
 ERLC_MIB_OPTS ?=
 COMPILE_MIB_FIRST ?=
 COMPILE_MIB_FIRST_PATHS = $(addprefix mibs/,$(addsuffix .mib,$(COMPILE_MIB_FIRST)))
@@ -4877,7 +4864,7 @@ endif
 
 ifeq ($(wildcard src/$(PROJECT_MOD).erl),)
 define app_file
-{application, $(PROJECT), [
+{application, '$(PROJECT)', [
 	{description, "$(PROJECT_DESCRIPTION)"},
 	{vsn, "$(PROJECT_VERSION)"},$(if $(IS_DEP),
 	{id$(comma)$(space)"$(1)"}$(comma))
@@ -4889,7 +4876,7 @@ define app_file
 endef
 else
 define app_file
-{application, $(PROJECT), [
+{application, '$(PROJECT)', [
 	{description, "$(PROJECT_DESCRIPTION)"},
 	{vsn, "$(PROJECT_VERSION)"},$(if $(IS_DEP),
 	{id$(comma)$(space)"$(1)"}$(comma))
@@ -4920,7 +4907,7 @@ ERL_FILES += $(addprefix src/,$(patsubst %.asn1,%.erl,$(notdir $(ASN1_FILES))))
 
 define compile_asn1
 	$(verbose) mkdir -p include/
-	$(asn1_verbose) erlc -v -I include/ -o asn1/ +noobj $(1)
+	$(asn1_verbose) erlc -v -I include/ -o asn1/ +noobj $(ERLC_ASN1_OPTS) $(1)
 	$(verbose) mv asn1/*.erl src/
 	$(verbose) mv asn1/*.hrl include/
 	$(verbose) mv asn1/*.asn1db include/
@@ -5052,7 +5039,7 @@ $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES):
 ebin/$(PROJECT).app:: $(ERLANG_MK_TMP)/last-makefile-change
 endif
 
--include $(PROJECT).d
+include $(wildcard $(PROJECT).d)
 
 ebin/$(PROJECT).app:: ebin/
 
@@ -5277,6 +5264,7 @@ MAN_VERSION ?= $(PROJECT_VERSION)
 define asciidoc2man.erl
 try
 	[begin
+		io:format(" ADOC   ~s~n", [F]),
 		ok = asciideck:to_manpage(asciideck:parse_file(F), #{
 			compress => gzip,
 			outdir => filename:dirname(F),
@@ -5285,7 +5273,8 @@ try
 		})
 	end || F <- [$(shell echo $(addprefix $(comma)\",$(addsuffix \",$1)) | sed 's/^.//')]],
 	halt(0)
-catch _:_ ->
+catch C:E ->
+	io:format("Exception ~p:~p~nStacktrace: ~p~n", [C, E, erlang:get_stacktrace()]),
 	halt(1)
 end.
 endef
@@ -6123,6 +6112,7 @@ CT_SUITES := $(sort $(subst _SUITE.erl,,$(notdir $(call core_find,$(TEST_DIR)/,*
 endif
 endif
 CT_SUITES ?=
+CT_LOGS_DIR ?= $(CURDIR)/logs
 
 # Core targets.
 
@@ -6145,13 +6135,13 @@ CT_RUN = ct_run \
 	-noinput \
 	-pa $(CURDIR)/ebin $(DEPS_DIR)/*/ebin $(APPS_DIR)/*/ebin $(TEST_DIR) \
 	-dir $(TEST_DIR) \
-	-logdir $(CURDIR)/logs
+	-logdir $(CT_LOGS_DIR)
 
 ifeq ($(CT_SUITES),)
 ct: $(if $(IS_APP),,apps-ct)
 else
 ct: test-build $(if $(IS_APP),,apps-ct)
-	$(verbose) mkdir -p $(CURDIR)/logs/
+	$(verbose) mkdir -p $(CT_LOGS_DIR)
 	$(gen_verbose) $(CT_RUN) -sname ct_$(PROJECT) -suite $(addsuffix _SUITE,$(CT_SUITES)) $(CT_OPTS)
 endif
 
@@ -6179,14 +6169,14 @@ endif
 
 define ct_suite_target
 ct-$(1): test-build
-	$(verbose) mkdir -p $(CURDIR)/logs/
+	$(verbose) mkdir -p $(CT_LOGS_DIR)
 	$(gen_verbose) $(CT_RUN) -sname ct_$(PROJECT) -suite $(addsuffix _SUITE,$(1)) $(CT_EXTRA) $(CT_OPTS)
 endef
 
 $(foreach test,$(CT_SUITES),$(eval $(call ct_suite_target,$(test))))
 
 distclean-ct:
-	$(gen_verbose) rm -rf $(CURDIR)/logs/
+	$(gen_verbose) rm -rf $(CT_LOGS_DIR)
 
 # Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
@@ -6232,8 +6222,10 @@ define filter_opts.erl
 endef
 
 $(DIALYZER_PLT): deps app
-	$(verbose) dialyzer --build_plt --apps erts kernel stdlib $(PLT_APPS) $(OTP_DEPS) $(LOCAL_DEPS) \
-		`test -f $(ERLANG_MK_TMP)/deps.log && cat $(ERLANG_MK_TMP)/deps.log`
+	$(eval DEPS_LOG := $(shell test -f $(ERLANG_MK_TMP)/deps.log && \
+		while read p; do test -d $$p/ebin && echo $$p/ebin; done <$(ERLANG_MK_TMP)/deps.log))
+	$(verbose) dialyzer --build_plt --apps erts kernel stdlib \
+		$(PLT_APPS) $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS_LOG)
 
 plt: $(DIALYZER_PLT)
 
@@ -6271,585 +6263,3 @@ edoc: distclean-edoc doc-deps
 
 distclean-edoc:
 	$(gen_verbose) rm -f doc/*.css doc/*.html doc/*.png doc/edoc-info
-
-# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
-# Copyright (c) 2014, Dave Cottlehuber <dch@skunkwerks.at>
-# This file is part of erlang.mk and subject to the terms of the ISC License.
-
-.PHONY: distclean-escript escript escript-zip
-
-# Configuration.
-
-ESCRIPT_NAME ?= $(PROJECT)
-ESCRIPT_FILE ?= $(ESCRIPT_NAME)
-
-ESCRIPT_SHEBANG ?= /usr/bin/env escript
-ESCRIPT_COMMENT ?= This is an -*- erlang -*- file
-ESCRIPT_EMU_ARGS ?= -escript main $(ESCRIPT_NAME)
-
-ESCRIPT_ZIP ?= 7z a -tzip -mx=9 -mtc=off $(if $(filter-out 0,$(V)),,> /dev/null)
-ESCRIPT_ZIP_FILE ?= $(ERLANG_MK_TMP)/escript.zip
-
-# Core targets.
-
-distclean:: distclean-escript
-
-help::
-	$(verbose) printf "%s\n" "" \
-		"Escript targets:" \
-		"  escript     Build an executable escript archive" \
-
-# Plugin-specific targets.
-
-escript-zip:: deps app
-	$(verbose) mkdir -p $(dir $(ESCRIPT_ZIP))
-	$(verbose) rm -f $(ESCRIPT_ZIP_FILE)
-	$(gen_verbose) cd .. && $(ESCRIPT_ZIP) $(ESCRIPT_ZIP_FILE) $(PROJECT)/ebin/*
-ifneq ($(DEPS),)
-	$(verbose) cd $(DEPS_DIR) && $(ESCRIPT_ZIP) $(ESCRIPT_ZIP_FILE) \
-		`cat $(ERLANG_MK_TMP)/deps.log | sed 's/^$(subst /,\/,$(DEPS_DIR))\///' | sed 's/$$/\/ebin\/\*/'`
-endif
-
-escript:: escript-zip
-	$(gen_verbose) printf "%s\n" \
-		"#!$(ESCRIPT_SHEBANG)" \
-		"%% $(ESCRIPT_COMMENT)" \
-		"%%! $(ESCRIPT_EMU_ARGS)" > $(ESCRIPT_FILE)
-	$(verbose) cat $(ESCRIPT_ZIP_FILE) >> $(ESCRIPT_FILE)
-	$(verbose) chmod +x $(ESCRIPT_FILE)
-
-distclean-escript:
-	$(gen_verbose) rm -f $(ESCRIPT_NAME)
-
-# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
-# Copyright (c) 2014, Enrique Fernandez <enrique.fernandez@erlang-solutions.com>
-# This file is contributed to erlang.mk and subject to the terms of the ISC License.
-
-.PHONY: eunit apps-eunit
-
-# Configuration
-
-EUNIT_OPTS ?=
-EUNIT_ERL_OPTS ?=
-
-# Core targets.
-
-tests:: eunit
-
-help::
-	$(verbose) printf "%s\n" "" \
-		"EUnit targets:" \
-		"  eunit       Run all the EUnit tests for this project"
-
-# Plugin-specific targets.
-
-define eunit.erl
-	case "$(COVER)" of
-		"" -> ok;
-		_ ->
-			case cover:compile_beam_directory("ebin") of
-				{error, _} -> halt(1);
-				_ -> ok
-			end
-	end,
-	case eunit:test($1, [$(EUNIT_OPTS)]) of
-		ok -> ok;
-		error -> halt(2)
-	end,
-	case "$(COVER)" of
-		"" -> ok;
-		_ ->
-			cover:export("eunit.coverdata")
-	end,
-	halt()
-endef
-
-EUNIT_ERL_OPTS += -pa $(TEST_DIR) $(DEPS_DIR)/*/ebin $(APPS_DIR)/*/ebin $(CURDIR)/ebin
-
-ifdef t
-ifeq (,$(findstring :,$(t)))
-eunit: test-build
-	$(gen_verbose) $(call erlang,$(call eunit.erl,['$(t)']),$(EUNIT_ERL_OPTS))
-else
-eunit: test-build
-	$(gen_verbose) $(call erlang,$(call eunit.erl,fun $(t)/0),$(EUNIT_ERL_OPTS))
-endif
-else
-EUNIT_EBIN_MODS = $(notdir $(basename $(ERL_FILES) $(BEAM_FILES)))
-EUNIT_TEST_MODS = $(notdir $(basename $(call core_find,$(TEST_DIR)/,*.erl)))
-
-EUNIT_MODS = $(foreach mod,$(EUNIT_EBIN_MODS) $(filter-out \
-	$(patsubst %,%_tests,$(EUNIT_EBIN_MODS)),$(EUNIT_TEST_MODS)),'$(mod)')
-
-eunit: test-build $(if $(IS_APP),,apps-eunit)
-	$(gen_verbose) $(call erlang,$(call eunit.erl,[$(call comma_list,$(EUNIT_MODS))]),$(EUNIT_ERL_OPTS))
-
-ifneq ($(ALL_APPS_DIRS),)
-apps-eunit:
-	$(verbose) for app in $(ALL_APPS_DIRS); do $(MAKE) -C $$app eunit IS_APP=1; done
-endif
-endif
-
-# Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
-# This file is part of erlang.mk and subject to the terms of the ISC License.
-
-.PHONY: relx-rel relx-relup distclean-relx-rel run
-
-# Configuration.
-
-RELX ?= $(ERLANG_MK_TMP)/relx
-RELX_CONFIG ?= $(CURDIR)/relx.config
-
-RELX_URL ?= https://github.com/erlware/relx/releases/download/v3.19.0/relx
-RELX_OPTS ?=
-RELX_OUTPUT_DIR ?= _rel
-
-ifeq ($(firstword $(RELX_OPTS)),-o)
-	RELX_OUTPUT_DIR = $(word 2,$(RELX_OPTS))
-else
-	RELX_OPTS += -o $(RELX_OUTPUT_DIR)
-endif
-
-# Core targets.
-
-ifeq ($(IS_DEP),)
-ifneq ($(wildcard $(RELX_CONFIG)),)
-rel:: relx-rel
-
-relup:: relx-relup
-endif
-endif
-
-distclean:: distclean-relx-rel
-
-# Plugin-specific targets.
-
-$(RELX):
-	$(gen_verbose) $(call core_http_get,$(RELX),$(RELX_URL))
-	$(verbose) chmod +x $(RELX)
-
-relx-rel: $(RELX) rel-deps app
-	$(verbose) $(RELX) -c $(RELX_CONFIG) $(RELX_OPTS) release tar
-
-relx-relup: $(RELX) rel-deps app
-	$(verbose) $(RELX) -c $(RELX_CONFIG) $(RELX_OPTS) release relup tar
-
-distclean-relx-rel:
-	$(gen_verbose) rm -rf $(RELX_OUTPUT_DIR)
-
-# Run target.
-
-ifeq ($(wildcard $(RELX_CONFIG)),)
-run:
-else
-
-define get_relx_release.erl
-	{ok, Config} = file:consult("$(RELX_CONFIG)"),
-	{release, {Name, Vsn}, _} = lists:keyfind(release, 1, Config),
-	io:format("~s ~s", [Name, Vsn]),
-	halt(0).
-endef
-
-RELX_REL := $(shell $(call erlang,$(get_relx_release.erl)))
-RELX_REL_NAME := $(word 1,$(RELX_REL))
-RELX_REL_VSN := $(word 2,$(RELX_REL))
-
-run: all
-	$(verbose) $(RELX_OUTPUT_DIR)/$(RELX_REL_NAME)/bin/$(RELX_REL_NAME) console
-
-help::
-	$(verbose) printf "%s\n" "" \
-		"Relx targets:" \
-		"  run         Compile the project, build the release and run it"
-
-endif
-
-# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
-# Copyright (c) 2014, M Robert Martin <rob@version2beta.com>
-# This file is contributed to erlang.mk and subject to the terms of the ISC License.
-
-.PHONY: shell
-
-# Configuration.
-
-SHELL_ERL ?= erl
-SHELL_PATHS ?= $(CURDIR)/ebin $(APPS_DIR)/*/ebin $(DEPS_DIR)/*/ebin
-SHELL_OPTS ?=
-
-ALL_SHELL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(SHELL_DEPS))
-
-# Core targets
-
-help::
-	$(verbose) printf "%s\n" "" \
-		"Shell targets:" \
-		"  shell       Run an erlang shell with SHELL_OPTS or reasonable default"
-
-# Plugin-specific targets.
-
-$(foreach dep,$(SHELL_DEPS),$(eval $(call dep_target,$(dep))))
-
-build-shell-deps: $(ALL_SHELL_DEPS_DIRS)
-	$(verbose) for dep in $(ALL_SHELL_DEPS_DIRS) ; do $(MAKE) -C $$dep ; done
-
-shell: build-shell-deps
-	$(gen_verbose) $(SHELL_ERL) -pa $(SHELL_PATHS) $(SHELL_OPTS)
-
-# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
-# This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(filter triq,$(DEPS) $(TEST_DEPS)),triq)
-.PHONY: triq
-
-# Targets.
-
-tests:: triq
-
-define triq_check.erl
-	code:add_pathsa(["$(call core_native_path,$(CURDIR)/ebin)", "$(call core_native_path,$(DEPS_DIR)/*/ebin)"]),
-	try
-		case $(1) of
-			all -> [true] =:= lists:usort([triq:check(M) || M <- [$(call comma_list,$(3))]]);
-			module -> triq:check($(2));
-			function -> triq:check($(2))
-		end
-	of
-		true -> halt(0);
-		_ -> halt(1)
-	catch error:undef ->
-		io:format("Undefined property or module~n"),
-		halt(0)
-	end.
-endef
-
-ifdef t
-ifeq (,$(findstring :,$(t)))
-triq: test-build
-	$(verbose) $(call erlang,$(call triq_check.erl,module,$(t)))
-else
-triq: test-build
-	$(verbose) echo Testing $(t)/0
-	$(verbose) $(call erlang,$(call triq_check.erl,function,$(t)()))
-endif
-else
-triq: test-build
-	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename $(wildcard ebin/*.beam))))))
-	$(gen_verbose) $(call erlang,$(call triq_check.erl,all,undefined,$(MODULES)))
-endif
-endif
-
-# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
-# Copyright (c) 2015, Erlang Solutions Ltd.
-# This file is part of erlang.mk and subject to the terms of the ISC License.
-
-.PHONY: xref distclean-xref
-
-# Configuration.
-
-ifeq ($(XREF_CONFIG),)
-	XREFR_ARGS :=
-else
-	XREFR_ARGS := -c $(XREF_CONFIG)
-endif
-
-XREFR ?= $(CURDIR)/xrefr
-export XREFR
-
-XREFR_URL ?= https://github.com/inaka/xref_runner/releases/download/0.2.2/xrefr
-
-# Core targets.
-
-help::
-	$(verbose) printf "%s\n" "" \
-		"Xref targets:" \
-		"  xref        Run Xrefr using $XREF_CONFIG as config file if defined"
-
-distclean:: distclean-xref
-
-# Plugin-specific targets.
-
-$(XREFR):
-	$(gen_verbose) $(call core_http_get,$(XREFR),$(XREFR_URL))
-	$(verbose) chmod +x $(XREFR)
-
-xref: deps app $(XREFR)
-	$(gen_verbose) $(XREFR) $(XREFR_ARGS)
-
-distclean-xref:
-	$(gen_verbose) rm -rf $(XREFR)
-
-# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
-# Copyright (c) 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
-# This file is part of erlang.mk and subject to the terms of the ISC License.
-
-COVER_REPORT_DIR = cover
-
-# Hook in coverage to ct
-
-ifdef COVER
-ifdef CT_RUN
-# All modules in 'ebin'
-COVER_MODS = $(notdir $(basename $(call core_ls,ebin/*.beam)))
-
-test-build:: $(TEST_DIR)/ct.cover.spec
-
-$(TEST_DIR)/ct.cover.spec:
-	$(verbose) echo Cover mods: $(COVER_MODS)
-	$(gen_verbose) printf "%s\n" \
-		'{incl_mods,[$(subst $(space),$(comma),$(COVER_MODS))]}.' \
-		'{export,"$(CURDIR)/ct.coverdata"}.' > $@
-
-CT_RUN += -cover $(TEST_DIR)/ct.cover.spec
-endif
-endif
-
-# Core targets
-
-ifdef COVER
-ifneq ($(COVER_REPORT_DIR),)
-tests::
-	$(verbose) $(MAKE) --no-print-directory cover-report
-endif
-endif
-
-clean:: coverdata-clean
-
-ifneq ($(COVER_REPORT_DIR),)
-distclean:: cover-report-clean
-endif
-
-help::
-	$(verbose) printf "%s\n" "" \
-		"Cover targets:" \
-		"  cover-report  Generate a HTML coverage report from previously collected" \
-		"                cover data." \
-		"  all.coverdata Merge {eunit,ct}.coverdata into one coverdata file." \
-		"" \
-		"If COVER=1 is set, coverage data is generated by the targets eunit and ct. The" \
-		"target tests additionally generates a HTML coverage report from the combined" \
-		"coverdata files from each of these testing tools. HTML reports can be disabled" \
-		"by setting COVER_REPORT_DIR to empty."
-
-# Plugin specific targets
-
-COVERDATA = $(filter-out all.coverdata,$(wildcard *.coverdata))
-
-.PHONY: coverdata-clean
-coverdata-clean:
-	$(gen_verbose) rm -f *.coverdata ct.cover.spec
-
-# Merge all coverdata files into one.
-all.coverdata: $(COVERDATA)
-	$(gen_verbose) $(ERL) -eval ' \
-		$(foreach f,$(COVERDATA),cover:import("$(f)") == ok orelse halt(1),) \
-		cover:export("$@"), halt(0).'
-
-# These are only defined if COVER_REPORT_DIR is non-empty. Set COVER_REPORT_DIR to
-# empty if you want the coverdata files but not the HTML report.
-ifneq ($(COVER_REPORT_DIR),)
-
-.PHONY: cover-report-clean cover-report
-
-cover-report-clean:
-	$(gen_verbose) rm -rf $(COVER_REPORT_DIR)
-
-ifeq ($(COVERDATA),)
-cover-report:
-else
-
-# Modules which include eunit.hrl always contain one line without coverage
-# because eunit defines test/0 which is never called. We compensate for this.
-EUNIT_HRL_MODS = $(subst $(space),$(comma),$(shell \
-	grep -e '^\s*-include.*include/eunit\.hrl"' src/*.erl \
-	| sed "s/^src\/\(.*\)\.erl:.*/'\1'/" | uniq))
-
-define cover_report.erl
-	$(foreach f,$(COVERDATA),cover:import("$(f)") == ok orelse halt(1),)
-	Ms = cover:imported_modules(),
-	[cover:analyse_to_file(M, "$(COVER_REPORT_DIR)/" ++ atom_to_list(M)
-		++ ".COVER.html", [html])  || M <- Ms],
-	Report = [begin {ok, R} = cover:analyse(M, module), R end || M <- Ms],
-	EunitHrlMods = [$(EUNIT_HRL_MODS)],
-	Report1 = [{M, {Y, case lists:member(M, EunitHrlMods) of
-		true -> N - 1; false -> N end}} || {M, {Y, N}} <- Report],
-	TotalY = lists:sum([Y || {_, {Y, _}} <- Report1]),
-	TotalN = lists:sum([N || {_, {_, N}} <- Report1]),
-	Perc = fun(Y, N) -> case Y + N of 0 -> 100; S -> round(100 * Y / S) end end,
-	TotalPerc = Perc(TotalY, TotalN),
-	{ok, F} = file:open("$(COVER_REPORT_DIR)/index.html", [write]),
-	io:format(F, "<!DOCTYPE html><html>~n"
-		"<head><meta charset=\"UTF-8\">~n"
-		"<title>Coverage report</title></head>~n"
-		"<body>~n", []),
-	io:format(F, "<h1>Coverage</h1>~n<p>Total: ~p%</p>~n", [TotalPerc]),
-	io:format(F, "<table><tr><th>Module</th><th>Coverage</th></tr>~n", []),
-	[io:format(F, "<tr><td><a href=\"~p.COVER.html\">~p</a></td>"
-		"<td>~p%</td></tr>~n",
-		[M, M, Perc(Y, N)]) || {M, {Y, N}} <- Report1],
-	How = "$(subst $(space),$(comma)$(space),$(basename $(COVERDATA)))",
-	Date = "$(shell date -u "+%Y-%m-%dT%H:%M:%SZ")",
-	io:format(F, "</table>~n"
-		"<p>Generated using ~s and erlang.mk on ~s.</p>~n"
-		"</body></html>", [How, Date]),
-	halt().
-endef
-
-cover-report:
-	$(gen_verbose) mkdir -p $(COVER_REPORT_DIR)
-	$(gen_verbose) $(call erlang,$(cover_report.erl))
-
-endif
-endif # ifneq ($(COVER_REPORT_DIR),)
-
-# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
-# This file is part of erlang.mk and subject to the terms of the ISC License.
-
-.PHONY: sfx
-
-ifdef RELX_REL
-ifdef SFX
-
-# Configuration.
-
-SFX_ARCHIVE ?= $(RELX_OUTPUT_DIR)/$(RELX_REL_NAME)/$(RELX_REL_NAME)-$(RELX_REL_VSN).tar.gz
-SFX_OUTPUT_FILE ?= $(RELX_OUTPUT_DIR)/$(RELX_REL_NAME).run
-
-# Core targets.
-
-rel:: sfx
-
-# Plugin-specific targets.
-
-define sfx_stub
-#!/bin/sh
-
-TMPDIR=`mktemp -d`
-ARCHIVE=`awk '/^__ARCHIVE_BELOW__$$/ {print NR + 1; exit 0;}' $$0`
-FILENAME=$$(basename $$0)
-REL=$${FILENAME%.*}
-
-tail -n+$$ARCHIVE $$0 | tar -xzf - -C $$TMPDIR
-
-$$TMPDIR/bin/$$REL console
-RET=$$?
-
-rm -rf $$TMPDIR
-
-exit $$RET
-
-__ARCHIVE_BELOW__
-endef
-
-sfx:
-	$(call render_template,sfx_stub,$(SFX_OUTPUT_FILE))
-	$(gen_verbose) cat $(SFX_ARCHIVE) >> $(SFX_OUTPUT_FILE)
-	$(verbose) chmod +x $(SFX_OUTPUT_FILE)
-
-endif
-endif
-
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
-# Copyright (c) 2015-2016, Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>
-# This file is part of erlang.mk and subject to the terms of the ISC License.
-
-# Fetch dependencies recursively (without building them).
-
-.PHONY: fetch-deps fetch-doc-deps fetch-rel-deps fetch-test-deps \
-	fetch-shell-deps
-
-.PHONY: $(ERLANG_MK_RECURSIVE_DEPS_LIST) \
-	$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
-	$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST) \
-	$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
-	$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST)
-
-fetch-deps: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-fetch-doc-deps: $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST)
-fetch-rel-deps: $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST)
-fetch-test-deps: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
-fetch-shell-deps: $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST)
-
-ifneq ($(SKIP_DEPS),)
-$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
-$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
-$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST) \
-$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
-$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST):
-	$(verbose) :> $@
-else
-# By default, we fetch "normal" dependencies. They are also included no
-# matter the type of requested dependencies.
-#
-# $(ALL_DEPS_DIRS) includes $(BUILD_DEPS).
-
-$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_DOC_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_REL_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_TEST_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_SHELL_DEPS_DIRS)
-
-# Allow to use fetch-deps and $(DEP_TYPES) to fetch multiple types of
-# dependencies with a single target.
-ifneq ($(filter doc,$(DEP_TYPES)),)
-$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_DOC_DEPS_DIRS)
-endif
-ifneq ($(filter rel,$(DEP_TYPES)),)
-$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_REL_DEPS_DIRS)
-endif
-ifneq ($(filter test,$(DEP_TYPES)),)
-$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_TEST_DEPS_DIRS)
-endif
-ifneq ($(filter shell,$(DEP_TYPES)),)
-$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_SHELL_DEPS_DIRS)
-endif
-
-ERLANG_MK_RECURSIVE_TMP_LIST := $(abspath $(ERLANG_MK_TMP)/recursive-tmp-deps.log)
-
-$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
-$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
-$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST) \
-$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
-$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST):
-ifeq ($(IS_APP)$(IS_DEP),)
-	$(verbose) mkdir -p $(ERLANG_MK_TMP)
-	$(verbose) rm -f $(ERLANG_MK_RECURSIVE_TMP_LIST)
-endif
-ifndef IS_APP
-	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
-		$(MAKE) -C $$dep $@ \
-		 IS_APP=1 \
-		 ERLANG_MK_RECURSIVE_TMP_LIST=$(ERLANG_MK_RECURSIVE_TMP_LIST) \
-		 || exit $$?; \
-	done
-endif
-	$(verbose) for dep in $^ ; do \
-		if ! grep -qs ^$$dep$$ $(ERLANG_MK_RECURSIVE_TMP_LIST); then \
-			echo $$dep >> $(ERLANG_MK_RECURSIVE_TMP_LIST); \
-			if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" \
-			 $$dep/GNUmakefile $$dep/makefile $$dep/Makefile; then \
-				$(MAKE) -C $$dep fetch-deps \
-				 IS_DEP=1 \
-				 ERLANG_MK_RECURSIVE_TMP_LIST=$(ERLANG_MK_RECURSIVE_TMP_LIST) \
-				 || exit $$?; \
-			fi \
-		fi \
-	done
-ifeq ($(IS_APP)$(IS_DEP),)
-	$(verbose) sort < $(ERLANG_MK_RECURSIVE_TMP_LIST) | uniq > $@
-	$(verbose) rm $(ERLANG_MK_RECURSIVE_TMP_LIST)
-endif
-endif # ifneq ($(SKIP_DEPS),)
-
-# List dependencies recursively.
-
-.PHONY: list-deps list-doc-deps list-rel-deps list-test-deps \
-	list-shell-deps
-
-list-deps: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-list-doc-deps: $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST)
-list-rel-deps: $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST)
-list-test-deps: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
-list-shell-deps: $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST)
-
-list-deps list-doc-deps list-rel-deps list-test-deps list-shell-deps:
-	$(verbose) cat $^
