@@ -101,16 +101,16 @@
   %% when queue.bind's queue field is empty,
   %% this name will be used instead
   most_recently_declared_queue,
-  %% a dictionary of queue pid to queue name
+  %% a map of queue pid to queue name
   queue_names,
   %% queue processes are monitored to update
   %% queue names
   queue_monitors,
-  %% a dictionary of consumer tags to
+  %% a map of consumer tags to
   %% consumer details: #amqqueue record, acknowledgement mode,
   %% consumer exclusivity, etc
   consumer_mapping,
-  %% a dictionary of queue pids to consumer tag lists
+  %% a map of queue pids to consumer tag lists
   queue_consumers,
   %% a set of pids of queues that have unacknowledged
   %% deliveries
@@ -353,7 +353,7 @@ refresh_interceptors() ->
     rabbit_misc:upmap(
       fun (C) -> gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT) end,
       list_local()),
-    ok.    
+    ok.
 
 ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
@@ -387,10 +387,10 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 user                    = User,
                 virtual_host            = VHost,
                 most_recently_declared_queue = <<>>,
-                queue_names             = dict:new(),
+                queue_names             = #{},
                 queue_monitors          = pmon:new(),
-                consumer_mapping        = dict:new(),
-                queue_consumers         = dict:new(),
+                consumer_mapping        = #{},
+                queue_consumers         = #{},
                 delivering_queues       = sets:new(),
                 queue_collector_pid     = CollectorPid,
                 confirm_enabled         = false,
@@ -611,11 +611,11 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     %% processs that might be blocked by this particular channel.
     credit_flow:peer_down(QPid),
     #ch{queue_names = QNames, queue_monitors = QMons} = State4,
-    case dict:find(QPid, QNames) of
+    case maps:find(QPid, QNames) of
         {ok, QName} -> erase_queue_stats(QName);
         error       -> ok
     end,
-    noreply(State4#ch{queue_names    = dict:erase(QPid, QNames),
+    noreply(State4#ch{queue_names    = maps:remove(QPid, QNames),
                       queue_monitors = pmon:erase(QPid, QMons)});
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
@@ -1075,7 +1075,7 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                nowait       = NoWait},
               _, State = #ch{reply_consumer   = ReplyConsumer,
                              consumer_mapping = ConsumerMapping}) ->
-    case dict:find(CTag0, ConsumerMapping) of
+    case maps:find(CTag0, ConsumerMapping) of
         error ->
             case {ReplyConsumer, NoAck} of
                 {none, true} ->
@@ -1128,7 +1128,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                arguments    = Args},
               _, State = #ch{consumer_prefetch = ConsumerPrefetch,
                              consumer_mapping  = ConsumerMapping}) ->
-    case dict:find(ConsumerTag, ConsumerMapping) of
+    case maps:find(ConsumerTag, ConsumerMapping) of
         error ->
             QueueName = qbin_to_resource(QueueNameBin, State),
             check_read_permitted(QueueName, State),
@@ -1159,19 +1159,19 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
                              queue_consumers  = QCons,
                              user             = #user{username = Username}}) ->
     OkMsg = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
-    case dict:find(ConsumerTag, ConsumerMapping) of
+    case maps:find(ConsumerTag, ConsumerMapping) of
         error ->
             %% Spec requires we ignore this situation.
             return_ok(State, NoWait, OkMsg);
         {ok, {Q = #amqqueue{pid = QPid}, _CParams}} ->
-            ConsumerMapping1 = dict:erase(ConsumerTag, ConsumerMapping),
+            ConsumerMapping1 = maps:remove(ConsumerTag, ConsumerMapping),
             QCons1 =
-                case dict:find(QPid, QCons) of
+                case maps:find(QPid, QCons) of
                     error       -> QCons;
                     {ok, CTags} -> CTags1 = gb_sets:delete(ConsumerTag, CTags),
                                    case gb_sets:is_empty(CTags1) of
-                                       true  -> dict:erase(QPid, QCons);
-                                       false -> dict:store(QPid, CTags1, QCons)
+                                       true  -> maps:remove(QPid, QCons);
+                                       false -> maps:put(QPid, CTags1, QCons)
                                    end
                 end,
             NewState = State#ch{consumer_mapping = ConsumerMapping1,
@@ -1548,7 +1548,7 @@ handle_method(#'basic.credit'{consumer_tag = CTag,
                               credit       = Credit,
                               drain        = Drain},
               _, State = #ch{consumer_mapping = Consumers}) ->
-    case dict:find(CTag, Consumers) of
+    case maps:find(CTag, Consumers) of
         {ok, {Q, _CParams}} -> ok = rabbit_amqqueue:credit(
                                       Q, self(), CTag, Credit, Drain),
                                {noreply, State};
@@ -1586,7 +1586,7 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                     Q}
            end) of
         {ok, Q = #amqqueue{pid = QPid, name = QName}} ->
-            CM1 = dict:store(
+            CM1 = maps:put(
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
                     ConsumerMapping),
@@ -1609,11 +1609,12 @@ consumer_monitor(ConsumerTag,
                              queue_monitors   = QMons,
                              queue_consumers  = QCons}) ->
     {#amqqueue{pid = QPid}, _CParams} =
-        dict:fetch(ConsumerTag, ConsumerMapping),
-    QCons1 = dict:update(QPid, fun (CTags) ->
-                                       gb_sets:insert(ConsumerTag, CTags)
-                               end,
-                         gb_sets:singleton(ConsumerTag), QCons),
+        maps:get(ConsumerTag, ConsumerMapping),
+    CTags1 = case maps:find(QPid, QCons) of
+        {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
+        error -> gb_sets:singleton(ConsumerTag)
+    end,
+    QCons1 = maps:put(QPid, CTags1, QCons),
     State#ch{queue_monitors  = pmon:monitor(QPid, QMons),
              queue_consumers = QCons1}.
 
@@ -1621,7 +1622,7 @@ monitor_delivering_queue(NoAck, QPid, QName,
                          State = #ch{queue_names       = QNames,
                                      queue_monitors    = QMons,
                                      delivering_queues = DQ}) ->
-    State#ch{queue_names       = dict:store(QPid, QName, QNames),
+    State#ch{queue_names       = maps:put(QPid, QName, QNames),
              queue_monitors    = pmon:monitor(QPid, QMons),
              delivering_queues = case NoAck of
                                      true  -> DQ;
@@ -1643,13 +1644,13 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
 
 handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
                                               queue_names      = QNames}) ->
-    ConsumerTags = case dict:find(QPid, QCons) of
+    ConsumerTags = case maps:find(QPid, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
     gb_sets:fold(
       fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
-              QName = dict:fetch(QPid, QNames),
+              QName = maps:get(QPid, QNames),
               case queue_down_consumer_action(CTag, CMap) of
                   remove ->
                       cancel_consumer(CTag, QName, StateN);
@@ -1661,7 +1662,7 @@ handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
                           _             -> cancel_consumer(CTag, QName, StateN)
                       end
               end
-      end, State#ch{queue_consumers = dict:erase(QPid, QCons)}, ConsumerTags).
+      end, State#ch{queue_consumers = maps:remove(QPid, QCons)}, ConsumerTags).
 
 %% [0] There is a slight danger here that if a queue is deleted and
 %% then recreated again the reconsume will succeed even though it was
@@ -1679,10 +1680,10 @@ cancel_consumer(CTag, QName, State = #ch{capabilities     = Capabilities,
     rabbit_event:notify(consumer_deleted, [{consumer_tag, CTag},
                                            {channel,      self()},
                                            {queue,        QName}]),
-    State#ch{consumer_mapping = dict:erase(CTag, CMap)}.
+    State#ch{consumer_mapping = maps:remove(CTag, CMap)}.
 
 queue_down_consumer_action(CTag, CMap) ->
-    {_, {_, _, _, Args} = ConsumeSpec} = dict:fetch(CTag, CMap),
+    {_, {_, _, _, Args} = ConsumeSpec} = maps:get(CTag, CMap),
     case rabbit_misc:table_lookup(Args, <<"x-cancel-on-ha-failover">>) of
         {bool, true} -> remove;
         _            -> {recover, ConsumeSpec}
@@ -1832,7 +1833,7 @@ ack(Acked, State = #ch{queue_names = QNames}) ->
     foreach_per_queue(
       fun (QPid, MsgIds) ->
               ok = rabbit_amqqueue:ack(QPid, MsgIds, self()),
-              ?INCR_STATS(case dict:find(QPid, QNames) of
+              ?INCR_STATS(case maps:find(QPid, QNames) of
                               {ok, QName} -> Count = length(MsgIds),
                                              [{queue_stats, QName, Count}];
                               error       -> []
@@ -1878,7 +1879,7 @@ foreach_per_queue(F, UAL) ->
 
 consumer_queues(Consumers) ->
     lists:usort([QPid || {_Key, {#amqqueue{pid = QPid}, _CParams}}
-                             <- dict:to_list(Consumers)]).
+                             <- maps:to_list(Consumers)]).
 
 %% tell the limiter about the number of acks that have been received
 %% for messages delivered to subscribed consumers, but not acks for
@@ -1925,9 +1926,9 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     {QNames1, QMons1} =
         lists:foldl(fun (#amqqueue{pid = QPid, name = QName},
                          {QNames0, QMons0}) ->
-                            {case dict:is_key(QPid, QNames0) of
+                            {case maps:is_key(QPid, QNames0) of
                                  true  -> QNames0;
-                                 false -> dict:store(QPid, QName, QNames0)
+                                 false -> maps:put(QPid, QName, QNames0)
                              end, pmon:monitor(QPid, QMons0)}
                     end, {QNames, pmon:monitor_all(DeliveredQPids, QMons)}, Qs),
     State1 = State#ch{queue_names    = QNames1,
@@ -1941,7 +1942,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     ?INCR_STATS([{exchange_stats, XName, 1} |
                  [{queue_exchange_stats, {QName, XName}, 1} ||
                      QPid        <- DeliveredQPids,
-                     {ok, QName} <- [dict:find(QPid, QNames1)]]],
+                     {ok, QName} <- [maps:find(QPid, QNames1)]]],
                 publish, State3),
     State3.
 
@@ -2060,7 +2061,7 @@ i(vhost,          #ch{virtual_host     = VHost})   -> VHost;
 i(transactional,  #ch{tx               = Tx})      -> Tx =/= none;
 i(confirm,        #ch{confirm_enabled  = CE})      -> CE;
 i(name,           State)                           -> name(State);
-i(consumer_count,          #ch{consumer_mapping = CM})    -> dict:size(CM);
+i(consumer_count,          #ch{consumer_mapping = CM})    -> maps:size(CM);
 i(messages_unconfirmed,    #ch{unconfirmed = UC})         -> dtree:size(UC);
 i(messages_unacknowledged, #ch{unacked_message_q = UAMQ}) -> queue:len(UAMQ);
 i(messages_uncommitted,    #ch{tx = {Msgs, _Acks}})       -> queue:len(Msgs);
