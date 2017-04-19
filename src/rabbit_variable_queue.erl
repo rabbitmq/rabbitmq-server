@@ -579,7 +579,7 @@ terminate(_Reason, State) ->
         purge_pending_ack(true, State),
     PRef = case MSCStateP of
                undefined -> undefined;
-               _         -> ok = rabbit_msg_store:client_terminate(MSCStateP),
+               _         -> ok = maybe_client_terminate(MSCStateP),
                             rabbit_msg_store:client_ref(MSCStateP)
            end,
     ok = rabbit_msg_store:client_delete_and_terminate(MSCStateT),
@@ -2943,3 +2943,14 @@ log_upgrade_verbose(Msg) ->
 
 log_upgrade_verbose(Msg, Args) ->
     rabbit_log_upgrade:info(Msg, Args).
+
+maybe_client_terminate(MSCStateP) ->
+    %% Queue might have been asked to stop by the supervisor, it needs a clean
+    %% shutdown in order for the supervising strategy to work - if it reaches max
+    %% restarts might bring the vhost down.
+    try
+        rabbit_msg_store:client_terminate(MSCStateP)
+    catch
+        _:_ ->
+            ok
+    end.
