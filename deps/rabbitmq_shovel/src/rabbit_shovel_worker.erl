@@ -11,7 +11,7 @@
 %%  The Original Code is RabbitMQ.
 %%
 %%  The Initial Developer of the Original Code is GoPivotal, Inc.
-%%  Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%%  Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_shovel_worker).
@@ -103,7 +103,7 @@ terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
     close_connections(State),
     %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
     put(shovel_worker_autodelete, true),
-    rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ?SHOVEL_USER),
+    _ = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ?SHOVEL_USER),
     rabbit_shovel_status:remove({VHost, Name}),
     ok;
 terminate(Reason, State) ->

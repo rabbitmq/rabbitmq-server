@@ -11,7 +11,7 @@
 %%  The Original Code is RabbitMQ.
 %%
 %%  The Initial Developer of the Original Code is GoPivotal, Inc.
-%%  Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%%  Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_shovel_config).
@@ -166,6 +166,7 @@ run_state_monad(FunList, State) ->
 
 return(V) -> V.
 
+-spec fail(term()) -> no_return().
 fail(Reason) -> throw({error, Reason}).
 %% --=: end :=--
 
