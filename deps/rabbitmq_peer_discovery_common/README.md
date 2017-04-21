@@ -7,6 +7,11 @@ It is not supposed to be enabled, disabled or used directly by the users, only a
 dependency of other plugins.
 
 
+## Project Maturity
+
+This library is very immature and under heavy development. Steer clear from it for now.
+
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](http://www.rabbitmq.com/github.html).
