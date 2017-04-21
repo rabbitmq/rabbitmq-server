@@ -57,13 +57,13 @@
                                  coordinator         :: pid(),
                                  backing_queue       :: atom(),
                                  backing_queue_state :: any(),
-                                 seen_status         :: dict:dict(),
+                                 seen_status         :: map(),
                                  confirmed           :: [rabbit_guid:guid()],
                                  known_senders       :: sets:set()
                                }.
 -spec promote_backing_queue_state
         (rabbit_amqqueue:name(), pid(), atom(), any(), pid(), [any()],
-         dict:dict(), [pid()]) ->
+         map(), [pid()]) ->
             master_state().
 
 -spec sender_death_fun() -> death_fun().
@@ -127,7 +127,7 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
 		     coordinator         = CPid,
 		     backing_queue       = BQ,
 		     backing_queue_state = BQS,
-		     seen_status         = dict:new(),
+		     seen_status         = #{},
 		     confirmed           = [],
 		     known_senders       = sets:new(),
 		     wait_timeout        = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000) };
@@ -266,7 +266,7 @@ publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid, Flow,
                          seen_status         = SS,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
-    false = dict:is_key(MsgId, SS), %% ASSERTION
+    false = maps:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {publish, ChPid, Flow, MsgProps, Msg},
                       rabbit_basic:msg_size(Msg)),
     BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS),
@@ -281,7 +281,7 @@ batch_publish(Publishes, ChPid, Flow,
         lists:foldl(fun ({Msg = #basic_message { id = MsgId },
                           MsgProps, _IsDelivered}, {Pubs, false, Sizes}) ->
                             {[{Msg, MsgProps, true} | Pubs], %% [0]
-                             false = dict:is_key(MsgId, SS), %% ASSERTION
+                             false = maps:is_key(MsgId, SS), %% ASSERTION
                              Sizes + rabbit_basic:msg_size(Msg)}
                     end, {[], false, 0}, Publishes),
     Publishes2 = lists:reverse(Publishes1),
@@ -298,7 +298,7 @@ publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                                                 seen_status         = SS,
                                                 backing_queue       = BQ,
                                                 backing_queue_state = BQS }) ->
-    false = dict:is_key(MsgId, SS), %% ASSERTION
+    false = maps:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {publish_delivered, ChPid, Flow, MsgProps, Msg},
                       rabbit_basic:msg_size(Msg)),
     {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, Flow, BQS),
@@ -313,7 +313,7 @@ batch_publish_delivered(Publishes, ChPid, Flow,
     {false, MsgSizes} =
         lists:foldl(fun ({Msg = #basic_message { id = MsgId }, _MsgProps},
                          {false, Sizes}) ->
-                            {false = dict:is_key(MsgId, SS), %% ASSERTION
+                            {false = maps:is_key(MsgId, SS), %% ASSERTION
                              Sizes + rabbit_basic:msg_size(Msg)}
                     end, {false, 0}, Publishes),
     ok = gm:broadcast(GM, {batch_publish_delivered, ChPid, Flow, Publishes},
@@ -326,7 +326,7 @@ discard(MsgId, ChPid, Flow, State = #state { gm                  = GM,
                                              backing_queue       = BQ,
                                              backing_queue_state = BQS,
                                              seen_status         = SS }) ->
-    false = dict:is_key(MsgId, SS), %% ASSERTION
+    false = maps:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {discard, ChPid, Flow, MsgId}),
     ensure_monitoring(ChPid,
                       State #state { backing_queue_state =
@@ -353,7 +353,7 @@ drain_confirmed(State = #state { backing_queue       = BQ,
         lists:foldl(
           fun (MsgId, {MsgIdsN, SSN}) ->
                   %% We will never see 'discarded' here
-                  case dict:find(MsgId, SSN) of
+                  case maps:find(MsgId, SSN) of
                       error ->
                           {[MsgId | MsgIdsN], SSN};
                       {ok, published} ->
@@ -364,7 +364,7 @@ drain_confirmed(State = #state { backing_queue       = BQ,
                           %% consequently we need to filter out the
                           %% confirm here. We will issue the confirm
                           %% when we see the publish from the channel.
-                          {MsgIdsN, dict:store(MsgId, confirmed, SSN)};
+                          {MsgIdsN, maps:put(MsgId, confirmed, SSN)};
                       {ok, confirmed} ->
                           %% Well, confirms are racy by definition.
                           {[MsgId | MsgIdsN], SSN}
@@ -457,7 +457,7 @@ msg_rates(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
 info(backing_queue_status,
      State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:info(backing_queue_status, BQS) ++
-        [ {mirror_seen,    dict:size(State #state.seen_status)},
+        [ {mirror_seen,    maps:size(State #state.seen_status)},
           {mirror_senders, sets:size(State #state.known_senders)} ];
 info(Item, #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:info(Item, BQS).
@@ -480,7 +480,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
     %% it.
 
     %% We will never see {published, ChPid, MsgSeqNo} here.
-    case dict:find(MsgId, SS) of
+    case maps:find(MsgId, SS) of
         error ->
             %% We permit the underlying BQ to have a peek at it, but
             %% only if we ourselves are not filtering out the msg.
@@ -494,7 +494,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% immediately after calling is_duplicate). The msg is
             %% invalid. We will not see this again, nor will we be
             %% further involved in confirming this message, so erase.
-            {true, State #state { seen_status = dict:erase(MsgId, SS) }};
+            {true, State #state { seen_status = maps:remove(MsgId, SS) }};
         {ok, Disposition}
           when Disposition =:= confirmed
             %% It got published when we were a slave via gm, and
@@ -509,7 +509,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% Message was discarded while we were a slave. Confirm now.
             %% As above, amqqueue_process will have the entry for the
             %% msg_id_to_channel mapping.
-            {true, State #state { seen_status = dict:erase(MsgId, SS),
+            {true, State #state { seen_status = maps:remove(MsgId, SS),
                                   confirmed = [MsgId | Confirmed] }}
     end.
 
