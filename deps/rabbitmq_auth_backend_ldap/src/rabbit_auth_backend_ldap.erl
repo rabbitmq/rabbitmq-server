@@ -29,9 +29,8 @@
 
 -export([get_connections/0]).
 
--ifdef(TEST).
+%% for tests
 -export([purge_connections/0]).
--endif.
 
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
