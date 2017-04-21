@@ -68,13 +68,29 @@ discover_nodes(SeedHostname, LongNamesUsed) ->
         H <- discover_hostnames(SeedHostname, LongNamesUsed)].
 
 discover_hostnames(SeedHostname, LongNamesUsed) ->
-    %% TODO: IPv6 support
-    IPs   = inet_res:lookup(SeedHostname, in, a),
-    rabbit_log:info("Addresses discovered via A records of ~s: ~s",
-      [SeedHostname, string:join([inet_parse:ntoa(IP) || IP <- IPs], ", ")]),
+    case lookup(SeedHostname, LongNamesUsed, ipv4) of
+	[] ->
+	    rabbit_log:info("Hostnames lookup failed for IPv4, trying IPv6"),
+	    lookup(SeedHostname, LongNamesUsed, ipv6);
+	Hosts4 -> Hosts4
+    end.
+
+
+decode_record(ipv4) ->
+    a;
+decode_record(ipv6) ->
+    aaaa.
+
+lookup(SeedHostname, LongNamesUsed, IPv) ->
+    IPs   = inet_res:lookup(SeedHostname, in, decode_record(IPv)),
+    rabbit_log:info("Addresses discovered via ~s records of ~s: ~s",
+		    [string:to_upper(atom_to_list(decode_record(IPv))),
+		     SeedHostname, 
+		     string:join([inet_parse:ntoa(IP) || IP <- IPs], ", ")]),
     Hosts = [extract_host(inet:gethostbyaddr(A), LongNamesUsed, A) ||
-                A <- IPs],
+		A <- IPs],
     lists:filter(fun(E) -> E =/= error end, Hosts).
+
 
 %% long node names are used
 extract_host({ok, {hostent, FQDN, _, _, _, _}}, true, _Address) ->
