@@ -527,7 +527,6 @@ is_multi_attr_member(Str1, Str2) ->
 
 purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
-    error_logger:info_msg("Conns ~p~n", [Conns]),
     Key = {IsAnon, Servers, Opts},
     {ok, Conn} = dict:find(Key, Conns),
     rabbit_log:warning("LDAP Purging an already closed LDAP server connection~n"),
