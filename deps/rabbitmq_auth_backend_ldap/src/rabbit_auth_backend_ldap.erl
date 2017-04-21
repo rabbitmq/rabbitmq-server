@@ -29,6 +29,9 @@
 
 -export([get_connections/0]).
 
+%% for tests
+-export([purge_connections/0]).
+
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
 -define(L2(F, A), log("        LDAP " ++ F, A)).
@@ -43,6 +46,12 @@
 
 get_connections() ->
     worker_pool:submit(ldap_pool, fun() -> get(ldap_conns) end, reuse).
+
+purge_connections() ->
+    [ok = worker_pool:submit(ldap_pool,
+                             fun() -> purge_conn(Anon, Servers, Opts) end, reuse)
+     || {{Anon, Servers, Opts}, _} <- dict:to_list(get_connections())],
+    ok.
 
 user_login_authentication(Username, []) ->
     %% Without password, e.g. EXTERNAL
@@ -563,7 +572,7 @@ is_multi_attr_member(Str1, Str2) ->
 purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
     Key = {IsAnon, Servers, Opts},
-    {_, {_, Conn}} = dict:find(Key, Conns),
+    {ok, Conn} = dict:find(Key, Conns),
     rabbit_log:warning("LDAP Purging an already closed LDAP server connection~n"),
     % We cannot close the connection with eldap:close/1 because as of OTP-13327
     % eldap will try to do_unbind first and will fail with a `{gen_tcp_error, closed}`.
@@ -571,7 +580,8 @@ purge_conn(IsAnon, Servers, Opts) ->
     % kill its process.
     unlink(Conn),
     exit(Conn, closed),
-    put(ldap_conns, dict:erase(Key, Conns)).
+    put(ldap_conns, dict:erase(Key, Conns)),
+    ok.
 
 eldap_open(Servers, Opts) ->
     case eldap:open(Servers, ssl_conf() ++ Opts) of

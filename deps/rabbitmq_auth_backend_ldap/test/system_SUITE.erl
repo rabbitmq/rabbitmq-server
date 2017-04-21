@@ -102,6 +102,7 @@ all() ->
 
 groups() ->
     Tests = [
+        purge_connection,
         ldap_only,
         ldap_and_internal,
         internal_followed_ldap_and_internal,
@@ -244,6 +245,16 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testsuite cases
 %% -------------------------------------------------------------------
+
+purge_connection(Config) ->
+    {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                           rabbit_auth_backend_ldap,
+                                           user_login_authentication,
+                                           [<<?ALICE_NAME>>, []]),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                      rabbit_auth_backend_ldap,
+                                      purge_connections, []).
 
 connections_closed_after_timeout(Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
