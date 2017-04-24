@@ -33,7 +33,8 @@ groups() ->
                           hostname_discovery_with_long_node_names,
                           hostname_discovery_with_short_node_names,
                           node_discovery_with_long_node_names,
-                          node_discovery_with_short_node_names
+                          node_discovery_with_short_node_names,
+                          test_aaaa_record_hostname_discovery
                          ]}
     ].
 
@@ -54,7 +55,9 @@ suite() ->
 %% * One does not resolve to a [typically] non-reachable IP
 %% * One does not support reverse lookup queries
 
--define(DISCOVERY_ENDPOINT, "peer_discovery.tests.rabbitmq.net").
+-define(DISCOVERY_ENDPOINT_RECORD_A, "peer_discovery.tests.rabbitmq.net").
+
+-define(DISCOVERY_ENDPOINT_RECORD_AAAA, "www.v6.facebook.com").
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -63,17 +66,26 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+
+init_per_testcase(test_aaaa_record, Config) ->
+    case inet_res:lookup(?DISCOVERY_ENDPOINT_RECORD_AAAA, in, aaaa) of
+        []      ->
+            {skip, "pre-configured AAAA record does not resolve, skipping"};
+        [_ | _] ->
+            Config
+    end;
+
 init_per_testcase(_Testcase, Config) ->
-    %% TODO: support IPv6-only environments
-    case inet_res:lookup(?DISCOVERY_ENDPOINT, in, a) of
+    case inet_res:lookup(?DISCOVERY_ENDPOINT_RECORD_A, in, a) of
         []      ->
             {skip, "pre-configured *.rabbitmq.net record does not resolve, skipping"};
         [_ | _] ->
             Config
     end.
 
+
 end_per_testcase(_Testcase, Config) ->
-    case inet_res:lookup(?DISCOVERY_ENDPOINT, in, a) of
+    case inet_res:lookup(?DISCOVERY_ENDPOINT_RECORD_A, in, a) of
         []      ->
             {skip, "pre-configured *.rabbitmq.net record does not resolve, skipping"};
         [_ | _] ->
@@ -85,18 +97,22 @@ end_per_testcase(_Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
+test_aaaa_record_hostname_discovery(_) ->
+    Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT_RECORD_AAAA, true),
+    ?assert(string:str(lists:flatten(Result), "facebook.com") > 0).
+
 hostname_discovery_with_long_node_names(_) ->
-    Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT, true),
+    Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT_RECORD_A, true),
     ?assert(lists:member("www.rabbitmq.com", Result)).
 
 hostname_discovery_with_short_node_names(_) ->
-    Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT, false),
+    Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT_RECORD_A, false),
     ?assert(lists:member("www", Result)).
 
 node_discovery_with_long_node_names(_) ->
-    Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT, true),
+    Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT_RECORD_A, true),
     ?assert(lists:member('ct_rabbit@www.rabbitmq.com', Result)).
 
 node_discovery_with_short_node_names(_) ->
-    Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT, false),
+    Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT_RECORD_A, false),
     ?assert(lists:member(ct_rabbit@www, Result)).
