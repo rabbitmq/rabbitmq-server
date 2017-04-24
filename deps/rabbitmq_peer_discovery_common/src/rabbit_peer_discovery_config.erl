@@ -64,45 +64,10 @@ get_with_entry_meta(Key, #peer_discovery_config_entry_meta{env_variable = EV,
                                    Default :: atom() | integer() | string())
                                   -> atom() | integer() | string().
 get_from_env_variable_or_map(Map, OSKey, AppKey, Default) ->
-  case getenv(OSKey) of
+  case rabbit_peer_discovery_util:getenv(OSKey) of
     false -> maps:get(AppKey, Map, Default);
     Value -> Value
   end.
-
--spec getenv(Key :: string()) -> string() | false.
-getenv(Key) ->
-  process_getenv_value(Key, os:getenv(Key)).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check the response of os:getenv/1 to see if it's false and if it is
-%% chain down to maybe_getenv_with_subkey/2 to see if the environment
-%% variable has a prefix of RABBITMQ_, potentially trying to get an
-%% environment variable without the prefix.
-%% @end
-%%--------------------------------------------------------------------
--spec process_getenv_value(Key :: string(), Value :: string() | false)
-    -> string() | false.
-process_getenv_value(Key, false) ->
-  maybe_getenv_with_subkey(Key, string:left(Key, 9));
-process_getenv_value(_, Value) -> Value.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check to see if the OS environment variable starts with RABBITMQ_
-%% and if so, try and fetch the value from an environment variable
-%% with the prefix removed.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_getenv_with_subkey(Key :: string(), Prefix :: string())
-    -> string() | false.
-maybe_getenv_with_subkey(Key, "RABBITMQ_") ->
-  os:getenv(string:sub_string(Key, 10));
-maybe_getenv_with_subkey(_, _) ->
-  false.
 
 %%--------------------------------------------------------------------
 %% @private

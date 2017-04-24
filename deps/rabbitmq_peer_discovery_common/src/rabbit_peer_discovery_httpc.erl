@@ -145,7 +145,7 @@ get(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
   rabbit_log:debug("GET ~s", [URL]),
   Response = httpc:request(get, {URL, Headers}, HttpOpts, []),
-  rabbit_log:debug("Response: [~p]", [Response]),
+  rabbit_log:debug("Response: ~p", [Response]),
   parse_response(Response).
 
 
@@ -216,7 +216,7 @@ delete(Scheme, Host, Port, Path, Args, Body) ->
 %%
 decode_body(_, []) -> [];
 decode_body(?CONTENT_JSON, Body) ->
-    case rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body), []) of
+    case rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body)) of
         {ok, Value} -> Value;
         {error, Err}  ->
             rabbit_log:error("HTTP client could not decode a JSON payload "

@@ -17,10 +17,10 @@
 -module(rabbit_peer_discovery_util).
 
 %% API
--export([as_atom/1,
+-export([getenv/1,
+         as_atom/1,
          as_integer/1,
          as_string/1,
-         backend_module/0,
          nic_ipv4/1,
          node_hostname/1,
          node_name/1,
@@ -39,6 +39,42 @@
                  {dstaddr,inet:ip_address()} | {hwaddr,[byte()]}.
 
 
+-spec getenv(Key :: string()) -> string() | false.
+getenv(Key) ->
+  process_getenv_value(Key, os:getenv(Key)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Check the response of os:getenv/1 to see if it's false and if it is
+%% chain down to maybe_getenv_with_subkey/2 to see if the environment
+%% variable has a prefix of RABBITMQ_, potentially trying to get an
+%% environment variable without the prefix.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_getenv_value(Key :: string(), Value :: string() | false)
+    -> string() | false.
+process_getenv_value(Key, false) ->
+  maybe_getenv_with_subkey(Key, string:left(Key, 9));
+process_getenv_value(_, Value) -> Value.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Check to see if the OS environment variable starts with RABBITMQ_
+%% and if so, try and fetch the value from an environment variable
+%% with the prefix removed.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_getenv_with_subkey(Key :: string(), Prefix :: string())
+    -> string() | false.
+maybe_getenv_with_subkey(Key, "RABBITMQ_") ->
+  os:getenv(string:sub_string(Key, 10));
+maybe_getenv_with_subkey(_, _) ->
+  false.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Return the passed in value as an atom.
@@ -52,8 +88,8 @@ as_atom(Value) when is_binary(Value) ->
 as_atom(Value) when is_list(Value) ->
   list_to_atom(Value);
 as_atom(Value) ->
-  autocluster_log:error("Unexpected data type for atom value: ~p~n",
-                        [Value]),
+  rabbit_log:error("Unexpected data type for atom value: ~p~n",
+                   [Value]),
   Value.
 
 
@@ -71,8 +107,8 @@ as_integer(Value) when is_list(Value) ->
 as_integer(Value) when is_integer(Value) ->
   Value;
 as_integer(Value) ->
-  autocluster_log:error("Unexpected data type for integer value: ~p~n",
-                        [Value]),
+  rabbit_log:error("Unexpected data type for integer value: ~p~n",
+                   [Value]),
   Value.
 
 
@@ -93,34 +129,9 @@ as_string(Value) when is_integer(Value) ->
 as_string(Value) when is_list(Value) ->
   lists:flatten(Value);
 as_string(Value) ->
-  autocluster_log:error("Unexpected data type for list value: ~p~n",
+  rabbit_log:error("Unexpected data type for list value: ~p~n",
                         [Value]),
   Value.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Return the module to use for node discovery.
-%% @end
-%%--------------------------------------------------------------------
--spec backend_module() -> module() | undefined.
-backend_module() ->
-  backend_module(autocluster_config:get(backend)).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Return the module to use for node discovery.
-%% @end
-%%--------------------------------------------------------------------
--spec backend_module(atom()) -> module() | undefined.
-backend_module(aws)          -> autocluster_aws;
-backend_module(consul)       -> autocluster_consul;
-backend_module(dns)          -> autocluster_dns;
-backend_module(etcd)         -> autocluster_etcd;
-backend_module(k8s)          -> autocluster_k8s;
-backend_module(_)            -> undefined.
 
 
 %%--------------------------------------------------------------------
@@ -202,7 +213,7 @@ node_name(Value) when is_list(Value) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Parse the value passed into nodename, checking if it's an ip
+%% Parse the value passed into nodename, checking if it's an IP
 %% address. If so, return it. If not, then check to see if longname
 %% support is turned on. if so, return it. If not, extract the left
 %% most part of the name, delimited by periods.
@@ -210,11 +221,12 @@ node_name(Value) when is_list(Value) ->
 %%--------------------------------------------------------------------
 -spec node_name_parse(Value :: string()) -> string().
 node_name_parse(Value) ->
+  %% TODO: support IPv6 here
   case inet:parse_ipv4strict_address(Value) of
     {ok, _} ->
       Value;
     {error, einval} ->
-      node_name_parse(autocluster_config:get(longname), Value)
+      node_name_parse(net_kernel:longnames(), Value)
   end.
 
 
@@ -257,7 +269,7 @@ node_name_parse(_, _, Parts) ->
 %%--------------------------------------------------------------------
 -spec node_prefix() -> string().
 node_prefix() ->
-  Value = autocluster_config:get(node_name),
+  Value = rabbit_data_coercion:to_list(getenv("RABBITMQ_NODENAME")),
   lists:nth(1, string:tokens(Value, "@")).
 
 
@@ -288,15 +300,15 @@ as_proplist([]) ->
 as_proplist(List) when is_list(List) ->
     Value = rabbit_data_coercion:to_binary(List),
     case rabbit_json:try_decode(Value) of
-        {ok, Json} ->
+        {ok, Map} ->
             [{binary_to_list(K), binary_to_list(V)}
-             || {K, V} <- maps:to_list(Json)];
+             || {K, V} <- maps:to_list(Map)];
         {error, Error} ->
-            autocluster_log:error("Unexpected data type for proplist value: ~p. JSON parser returned an error: ~p!~n",
+            rabbit_log:error("Unexpected data type for proplist value: ~p. JSON parser returned an error: ~p!~n",
                                   [Value, Error]),
             []
     end;
 as_proplist(Value) ->
-    autocluster_log:error("Unexpected data type for proplist value: ~p.~n",
+    rabbit_log:error("Unexpected data type for proplist value: ~p.~n",
                           [Value]),
     [].
