@@ -22,6 +22,9 @@
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0]).
+-export([init/0, send_health_check_pass/0]).
+%% useful for debugging from the REPL with RABBITMQ_ALLOW_INPUT
+-export([config_map/0, service_id/0, service_address/0]).
 
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(UTIL_MODULE,   rabbit_peer_discovery_util).
@@ -114,6 +117,12 @@
                                                   }
          }).
 
+
+-rabbit_boot_step({?MODULE,
+                   [{description, <<"Peer cluster discovery Consul backend initialisation">>},
+                    {mfa,         {?MODULE, init, []}},
+                    {requires,    notify_cluster}]}).
+
 %%
 %% API
 %%
@@ -162,6 +171,7 @@ register() ->
   M = config_map(),
   case registration_body() of
     {ok, Body} ->
+      rabbit_log:debug("Consul registration body: ~s", [Body]),
       case rabbit_peer_discovery_httpc:post(get_config_key(consul_scheme, M),
                                             get_config_key(consul_host, M),
                                             get_config_key(consul_port, M),
@@ -176,15 +186,21 @@ register() ->
 
 -spec unregister() -> ok | {error, Reason :: string()}.
 unregister() ->
-  M = config_map(),
-  Service = string:join(["service", service_id()], ":"),
+  M  = config_map(),
+  ID = service_id(),
+  rabbit_log:debug("Unregistering with Consul using service ID '~s'", [ID]),
   case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
                                        get_config_key(consul_host, M),
                                        get_config_key(consul_port, M),
-                                       [v1, agent, service, deregister, Service],
+                                       [v1, agent, service, deregister, ID],
                                        maybe_add_acl([])) of
-    {ok, _} -> ok;
-    Error   -> Error
+    {ok, Response} ->
+          rabbit_log:info("Consul's response to the unregistration attempt: ~p", [Response]),
+          ok;
+    Error   ->
+          rabbit_log:info("Failed to unregister service with ID '~s` with Consul: ~p",
+                         [ID, Error]),
+          Error
   end.
 
 
@@ -210,20 +226,23 @@ config_map() ->
 get_config_key(Key, Map) ->
     ?CONFIG_MODULE:get(Key, ?CONFIG_MAPPING, Map).
 
-%% init() ->
-%%   M = config_map(),
-%%   case get_config_key(backend, M) of
-%%     consul ->
-%%       case get_config_key(consul_svc_ttl, M) of
-%%         undefined -> ok;
-%%         Interval  ->
-%%           rabbit_log:debug("Starting Consul health check TTL timer"),
-%%           {ok, _} = timer:apply_interval(Interval * 500, ?MODULE,
-%%                                          send_health_check_pass, []),
-%%           ok
-%%       end;
-%%     _ -> ok
-%%   end.
+-spec init() -> ok.
+
+init() ->
+  case rabbit_peer_discovery:backend() of
+    ?MODULE ->
+      M = config_map(),
+      case get_config_key(consul_svc_ttl, M) of
+        undefined -> ok;
+        Interval  ->
+          T = Interval * 500,
+          rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [T]),
+          {ok, _} = timer:apply_interval(T, ?MODULE,
+                                         send_health_check_pass, []),
+          ok
+      end;
+    _ -> ok
+  end.
 
 -spec filter_nodes(ConsulResult :: list(), AllowWarning :: atom()) -> list().
 filter_nodes(Nodes, Warn) ->
@@ -247,9 +266,9 @@ extract_nodes(Data) -> extract_nodes(Data, []).
 -spec extract_nodes(ConsulResult :: list(), Nodes :: list())
     -> list().
 extract_nodes([], Nodes)    -> Nodes;
-extract_nodes([H|T], Nodes) ->
-  Service = maps:get(<<"Service">>, H),
-  Value = maps:get(<<"Address">>, Service),
+extract_nodes([H | T], Nodes) ->
+  Service  = maps:get(<<"Service">>, H),
+  Value    = maps:get(<<"Address">>, Service),
   NodeName = case ?UTIL_MODULE:as_string(Value) of
     "" ->
       NodeData = maps:get(<<"Node">>, H),
@@ -297,7 +316,7 @@ registration_body() ->
 registration_body({ok, Body}) ->
   {ok, rabbit_data_coercion:to_binary(Body)};
 registration_body({error, Reason}) ->
-  autocluster_log:error("Error serializing the request body: ~p",
+  rabbit_log:error("Error serializing the request body: ~p",
     [Reason]),
   {error, Reason}.
 
@@ -341,7 +360,7 @@ registration_body_maybe_add_check(Payload) ->
 registration_body_maybe_add_check(Payload, undefined) ->
     case registration_body_maybe_add_deregister([]) of
         [{'Deregister_critical_service_after', _}]->
-            autocluster_log:warning("Can't use Consul Deregister After without " ++
+            rabbit_log:warning("Can't use Consul Deregister After without " ++
             "using TTL. The parameter CONSUL_DEREGISTER_AFTER will be ignored"),
             Payload;
 
@@ -386,9 +405,9 @@ registration_body_maybe_add_tag(Payload, Cluster) ->
 
 -spec validate_addr_parameters(false | true, false | true) -> false | true.
 validate_addr_parameters(false, true) ->
-    autocluster_log:warning("The params CONSUL_SVC_ADDR_NODENAME" ++
-				" can be used only if CONSUL_SVC_ADDR_AUTO is true." ++
-				" CONSUL_SVC_ADDR_NODENAME value will be ignored."),
+    rabbit_log:warning("The parameter CONSUL_SVC_ADDR_NODENAME" ++
+                           " can be used only if CONSUL_SVC_ADDR_AUTO is true." ++
+                           " CONSUL_SVC_ADDR_NODENAME value will be ignored."),
     false;
 validate_addr_parameters(_, _) ->
     true.
@@ -443,3 +462,63 @@ maybe_add_domain(Value) ->
                                    "."));
       false -> Value
   end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Let Consul know that this node is still around
+%% @end
+%%--------------------------------------------------------------------
+
+-spec send_health_check_pass() -> ok.
+
+send_health_check_pass() ->
+  Service = string:join(["service", service_id()], ":"),
+  M = config_map(),
+  rabbit_log:debug("Running Consul health check"),
+  case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
+                                       get_config_key(consul_host, M),
+                                       get_config_key(consul_port, M),
+                                       [v1, agent, check, pass, Service],
+                                       maybe_add_acl([])) of
+    {ok, []} -> ok;
+    {error, "429"} ->
+          %% Too Many Requests, see https://www.consul.io/docs/agent/checks.html
+          rabbit_log:warning("Consul responded to a health check with 429 Too Many Requests"),
+          ok;
+    {error, "500"} ->
+          maybe_re_register(wait_nodelist());
+    {error, Reason} ->
+          rabbit_log:error("Error running Consul health check: ~p",
+                           [Reason]),
+      ok
+  end.
+
+maybe_re_register({error, Reason}) ->
+    rabbit_log:error("Internal error in Consul while updating health check. "
+                     "Cannot obtain list of nodes registered in Consul either: ~p",
+                     [Reason]);
+maybe_re_register({ok, Members}) ->
+    case lists:member(node(), Members) of
+        true ->
+            rabbit_log:error("Internal error in Consul while updating health check",
+                             []);
+        false ->
+            rabbit_log:error("Internal error in Consul while updating health check, "
+                             "node is not registered. Re-registering", []),
+            register()
+    end.
+
+wait_nodelist() ->
+    wait_nodelist(60).
+
+wait_nodelist(N) ->
+    case {list_nodes(), N} of
+        {Reply, 0} ->
+            Reply;
+        {{ok, _} = Reply, _} ->
+            Reply;
+        {{error, _}, _} ->
+            timer:sleep(1000),
+            wait_nodelist(N - 1)
+    end.
