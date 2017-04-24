@@ -264,7 +264,7 @@
                     on_sync_fun(), on_sync_fun()) ->
                         {'undefined' | non_neg_integer(),
                          'undefined' | non_neg_integer(), qistate()}.
--spec terminate(rabbit_types:vhsot(), [any()], qistate()) -> qistate().
+-spec terminate(rabbit_types:vhost(), [any()], qistate()) -> qistate().
 -spec delete_and_terminate(qistate()) -> qistate().
 -spec publish(rabbit_types:msg_id(), seq_id(),
                     rabbit_types:message_properties(), boolean(),
@@ -281,7 +281,7 @@
 -spec next_segment_boundary(seq_id()) -> seq_id().
 -spec bounds(qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}.
--spec start(rabbit_types:vhsot(), [rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
+-spec start(rabbit_types:vhost(), [rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
 
 -spec add_queue_ttl() -> 'ok'.
 
