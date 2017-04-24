@@ -63,38 +63,38 @@ created_stats(Type) ->
     %% TODO better tab2list?
     ets:select(Type, [{{'_', '_', '$3'}, [], ['$3']}]).
 
--spec all_detail_queue_data(pid(), [any()], ranges())  -> dict:dict(atom(), any()).
+-spec all_detail_queue_data(pid(), [any()], ranges())  -> #{atom() => any()}.
 all_detail_queue_data(_Pid, Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = detail_queue_data(Ranges, Id),
-                        dict:store(Id, Data, Acc)
-                end, dict:new(), Ids).
+                        maps:put(Id, Data, Acc)
+                end, #{}, Ids).
 
 all_list_queue_data(_Pid, Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = list_queue_data(Ranges, Id),
-                        dict:store(Id, Data, Acc)
-                end, dict:new(), Ids).
+                        maps:put(Id, Data, Acc)
+                end, #{}, Ids).
 
 all_detail_channel_data(_Pid, Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = detail_channel_data(Ranges, Id),
-                        dict:store(Id, Data, Acc)
-                end, dict:new(), Ids).
+                        maps:put(Id, Data, Acc)
+                end, #{}, Ids).
 
 all_list_channel_data(_Pid, Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = list_channel_data(Ranges, Id),
-                        dict:store(Id, Data, Acc)
-                end, dict:new(), Ids).
+                        maps:put(Id, Data, Acc)
+                end, #{}, Ids).
 
 connection_data(Ranges, Id) ->
-    dict:from_list([raw_message_data(connection_stats_coarse_conn_stats,
+    maps:from_list([raw_message_data(connection_stats_coarse_conn_stats,
                                      pick_range(coarse_conn_stats, Ranges), Id),
                     {connection_stats, lookup_element(connection_stats, Id)}]).
 
 exchange_data(Ranges, Id) ->
-    dict:from_list(
+    maps:from_list(
       exchange_raw_detail_stats_data(Ranges, Id) ++
       [raw_message_data(exchange_stats_publish_out,
                         pick_range(fine_stats, Ranges), Id),
@@ -102,7 +102,7 @@ exchange_data(Ranges, Id) ->
                         pick_range(fine_stats, Ranges), Id)]).
 
 vhost_data(Ranges, Id) ->
-    dict:from_list([raw_message_data(vhost_stats_coarse_conn_stats,
+    maps:from_list([raw_message_data(vhost_stats_coarse_conn_stats,
                                      pick_range(coarse_conn_stats, Ranges), Id),
                     raw_message_data(vhost_msg_stats,
                                      pick_range(queue_msg_rates, Ranges), Id),
@@ -112,7 +112,7 @@ vhost_data(Ranges, Id) ->
                                      pick_range(deliver_get, Ranges), Id)]).
 
 node_data(Ranges, Id) ->
-    dict:from_list(
+    maps:from_list(
       [{mgmt_stats, mgmt_qeue_length_stats()}] ++
       node_raw_detail_stats_data(Ranges, Id) ++
       [raw_message_data(node_coarse_stats,
@@ -127,27 +127,27 @@ overview_data(_Pid, User, Ranges, VHosts) ->
            raw_all_message_data(vhost_msg_rates, pick_range(queue_msg_rates, Ranges), VHosts),
            raw_all_message_data(vhost_stats_deliver_stats, pick_range(deliver_get, Ranges), VHosts)],
 
-    dict:from_list(Raw ++
+    maps:from_list(Raw ++
                    [{connections_count, count_created_stats(connection_created_stats, User)},
                     {channels_count, count_created_stats(channel_created_stats, User)},
                     {consumers_count, ets:info(consumer_stats, size)}]).
 
 consumer_data(_Pid, VHost) ->
-    dict:from_list(
+    maps:from_list(
     [{C, augment_msg_stats(augment_consumer(C))}
      || C <- consumers_by_vhost(VHost)]).
 
 all_connection_data(_Pid, Ids, Ranges) ->
-    dict:from_list([{Id, connection_data(Ranges, Id)} || Id <- Ids]).
+    maps:from_list([{Id, connection_data(Ranges, Id)} || Id <- Ids]).
 
 all_exchange_data(_Pid, Ids, Ranges) ->
-    dict:from_list([{Id, exchange_data(Ranges, Id)} || Id <- Ids]).
+    maps:from_list([{Id, exchange_data(Ranges, Id)} || Id <- Ids]).
 
 all_vhost_data(_Pid, Ids, Ranges) ->
-    dict:from_list([{Id, vhost_data(Ranges, Id)} || Id <- Ids]).
+    maps:from_list([{Id, vhost_data(Ranges, Id)} || Id <- Ids]).
 
 all_node_data(_Pid, Ids, Ranges) ->
-    dict:from_list([{Id, node_data(Ranges, Id)} || Id <- Ids]).
+    maps:from_list([{Id, node_data(Ranges, Id)} || Id <- Ids]).
 
 channel_raw_message_data(Ranges, Id) ->
     [raw_message_data(channel_stats_fine_stats, pick_range(fine_stats, Ranges), Id),
@@ -198,24 +198,24 @@ raw_message_data2(Table, Range, Id) ->
     {{Table, Id}, {SmallSample, Samples}}.
 
 detail_queue_data(Ranges, Id) ->
-    dict:from_list(queue_raw_message_data(Ranges, Id) ++
+    maps:from_list(queue_raw_message_data(Ranges, Id) ++
                    queue_raw_deliver_stats_data(Ranges, Id) ++
                    [{queue_stats, lookup_element(queue_stats, Id)},
                     {consumer_stats, get_queue_consumer_stats(Id)}]).
 
 list_queue_data(Ranges, Id) ->
-    dict:from_list(queue_raw_message_data(Ranges, Id) ++
+    maps:from_list(queue_raw_message_data(Ranges, Id) ++
                    queue_raw_deliver_stats_data(Ranges, Id) ++
                    [{queue_stats, lookup_element(queue_stats, Id)}]).
 
 detail_channel_data(Ranges, Id) ->
-    dict:from_list(channel_raw_message_data(Ranges, Id) ++
+    maps:from_list(channel_raw_message_data(Ranges, Id) ++
                    channel_raw_detail_stats_data(Ranges, Id) ++
                    [{channel_stats, lookup_element(channel_stats, Id)},
                     {consumer_stats, get_consumer_stats(Id)}]).
 
 list_channel_data(Ranges, Id) ->
-    dict:from_list(channel_raw_message_data(Ranges, Id) ++
+    maps:from_list(channel_raw_message_data(Ranges, Id) ++
                    channel_raw_detail_stats_data(Ranges, Id) ++
                    [{channel_stats, lookup_element(channel_stats, Id)}]).
 

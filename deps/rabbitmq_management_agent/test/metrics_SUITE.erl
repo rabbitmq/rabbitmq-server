@@ -158,5 +158,5 @@ get_vhost_stats(Config) ->
     Dict = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_data, overview_data,
                                         [none, all ,{no_range, no_range, no_range,no_range},
                                          [<<"/">>]]),
-    {ok, {VhostMsgStats, _}} = dict:find(vhost_msg_stats, Dict),
+    {ok, {VhostMsgStats, _}} = maps:find(vhost_msg_stats, Dict),
     exometer_slide:last(VhostMsgStats).
