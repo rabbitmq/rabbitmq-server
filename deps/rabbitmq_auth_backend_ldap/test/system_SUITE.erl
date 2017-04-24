@@ -262,11 +262,11 @@ connections_closed_after_timeout(Config) ->
                                            user_login_authentication,
                                            [<<?ALICE_NAME>>, []]),
 
-    [_] = dict:to_list(get_ldap_connections(Config)),
+    [_] = maps:to_list(get_ldap_connections(Config)),
     ct:sleep(idle_timeout(with_idle_timeout) + 200),
 
     %% There should be no connections after idle timeout
-    [] = dict:to_list(get_ldap_connections(Config)),
+    [] = maps:to_list(get_ldap_connections(Config)),
 
     {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
                                            rabbit_auth_backend_ldap,
@@ -298,7 +298,7 @@ connections_closed_after_timeout(Config) ->
 
     ct:sleep(round(idle_timeout(with_idle_timeout)/2)),
 
-    [{Key, _Conn}] = dict:to_list(get_ldap_connections(Config)),
+    [{Key, _Conn}] = maps:to_list(get_ldap_connections(Config)),
 
     %% Key will be {IsAnon, Servers, Options}
     %% IsAnon is false for password authorization

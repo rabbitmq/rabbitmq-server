@@ -50,7 +50,7 @@ get_connections() ->
 purge_connections() ->
     [ok = worker_pool:submit(ldap_pool,
                              fun() -> purge_conn(Anon, Servers, Opts) end, reuse)
-     || {{Anon, Servers, Opts}, _} <- dict:to_list(get_connections())],
+     || {{Anon, Servers, Opts}, _} <- maps:to_list(get_connections())],
     ok.
 
 user_login_authentication(Username, []) ->
@@ -505,11 +505,11 @@ call_ldap_fun(Fun, LDAP, UserDN) ->
 %% Gets either the anonymous or bound (authenticated) connection
 get_or_create_conn(IsAnon, Servers, Opts) ->
     Conns = case get(ldap_conns) of
-                undefined -> dict:new();
+                undefined -> #{};
                 Dict      -> Dict
             end,
     Key = {IsAnon, Servers, Opts},
-    case dict:find(Key, Conns) of
+    case maps:find(Key, Conns) of
         {ok, Conn} ->
             Timeout = rabbit_misc:pget(idle_timeout, Opts, infinity),
             %% Defer the timeout by re-setting it.
@@ -522,7 +522,7 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
             end,
             case eldap_open(Servers, EldapOpts) of
                 {ok, Conn} ->
-                    put(ldap_conns, dict:store(Key, Conn, Conns)),
+                    put(ldap_conns, maps:put(Key, Conn, Conns)),
                     set_connection_timeout(Key, Timeout),
                     {ok, Conn};
                 Error -> Error
@@ -535,13 +535,13 @@ set_connection_timeout(Key, Timeout) when is_integer(Timeout) ->
     worker_pool_worker:set_timeout(Key, Timeout,
         fun() ->
             Conns = case get(ldap_conns) of
-                undefined -> dict:new();
+                undefined -> #{};
                 Dict      -> Dict
             end,
-            case dict:find(Key, Conns) of
+            case maps:find(Key, Conns) of
                 {ok, Conn} ->
                     eldap:close(Conn),
-                    put(ldap_conns, dict:erase(Key, Conns));
+                    put(ldap_conns, maps:remove(Key, Conns));
                 _ -> ok
             end
         end).
@@ -572,7 +572,7 @@ is_multi_attr_member(Str1, Str2) ->
 purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
     Key = {IsAnon, Servers, Opts},
-    {ok, Conn} = dict:find(Key, Conns),
+    {ok, Conn} = maps:find(Key, Conns),
     rabbit_log:warning("LDAP Purging an already closed LDAP server connection~n"),
     % We cannot close the connection with eldap:close/1 because as of OTP-13327
     % eldap will try to do_unbind first and will fail with a `{gen_tcp_error, closed}`.
@@ -580,7 +580,7 @@ purge_conn(IsAnon, Servers, Opts) ->
     % kill its process.
     unlink(Conn),
     exit(Conn, closed),
-    put(ldap_conns, dict:erase(Key, Conns)),
+    put(ldap_conns, maps:remove(Key, Conns)),
     ok.
 
 eldap_open(Servers, Opts) ->
