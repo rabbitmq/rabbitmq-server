@@ -68,13 +68,8 @@ discover_nodes(SeedHostname, LongNamesUsed) ->
         H <- discover_hostnames(SeedHostname, LongNamesUsed)].
 
 discover_hostnames(SeedHostname, LongNamesUsed) ->
-    case lookup(SeedHostname, LongNamesUsed, ipv4) of
-	[] ->
-	    rabbit_log:info("Hostnames lookup failed for IPv4, trying IPv6"),
-	    lookup(SeedHostname, LongNamesUsed, ipv6);
-	Hosts4 -> Hosts4
-    end.
-
+    lookup(SeedHostname, LongNamesUsed, ipv4) ++
+    lookup(SeedHostname, LongNamesUsed, ipv6).
 
 decode_record(ipv4) ->
     a;
