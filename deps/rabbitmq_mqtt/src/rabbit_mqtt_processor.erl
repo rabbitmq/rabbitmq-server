@@ -51,7 +51,7 @@ initial_state(Socket, SSLLoginName,
     #proc_state{ unacked_pubs   = gb_trees:empty(),
                  awaiting_ack   = gb_trees:empty(),
                  message_id     = 1,
-                 subscriptions  = dict:new(),
+                 subscriptions  = #{},
                  consumer_tags  = {undefined, undefined},
                  channels       = {undefined, undefined},
                  exchange       = rabbit_mqtt_util:env(exchange),
@@ -216,9 +216,14 @@ process_request(?SUBSCRIBE,
                                        routing_key = rabbit_mqtt_util:mqtt2amqp(
                                                        TopicName)},
                            #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
+                           SupportedQosList = case maps:find(TopicName, Subs) of
+                               {ok, L} -> [SupportedQos|L];
+                               error   -> [SupportedQos]
+                           end,
                            {[SupportedQos | QosList],
-                            PState1 #proc_state{subscriptions =
-                                                dict:append(TopicName, SupportedQos, Subs)}}
+                            PState1 #proc_state{
+                                subscriptions =
+                                    maps:put(TopicName, SupportedQosList, Subs)}}
                        end, {[], PState0}, Topics),
         SendFun(#mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
                             variable = #mqtt_frame_suback{
@@ -249,7 +254,7 @@ process_request(?UNSUBSCRIBE,
     Subs1 =
     lists:foldl(
       fun (#mqtt_topic{ name = TopicName }, Subs) ->
-        QosSubs = case dict:find(TopicName, Subs) of
+        QosSubs = case maps:find(TopicName, Subs) of
                       {ok, Val} when is_list(Val) -> lists:usort(Val);
                       error                       -> []
                   end,
@@ -263,7 +268,7 @@ process_request(?UNSUBSCRIBE,
                                   rabbit_mqtt_util:mqtt2amqp(TopicName)},
                   #'queue.unbind_ok'{} = amqp_channel:call(Channel, Binding)
           end, QosSubs),
-        dict:erase(TopicName, Subs)
+        maps:remove(TopicName, Subs)
       end, Subs0, Topics),
     SendFun(#mqtt_frame{ fixed    = #mqtt_frame_fixed { type       = ?UNSUBACK },
                          variable = #mqtt_frame_suback{ message_id = MessageId }},
