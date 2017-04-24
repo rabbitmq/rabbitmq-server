@@ -48,7 +48,10 @@ init([Type, Name, Config0]) ->
     Config = case Type of
                 static -> Config0;
                 dynamic ->
-                    {ok, Conf} = rabbit_shovel_parameters:parse(Name, Config0),
+                    ClusterName = rabbit_nodes:cluster_name(),
+                    {ok, Conf} = rabbit_shovel_parameters:parse(Name,
+                                                                ClusterName,
+                                                                Config0),
                     Conf
             end,
 
