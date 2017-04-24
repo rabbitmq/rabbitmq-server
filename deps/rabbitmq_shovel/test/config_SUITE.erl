@@ -95,9 +95,9 @@ parse_amqp10_mixed(_Config) ->
     Amqp10Dst = {destination, [{protocol, amqp10},
                                {uris, ["ampq://myhost:5672"]},
                                {target_address, <<"targe-queue">>},
-                               {delivery_annotations, [{soma_ann, <<"some-info">>}]},
                                {message_annotations, [{soma_ann, <<"some-info">>}]},
                                {properties, [{user_id, <<"some-user">>}]},
+                               {application_properties, [{app_prop_key, <<"app_prop_value">>}]},
                                {add_forward_headers, true}
                               ]},
     In = [Amqp10Src,
@@ -115,9 +115,9 @@ parse_amqp10_mixed(_Config) ->
               dest := #{module := rabbit_amqp10_shovel,
                         uris := ["ampq://myhost:5672"],
                         target_address := <<"targe-queue">>,
-                        delivery_annotations := #{soma_ann := <<"some-info">>},
-                        message_annotations := #{soma_ann := <<"some-info">>},
                         properties := #{user_id := <<"some-user">>},
+                        application_properties := #{app_prop_key := <<"app_prop_value">>},
+                        message_annotations := #{soma_ann := <<"some-info">>},
                         add_forward_headers := true}}},
         rabbit_shovel_config:parse(my_shovel, In)),
     ok.

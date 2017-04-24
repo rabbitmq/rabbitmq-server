@@ -22,7 +22,7 @@ groups() ->
       {tests, [parallel], [
           parse_amqp091,
           parse_amqp091_legacy,
-          parse_amqp10_mixed
+          parse_amqp10
         ]}
     ].
 
@@ -55,7 +55,7 @@ parse_amqp091_legacy(_Config) ->
     Params =
         [{<<"src-uri">>, <<"amqp://localhost:5672">>},
          {<<"src-protocol">>, <<"amqp091">>},
-         {<<"dst-protocol">>, <<"amqp091">>},
+         {<<"dest-protocol">>, <<"amqp091">>},
          {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
          {<<"add-forward-headers">>, true},
          {<<"add-timestamp-header">>, true},
@@ -75,7 +75,7 @@ parse_amqp091(_Config) ->
     Params =
         [{<<"src-uri">>, <<"amqp://localhost:5672">>},
          {<<"src-protocol">>, <<"amqp091">>},
-         {<<"dst-protocol">>, <<"amqp091">>},
+         {<<"dest-protocol">>, <<"amqp091">>},
          {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
          {<<"dest-add-forward-headers">>, true},
          {<<"dest-add-timestamp-header">>, true},
@@ -132,37 +132,51 @@ test_parse_amqp091(Params) ->
                   end, ExpectedHeaders),
     ok.
 
-parse_amqp10_mixed(_Config) ->
-    % Amqp10Src = {source, [{protocol, amqp10},
-    %                       {uris, ["ampq://myotherhost:5672"]},
-    %                       {source_address, <<"the-queue">>}
-    %                      ]},
-    % Amqp10Dst = {destination, [{protocol, amqp10},
-    %                            {uris, ["ampq://myhost:5672"]},
-    %                            {target_address, <<"targe-queue">>},
-    %                            {delivery_annotations, [{soma_ann, <<"some-info">>}]},
-    %                            {message_annotations, [{soma_ann, <<"some-info">>}]},
-    %                            {properties, [{user_id, <<"some-user">>}]},
-    %                            {add_forward_headers, true}
-    %                           ]},
-    % In = [Amqp10Src,
-    %       Amqp10Dst,
-    %       {ack_mode, on_confirm},
-    %       {reconnect_delay, 2}],
+parse_amqp10(_Config) ->
+    Params =
+        [
+         {<<"ack-mode">>, <<"on-publish">>},
+         {<<"reconnect-delay">>, 1001},
 
-    % ?assertMatch(
-    %    {ok, #{name := my_shovel,
-    %           ack_mode := on_confirm,
-    %           source := #{module := rabbit_amqp10_shovel,
-    %                       uris := ["ampq://myotherhost:5672"],
-    %                       source_address := <<"the-queue">>
-    %                       },
-    %           dest := #{module := rabbit_amqp10_shovel,
-    %                     uris := ["ampq://myhost:5672"],
-    %                     target_address := <<"targe-queue">>,
-    %                     delivery_annotations := #{soma_ann := <<"some-info">>},
-    %                     message_annotations := #{soma_ann := <<"some-info">>},
-    %                     properties := #{user_id := <<"some-user">>},
-    %                     add_forward_headers := true}}},
-    %     rabbit_shovel_config:parse(my_shovel, In)),
+         {<<"src-protocol">>, <<"amqp10">>},
+         {<<"src-uri">>, <<"amqp://localhost:5672">>},
+         {<<"src-address">>, <<"a-src-queue">>},
+         {<<"src-delete-after">>, <<"never">>},
+         {<<"src-prefetch-count">>, 30},
+
+         {<<"dest-protocol">>, <<"amqp10">>},
+         {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
+         {<<"dest-address">>, <<"a-dest-queue">>},
+         {<<"dest-add-forward-headers">>, true},
+         {<<"dest-add-timestamp-header">>, true},
+         {<<"dest-application-properties">>, [{<<"some-app-prop">>,
+                                               <<"app-prop-value">>}]},
+         {<<"dest-message-annotations">>, [{<<"some-message-ann">>,
+                                               <<"message-ann-value">>}]},
+         {<<"dest-properties">>, [{<<"user_id">>, <<"some-user">>}]}
+        ],
+
+    ?assertMatch(
+       {ok, #{name := "my_shovel",
+              ack_mode := on_publish,
+              source := #{module := rabbit_amqp10_shovel,
+                          uris := ["amqp://localhost:5672"],
+                          delete_after := never,
+                          prefetch_count := 30,
+                          source_address := <<"a-src-queue">>
+                          },
+              dest := #{module := rabbit_amqp10_shovel,
+                        uris := ["amqp://remotehost:5672"],
+                        target_address := <<"a-dest-queue">>,
+                        message_annotations := #{<<"some-message-ann">> :=
+                                                 <<"message-ann-value">>},
+                        application_properties := #{<<"some-app-prop">> :=
+                                                    <<"app-prop-value">>},
+                        properties := #{user_id := <<"some-user">>},
+                        add_timestamp_header := true,
+                        add_forward_headers := true
+                       }
+             }},
+        rabbit_shovel_parameters:parse({"vhost", "my_shovel"}, "my-cluster",
+                                       Params)),
     ok.

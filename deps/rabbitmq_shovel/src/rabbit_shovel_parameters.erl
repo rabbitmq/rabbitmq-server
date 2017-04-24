@@ -158,14 +158,51 @@ validate_properties(Name, Term) ->
 %%----------------------------------------------------------------------------
 
 parse({VHost, Name}, ClusterName, Def) ->
-    {Source, SourceHeaders} = parse_amqp091_source(Def),
+    {Source, SourceHeaders} = parse_source(Def),
     {ok, #{name => Name,
            source => Source,
-           dest => parse_amqp091_dest({VHost, Name}, ClusterName, Def,
+           dest => parse_dest({VHost, Name}, ClusterName, Def,
                                       SourceHeaders),
            ack_mode => translate_ack_mode(pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
            reconnect_delay => pget(<<"reconnect-delay">>, Def,
                                    ?DEFAULT_RECONNECT_DELAY)}}.
+
+parse_source(Def) ->
+    case lists:any(fun ({<<"src-protocol">>, <<"amqp10">>}) ->  true;
+                        (_) -> false
+                   end, Def) of
+        true -> parse_amqp10_source(Def);
+        false -> parse_amqp091_source(Def)
+    end.
+
+parse_dest(VHostName, ClusterName, Def, SourceHeaders) ->
+    case lists:any(fun ({<<"dest-protocol">>, <<"amqp10">>}) ->  true;
+                        (_) -> false
+                   end, Def) of
+        true -> parse_amqp10_dest(VHostName, ClusterName, Def, SourceHeaders);
+        false -> parse_amqp091_dest(VHostName, ClusterName, Def,
+                                    SourceHeaders)
+    end.
+
+parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
+    Uris = get_uris(<<"dest-uri">>, Def),
+    Address = pget(<<"dest-address">>, Def),
+    Properties = pget(<<"dest-properties">>, Def),
+    AppProperties = pget(<<"dest-application-properties">>, Def, []),
+    MessageAnns = pget(<<"dest-message-annotations">>, Def, []),
+    #{module => rabbit_amqp10_shovel,
+      uris => Uris,
+      target_address => Address,
+      message_annotations => maps:from_list(MessageAnns),
+      application_properties => maps:from_list(AppProperties ++ SourceHeaders),
+      properties => maps:from_list(
+                      lists:map(fun({K, V}) ->
+                                        {rabbit_data_coercion:to_atom(K), V}
+                                end, Properties)),
+      add_timestamp_header => pget(<<"dest-add-timestamp-header">>, Def, false),
+      add_forward_headers => pget(<<"dest-add-forward-headers">>, Def, false)
+
+     }.
 
 parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
     DestURIs = get_uris(<<"dest-uri">>,      Def),
@@ -227,6 +264,18 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
       fields_fun => PubFun,
       props_fun => PubPropsFun
      }.
+
+parse_amqp10_source(Def) ->
+    Uris = get_uris(<<"src-uri">>, Def),
+    Address = pget(<<"src-address">>, Def),
+    DeleteAfter = pget(<<"src-delete-after">>, Def, <<"never">>),
+    PrefetchCount = pget(<<"src-prefetch-count">>, Def, 1000),
+    Headers = [],
+    {#{module => rabbit_amqp10_shovel,
+       uris => Uris,
+       source_address => Address,
+       delete_after => rabbit_data_coercion:to_atom(DeleteAfter),
+       prefetch_count => PrefetchCount}, Headers}.
 
 parse_amqp091_source(Def) ->
     SrcURIs = get_uris(<<"src-uri">>, Def),
