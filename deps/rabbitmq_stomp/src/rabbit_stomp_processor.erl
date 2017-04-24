@@ -154,12 +154,12 @@ initial_state(Configuration,
        session_id          = none,
        channel             = none,
        connection          = none,
-       subscriptions       = dict:new(),
+       subscriptions       = #{},
        version             = none,
        pending_receipts    = undefined,
        config              = Configuration,
        route_state         = rabbit_routing_util:init_state(),
-       reply_queues        = dict:new(),
+       reply_queues        = #{},
        frame_transformer   = undefined,
        trailing_lf         = rabbit_misc:get_env(rabbitmq_stomp, trailing_lf, true)}.
 
@@ -403,7 +403,7 @@ ack_action(Command, Frame,
         {ok, AckValue} ->
             case rabbit_stomp_util:parse_message_id(AckValue) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
-                    case dict:find(ConsumerTag, Subs) of
+                    case maps:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
                             Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", true),
                             Method = MethodFun(DeliveryTag, Sub, Requeue),
@@ -438,7 +438,7 @@ ack_action(Command, Frame,
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
 server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) ->
-    case dict:find(ConsumerTag, Subs) of
+    case maps:find(ConsumerTag, Subs) of
         error ->
             error("Server cancelled unknown subscription",
                   "Consumer tag ~p is not associated with a subscription.~n",
@@ -473,7 +473,7 @@ cancel_subscription({error, _}, _Frame, State) ->
 cancel_subscription({ok, ConsumerTag, Description}, Frame,
                     State = #proc_state{subscriptions = Subs,
                                    channel       = Channel}) ->
-    case dict:find(ConsumerTag, Subs) of
+    case maps:find(ConsumerTag, Subs) of
         error ->
             error("No subscription found",
                   "UNSUBSCRIBE must refer to an existing subscription.~n"
@@ -497,7 +497,7 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
 
 tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
                            Frame, State = #proc_state{subscriptions = Subs}) ->
-    Subs1 = dict:erase(ConsumerTag, Subs),
+    Subs1 = maps:remove(ConsumerTag, Subs),
     {ok, Dest} = rabbit_routing_util:parse_endpoint(DestHdr),
     maybe_delete_durable_sub(Dest, Frame, State#proc_state{subscriptions = Subs1}).
 
@@ -659,7 +659,7 @@ do_subscribe(Destination, DestHdr, Frame,
                 _         -> amqp_channel:call(
                                Channel, #'basic.qos'{prefetch_count = Prefetch})
             end,
-            case dict:find(ConsumerTag, Subs) of
+            case maps:find(ConsumerTag, Subs) of
                 {ok, _} ->
                     Message = "Duplicated subscription identifier",
                     Detail = "A subscription identified by '~s' alredy exists.",
@@ -695,7 +695,7 @@ do_subscribe(Destination, DestHdr, Frame,
                             exit(Err)
                     end,
                     ok(State#proc_state{subscriptions =
-                                       dict:store(
+                                       maps:put(
                                          ConsumerTag,
                                          #subscription{dest_hdr    = DestHdr,
                                                        ack_mode    = AckMode,
@@ -792,7 +792,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
                           session_id  = SessionId,
                           subscriptions = Subs,
                           version       = Version}) ->
-    NewState = case dict:find(ConsumerTag, Subs) of
+    NewState = case maps:find(ConsumerTag, Subs) of
         {ok, #subscription{ack_mode = AckMode}} ->
             send_frame(
               "MESSAGE",
@@ -863,7 +863,7 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
 ensure_reply_queue(TempQueueId, State = #proc_state{channel       = Channel,
                                                reply_queues  = RQS,
                                                subscriptions = Subs}) ->
-    case dict:find(TempQueueId, RQS) of
+    case maps:find(TempQueueId, RQS) of
         {ok, RQ} ->
             {binary_to_list(RQ), State};
         error ->
@@ -885,13 +885,13 @@ ensure_reply_queue(TempQueueId, State = #proc_state{channel       = Channel,
             Destination = binary_to_list(Queue),
 
             %% synthesise a subscription to the reply queue destination
-            Subs1 = dict:store(ConsumerTag,
-                               #subscription{dest_hdr  = Destination,
-                                             multi_ack = false},
-                               Subs),
+            Subs1 = maps:put(ConsumerTag,
+                             #subscription{dest_hdr  = Destination,
+                                           multi_ack = false},
+                             Subs),
 
             {Destination, State#proc_state{
-                            reply_queues  = dict:store(TempQueueId, Queue, RQS),
+                            reply_queues  = maps:put(TempQueueId, Queue, RQS),
                             subscriptions = Subs1}}
     end.
 
