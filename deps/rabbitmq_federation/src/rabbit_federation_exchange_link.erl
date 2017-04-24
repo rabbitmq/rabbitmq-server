@@ -42,7 +42,7 @@
                 internal_exchange,
                 waiting_cmds = gb_trees:empty(),
                 next_serial,
-                bindings = dict:new(),
+                bindings = #{},
                 downstream_connection,
                 downstream_channel,
                 downstream_exchange,
@@ -85,7 +85,7 @@ init({Upstream, XName}) ->
     end.
 
 handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
-    {reply, lists:sort([K || {K, _} <- dict:fetch_keys(Bindings)]), State};
+    {reply, lists:sort([K || {K, _} <- maps:keys(Bindings)]), State};
 
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
@@ -252,19 +252,19 @@ remove_binding(B, State) ->
 
 record_binding(B = #binding{destination = Dest},
                State = #state{bindings = Bs}) ->
-    {DoIt, Set} = case dict:find(key(B), Bs) of
+    {DoIt, Set} = case maps:find(key(B), Bs) of
                       error       -> {true,  sets:from_list([Dest])};
                       {ok, Dests} -> {false, sets:add_element(
                                                Dest, Dests)}
                   end,
-    {DoIt, State#state{bindings = dict:store(key(B), Set, Bs)}}.
+    {DoIt, State#state{bindings = maps:put(key(B), Set, Bs)}}.
 
 forget_binding(B = #binding{destination = Dest},
                State = #state{bindings = Bs}) ->
-    Dests = sets:del_element(Dest, dict:fetch(key(B), Bs)),
+    Dests = sets:del_element(Dest, maps:get(key(B), Bs)),
     {DoIt, Bs1} = case sets:size(Dests) of
-                      0 -> {true,  dict:erase(key(B), Bs)};
-                      _ -> {false, dict:store(key(B), Dests, Bs)}
+                      0 -> {true,  maps:remove(key(B), Bs)};
+                      _ -> {false, maps:put(key(B), Dests, Bs)}
                   end,
     {DoIt, State#state{bindings = Bs1}}.
 
