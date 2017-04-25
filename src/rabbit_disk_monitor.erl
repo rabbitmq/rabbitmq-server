@@ -75,7 +75,7 @@
 
 %%----------------------------------------------------------------------------
 
--type disk_free_limit() :: (integer() | string() | {'mem_relative', float()}).
+-type disk_free_limit() :: (integer() | string() | {'mem_relative', float() | integer()}).
 -spec start_link(disk_free_limit()) -> rabbit_types:ok_pid_or_error().
 -spec get_disk_free_limit() -> integer().
 -spec set_disk_free_limit(disk_free_limit()) -> 'ok'.
@@ -237,7 +237,7 @@ parse_free_win32(CommandResult) ->
     list_to_integer(lists:reverse(Free)).
 
 interpret_limit({mem_relative, Relative}) 
-    when is_float(Relative) ->
+    when is_number(Relative) ->
     round(Relative * vm_memory_monitor:get_total_memory());
 interpret_limit(Absolute) -> 
     case rabbit_resource_monitor_misc:parse_information_unit(Absolute) of

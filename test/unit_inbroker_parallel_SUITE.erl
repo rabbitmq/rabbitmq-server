@@ -1521,14 +1521,25 @@ set_disk_free_limit_command1(_Config) ->
     ok = control_action(set_disk_free_limit,
       ["2000kiB"]),
     2048000 = rabbit_disk_monitor:get_disk_free_limit(),
+
+    %% Use an integer
     ok = control_action(set_disk_free_limit,
-      ["mem_relative", "1.1"]),
-    ExpectedLimit = 1.1 * vm_memory_monitor:get_total_memory(),
-    % Total memory is unstable, so checking order
-    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() < 1.2,
-    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() > 0.98,
+      ["mem_relative", "1"]),
+    check_limit(1),
+
+    %% Use a float
+    ok = control_action(set_disk_free_limit,
+      ["mem_relative", "1.5"]),
+    check_limit(1.5),
+
     ok = control_action(set_disk_free_limit, ["50MB"]),
     passed.
+
+check_limit(Limit) ->
+    ExpectedLimit = Limit * vm_memory_monitor:get_total_memory(),
+    % Total memory is unstable, so checking order
+    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() < 1.2,
+    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() > 0.98.
 
 %% ---------------------------------------------------------------------------
 %% rabbitmqctl helpers.
