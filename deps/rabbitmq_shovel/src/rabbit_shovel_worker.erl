@@ -71,8 +71,8 @@ handle_cast(init, State = #state{config =
     %% if we try to shut down while waiting for a connection to be
     %% established then we don't block
     process_flag(trap_exit, true),
-    Config3 = SrcMod:init_source(Config2),
-    Config4 = DstMod:init_dest(Config3),
+    Config3 = DstMod:init_dest(Config2),
+    Config4 = SrcMod:init_source(Config3),
     State1 = State#state{config = Config4},
     ok = report_running(State1),
     {noreply, State1}.
@@ -81,7 +81,6 @@ handle_cast(init, State = #state{config =
 handle_info(Msg, State = #state{config =
                                 #{source := #{module := SrcMod},
                                   dest := #{module := DstMod}} = Config}) ->
-    error_logger:info_msg("handle_info ~p~n", [Msg]),
     case SrcMod:handle_source(Msg, Config) of
         not_handled ->
             case DstMod:handle_dest(Msg, Config) of

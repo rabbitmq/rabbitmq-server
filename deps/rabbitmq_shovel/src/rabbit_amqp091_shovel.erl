@@ -83,8 +83,7 @@ init_source(Conf = #{ack_mode := AckMode,
     Conf#{source => Src#{remaining => Remaining,
                          remaining_unacked => Remaining}}.
 
-connect_dest(Conf = #{name := Name,
-                   dest := #{uris := Uris} = Dst}) ->
+connect_dest(Conf = #{name := Name, dest := #{uris := Uris} = Dst}) ->
     {Conn, Chan, URI} = make_conn_and_chan(Uris, Name),
     Conf#{dest => Dst#{current => {Conn, Chan, URI}}}.
 
