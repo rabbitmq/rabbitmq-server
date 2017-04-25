@@ -237,7 +237,7 @@ parse_free_win32(CommandResult) ->
     list_to_integer(lists:reverse(Free)).
 
 interpret_limit({mem_relative, Relative}) 
-    when is_float(Relative) ->
+    when is_number(Relative) ->
     round(Relative * vm_memory_monitor:get_total_memory());
 interpret_limit(Absolute) -> 
     case rabbit_resource_monitor_misc:parse_information_unit(Absolute) of
