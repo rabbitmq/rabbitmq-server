@@ -260,6 +260,7 @@
    %% Alternatively, we can set a limit relative to total available RAM.
    %%
    %% Values lower than 1.0 can be dangerous and should be used carefully.
+   %% As a rule of thumb, values between 1.5 and 2.0 fit most cases.
    %% {disk_free_limit, {mem_relative, 2.0}},
 
    %%
