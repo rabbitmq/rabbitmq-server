@@ -80,7 +80,7 @@
 %% contains a mapping from segment numbers to state-per-segment (this
 %% state is held for all segments which have been "seen": thus a
 %% segment which has been read but has no pending entries in the
-%% journal is still held in this mapping. Also note that a dict is
+%% journal is still held in this mapping. Also note that a map is
 %% used for this mapping, not an array because with an array, you will
 %% always have entries from 0). Actions are stored directly in this
 %% state. Thus at the point of flushing the journal, firstly no
@@ -233,10 +233,10 @@
                                unacked            :: non_neg_integer()
                              }).
 -type seq_id() :: integer().
--type seg_dict() :: {dict:dict(), [segment()]}.
+-type seg_map() :: {map(), [segment()]}.
 -type on_sync_fun() :: fun ((gb_sets:set()) -> ok).
 -type qistate() :: #qistate { dir                 :: file:filename(),
-                              segments            :: 'undefined' | seg_dict(),
+                              segments            :: 'undefined' | seg_map(),
                               journal_handle      :: hdl(),
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer(),
@@ -995,7 +995,7 @@ segment_find(Seg, {_Segments, [Segment = #segment { num = Seg } |_]}) ->
 segment_find(Seg, {_Segments, [_, Segment = #segment { num = Seg }]}) ->
     {ok, Segment}; %% 2, matches tail
 segment_find(Seg, {Segments, _}) -> %% no match
-    dict:find(Seg, Segments).
+    maps:find(Seg, Segments).
 
 segment_store(Segment = #segment { num = Seg }, %% 1 or (2, matches head)
               {Segments, [#segment { num = Seg } | Tail]}) ->
@@ -1004,28 +1004,28 @@ segment_store(Segment = #segment { num = Seg }, %% 2, matches tail
               {Segments, [SegmentA, #segment { num = Seg }]}) ->
     {Segments, [Segment, SegmentA]};
 segment_store(Segment = #segment { num = Seg }, {Segments, []}) ->
-    {dict:erase(Seg, Segments), [Segment]};
+    {maps:remove(Seg, Segments), [Segment]};
 segment_store(Segment = #segment { num = Seg }, {Segments, [SegmentA]}) ->
-    {dict:erase(Seg, Segments), [Segment, SegmentA]};
+    {maps:remove(Seg, Segments), [Segment, SegmentA]};
 segment_store(Segment = #segment { num = Seg },
               {Segments, [SegmentA, SegmentB]}) ->
-    {dict:store(SegmentB#segment.num, SegmentB, dict:erase(Seg, Segments)),
+    {maps:put(SegmentB#segment.num, SegmentB, maps:remove(Seg, Segments)),
      [Segment, SegmentA]}.
 
 segment_fold(Fun, Acc, {Segments, CachedSegments}) ->
-    dict:fold(fun (_Seg, Segment, Acc1) -> Fun(Segment, Acc1) end,
+    maps:fold(fun (_Seg, Segment, Acc1) -> Fun(Segment, Acc1) end,
               lists:foldl(Fun, Acc, CachedSegments), Segments).
 
 segment_map(Fun, {Segments, CachedSegments}) ->
-    {dict:map(fun (_Seg, Segment) -> Fun(Segment) end, Segments),
+    {maps:map(fun (_Seg, Segment) -> Fun(Segment) end, Segments),
      lists:map(Fun, CachedSegments)}.
 
 segment_nums({Segments, CachedSegments}) ->
     lists:map(fun (#segment { num = Num }) -> Num end, CachedSegments) ++
-        dict:fetch_keys(Segments).
+        maps:keys(Segments).
 
 segments_new() ->
-    {dict:new(), []}.
+    {#{}, []}.
 
 entry_to_segment(_RelSeq, {?PUB, del, ack}, Initial) ->
     Initial;

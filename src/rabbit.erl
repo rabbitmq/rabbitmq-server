@@ -22,7 +22,7 @@
          stop_and_halt/0, await_startup/0, status/0, is_running/0, alarms/0,
          is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
--export([start/2, stop/1]).
+-export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, stop_apps/1]).
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
 
@@ -327,7 +327,9 @@ broker_start() ->
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
     maybe_sd_notify(),
-    ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())).
+    ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())),
+    rabbit_peer_discovery:maybe_register(),
+    ok.
 
 %% Try to send systemd ready notification if it makes sense in the
 %% current environment. standard_error is used intentionally in all
@@ -471,6 +473,8 @@ stop() ->
     end,
     rabbit_log:info("RabbitMQ is asked to stop...~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
+    %% this will also perform unregistration with the peer discovery backend
+    %% as needed
     stop_apps(app_utils:app_dependency_order(Apps, true)),
     rabbit_log:info("Successfully stopped RabbitMQ and its dependencies~n", []).
 
@@ -758,6 +762,10 @@ start(normal, []) ->
         Error ->
             Error
     end.
+
+prep_stop(State) ->
+  rabbit_peer_discovery:maybe_unregister(),
+  State.
 
 stop(_State) ->
     ok = rabbit_alarm:stop(),

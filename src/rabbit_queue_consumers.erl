@@ -64,7 +64,8 @@
 -spec max_active_priority(state()) -> integer() | 'infinity' | 'empty'.
 -spec inactive(state()) -> boolean().
 -spec all(state()) -> [{ch(), rabbit_types:ctag(), boolean(),
-                        non_neg_integer(), rabbit_framing:amqp_table()}].
+                        non_neg_integer(), rabbit_framing:amqp_table(),
+                        rabbit_types:username()}].
 -spec count() -> non_neg_integer().
 -spec unacknowledged_message_count() -> non_neg_integer().
 -spec add(ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
@@ -280,7 +281,7 @@ subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
                           orddict:update_counter(CTag, 1, CTagCounts), QTail);
         {{value, V}, QTail} ->
             subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail);
-        {empty, _} -> 
+        {empty, _} ->
             subtract_acks([], Prefix, CTagCounts, AckQ)
     end.
 
