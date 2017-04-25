@@ -75,7 +75,7 @@
 
 %%----------------------------------------------------------------------------
 
--type disk_free_limit() :: (integer() | string() | {'mem_relative', float()}).
+-type disk_free_limit() :: (integer() | string() | {'mem_relative', float() | integer()}).
 -spec start_link(disk_free_limit()) -> rabbit_types:ok_pid_or_error().
 -spec get_disk_free_limit() -> integer().
 -spec set_disk_free_limit(disk_free_limit()) -> 'ok'.
