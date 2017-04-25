@@ -201,6 +201,8 @@ clean-extra-sources:
 	    opt='--stringparam man.indent.verbatims=0' ; \
 	xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
 	xmlto -vv -o $(DOCS_DIR) $$opt man $< 2>&1 | (grep -v '^Note: Writing' || :) && \
+	awk -F"'u " '/^\.HP / { print $$1; print $$2; next; } { print; }' "$@" > "$@.tmp" && \
+	mv "$@.tmp" "$@" && \
 	test -f $@ && \
 	rm $<.tmp
 
