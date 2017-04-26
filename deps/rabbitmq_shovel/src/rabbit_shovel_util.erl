@@ -16,7 +16,8 @@
 
 -module(rabbit_shovel_util).
 
--export([update_headers/5, add_timestamp_header/1]).
+-export([update_headers/5,
+         add_timestamp_header/1]).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 

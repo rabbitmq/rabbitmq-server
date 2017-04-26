@@ -23,6 +23,7 @@ groups() ->
           parse_amqp091,
           parse_amqp091_legacy,
           parse_amqp10,
+          parse_amqp10_minimal,
           validate_amqp10
         ]}
     ].
@@ -176,6 +177,35 @@ parse_amqp10(_Config) ->
                         properties := #{user_id := <<"some-user">>},
                         add_timestamp_header := true,
                         add_forward_headers := true
+                       }
+             }},
+        rabbit_shovel_parameters:parse({"vhost", "my_shovel"}, "my-cluster",
+                                       Params)),
+    ok.
+
+parse_amqp10_minimal(_Config) ->
+    Params =
+        [
+         {<<"src-protocol">>, <<"amqp10">>},
+         {<<"src-uri">>, <<"amqp://localhost:5672">>},
+         {<<"src-address">>, <<"a-src-queue">>},
+
+         {<<"dest-protocol">>, <<"amqp10">>},
+         {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
+         {<<"dest-address">>, <<"a-dest-queue">>}
+        ],
+    ?assertMatch(
+       {ok, #{name := "my_shovel",
+              ack_mode := on_confirm,
+              source := #{module := rabbit_amqp10_shovel,
+                          uris := ["amqp://localhost:5672"],
+                          delete_after := never,
+                          source_address := <<"a-src-queue">>
+                          },
+              dest := #{module := rabbit_amqp10_shovel,
+                        uris := ["amqp://remotehost:5672"],
+                        unacked := #{},
+                        target_address := <<"a-dest-queue">>
                        }
              }},
         rabbit_shovel_parameters:parse({"vhost", "my_shovel"}, "my-cluster",

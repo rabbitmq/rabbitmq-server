@@ -16,18 +16,25 @@
 
 -module(shovel_test_utils).
 
+-include_lib("common_test/include/ct.hrl").
 -export([set_param/3, set_param_nowait/3, await_shovel/2, await_shovel1/2,
          shovels_from_status/0, await/1, clear_param/2]).
 
+make_uri(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    list_to_binary(lists:flatten(io_lib:format("amqp://~s:~b",
+                                               [Hostname, Port]))).
 set_param(Config, Name, Value) ->
     set_param_nowait(Config, Name, Value),
     await_shovel(Config, Name).
 
 set_param_nowait(Config, Name, Value) ->
+    Uri = make_uri(Config),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       rabbit_runtime_parameters, set, [
-        <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  <<"amqp://">>},
-                                      {<<"dest-uri">>, [<<"amqp://">>]} |
+        <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  Uri},
+                                      {<<"dest-uri">>, [Uri]} |
                                       Value], none]).
 
 await_shovel(Config, Name) ->

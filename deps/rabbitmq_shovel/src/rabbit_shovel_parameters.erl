@@ -142,7 +142,7 @@ dest_validation(Def, User) ->
 
 amqp10_dest_validation(Def, User) ->
     [{<<"dest-uri">>, validate_uri_fun(User), mandatory},
-     {<<"dest-address">>, fun rabbit_parameter_validation:binary/2, optional},
+     {<<"dest-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2, optional},
      {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2, optional},
      {<<"dest-application-properties">>, fun validate_amqp10_map/2, optional},
@@ -259,7 +259,7 @@ parse_dest(VHostName, ClusterName, Def, SourceHeaders) ->
 parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
     Uris = get_uris(<<"dest-uri">>, Def),
     Address = pget(<<"dest-address">>, Def),
-    Properties = pget(<<"dest-properties">>, Def),
+    Properties = pget(<<"dest-properties">>, Def, []),
     AppProperties = pget(<<"dest-application-properties">>, Def, []),
     MessageAnns = pget(<<"dest-message-annotations">>, Def, []),
     #{module => rabbit_amqp10_shovel,
@@ -272,8 +272,8 @@ parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
                                         {rabbit_data_coercion:to_atom(K), V}
                                 end, Properties)),
       add_timestamp_header => pget(<<"dest-add-timestamp-header">>, Def, false),
-      add_forward_headers => pget(<<"dest-add-forward-headers">>, Def, false)
-
+      add_forward_headers => pget(<<"dest-add-forward-headers">>, Def, false),
+      unacked => #{}
      }.
 
 parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->

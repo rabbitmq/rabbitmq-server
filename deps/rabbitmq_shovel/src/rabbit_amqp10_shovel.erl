@@ -62,7 +62,10 @@ connect_source(State = #{name := Name,
     {ok, Conn} = amqp10_client:open_connection(Config),
     link(Conn),
     {ok, Sess} = amqp10_client:begin_session(Conn),
-    LinkName = list_to_binary(atom_to_list(Name) ++ "-receiver"),
+    LinkName = begin
+                   LinkName0 = rabbit_data_coercion:to_list(Name) ++ "-receiver",
+                   rabbit_data_coercion:to_binary(LinkName0)
+               end,
     % mixed settlement mode covers all the ack_modes
     SettlementMode = case AckMode of
                          no_ack -> settled;
@@ -84,7 +87,10 @@ connect_dest(State = #{name := Name,
     {ok, Conn} = amqp10_client:open_connection(Config),
     link(Conn),
     {ok, Sess} = amqp10_client:begin_session(Conn),
-    LinkName = list_to_binary(atom_to_list(Name) ++ "-sender"),
+    LinkName = begin
+                   LinkName0 = rabbit_data_coercion:to_list(Name) ++ "-receiver",
+                   rabbit_data_coercion:to_binary(LinkName0)
+               end,
     SettlementMode = case AckMode of
                          no_ack -> settled;
                          _ -> unsettled
