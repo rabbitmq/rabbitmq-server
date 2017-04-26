@@ -89,6 +89,8 @@ $$(dist_$(1)_ez): VSN     = $(2)
 $$(dist_$(1)_ez): SRC_DIR = $(3)
 $$(dist_$(1)_ez): EZ_DIR  = $$(abspath $$(dist_$(1)_ez_dir))
 $$(dist_$(1)_ez): EZ      = $$(dist_$(1)_ez)
+$$(dist_$(1)_ez): $$(if $$(wildcard _build/dev/lib/$(1)/ebin $(3)/priv),\
+	$$(call core_find,$$(wildcard _build/dev/lib/$(1)/ebin $(3)/priv),*),)
 
 MIX_DIST_EZS += $$(dist_$(1)_ez)
 EXTRA_DIST_EZS += $$(call get_mix_project_dep_ezs,$(3))
