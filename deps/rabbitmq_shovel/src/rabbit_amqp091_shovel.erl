@@ -74,7 +74,8 @@ init_source(Conf = #{ack_mode := AckMode,
     end,
     Remaining = remaining(Chan, Conf),
     case Remaining of
-        0 -> exit({shutdown, autodelete});
+        0 ->
+            exit({shutdown, autodelete});
         _ -> ok
     end,
     #'basic.consume_ok'{} =
@@ -298,7 +299,8 @@ decr_remaining(_N, State = #{source := #{remaining := unlimited}}) ->
 decr_remaining(N, State = #{source := #{remaining := M} = Src}) ->
     case M > N of
         true  -> State#{source => Src#{remaining => M - N}};
-        false -> exit({shutdown, autodelete})
+        false ->
+            exit({shutdown, autodelete})
     end.
 
 remove_delivery_tags(Seq, false, Unacked, 0) ->

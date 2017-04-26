@@ -40,11 +40,11 @@ unregister() ->
 
 validate(_VHost, <<"shovel">>, Name, Def, User) ->
     Validations =
-        shovel_validation(User)
-        ++ amqp091_src_validation(Def, User)
-        ++ amqp091_dest_validation(Def, User),
-    validate_amqp091_src(Def)
-    ++ validate_amqp091_dest(Def)
+        shovel_validation()
+        ++ src_validation(Def, User)
+        ++ dest_validation(Def, User),
+    validate_src(Def)
+    ++ validate_dest(Def)
     ++ rabbit_parameter_validation:proplist(Name, Validations, Def);
 
 validate(_VHost, _Component, Name, _Term, _User) ->
@@ -64,6 +64,18 @@ notify_clear(VHost, <<"shovel">>, Name, _Username) ->
     rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}).
 
 %%----------------------------------------------------------------------------
+
+validate_src(Def) ->
+    case protocols(Def)  of
+        {amqp091, _} -> validate_amqp091_src(Def);
+        {amqp10, _} -> []
+    end.
+
+validate_dest(Def) ->
+    case protocols(Def)  of
+        {_, amqp091} -> validate_amqp091_dest(Def);
+        {_, amqp10} -> []
+    end.
 
 validate_amqp091_src(Def) ->
     [case pget2(<<"src-exchange">>, <<"src-queue">>, Def) of
@@ -85,11 +97,29 @@ validate_amqp091_dest(Def) ->
          both -> {error, "Cannot specify 'dest-exchange' and 'dest-queue'", []}
      end].
 
-shovel_validation(_User) ->
+shovel_validation() ->
     [{<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
      {<<"ack-mode">>, rabbit_parameter_validation:enum(
                         ['no-ack', 'on-publish', 'on-confirm']), optional},
-     {<<"delete-after">>, fun validate_delete_after/2, optional}
+     {<<"src-protocol">>,
+      rabbit_parameter_validation:enum(['amqp10', 'amqp091']), optional},
+     {<<"dest-protocol">>,
+      rabbit_parameter_validation:enum(['amqp10', 'amqp091']), optional}
+    ].
+
+src_validation(Def, User) ->
+    case protocols(Def)  of
+        {amqp091, _} -> amqp091_src_validation(Def, User);
+        {amqp10, _} -> amqp10_src_validation(Def, User)
+    end.
+
+
+amqp10_src_validation(Def, User) ->
+    [
+     {<<"src-uri">>, validate_uri_fun(User), mandatory},
+     {<<"src-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
+     {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
+     {<<"src-delete-after">>, fun validate_delete_after/2, optional}
     ].
 
 amqp091_src_validation(Def, User) ->
@@ -99,7 +129,26 @@ amqp091_src_validation(Def, User) ->
      {<<"src-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
      {<<"src-queue">>,       fun rabbit_parameter_validation:binary/2,optional},
      {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
-     {<<"src-prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional}
+     {<<"src-prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
+     {<<"delete-after">>, fun validate_delete_after/2, optional},
+     {<<"src-delete-after">>, fun validate_delete_after/2, optional}
+    ].
+
+dest_validation(Def, User) ->
+    case protocols(Def)  of
+        {_, amqp091} -> amqp091_dest_validation(Def, User);
+        {_, amqp10} -> amqp10_dest_validation(Def, User)
+    end.
+
+amqp10_dest_validation(Def, User) ->
+    [{<<"dest-uri">>, validate_uri_fun(User), mandatory},
+     {<<"dest-address">>, fun rabbit_parameter_validation:binary/2, optional},
+     {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"dest-application-properties">>, fun validate_amqp10_map/2, optional},
+     {<<"dest-message-annotations">>, fun validate_amqp10_map/2, optional},
+     % TOOD: restrict to allowed fields
+     {<<"dest-properties">>, fun validate_amqp10_map/2, optional}
     ].
 
 amqp091_dest_validation(Def, User) ->
@@ -156,6 +205,11 @@ validate_delete_after(_Name, N) when is_integer(N) -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~s should be number, \"never\" or \"queue-length\", actually was "
      "~p", [Name, Term]}.
+
+validate_amqp10_map(Name, Terms) ->
+    Str = fun rabbit_parameter_validation:binary/2,
+    Validation = [{K, Str, optional} || {K, _} <- Terms],
+    rabbit_parameter_validation:proplist(Name, Validation, Terms).
 
 %% TODO headers?
 validate_properties(Name, Term) ->

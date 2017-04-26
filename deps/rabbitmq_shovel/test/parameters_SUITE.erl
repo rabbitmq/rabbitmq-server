@@ -22,7 +22,8 @@ groups() ->
       {tests, [parallel], [
           parse_amqp091,
           parse_amqp091_legacy,
-          parse_amqp10
+          parse_amqp10,
+          validate_amqp10
         ]}
     ].
 
@@ -180,3 +181,40 @@ parse_amqp10(_Config) ->
         rabbit_shovel_parameters:parse({"vhost", "my_shovel"}, "my-cluster",
                                        Params)),
     ok.
+
+validate_amqp10(_Config) ->
+    Params =
+        [
+         {<<"ack-mode">>, <<"on-publish">>},
+         {<<"reconnect-delay">>, 1001},
+
+         {<<"src-protocol">>, <<"amqp10">>},
+         {<<"src-uri">>, <<"amqp://localhost:5672">>},
+         {<<"src-address">>, <<"a-src-queue">>},
+         {<<"src-delete-after">>, <<"never">>},
+         {<<"src-prefetch-count">>, 30},
+
+         {<<"dest-protocol">>, <<"amqp10">>},
+         {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
+         {<<"dest-address">>, <<"a-dest-queue">>},
+         {<<"dest-add-forward-headers">>, true},
+         {<<"dest-add-timestamp-header">>, true},
+         {<<"dest-application-properties">>, [{<<"some-app-prop">>,
+                                               <<"app-prop-value">>}]},
+         {<<"dest-message-annotations">>, [{<<"some-message-ann">>,
+                                               <<"message-ann-value">>}]},
+         {<<"dest-properties">>, [{<<"user_id">>, <<"some-user">>}]}
+        ],
+
+        Res = rabbit_shovel_parameters:validate("my-vhost", <<"shovel">>,
+                                                "my-shovel", Params, none),
+        [] = validate_ok(Res),
+        ok.
+
+validate_ok([ok | T]) ->
+    validate_ok(T);
+validate_ok([[_|_] = L | T]) ->
+    validate_ok(L) ++ validate_ok(T);
+validate_ok([]) -> [];
+validate_ok(X) ->
+    exit({not_ok, X}).
