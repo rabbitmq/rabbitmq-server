@@ -20,10 +20,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListDiscoveryPeersCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
   def merge_defaults(args, opts), do: {args, opts}
-
-  def scopes(), do: [:ctl, :diagnostics]
 
   def validate([_|_], _) do
     {:validation_failure, :too_many_args}
@@ -31,7 +29,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListDiscoveryPeersCommand do
   def validate(_, _), do: :ok
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_peer_discovery, :discover_cluster_nodes, [], timeout)
+    nodes = :rabbit_misc.rpc_call(node_name, :rabbit_peer_discovery, :discover_cluster_nodes, [], timeout)
+    case nodes do
+      {:ok, {[], _} } -> ""
+      result -> result
+    end
   end
 
   def usage, do: "list_discovery_peers"
