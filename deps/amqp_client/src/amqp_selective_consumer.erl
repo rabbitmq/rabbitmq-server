@@ -49,9 +49,9 @@
          handle_deliver/3, handle_deliver/4,
          handle_info/2, handle_call/3, terminate/2]).
 
--record(state, {consumers             = dict:new(), %% Tag -> ConsumerPid
+-record(state, {consumers             = #{}, %% Tag -> ConsumerPid
                 unassigned            = undefined,  %% Pid
-                monitors              = dict:new(), %% Pid -> {Count, MRef}
+                monitors              = #{}, %% Pid -> {Count, MRef}
                 default_consumer      = none}).
 
 %%---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ handle_consume(#'basic.consume'{consumer_tag = Tag,
     case {Result, NoWait} of
         {ok, true} ->
             {ok, State#state
-                   {consumers = dict:store(Tag, Pid, Consumers),
+                   {consumers = maps:put(Tag, Pid, Consumers),
                     monitors  = add_to_monitor_dict(Pid, Monitors)}};
         {ok, false} ->
             {ok, State#state{unassigned = Pid}};
@@ -119,7 +119,7 @@ handle_consume_ok(BasicConsumeOk, _BasicConsume,
   when is_pid(Pid) ->
     State1 =
         State#state{
-          consumers  = dict:store(tag(BasicConsumeOk), Pid, Consumers),
+          consumers  = maps:put(tag(BasicConsumeOk), Pid, Consumers),
           monitors   = add_to_monitor_dict(Pid, Monitors),
           unassigned = undefined},
     deliver(BasicConsumeOk, State1),
@@ -169,18 +169,18 @@ handle_info({'DOWN', _MRef, process, Pid, _Info},
             State = #state{monitors         = Monitors,
                            consumers        = Consumers,
                            default_consumer = DConsumer }) ->
-    case dict:find(Pid, Monitors) of
+    case maps:find(Pid, Monitors) of
         {ok, _CountMRef} ->
-            {ok, State#state{monitors = dict:erase(Pid, Monitors),
+            {ok, State#state{monitors = maps:remove(Pid, Monitors),
                              consumers =
-                                 dict:filter(
+                                 maps:filter(
                                    fun (_, Pid1) when Pid1 =:= Pid -> false;
                                        (_, _)                      -> true
                                    end, Consumers)}};
         error ->
             case Pid of
                 DConsumer -> {ok, State#state{
-                                    monitors = dict:erase(Pid, Monitors),
+                                    monitors = maps:remove(Pid, Monitors),
                                     default_consumer = none}};
                 _         -> {ok, State} %% unnamed consumer went down
                                          %% before receiving consume_ok
@@ -230,9 +230,9 @@ deliver(Method, Message, DeliveryCtx, State) ->
 do_cancel(Cancel, State = #state{consumers = Consumers,
                                  monitors  = Monitors}) ->
     Tag = tag(Cancel),
-    case dict:find(Tag, Consumers) of
+    case maps:find(Tag, Consumers) of
         {ok, Pid} -> State#state{
-                       consumers = dict:erase(Tag, Consumers),
+                       consumers = maps:remove(Tag, Consumers),
                        monitors  = remove_from_monitor_dict(Pid, Monitors)};
         error     -> %% Untracked consumer. Do nothing.
                      State
@@ -240,7 +240,7 @@ do_cancel(Cancel, State = #state{consumers = Consumers,
 
 resolve_consumer(Tag, #state{consumers = Consumers,
                              default_consumer = DefaultConsumer}) ->
-    case dict:find(Tag, Consumers) of
+    case maps:find(Tag, Consumers) of
         {ok, ConsumerPid} -> {consumer, ConsumerPid};
         error             -> case DefaultConsumer of
                                  none -> error;
@@ -255,16 +255,16 @@ tag(#'basic.cancel_ok'{consumer_tag = Tag})       -> Tag;
 tag(#'basic.deliver'{consumer_tag = Tag})         -> Tag.
 
 add_to_monitor_dict(Pid, Monitors) ->
-    case dict:find(Pid, Monitors) of
-        error               -> dict:store(Pid,
-                                          {1, erlang:monitor(process, Pid)},
-                                          Monitors);
-        {ok, {Count, MRef}} -> dict:store(Pid, {Count + 1, MRef}, Monitors)
+    case maps:find(Pid, Monitors) of
+        error               -> maps:put(Pid,
+                                        {1, erlang:monitor(process, Pid)},
+                                        Monitors);
+        {ok, {Count, MRef}} -> maps:put(Pid, {Count + 1, MRef}, Monitors)
     end.
 
 remove_from_monitor_dict(Pid, Monitors) ->
-    case dict:fetch(Pid, Monitors) of
+    case maps:get(Pid, Monitors) of
         {1, MRef}     -> erlang:demonitor(MRef),
-                         dict:erase(Pid, Monitors);
-        {Count, MRef} -> dict:store(Pid, {Count - 1, MRef}, Monitors)
+                         maps:remove(Pid, Monitors);
+        {Count, MRef} -> maps:put(Pid, {Count - 1, MRef}, Monitors)
     end.

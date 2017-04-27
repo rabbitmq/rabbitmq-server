@@ -30,7 +30,7 @@
 -record(state, {connection,
                 channel_sup_sup,
                 map_num_pa      = gb_trees:empty(), %% Number -> {Pid, AState}
-                map_pid_num     = dict:new(),       %% Pid -> Number
+                map_pid_num     = #{},       %% Pid -> Number
                 channel_max     = ?MAX_CHANNEL_NUMBER,
                 closing         = false}).
 
@@ -222,14 +222,14 @@ internal_pass_frame(Number, Frame, State) ->
 internal_register(Number, Pid, AState,
                   State = #state{map_num_pa = MapNPA, map_pid_num = MapPN}) ->
     MapNPA1 = gb_trees:enter(Number, {Pid, AState}, MapNPA),
-    MapPN1 = dict:store(Pid, Number, MapPN),
+    MapPN1 = maps:put(Pid, Number, MapPN),
     State#state{map_num_pa  = MapNPA1,
                 map_pid_num = MapPN1}.
 
 internal_unregister(Number, Pid,
                     State = #state{map_num_pa = MapNPA, map_pid_num = MapPN}) ->
     MapNPA1 = gb_trees:delete(Number, MapNPA),
-    MapPN1 = dict:erase(Pid, MapPN),
+    MapPN1 = maps:remove(Pid, MapPN),
     State#state{map_num_pa  = MapNPA1,
                 map_pid_num = MapPN1}.
 
@@ -245,7 +245,7 @@ internal_lookup_npa(Number, #state{map_num_pa = MapNPA}) ->
     end.
 
 internal_lookup_pn(Pid, #state{map_pid_num = MapPN}) ->
-    case dict:find(Pid, MapPN) of {ok, Number} -> Number;
+    case maps:find(Pid, MapPN) of {ok, Number} -> Number;
                                   error        -> undefined
     end.
 
@@ -255,4 +255,4 @@ internal_update_npa(Number, Pid, AState, State = #state{map_num_pa = MapNPA}) ->
 signal_channels_connection_closing(ChannelCloseType, Reason,
                                    #state{map_pid_num = MapPN}) ->
     [amqp_channel:connection_closing(Pid, ChannelCloseType, Reason)
-        || Pid <- dict:fetch_keys(MapPN)].
+        || Pid <- maps:keys(MapPN)].

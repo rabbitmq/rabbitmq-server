@@ -34,7 +34,7 @@
                 reply_queue,
                 exchange,
                 routing_key,
-                continuations = dict:new(),
+                continuations = #{},
                 correlation_id = 0}).
 
 %%--------------------------------------------------------------------------
@@ -116,7 +116,7 @@ publish(Payload, From,
     amqp_channel:call(Channel, Publish, #amqp_msg{props = Props,
                                                   payload = Payload}),
     State#state{correlation_id = CorrelationId + 1,
-                continuations = dict:store(EncodedCorrelationId, From, Continuations)}.
+                continuations = maps:put(EncodedCorrelationId, From, Continuations)}.
 
 %%--------------------------------------------------------------------------
 %% gen_server callbacks
@@ -175,10 +175,10 @@ handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
              #amqp_msg{props = #'P_basic'{correlation_id = Id},
                        payload = Payload}},
             State = #state{continuations = Conts, channel = Channel}) ->
-    From = dict:fetch(Id, Conts),
+    From = maps:get(Id, Conts),
     gen_server:reply(From, Payload),
     amqp_channel:call(Channel, #'basic.ack'{delivery_tag = DeliveryTag}),
-    {noreply, State#state{continuations = dict:erase(Id, Conts) }}.
+    {noreply, State#state{continuations = maps:remove(Id, Conts) }}.
 
 %% @private
 code_change(_OldVsn, State, _Extra) ->
