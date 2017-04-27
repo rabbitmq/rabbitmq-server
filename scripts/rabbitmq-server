@@ -243,11 +243,12 @@ else
     #     They are considered an abnormal process termination, the script
     #     exits with the job exit code.
     trap "stop_rabbitmq_server; exit 0" HUP TERM TSTP
-    trap "stop_rabbitmq_server" INT
+    trap "stop_rabbitmq_server; exit 130" INT
 
     start_rabbitmq_server "$@" &
 
     # Block until RabbitMQ exits or a signal is caught.
     # Waits for last command (which is start_rabbitmq_server)
-    wait $!
+    # This noop fixes dash's trap handling bug.
+    wait $! || true
 fi
