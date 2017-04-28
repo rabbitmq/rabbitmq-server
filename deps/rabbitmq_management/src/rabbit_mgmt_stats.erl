@@ -498,17 +498,14 @@ format_rate(node_persister_stats,
         {SIR, SIB, SIA, SIWC, SIWB, SIWAT, SIS, SISAT, SISC,
              SISEAT, SIRC, SMRTC, SMDTC, SMSRC, SMSWC, SQIJWC, SQIWC, SQIRC,
              SIO, SIOAT},
-        {STIR, STIB, STIA, STIWC, STIWB, STIWAT, STIS, STISAT, STISC,
-             STISEAT, STIRC, STMRTC, STMDTC, STMSRC, STMSWC, STQIJWC, STQIWC, STQIRC,
-             STIO, STIOAT}, Length) ->
+        {STIR, STIB, _STIA, STIWC, STIWB, _STIWAT, STIS, _STISAT, STISC,
+             _STISEAT, STIRC, STMRTC, STMDTC, STMSRC, STMSWC, STQIJWC, STQIWC, STQIRC,
+             STIO, _STIOAT}, Length) ->
     %% Calculates average times for read/write/sync/seek from the
     %% accumulated time and count
     %% io_<op>_avg_time is the average operation time for the life of the node
     %% io_<op>_avg_time_details/rate is the average operation time during the
     %% last time unit calculated (thus similar to an instant rate)
-
-
-    %% TODO avg_time
 
     [
      {io_read_count, TIR},
@@ -518,8 +515,8 @@ format_rate(node_persister_stats,
      {io_read_bytes_details, [{rate, RIB},
                  {samples, SIB}] ++ average(SIB, STIB, Length)},
      {io_read_avg_time, avg_time(TIA, TIR)},
-     {io_read_avg_time_details, [{rate, avg_time(RIA, RIR)},
-                 {samples, SIA}] ++ average(SIA, STIA, Length)},
+     {io_read_avg_time_details, [{samples, unit_samples(SIA, SIR)}] ++
+          avg_time_details(avg_time(TIA, TIR))},
      {io_write_count, TIWC},
      {io_write_count_details, [{rate, RIWC},
                    {samples, SIWC}] ++ average(SIWC, STIWC, Length)},
@@ -527,20 +524,20 @@ format_rate(node_persister_stats,
      {io_write_bytes_details, [{rate, RIWB},
                    {samples, SIWB}] ++ average(SIWB, STIWB, Length)},
      {io_write_avg_time, avg_time(TIWAT, TIWC)},
-     {io_write_avg_time_details, [{rate, avg_time(RIWAT, RIWC)},
-                  {samples, SIWAT}] ++ average(SIWAT, STIWAT, Length)},
+     {io_write_avg_time_details, [{samples, unit_samples(SIWAT, SIWC)}] ++
+          avg_time_details(avg_time(TIWAT, TIWC))},
      {io_sync_count, TIS},
      {io_sync_count_details, [{rate, RIS},
                   {samples, SIS}] ++ average(SIS, STIS, Length)},
      {io_sync_avg_time, avg_time(TISAT, TIS)},
-     {io_sync_avg_time_details, [{rate, avg_time(RISAT, RIS)},
-                 {samples, SISAT}] ++ average(SISAT, STISAT, Length)},
+     {io_sync_avg_time_details, [{samples, unit_samples(SISAT, SIS)}] ++
+          avg_time_details(avg_time(TISAT, TIS))},
      {io_seek_count, TISC},
      {io_seek_count_details, [{rate, RISC},
                   {samples, SISC}] ++ average(SISC, STISC, Length)},
      {io_seek_avg_time, avg_time(TISEAT, TISC)},
-     {io_seek_avg_time_details, [{rate, avg_time(RISEAT, RISC)},
-                 {samples, SISEAT}] ++ average(SISEAT, STISEAT, Length)},
+     {io_seek_avg_time_details, [{samples, unit_samples(SISEAT, SISC)}] ++
+          avg_time_details(avg_time(TISEAT, TISC))},
      {io_reopen_count, TIRC},
      {io_reopen_count_details, [{rate, RIRC},
                 {samples, SIRC}] ++ average(SIRC, STIRC, Length)},
@@ -569,8 +566,8 @@ format_rate(node_persister_stats,
      {io_file_handle_open_attempt_count_details, [{rate, RIO},
                           {samples, SIO}] ++ average(SIO, STIO, Length)},
      {io_file_handle_open_attempt_avg_time, avg_time(TIOAT, TIO)},
-     {io_file_handle_open_attempt_avg_time_details, [{rate, avg_time(RIOAT, RIO)},
-                             {samples, SIOAT}] ++ average(SIOAT, STIOAT, Length)}
+     {io_file_handle_open_attempt_avg_time_details,
+      [{samples, unit_samples(SIOAT, SIO)}] ++ avg_time_details(avg_time(TIOAT, TIO))}
     ];
 format_rate(node_node_coarse_stats, {TS, TR}, {RS, RR}, {SS, SR}, {STS, STR}, Length) ->
     [
@@ -581,6 +578,10 @@ format_rate(node_node_coarse_stats, {TS, TR}, {RS, RR}, {SS, SR}, {STS, STR}, Le
      {recv_bytes_details, [{rate, RR},
                {samples, SR}] ++ average(SR, STR, Length)}
     ].
+
+avg_time_details(Avg) ->
+    %% Rates don't make sense here, populate it with the average.
+    [{rate, Avg}, {avg_rate, Avg}, {avg, Avg}].
 
 average(_Samples, _Total, Length) when Length =< 1->
     [];
@@ -661,6 +662,14 @@ avg_time(_Total, Count) when Count == 0;
     0.0;
 avg_time(Total, Count) ->
     (Total / Count) / ?MICRO_TO_MILLI.
+
+unit_samples(Total, Count) ->
+    lists:zipwith(fun(T, C) ->
+                          TS = proplists:get_value(timestamp, T),
+                          Sample = avg_time(proplists:get_value(sample, T),
+                                            proplists:get_value(sample, C)),
+                          [{sample, Sample}, {timestamp, TS}]
+                  end, Total, Count).
 
 empty(Table, Def) ->
     rabbit_mgmt_data:empty(Table, Def).
