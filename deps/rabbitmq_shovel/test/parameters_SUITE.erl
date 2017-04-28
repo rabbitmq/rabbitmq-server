@@ -154,7 +154,7 @@ parse_amqp10(_Config) ->
          {<<"dest-application-properties">>, [{<<"some-app-prop">>,
                                                <<"app-prop-value">>}]},
          {<<"dest-message-annotations">>, [{<<"some-message-ann">>,
-                                               <<"message-ann-value">>}]},
+                                            <<"message-ann-value">>}]},
          {<<"dest-properties">>, [{<<"user_id">>, <<"some-user">>}]}
         ],
 

@@ -39,6 +39,7 @@ unregister() ->
     rabbit_registry:unregister(runtime_parameter, <<"shovel">>).
 
 validate(_VHost, <<"shovel">>, Name, Def, User) ->
+    error_logger:info_msg("validating ~p~n", [Def]),
     Validations =
         shovel_validation()
         ++ src_validation(Def, User)
@@ -235,6 +236,7 @@ validate_properties(Name, Term) ->
 parse({VHost, Name}, ClusterName, Def) ->
     {Source, SourceHeaders} = parse_source(Def),
     {ok, #{name => Name,
+           shovel_type => dynamic,
            source => Source,
            dest => parse_dest({VHost, Name}, ClusterName, Def,
                                       SourceHeaders),

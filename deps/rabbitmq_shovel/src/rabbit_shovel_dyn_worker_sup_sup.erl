@@ -21,6 +21,7 @@
 
 -import(rabbit_misc, [pget/2]).
 
+-include("rabbit_shovel.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -define(SUPERVISOR, ?MODULE).
 
@@ -41,6 +42,7 @@ adjust(Name, Def) ->
     start_child(Name, Def).
 
 start_child(Name, Def) ->
+    error_logger:info_msg("start child with def ~p ~p~n", [Name, Def]),
     case mirrored_supervisor:start_child(
            ?SUPERVISOR,
            {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, Def]},
@@ -54,6 +56,7 @@ child_exists(Name) ->
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
 stop_child(Name) ->
+    error_logger:info_msg("stopping child ~p~n", [Name]),
     case get(shovel_worker_autodelete) of
         true -> ok; %% [1]
         _    ->

@@ -80,6 +80,7 @@ parse_current(ShovelName, Config) ->
     {destination, Destination} = proplists:lookup(destination, Config),
     DstMod = resolve_module(proplists:get_value(protocol, Destination, amqp091)),
     {ok, #{name => ShovelName,
+           shovel_type => static,
            ack_mode => proplists:get_value(ack_mode, Config, no_ack),
            reconnect_delay => proplists:get_value(reconnect_delay, Config,
                                                   ?DEFAULT_RECONNECT_DELAY),

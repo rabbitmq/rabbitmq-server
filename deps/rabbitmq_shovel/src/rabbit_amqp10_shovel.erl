@@ -63,7 +63,7 @@ connect_source(State = #{name := Name,
     link(Conn),
     {ok, Sess} = amqp10_client:begin_session(Conn),
     LinkName = begin
-                   LinkName0 = rabbit_data_coercion:to_list(Name) ++ "-receiver",
+                   LinkName0 = gen_unique_name(Name, "-receiver"),
                    rabbit_data_coercion:to_binary(LinkName0)
                end,
     % mixed settlement mode covers all the ack_modes
@@ -88,24 +88,27 @@ connect_dest(State = #{name := Name,
     link(Conn),
     {ok, Sess} = amqp10_client:begin_session(Conn),
     LinkName = begin
-                   LinkName0 = rabbit_data_coercion:to_list(Name) ++ "-receiver",
+                   LinkName0 = gen_unique_name(Name, "-sender"),
                    rabbit_data_coercion:to_binary(LinkName0)
                end,
     SettlementMode = case AckMode of
                          no_ack -> settled;
                          _ -> unsettled
                      end,
-    {ok, LinkRef} = amqp10_client:attach_sender_link(Sess, LinkName, Addr,
-                                                     SettlementMode),
+    % needs to be sync, i.e. awaits the 'attach' event as
+    % else we may try to use the link before it is ready
+    {ok, LinkRef} = amqp10_client:attach_sender_link_sync(Sess, LinkName, Addr,
+                                                          SettlementMode),
     State#{dest => Dst#{current => #{conn => Conn,
                                      session => Sess,
                                      link => LinkRef,
                                      uri => Uri}}}.
 
 -spec init_source(state()) -> state().
-init_source(State = #{source := #{current := #{link := Link},
+init_source(State = #{name := Name,
+                      source := #{current := #{link := Link},
                                   prefetch_count := Prefetch} = Src}) ->
-    ?INFO("flowing credit", []),
+    ?INFO("initializing amqp10 source ~p", [Name]),
     ok = amqp10_client:flow_link_credit(Link, Prefetch, round(Prefetch/10)),
     State#{source => Src#{remaining => unlimited,
                           remaining_unacked => unlimited}}. % TODO remaining?
@@ -120,25 +123,43 @@ source_uri(#{source := #{current := #{uri := Uri}}}) -> Uri.
 dest_uri(#{dest := #{current := #{uri := Uri}}}) -> Uri.
 
 -spec handle_source(Msg :: any(), state()) -> not_handled | state().
-handle_source({'EXIT', Conn, Reason},
-              #{source := #{current := #{conn := Conn}}}) ->
-    {stop, {outbound_conn_died, Reason}};
-
 handle_source({amqp10_msg, LinkRef, Msg},
               State = #{dest := #{module := DstMod}}) ->
     ?INFO("handling msg ~p link_ref ~p~n", [Msg, LinkRef]),
     Tag = amqp10_msg:delivery_id(Msg),
     [Payload] = amqp10_msg:body(Msg),
     DstMod:forward(Tag, #{}, Payload, State);
-
+handle_source({amqp10_event, {connection, Conn, opened}},
+              State = #{source := #{current := #{conn := Conn}}}) ->
+    ?INFO("Source connection opened.", []),
+    State;
+handle_source({amqp10_event, {connection, Conn, {closed, Why}}},
+              #{source := #{current := #{conn := Conn}}}) ->
+    ?INFO("Source connection closed. Reason: ~p~n", [Why]),
+    {stop, {inbound_conn_closed, Why}};
+handle_source({amqp10_event, {session, Sess, begun}},
+              State = #{source := #{current := #{session := Sess}}}) ->
+    ?INFO("Source session begun", []),
+    State;
+handle_source({amqp10_event, {session, Sess, {ended, Why}}},
+              #{source := #{current := #{session := Sess}}}) ->
+    ?INFO("Source session ended. Reason: ~p~n", [Why]),
+    {stop, {inbound_session_ended, Why}};
+handle_source({amqp10_event, {link, Link, {detached, Why}}},
+              #{source := #{current := #{link := Link}}}) ->
+    ?INFO("Source link detached. Reason: ~p~n", [Why]),
+    {stop, {inbound_link_detached, Why}};
+handle_source({amqp10_event, {link, Link, Evt}},
+              State= #{source := #{current := #{link := Link}}}) ->
+    ?INFO("Source link event: ~p~n", [Evt]),
+    State;
+handle_source({'EXIT', Conn, Reason},
+              #{source := #{current := #{conn := Conn}}}) ->
+    {stop, {outbound_conn_died, Reason}};
 handle_source(_Msg, _State) ->
     not_handled.
 
 -spec handle_dest(Msg :: any(), state()) -> not_handled | state().
-handle_dest({'EXIT', Conn, Reason},
-            #{dest := #{current := #{conn := Conn}}}) ->
-    {stop, {outbound_conn_died, Reason}};
-
 handle_dest({amqp10_disposition, {Result, Tag}},
             State0 = #{ack_mode := on_confirm,
                       source := #{module := SrcMod},
@@ -154,16 +175,45 @@ handle_dest({amqp10_disposition, {Result, Tag}},
                                      "found: ~p~n", [Tag]),
             State
     end;
+handle_dest({amqp10_event, {connection, Conn, opened}},
+            State = #{dest := #{current := #{conn := Conn}}}) ->
+    ?INFO("Destination connection opened.", []),
+    State;
+handle_dest({amqp10_event, {connection, Conn, {closed, Why}}},
+            #{dest := #{current := #{conn := Conn}}}) ->
+    ?INFO("Destination connection closed. Reason: ~p~n", [Why]),
+    {stop, {outbound_conn_died, Why}};
+handle_dest({amqp10_event, {session, Sess, begun}},
+            State = #{dest := #{current := #{session := Sess}}}) ->
+    ?INFO("Destination session begun", []),
+    State;
+handle_dest({amqp10_event, {session, Sess, {ended, Why}}},
+            #{dest := #{current := #{session := Sess}}}) ->
+    ?INFO("Destination session ended. Reason: ~p~n", [Why]),
+    {stop, {outbound_conn_died, Why}};
+handle_dest({amqp10_event, {link, Link, {detached, Why}}},
+            #{dest := #{current := #{link := Link}}}) ->
+    ?INFO("Destination link detached. Reason: ~p~n", [Why]),
+    {stop, {outbound_link_detached, Why}};
+handle_dest({amqp10_event, {link, Link, Evt}},
+            State= #{dest := #{current := #{link := Link}}}) ->
+    ?INFO("Destination link event: ~p~n", [Evt]),
+    State;
+handle_dest({'EXIT', Conn, Reason},
+            #{dest := #{current := #{conn := Conn}}}) ->
+    {stop, {outbound_conn_died, Reason}};
 handle_dest(_Msg, _State) ->
     not_handled.
 
 close_source(#{source := #{current := #{conn := Conn}}}) ->
     _ = amqp10_client:close_connection(Conn),
-    ok.
+    ok;
+close_source(_Config) -> ok.
 
 close_dest(#{dest := #{current := #{conn := Conn}}}) ->
     _ = amqp10_client:close_connection(Conn),
-    ok.
+    ok;
+close_dest(_Config) -> ok.
 
 -spec ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 % TODO support multiple by keeping track of last ack
@@ -187,8 +237,8 @@ forward(Tag, Props, Payload,
                     unacked := Unacked} = Dst,
           source := #{module := SrcMod},
           ack_mode := AckMode} = State) ->
-    OutTag = integer_to_binary(Tag),
-    Msg0 = amqp10_msg:new(OutTag, Payload, AckMode =:= no_ack),
+    OutTag = rabbit_data_coercion:to_binary(Tag),
+    Msg0 = new_message(OutTag, Payload, State),
     Msg = add_timestamp_header(
             State, set_message_properties(
                      Props, add_forward_headers(State, Msg0))),
@@ -202,16 +252,26 @@ forward(Tag, Props, Payload,
               State#{dest => Dst#{unacked => Unacked#{OutTag => Tag}}}
     end.
 
+new_message(Tag, Payload, #{ack_mode := AckMode,
+                            dest := #{properties := Props,
+                                      application_properties := AppProps,
+                                      message_annotations := MsgAnns}}) ->
+    Msg0 = amqp10_msg:new(Tag, Payload, AckMode =:= no_ack),
+    Msg1 = amqp10_msg:set_properties(Props, Msg0),
+    Msg = amqp10_msg:set_message_annotations(MsgAnns, Msg1),
+    amqp10_msg:set_application_properties(AppProps, Msg).
+
 add_timestamp_header(#{dest := #{add_timestamp_header := true}}, Msg) ->
     P =#{creation_time => os:system_time(millisecond)},
     amqp10_msg:set_properties(P, Msg);
 add_timestamp_header(_, Msg) -> Msg.
 
 add_forward_headers(#{name := Name,
+                      shovel_type := Type,
                       dest := #{add_forward_headers := true}}, Msg) ->
       Props = #{<<"shovelled-by">> => rabbit_nodes:cluster_name(),
-                <<"shovel-type">> => <<"static">>,
-                <<"shovel-name">> => list_to_binary(atom_to_list(Name))},
+                <<"shovel-type">> => rabbit_data_coercion:to_binary(Type),
+                <<"shovel-name">> => rabbit_data_coercion:to_binary(Name)},
       amqp10_msg:set_application_properties(Props, Msg);
 add_forward_headers(_, Msg) -> Msg.
 
@@ -220,7 +280,7 @@ set_message_properties(Props, Msg) ->
                       amqp10_msg:set_headers(#{durable => true}, M);
                  (content_type, Ct, M) ->
                       amqp10_msg:set_properties(
-                        #{content_type => to_binary(Ct)}, M);
+                        #{content_type => rabbit_data_coercion:to_binary(Ct)}, M);
                  (_, _, M) -> M
               end, Msg, Props).
 
@@ -231,6 +291,13 @@ pget(K, PList) ->
 pget(K, PList, Default) ->
     proplists:get_value(K, PList, Default).
 
-to_binary(X) when is_binary(X) -> X;
-to_binary(X) when is_list(X) -> list_to_binary(X);
-to_binary(X) when is_atom(X) -> list_to_binary(atom_to_list(X)).
+gen_unique_name(Pre0, Post0) ->
+    Pre = rabbit_data_coercion:to_binary(Pre0),
+    Post = rabbit_data_coercion:to_binary(Post0),
+    Id = bin_to_hex(crypto:strong_rand_bytes(8)),
+    <<Pre/binary, <<"_">>/binary, Id/binary, <<"_">>/binary, Post/binary>>.
+
+bin_to_hex(Bin) ->
+    <<<<if N >= 10 -> N -10 + $a;
+           true  -> N + $0 end>>
+      || <<N:4>> <= Bin>>.

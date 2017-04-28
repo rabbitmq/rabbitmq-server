@@ -300,6 +300,7 @@ decr_remaining(N, State = #{source := #{remaining := M} = Src}) ->
     case M > N of
         true  -> State#{source => Src#{remaining => M - N}};
         false ->
+            error_logger:info_msg("shutting down shovel, none remaining ~p~n", [State]),
             exit({shutdown, autodelete})
     end.
 
