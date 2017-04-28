@@ -20,7 +20,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
--include("rabbit_mgmt_test.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3, restart_node/2]).
 -import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_delete/3]).
