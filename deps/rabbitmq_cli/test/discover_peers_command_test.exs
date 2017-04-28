@@ -13,11 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-defmodule ListDiscoverPeersCommandTest do
+defmodule DiscoverPeersCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands.ListDiscoverPeersCommand
+  @command RabbitMQ.CLI.Ctl.Commands.DiscoverPeersCommand
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname())

@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule RabbitMQ.CLI.Ctl.Commands.ListDiscoverPeersCommand do
+defmodule RabbitMQ.CLI.Ctl.Commands.DiscoverPeersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def scopes(), do: [:ctl, :diagnostics]
@@ -35,24 +35,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListDiscoverPeersCommand do
     end
   end
 
-  def backend_type_banner(backend, options) do
-    Enum.join(["Backend type",  RabbitMQ.CLI.Formatters.ErlangString.format_output(backend, options)], ": ")
+  def backend_type_banner(backend) do
+    "Backend type: #{backend} "
   end
 
-  def output({backend, []}, options) do
-      {:ok,  Enum.join([backend_type_banner(backend, options),
+  def output({backend, []}, _options) do
+      {:ok,  Enum.join([backend_type_banner(backend),
              "No peers discovered"],  "\n" )}
   end
   def output({backend, list_nodes}, options) do
-    {:ok, Enum.join([backend_type_banner(backend, options),
+    {:ok, Enum.join([backend_type_banner(backend),
           RabbitMQ.CLI.Formatters.Erlang.format_output(list_nodes, options)],  "\n" )}
   end
   use RabbitMQ.CLI.DefaultOutput
 
 
-  def usage, do: "list_discover_peers"
+  def usage, do: "discover_peers"
 
-  def banner(_,_), do: "Listing discover peer nodes ..."
+  def banner(_,_), do: "Discovering peers nodes ..."
 
 
 end
