@@ -14,13 +14,11 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule RabbitMQ.CLI.Ctl.Commands.ListDiscoveryPeersCommand do
+defmodule RabbitMQ.CLI.Ctl.Commands.ListDiscoverPeersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([_|_], _) do
@@ -30,15 +28,31 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListDiscoveryPeersCommand do
 
   def run([], %{node: node_name, timeout: timeout}) do
     nodes = :rabbit_misc.rpc_call(node_name, :rabbit_peer_discovery, :discover_cluster_nodes, [], timeout)
+    backend = :rabbit_misc.rpc_call(node_name, :rabbit_peer_discovery, :backend, [], timeout)
     case nodes do
-      {:ok, {[], _} } -> ""
-      result -> result
+      {:ok, {[], _} } -> {backend, []}
+      {:ok, {list_nodes, _} } -> {backend, list_nodes}
     end
   end
 
-  def usage, do: "list_discovery_peers"
+  def backend_type_banner(backend, options) do
+    Enum.join(["Backend type",  RabbitMQ.CLI.Formatters.ErlangString.format_output(backend, options)], ": ")
+  end
 
-  def banner(_,_), do: "Listing discovery peer nodes ..."
+  def output({backend, []}, options) do
+      {:ok,  Enum.join([backend_type_banner(backend, options),
+             "No peers discovered"],  "\n" )}
+  end
+  def output({backend, list_nodes}, options) do
+    {:ok, Enum.join([backend_type_banner(backend, options),
+          RabbitMQ.CLI.Formatters.Erlang.format_output(list_nodes, options)],  "\n" )}
+  end
+  use RabbitMQ.CLI.DefaultOutput
+
+
+  def usage, do: "list_discover_peers"
+
+  def banner(_,_), do: "Listing discover peer nodes ..."
 
 
 end
