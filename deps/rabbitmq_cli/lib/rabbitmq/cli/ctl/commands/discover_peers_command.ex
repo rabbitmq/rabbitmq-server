@@ -27,28 +27,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DiscoverPeersCommand do
   def validate(_, _), do: :ok
 
   def run([], %{node: node_name, timeout: timeout}) do
-    nodes = :rabbit_misc.rpc_call(node_name, :rabbit_peer_discovery, :discover_cluster_nodes, [], timeout)
-    backend = :rabbit_misc.rpc_call(node_name, :rabbit_peer_discovery, :backend, [], timeout)
-    case nodes do
-      {:ok, {[], _} } -> {backend, []}
-      {:ok, {list_nodes, _} } -> {backend, list_nodes}
-    end
+    :rabbit_misc.rpc_call(node_name, :rabbit_peer_discovery, :discover_cluster_nodes, [], timeout)
   end
 
-  def backend_type_banner(backend) do
-    "Backend type: #{backend} "
+  def output({:ok, {[], _}}, _options) do
+      {:ok, "No peers discovered"}
   end
-
-  def output({backend, []}, _options) do
-      {:ok,  Enum.join([backend_type_banner(backend),
-             "No peers discovered"],  "\n" )}
-  end
-  def output({backend, list_nodes}, options) do
-    {:ok, Enum.join([backend_type_banner(backend),
-          RabbitMQ.CLI.Formatters.Erlang.format_output(list_nodes, options)],  "\n" )}
+  def output({:ok, {nodes, _}}, _options) do
+    {:ok, nodes}
   end
   use RabbitMQ.CLI.DefaultOutput
 
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def usage, do: "discover_peers"
 

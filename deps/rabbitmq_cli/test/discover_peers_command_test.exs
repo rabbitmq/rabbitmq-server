@@ -35,8 +35,7 @@ defmodule DiscoverPeersCommandTest do
   end
 
   @tag test_timeout: 15000
-  test "run: return an empty list nodes when the Backend is not configured", context do
-    assert {:rabbit_peer_discovery_classic_config, []} == @command.run([], context[:opts])
+  test "run: return a list of nodes when the backend isn't configured", context do
+    assert match?({:ok, {[], _}}, @command.run([], context[:opts]))
   end
-  
 end
