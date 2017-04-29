@@ -14,10 +14,8 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule RabbitMQ.CLI.Ctl.Commands.DiscoverPeersCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-
-  def scopes(), do: [:ctl, :diagnostics]
 
   def merge_defaults(args, opts), do: {args, opts}
 
