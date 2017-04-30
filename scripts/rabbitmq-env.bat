@@ -406,7 +406,12 @@ set paths=
 exit /b
 
 :filter_path
-set ERL_LIBS=%ERL_LIBS%;%~dps1%~n1%~x1
+REM Ensure ERL_LIBS begins with valid path
+IF [%ERL_LIBS%] EQU [] (
+    set ERL_LIBS=%~dps1%~n1%~x1
+) else (
+    set ERL_LIBS=%ERL_LIBS%;%~dps1%~n1%~x1
+)
 exit /b
 
 :filter_paths_done
