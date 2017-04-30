@@ -340,10 +340,17 @@ check_total(Results, Totals, _Samples, Table) ->
                   end
               end, Expected).
 
+is_avg_time_details(Detail) ->
+    match == re:run(atom_to_list(Detail), "avg_time_details$", [{capture, none}]).
+
 check_samples(Results, _Totals, Samples, Table) ->
     Details = details(Table),
     %% Lookup list for the position of the key in the stats tuple
     Pairs = lists:zip(Details, lists:seq(1, length(Details))),
+
+    NonAvgTimeDetails = lists:filter(fun(D) ->
+                                             not is_avg_time_details(D)
+                                     end, Details),
 
     %% Check that all samples in the results match one of the samples in the inputs
     lists:all(fun(Detail) ->
@@ -359,7 +366,7 @@ check_samples(Results, _Totals, Samples, Table) ->
                                 Samples)
                     end
                 end, RSamples)
-          end, Details)
+          end, NonAvgTimeDetails)
     %% ensure that not all samples are 0
     andalso lists:all(fun(Detail) ->
                   RSamples = get_from_detail(samples, Detail, Results),
@@ -371,6 +378,14 @@ check_samples(Results, _Totals, Samples, Table) ->
 check_avg_rate(Results, _Totals, _Samples, Table) ->
     Details = details(Table),
 
+    NonAvgTimeDetails = lists:filter(fun(D) ->
+                                             not is_avg_time_details(D)
+                                     end, Details),
+
+    AvgTimeDetails = lists:filter(fun(D) ->
+                                          is_avg_time_details(D)
+                                  end, Details),
+
     lists:all(fun(Detail) ->
               AvgRate = get_from_detail(avg_rate, Detail, Results),
               Samples = get_from_detail(samples, Detail, Results),
@@ -379,17 +394,37 @@ check_avg_rate(Results, _Totals, _Samples, Table) ->
               S1 = proplists:get_value(sample, lists:last(Samples)),
               T1 = proplists:get_value(timestamp, lists:last(Samples)),
               AvgRate == ((S2 - S1) * 1000 / (T2 - T1))
-          end, Details).
+          end, NonAvgTimeDetails) andalso
+        lists:all(fun(Detail) ->
+                          Avg = get_from_detail(avg_rate, Detail, Results),
+                          Samples = get_from_detail(samples, Detail, Results),
+                          First = proplists:get_value(sample, hd(Samples)),
+                          Avg == First
+                  end, AvgTimeDetails).
 
 check_avg(Results, _Totals, _Samples, Table) ->
     Details = details(Table),
+
+    NonAvgTimeDetails = lists:filter(fun(D) ->
+                                             not is_avg_time_details(D)
+                                     end, Details),
+
+    AvgTimeDetails = lists:filter(fun(D) ->
+                                          is_avg_time_details(D)
+                                  end, Details),
 
     lists:all(fun(Detail) ->
               Avg = get_from_detail(avg, Detail, Results),
               Samples = get_from_detail(samples, Detail, Results),
               Sum = lists:sum([proplists:get_value(sample, S) || S <- Samples]),
               Avg == (Sum / length(Samples))
-          end, Details).
+              end, NonAvgTimeDetails) andalso
+        lists:all(fun(Detail) ->
+                          Avg = get_from_detail(avg, Detail, Results),
+                          Samples = get_from_detail(samples, Detail, Results),
+                          First = proplists:get_value(sample, hd(Samples)),
+                          Avg == First
+                  end, AvgTimeDetails).
 
 get_from_detail(Tag, Detail, Results) ->
     proplists:get_value(Tag, proplists:get_value(Detail, Results), []).
