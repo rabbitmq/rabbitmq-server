@@ -917,8 +917,8 @@ or:
         <td class="path">/api/vhost-limits/<i>vhost</i>/<i>name</i></td>
         <td>
             Set or delete per-vost limit for <code>vhost</code> with <code>name</code>.
-            To set a limit, a body should look like:
-            <pre>{"value": 100}</pre>
+            Limits are set using a JSON document in the body:
+            <pre>{"max-connections": 100, "max-queues": 200}</pre>
         </td>
       </tr>
     </table>
