@@ -723,6 +723,10 @@ rcv_settle_mode(#{rcv_settle_mode := first}) -> {ubyte, 0};
 rcv_settle_mode(#{rcv_settle_mode := second}) -> {ubyte, 1};
 rcv_settle_mode(_) -> undefined.
 
+% certain amqp10 brokers (IBM MQ) return an undefined delivery state
+% when the link is detached before settlement is sent
+% TODO: work out if we can assume accepted
+translate_delivery_state(undefined) -> undefined;
 translate_delivery_state(#'v1_0.accepted'{}) -> accepted;
 translate_delivery_state(#'v1_0.rejected'{}) -> rejected;
 translate_delivery_state(#'v1_0.modified'{}) -> modified;
