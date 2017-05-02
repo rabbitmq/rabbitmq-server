@@ -39,6 +39,8 @@
                           {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
                           {error, Reason :: string()}.
 
+-callback supports_registration() -> boolean().
+
 -callback register()   -> ok | {error, Reason :: string()}.
 
 -callback unregister() -> ok | {error, Reason :: string()}.
