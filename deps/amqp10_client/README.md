@@ -56,7 +56,7 @@ SenderLinkName = <<"test-sender">>,
 
 % wait for credit to be received
 receive
-    {amqp10_event, {link, LinkRef, credited}} -> ok
+    {amqp10_event, {link, Sender, credited}} -> ok
 after 2000 ->
       exit(credited_timeout)
 end.
@@ -78,7 +78,7 @@ ok = amqp10_client:flow_link_credit(Receiver, 5, never),
 
 % wait for a delivery
 receive
-    {amqp10_msg, LinkRef, Msg} -> ok
+    {amqp10_msg, Receiver, Msg} -> ok
 after 2000 ->
       exit(delivery_timeout)
 end.
@@ -133,9 +133,9 @@ to a sender.
 
 ```
 %% no more credit available to sender
-{amqp10_event, {link, LinkRef, credit_exhausted}}
+{amqp10_event, {link, Sender, credit_exhausted}}
 %% sender credit received
-{amqp10_event, {link, LinkRef, credited}}
+{amqp10_event, {link, Sender, credited}}
 ```
 
 Other events may be declared as necessary, Hence it makes sense for a user
