@@ -1,6 +1,6 @@
 -module(rabbit_amqp091_shovel).
 
--behaviour(rabbit_shovel_protocol).
+-behaviour(rabbit_shovel_behaviour).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
@@ -121,9 +121,8 @@ dest_uri(#{dest := #{current := {_, _, Uri}}}) -> Uri.
 forward(IncomingTag, Props, Payload,
         State0 = #{dest := #{props_fun := PropsFun,
                              current := {_, _, DstUri},
-                             fields_fun := FieldsFun},
-                   source := #{module := SrcMod}}) ->
-    SrcUri = SrcMod:source_uri(State0),
+                             fields_fun := FieldsFun}}) ->
+    SrcUri = rabbit_shovel_behaviour:source_uri(State0),
     % do publish
     Exchange = maps:get(exchange, Props, undefined),
     RoutingKey = maps:get(routing_key, Props, undefined),
@@ -186,13 +185,11 @@ handle_source(#'basic.consume_ok'{}, State) ->
 handle_source({#'basic.deliver'{delivery_tag = Tag,
                                 exchange = Exchange,
                                 routing_key = RoutingKey},
-              #amqp_msg{props = Props0, payload = Payload}},
-              State = #{source := _Src,
-                        dest := #{module := DestMod}}) ->
+              #amqp_msg{props = Props0, payload = Payload}}, State) ->
     Props = (map_from_props(Props0))#{exchange => Exchange,
                                       routing_key => RoutingKey},
     % forward to destination
-    DestMod:forward(Tag, Props, Payload, State);
+    rabbit_shovel_behaviour:forward(Tag, Props, Payload, State);
 
 handle_source({'EXIT', Conn, Reason},
               #{source := #{current := {Conn, _, _}}}) ->
@@ -202,14 +199,16 @@ handle_source(_Msg, _State) ->
     not_handled.
 
 handle_dest(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
-            State = #{ack_mode := on_confirm,
-                      source := #{module := SrcMod}}) ->
-    confirm_to_inbound(fun SrcMod:ack/3, Seq, Multiple, State);
+            State = #{ack_mode := on_confirm}) ->
+    confirm_to_inbound(fun (Tag, Multi, StateX) ->
+                               rabbit_shovel_behaviour:ack(Tag, Multi, StateX)
+                       end, Seq, Multiple, State);
 
 handle_dest(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
-            State = #{ack_mode := on_confirm,
-                      source := #{module := SrcMod}}) ->
-    confirm_to_inbound(fun SrcMod:nack/3, Seq, Multiple, State);
+            State = #{ack_mode := on_confirm }) ->
+    confirm_to_inbound(fun (Tag, Multi, StateX) ->
+                               rabbit_shovel_behaviour:nack(Tag, Multi, StateX)
+                       end, Seq, Multiple, State);
 
 handle_dest(#'basic.cancel'{}, #{name := Name}) ->
     rabbit_log:warning("Shovel ~p received 'basic.cancel' from the broker~n",
@@ -235,7 +234,9 @@ confirm_to_inbound(ConfirmFun, Seq, Multiple,
     #{Seq := InTag} = Unacked,
     State = ConfirmFun(InTag, Multiple, State0),
     {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
-    decr_remaining(Removed, State#{dest => Dst#{unacked => Unacked1}}).
+    rabbit_shovel_behaviour:decr_remaining(Removed,
+                                          State#{dest =>
+                                                 Dst#{unacked => Unacked1}}).
 
 publish(_Tag, _Method, _Msg, State = #{remaining_unacked := 0}) ->
     %% We are in on-confirm mode, and are autodelete. We have
@@ -246,8 +247,7 @@ publish(_Tag, _Method, _Msg, State = #{remaining_unacked := 0}) ->
 
 publish(IncomingTag, Method, Msg,
         State = #{ack_mode := AckMode,
-                  dest := Dst,
-                  source := #{module := SrcMod}}) ->
+                  dest := Dst}) ->
     #{unacked := Unacked,
       current := {_, OutboundChan, _}} = Dst,
     Seq = case AckMode of
@@ -256,14 +256,15 @@ publish(IncomingTag, Method, Msg,
               _  -> undefined
           end,
     ok = amqp_channel:call(OutboundChan, Method, Msg),
-    decr_remaining_unacked(
+    rabbit_shovel_behaviour:decr_remaining_unacked(
       case AckMode of
           no_ack ->
-              decr_remaining(1, State);
+              rabbit_shovel_behaviour:decr_remaining(1, State);
           on_confirm ->
               State#{dest => Dst#{unacked => Unacked#{Seq => IncomingTag}}};
           on_publish ->
-              decr_remaining(1, SrcMod:ack(IncomingTag, false, State))
+              State1 = rabbit_shovel_behaviour:ack(IncomingTag, false, State),
+              rabbit_shovel_behaviour:decr_remaining(1, State1)
       end).
 
 make_conn_and_chan(URIs, ShovelName) ->
@@ -286,23 +287,6 @@ get_connection_name({_, Name}) when is_binary(Name) ->
 %% fallback
 get_connection_name(_) ->
     <<"Shovel">>.
-
-decr_remaining_unacked(State = #{source := #{remaining_unacked := unlimited}}) ->
-    State;
-decr_remaining_unacked(State = #{source := #{remaining_unacked := 0}}) ->
-    State;
-decr_remaining_unacked(State = #{source := #{remaining_unacked := N}}) ->
-    State#{remaining_unacked =>  N - 1}.
-
-decr_remaining(_N, State = #{source := #{remaining := unlimited}}) ->
-    State;
-decr_remaining(N, State = #{source := #{remaining := M} = Src}) ->
-    case M > N of
-        true  -> State#{source => Src#{remaining => M - N}};
-        false ->
-            error_logger:info_msg("shutting down shovel, none remaining ~p~n", [State]),
-            exit({shutdown, autodelete})
-    end.
 
 remove_delivery_tags(Seq, false, Unacked, 0) ->
     {maps:remove(Seq, Unacked), 1};

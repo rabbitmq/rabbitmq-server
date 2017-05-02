@@ -348,7 +348,7 @@ parse_amqp10_source(Def) ->
     {#{module => rabbit_amqp10_shovel,
        uris => Uris,
        source_address => Address,
-       delete_after => rabbit_data_coercion:to_atom(DeleteAfter),
+       delete_after => opt_b2a(DeleteAfter),
        prefetch_count => PrefetchCount}, Headers}.
 
 parse_amqp091_source(Def) ->

@@ -1,6 +1,6 @@
 -module(rabbit_amqp10_shovel).
 
--behaviour(rabbit_shovel_protocol).
+-behaviour(rabbit_shovel_behaviour).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
@@ -24,11 +24,11 @@
 
 -define(INFO(Text, Args), error_logger:info_msg(Text, Args)).
 
--type state() :: rabbit_shovel_protocol:state().
--type uri() :: rabbit_shovel_protocol:uri().
--type tag() :: rabbit_shovel_protocol:tag().
--type endpoint_config() :: rabbit_shovel_protocol:source_config()
-                           | rabbit_shovel_protocol:dest_config().
+-type state() :: rabbit_shovel_behaviour:state().
+-type uri() :: rabbit_shovel_behaviour:uri().
+-type tag() :: rabbit_shovel_behaviour:tag().
+-type endpoint_config() :: rabbit_shovel_behaviour:source_config()
+                           | rabbit_shovel_behaviour:dest_config().
 
 -spec parse(binary(), {source | destination, proplists:proplist()}) ->
     endpoint_config().
@@ -123,12 +123,11 @@ source_uri(#{source := #{current := #{uri := Uri}}}) -> Uri.
 dest_uri(#{dest := #{current := #{uri := Uri}}}) -> Uri.
 
 -spec handle_source(Msg :: any(), state()) -> not_handled | state().
-handle_source({amqp10_msg, LinkRef, Msg},
-              State = #{dest := #{module := DstMod}}) ->
+handle_source({amqp10_msg, LinkRef, Msg}, State) ->
     ?INFO("handling msg ~p link_ref ~p~n", [Msg, LinkRef]),
     Tag = amqp10_msg:delivery_id(Msg),
     [Payload] = amqp10_msg:body(Msg),
-    DstMod:forward(Tag, #{}, Payload, State);
+    rabbit_shovel_behaviour:forward(Tag, #{}, Payload, State);
 handle_source({amqp10_event, {connection, Conn, opened}},
               State = #{source := #{current := #{conn := Conn}}}) ->
     ?INFO("Source connection opened.", []),
@@ -162,14 +161,13 @@ handle_source(_Msg, _State) ->
 -spec handle_dest(Msg :: any(), state()) -> not_handled | state().
 handle_dest({amqp10_disposition, {Result, Tag}},
             State0 = #{ack_mode := on_confirm,
-                      source := #{module := SrcMod},
                       dest := #{unacked := Unacked} = Dst}) ->
     State = State0#{dest => Dst#{unacked => maps:remove(Tag, Unacked)}},
     case {Unacked, Result} of
         {#{Tag := IncomingTag}, accepted} ->
-            SrcMod:ack(IncomingTag, false, State);
+            rabbit_shovel_behaviour:ack(IncomingTag, false, State);
         {#{Tag := IncomingTag}, rejected} ->
-            SrcMod:nack(IncomingTag, false, State);
+            rabbit_shovel_behaviour:nack(IncomingTag, false, State);
         _ -> % not found - this should ideally not happen
             error_logger:warning_msg("amqp10 destination disposition tag not"
                                      "found: ~p~n", [Tag]),
@@ -235,7 +233,6 @@ nack(Tag, false, State = #{source := #{current := #{session := Session}}}) ->
 forward(Tag, Props, Payload,
         #{dest := #{current := #{link := Link},
                     unacked := Unacked} = Dst,
-          source := #{module := SrcMod},
           ack_mode := AckMode} = State) ->
     OutTag = rabbit_data_coercion:to_binary(Tag),
     Msg0 = new_message(OutTag, Payload, State),
@@ -247,7 +244,7 @@ forward(Tag, Props, Payload,
     case AckMode of
         no_ack -> State;
         on_publish ->
-            SrcMod:ack(Tag, false, State);
+            rabbit_shovel_behaviour:ack(Tag, false, State);
         on_confirm ->
               State#{dest => Dst#{unacked => Unacked#{OutTag => Tag}}}
     end.

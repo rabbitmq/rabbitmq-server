@@ -62,28 +62,24 @@ init([Type, Name, Config0]) ->
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
-handle_cast(init, State = #state{config =
-                                 #{source := #{module := SrcMod},
-                                   dest := #{module := DstMod}} = Config}) ->
-    Config1 = SrcMod:connect_source(Config),
-    Config2 = DstMod:connect_dest(Config1),
+handle_cast(init, State = #state{config = Config}) ->
+    Config1 = rabbit_shovel_behaviour:connect_source(Config),
+    Config2 =  rabbit_shovel_behaviour:connect_dest(Config1),
     %% Don't trap exits until we have established connections so that
     %% if we try to shut down while waiting for a connection to be
     %% established then we don't block
     process_flag(trap_exit, true),
-    Config3 = DstMod:init_dest(Config2),
-    Config4 = SrcMod:init_source(Config3),
+    Config3 = rabbit_shovel_behaviour:init_dest(Config2),
+    Config4 = rabbit_shovel_behaviour:init_source(Config3),
     State1 = State#state{config = Config4},
     ok = report_running(State1),
     {noreply, State1}.
 
 
-handle_info(Msg, State = #state{config =
-                                #{source := #{module := SrcMod},
-                                  dest := #{module := DstMod}} = Config}) ->
-    case SrcMod:handle_source(Msg, Config) of
+handle_info(Msg, State = #state{config = Config}) ->
+    case rabbit_shovel_behaviour:handle_source(Msg, Config) of
         not_handled ->
-            case DstMod:handle_dest(Msg, Config) of
+            case rabbit_shovel_behaviour:handle_dest(Msg, Config) of
                 not_handled ->
                     error_logger:info_msg("message not handled! ~p ~p~n",
                                           [Msg, Config]),
@@ -122,14 +118,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% Helpers
 %%---------------------------
 
-report_running(#state{config = Config = #{source := #{module := Src},
-                                          dest := #{module := Dst}}} = State) ->
-    InUri = Src:source_uri(Config),
-    OutUri = Dst:dest_uri(Config),
-    rabbit_shovel_status:report(
-      State#state.name, State#state.type,
-      {running, [{src_uri,  InUri},
-                 {dest_uri, OutUri}]}).
+report_running(#state{config = Config} = State) ->
+    InUri = rabbit_shovel_behaviour:source_uri(Config),
+    OutUri = rabbit_shovel_behaviour:dest_uri(Config),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {running, [{src_uri,  InUri},
+                                           {dest_uri, OutUri}]}).
 
 
 %% for static shovels, name is an atom from the configuration file
@@ -147,7 +141,6 @@ get_connection_name({_, Name}) when is_binary(Name) ->
 get_connection_name(_) ->
     <<"Shovel">>.
 
-close_connections(#state{config = #{dest := #{module := DstMod},
-                                    source := #{module := SrcMod}} = Conf}) ->
-    ok = SrcMod:close_source(Conf),
-    ok = DstMod:close_dest(Conf).
+close_connections(#state{config = Conf}) ->
+    ok = rabbit_shovel_behaviour:close_source(Conf),
+    ok = rabbit_shovel_behaviour:close_dest(Conf).

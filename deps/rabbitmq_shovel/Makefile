@@ -21,10 +21,12 @@ endef
 DEPS = rabbit_common rabbit amqp_client amqp10_client
 dep_amqp10_client = git git@github.com:rabbitmq/rabbitmq-amqp1.0-client.git master
 
+LOCAL_DEPS = crypto
+
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_amqp1_0
 
-
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk elvis_mk
+dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.

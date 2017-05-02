@@ -35,8 +35,8 @@ groups() ->
           % headers,
           % exchange,
           % restart,
-          change_definition
-          % autodelete,
+          change_definition,
+          autodelete
           % validation,
           % security_validation,
           % get_connection_name
@@ -133,36 +133,43 @@ change_definition(Config) ->
               expect_empty(Sess, <<"dest2">>)
       end).
 
-% autodelete(Config) ->
-%     autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50}),
-%     autodelete_case(Config, {<<"on-confirm">>, <<"queue-length">>,  0, 100}),
-%     autodelete_case(Config, {<<"on-publish">>, <<"queue-length">>,  0, 100}),
-%     autodelete_case(Config, {<<"on-publish">>, 50,                 50,  50}),
-%     %% no-ack is not compatible with explicit count
-%     autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}),
-%     ok.
+autodelete(Config) ->
+    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50}),
+    % autodelete_case(Config, {<<"on-publish">>, 50, 50, 50}),
+    % autodelete_case(Config, {<<"no-ack">>, 50, 50, 50}),
+    % autodelete_case(Config, {<<"on-publish">>, 50, 50, 50}),
+    % autodelete_case(Config, {<<"on-publish">>, 50, 50, 50}),
+    % autodelete_case(Config, {<<"on-publish">>, 50, 50, 50}),
+    % autodelete_case(Config, {<<"no-ack">>, 50, 50, 50}),
+    % autodelete_case(Config, {<<"on-confirm">>, <<"queue-length">>,  0, 100}),
+    % autodelete_case(Config, {<<"on-publish">>, <<"queue-length">>,  0, 100}),
+    % autodelete_case(Config, {<<"on-publish">>, 50,                 50,  50}),
+    % %% no-ack is not compatible with explicit count
+    % autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}),
+    ok.
 
-% autodelete_case(Config, Args) ->
-%     with_ch(Config, autodelete_do(Config, Args)).
+autodelete_case(Config, Args) ->
+    with_session(Config, autodelete_do(Config, Args)).
 
-% autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
-%     fun (Ch) ->
-%             amqp_channel:call(Ch, #'confirm.select'{}),
-%             amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
-%             publish_count(Ch, <<>>, <<"src">>, <<"hello">>, 100),
-%             Ret = amqp_channel:wait_for_confirms(Ch),
-%             ct:pal("wait ret ~p~n", [Ret]),
-%             shovel_test_utils:set_param_nowait(
-%               Config,
-%               <<"test">>, [{<<"src-queue">>,    <<"src">>},
-%                            {<<"dest-queue">>,   <<"dest">>},
-%                            {<<"src-prefetch-count">>, 50},
-%                            {<<"ack-mode">>,     AckMode},
-%                            {<<"delete-after">>, After}]),
-%             await_autodelete(Config, <<"test">>),
-%             expect_count(Ch, <<"dest">>, <<"hello">>, ExpDest),
-%             expect_count(Ch, <<"src">>, <<"hello">>, ExpSrc)
-%     end.
+autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
+    fun (Session) ->
+            % amqp_channel:call(Ch, #'confirm.select'{}),
+            % amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
+            publish_count(Session, <<"src">>, <<"hello">>, 100),
+            shovel_test_utils:set_param_nowait(
+              Config,
+              <<"test">>, [{<<"src-address">>,    <<"src">>},
+                           {<<"src-protocol">>,   <<"amqp10">>},
+                           {<<"src-delete-after">>, After},
+                           {<<"dest-address">>,   <<"dest">>},
+                           {<<"dest-protocol">>,   <<"amqp10">>},
+                           {<<"src-prefetch-count">>, 50},
+                           {<<"ack-mode">>,     AckMode}
+                          ]),
+            await_autodelete(Config, <<"test">>),
+            expect_count(Session, <<"dest">>, <<"hello">>, ExpDest),
+            expect_count(Session, <<"src">>, <<"hello">>, ExpSrc)
+    end.
 
 
 % security_validation(Config) ->
@@ -223,8 +230,15 @@ with_session(Config, Fun) ->
     ok.
 
 publish(Sender, Tag, Payload) when is_binary(Payload) ->
-    Msg = amqp10_msg:new(Tag, Payload, true),
-    ok = amqp10_client:send_msg(Sender, Msg).
+    Headers = #{durable => true},
+    Msg = amqp10_msg:set_headers(Headers,
+                                 amqp10_msg:new(Tag, Payload, false)),
+    ok = amqp10_client:send_msg(Sender, Msg),
+    receive
+        {amqp10_disposition, {accepted, Tag}} -> ok
+    after 3000 ->
+              exit(publish_disposition_not_received)
+    end.
 
 publish_expect(Session, Source, Dest, Tag, Payload) ->
     LinkName = <<"dynamic-sender-", Dest/binary>>,
@@ -233,7 +247,7 @@ publish_expect(Session, Source, Dest, Tag, Payload) ->
     ok = await_amqp10_event(link, Sender, attached),
     publish(Sender, Tag, Payload),
     amqp10_client:detach_link(Sender),
-    expect(Session, Dest, Payload).
+    expect_one(Session, Dest, Payload).
 
 await_amqp10_event(On, Ref, Evt) ->
     receive
@@ -242,11 +256,14 @@ await_amqp10_event(On, Ref, Evt) ->
           exit({amqp10_event_timeout, On, Ref, Evt})
     end.
 
-expect(Session, Dest, Payload) ->
+expect_one(Session, Dest, Payload) ->
     LinkName = <<"dynamic-receiver-", Dest/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
                                                         Dest),
     ok = amqp10_client:flow_link_credit(Receiver, 5, never),
+    expect(Receiver, Payload).
+
+expect(Receiver, Payload) ->
     receive
         {amqp10_msg, Receiver, InMsg} ->
             [Payload] = amqp10_msg:body(InMsg),
@@ -267,17 +284,28 @@ expect_empty(Session, Dest) ->
     {error, timeout} = amqp10_client:get_msg(Receiver, 250),
     amqp10_client:detach_link(Receiver).
 
-% publish_count(Ch, X, Key, M, Count) ->
-%     [begin
+publish_count(Session, Address, Payload, Count) ->
+    LinkName = <<"dynamic-sender-", Address/binary>>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName,
+                                                    Address),
+    ok = await_amqp10_event(link, Sender, attached),
+    [begin
 
-%          publish(Ch, X, Key, M)
-%      end || _ <- lists:seq(1, Count)].
+         Tag = rabbit_data_coercion:to_binary(I),
+         publish(Sender, Tag, Payload)
+     end || I <- lists:seq(1, Count)],
+     amqp10_client:detach_link(Sender).
 
-% expect_count(Ch, Q, M, Count) ->
-%     [begin
-%          expect(Ch, Q, M)
-%      end || _ <- lists:seq(1, Count)],
-%     expect_empty(Ch, Q).
+expect_count(Session, Address, Payload, Count) ->
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
+                                                        <<"dynamic-receiver">>,
+                                                        Address),
+    [begin
+         expect(Receiver, Payload)
+     end || _ <- lists:seq(1, Count)],
+    expect_empty(Session, Address),
+    amqp10_client:detach_link(Receiver).
+
 
 invalid_param(Config, Value, User) ->
     {error_string, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -316,7 +344,7 @@ cleanup1(_Config) ->
 
 await_autodelete(Config, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, await_autodelete1, [Config, Name]).
+      ?MODULE, await_autodelete1, [Config, Name], 10000).
 
 await_autodelete1(_Config, Name) ->
     shovel_test_utils:await(

@@ -84,8 +84,10 @@ parse_current(ShovelName, Config) ->
            ack_mode => proplists:get_value(ack_mode, Config, no_ack),
            reconnect_delay => proplists:get_value(reconnect_delay, Config,
                                                   ?DEFAULT_RECONNECT_DELAY),
-           source => SrcMod:parse(ShovelName, {source, Source}),
-           dest => DstMod:parse(ShovelName, {destination, Destination})}}.
+           source => rabbit_shovel_behaviour:parse(SrcMod, ShovelName,
+                                                  {source, Source}),
+           dest => rabbit_shovel_behaviour:parse(DstMod, ShovelName,
+                                                 {destination, Destination})}}.
 
 parse_legacy(ShovelName, Config) ->
     {ok, Defaults} = application:get_env(defaults),
