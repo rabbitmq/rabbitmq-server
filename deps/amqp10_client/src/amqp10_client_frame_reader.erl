@@ -177,7 +177,7 @@ handle_info({TcpClosed, _}, StateName, State)
     State1 = State#state{socket = undefined,
                          buffer = <<>>,
                          frame_state = undefined},
-    {stop, normal, State1};
+    {stop, {error, TcpClosed}, State1};
 
 handle_info(heartbeat, StateName, State = #state{connection = Conn}) ->
     amqp10_client_connection:close(Conn, {resource_limit_exceeded,
@@ -185,19 +185,12 @@ handle_info(heartbeat, StateName, State = #state{connection = Conn}) ->
     % do not stop as may want to read the peer's close frame
     {next_state, StateName, State}.
 
-terminate(Reason, _StateName, #state{connection_sup = Sup, socket = Socket}) ->
+terminate(Reason, _StateName, #state{connection_sup = _Sup, socket = Socket}) ->
     error_logger:warning_msg("terminating reader with '~p'~n", [Reason]),
     case Socket of
         undefined -> ok;
         _ -> close_socket(Socket)
-    end,
-    case Reason of
-        normal ->
-            error_logger:warning_msg("terminating sup from reader with~n", []),
-            sys:terminate(Sup, normal);
-        _ -> ok
-    end,
-    ok.
+    end.
 
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
