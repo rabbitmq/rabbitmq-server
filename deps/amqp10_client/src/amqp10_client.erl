@@ -32,6 +32,7 @@
          attach_sender_link_sync/4,
          attach_receiver_link/3,
          attach_receiver_link/4,
+         attach_link/2,
          detach_link/1,
          send_msg/2,
          accept_msg/2,
@@ -44,9 +45,32 @@
 
 -define(DEFAULT_TIMEOUT, 5000).
 
+-type snd_settle_mode() :: amqp10_client_session:snd_settle_mode().
+-type rcv_settle_mode() :: amqp10_client_session:rcv_settle_mode().
+
+-type terminus_durability() :: amqp10_client_session:terminus_durability().
+
+-type target_def() :: amqp10_client_session:target_def().
+-type source_def() :: amqp10_client_session:source_def().
+
+-type attach_role() :: amqp10_client_session:attach_role().
+-type attach_args() :: amqp10_client_session:attach_args().
+
+-type connection_config() :: amqp10_client_connection:connection_config().
+
 -opaque link_ref() :: #link_ref{}.
 
--export_type([link_ref/0]).
+-export_type([
+              link_ref/0,
+              snd_settle_mode/0,
+              rcv_settle_mode/0,
+              terminus_durability/0,
+              target_def/0,
+              source_def/0,
+              attach_role/0,
+              attach_args/0,
+              connection_config/0
+             ]).
 
 %% @doc Convenience function for opening a connection providing only an
 %% address and port. This uses anonymous sasl authentication.
@@ -63,7 +87,7 @@ open_connection(Addr, Port) ->
 %% This is asynchronous and will notify success/closure to the caller using
 %% an amqp10_event of the following format:
 %% {amqp10_event, {connection, ConnectionPid, opened | {closed, Why}}}
--spec open_connection(amqp10_client_connection:connection_config()) ->
+-spec open_connection(connection_config()) ->
     supervisor:startchild_ret().
 open_connection(ConnectionConfig0) ->
     Notify = maps:get(notify, ConnectionConfig0, self()),
@@ -129,7 +153,7 @@ attach_sender_link_sync(Session, Name, Target) ->
 %% This is a convenience function that awaits attached event
 %% for the link before returning.
 -spec attach_sender_link_sync(pid(), binary(), binary(),
-                              amqp10_client_session:snd_settle_mode()) ->
+                              snd_settle_mode()) ->
     {ok, link_ref()} | link_timeout.
 attach_sender_link_sync(Session, Name, Target, SettleMode) ->
     {ok, Ref} = attach_sender_link(Session, Name, Target, SettleMode),
@@ -155,11 +179,12 @@ attach_sender_link(Session, Name, Target) ->
 %% caller using an amqp10_event of the following format:
 %% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
 -spec attach_sender_link(pid(), binary(), binary(),
-                         amqp10_client_session:snd_settle_mode()) ->
+                         snd_settle_mode()) ->
     {ok, link_ref()}.
 attach_sender_link(Session, Name, Target, SettleMode) ->
     AttachArgs = #{name => Name,
-                   role => {sender, #{address => Target}},
+                   role => {sender, #{address => Target,
+                                      durable => none}},
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first},
     amqp10_client_session:attach(Session, AttachArgs).
@@ -178,13 +203,18 @@ attach_receiver_link(Session, Name, Source) ->
 %% caller using an amqp10_event of the following format:
 %% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
 -spec attach_receiver_link(pid(), binary(), binary(),
-                           amqp10_client_session:snd_settle_mode()) ->
+                           snd_settle_mode()) ->
     {ok, link_ref()}.
 attach_receiver_link(Session, Name, Source, SettleMode) ->
     AttachArgs = #{name => Name,
-                   role => {receiver, #{address => Source}, self()},
+                   role => {receiver, #{address => Source,
+                                        durable => none}, self()},
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first},
+    amqp10_client_session:attach(Session, AttachArgs).
+
+-spec attach_link(pid(), attach_args()) -> {ok, link_ref()}.
+attach_link(Session, AttachArgs) ->
     amqp10_client_session:attach(Session, AttachArgs).
 
 %% @doc Detaches a link.
@@ -254,7 +284,7 @@ link_handle(#link_ref{link_handle = Handle}) -> Handle.
 
 
 -spec parse_uri(string()) ->
-    {ok, amqp10_client_connection:connection_config()} | {error, term()}.
+    {ok, connection_config()} | {error, term()}.
 parse_uri(Uri) ->
     case http_uri:parse(Uri) of
         {ok, Result} ->

@@ -71,12 +71,14 @@
 -type snd_settle_mode() :: unsettled | settled | mixed.
 -type rcv_settle_mode() :: first | second.
 
+-type terminus_durability() :: none | configuration | unsettled_state.
 
--type target_def() :: #{address => link_address(), durable => boolean()}.
--type source_def() :: #{address => link_address()}.
+-type target_def() :: #{address => link_address(),
+                        durable => terminus_durability()}.
+-type source_def() :: #{address => link_address(),
+                        durable => terminus_durability()}.
 
 -type attach_role() :: {sender, target_def()} | {receiver, source_def(), pid()}.
-
 -type attach_args() :: #{name => binary(),
                          role => attach_role(),
                          snd_settle_mode => snd_settle_mode(),
@@ -588,10 +590,17 @@ make_source(#{role := {sender, _}}) ->
 make_source(#{role := {receiver, #{address := Address}, _Pid}}) ->
     #'v1_0.source'{address = {utf8, Address}}.
 
-make_target(#{role := {receiver, _Source, _Pid}}) ->
-    #'v1_0.target'{};
-make_target(#{role := {sender, #{address := Address}}}) ->
-    #'v1_0.target'{address = {utf8, Address}}.
+make_target(#{role := {receiver, Source, _Pid}}) ->
+    Durable = translate_terminus_durability(maps:get(durable, Source, none)),
+    #'v1_0.target'{durable = {uint, Durable}};
+make_target(#{role := {sender, #{address := Address} = Target}}) ->
+    Durable = translate_terminus_durability(maps:get(durable, Target, none)),
+    #'v1_0.target'{address = {utf8, Address},
+                   durable = {uint, Durable}}.
+
+translate_terminus_durability(none) -> 0;
+translate_terminus_durability(configuration) -> 1;
+translate_terminus_durability(unsettled_state) -> 2.
 
 send_detach(Send, {detach, OutHandle}, _From, State = #state{links = Links}) ->
     case Links of

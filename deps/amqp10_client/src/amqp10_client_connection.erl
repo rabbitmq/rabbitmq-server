@@ -276,6 +276,7 @@ handle_info(_Info, StateName, State) ->
 
 terminate(Reason, _StateName, #state{connection_sup = Sup,
                                      config = Config}) ->
+    error_logger:warning_msg("terminating connection with '~p'~n", [Reason]),
     ok = notify_closed(Config, Reason),
     case Reason of
         normal -> sys:terminate(Sup, normal);
