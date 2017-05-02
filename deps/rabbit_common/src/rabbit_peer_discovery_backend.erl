@@ -43,3 +43,5 @@
 -callback register()   -> ok | {error, Reason :: string()}.
 
 -callback unregister() -> ok | {error, Reason :: string()}.
+
+-callback post_registration()   -> ok | {error, Reason :: string()}.
