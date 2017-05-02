@@ -22,7 +22,7 @@
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0]).
--export([init/0, send_health_check_pass/0]).
+-export([init_health_check_notifier/0, send_health_check_pass/0]).
 %% useful for debugging from the REPL with RABBITMQ_ALLOW_INPUT
 -export([config_map/0, service_id/0, service_address/0]).
 
@@ -120,19 +120,19 @@
 
 -rabbit_boot_step({?MODULE,
                    [{description, <<"Peer cluster discovery Consul backend initialisation">>},
-                    {mfa,         {?MODULE, init, []}},
+                    {mfa,         {?MODULE, init_health_check_notifier, []}},
                     {requires,    notify_cluster}]}).
 
 %%
 %% API
 %%
 
--spec list_nodes() -> {ok, Nodes :: list()} | {error, Reason :: string()}.
+-spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
 
 list_nodes() ->
     case application:get_env(rabbit, autocluster) of
       undefined         ->
-        {[], disc};
+        {ok, {[], disc}};
       {ok, Autocluster} ->
         case proplists:get_value(?BACKEND_CONFIG_KEY, Autocluster) of
             undefined ->
@@ -140,7 +140,7 @@ list_nodes() ->
                                  "but final config does not contain rabbit.autocluster.peer_discovery_consul. "
                                  "Cannot discover any nodes because Consul cluster details are not configured!",
                                  [?MODULE]),
-              {[], disc};
+              {ok, {[], disc}};
             Proplist  ->
               M = maps:from_list(Proplist),
               case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
@@ -152,7 +152,7 @@ list_nodes() ->
                       IncludeWithWarnings = get_config_key(consul_include_nodes_with_warnings, M),
                       Result = extract_nodes(
                                  filter_nodes(Nodes, IncludeWithWarnings)),
-                      {ok, Result};
+                      {ok, {Result, disc}};
                   {error, _} = Error ->
                       Error
               end
@@ -226,9 +226,9 @@ config_map() ->
 get_config_key(Key, Map) ->
     ?CONFIG_MODULE:get(Key, ?CONFIG_MAPPING, Map).
 
--spec init() -> ok.
+-spec init_health_check_notifier() -> ok.
 
-init() ->
+init_health_check_notifier() ->
   case rabbit_peer_discovery:backend() of
     ?MODULE ->
       M = config_map(),
