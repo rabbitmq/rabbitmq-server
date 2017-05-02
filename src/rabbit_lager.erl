@@ -150,7 +150,7 @@ lager_handlers(FileName) when is_list(FileName) ->
                            {cannot_create_parent_dirs, LogFile, Reason}}})
     end,
     [{lager_file_backend, [{file, FileName},
-                           {level, info},
+                           {level, debug},
                            {formatter_config,
                             [date, " ", time, " ", color, "[", severity, "] ",
                              {pid, ""},

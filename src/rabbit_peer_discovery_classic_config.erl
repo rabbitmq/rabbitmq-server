@@ -48,3 +48,8 @@ register() ->
 
 unregister() ->
     ok.
+
+-spec post_registration() -> ok.
+
+post_registration() ->
+    ok.
