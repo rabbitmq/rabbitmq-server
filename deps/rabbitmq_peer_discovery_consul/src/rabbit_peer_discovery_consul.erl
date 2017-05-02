@@ -21,7 +21,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 
--export([list_nodes/0, supports_registration/0, register/0, unregister/0]).
+-export([list_nodes/0, supports_registration/0, register/0, unregister/0,
+         post_registration/0]).
 -export([init_health_check_notifier/0, send_health_check_pass/0]).
 %% useful for debugging from the REPL with RABBITMQ_ALLOW_INPUT
 -export([config_map/0, service_id/0, service_address/0]).
@@ -117,12 +118,6 @@
                                                   }
          }).
 
-
--rabbit_boot_step({?MODULE,
-                   [{description, <<"Peer cluster discovery Consul backend initialisation">>},
-                    {mfa,         {?MODULE, init_health_check_notifier, []}},
-                    {requires,    notify_cluster}]}).
-
 %%
 %% API
 %%
@@ -203,6 +198,10 @@ unregister() ->
           Error
   end.
 
+-spec post_registration() -> ok | {error, Reason :: string()}.
+
+post_registration() ->
+    init_health_check_notifier().
 
 %%
 %% Implementation
@@ -237,8 +236,11 @@ init_health_check_notifier() ->
         Interval  ->
           T = Interval * 500,
           rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [T]),
-          {ok, _} = timer:apply_interval(T, ?MODULE,
-                                         send_health_check_pass, []),
+          %% We ignore the returned ref. The only time when we'd like to stop the checks is
+          %% when the node shuts down, which naturally terminates the timer. This seems to be good
+          %% enough for now.
+          {ok, _TRef} = timer:apply_interval(T, ?MODULE,
+                                             send_health_check_pass, []),
           ok
       end;
     _ -> ok
@@ -487,6 +489,7 @@ send_health_check_pass() ->
           rabbit_log:warning("Consul responded to a health check with 429 Too Many Requests"),
           ok;
     {error, "500"} ->
+          rabbit_log:warning("Consul responded to a health check with a 500 status, will wait and try re-registering"),
           maybe_re_register(wait_for_list_nodes());
     {error, Reason} ->
           rabbit_log:error("Error running Consul health check: ~p",
