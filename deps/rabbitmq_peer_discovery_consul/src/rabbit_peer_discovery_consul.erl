@@ -487,7 +487,7 @@ send_health_check_pass() ->
           rabbit_log:warning("Consul responded to a health check with 429 Too Many Requests"),
           ok;
     {error, "500"} ->
-          maybe_re_register(wait_nodelist());
+          maybe_re_register(wait_for_list_nodes());
     {error, Reason} ->
           rabbit_log:error("Error running Consul health check: ~p",
                            [Reason]),
@@ -498,7 +498,11 @@ maybe_re_register({error, Reason}) ->
     rabbit_log:error("Internal error in Consul while updating health check. "
                      "Cannot obtain list of nodes registered in Consul either: ~p",
                      [Reason]);
+maybe_re_register({ok, {Members, _NodeType}}) ->
+    maybe_re_register(Members);
 maybe_re_register({ok, Members}) ->
+    maybe_re_register(Members);
+maybe_re_register(Members) ->
     case lists:member(node(), Members) of
         true ->
             rabbit_log:error("Internal error in Consul while updating health check",
@@ -509,10 +513,10 @@ maybe_re_register({ok, Members}) ->
             register()
     end.
 
-wait_nodelist() ->
-    wait_nodelist(60).
+wait_for_list_nodes() ->
+    wait_for_list_nodes(60).
 
-wait_nodelist(N) ->
+wait_for_list_nodes(N) ->
     case {list_nodes(), N} of
         {Reply, 0} ->
             Reply;
@@ -520,5 +524,5 @@ wait_nodelist(N) ->
             Reply;
         {{error, _}, _} ->
             timer:sleep(1000),
-            wait_nodelist(N - 1)
+            wait_for_list_nodes(N - 1)
     end.
