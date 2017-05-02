@@ -494,6 +494,12 @@ tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
     {ok, Dest} = rabbit_routing_util:parse_endpoint(DestHdr),
     maybe_delete_durable_sub(Dest, Frame, State#proc_state{subscriptions = Subs1}).
 
+%% Server-initiated cancelations will pass a blank STOMP frame.
+%% In this case we know that the queue was deleted and thus
+%% we don't have to clean it up
+maybe_delete_durable_sub({topic, _Name}, #stomp_frame{}, State) ->
+    ok(State);
+%% Client-initiated cancelations will pass an actual frame
 maybe_delete_durable_sub({topic, Name}, Frame,
                          State = #proc_state{channel = Channel}) ->
     case rabbit_stomp_util:has_durable_header(Frame) of
