@@ -119,6 +119,8 @@ init_from_config() ->
         (Name, BadNames) when is_atom(Name) -> BadNames;
         (Name, BadNames)                    -> [Name | BadNames]
     end,
+    %% See rabbitmq/rabbitmq-server#1202 for details.
+    rabbit_peer_discovery:maybe_inject_randomized_delay(),
     {DiscoveredNodes, NodeType} =
         case rabbit_peer_discovery:discover_cluster_nodes() of
             {ok, {Nodes, Type} = Config}

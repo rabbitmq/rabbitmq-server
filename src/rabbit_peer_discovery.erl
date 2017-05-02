@@ -22,7 +22,8 @@
 
 -export([discover_cluster_nodes/0, backend/0, node_type/0,
          normalize/1, format_discovered_nodes/1, log_configured_backend/0,
-         register/0, unregister/0, maybe_register/0, maybe_unregister/0]).
+         register/0, unregister/0, maybe_register/0, maybe_unregister/0,
+         maybe_inject_randomized_delay/0]).
 -export([append_node_prefix/1, node_prefix/0]).
 
 -define(DEFAULT_BACKEND,   rabbit_peer_discovery_classic_config).
@@ -31,6 +32,9 @@
 -define(DEFAULT_NODE_TYPE, disc).
 %% default node prefix to attach to discovered hostnames
 -define(DEFAULT_PREFIX, "rabbit").
+%% default randomized delay range, in seconds
+-define(DEFAULT_STARTUP_RANDOMIZED_DELAY, {5, 60}).
+
 -define(NODENAME_PART_SEPARATOR, "@").
 
 
@@ -96,6 +100,56 @@ maybe_unregister() ->
     false ->
       rabbit_log:info("Peer discovery backend ~s does not support registration, skipping unregistration.", [Backend]),
       ok
+  end.
+
+
+-spec maybe_inject_randomized_delay() -> ok.
+maybe_inject_randomized_delay() ->
+  Backend = backend(),
+  case Backend:supports_registration() of
+    true  ->
+      rabbit_log:info("Peer discovery backend ~s supports registration.", [Backend]),
+      inject_randomized_delay();
+    false ->
+      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping randomized startup delay.", [Backend]),
+      ok
+  end.
+
+-spec inject_randomized_delay() -> ok.
+
+inject_randomized_delay() ->
+    {Min, Max} = case randomized_delay_range() of
+                     {A, B} -> {A, B};
+                     [A, B] -> {A, B}
+                 end,
+    case {Min, Max} of
+        %% When the max value is set to 0, consider the delay to be disabled.
+        %% In addition, `rand:uniform/1` will fail with a "no function clause"
+        %% when the argument is 0.
+        {_, 0} ->
+            rabbit_log:info("Randomized delay range's upper bound is set to 0. Considering it disabled."),
+            ok;
+        {_, N} when is_number(N) ->
+            rand:seed(exsplus),
+            RandomVal  = rand:uniform(round(N)),
+            rabbit_log:debug("Randomized startup delay: configured range is from ~p to ~p, PRNG pick: ~p...", [Min, Max, RandomVal]),
+            Effective  = case RandomVal < Min of
+                             true  -> Min;
+                             false -> RandomVal
+                         end,
+            rabbit_log:info("Will wait for ~p seconds before proceeding with regitration...", [Effective]),
+            timer:sleep(Effective * 1000),
+            ok
+    end.
+
+-spec randomized_delay_range() -> {integer(), integer()}.
+
+randomized_delay_range() ->
+    case application:get_env(rabbit, autocluster) of
+    {ok, Proplist} ->
+      proplists:get_value(randomized_startup_delay_range, Proplist, ?DEFAULT_STARTUP_RANDOMIZED_DELAY);
+    undefined      ->
+      ?DEFAULT_STARTUP_RANDOMIZED_DELAY
   end.
 
 
