@@ -83,7 +83,8 @@ maybe_register() ->
   Backend = backend(),
   case Backend:supports_registration() of
     true  ->
-      register();
+      register(),
+      Backend:post_registration();
     false ->
       rabbit_log:info("Peer discovery backend ~s does not support registration, skipping registration.", [Backend]),
       ok
