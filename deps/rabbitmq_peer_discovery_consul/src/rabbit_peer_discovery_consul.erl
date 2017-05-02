@@ -233,14 +233,20 @@ init_health_check_notifier() ->
       M = config_map(),
       case get_config_key(consul_svc_ttl, M) of
         undefined -> ok;
+        %% in seconds
         Interval  ->
-          T = Interval * 500,
-          rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [T]),
-          %% We ignore the returned ref. The only time when we'd like to stop the checks is
-          %% when the node shuts down, which naturally terminates the timer. This seems to be good
-          %% enough for now.
-          {ok, _TRef} = timer:apply_interval(T, ?MODULE,
-                                             send_health_check_pass, []),
+          %% We cannot use timer:apply_interval/4 here because this
+          %% function is executed in a short live process and when it
+          %% exits, the timer module will automatically cancel the
+          %% timer.
+          %%
+          %% Instead we delegate to a locally registered gen_server,
+          %% `rabbitmq_peer_discovery_consul_health_check_helper`.
+          %%
+          %% The value is 1/2 of what's configured to avoid a race
+          %% condition between check TTL expiration and in flight
+          %% notifications
+          rabbitmq_peer_discovery_consul_health_check_helper:start_timer(Interval * 500),
           ok
       end;
     _ -> ok

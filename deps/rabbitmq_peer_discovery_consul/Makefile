@@ -1,5 +1,6 @@
 PROJECT = rabbitmq_peer_discovery_consul
 PROJECT_DESCRIPTION = Consult-based RabbitMQ peer discovery backend
+PROJECT_MOD = rabbitmq_peer_discovery_consul_app
 
 define PROJECT_ENV
 [
