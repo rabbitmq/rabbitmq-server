@@ -490,7 +490,8 @@ send_health_check_pass() ->
           ok;
     {error, "500"} ->
           rabbit_log:warning("Consul responded to a health check with a 500 status, will wait and try re-registering"),
-          maybe_re_register(wait_for_list_nodes());
+          maybe_re_register(wait_for_list_nodes()),
+          ok;
     {error, Reason} ->
           rabbit_log:error("Error running Consul health check: ~p",
                            [Reason]),
