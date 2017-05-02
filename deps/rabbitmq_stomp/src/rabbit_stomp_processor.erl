@@ -449,7 +449,7 @@ server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) -
                              [Description],
                              State),
             tidy_canceled_subscription(ConsumerTag, Subscription,
-                                       #stomp_frame{}, State)
+                                       undefined, State)
     end.
 
 cancel_subscription({error, invalid_prefix}, _Frame, State) ->
@@ -488,18 +488,21 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
             end
     end.
 
+%% Server-initiated cancelations will pass an undefined instead of a
+%% STOMP frame. In this case we know that the queue was deleted and
+%% thus we don't have to clean it up.
+tidy_canceled_subscription(ConsumerTag, _Subscription,
+                           undefined, State = #proc_state{subscriptions = Subs}) ->
+    Subs1 = dict:erase(ConsumerTag, Subs),
+    ok(State#proc_state{subscriptions = Subs1});
+
+%% Client-initiated cancelations will pass an actual frame
 tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
                            Frame, State = #proc_state{subscriptions = Subs}) ->
     Subs1 = dict:erase(ConsumerTag, Subs),
     {ok, Dest} = rabbit_routing_util:parse_endpoint(DestHdr),
     maybe_delete_durable_sub(Dest, Frame, State#proc_state{subscriptions = Subs1}).
 
-%% Server-initiated cancelations will pass a blank STOMP frame.
-%% In this case we know that the queue was deleted and thus
-%% we don't have to clean it up
-maybe_delete_durable_sub({topic, _Name}, #stomp_frame{}, State) ->
-    ok(State);
-%% Client-initiated cancelations will pass an actual frame
 maybe_delete_durable_sub({topic, Name}, Frame,
                          State = #proc_state{channel = Channel}) ->
     case rabbit_stomp_util:has_durable_header(Frame) of
