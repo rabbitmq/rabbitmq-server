@@ -52,7 +52,7 @@ start_link(SupHelperPid, Ref, Sock, Configuration) ->
     %% meaningless synchronous call to the underlying gen_event
     %% mechanism. When it returns the mailbox is drained, and we
     %% return to our caller to accept more connections.
-    gen_event:which_handlers(error_logger),
+    _ = gen_event:which_handlers(error_logger),
 
     {ok, Pid}.
 
@@ -80,7 +80,7 @@ init([SupHelperPid, Ref, Sock, Configuration]) ->
                 [self(), ConnStr]),
 
             ParseState = rabbit_stomp_frame:initial_state(),
-            register_resource_alarm(),
+            _ = register_resource_alarm(),
             gen_server2:enter_loop(?MODULE, [],
               rabbit_event:init_stats_timer(
                 run_socket(control_throttle(
@@ -275,15 +275,18 @@ run_socket(State = #reader_state{state = blocked}) ->
 run_socket(State = #reader_state{recv_outstanding = true}) ->
     State;
 run_socket(State = #reader_state{socket = Sock}) ->
-    rabbit_net:async_recv(Sock, 0, infinity),
+    _ = rabbit_net:async_recv(Sock, 0, infinity),
     State#reader_state{recv_outstanding = true}.
 
 
+terminate(Reason, undefined) ->
+    log_reason(Reason, undefined),
+    {stop, Reason};
 terminate(Reason, State = #reader_state{ processor_state = ProcState }) ->
   maybe_emit_stats(State),
   log_reason(Reason, State),
-  rabbit_stomp_processor:flush_and_die(ProcState),
-  ok.
+  _ = rabbit_stomp_processor:flush_and_die(ProcState),
+    {stop, Reason}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -331,11 +334,13 @@ log_reason({shutdown, client_heartbeat_timeout},
 log_reason(normal, #reader_state{ conn_name  = ConnName}) ->
     log(info, "closing STOMP connection ~p (~s)~n", [self(), ConnName]);
 
+log_reason(shutdown, undefined) ->
+    log(error, "closing STOMP connection that never completed connection handshake (negotiation)~n", []);
+
 log_reason(Reason, #reader_state{ processor_state = ProcState }) ->
     AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
     rabbit_log:warning("STOMP connection ~s terminated"
                        " with reason ~p, closing it~n", [AdapterName, Reason]).
-
 
 %%----------------------------------------------------------------------------
 
@@ -417,8 +422,8 @@ info_internal(SockStat, #reader_state{socket = Sock}) when SockStat =:= recv_oct
                                                            SockStat =:= send_cnt;
                                                            SockStat =:= send_pend ->
     case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{_, I}]} -> I;
-        {error, _} -> ''
+        {ok, [{_, N}]} when is_number(N) -> N;
+        _ -> 0
     end;
 info_internal(state, State) -> info_internal(connection_state, State);
 info_internal(garbage_collection, _State) ->
