@@ -14,7 +14,11 @@
 %%   Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
-
+%% This gen_server starts a periodic timer on behalf of
+%% a short lived process that kicks off peer discovery.
+%% This is so that the timer is not automatically canceled
+%% and cleaned up by the timer server when the short lived
+%% process terminates.
 
 -module(rabbitmq_peer_discovery_consul_health_check_helper).
 
