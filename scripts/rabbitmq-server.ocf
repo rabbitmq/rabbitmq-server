@@ -249,7 +249,7 @@ rabbitmqctl_action() {
     local rc
     local action
     action=$@
-    $RABBITMQ_CTL $NODENAME_ARG $action > /dev/null 2> /dev/null
+    ocf_run -q -info $RABBITMQ_CTL $NODENAME_ARG $action
     rc=$?
     case "$rc" in
         0)
