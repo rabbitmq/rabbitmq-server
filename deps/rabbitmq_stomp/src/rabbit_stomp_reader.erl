@@ -331,7 +331,7 @@ log_reason(normal, #reader_state{ conn_name  = ConnName}) ->
     log(info, "closing STOMP connection ~p (~s)~n", [self(), ConnName]);
 
 log_reason(shutdown, undefined) ->
-    log(error, "STOMP socket is not connected, terminating~n", []);
+    log(error, "closing STOMP connection that never completed connection handshake (negotiation)~n", []);
 
 log_reason(Reason, #reader_state{ processor_state = ProcState }) ->
     AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
