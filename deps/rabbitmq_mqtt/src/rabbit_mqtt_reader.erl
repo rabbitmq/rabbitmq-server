@@ -406,8 +406,8 @@ info_internal(SockStat, #state{socket = Sock}) when SockStat =:= recv_oct;
                                                     SockStat =:= send_cnt;
                                                     SockStat =:= send_pend ->
     case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{_, I}]} -> I;
-        {error, _} -> ''
+        {ok, [{_, N}]} when is_number(N) -> N;
+        _ -> 0
     end;
 info_internal(state, State) -> info_internal(connection_state, State);
 info_internal(garbage_collection, _State) ->
