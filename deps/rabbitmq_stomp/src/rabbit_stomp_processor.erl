@@ -58,13 +58,13 @@ adapter_name(State) ->
        PeerAddr :: inet:ip_address().
 
 -type process_frame_result() ::
-    {ok, #proc_state{}} |
+    {ok, term(), #proc_state{}} |
     {stop, term(), #proc_state{}}.
 
 -spec process_frame(#stomp_frame{}, #proc_state{}) ->
     process_frame_result().
 
--spec flush_and_die(#proc_state{}) -> ok.
+-spec flush_and_die(#proc_state{}) -> #proc_state{}.
 
 -spec command({Command, Frame}, State) -> process_frame_result()
     when Command :: string(),
@@ -209,7 +209,7 @@ handle_exit(Conn, {shutdown, {connection_closing,
             State = #proc_state{connection = Conn}) ->
     amqp_death(Code, Explanation, State);
 handle_exit(Conn, Reason, State = #proc_state{connection = Conn}) ->
-    send_error("AMQP connection died", "Reason: ~p", [Reason], State),
+    _ = send_error("AMQP connection died", "Reason: ~p", [Reason], State),
     {stop, {conn_died, Reason}, State};
 
 handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
@@ -217,7 +217,7 @@ handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
     amqp_death(Code, Explanation, State);
 
 handle_exit(Ch, Reason, State = #proc_state{channel = Ch}) ->
-    send_error("AMQP channel died", "Reason: ~p", [Reason], State),
+    _ = send_error("AMQP channel died", "Reason: ~p", [Reason], State),
     {stop, {channel_died, Reason}, State};
 handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
             State = #proc_state{channel = Ch}) ->
@@ -243,10 +243,10 @@ process_request(ProcessFun, SuccessFun, State) ->
           end,
     case Res of
         {ok, Frame, NewState = #proc_state{connection = Conn}} ->
-            case Frame of
-                none -> ok;
-                _    -> send_frame(Frame, NewState)
-            end,
+            _ = case Frame of
+                    none -> ok;
+                    _    -> send_frame(Frame, NewState)
+                end,
             {ok, SuccessFun(NewState), Conn};
         {error, Message, Detail, NewState = #proc_state{connection = Conn}} ->
             {ok, send_error(Message, Detail, NewState), Conn};
@@ -442,14 +442,14 @@ server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) -
                      {ok,    {_, Id1}} -> Id1;
                      {error, {_, Id1}} -> "Unknown[" ++ Id1 ++ "]"
                  end,
-            send_error_frame("Server cancelled subscription",
-                             [{?HEADER_SUBSCRIPTION, Id}],
-                             "The server has canceled a subscription.~n"
-                             "No more messages will be delivered for ~p.~n",
-                             [Description],
-                             State),
+            _ = send_error_frame("Server cancelled subscription",
+                                 [{?HEADER_SUBSCRIPTION, Id}],
+                                 "The server has canceled a subscription.~n"
+                                 "No more messages will be delivered for ~p.~n",
+                                 [Description],
+                                 State),
             tidy_canceled_subscription(ConsumerTag, Subscription,
-                                       #stomp_frame{}, State)
+                                       undefined, State)
     end.
 
 cancel_subscription({error, invalid_prefix}, _Frame, State) ->
@@ -488,6 +488,15 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
             end
     end.
 
+%% Server-initiated cancelations will pass an undefined instead of a
+%% STOMP frame. In this case we know that the queue was deleted and
+%% thus we don't have to clean it up.
+tidy_canceled_subscription(ConsumerTag, _Subscription,
+                           undefined, State = #proc_state{subscriptions = Subs}) ->
+    Subs1 = dict:erase(ConsumerTag, Subs),
+    ok(State#proc_state{subscriptions = Subs1});
+
+%% Client-initiated cancelations will pass an actual frame
 tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
                            Frame, State = #proc_state{subscriptions = Subs}) ->
     Subs1 = dict:erase(ConsumerTag, Subs),
@@ -655,8 +664,8 @@ do_subscribe(Destination, DestHdr, Frame,
                 {ok, _} ->
                     Message = "Duplicated subscription identifier",
                     Detail = "A subscription identified by '~s' alredy exists.",
-                    error(Message, Detail, [ConsumerTag], State),
-                    send_error(Message, Detail, [ConsumerTag], State),
+                    _ = error(Message, Detail, [ConsumerTag], State),
+                    _ = send_error(Message, Detail, [ConsumerTag], State),
                     {stop, normal, close_connection(State)};
                 error ->
                     ExchangeAndKey =
@@ -1025,7 +1034,7 @@ ensure_heartbeats(Heartbeats) ->
     {SendTimeout, ReceiveTimeout} =
         {millis_to_seconds(CY), millis_to_seconds(CX)},
 
-    rabbit_stomp_reader:start_heartbeats(self(), {SendTimeout, ReceiveTimeout}),
+    _ = rabbit_stomp_reader:start_heartbeats(self(), {SendTimeout, ReceiveTimeout}),
     {SendTimeout * 1000 , ReceiveTimeout * 1000}.
 
 millis_to_seconds(M) when M =< 0   -> 0;

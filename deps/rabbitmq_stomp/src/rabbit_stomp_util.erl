@@ -383,7 +383,6 @@ subscription_queue_name(Destination, SubscriptionId, Frame) ->
 %% ---- Helpers ----
 
 split([],      _Splitter) -> [];
-split(Content, [])        -> Content;
 split(Content, Splitter)  -> split(Content, [], [], Splitter).
 
 split([], RPart, RParts, _Splitter) ->
