@@ -16,6 +16,8 @@
 
 -module(rabbit_mgmt_load_definitions).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 -export([maybe_load_definitions/0]).
 
 %% We want to A) make sure we apply defintions before being open for
@@ -45,4 +47,4 @@ maybe_load_definitions() ->
 
 load_definitions(Body) ->
     rabbit_mgmt_wm_definitions:apply_defs(
-      Body, fun () -> ok end, fun (E) -> {error, E} end).
+      Body, ?INTERNAL_USER, fun () -> ok end, fun (E) -> {error, E} end).
