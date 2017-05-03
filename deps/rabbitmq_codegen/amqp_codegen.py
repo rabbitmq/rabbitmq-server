@@ -14,7 +14,7 @@
 ##  Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 ##
 
-from __future__ import nested_scopes
+from __future__ import nested_scopes, print_function
 import re
 import sys
 import os
@@ -23,21 +23,21 @@ from optparse import OptionParser
 try:
     try:
         import simplejson as json
-    except ImportError, e:
+    except ImportError as e:
         if sys.hexversion >= 0x20600f0:
             import json
         else:
             raise e
 except ImportError:
-    print >> sys.stderr , " You don't appear to have simplejson.py installed"
-    print >> sys.stderr , " (an implementation of a JSON reader and writer in Python)."
-    print >> sys.stderr , " You can install it:"
-    print >> sys.stderr , "   - by running 'apt-get install python-simplejson' on Debian-based systems,"
-    print >> sys.stderr , "   - by running 'yum install python-simplejson' on Fedora/Red Hat system,"
-    print >> sys.stderr , "   - by running 'port install py25-simplejson' on Macports on OS X"
-    print >> sys.stderr , "     (you may need to say 'make PYTHON=python2.5', as well),"
-    print >> sys.stderr , "   - from sources from 'http://pypi.python.org/pypi/simplejson'"
-    print >> sys.stderr , "   - simplejson is a standard json library in the Python core since 2.6"
+    print(" You don't appear to have simplejson.py installed", file = sys.stderr)
+    print(" (an implementation of a JSON reader and writer in Python).", file = sys.stderr)
+    print(" You can install it:", file = sys.stderr)
+    print("   - by running 'apt-get install python-simplejson' on Debian-based systems,", file = sys.stderr)
+    print("   - by running 'yum install python-simplejson' on Fedora/Red Hat system,", file = sys.stderr)
+    print("   - by running 'port install py25-simplejson' on Macports on OS X", file = sys.stderr)
+    print("     (you may need to say 'make PYTHON=python2.5', as well),", file = sys.stderr)
+    print("   - from sources from 'http://pypi.python.org/pypi/simplejson'", file = sys.stderr)
+    print("   - simplejson is a standard json library in the Python core since 2.6", file = sys.stderr)
     sys.exit(1)
 
 def insert_base_types(d):
@@ -63,13 +63,13 @@ def extension_info_merger(key, acc, new, ignore_conflicts):
 def domains_merger(key, acc, new, ignore_conflicts):
     merged = dict((k, v) for [k, v] in acc)
     for [k, v] in new:
-        if merged.has_key(k):
+        if k in merged:
             if not ignore_conflicts:
                 raise AmqpSpecFileMergeConflict(key, acc, new)
         else:
             merged[k] = v
 
-    return [[k, v] for (k, v) in merged.iteritems()]
+    return [[k, v] for (k, v) in merged.items()]
 
 def merge_dict_lists_by(dict_key, acc, new, ignore_conflicts):
     acc_index = set(v[dict_key] for v in acc)
@@ -123,7 +123,7 @@ def merge_load_specs(filenames, ignore_conflicts):
     docs = [json.load(handle) for handle in handles]
     spec = {}
     for doc in docs:
-        for (key, value) in doc.iteritems():
+        for (key, value) in doc.items():
             (merger, default_value) = mergers.get(key, (default_spec_value_merger, None))
             spec[key] = merger(key, spec.get(key, default_value), value, ignore_conflicts)
     for handle in handles: handle.close()
@@ -139,7 +139,7 @@ class AmqpSpec:
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
-        self.revision = self.spec.has_key('revision') and self.spec['revision'] or 0
+        self.revision = ('revision' in self.spec) and (self.spec['revision'] or 0)
         self.port =  self.spec['port']
 
         self.domains = {}
@@ -149,7 +149,7 @@ class AmqpSpec:
 
         self.constants = []
         for d in self.spec['constants']:
-            if d.has_key('class'):
+            if 'class' in d:
                 klass = d['class']
             else:
                 klass = ''
@@ -190,7 +190,7 @@ class AmqpClass(AmqpEntity):
                 break
 
         self.fields = []
-        if self.element.has_key('properties'):
+        if 'properties' in self.element:
             index = 0
             for e in self.element['properties']:
                 self.fields.append(AmqpField(self, e, index))
@@ -207,11 +207,11 @@ class AmqpMethod(AmqpEntity):
         AmqpEntity.__init__(self, element)
         self.klass = klass
         self.index = int(self.element['id'])
-        if self.element.has_key('synchronous'):
+        if 'synchronous' in self.element:
             self.isSynchronous = self.element['synchronous']
         else:
             self.isSynchronous = False
-        if self.element.has_key('content'):
+        if 'content' in self.element:
             self.hasContent = self.element['content']
         else:
             self.hasContent = False
@@ -231,12 +231,12 @@ class AmqpField(AmqpEntity):
         self.method = method
         self.index = index
 
-        if self.element.has_key('type'):
+        if 'type' in self.element:
             self.domain = self.element['type']
         else:
             self.domain = self.element['domain']
             
-        if self.element.has_key('default-value'):
+        if 'default-value' in self.element:
             self.defaultvalue = self.element['default-value']
         else:
             self.defaultvalue = None
@@ -249,9 +249,9 @@ def do_main(header_fn, body_fn):
 
 def do_main_dict(funcDict):
     def usage():
-        print >> sys.stderr , "Usage:"
-        print >> sys.stderr , "  %s <function> <path_to_amqp_spec.json>... <path_to_output_file>" % (sys.argv[0])
-        print >> sys.stderr , " where <function> is one of %s" % ", ".join([k for k in funcDict.keys()])
+        print("Usage:", file = sys.stderr)
+        print("  {0} <function> <path_to_amqp_spec.json>... <path_to_output_file>".format(sys.argv[0]), file = sys.stderr)
+        print(" where <function> is one of: {0}".format(", ".join([k for k in funcDict.keys()])), file = sys.stderr)
 
     def execute(fn, amqp_specs, out_file):
         stdout = sys.stdout
@@ -279,7 +279,7 @@ def do_main_dict(funcDict):
         sources = args[1:-1]
         dest = args[-1]
         AmqpSpec.ignore_conflicts = options.ignore_conflicts
-        if funcDict.has_key(function):
+        if function in funcDict:
             execute(funcDict[function], sources, dest)
         else:
             usage()
