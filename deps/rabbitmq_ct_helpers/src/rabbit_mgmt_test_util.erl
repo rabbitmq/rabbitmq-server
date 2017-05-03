@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_test_util).
 
--include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
+-include("rabbit_mgmt_test.hrl").
 
 -compile(export_all).
 
@@ -51,6 +51,12 @@ http_get(Config, Path, User, Pass, CodeExp) ->
         req(Config, 0, get, Path, [auth_header(User, Pass)]),
     assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
+
+http_get_no_map(Config, Path) ->
+    {ok, {{_HTTP, CodeAct, _}, _Headers, ResBody}} =
+        req(Config, get, Path, [auth_header("guest", "guest")]),
+    assert_code(?OK, CodeAct, "GET", Path, ResBody),
+    cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody), [])).
 
 http_put(Config, Path, List, CodeExp) ->
     http_put_raw(Config, Path, format_for_upload(List), CodeExp).
@@ -87,6 +93,10 @@ uri_base_from(Config, Node) ->
         "http://localhost:~w/api",
         [mgmt_port(Config, Node)])).
 
+auth_header(Username, Password) when is_binary(Username) ->
+    auth_header(binary_to_list(Username), Password);
+auth_header(Username, Password) when is_binary(Password) ->
+    auth_header(Username, binary_to_list(Password));
 auth_header(Username, Password) ->
     {"Authorization",
      "Basic " ++ binary_to_list(base64:encode(Username ++ ":" ++ Password))}.
@@ -138,35 +148,85 @@ http_delete(Config, Path, User, Pass, CodeExp) ->
 format_for_upload(none) ->
     <<"">>;
 format_for_upload(List) ->
-    iolist_to_binary(mochijson2:encode({struct, List})).
+    iolist_to_binary(rabbit_json:encode(List)).
 
-assert_code(CodesExpected, CodeAct, Type, Path, Body) when is_list(CodesExpected) ->
+assert_code({one_of, CodesExpected}, CodeAct, Type, Path, Body) when is_list(CodesExpected) ->
     case lists:member(CodeAct, CodesExpected) of
         true ->
             ok;
         false ->
-            throw({expected, CodesExpected, got, CodeAct, type, Type,
+            error({expected, CodesExpected, got, CodeAct, type, Type,
                    path, Path, body, Body})
+    end;
+assert_code({group, '2xx'} = CodeExp, CodeAct, Type, Path, Body) ->
+    case CodeAct of
+        200 -> ok;
+        201 -> ok;
+        202 -> ok;
+        203 -> ok;
+        204 -> ok;
+        205 -> ok;
+        206 -> ok;
+        _   -> error({expected, CodeExp, got, CodeAct, type, Type,
+                          path, Path, body, Body})
+    end;
+assert_code({group, '3xx'} = CodeExp, CodeAct, Type, Path, Body) ->
+    case CodeAct of
+        300 -> ok;
+        301 -> ok;
+        302 -> ok;
+        303 -> ok;
+        304 -> ok;
+        305 -> ok;
+        306 -> ok;
+        307 -> ok;
+        _   -> error({expected, CodeExp, got, CodeAct, type, Type,
+                          path, Path, body, Body})
+    end;
+assert_code({group, '4xx'} = CodeExp, CodeAct, Type, Path, Body) ->
+    case CodeAct of
+        400 -> ok;
+        401 -> ok;
+        402 -> ok;
+        403 -> ok;
+        404 -> ok;
+        405 -> ok;
+        406 -> ok;
+        407 -> ok;
+        408 -> ok;
+        409 -> ok;
+        410 -> ok;
+        411 -> ok;
+        412 -> ok;
+        413 -> ok;
+        414 -> ok;
+        415 -> ok;
+        416 -> ok;
+        417 -> ok;
+        _   -> error({expected, CodeExp, got, CodeAct, type, Type,
+                          path, Path, body, Body})
     end;
 assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     case CodeExp of
         CodeAct -> ok;
-        _       -> throw({expected, CodeExp, got, CodeAct, type, Type,
+        _       -> error({expected, CodeExp, got, CodeAct, type, Type,
                           path, Path, body, Body})
     end.
 
-decode(?OK, _Headers,  ResBody) -> cleanup(mochijson2:decode(ResBody));
+decode(?OK, _Headers,  ResBody) ->
+    cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)));
 decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
     [cleanup(I) || I <- L];
-cleanup({struct, I}) ->
-    cleanup(I);
-cleanup({K, V}) when is_binary(K) ->
-    {list_to_atom(binary_to_list(K)), cleanup(V)};
+cleanup(M) when is_map(M) ->
+    maps:fold(fun(K, V, Acc) ->
+        Acc#{binary_to_atom(K, latin1) => cleanup(V)}
+    end, #{}, M);
 cleanup(I) ->
     I.
 
+%% @todo There wasn't a specific order before; now there is; maybe we shouldn't have one?
 assert_list(Exp, Act) ->
     case length(Exp) == length(Act) of
         true  -> ok;
@@ -176,9 +236,18 @@ assert_list(Exp, Act) ->
          1 -> ok;
          N -> throw({found, N, ExpI, in, Act})
      end || ExpI <- Exp].
+    %_ = [assert_item(ExpI, ActI) || {ExpI, ActI} <- lists:zip(Exp, Act)],
 
-assert_item(Exp, Act) ->
-    case test_item0(Exp, Act) of
+assert_item(ExpI, [H | _] = ActI) when is_list(ActI) ->
+    %% just check first item of the list
+    assert_item(ExpI, H),
+    ok;
+assert_item(ExpI, ActI) ->
+    ExpI = maps:with(maps:keys(ExpI), ActI),
+    ok.
+
+assert_item_kv(Exp, Act) when is_list(Exp) ->
+    case test_item0_kv(Exp, Act) of
         [] -> ok;
         Or -> throw(Or)
     end.
@@ -190,6 +259,10 @@ test_item(Exp, Act) ->
     end.
 
 test_item0(Exp, Act) ->
+    [{did_not_find, KeyExpI, in, Act} || KeyExpI <- maps:keys(Exp),
+        maps:get(KeyExpI, Exp) =/= maps:get(KeyExpI, Act, null)].
+
+test_item0_kv(Exp, Act) ->
     [{did_not_find, ExpI, in, Act} || ExpI <- Exp,
                                       not lists:member(ExpI, Act)].
 
@@ -201,7 +274,7 @@ assert_keys(Exp, Act) ->
 
 test_key0(Exp, Act) ->
     [{did_not_find, ExpI, in, Act} || ExpI <- Exp,
-                                      not proplists:is_defined(ExpI, Act)].
+                                      not maps:is_key(ExpI, Act)].
 assert_no_keys(NotExp, Act) ->
     case test_no_key0(NotExp, Act) of
         [] -> ok;
@@ -210,4 +283,4 @@ assert_no_keys(NotExp, Act) ->
 
 test_no_key0(Exp, Act) ->
     [{invalid_key, ExpI, in, Act} || ExpI <- Exp,
-                                      proplists:is_defined(ExpI, Act)].
+                                      maps:is_key(ExpI, Act)].
