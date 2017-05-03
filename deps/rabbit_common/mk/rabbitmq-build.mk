@@ -44,24 +44,40 @@ ERLC_OPTS += $(RMQ_ERLC_OPTS)
 TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 
 # --------------------------------------------------------------------
-# Common test flags.
+# Common Test flags.
 # --------------------------------------------------------------------
 
-# Enable the cth_fail_fast common_test hook on Concourse.
+# Enable the following common_test hooks on Travis and Concourse:
 #
-# This hook will make sure the first failure puts an end to the
-# testsuites; ie. all remaining tests are skipped.
+# cth_fail_fast
+#   This hook will make sure the first failure puts an end to the
+#   testsuites; ie. all remaining tests are skipped.
+#
+# cth_styledout
+#   This hook will change the output of common_test to something more
+#   consise and colored.
 
-ifdef CONCOURSE
-TEST_DEPS += cth_fail_fast
+CTH_DEPS = cth_fail_fast cth_styledout
 dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
-CT_OPTS += -ct_hooks cth_fail_fast
+dep_cth_styledout = git https://github.com/rabbitmq/cth_styledout.git master
+CTH_OPTS = -ct_hooks cth_fail_fast and cth_styledout
+
+ifdef TRAVIS
+TEST_DEPS += $(CTH_DEPS)
+CT_OPTS += $(CTH_OPTS)
+endif
+ifdef CONCOURSE
+TEST_DEPS += $(CTH_DEPS)
+CT_OPTS += $(CTH_OPTS)
 endif
 
-# Disable most messages on Travis and Concourse.
+# Disable most messages on Travis because it might exceed the limit
+# set by Travis.
 #
-# On CI, set $RABBITMQ_CT_SKIP_AS_ERROR so that any skipped
-# testsuite/testgroup/testcase is considered an error.
+# On Concourse, we keep the default verbosity. With Erlang 19.2+, the
+# cth_styledout hook will change the output to something concise and all
+# messages are available in in HTML reports. With Erlang up-to 19.1,
+# stdout will be flooded with messages, but we'll live with that.
 #
 # CAUTION: All arguments after -erl_args are passed to the emulator and
 # common_test doesn't interpret them! Therefore, all common_test flags
@@ -73,17 +89,25 @@ CT_QUIET_FLAGS = -verbosity 50 \
 
 ifdef TRAVIS
 CT_OPTS += $(CT_QUIET_FLAGS)
-export RABBITMQ_CT_SKIP_AS_ERROR = true
-endif
-ifdef CONCOURSE
-CT_OPTS += $(CT_QUIET_FLAGS)
-export RABBITMQ_CT_SKIP_AS_ERROR = true
 endif
 
 # Enable JUnit-like report on Jenkins. Jenkins parses those reports so
 # the results can be browsed from its UI. Furthermore, it displays a
 # graph showing evolution of the results over time.
+
 ifdef JENKINS_HOME
 CT_OPTS += -ct_hooks cth_surefire
+endif
+
+# On CI, set $RABBITMQ_CT_SKIP_AS_ERROR so that any skipped
+# testsuite/testgroup/testcase is considered an error.
+
+ifdef TRAVIS
+export RABBITMQ_CT_SKIP_AS_ERROR = true
+endif
+ifdef CONCOURSE
+export RABBITMQ_CT_SKIP_AS_ERROR = true
+endif
+ifdef JENKINS_HOME
 export RABBITMQ_CT_SKIP_AS_ERROR = true
 endif
