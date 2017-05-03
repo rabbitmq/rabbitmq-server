@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh
 ##  The contents of this file are subject to the Mozilla Public License
 ##  Version 1.1 (the "License"); you may not use this file except in
 ##  compliance with the License. You may obtain a copy of the License
@@ -12,8 +12,10 @@
 ##  The Original Code is RabbitMQ.
 ##
 ##  The Initial Developer of the Original Code is GoPivotal, Inc.
-##  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
+##  Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 ##
+
+set -e
 
 # Get default settings with user overrides for (RABBITMQ_)<var_name>
 # Non-empty defaults should be set in rabbitmq-env
@@ -278,21 +280,38 @@ else
     # The Erlang VM should ignore SIGINT.
     RABBITMQ_SERVER_START_ARGS="${RABBITMQ_SERVER_START_ARGS} ${RABBITMQ_IGNORE_SIGINT_FLAG}"
 
-    # Signal handlers. They all stop RabbitMQ properly (using
-    # rabbitmqctl stop). Depending on the signal, this script will exit
-    # with a non-zero error code:
+    # Signal handlers. They all stop RabbitMQ properly, using
+    # rabbitmqctl stop. This script will exit with different exit codes:
     #   SIGHUP SIGTERM SIGTSTP
-    #     They are considered a normal process termination, so the script
-    #     exits with 0.
+    #	  Exits 0 since this is considered a normal process termination.
     #   SIGINT
-    #     They are considered an abnormal process termination, the script
-    #     exits with the job exit code.
+    #     Exits 128 + $signal_number where $signal_number is 2 for SIGINT (see
+    #     http://pubs.opengroup.org/onlinepubs/009695399/utilities/kill.html).
+    #     This is considered an abnormal process termination. Normally, we
+    #     don't need to specify this exit code because the shell propagates it.
+    #     Unfortunately, the signal handler doesn't work as expected in Dash,
+    #     thus we need to explicitely restate the exit code.
     trap "stop_rabbitmq_server; exit 0" HUP TERM TSTP
-    trap "stop_rabbitmq_server" INT
+    trap "stop_rabbitmq_server; exit 130" INT
 
     start_rabbitmq_server "$@" &
+    rabbitmq_server_pid=$!
 
     # Block until RabbitMQ exits or a signal is caught.
     # Waits for last command (which is start_rabbitmq_server)
-    wait $!
+    #
+    # The "|| true" is here to work around an issue with Dash. Normally
+    # in a Bourne shell, if `wait` is interrupted by a signal, the
+    # signal handlers defined above are executed and the script
+    # terminates with the exit code of `wait` (unless the signal handler
+    # overrides that).
+    # In the case of Dash, it looks like `set -e` (set at the beginning
+    # of this script) gets precedence over signal handling. Therefore,
+    # when `wait` is interrupted, its exit code is non-zero and because
+    # of `set -e`, the script terminates immediately without running the
+    # signal handler. To work around this issue, we use "|| true" to
+    # force that statement to succeed and the signal handler to properly
+    # execute. Because the statement below has an exit code of 0, the
+    # signal handler has to restate the expected exit code.
+    wait $rabbitmq_server_pid || true
 fi
