@@ -140,7 +140,7 @@ class AmqpSpec:
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
-        self.revision = 'revision' in self.spec and self.spec['revision'] or 0
+        self.revision = ('revision' in self.spec) and (self.spec['revision'] or 0)
         self.port =  self.spec['port']
 
         self.domains = {}
