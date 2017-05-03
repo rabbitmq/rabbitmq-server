@@ -14,7 +14,7 @@
 ##  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 ##
 
-from __future__ import nested_scopes
+from __future__ import nested_scopes, print_function
 import errno
 import re
 import sys
@@ -30,15 +30,15 @@ try:
         else:
             raise e
 except ImportError:
-    print >> sys.stderr , " You don't appear to have simplejson.py installed"
-    print >> sys.stderr , " (an implementation of a JSON reader and writer in Python)."
-    print >> sys.stderr , " You can install it:"
-    print >> sys.stderr , "   - by running 'apt-get install python-simplejson' on Debian-based systems,"
-    print >> sys.stderr , "   - by running 'yum install python-simplejson' on Fedora/Red Hat system,"
-    print >> sys.stderr , "   - by running 'port install py25-simplejson' on Macports on OS X"
-    print >> sys.stderr , "     (you may need to say 'make PYTHON=python2.5', as well),"
-    print >> sys.stderr , "   - from sources from 'http://pypi.python.org/pypi/simplejson'"
-    print >> sys.stderr , "   - simplejson is a standard json library in the Python core since 2.6"
+    print(" You don't appear to have simplejson.py installed", file = sys.stderr)
+    print(" (an implementation of a JSON reader and writer in Python).", file = sys.stderr)
+    print(" You can install it:", file = sys.stderr)
+    print("   - by running 'apt-get install python-simplejson' on Debian-based systems,", file = sys.stderr)
+    print("   - by running 'yum install python-simplejson' on Fedora/Red Hat system,", file = sys.stderr)
+    print("   - by running 'port install py25-simplejson' on Macports on OS X", file = sys.stderr)
+    print("     (you may need to say 'make PYTHON=python2.5', as well),", file = sys.stderr)
+    print("   - from sources from 'http://pypi.python.org/pypi/simplejson'", file = sys.stderr)
+    print("   - simplejson is a standard json library in the Python core since 2.6", file = sys.stderr)
     sys.exit(1)
 
 def insert_base_types(d):
@@ -140,7 +140,7 @@ class AmqpSpec:
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
-        self.revision = 'revision' in self.spec and self.spec['revision'] or 0
+        self.revision = ('revision' in self.spec) and (self.spec['revision'] or 0)
         self.port =  self.spec['port']
 
         self.domains = {}
@@ -236,7 +236,6 @@ class AmqpField(AmqpEntity):
             self.domain = self.element['type']
         else:
             self.domain = self.element['domain']
-
         if 'default-value' in self.element:
             self.defaultvalue = self.element['default-value']
         else:
@@ -250,9 +249,9 @@ def do_main(header_fn, body_fn):
 
 def do_main_dict(funcDict):
     def usage():
-        print >> sys.stderr , "Usage:"
-        print >> sys.stderr , "  %s <function> <path_to_amqp_spec.json>... <path_to_output_file>" % (sys.argv[0])
-        print >> sys.stderr , " where <function> is one of %s" % ", ".join([k for k in funcDict.keys()])
+        print("Usage:", file = sys.stderr)
+        print("  {0} <function> <path_to_amqp_spec.json>... <path_to_output_file>".format(sys.argv[0]), file = sys.stderr)
+        print(" where <function> is one of: {0}".format(", ".join([k for k in funcDict.keys()])), file = sys.stderr)
 
     def mkdir_p(path):
         try:
