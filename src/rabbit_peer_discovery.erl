@@ -119,7 +119,7 @@ maybe_inject_randomized_delay() ->
 -spec inject_randomized_delay() -> ok.
 
 inject_randomized_delay() ->
-    {Min, Max} = case randomized_delay_range() of
+    {Min, Max} = case randomized_delay_range_in_ms() of
                      {A, B} -> {A, B};
                      [A, B] -> {A, B}
                  end,
@@ -133,25 +133,27 @@ inject_randomized_delay() ->
         {_, N} when is_number(N) ->
             rand:seed(exsplus),
             RandomVal  = rand:uniform(round(N)),
-            rabbit_log:debug("Randomized startup delay: configured range is from ~p to ~p, PRNG pick: ~p...", [Min, Max, RandomVal]),
+            rabbit_log:debug("Randomized startup delay: configured range is from ~p to ~p milliseconds, PRNG pick: ~p...",
+                             [Min, Max, RandomVal]),
             Effective  = case RandomVal < Min of
                              true  -> Min;
                              false -> RandomVal
                          end,
-            rabbit_log:info("Will wait for ~p seconds before proceeding with regitration...", [Effective]),
-            timer:sleep(Effective * 1000),
+            rabbit_log:info("Will wait for ~p milliseconds before proceeding with regitration...", [Effective]),
+            timer:sleep(Effective),
             ok
     end.
 
--spec randomized_delay_range() -> {integer(), integer()}.
+-spec randomized_delay_range_in_ms() -> {integer(), integer()}.
 
-randomized_delay_range() ->
-    case application:get_env(rabbit, autocluster) of
-    {ok, Proplist} ->
-      proplists:get_value(randomized_startup_delay_range, Proplist, ?DEFAULT_STARTUP_RANDOMIZED_DELAY);
-    undefined      ->
-      ?DEFAULT_STARTUP_RANDOMIZED_DELAY
-  end.
+randomized_delay_range_in_ms() ->
+  {Min, Max} = case application:get_env(rabbit, autocluster) of
+                   {ok, Proplist} ->
+                       proplists:get_value(randomized_startup_delay_range, Proplist, ?DEFAULT_STARTUP_RANDOMIZED_DELAY);
+                   undefined      ->
+                       ?DEFAULT_STARTUP_RANDOMIZED_DELAY
+               end,
+    {Min * 1000, Max * 1000}.
 
 
 -spec register() -> ok.
