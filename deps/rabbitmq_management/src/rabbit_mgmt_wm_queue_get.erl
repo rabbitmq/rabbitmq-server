@@ -52,12 +52,12 @@ content_types_accepted(ReqData, Context) ->
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
 
-do_it(ReqData, Context) ->
-    VHost = rabbit_mgmt_util:vhost(ReqData),
-    Q = rabbit_mgmt_util:id(queue, ReqData),
+do_it(ReqData0, Context) ->
+    VHost = rabbit_mgmt_util:vhost(ReqData0),
+    Q = rabbit_mgmt_util:id(queue, ReqData0),
     rabbit_mgmt_util:with_decode(
-      [requeue, count, encoding], ReqData, Context,
-      fun([RequeueBin, CountBin, EncBin], Body) ->
+      [requeue, count, encoding], ReqData0, Context,
+      fun([RequeueBin, CountBin, EncBin], Body, ReqData) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->

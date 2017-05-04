@@ -16,6 +16,7 @@
 
 -module(clustering_prop_SUITE).
 
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").

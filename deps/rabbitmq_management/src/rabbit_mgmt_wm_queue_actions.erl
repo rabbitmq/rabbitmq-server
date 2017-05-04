@@ -48,12 +48,12 @@ content_types_accepted(ReqData, Context) ->
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
 
-do_it(ReqData, Context) ->
-    VHost = rabbit_mgmt_util:vhost(ReqData),
-    QName = rabbit_mgmt_util:id(queue, ReqData),
+do_it(ReqData0, Context) ->
+    VHost = rabbit_mgmt_util:vhost(ReqData0),
+    QName = rabbit_mgmt_util:id(queue, ReqData0),
     rabbit_mgmt_util:with_decode(
-      [action], ReqData, Context,
-      fun([Action], _Body) ->
+      [action], ReqData0, Context,
+      fun([Action], _Body, ReqData) ->
               rabbit_amqqueue:with(
                 rabbit_misc:r(VHost, queue, QName),
                 fun(Q) -> action(Action, Q, ReqData, Context) end)

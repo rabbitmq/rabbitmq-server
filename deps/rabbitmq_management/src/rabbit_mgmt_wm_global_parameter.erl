@@ -22,8 +22,6 @@
          delete_resource/2]).
 -export([variances/2]).
 
--import(rabbit_misc, [pget/2]).
-
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 %%--------------------------------------------------------------------
@@ -55,10 +53,10 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(parameter(ReqData)),
                            ReqData, Context).
 
-accept_content(ReqData, Context) ->
+accept_content(ReqData0, Context) ->
     rabbit_mgmt_util:with_decode(
-      [value], ReqData, Context,
-      fun([Value], _) ->
+      [value], ReqData0, Context,
+      fun([Value], _, ReqData) ->
               case rabbit_runtime_parameters:set_global(
                      name(ReqData),rabbit_misc:json_to_term(Value)) of
                   ok ->
