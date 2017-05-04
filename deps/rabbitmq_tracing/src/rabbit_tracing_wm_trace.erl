@@ -51,22 +51,24 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(trace(ReqData), ReqData, Context).
 
-accept_content(RD, Ctx) ->
-    case rabbit_mgmt_util:vhost(RD) of
+accept_content(ReqData0, Ctx) ->
+    case rabbit_mgmt_util:vhost(ReqData0) of
         not_found ->
             not_found;
         VHost ->
-            Name = rabbit_mgmt_util:id(name, RD),
+            Name = rabbit_mgmt_util:id(name, ReqData0),
             rabbit_mgmt_util:with_decode(
-              [format, pattern], RD, Ctx,
-              fun([_, _], Trace) ->
+              [format, pattern], ReqData0, Ctx,
+              fun([_, _], Trace, ReqData) ->
                       Fs = [fun val_payload_bytes/3, fun val_format/3,
                             fun val_create/3],
                       case lists:foldl(fun (F,  ok)  -> F(VHost, Name, Trace);
                                            (_F, Err) -> Err
                                        end, ok, Fs) of
-                          ok  -> {true, RD, Ctx};
-                          Err -> rabbit_mgmt_util:bad_request(Err, RD, Ctx)
+                          ok  -> {true, ReqData, Ctx};
+                          Err -> rabbit_mgmt_util:bad_request(Err,
+                                                              ReqData,
+                                                              Ctx)
                       end
               end)
     end.
