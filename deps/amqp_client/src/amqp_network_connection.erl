@@ -144,7 +144,7 @@ do_connect({Addr, Family},
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
         {ok, Sock} ->
-            SslOpts = rabbit_networking:fix_ssl_options(
+            SslOpts = rabbit_ssl_options:fix(
                         orddict:to_list(
                           orddict:merge(fun (_, _A, B) -> B end,
                                         orddict:from_list(GlobalSslOpts),
