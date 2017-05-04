@@ -57,11 +57,11 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(rabbit_mgmt_format:internal_user(User),
                            ReqData, Context).
 
-accept_content(ReqData, Context) ->
-    Username = rabbit_mgmt_util:id(user, ReqData),
+accept_content(ReqData0, Context) ->
+    Username = rabbit_mgmt_util:id(user, ReqData0),
     rabbit_mgmt_util:with_decode(
-      [], ReqData, Context,
-      fun(_, User) ->
+      [], ReqData0, Context,
+      fun(_, User, ReqData) ->
               put_user([{name, Username} | User]),
               {true, ReqData, Context}
       end).
