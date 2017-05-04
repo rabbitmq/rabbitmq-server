@@ -999,7 +999,7 @@ fun(Conf) ->
             [{lager_console_backend, ConsoleLevel}];
         false -> []
     end,
-    FileHandler = case cuttlefish:conf_get("log.file", Conf, false) of
+    FileHandler = case cuttlefish:conf_get("log.file", Conf, undefined) of
         false -> [];
         File  ->
             FileLevel = cuttlefish:conf_get("log.file.level", Conf, info),
@@ -1010,6 +1010,11 @@ fun(Conf) ->
                                    {level, FileLevel},
                                    {date, RotationDate},
                                    {size, RotationSize},
+                                   {formatter_config,
+                                        [date, " ", time, " ", color,
+                                         "[", severity, "] ",
+                                         {pid, ""},
+                                         " ", message, "\n"]},
                                    {count, RotationCount}]}]
     end,
     SyslogHandler = case cuttlefish:conf_get("log.syslog", Conf, false) of
