@@ -67,7 +67,7 @@ attach(#'v1_0.attach'{name = Name,
                      exclusive = false,
                      arguments = [{<<"x-credit">>, table,
                                    [{<<"credit">>, long,    0},
-                                    {<<"drain">>,  boolean, false}]}]},
+                                    {<<"drain">>,  bool, false}]}]},
                    self()) of
                 #'basic.consume_ok'{} ->
                     %% TODO we should avoid the race by getting the queue to send
