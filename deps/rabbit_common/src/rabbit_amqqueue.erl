@@ -777,7 +777,7 @@ notify_sent(QPid, ChPid) ->
     rabbit_amqqueue_common:notify_sent(QPid, ChPid).
 
 notify_sent_queue_down(QPid) ->
-    rabbit_amqqueue_common:notify_sent(QPid).
+    rabbit_amqqueue_common:notify_sent_queue_down(QPid).
 
 resume(QPid, ChPid) -> delegate:cast(QPid, {resume, ChPid}).
 
