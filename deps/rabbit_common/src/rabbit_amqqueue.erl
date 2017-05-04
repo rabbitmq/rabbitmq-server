@@ -173,8 +173,6 @@
 -spec basic_cancel
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any()) -> 'ok'.
 -spec notify_decorators(rabbit_types:amqqueue()) -> 'ok'.
--spec notify_sent(pid(), pid()) -> 'ok'.
--spec notify_sent_queue_down(pid()) -> 'ok'.
 -spec resume(pid(), pid()) -> 'ok'.
 -spec internal_delete(name()) ->
           rabbit_types:ok_or_error('not_found') |
@@ -776,21 +774,10 @@ notify_decorators(#amqqueue{pid = QPid}) ->
     delegate:cast(QPid, notify_decorators).
 
 notify_sent(QPid, ChPid) ->
-    Key = {consumer_credit_to, QPid},
-    put(Key, case get(Key) of
-                 1         -> gen_server2:cast(
-                                QPid, {notify_sent, ChPid,
-                                       ?MORE_CONSUMER_CREDIT_AFTER}),
-                              ?MORE_CONSUMER_CREDIT_AFTER;
-                 undefined -> erlang:monitor(process, QPid),
-                              ?MORE_CONSUMER_CREDIT_AFTER - 1;
-                 C         -> C - 1
-             end),
-    ok.
+    rabbit_amqqueue_common:notify_sent(QPid, ChPid).
 
 notify_sent_queue_down(QPid) ->
-    erase({consumer_credit_to, QPid}),
-    ok.
+    rabbit_amqqueue_common:notify_sent(QPid).
 
 resume(QPid, ChPid) -> delegate:cast(QPid, {resume, ChPid}).
 
