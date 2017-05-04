@@ -251,9 +251,9 @@ begin_sent({attach, Attach}, From,
 mapped('end', State) ->
     %% We send the first end frame and wait for the reply.
     case send_end(State) of
-        ok              -> {next_state, end_sent, State};
+        ok -> {next_state, end_sent, State};
         {error, closed} -> {stop, normal, State};
-        Error           -> {stop, Error, State}
+        Error -> {stop, Error, State}
     end;
 mapped({flow, OutHandle, Flow0, RenewAfter}, State0) ->
     State = send_flow(fun send/2, OutHandle, Flow0, RenewAfter, State0),
@@ -291,18 +291,22 @@ mapped(#'v1_0.attach'{name = {utf8, Name},
     {next_state, mapped, State};
 
 mapped(#'v1_0.detach'{handle = {uint, InHandle}, closed = Closed, error = Err},
-        #state{links = Links, link_handle_index = LHI} = State)
+        #state{links = Links, link_handle_index = LHI} = State0)
   when Closed =:= true orelse Closed =:= undefined ->
-    {ok, #link{output_handle = OutHandle} = Link} =
-        find_link_by_input_handle(InHandle, State),
-    Reason = case Err of
-                 undefined -> normal;
-                 Err -> Err
-             end,
-    ok = notify_link_detached(Link, Reason),
-    {next_state, mapped,
-     State#state{links = maps:remove(OutHandle, Links),
-                 link_handle_index = maps:remove(InHandle, LHI)}};
+    with_link(InHandle, State0,
+              fun (#link{output_handle = OutHandle} = Link, State) ->
+                      % {ok, #link{output_handle = OutHandle} = Link} =
+                      %     find_link_by_input_handle(InHandle, State),
+                      Reason = case Err of
+                                   undefined -> normal;
+                                   Err -> Err
+                               end,
+                      ok = notify_link_detached(Link, Reason),
+                      {next_state, mapped,
+                       State#state{links = maps:remove(OutHandle, Links),
+                                   link_handle_index = maps:remove(InHandle, LHI)}}
+              end);
+
 
 mapped(#'v1_0.flow'{handle = undefined} = Flow, State0) ->
     State = handle_session_flow(Flow, State0),
@@ -371,6 +375,7 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
             ok = notify_link(Link, credit_exhausted),
             {next_state, mapped, State};
         {transfer_limit_exceeded, State} ->
+            error_logger:info_msg("transfer_limit_exceeded for link ~p~n", [Link]),
             Link1 = detach_with_error_cond(Link, State,
                                            ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED),
             {next_state, mapped, update_link(Link1, State)}
@@ -513,8 +518,12 @@ send_begin(#state{socket = Socket,
     Frame = encode_frame(Begin, State),
     socket_send(Socket, Frame).
 
-send_end(#state{socket = Socket} = State) ->
-    End = #'v1_0.end'{},
+send_end(State) ->
+    send_end(State, undefined).
+
+send_end(#state{socket = Socket} = State, Cond) ->
+    Err = #'v1_0.error'{condition = Cond},
+    End = #'v1_0.end'{error = Err},
     Frame = encode_frame(End, State),
     socket_send(Socket, Frame).
 
@@ -719,6 +728,20 @@ find_link_by_input_handle(InHandle, #state{link_handle_index = LHI,
             end;
         _ -> not_found
     end.
+
+with_link(InHandle, State, Fun) ->
+    case find_link_by_input_handle(InHandle, State) of
+        {ok, Link} ->
+            Fun(Link, State);
+        not_found ->
+            % end session with errant-link
+            case send_end(State, ?V_1_0_SESSION_ERROR_ERRANT_LINK) of
+                ok -> {next_state, end_sent, State};
+                {error, closed} -> {stop, normal, State};
+                Error -> {stop, Error, State}
+            end
+    end.
+
 
 uint(Int) -> {uint, Int}.
 unpack(X) -> amqp10_client_types:unpack(X).
