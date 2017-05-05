@@ -206,7 +206,7 @@ prepare_plugins(Enabled) ->
     Wanted.
 
 clean_plugins(Plugins) ->
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+    ExpandDir = plugins_expand_dir(),
     [clean_plugin(Plugin, ExpandDir) || Plugin <- Plugins].
 
 clean_plugin(Plugin, ExpandDir) ->
