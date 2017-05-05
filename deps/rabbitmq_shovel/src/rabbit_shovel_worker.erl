@@ -54,9 +54,6 @@ init([Type, Name, Config0]) ->
                                                                 Config0),
                     Conf
             end,
-
-    % error_logger:info_msg("Config ~p Name ~p Type ~p~n", [Config, Name, Type]),
-
     {ok, #state{name = Name, type = Type, config = Config}}.
 
 handle_call(_Msg, _From, State) ->

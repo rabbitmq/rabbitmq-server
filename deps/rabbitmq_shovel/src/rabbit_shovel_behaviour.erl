@@ -127,8 +127,8 @@ decr_remaining_unacked(State = #{source := #{remaining_unacked := unlimited}}) -
     State;
 decr_remaining_unacked(State = #{source := #{remaining_unacked := 0}}) ->
     State;
-decr_remaining_unacked(State = #{source := #{remaining_unacked := N}}) ->
-    State#{remaining_unacked =>  N - 1}.
+decr_remaining_unacked(State = #{source := #{remaining_unacked := N} = Src}) ->
+    State#{source => Src#{remaining_unacked =>  N - 1}}.
 
 decr_remaining(_N, State = #{source := #{remaining := unlimited}}) ->
     State;

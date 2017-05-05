@@ -108,10 +108,20 @@ connect_dest(State = #{name := Name,
 init_source(State = #{name := Name,
                       source := #{current := #{link := Link},
                                   prefetch_count := Prefetch} = Src}) ->
-    ?INFO("initializing amqp10 source ~p", [Name]),
-    ok = amqp10_client:flow_link_credit(Link, Prefetch, round(Prefetch/10)),
-    State#{source => Src#{remaining => unlimited,
-                          remaining_unacked => unlimited}}. % TODO remaining?
+    {Credit, RenewAfter} = case Src of
+                               #{delete_after := R} when is_integer(R) ->
+                                   {R, never};
+                               #{prefetch_count := Pre} ->
+                                   {Pre, round(Prefetch/10)}
+                           end,
+    ok = amqp10_client:flow_link_credit(Link, Credit, RenewAfter),
+    Remaining = case Src of
+                    #{delete_after := never} -> unlimited;
+                    #{delete_after := Rem} -> Rem;
+                    _ -> unlimited
+                end,
+    State#{source => Src#{remaining => Remaining,
+                          remaining_unacked => Remaining}}.
 
 -spec init_dest(state()) -> state().
 init_dest(State) -> State.
@@ -161,18 +171,20 @@ handle_source(_Msg, _State) ->
 -spec handle_dest(Msg :: any(), state()) -> not_handled | state().
 handle_dest({amqp10_disposition, {Result, Tag}},
             State0 = #{ack_mode := on_confirm,
-                      dest := #{unacked := Unacked} = Dst}) ->
+                       dest := #{unacked := Unacked} = Dst}) ->
     State = State0#{dest => Dst#{unacked => maps:remove(Tag, Unacked)}},
-    case {Unacked, Result} of
-        {#{Tag := IncomingTag}, accepted} ->
-            rabbit_shovel_behaviour:ack(IncomingTag, false, State);
-        {#{Tag := IncomingTag}, rejected} ->
-            rabbit_shovel_behaviour:nack(IncomingTag, false, State);
-        _ -> % not found - this should ideally not happen
-            error_logger:warning_msg("amqp10 destination disposition tag not"
-                                     "found: ~p~n", [Tag]),
-            State
-    end;
+    rabbit_shovel_behaviour:decr_remaining(
+      1,
+      case {Unacked, Result} of
+          {#{Tag := IncomingTag}, accepted} ->
+              rabbit_shovel_behaviour:ack(IncomingTag, false, State);
+          {#{Tag := IncomingTag}, rejected} ->
+              rabbit_shovel_behaviour:nack(IncomingTag, false, State);
+          _ -> % not found - this should ideally not happen
+              error_logger:warning_msg("amqp10 destination disposition tag not"
+                                       "found: ~p~n", [Tag]),
+              State
+      end);
 handle_dest({amqp10_event, {connection, Conn, opened}},
             State = #{dest := #{current := #{conn := Conn}}}) ->
     ?INFO("Destination connection opened.", []),
@@ -230,6 +242,10 @@ nack(Tag, false, State = #{source := #{current := #{session := Session}}}) ->
 
 -spec forward(Tag :: tag(), Props :: #{atom() => any()},
               Payload :: binary(), state()) -> state().
+forward(Tag, _Props, _Payload,
+        #{source := #{remaining_unacked := 0}} = State) ->
+    error_logger:info_msg("dropping ~p~n", [Tag]),
+    State;
 forward(Tag, Props, Payload,
         #{dest := #{current := #{link := Link},
                     unacked := Unacked} = Dst,
@@ -241,19 +257,22 @@ forward(Tag, Props, Payload,
                      Props, add_forward_headers(State, Msg0))),
     error_logger:info_msg("forwarding ~p ", [Msg]),
     ok = amqp10_client:send_msg(Link, Msg),
-    case AckMode of
-        no_ack -> State;
-        on_publish ->
-            rabbit_shovel_behaviour:ack(Tag, false, State);
-        on_confirm ->
-              State#{dest => Dst#{unacked => Unacked#{OutTag => Tag}}}
-    end.
+    rabbit_shovel_behaviour:decr_remaining_unacked(
+      case AckMode of
+          no_ack ->
+              rabbit_shovel_behaviour:decr_remaining(1, State);
+          on_confirm ->
+              State#{dest => Dst#{unacked => Unacked#{OutTag => Tag}}};
+          on_publish ->
+              State1 = rabbit_shovel_behaviour:ack(Tag, false, State),
+              rabbit_shovel_behaviour:decr_remaining(1, State1)
+      end).
 
 new_message(Tag, Payload, #{ack_mode := AckMode,
                             dest := #{properties := Props,
                                       application_properties := AppProps,
                                       message_annotations := MsgAnns}}) ->
-    Msg0 = amqp10_msg:new(Tag, Payload, AckMode =:= no_ack),
+    Msg0 = amqp10_msg:new(Tag, Payload, AckMode =/= on_confirm),
     Msg1 = amqp10_msg:set_properties(Props, Msg0),
     Msg = amqp10_msg:set_message_annotations(MsgAnns, Msg1),
     amqp10_msg:set_application_properties(AppProps, Msg).

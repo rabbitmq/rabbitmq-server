@@ -238,7 +238,7 @@ confirm_to_inbound(ConfirmFun, Seq, Multiple,
                                           State#{dest =>
                                                  Dst#{unacked => Unacked1}}).
 
-publish(_Tag, _Method, _Msg, State = #{remaining_unacked := 0}) ->
+publish(_Tag, _Method, _Msg, State = #{source := #{remaining_unacked := 0}}) ->
     %% We are in on-confirm mode, and are autodelete. We have
     %% published all the messages we need to; we just wait for acks to
     %% come back. So drop subsequent messages on the floor to be

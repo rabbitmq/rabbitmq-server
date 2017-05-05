@@ -31,15 +31,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
           simple,
-          % set_properties,
-          % headers,
-          % exchange,
-          % restart,
           change_definition,
           autodelete
-          % validation,
-          % security_validation,
-          % get_connection_name
         ]}
     ].
 
@@ -47,9 +40,11 @@ groups() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_suite(Config) ->
+init_per_suite(Config0) ->
     {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
+    Config = rabbit_ct_helpers:merge_app_env(Config0,
+                                             [{lager, [{error_logger_hwm, 200}]}]),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE}
       ]),
@@ -134,18 +129,13 @@ change_definition(Config) ->
       end).
 
 autodelete(Config) ->
-    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50}),
-    % autodelete_case(Config, {<<"on-publish">>, 50, 50, 50}),
-    % autodelete_case(Config, {<<"no-ack">>, 50, 50, 50}),
-    % autodelete_case(Config, {<<"on-publish">>, 50, 50, 50}),
-    % autodelete_case(Config, {<<"on-publish">>, 50, 50, 50}),
-    % autodelete_case(Config, {<<"on-publish">>, 50, 50, 50}),
-    % autodelete_case(Config, {<<"no-ack">>, 50, 50, 50}),
-    % autodelete_case(Config, {<<"on-confirm">>, <<"queue-length">>,  0, 100}),
-    % autodelete_case(Config, {<<"on-publish">>, <<"queue-length">>,  0, 100}),
-    % autodelete_case(Config, {<<"on-publish">>, 50,                 50,  50}),
-    % %% no-ack is not compatible with explicit count
-    % autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}),
+    %% amqp10 cannot currently support queue-length as many brokers
+    %% don't appear to support flow echo requests.
+    autodelete_case(Config, {<<"on-confirm">>, 5, 5, 5}),
+    autodelete_case(Config, {<<"on-publish">>, 5, 5, 5}),
+    % due to amqp10 mandatory flow control we can support
+    % no-ack with explicit count
+    autodelete_case(Config, {<<"no-ack">>, 5, 5, 5}),
     ok.
 
 autodelete_case(Config, Args) ->
@@ -153,9 +143,7 @@ autodelete_case(Config, Args) ->
 
 autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
     fun (Session) ->
-            % amqp_channel:call(Ch, #'confirm.select'{}),
-            % amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
-            publish_count(Session, <<"src">>, <<"hello">>, 100),
+            publish_count(Session, <<"src">>, <<"hello">>, 10),
             shovel_test_utils:set_param_nowait(
               Config,
               <<"test">>, [{<<"src-address">>,    <<"src">>},
@@ -163,58 +151,13 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
                            {<<"src-delete-after">>, After},
                            {<<"dest-address">>,   <<"dest">>},
                            {<<"dest-protocol">>,   <<"amqp10">>},
-                           {<<"src-prefetch-count">>, 50},
+                           {<<"src-prefetch-count">>, 5},
                            {<<"ack-mode">>,     AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
             expect_count(Session, <<"dest">>, <<"hello">>, ExpDest),
             expect_count(Session, <<"src">>, <<"hello">>, ExpSrc)
     end.
-
-
-% security_validation(Config) ->
-%     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-%       ?MODULE, security_validation_add_user, []),
-
-%     Qs = [{<<"src-queue">>, <<"test">>},
-%           {<<"dest-queue">>, <<"test2">>}],
-
-%     A = lookup_user(Config, <<"a">>),
-%     valid_param(Config, [{<<"src-uri">>,  <<"amqp:///a">>},
-%                  {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
-%     invalid_param(Config,
-%                   [{<<"src-uri">>,  <<"amqp:///a">>},
-%                    {<<"dest-uri">>, <<"amqp:///b">>} | Qs], A),
-%     invalid_param(Config,
-%                   [{<<"src-uri">>,  <<"amqp:///b">>},
-%                    {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
-
-%     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-%       ?MODULE, security_validation_remove_user, []),
-%     ok.
-
-% security_validation_add_user() ->
-%     [begin
-%          rabbit_vhost:add(U, <<"acting-user">>),
-%          rabbit_auth_backend_internal:add_user(U, <<>>, <<"acting-user">>),
-%          rabbit_auth_backend_internal:set_permissions(
-%            U, U, <<".*">>, <<".*">>, <<".*">>, <<"acting-user">>)
-%      end || U <- [<<"a">>, <<"b">>]],
-%     ok.
-
-% security_validation_remove_user() ->
-%     [begin
-%          rabbit_vhost:delete(U, <<"acting-user">>),
-%          rabbit_auth_backend_internal:delete_user(U, <<"acting-user">>)
-%      end || U <- [<<"a">>, <<"b">>]],
-%     ok.
-
-% get_connection_name(_Config) ->
-%     <<"Shovel static_shovel_name_as_atom">> = rabbit_shovel_worker:get_connection_name(static_shovel_name_as_atom),
-%     <<"Shovel dynamic_shovel_name_as_binary">> = rabbit_shovel_worker:get_connection_name({<<"/">>, <<"dynamic_shovel_name_as_binary">>}),
-%     <<"Shovel">> = rabbit_shovel_worker:get_connection_name({<<"/">>, {unexpected, tuple}}),
-%     <<"Shovel">> = rabbit_shovel_worker:get_connection_name({one, two, three}),
-%     <<"Shovel">> = rabbit_shovel_worker:get_connection_name(<<"anything else">>).
 
 
 %%----------------------------------------------------------------------------
@@ -260,16 +203,17 @@ expect_one(Session, Dest, Payload) ->
     LinkName = <<"dynamic-receiver-", Dest/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
                                                         Dest),
-    ok = amqp10_client:flow_link_credit(Receiver, 5, never),
-    expect(Receiver, Payload).
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
+    Msg = expect(Receiver, Payload),
+    amqp10_client:detach_link(Receiver),
+    Msg.
 
-expect(Receiver, Payload) ->
+expect(Receiver, _Payload) ->
     receive
         {amqp10_msg, Receiver, InMsg} ->
-            [Payload] = amqp10_msg:body(InMsg),
+            [P] = amqp10_msg:body(InMsg),
             % #{content_type := ?UNSHOVELLED} = amqp10_msg:properties(InMsg),
             % #{durable := true} = amqp10_msg:headers(InMsg),
-            amqp10_client:detach_link(Receiver),
             InMsg
     after 4000 ->
               throw(timeout_in_expect_waiting_for_delivery)
@@ -290,16 +234,17 @@ publish_count(Session, Address, Payload, Count) ->
                                                     Address),
     ok = await_amqp10_event(link, Sender, attached),
     [begin
-
          Tag = rabbit_data_coercion:to_binary(I),
-         publish(Sender, Tag, Payload)
+         publish(Sender, Tag, <<Payload/binary, Tag/binary>>)
      end || I <- lists:seq(1, Count)],
      amqp10_client:detach_link(Sender).
 
 expect_count(Session, Address, Payload, Count) ->
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
-                                                        <<"dynamic-receiver">>,
+                                                        <<"dynamic-receiver",
+                                                          Address/binary>>,
                                                         Address),
+    ok = amqp10_client:flow_link_credit(Receiver, Count, never),
     [begin
          expect(Receiver, Payload)
      end || _ <- lists:seq(1, Count)],
