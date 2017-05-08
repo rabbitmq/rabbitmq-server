@@ -8,7 +8,9 @@
 
 -define(DIRECTORY_OR_FILE_NAME_EXISTS, eexist).
 
--type cert_id() :: {FileName :: string(), ChangeTime :: integer()}.
+-type cert_id() :: {FileName :: string(),
+                    ChangeTime :: integer(),
+                    Hash :: integer()}.
 
 -spec list_certs(Config :: list())
     -> no_change | {ok, [{cert_id(), list()}], State}
@@ -26,7 +28,7 @@ list_certs(Config, _) ->
 
 -spec load_cert(cert_id(), list(), Config :: list())
     -> {ok, Cert :: public_key:der_encoded()}.
-load_cert({FileName, _}, _, Config) ->
+load_cert({FileName, _, _}, _, Config) ->
     Path = directory_path(Config),
     Cert = extract_cert(Path, FileName),
     rabbit_log:info(
@@ -47,7 +49,7 @@ list_certs_0(Path) ->
     lists:map(
         fun(FileName) ->
             AbsName = filename:absname(FileName, Path),
-            CertId = {FileName, modification_time(AbsName)},
+            CertId = {FileName, modification_time(AbsName), file_hash(AbsName)},
             {CertId, [{name, FileName}]}
         end,
         FileNames).
@@ -55,6 +57,10 @@ list_certs_0(Path) ->
 modification_time(Path) ->
     {ok, Info} = file:read_file_info(Path, [{time, posix}]),
     Info#file_info.mtime.
+
+file_hash(Path) ->
+    {ok, Data} = file:read_file(Path),
+    erlang:phash2(Data).
 
 directory_path(Config) ->
     directory_path(Config, default_directory()).
