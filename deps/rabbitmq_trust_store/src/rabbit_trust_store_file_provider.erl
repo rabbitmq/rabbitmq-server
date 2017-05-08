@@ -49,7 +49,9 @@ list_certs_0(Path) ->
     lists:map(
         fun(FileName) ->
             AbsName = filename:absname(FileName, Path),
-            CertId = {FileName, modification_time(AbsName), file_hash(AbsName)},
+            CertId = {FileName,
+                      modification_time(AbsName),
+                      file_content_hash(AbsName)},
             {CertId, [{name, FileName}]}
         end,
         FileNames).
@@ -58,7 +60,7 @@ modification_time(Path) ->
     {ok, Info} = file:read_file_info(Path, [{time, posix}]),
     Info#file_info.mtime.
 
-file_hash(Path) ->
+file_content_hash(Path) ->
     {ok, Data} = file:read_file(Path),
     erlang:phash2(Data).
 
