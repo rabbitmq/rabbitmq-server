@@ -68,6 +68,7 @@
 -record(state,
         {next_channel = 1 :: pos_integer(),
          connection_sup :: pid(),
+         reader_m_ref :: reference(),
          sessions_sup :: pid() | undefined,
          pending_session_reqs = [] :: [term()],
          reader :: pid() | undefined,
@@ -242,13 +243,19 @@ opened(Frame, State) ->
     {next_state, opened, State}.
 
 close_sent(#'v1_0.close'{}, State) ->
+    % TODO: we should probably set up a timer before this to ensure
+    % we close down event if no reply is received
+
+    error_logger:info_msg("Conn close_sent Close received ~n", []),
     {stop, normal, State}.
 
 handle_event({set_other_procs, OtherProcs}, StateName, State) ->
     #{sessions_sup := SessionsSup,
       reader := Reader} = OtherProcs,
+    ReaderMRef = monitor(process, Reader),
     amqp10_client_frame_reader:set_connection(Reader, self()),
     State1 = State#state{sessions_sup = SessionsSup,
+                         reader_m_ref = ReaderMRef,
                          reader = Reader},
     {next_state, StateName, State1};
 handle_event(_Event, StateName, State) ->
@@ -271,7 +278,15 @@ handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.
 
-handle_info(_Info, StateName, State) ->
+handle_info({'DOWN', MRef, _, _, Info}, StateName, State = #state{reader_m_ref = MRef,
+                                                                  config = Config})
+  when StateName =/= close_sent ->
+    % reader has gone down and we are not already shutting down
+    ok = notify_closed(Config, shutdown),
+    error_logger:info_msg("Conn received DOWN from Reader ~p ~p~n", [Info, StateName]),
+    {stop, normal, State};
+handle_info(Info, StateName, State) ->
+    error_logger:info_msg("Conn handle_info ~p ~p~n", [Info, StateName]),
     {next_state, StateName, State}.
 
 terminate(Reason, _StateName, #state{connection_sup = Sup,

@@ -27,7 +27,7 @@
 %% Private API.
 -export([start_link/2,
          set_connection/2,
-         connection_closing/1,
+         close/1,
          register_session/3,
          unregister_session/4]).
 
@@ -88,8 +88,8 @@ start_link(Sup, Config) ->
 set_connection(Reader, Connection) ->
     gen_fsm:send_event(Reader, {set_connection, Connection}).
 
-connection_closing(Reader) ->
-    gen_fsm:send_all_state_event(Reader, connection_closing).
+close(Reader) ->
+    gen_fsm:send_all_state_event(Reader, close).
 
 register_session(Reader, Session, OutgoingChannel) ->
     gen_fsm:send_all_state_event(
@@ -143,6 +143,9 @@ handle_event({unregister_session, _Session, OutgoingChannel, IncomingChannel},
     State1 = State#state{outgoing_channels = OutgoingChannels1,
                          incoming_channels = IncomingChannels1},
     {next_state, StateName, State1};
+handle_event(close, _StateName, State = #state{socket = Socket}) ->
+    close_socket(Socket),
+    {stop, normal, State#state{socket = undefined}};
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
@@ -177,7 +180,7 @@ handle_info({TcpClosed, _}, StateName, State)
     State1 = State#state{socket = undefined,
                          buffer = <<>>,
                          frame_state = undefined},
-    {stop, {error, TcpClosed}, State1};
+    {stop, normal, State1};
 
 handle_info(heartbeat, StateName, State = #state{connection = Conn}) ->
     amqp10_client_connection:close(Conn, {resource_limit_exceeded,

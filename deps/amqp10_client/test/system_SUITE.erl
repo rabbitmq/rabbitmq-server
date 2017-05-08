@@ -226,7 +226,11 @@ open_connection_plain_sasl_failure(Config) ->
                         {closed, sasl_auth_failure}}} -> ok;
         % some implementation may simply close the tcp_connection
         {amqp10_event, {connection, Connection, {closed, shutdown}}} -> ok
-    after 5000 -> exit(connection_timeout)
+
+    after 5000 ->
+              ct:pal("Connection process is alive? = ~p~n",
+                     [erlang:is_process_alive(Connection)]),
+              exit(connection_timeout)
     end,
     ok = amqp10_client:close_connection(Connection).
 

@@ -419,7 +419,8 @@ mapped(Frame, State) ->
 mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
                                    delivery_tag = {binary, DeliveryTag},
                                    settled = false} = Transfer0, Parts},
-       From, #state{next_outgoing_id = NOI, links = Links} = State) ->
+       From, #state{next_outgoing_id = NOI, links = Links,
+                    unsettled = Unsettled} = State) ->
     case Links of
         #{OutHandle := #link{input_handle = undefined}} ->
             {reply, {error, half_attached}, mapped, State};
@@ -429,7 +430,7 @@ mapped({transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(NOI),
                                                  resume = false},
             {ok, NumFrames} = send_transfer(Transfer, Parts, State),
-            State1 = State#state{unsettled = #{NOI => {DeliveryTag, From}}},
+            State1 = State#state{unsettled = Unsettled#{NOI => {DeliveryTag, From}}},
             {reply, ok, mapped, book_transfer_send(NumFrames, Link, State1)};
         _ ->
             {reply, {error, link_not_found}, mapped, State}
@@ -876,9 +877,15 @@ decode_as_msg(Transfer, Payload) ->
 amqp10_session_event(Evt) ->
     {amqp10_event, {session, self(), Evt}}.
 
-socket_send({tcp, Socket}, Data) ->
+socket_send(Sock, Data) ->
+    case socket_send0(Sock, Data) of
+        ok -> ok;
+        {error, Reason} -> exit({socket_closed, Reason})
+    end.
+
+socket_send0({tcp, Socket}, Data) ->
     gen_tcp:send(Socket, Data);
-socket_send({ssl, Socket}, Data) ->
+socket_send0({ssl, Socket}, Data) ->
     ssl:send(Socket, Data).
 
 -spec make_link_ref(_, _, _) -> link_ref().
