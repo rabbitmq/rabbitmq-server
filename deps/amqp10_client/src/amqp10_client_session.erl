@@ -213,10 +213,8 @@ init([FromPid, Channel, Reader, ConnConfig]) ->
 
 unmapped({socket_ready, Socket}, State) ->
     State1 = State#state{socket = Socket},
-    case send_begin(State1) of
-        ok    -> {next_state, begin_sent, State1};
-        Error -> {stop, Error, State1}
-    end.
+    ok = send_begin(State1),
+    {next_state, begin_sent, State1}.
 
 unmapped({attach, Attach}, From,
                       #state{early_attach_requests = EARs} = State) ->
@@ -250,11 +248,8 @@ begin_sent({attach, Attach}, From,
 
 mapped('end', State) ->
     %% We send the first end frame and wait for the reply.
-    case send_end(State) of
-        ok -> {next_state, end_sent, State};
-        {error, closed} -> {stop, normal, State};
-        Error -> {stop, Error, State}
-    end;
+    send_end(State),
+    {next_state, end_sent, State};
 mapped({flow, OutHandle, Flow0, RenewAfter}, State0) ->
     State = send_flow(fun send/2, OutHandle, Flow0, RenewAfter, State0),
     {next_state, mapped, State};
@@ -736,11 +731,8 @@ with_link(InHandle, State, Fun) ->
             Fun(Link, State);
         not_found ->
             % end session with errant-link
-            case send_end(State, ?V_1_0_SESSION_ERROR_ERRANT_LINK) of
-                ok -> {next_state, end_sent, State};
-                {error, closed} -> {stop, normal, State};
-                Error -> {stop, Error, State}
-            end
+            ok = send_end(State, ?V_1_0_SESSION_ERROR_ERRANT_LINK),
+            {next_state, end_sent, State}
     end.
 
 

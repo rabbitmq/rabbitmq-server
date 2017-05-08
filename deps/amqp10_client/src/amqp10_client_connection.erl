@@ -68,7 +68,7 @@
 -record(state,
         {next_channel = 1 :: pos_integer(),
          connection_sup :: pid(),
-         reader_m_ref :: reference(),
+         reader_m_ref :: reference() | undefined,
          sessions_sup :: pid() | undefined,
          pending_session_reqs = [] :: [term()],
          reader :: pid() | undefined,
