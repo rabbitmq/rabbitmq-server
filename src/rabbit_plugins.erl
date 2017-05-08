@@ -213,7 +213,7 @@ strictly_plugins(Plugins, AllPlugins) ->
       end, Plugins).
 
 strictly_plugins(Plugins) ->
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+    ExpandDir = plugins_expand_dir(),
     AllPlugins = list(ExpandDir),
     lists:filter(
       fun(Name) ->
