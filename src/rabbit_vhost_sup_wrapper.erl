@@ -33,7 +33,8 @@ start_link(VHost) ->
 %% so one_for_all strategy cannot be used.
 
 init([VHost]) ->
-    {ok, {{one_for_all, 1, 10000000},
+    %% Two restarts in 1 hour. One per message store.
+    {ok, {{one_for_all, 2, 3600000},
           [{rabbit_vhost_sup,
             {rabbit_vhost_sup_wrapper, start_vhost_sup, [VHost]},
              permanent, infinity, supervisor,
