@@ -119,6 +119,8 @@ init_from_config() ->
         (Name, BadNames) when is_atom(Name) -> BadNames;
         (Name, BadNames)                    -> [Name | BadNames]
     end,
+    %% See rabbitmq/rabbitmq-server#1202 for details.
+    rabbit_peer_discovery:maybe_inject_randomized_delay(),
     {DiscoveredNodes, NodeType} =
         case rabbit_peer_discovery:discover_cluster_nodes() of
             {ok, {Nodes, Type} = Config}
@@ -139,14 +141,17 @@ init_from_config() ->
             {ok, _} ->
                 e(invalid_cluster_nodes_conf)
         end,
-    case DiscoveredNodes of
+    rabbit_log:info("All discovered existing cluster peers: ~p~n",
+                    [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
+    Peers = nodes_excl_me(DiscoveredNodes),
+    case Peers of
         [] ->
             rabbit_log:info("Discovered no peer nodes to cluster with"),
             init_db_and_upgrade([node()], disc, false, _Retry = true);
         _  ->
-            rabbit_log:info("Discovered peer nodes: ~s~n",
-                [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
-            join_discovered_peers(DiscoveredNodes, NodeType)
+            rabbit_log:info("Peer nodes we can cluster with: ~s~n",
+                [rabbit_peer_discovery:format_discovered_nodes(Peers)]),
+            join_discovered_peers(Peers, NodeType)
     end.
 
 %% Attempts to join discovered,

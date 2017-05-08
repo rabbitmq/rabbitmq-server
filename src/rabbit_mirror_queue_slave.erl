@@ -129,10 +129,10 @@ handle_go(Q = #amqqueue{name = QName}) ->
                              rate_timer_ref      = undefined,
                              sync_timer_ref      = undefined,
 
-                             sender_queues       = dict:new(),
-                             msg_id_ack          = dict:new(),
+                             sender_queues       = #{},
+                             msg_id_ack          = #{},
 
-                             msg_id_status       = dict:new(),
+                             msg_id_status       = #{},
                              known_senders       = pmon:new(delegate),
 
                              depth_delta         = undefined
@@ -312,7 +312,7 @@ handle_cast({sync_start, Ref, Syncer},
     State1 = #state{rate_timer_ref = TRef} = ensure_rate_timer(State),
     S = fun({MA, TRefN, BQSN}) ->
                 State1#state{depth_delta         = undefined,
-                             msg_id_ack          = dict:from_list(MA),
+                             msg_id_ack          = maps:from_list(MA),
                              rate_timer_ref      = TRefN,
                              backing_queue_state = BQSN}
         end,
@@ -548,7 +548,7 @@ send_or_record_confirm(published, #delivery { sender     = ChPid,
                                                 id            = MsgId,
                                                 is_persistent = true } },
                        MS, #state { q = #amqqueue { durable = true } }) ->
-    dict:store(MsgId, {published, ChPid, MsgSeqNo} , MS);
+    maps:put(MsgId, {published, ChPid, MsgSeqNo} , MS);
 send_or_record_confirm(_Status, #delivery { sender     = ChPid,
                                             confirm    = true,
                                             msg_seq_no = MsgSeqNo },
@@ -561,7 +561,7 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
         lists:foldl(
           fun (MsgId, {CMsN, MSN} = Acc) ->
                   %% We will never see 'discarded' here
-                  case dict:find(MsgId, MSN) of
+                  case maps:find(MsgId, MSN) of
                       error ->
                           %% If it needed confirming, it'll have
                           %% already been done.
@@ -569,12 +569,12 @@ confirm_messages(MsgIds, State = #state { msg_id_status = MS }) ->
                       {ok, published} ->
                           %% Still not seen it from the channel, just
                           %% record that it's been confirmed.
-                          {CMsN, dict:store(MsgId, confirmed, MSN)};
+                          {CMsN, maps:put(MsgId, confirmed, MSN)};
                       {ok, {published, ChPid, MsgSeqNo}} ->
                           %% Seen from both GM and Channel. Can now
                           %% confirm.
                           {rabbit_misc:gb_trees_cons(ChPid, MsgSeqNo, CMsN),
-                           dict:erase(MsgId, MSN)};
+                           maps:remove(MsgId, MSN)};
                       {ok, confirmed} ->
                           %% It's already been confirmed. This is
                           %% probably it's been both sync'd to disk
@@ -674,21 +674,21 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
     %% Master, or MTC in queue_process.
 
     St = [published, confirmed, discarded],
-    SS = dict:filter(fun (_MsgId, Status) -> lists:member(Status, St) end, MS),
-    AckTags = [AckTag || {_MsgId, AckTag} <- dict:to_list(MA)],
+    SS = maps:filter(fun (_MsgId, Status) -> lists:member(Status, St) end, MS),
+    AckTags = [AckTag || {_MsgId, AckTag} <- maps:to_list(MA)],
 
     MasterState = rabbit_mirror_queue_master:promote_backing_queue_state(
                     QName, CPid, BQ, BQS, GM, AckTags, SS, MPids),
 
-    MTC = dict:fold(fun (MsgId, {published, ChPid, MsgSeqNo}, MTC0) ->
+    MTC = maps:fold(fun (MsgId, {published, ChPid, MsgSeqNo}, MTC0) ->
                             gb_trees:insert(MsgId, {ChPid, MsgSeqNo}, MTC0);
                         (_Msgid, _Status, MTC0) ->
                             MTC0
                     end, gb_trees:empty(), MS),
     Deliveries = [promote_delivery(Delivery) ||
-                   {_ChPid, {PubQ, _PendCh, _ChState}} <- dict:to_list(SQ),
+                   {_ChPid, {PubQ, _PendCh, _ChState}} <- maps:to_list(SQ),
                    Delivery <- queue:to_list(PubQ)],
-    AwaitGmDown = [ChPid || {ChPid, {_, _, down_from_ch}} <- dict:to_list(SQ)],
+    AwaitGmDown = [ChPid || {ChPid, {_, _, down_from_ch}} <- maps:to_list(SQ)],
     KS1 = lists:foldl(fun (ChPid0, KS0) ->
                               pmon:demonitor(ChPid0, KS0)
                       end, KS, AwaitGmDown),
@@ -800,20 +800,20 @@ forget_sender(Down1, Down2) when Down1 =/= Down2 -> true.
 maybe_forget_sender(ChPid, ChState, State = #state { sender_queues = SQ,
                                                      msg_id_status = MS,
                                                      known_senders = KS }) ->
-    case dict:find(ChPid, SQ) of
+    case maps:find(ChPid, SQ) of
         error ->
             State;
         {ok, {MQ, PendCh, ChStateRecord}} ->
             case forget_sender(ChState, ChStateRecord) of
                 true ->
                     credit_flow:peer_down(ChPid),
-                    State #state { sender_queues = dict:erase(ChPid, SQ),
+                    State #state { sender_queues = maps:remove(ChPid, SQ),
                                    msg_id_status = lists:foldl(
-                                                     fun dict:erase/2,
+                                                     fun maps:remove/2,
                                                      MS, sets:to_list(PendCh)),
                                    known_senders = pmon:demonitor(ChPid, KS) };
                 false ->
-                    SQ1 = dict:store(ChPid, {MQ, PendCh, ChState}, SQ),
+                    SQ1 = maps:put(ChPid, {MQ, PendCh, ChState}, SQ),
                     State #state { sender_queues = SQ1 }
             end
     end.
@@ -825,32 +825,32 @@ maybe_enqueue_message(
     send_mandatory(Delivery), %% must do this before confirms
     State1 = ensure_monitoring(ChPid, State),
     %% We will never see {published, ChPid, MsgSeqNo} here.
-    case dict:find(MsgId, MS) of
+    case maps:find(MsgId, MS) of
         error ->
             {MQ, PendingCh, ChState} = get_sender_queue(ChPid, SQ),
             MQ1 = queue:in(Delivery, MQ),
-            SQ1 = dict:store(ChPid, {MQ1, PendingCh, ChState}, SQ),
+            SQ1 = maps:put(ChPid, {MQ1, PendingCh, ChState}, SQ),
             State1 #state { sender_queues = SQ1 };
         {ok, Status} ->
             MS1 = send_or_record_confirm(
-                    Status, Delivery, dict:erase(MsgId, MS), State1),
+                    Status, Delivery, maps:remove(MsgId, MS), State1),
             SQ1 = remove_from_pending_ch(MsgId, ChPid, SQ),
             State1 #state { msg_id_status = MS1,
                             sender_queues = SQ1 }
     end.
 
 get_sender_queue(ChPid, SQ) ->
-    case dict:find(ChPid, SQ) of
+    case maps:find(ChPid, SQ) of
         error     -> {queue:new(), sets:new(), running};
         {ok, Val} -> Val
     end.
 
 remove_from_pending_ch(MsgId, ChPid, SQ) ->
-    case dict:find(ChPid, SQ) of
+    case maps:find(ChPid, SQ) of
         error ->
             SQ;
         {ok, {MQ, PendingCh, ChState}} ->
-            dict:store(ChPid, {MQ, sets:del_element(MsgId, PendingCh), ChState},
+            maps:put(ChPid, {MQ, sets:del_element(MsgId, PendingCh), ChState},
                        SQ)
     end.
 
@@ -867,7 +867,7 @@ publish_or_discard(Status, ChPid, MsgId,
         case queue:out(MQ) of
             {empty, _MQ2} ->
                 {MQ, sets:add_element(MsgId, PendingCh),
-                 dict:store(MsgId, Status, MS)};
+                 maps:put(MsgId, Status, MS)};
             {{value, Delivery = #delivery {
                        message = #basic_message { id = MsgId } }}, MQ2} ->
                 {MQ2, PendingCh,
@@ -882,7 +882,7 @@ publish_or_discard(Status, ChPid, MsgId,
                 %% expecting any confirms from us.
                 {MQ, PendingCh, MS}
         end,
-    SQ1 = dict:store(ChPid, {MQ1, PendingCh1, ChState}, SQ),
+    SQ1 = maps:put(ChPid, {MQ1, PendingCh1, ChState}, SQ),
     State1 #state { sender_queues = SQ1, msg_id_status = MS1 }.
 
 
@@ -1004,9 +1004,9 @@ msg_ids_to_acktags(MsgIds, MA) ->
     {AckTags, MA1} =
         lists:foldl(
           fun (MsgId, {Acc, MAN}) ->
-                  case dict:find(MsgId, MA) of
+                  case maps:find(MsgId, MA) of
                       error        -> {Acc, MAN};
-                      {ok, AckTag} -> {[AckTag | Acc], dict:erase(MsgId, MAN)}
+                      {ok, AckTag} -> {[AckTag | Acc], maps:remove(MsgId, MAN)}
                   end
           end, {[], MA}, MsgIds),
     {lists:reverse(AckTags), MA1}.
@@ -1014,7 +1014,7 @@ msg_ids_to_acktags(MsgIds, MA) ->
 maybe_store_ack(false, _MsgId, _AckTag, State) ->
     State;
 maybe_store_ack(true, MsgId, AckTag, State = #state { msg_id_ack = MA }) ->
-    State #state { msg_id_ack = dict:store(MsgId, AckTag, MA) }.
+    State #state { msg_id_ack = maps:put(MsgId, AckTag, MA) }.
 
 set_delta(0,        State = #state { depth_delta = undefined }) ->
     ok = record_synchronised(State#state.q),

@@ -65,12 +65,17 @@
           alarmed,
           %% is monitoring enabled? false on unsupported
           %% platforms
-          enabled
+          enabled,
+          %% number of retries to enable monitoring if it fails
+          %% on start-up
+          retries,
+          %% Interval between retries
+          interval
 }).
 
 %%----------------------------------------------------------------------------
 
--type disk_free_limit() :: (integer() | string() | {'mem_relative', float()}).
+-type disk_free_limit() :: (integer() | string() | {'mem_relative', float() | integer()}).
 -spec start_link(disk_free_limit()) -> rabbit_types:ok_pid_or_error().
 -spec get_disk_free_limit() -> integer().
 -spec set_disk_free_limit(disk_free_limit()) -> 'ok'.
@@ -114,20 +119,17 @@ start_link(Args) ->
 
 init([Limit]) ->
     Dir = dir(),
+    {ok, Retries} = application:get_env(rabbit, disk_monitor_failure_retries),
+    {ok, Interval} = application:get_env(rabbit, disk_monitor_failure_retry_interval),
     State = #state{dir          = Dir,
                    min_interval = ?DEFAULT_MIN_DISK_CHECK_INTERVAL,
                    max_interval = ?DEFAULT_MAX_DISK_CHECK_INTERVAL,
                    alarmed      = false,
-                   enabled      = true},
-    case {catch get_disk_free(Dir),
-          vm_memory_monitor:get_total_memory()} of
-        {N1, N2} when is_integer(N1), is_integer(N2) ->
-            {ok, start_timer(set_disk_limits(State, Limit))};
-        Err ->
-            rabbit_log:info("Disabling disk free space monitoring "
-                            "on unsupported platform:~n~p~n", [Err]),
-            {ok, State#state{enabled = false}}
-    end.
+                   enabled      = true,
+                   limit        = Limit,
+                   retries      = Retries,
+                   interval     = Interval},
+    {ok, enable(State)}.
 
 handle_call(get_disk_free_limit, _From, State = #state{limit = Limit}) ->
     {reply, Limit, State};
@@ -161,6 +163,8 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
+handle_info(try_enable, #state{retries = Retries} = State) ->
+    {noreply, enable(State#state{retries = Retries - 1})};
 handle_info(update, State) ->
     {noreply, start_timer(internal_update(State))};
 
@@ -233,7 +237,7 @@ parse_free_win32(CommandResult) ->
     list_to_integer(lists:reverse(Free)).
 
 interpret_limit({mem_relative, Relative}) 
-    when is_float(Relative) ->
+    when is_number(Relative) ->
     round(Relative * vm_memory_monitor:get_total_memory());
 interpret_limit(Absolute) -> 
     case rabbit_resource_monitor_misc:parse_information_unit(Absolute) of
@@ -246,7 +250,7 @@ interpret_limit(Absolute) ->
 
 emit_update_info(StateStr, CurrentFree, Limit) ->
     rabbit_log:info(
-      "Disk free space ~s. Free bytes:~p Limit:~p~n",
+      "Free disk space is ~s. Free bytes: ~p. Limit: ~p~n",
       [StateStr, CurrentFree, Limit]).
 
 start_timer(State) ->
@@ -261,3 +265,20 @@ interval(#state{limit        = Limit,
                 max_interval = MaxInterval}) ->
     IdealInterval = 2 * (Actual - Limit) / ?FAST_RATE,
     trunc(erlang:max(MinInterval, erlang:min(MaxInterval, IdealInterval))).
+
+enable(#state{retries = 0} = State) ->
+    State;
+enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries}
+       = State) ->
+    case {catch get_disk_free(Dir),
+          vm_memory_monitor:get_total_memory()} of
+        {N1, N2} when is_integer(N1), is_integer(N2) ->
+            rabbit_log:info("Enabling free disk space monitoring~n", []),
+            start_timer(set_disk_limits(State, Limit));
+        Err ->
+            rabbit_log:info("Free disk space monitor encountered an error "
+                            "(e.g. failed to parse output from OS tools): ~p, retries left: ~s~n",
+                            [Err, Retries]),
+            timer:send_after(Interval, self(), try_enable),
+            State#state{enabled = false}
+    end.

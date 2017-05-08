@@ -116,6 +116,8 @@ define PROJECT_ENV
 	    {background_gc_target_interval, 60000},
 	    %% rabbitmq-server-589
 	    {proxy_protocol, false},
+	    {disk_monitor_failure_retries, 10},
+	    {disk_monitor_failure_retry_interval, 120000},
 	    %% can be stop_rabbit or give_up see rabbitmq-server-1458
 	    {vhost_restart_strategy, stop_rabbit}
 	  ]
@@ -224,6 +226,8 @@ clean-escripts:
 	    opt='--stringparam man.indent.verbatims=0' ; \
 	xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
 	xmlto -vv -o $(DOCS_DIR) $$opt man $< 2>&1 | (grep -v '^Note: Writing' || :) && \
+	awk -F"'u " '/^\.HP / { print $$1; print $$2; next; } { print; }' "$@" > "$@.tmp" && \
+	mv "$@.tmp" "$@" && \
 	test -f $@ && \
 	rm $<.tmp
 

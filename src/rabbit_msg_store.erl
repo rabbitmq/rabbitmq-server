@@ -1337,9 +1337,11 @@ update_pending_confirms(Fun, CRef,
 record_pending_confirm(CRef, MsgId, State) ->
     update_pending_confirms(
       fun (_MsgOnDiskFun, CTM) ->
-              maps:update_with(CRef,
-                fun (MsgIds) -> gb_sets:add(MsgId, MsgIds) end,
-                gb_sets:singleton(MsgId), CTM)
+            NewMsgIds = case maps:find(CRef, CTM) of
+                error        -> gb_sets:singleton(MsgId);
+                {ok, MsgIds} -> gb_sets:add(MsgId, MsgIds)
+            end,
+            maps:put(CRef, NewMsgIds, CTM)
       end, CRef, State).
 
 client_confirm(CRef, MsgIds, ActionTaken, State) ->

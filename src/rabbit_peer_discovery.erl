@@ -21,7 +21,9 @@
 %%
 
 -export([discover_cluster_nodes/0, backend/0, node_type/0,
-         normalize/1, format_discovered_nodes/1, log_configured_backend/0]).
+         normalize/1, format_discovered_nodes/1, log_configured_backend/0,
+         register/0, unregister/0, maybe_register/0, maybe_unregister/0,
+         maybe_inject_randomized_delay/0]).
 -export([append_node_prefix/1, node_prefix/0]).
 
 -define(DEFAULT_BACKEND,   rabbit_peer_discovery_classic_config).
@@ -30,6 +32,9 @@
 -define(DEFAULT_NODE_TYPE, disc).
 %% default node prefix to attach to discovered hostnames
 -define(DEFAULT_PREFIX, "rabbit").
+%% default randomized delay range, in seconds
+-define(DEFAULT_STARTUP_RANDOMIZED_DELAY, {5, 60}).
+
 -define(NODENAME_PART_SEPARATOR, "@").
 
 
@@ -72,6 +77,117 @@ discover_cluster_nodes() ->
     normalize(Backend:list_nodes()).
 
 
+-spec maybe_register() -> ok.
+
+maybe_register() ->
+  Backend = backend(),
+  case Backend:supports_registration() of
+    true  ->
+      register(),
+      Backend:post_registration();
+    false ->
+      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping registration.", [Backend]),
+      ok
+  end.
+
+
+-spec maybe_unregister() -> ok.
+
+maybe_unregister() ->
+  Backend = backend(),
+  case Backend:supports_registration() of
+    true  ->
+      unregister();
+    false ->
+      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping unregistration.", [Backend]),
+      ok
+  end.
+
+
+-spec maybe_inject_randomized_delay() -> ok.
+maybe_inject_randomized_delay() ->
+  Backend = backend(),
+  case Backend:supports_registration() of
+    true  ->
+      rabbit_log:info("Peer discovery backend ~s supports registration.", [Backend]),
+      inject_randomized_delay();
+    false ->
+      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping randomized startup delay.", [Backend]),
+      ok
+  end.
+
+-spec inject_randomized_delay() -> ok.
+
+inject_randomized_delay() ->
+    {Min, Max} = case randomized_delay_range_in_ms() of
+                     {A, B} -> {A, B};
+                     [A, B] -> {A, B}
+                 end,
+    case {Min, Max} of
+        %% When the max value is set to 0, consider the delay to be disabled.
+        %% In addition, `rand:uniform/1` will fail with a "no function clause"
+        %% when the argument is 0.
+        {_, 0} ->
+            rabbit_log:info("Randomized delay range's upper bound is set to 0. Considering it disabled."),
+            ok;
+        {_, N} when is_number(N) ->
+            rand:seed(exsplus),
+            RandomVal  = rand:uniform(round(N)),
+            rabbit_log:debug("Randomized startup delay: configured range is from ~p to ~p milliseconds, PRNG pick: ~p...",
+                             [Min, Max, RandomVal]),
+            Effective  = case RandomVal < Min of
+                             true  -> Min;
+                             false -> RandomVal
+                         end,
+            rabbit_log:info("Will wait for ~p milliseconds before proceeding with regitration...", [Effective]),
+            timer:sleep(Effective),
+            ok
+    end.
+
+-spec randomized_delay_range_in_ms() -> {integer(), integer()}.
+
+randomized_delay_range_in_ms() ->
+  {Min, Max} = case application:get_env(rabbit, autocluster) of
+                   {ok, Proplist} ->
+                       proplists:get_value(randomized_startup_delay_range, Proplist, ?DEFAULT_STARTUP_RANDOMIZED_DELAY);
+                   undefined      ->
+                       ?DEFAULT_STARTUP_RANDOMIZED_DELAY
+               end,
+    {Min * 1000, Max * 1000}.
+
+
+-spec register() -> ok.
+
+register() ->
+  Backend = backend(),
+  rabbit_log:info("Will register with peer discovery backend ~s", [Backend]),
+  case Backend:register() of
+    ok             -> ok;
+    {error, Error} ->
+      rabbit_log:error("Failed to register with peer discovery backend ~s: ~p",
+        [Backend, Error]),
+      ok
+  end.
+
+
+-spec unregister() -> ok.
+
+unregister() ->
+  Backend = backend(),
+  rabbit_log:info("Will unregister with peer discovery backend ~s", [Backend]),
+  case Backend:unregister() of
+    ok             -> ok;
+    {error, Error} ->
+      rabbit_log:error("Failed to unregister with peer discovery backend ~s: ~p",
+        [Backend, Error]),
+      ok
+  end.
+
+
+%%
+%% Implementation
+%%
+
 -spec normalize(Nodes :: list() |
                 {Nodes :: list(), NodeType :: rabbit_types:node_type()} |
                 {ok, Nodes :: list()} |
@@ -89,7 +205,6 @@ normalize({ok, {Nodes, NodeType}}) when is_list(Nodes) andalso is_atom(NodeType)
   {ok, {Nodes, NodeType}};
 normalize({error, Reason}) ->
   {error, Reason}.
-
 
 -spec format_discovered_nodes(Nodes :: list()) -> string().
 

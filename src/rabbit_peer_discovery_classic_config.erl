@@ -19,7 +19,8 @@
 
 -include("rabbit.hrl").
 
--export([list_nodes/0, register/0, unregister/0]).
+-export([list_nodes/0, supports_registration/0, register/0, unregister/0,
+         post_registration/0]).
 
 %%
 %% API
@@ -34,6 +35,11 @@ list_nodes() ->
         undefined                  -> {[], disc}
     end.
 
+-spec supports_registration() -> boolean().
+
+supports_registration() ->
+    false.
+
 -spec register() -> ok.
 
 register() ->
@@ -42,4 +48,9 @@ register() ->
 -spec unregister() -> ok.
 
 unregister() ->
+    ok.
+
+-spec post_registration() -> ok.
+
+post_registration() ->
     ok.

@@ -19,7 +19,8 @@
 
 -include("rabbit.hrl").
 
--export([list_nodes/0, register/0, unregister/0]).
+-export([list_nodes/0, supports_registration/0, register/0, unregister/0,
+         post_registration/0]).
 %% for tests
 -export([discover_nodes/2, discover_hostnames/2]).
 
@@ -48,6 +49,13 @@ list_nodes() ->
         end
     end.
 
+
+-spec supports_registration() -> boolean().
+
+supports_registration() ->
+    false.
+
+
 -spec register() -> ok.
 
 register() ->
@@ -56,6 +64,11 @@ register() ->
 -spec unregister() -> ok.
 
 unregister() ->
+    ok.
+
+-spec post_registration() -> ok.
+
+post_registration() ->
     ok.
 
 
@@ -68,13 +81,24 @@ discover_nodes(SeedHostname, LongNamesUsed) ->
         H <- discover_hostnames(SeedHostname, LongNamesUsed)].
 
 discover_hostnames(SeedHostname, LongNamesUsed) ->
-    %% TODO: IPv6 support
-    IPs   = inet_res:lookup(SeedHostname, in, a),
-    rabbit_log:info("Addresses discovered via A records of ~s: ~s",
-      [SeedHostname, string:join([inet_parse:ntoa(IP) || IP <- IPs], ", ")]),
+    lookup(SeedHostname, LongNamesUsed, ipv4) ++
+    lookup(SeedHostname, LongNamesUsed, ipv6).
+
+decode_record(ipv4) ->
+    a;
+decode_record(ipv6) ->
+    aaaa.
+
+lookup(SeedHostname, LongNamesUsed, IPv) ->
+    IPs   = inet_res:lookup(SeedHostname, in, decode_record(IPv)),
+    rabbit_log:info("Addresses discovered via ~s records of ~s: ~s",
+		    [string:to_upper(atom_to_list(decode_record(IPv))),
+		     SeedHostname, 
+		     string:join([inet_parse:ntoa(IP) || IP <- IPs], ", ")]),
     Hosts = [extract_host(inet:gethostbyaddr(A), LongNamesUsed, A) ||
-                A <- IPs],
+		A <- IPs],
     lists:filter(fun(E) -> E =/= error end, Hosts).
+
 
 %% long node names are used
 extract_host({ok, {hostent, FQDN, _, _, _, _}}, true, _Address) ->

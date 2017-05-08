@@ -33,10 +33,10 @@ prepare_and_use_config() ->
 legacy_erlang_term_config_used() ->
     case init:get_argument(config) of
         error        -> false;
-        {ok, [Config | _]} -> 
+        {ok, [Config | _]} ->
             ConfigFile = Config ++ ".config",
-            rabbit_file:is_file(ConfigFile) 
-            andalso 
+            rabbit_file:is_file(ConfigFile)
+            andalso
             get_advanced_config() == none
     end.
 
@@ -66,10 +66,34 @@ prepare_config(Configs) ->
     end.
 
 update_app_config(ConfigFile) ->
-    ok = application_controller:change_application_data([], [ConfigFile]).
+    RunningApps = [ App || {App, _, _} <- application:which_applications() ],
+    LoadedApps = [ App || {App, _, _} <- application:loaded_applications() ],
+    {ok, [Config]} = file:consult(ConfigFile),
+    %% For application config to be updated, applications should
+    %% be unloaded first.
+    %% If an application is already running, print an error.
+    lists:foreach(fun({App, _Config}) ->
+        case lists:member(App, RunningApps) of
+            true ->
+                io:format(standard_error,
+                          "~nUnable to update config for app ~p from *.conf file."
+                          " App is already running. Use advanced.config instead.~n",
+                          [App]);
+            false ->
+                case lists:member(App, LoadedApps) of
+                    true  -> application:unload(App);
+                    false -> ok
+                end
+        end
+    end,
+    Config),
+    ok = application_controller:change_application_data([], [ConfigFile]),
+    %% Make sure to load all the applications we're unloaded
+    lists:foreach(fun(App) -> application:load(App) end, LoadedApps),
+    ok.
 
 generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
-    generate_config_file(ConfFiles, ConfDir, ScriptDir, 
+    generate_config_file(ConfFiles, ConfDir, ScriptDir,
                          schema_dir(), get_advanced_config()).
 
 
@@ -145,8 +169,8 @@ config_files() ->
                 {ok, Files} -> [Abs(File, ".config") || [File] <- Files];
                 error       -> case config_setting() of
                                    none -> [];
-                                   File -> [Abs(File, ".config") 
-                                            ++ 
+                                   File -> [Abs(File, ".config")
+                                            ++
                                             " (not found)"]
                                end
             end;
