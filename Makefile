@@ -115,7 +115,9 @@ define PROJECT_ENV
 	    {background_gc_enabled, false},
 	    {background_gc_target_interval, 60000},
 	    %% rabbitmq-server-589
-	    {proxy_protocol, false}
+	    {proxy_protocol, false},
+	    %% can be stop_rabbit or give_up see rabbitmq-server-1458
+	    {vhost_restart_strategy, stop_rabbit}
 	  ]
 endef
 
