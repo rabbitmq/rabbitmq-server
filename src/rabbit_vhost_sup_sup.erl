@@ -43,9 +43,11 @@ start_link() ->
     supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-    VhostRestart = case application:get_env(rabbit, vhost_restart_strategy, stop_rabbit) of
-        give_up     -> transient;
-        stop_rabbit -> permanent
+    VhostRestart = case application:get_env(rabbit, vhost_restart_strategy, stop_node) of
+        ignore    -> transient;
+        stop_node -> permanent;
+        transient -> transient;
+        permanent -> permanent
     end,
 
     ets:new(?MODULE, [named_table, public, {keypos, #vhost_sup.vhost}]),

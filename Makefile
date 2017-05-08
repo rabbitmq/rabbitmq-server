@@ -118,8 +118,8 @@ define PROJECT_ENV
 	    {proxy_protocol, false},
 	    {disk_monitor_failure_retries, 10},
 	    {disk_monitor_failure_retry_interval, 120000},
-	    %% can be stop_rabbit or give_up see rabbitmq-server-1458
-	    {vhost_restart_strategy, stop_rabbit}
+	    %% either "stop_node" or "ignore"
+	    {vhost_restart_strategy, stop_node}
 	  ]
 endef
 
