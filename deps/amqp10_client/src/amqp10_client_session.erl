@@ -592,12 +592,14 @@ build_frames(Channel, Trf, Payload, MaxPayloadSize, Acc) ->
 
 make_source(#{role := {sender, _}}) ->
     #'v1_0.source'{};
-make_source(#{role := {receiver, #{address := Address}, _Pid}}) ->
-    #'v1_0.source'{address = {utf8, Address}}.
+make_source(#{role := {receiver, #{address := Address} = Target, _Pid}}) ->
+    Durable = translate_terminus_durability(maps:get(durable, Target, none)),
+    #'v1_0.source'{address = {utf8, Address},
+                   durable = {uint, Durable}}.
 
-make_target(#{role := {receiver, Source, _Pid}}) ->
-    Durable = translate_terminus_durability(maps:get(durable, Source, none)),
-    #'v1_0.target'{durable = {uint, Durable}};
+make_target(#{role := {receiver, _Source, _Pid}}) ->
+    % Durable = translate_terminus_durability(maps:get(durable, Source, none)),
+    #'v1_0.target'{};
 make_target(#{role := {sender, #{address := Address} = Target}}) ->
     Durable = translate_terminus_durability(maps:get(durable, Target, none)),
     #'v1_0.target'{address = {utf8, Address},
