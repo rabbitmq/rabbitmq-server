@@ -71,8 +71,10 @@ connect_source(State = #{name := Name,
                          no_ack -> settled;
                          _ -> unsettled
                      end,
+    Durability = maps:get(durability, Src, unsettled_state),
     {ok, LinkRef} = amqp10_client:attach_receiver_link(Sess, LinkName, Addr,
-                                                       SettlementMode),
+                                                       SettlementMode,
+                                                       Durability),
     State#{source => Src#{current => #{conn => Conn,
                                        session => Sess,
                                        link => LinkRef,
@@ -97,8 +99,10 @@ connect_dest(State = #{name := Name,
                      end,
     % needs to be sync, i.e. awaits the 'attach' event as
     % else we may try to use the link before it is ready
+    Durability = maps:get(durability, Dst, unsettled_state),
     {ok, LinkRef} = amqp10_client:attach_sender_link_sync(Sess, LinkName, Addr,
-                                                          SettlementMode),
+                                                          SettlementMode,
+                                                          Durability),
     State#{dest => Dst#{current => #{conn => Conn,
                                      session => Sess,
                                      link => LinkRef,

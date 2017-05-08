@@ -105,7 +105,7 @@ amqp10_destination(Config, AckMode) ->
     {ok, Sess} = amqp10_client:begin_session(Conn),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Sess,
                                                         <<"amqp-destination-receiver">>,
-                                                        TargetQ),
+                                                        TargetQ, settled, unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, 5, never),
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
     Msg = #amqp_msg{payload = <<42>>,

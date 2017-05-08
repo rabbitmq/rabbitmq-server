@@ -161,7 +161,8 @@ amqp091_dest_validation(Def, User) ->
      {<<"add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
-     {<<"publish-properties">>, fun validate_properties/2,  optional}
+     {<<"publish-properties">>, fun validate_properties/2,  optional},
+     {<<"dest-publish-properties">>, fun validate_properties/2,  optional}
     ].
 
 validate_uri_fun(User) ->
@@ -400,7 +401,7 @@ ensure_queue(Conn, Queue) ->
     catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
             {ok, Ch2} = amqp_connection:open_channel(Conn),
             amqp_channel:call(Ch2, #'queue.declare'{queue   = Queue,
-                                                   durable = true}),
+                                                    durable = true}),
             catch amqp_channel:close(Ch2)
 
     after

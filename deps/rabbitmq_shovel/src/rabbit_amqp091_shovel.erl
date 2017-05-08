@@ -67,8 +67,7 @@ init_source(Conf = #{ack_mode := AckMode,
     case NoAck of
         false ->
             #'basic.qos_ok'{} =
-            amqp_channel:call(Chan, #'basic.qos'{
-                                       prefetch_count = Prefetch}),
+            amqp_channel:call(Chan, #'basic.qos'{prefetch_count = Prefetch}),
             ok;
         true  -> ok
     end,
@@ -305,7 +304,7 @@ remaining(_Ch, #{source := #{delete_after := never}}) ->
 remaining(Ch, #{source := #{delete_after := 'queue-length',
                             queue := Queue}}) ->
     #'queue.declare_ok'{message_count = N} =
-        amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
+        amqp_channel:call(Ch, #'queue.declare'{queue = Queue,
                                                passive = true}),
     N;
 remaining(_Ch, #{source := #{delete_after := Count}}) ->
