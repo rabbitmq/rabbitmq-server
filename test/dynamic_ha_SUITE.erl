@@ -62,7 +62,8 @@ groups() ->
           {cluster_size_3, [], [
               change_policy,
               rapid_change,
-              nodes_policy_should_pick_master_from_its_params
+              nodes_policy_should_pick_master_from_its_params,
+              promote_slave_after_standalone_restart
               % FIXME: Re-enable those tests when the know issues are
               % fixed.
               % failing_random_policies,
@@ -319,6 +320,45 @@ failing_random_policies(Config) ->
         [all, undefined, {exactly, 2}, all, {exactly, 3}, {exactly, 3},
           undefined, {exactly, 3}, all])).
 
+promote_slave_after_standalone_restart(Config) ->
+    %% Tests that slaves can be brought up standalone after forgetting the rest
+    %% of the cluster. Slave ordering should be irrelevant.
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/1213
+    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, ?POLICY, <<"all">>),
+    amqp_channel:call(Ch, #'queue.declare'{queue = ?QNAME,
+                                           durable = true}),
+
+    rabbit_ct_client_helpers:publish(Ch, ?QNAME, 15),
+    rabbit_ct_client_helpers:close_channel(Ch),
+
+    timer:sleep(500),
+    15 = proplists:get_value(messages, find_queue(?QNAME, A)),
+
+    rabbit_ct_broker_helpers:stop_node(Config, C),
+    rabbit_ct_broker_helpers:stop_node(Config, B),
+    rabbit_ct_broker_helpers:stop_node(Config, A),
+
+    %% Restart one slave
+    forget_cluster_node(Config, B, C),
+    forget_cluster_node(Config, B, A),
+
+    ok = rabbit_ct_broker_helpers:start_node(Config, B),
+    15 = proplists:get_value(messages, find_queue(?QNAME, B)),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, B),
+
+    %% Restart the other
+    forget_cluster_node(Config, C, B),
+    forget_cluster_node(Config, C, A),
+
+    ok = rabbit_ct_broker_helpers:start_node(Config, C),
+    15 = proplists:get_value(messages, find_queue(?QNAME, C)),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, C),
+
+    ok.
+
 %%----------------------------------------------------------------------------
 
 assert_slaves(RPCNode, QName, Exp) ->
@@ -528,3 +568,7 @@ apply_policy(Config, N, {exactly, Exactly}) ->
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, N, ?POLICY, {<<"exactly">>, Exactly},
       [{<<"ha-sync-mode">>, <<"automatic">>}]).
+
+forget_cluster_node(Config, Node, NodeToRemove) ->
+    rabbit_ct_broker_helpers:rabbitmqctl(
+      Config, Node, ["forget_cluster_node", "--offline", NodeToRemove]).
