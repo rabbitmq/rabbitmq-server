@@ -1040,7 +1040,7 @@ tune_read_buffer_limit(Handle = #handle{read_buffer            = Buf,
                                                  end, Lim)}.
 
 maybe_reduce_read_cache(SparedRefs) ->
-    case rabbit_memory_monitor:memory_use(bytes) of
+    case vm_memory_monitor:get_memory_use(bytes) of
         {_, infinity}                             -> ok;
         {MemUse, MemLimit} when MemUse < MemLimit -> ok;
         {MemUse, MemLimit}                        -> reduce_read_cache(
