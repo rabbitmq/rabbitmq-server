@@ -416,7 +416,7 @@ remove_version_preview_part(Version) ->
     iolist_to_binary(rabbit_semver:format({Ver, {[], []}})).
 
 clean_plugins(Plugins) ->
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+    ExpandDir = plugins_expand_dir(),
     [clean_plugin(Plugin, ExpandDir) || Plugin <- Plugins].
 
 clean_plugin(Plugin, ExpandDir) ->
