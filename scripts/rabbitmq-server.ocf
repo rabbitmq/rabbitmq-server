@@ -30,7 +30,7 @@
 ##   OCF_RESKEY_mnesia_base
 ##   OCF_RESKEY_server_start_args
 ##   OCF_RESKEY_pid_file
-##   OCF_RESKEY_limit_nofile_default
+##   OCF_RESKEY_limit_nofile
 
 #######################################################################
 # Initialization:
@@ -214,6 +214,13 @@ export_vars() {
     [ ! -z $RABBITMQ_MNESIA_BASE ]         && export RABBITMQ_MNESIA_BASE
     [ ! -z $RABBITMQ_SERVER_START_ARGS ]   && export RABBITMQ_SERVER_START_ARGS
     [ ! -z $RABBITMQ_PID_FILE ]            && ensure_pid_dir && export RABBITMQ_PID_FILE
+}
+
+set_limits() {
+    local current_limit=$(su rabbitmq -s /bin/sh -c "ulimit -n")
+    if [ ! -z $RABBITMQ_LIMIT_NOFILE -a $RABBITMQ_LIMIT_NOFILE -gt $current_limit ] ; then
+        ulimit -n $RABBITMQ_LIMIT_NOFILE
+    fi
 }
 
 rabbit_validate_partial() {
