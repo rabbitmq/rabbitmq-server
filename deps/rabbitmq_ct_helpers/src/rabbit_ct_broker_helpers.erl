@@ -1107,9 +1107,11 @@ get_connection_pids(Connections) ->
       end, rabbit_networking:connections()).
 
 %% Return the PID of the given queue's supervisor.
-get_queue_sup_pid(QueuePid) ->
-    Sups = supervisor:which_children(rabbit_amqqueue_sup_sup),
-    get_queue_sup_pid(Sups, QueuePid).
+get_queue_sup_pid(#amqqueue { pid = QPid, name = QName }) ->
+    VHost = QName#resource.virtual_host,
+    {ok, AmqSup} = rabbit_amqqueue_sup_sup:find_for_vhost(VHost, node(QPid)),
+    Sups = supervisor:which_children(AmqSup),
+    get_queue_sup_pid(Sups, QPid).
 
 get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
     WorkerPids = [Pid || {_, Pid, _, _} <- supervisor:which_children(SupPid)],
