@@ -172,8 +172,6 @@
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any(),
          rabbit_types:username()) -> 'ok'.
 -spec notify_decorators(rabbit_types:amqqueue()) -> 'ok'.
--spec notify_sent(pid(), pid()) -> 'ok'.
--spec notify_sent_queue_down(pid()) -> 'ok'.
 -spec resume(pid(), pid()) -> 'ok'.
 -spec internal_delete(name(), rabbit_types:username()) ->
           rabbit_types:ok_or_error('not_found') |
@@ -266,12 +264,12 @@ find_durable_queues() ->
                                               pid  = Pid}
                                     <- mnesia:table(rabbit_durable_queue),
                                 node(Pid) == Node andalso
-				%% Terminations on node down will not remove the rabbit_queue
-				%% record if it is a mirrored queue (such info is now obtained from
-				%% the policy). Thus, we must check if the local pid is alive
-				%% - if the record is present - in order to restart.
-						    (mnesia:read(rabbit_queue, Name, read) =:= []
-						     orelse not erlang:is_process_alive(Pid))]))
+                                %% Terminations on node down will not remove the rabbit_queue
+                                %% record if it is a mirrored queue (such info is now obtained from
+                                %% the policy). Thus, we must check if the local pid is alive
+                                %% - if the record is present - in order to restart.
+                                                    (mnesia:read(rabbit_queue, Name, read) =:= []
+                                                     orelse not erlang:is_process_alive(Pid))]))
       end).
 
 recover_durable_queues(QueuesAndRecoveryTerms) ->
@@ -795,21 +793,10 @@ notify_decorators(#amqqueue{pid = QPid}) ->
     delegate:cast(QPid, notify_decorators).
 
 notify_sent(QPid, ChPid) ->
-    Key = {consumer_credit_to, QPid},
-    put(Key, case get(Key) of
-                 1         -> gen_server2:cast(
-                                QPid, {notify_sent, ChPid,
-                                       ?MORE_CONSUMER_CREDIT_AFTER}),
-                              ?MORE_CONSUMER_CREDIT_AFTER;
-                 undefined -> erlang:monitor(process, QPid),
-                              ?MORE_CONSUMER_CREDIT_AFTER - 1;
-                 C         -> C - 1
-             end),
-    ok.
+    rabbit_amqqueue_common:notify_sent(QPid, ChPid).
 
 notify_sent_queue_down(QPid) ->
-    erase({consumer_credit_to, QPid}),
-    ok.
+    rabbit_amqqueue_common:notify_sent_queue_down(QPid).
 
 resume(QPid, ChPid) -> delegate:cast(QPid, {resume, ChPid}).
 
@@ -839,10 +826,9 @@ internal_delete(QueueName, ActingUser) ->
                       fun() ->
                               ok = T(),
 			      rabbit_core_metrics:queue_deleted(QueueName),
-                              ok = rabbit_event:notify(
-                                     queue_deleted,
-                                     [{name, QueueName},
-                                      {user_who_performed_action, ActingUser}])
+                              ok = rabbit_event:notify(queue_deleted,
+                                                       [{name, QueueName},
+                                                        {user_who_performed_action, ActingUser}])
                       end
               end
       end).
@@ -888,8 +874,10 @@ forget_node_for_queue(DeadNode, [H|T], Q) ->
 node_permits_offline_promotion(Node) ->
     case node() of
         Node -> not rabbit:is_running(); %% [1]
-        _    -> Running = rabbit_mnesia:cluster_nodes(running),
-                not lists:member(Node, Running) %% [2]
+        _    -> All = rabbit_mnesia:cluster_nodes(all),
+                Running = rabbit_mnesia:cluster_nodes(running),
+                lists:member(Node, All) andalso
+                    not lists:member(Node, Running) %% [2]
     end.
 %% [1] In this case if we are a real running node (i.e. rabbitmqctl
 %% has RPCed into us) then we cannot allow promotion. If on the other
@@ -963,9 +951,9 @@ on_node_down(Node) ->
                     qlc:e(qlc:q([{QName, delete_queue(QName)} ||
                                     #amqqueue{name = QName, pid = Pid} = Q
                                         <- mnesia:table(rabbit_queue),
-				    not rabbit_amqqueue:is_mirrored(Q) andalso
-					node(Pid) == Node andalso
-					not rabbit_mnesia:is_process_alive(Pid)])),
+                                    not rabbit_amqqueue:is_mirrored(Q) andalso
+                                        node(Pid) == Node andalso
+                                        not rabbit_mnesia:is_process_alive(Pid)])),
                 {Qs, Dels} = lists:unzip(QsDels),
                 T = rabbit_binding:process_deletions(
                       lists:foldl(fun rabbit_binding:combine_deletions/2,
@@ -975,7 +963,7 @@ on_node_down(Node) ->
                         T(),
                         lists:foreach(
                           fun(QName) ->
-				  rabbit_core_metrics:queue_deleted(QName),
+                                  rabbit_core_metrics:queue_deleted(QName),
                                   ok = rabbit_event:notify(queue_deleted,
                                                            [{name, QName},
                                                             {user, ?INTERNAL_USER}])
