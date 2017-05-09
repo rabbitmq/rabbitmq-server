@@ -19,7 +19,7 @@
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
-         stop_and_halt/0, await_startup/0, status/0, is_running/0,
+         stop_and_halt/0, await_startup/0, await_startup2/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
 -export([start/2, stop/1]).
@@ -436,7 +436,7 @@ stop() ->
         undefined -> ok;
         _         ->
             rabbit_log:info("RabbitMQ hasn't finished starting yet. Waiting for startup to finish before stopping..."),
-            await_startup(true)
+            wait_to_finish_booting()
     end,
     rabbit_log:info("RabbitMQ is asked to stop...~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
@@ -617,6 +617,35 @@ await_startup(HaveSeenRabbitBoot) ->
                      end;
         _         -> timer:sleep(100),
                      await_startup(true)
+    end.
+
+await_startup2() ->
+    case is_booting() of
+        true -> wait_to_finish_booting();
+        false ->
+            case is_running() of
+                true -> ok;
+                false -> wait_to_start_booting(),
+                         wait_to_finish_booting()
+            end
+    end.
+
+is_booting() ->
+    whereis(rabbit_boot) /= undefined.
+
+wait_to_start_booting() ->
+    case whereis(rabbit_boot) of
+        undefined -> timer:sleep(100),
+                     wait_to_start_booting();
+        _         -> ok
+    end.
+
+wait_to_finish_booting() ->
+    case whereis(rabbit_boot) of
+        undefined -> true = is_running(),
+                     ok;
+        _         -> timer:sleep(100),
+                     wait_to_finish_booting()
     end.
 
 status() ->
