@@ -853,8 +853,10 @@ forget_node_for_queue(DeadNode, [H|T], Q) ->
 node_permits_offline_promotion(Node) ->
     case node() of
         Node -> not rabbit:is_running(); %% [1]
-        _    -> Running = rabbit_mnesia:cluster_nodes(running),
-                not lists:member(Node, Running) %% [2]
+        _    -> All = rabbit_mnesia:cluster_nodes(all),
+                Running = rabbit_mnesia:cluster_nodes(running),
+                lists:member(Node, All) andalso
+                    not lists:member(Node, Running) %% [2]
     end.
 %% [1] In this case if we are a real running node (i.e. rabbitmqctl
 %% has RPCed into us) then we cannot allow promotion. If on the other
