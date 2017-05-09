@@ -135,15 +135,8 @@ $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(s
 endef
 
 DOCS_DIR     = docs
-MANPAGES     = $(patsubst %.xml, %, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
-WEB_MANPAGES = $(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml $(DOCS_DIR)/rabbitmq-echopid.xml)
-USAGES_XML   = $(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
-USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
-
-EXTRA_SOURCES += $(USAGES_ERL)
-
-.DEFAULT_GOAL = all
-$(PROJECT).d:: $(EXTRA_SOURCES)
+MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
+WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
@@ -207,10 +200,7 @@ copy-escripts:
 		PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
 		DESTDIR=
 
-clean:: clean-extra-sources clean-escripts
-
-clean-extra-sources:
-	$(gen_verbose) rm -f $(EXTRA_SOURCES)
+clean:: clean-escripts
 
 clean-escripts:
 	$(gen_verbose) rm -rf "$(CLI_ESCRIPTS_DIR)"
@@ -218,45 +208,6 @@ clean-escripts:
 # --------------------------------------------------------------------
 # Documentation.
 # --------------------------------------------------------------------
-
-# xmlto can not read from standard input, so we mess with a tmp file.
-%: %.xml $(DOCS_DIR)/examples-to-end.xsl
-	$(gen_verbose) xmlto --version | \
-	    grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || \
-	    opt='--stringparam man.indent.verbatims=0' ; \
-	xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	xmlto -vv -o $(DOCS_DIR) $$opt man $< 2>&1 | (grep -v '^Note: Writing' || :) && \
-	awk -F"'u " '/^\.HP / { print $$1; print $$2; next; } { print; }' "$@" > "$@.tmp" && \
-	mv "$@.tmp" "$@" && \
-	test -f $@ && \
-	rm $<.tmp
-
-# Use tmp files rather than a pipeline so that we get meaningful errors
-# Do not fold the cp into previous line, it's there to stop the file being
-# generated but empty if we fail
-define usage_dep
-$(call usage_xml_to_erl, $(1)):: $(1) $(DOCS_DIR)/usage.xsl
-	$$(gen_verbose) xsltproc --novalid --stringparam modulename "`basename $$@ .erl`" \
-	    $(DOCS_DIR)/usage.xsl $$< > $$@.tmp && \
-	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $$@.tmp > $$@.tmp2 && \
-	fold -s $$@.tmp2 > $$@.tmp3 && \
-	mv $$@.tmp3 $$@ && \
-	rm $$@.tmp $$@.tmp2
-endef
-
-$(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
-
-# We rename the file before xmlto sees it since xmlto will use the name of
-# the file to make internal links.
-%.man.xml: %.xml $(DOCS_DIR)/html-to-website-xml.xsl
-	$(gen_verbose) cp $< `basename $< .xml`.xml && \
-	    xmlto xhtml-nochunks `basename $< .xml`.xml ; \
-	rm `basename $< .xml`.xml && \
-	cat `basename $< .xml`.html | \
-	    xsltproc --novalid $(DOCS_DIR)/remove-namespaces.xsl - | \
-	      xsltproc --novalid --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
-	      xmllint --format - > $@ && \
-	rm `basename $< .xml`.html
 
 .PHONY: manpages web-manpages distclean-manpages
 
@@ -268,9 +219,32 @@ manpages: $(MANPAGES)
 web-manpages: $(WEB_MANPAGES)
 	@:
 
+# We use mandoc(1) to convert manpages to HTML plus an awk script which
+# does:
+#     1. remove tables at the top and the bottom (they recall the
+#        manpage name, section and date)
+#     2. "downgrade" headers by one level (eg. h1 -> h2)
+#     3. annotate .Dl lines with more CSS classes
+%.html: %
+	$(gen_verbose) mandoc -T html -O 'fragment,man=%N.%S.html' "$<" | \
+	  awk '\
+	  /^<table class="head">$$/ { remove_table=1; next; } \
+	  /^<table class="foot">$$/ { remove_table=1; next; } \
+	  /^<\/table>$$/ { if (remove_table) { remove_table=0; next; } } \
+	  { if (!remove_table) { \
+	    line=$$0; \
+	    gsub(/<h2/, "<h3", line); \
+	    gsub(/<\/h2>/, "</h3>", line); \
+	    gsub(/<h1/, "<h2", line); \
+	    gsub(/<\/h1>/, "</h2>", line); \
+	    gsub(/class="D1"/, "class=\"D1 sourcecode bash hljs\"", line); \
+	    print line; \
+	  } } \
+	  ' > "$@"
+
 distclean:: distclean-manpages
 
 distclean-manpages::
-	$(gen_verbose) rm -f $(MANPAGES) $(WEB_MANPAGES)
+	$(gen_verbose) rm -f $(WEB_MANPAGES)
 
 app-build: copy-escripts
