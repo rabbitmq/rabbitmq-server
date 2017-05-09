@@ -9,7 +9,7 @@ dist_verbose = $(dist_verbose_$(V))
 
 MIX_ARCHIVES ?= $(HOME)/.mix/archives
 
-MIX_TASK_ARCHIVE_DEPS_VERSION = 0.3.0
+MIX_TASK_ARCHIVE_DEPS_VERSION = 0.4.0
 mix_task_archive_deps = $(MIX_ARCHIVES)/mix_task_archive_deps-$(MIX_TASK_ARCHIVE_DEPS_VERSION)
 
 # We take the version of an Erlang application from the .app file. This
@@ -31,7 +31,7 @@ endef
 define get_mix_project_version
 $(shell cd $(1) && \
 	$(MIX) do deps.get, deps.compile, compile >/dev/null && \
-	$(MIX) run -e "IO.puts(Mix.Project.config[:version])")
+	$(MIX) run --no-start -e "IO.puts(Mix.Project.config[:version])")
 endef
 
 # Define the target to create an .ez plugin archive for an
@@ -64,6 +64,8 @@ $$(dist_$(1)_ez): $$(patsubst %,$(3)/%, \
 	APP=$(1) VSN=$(2) EZ_DIR=$$(abspath $$(dist_$(1)_ez_dir))))
 endif
 
+ERLANGMK_DIST_APPS += $(1)
+
 ERLANGMK_DIST_EZS += $$(dist_$(1)_ez)
 
 endef
@@ -76,7 +78,7 @@ endef
 define get_mix_project_dep_ezs
 $(shell cd $(1) && \
 	$(MIX) do deps.get, deps.compile, compile >/dev/null && \
-	$(MIX) archive.build.all.list -e -o $(DIST_DIR))
+	$(MIX) archive.build.all.list -e -o $(DIST_DIR) --skip "rabbit $(ERLANGMK_DIST_APPS)")
 endef
 
 define do_ez_target_mix
@@ -89,6 +91,8 @@ $$(dist_$(1)_ez): VSN     = $(2)
 $$(dist_$(1)_ez): SRC_DIR = $(3)
 $$(dist_$(1)_ez): EZ_DIR  = $$(abspath $$(dist_$(1)_ez_dir))
 $$(dist_$(1)_ez): EZ      = $$(dist_$(1)_ez)
+$$(dist_$(1)_ez): $$(if $$(wildcard _build/dev/lib/$(1)/ebin $(3)/priv),\
+	$$(call core_find,$$(wildcard _build/dev/lib/$(1)/ebin $(3)/priv),*),)
 
 MIX_DIST_EZS += $$(dist_$(1)_ez)
 EXTRA_DIST_EZS += $$(call get_mix_project_dep_ezs,$(3))
@@ -175,7 +179,7 @@ $(ERLANGMK_DIST_EZS):
 $(MIX_DIST_EZS): $(mix_task_archive_deps)
 	$(verbose) cd $(SRC_DIR) && \
 		$(MIX) do deps.get, deps.compile, compile, archive.build.all \
-		-e -o $(abspath $(DIST_DIR))
+		-e -o $(abspath $(DIST_DIR)) --skip "rabbit $(ERLANGMK_DIST_APPS)"
 
 MIX_TASK_ARCHIVE_DEPS_URL = https://github.com/hairyhum/mix_task_archive_deps/releases/download/$(MIX_TASK_ARCHIVE_DEPS_VERSION)/mix_task_archive_deps-$(MIX_TASK_ARCHIVE_DEPS_VERSION).ez
 

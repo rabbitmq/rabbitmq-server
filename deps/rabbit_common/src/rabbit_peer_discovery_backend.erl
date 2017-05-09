@@ -35,10 +35,13 @@
 
 -include("rabbit.hrl").
 
--callback list_nodes() -> {ok, Nodes :: list()} |
-                          {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
+-callback list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
                           {error, Reason :: string()}.
+
+-callback supports_registration() -> boolean().
 
 -callback register()   -> ok | {error, Reason :: string()}.
 
 -callback unregister() -> ok | {error, Reason :: string()}.
+
+-callback post_registration()   -> ok | {error, Reason :: string()}.
