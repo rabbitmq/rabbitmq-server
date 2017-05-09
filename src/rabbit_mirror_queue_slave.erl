@@ -197,8 +197,10 @@ stop_pending_slaves(QName, Pids) ->
          case erlang:process_info(Pid, dictionary) of
              undefined -> ok;
              {dictionary, Dict} ->
+                 Vhost = QName#resource.virtual_host,
+                 {ok, AmqQSup} = rabbit_amqqueue_sup_sup:find_for_vhost(Vhost),
                  case proplists:get_value('$ancestors', Dict) of
-                     [Sup, rabbit_amqqueue_sup_sup | _] ->
+                     [Sup, AmqQSup | _] ->
                          exit(Sup, kill),
                          exit(Pid, kill);
                      _ ->

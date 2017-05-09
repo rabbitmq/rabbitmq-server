@@ -949,6 +949,12 @@ end}.
 {mapping, "proxy_protocol", "rabbit.proxy_protocol",
     [{datatype, {enum, [true, false]}}]}.
 
+%% Whether to stop the rabbit application if VHost data
+%% cannot be recovered.
+
+{mapping, "vhost_restart_strategy", "rabbit.vhost_restart_strategy",
+    [{datatype, {enum, [stop_node, ignore]}}]}.
+
 % ==========================
 % Lager section
 % ==========================

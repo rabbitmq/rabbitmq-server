@@ -117,7 +117,9 @@ define PROJECT_ENV
 	    %% rabbitmq-server-589
 	    {proxy_protocol, false},
 	    {disk_monitor_failure_retries, 10},
-	    {disk_monitor_failure_retry_interval, 120000}
+	    {disk_monitor_failure_retry_interval, 120000},
+	    %% either "stop_node" or "ignore"
+	    {vhost_restart_strategy, stop_node}
 	  ]
 endef
 

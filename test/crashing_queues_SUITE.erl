@@ -218,12 +218,18 @@ kill_queue(Node, QName) ->
 
 queue_pid(Node, QName) ->
     #amqqueue{pid   = QPid,
-              state = State} = lookup(Node, QName),
+              state = State,
+              name  = #resource{virtual_host = VHost}} = lookup(Node, QName),
     case State of
-        crashed -> case sup_child(Node, rabbit_amqqueue_sup_sup) of
+        crashed ->
+            case rabbit_amqqueue_sup_sup:find_for_vhost(VHost, Node) of
+                {error, {queue_supervisor_not_found, Result}} -> {error, no_sup};
+                {ok, SPid} ->
+                    case sup_child(Node, SPid) of
                        {ok, _}           -> QPid;   %% restarting
                        {error, no_child} -> crashed %% given up
-                   end;
+                    end
+            end;
         _       -> QPid
     end.
 

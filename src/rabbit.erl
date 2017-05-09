@@ -147,12 +147,6 @@
                    [{description, "core initialized"},
                     {requires,    kernel_ready}]}).
 
--rabbit_boot_step({empty_db_check,
-                   [{description, "empty DB check"},
-                    {mfa,         {?MODULE, maybe_insert_default_data, []}},
-                    {requires,    core_initialized},
-                    {enables,     routing_ready}]}).
-
 -rabbit_boot_step({upgrade_queues,
                    [{description, "per-vhost message store migration"},
                     {mfa,         {rabbit_upgrade,
@@ -164,7 +158,13 @@
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},
-                    {requires,    core_initialized},
+                    {requires,    [core_initialized]},
+                    {enables,     routing_ready}]}).
+
+-rabbit_boot_step({empty_db_check,
+                   [{description, "empty DB check"},
+                    {mfa,         {?MODULE, maybe_insert_default_data, []}},
+                    {requires,    recovery},
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({mirrored_queues,
@@ -829,10 +829,7 @@ boot_delegate() ->
 
 recover() ->
     rabbit_policy:recover(),
-    Qs = rabbit_amqqueue:recover(),
-    ok = rabbit_binding:recover(rabbit_exchange:recover(),
-                                [QName || #amqqueue{name = QName} <- Qs]),
-    rabbit_amqqueue:start(Qs).
+    rabbit_vhost:recover().
 
 maybe_insert_default_data() ->
     case rabbit_table:needs_default_data() of

@@ -17,16 +17,19 @@
 -module(rabbit_queue_index).
 
 -export([erase/1, init/3, reset_state/1, recover/6,
-         terminate/2, delete_and_terminate/1,
+         terminate/3, delete_and_terminate/1,
          pre_publish/7, flush_pre_publish_cache/2,
          publish/6, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
-         read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
+         read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
 -export([scan_queue_segments/3]).
 
 %% Migrates from global to per-vhost message stores
--export([move_to_per_vhost_stores/1, update_recovery_term/2]).
+-export([move_to_per_vhost_stores/1,
+         update_recovery_term/2,
+         read_global_recovery_terms/1,
+         cleanup_global_recovery_terms/0]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -261,7 +264,7 @@
                     on_sync_fun(), on_sync_fun()) ->
                         {'undefined' | non_neg_integer(),
                          'undefined' | non_neg_integer(), qistate()}.
--spec terminate([any()], qistate()) -> qistate().
+-spec terminate(rabbit_types:vhost(), [any()], qistate()) -> qistate().
 -spec delete_and_terminate(qistate()) -> qistate().
 -spec publish(rabbit_types:msg_id(), seq_id(),
                     rabbit_types:message_properties(), boolean(),
@@ -278,7 +281,7 @@
 -spec next_segment_boundary(seq_id()) -> seq_id().
 -spec bounds(qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}.
--spec start([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
+-spec start(rabbit_types:vhost(), [rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
 
 -spec add_queue_ttl() -> 'ok'.
 
@@ -321,9 +324,9 @@ recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun,
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
-terminate(Terms, State = #qistate { dir = Dir }) ->
+terminate(VHost, Terms, State = #qistate { dir = Dir }) ->
     {SegmentCounts, State1} = terminate(State),
-    rabbit_recovery_terms:store(filename:basename(Dir),
+    rabbit_recovery_terms:store(VHost, filename:basename(Dir),
                                 [{segments, SegmentCounts} | Terms]),
     State1.
 
@@ -491,34 +494,63 @@ bounds(State = #qistate { segments = Segments }) ->
         end,
     {LowSeqId, NextSeqId, State}.
 
-start(DurableQueueNames) ->
-    ok = rabbit_recovery_terms:start(),
+start(VHost, DurableQueueNames) ->
+    ok = rabbit_recovery_terms:start(VHost),
     {DurableTerms, DurableDirectories} =
         lists:foldl(
           fun(QName, {RecoveryTerms, ValidDirectories}) ->
                   DirName = queue_name_to_dir_name(QName),
-                  RecoveryInfo = case rabbit_recovery_terms:read(DirName) of
+                  RecoveryInfo = case rabbit_recovery_terms:read(VHost, DirName) of
                                      {error, _}  -> non_clean_shutdown;
                                      {ok, Terms} -> Terms
                                  end,
                   {[RecoveryInfo | RecoveryTerms],
                    sets:add_element(DirName, ValidDirectories)}
           end, {[], sets:new()}, DurableQueueNames),
-
     %% Any queue directory we've not been asked to recover is considered garbage
     rabbit_file:recursive_delete(
       [DirName ||
-        DirName <- all_queue_directory_names(),
+        DirName <- all_queue_directory_names(VHost),
         not sets:is_element(filename:basename(DirName), DurableDirectories)]),
-
-    rabbit_recovery_terms:clear(),
+    rabbit_recovery_terms:clear(VHost),
 
     %% The backing queue interface requires that the queue recovery terms
     %% which come back from start/1 are in the same order as DurableQueueNames
     OrderedTerms = lists:reverse(DurableTerms),
     {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
-stop() -> rabbit_recovery_terms:stop().
+
+read_global_recovery_terms(DurableQueueNames) ->
+    ok = rabbit_recovery_terms:open_global_table(),
+
+    DurableTerms =
+        lists:foldl(
+          fun(QName, RecoveryTerms) ->
+                  DirName = queue_name_to_dir_name(QName),
+                  RecoveryInfo = case rabbit_recovery_terms:read_global(DirName) of
+                                     {error, _}  -> non_clean_shutdown;
+                                     {ok, Terms} -> Terms
+                                 end,
+                  [RecoveryInfo | RecoveryTerms]
+          end, [], DurableQueueNames),
+
+    ok = rabbit_recovery_terms:close_global_table(),
+    %% The backing queue interface requires that the queue recovery terms
+    %% which come back from start/1 are in the same order as DurableQueueNames
+    OrderedTerms = lists:reverse(DurableTerms),
+    {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
+
+cleanup_global_recovery_terms() ->
+    rabbit_file:recursive_delete([filename:join([queues_base_dir(), "queues"])]),
+    rabbit_recovery_terms:delete_global_table(),
+    ok.
+
+
+stop(VHost) -> rabbit_recovery_terms:stop(VHost).
+
+all_queue_directory_names(VHost) ->
+    filelib:wildcard(filename:join([rabbit_vhost:msg_store_dir_path(VHost),
+                                    "queues", "*"])).
 
 all_queue_directory_names() ->
     filelib:wildcard(filename:join([rabbit_vhost:msg_store_dir_wildcard(),
@@ -1447,6 +1479,6 @@ move_to_per_vhost_stores(#resource{} = QueueName) ->
     end,
     ok.
 
-update_recovery_term(#resource{} = QueueName, Term) ->
+update_recovery_term(#resource{virtual_host = VHost} = QueueName, Term) ->
     Key = queue_name_to_dir_name(QueueName),
-    rabbit_recovery_terms:store(Key, Term).
+    rabbit_recovery_terms:store(VHost, Key, Term).

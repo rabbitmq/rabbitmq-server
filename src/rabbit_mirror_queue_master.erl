@@ -26,7 +26,7 @@
          msg_rates/1, info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          zip_msgs_and_acks/4]).
 
--export([start/1, stop/0, delete_crashed/1]).
+-export([start/2, stop/1, delete_crashed/1]).
 
 -export([promote_backing_queue_state/8, sender_death_fun/0, depth_fun/0]).
 
@@ -81,12 +81,12 @@
 %% Backing queue
 %% ---------------------------------------------------------------------------
 
-start(_DurableQueues) ->
+start(_Vhost, _DurableQueues) ->
     %% This will never get called as this module will never be
     %% installed as the default BQ implementation.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-stop() ->
+stop(_Vhost) ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 

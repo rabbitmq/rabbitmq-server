@@ -30,7 +30,7 @@
 
 -export([enable/0]).
 
--export([start/1, stop/0]).
+-export([start/2, stop/1]).
 
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
          purge/1, purge_acks/1,
@@ -83,22 +83,22 @@ enable() ->
 
 %%----------------------------------------------------------------------------
 
-start(QNames) ->
+start(VHost, QNames) ->
     BQ = bq(),
     %% TODO this expand-collapse dance is a bit ridiculous but it's what
     %% rabbit_amqqueue:recover/0 expects. We could probably simplify
     %% this if we rejigged recovery a bit.
     {DupNames, ExpNames} = expand_queues(QNames),
-    case BQ:start(ExpNames) of
+    case BQ:start(VHost, ExpNames) of
         {ok, ExpRecovery} ->
             {ok, collapse_recovery(QNames, DupNames, ExpRecovery)};
         Else ->
             Else
     end.
 
-stop() ->
+stop(VHost) ->
     BQ = bq(),
-    BQ:stop().
+    BQ:stop(VHost).
 
 %%----------------------------------------------------------------------------
 

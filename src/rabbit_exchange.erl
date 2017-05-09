@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
--export([recover/0, policy_changed/2, callback/4, declare/7,
+-export([recover/1, policy_changed/2, callback/4, declare/7,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
          update_scratch/3, update_decorators/1, immutable/1,
@@ -36,7 +36,7 @@
 -type type() :: atom().
 -type fun_name() :: atom().
 
--spec recover() -> [name()].
+-spec recover(rabbit_types:vhost()) -> [name()].
 -spec callback
         (rabbit_types:exchange(), fun_name(),
          fun((boolean()) -> non_neg_integer()) | atom(), [any()]) -> 'ok'.
@@ -107,10 +107,11 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments,
                     policy, user_who_performed_action]).
 
-recover() ->
+recover(VHost) ->
     Xs = rabbit_misc:table_filter(
            fun (#exchange{name = XName}) ->
-                   mnesia:read({rabbit_exchange, XName}) =:= []
+                XName#resource.virtual_host =:= VHost andalso
+                mnesia:read({rabbit_exchange, XName}) =:= []
            end,
            fun (X, Tx) ->
                    X1 = case Tx of
