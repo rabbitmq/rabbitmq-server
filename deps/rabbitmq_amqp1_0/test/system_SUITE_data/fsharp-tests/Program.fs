@@ -303,6 +303,9 @@ module Test =
                 assertEqual (ae.Error.Condition) (Symbol cond)
             | _ -> failwith "invalid expection thrown"
 
+    let authFailure uri =
+        use c = connect uri
+        ()
 
 let (|AsLower|) (s: string) =
     match s with
@@ -314,6 +317,9 @@ let (|AsLower|) (s: string) =
 [<EntryPoint>]
 let main argv =
     match List.ofArray argv with
+    | [AsLower "auth_failure"; uri] ->
+        authFailure uri
+        0
     | [AsLower "roundtrip"; uri] ->
         roundtrip uri
         0
