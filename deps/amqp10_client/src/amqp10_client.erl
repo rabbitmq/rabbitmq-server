@@ -31,6 +31,7 @@
          attach_sender_link/5,
          attach_sender_link_sync/3,
          attach_sender_link_sync/4,
+         attach_sender_link_sync/5,
          attach_receiver_link/3,
          attach_receiver_link/4,
          attach_receiver_link/5,
@@ -158,7 +159,17 @@ attach_sender_link_sync(Session, Name, Target) ->
                               snd_settle_mode()) ->
     {ok, link_ref()} | link_timeout.
 attach_sender_link_sync(Session, Name, Target, SettleMode) ->
-    {ok, Ref} = attach_sender_link(Session, Name, Target, SettleMode),
+    attach_sender_link_sync(Session, Name, Target, SettleMode, none).
+
+%% @doc Synchronously attach a link on 'Session'.
+%% This is a convenience function that awaits attached event
+%% for the link before returning.
+-spec attach_sender_link_sync(pid(), binary(), binary(),
+                              snd_settle_mode(), terminus_durability()) ->
+    {ok, link_ref()} | link_timeout.
+attach_sender_link_sync(Session, Name, Target, SettleMode, Durability) ->
+    {ok, Ref} = attach_sender_link(Session, Name, Target, SettleMode,
+                                   Durability),
     receive
         {amqp10_event, {link, Ref, attached}} ->
             {ok, Ref};
