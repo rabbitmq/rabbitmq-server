@@ -21,7 +21,7 @@
 -export([protocol/1, resource/1, queue/1, queue_state/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
--export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
+-export([to_amqp_table/1, listener/1, web_context/1, properties/1, basic_properties/1]).
 -export([record/2, to_basic_properties/1]).
 -export([addr/1, port/1]).
 -export([format_nulls/1, escape_html_tags/1]).
@@ -35,7 +35,7 @@
 
 -export([clean_consumer_details/1, clean_channel_details/1]).
 
--import(rabbit_misc, [pget/2, pset/3]).
+-import(rabbit_misc, [pget/2, pget/3, pset/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -255,11 +255,20 @@ listener(#listener{node = Node, protocol = Protocol,
      {port, Port},
      {socket_opts, format_socket_opts(Opts)}].
 
+web_context(Props0) ->
+    SslOpts = pget(ssl_opts, Props0, []),
+    Props   = proplists:delete(ssl_opts, Props0),
+    [{ssl_opts, format_socket_opts(SslOpts)} | Props].
+
 format_socket_opts(Opts) ->
     format_socket_opts(Opts, []).
 
 format_socket_opts([], Acc) ->
     lists:reverse(Acc);
+%% for HTTP API listeners this will be included into
+%% socket_opts
+format_socket_opts([{ssl_opts, Value} | Tail], Acc) ->
+    format_socket_opts(Tail, [{ssl_opts, format_socket_opts(Value)} | Acc]);
 %% exclude options that have values that are nested
 %% data structures or may include functions. They are fairly
 %% obscure and not worth reporting via HTTP API.
