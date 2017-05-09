@@ -217,11 +217,11 @@ ssl_cert_info(Sock) ->
     case rabbit_net:peercert(Sock) of
         {ok, Cert} ->
             [{peer_cert_issuer,   list_to_binary(
-                                    rabbit_ssl:peer_cert_issuer(Cert))},
+                                    rabbit_cert_info:issuer(Cert))},
              {peer_cert_subject,  list_to_binary(
-                                    rabbit_ssl:peer_cert_subject(Cert))},
+                                    rabbit_cert_info:subject(Cert))},
              {peer_cert_validity, list_to_binary(
-                                    rabbit_ssl:peer_cert_validity(Cert))}];
+                                    rabbit_cert_info:validity(Cert))}];
         _ ->
             []
     end.
