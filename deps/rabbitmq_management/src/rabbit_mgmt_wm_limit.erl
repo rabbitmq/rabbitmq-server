@@ -41,14 +41,14 @@ content_types_accepted(ReqData, Context) ->
 allowed_methods(ReqData, Context) ->
     {[<<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
-accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
-    case rabbit_mgmt_util:vhost(ReqData) of
+accept_content(ReqData0, Context = #context{user = #user{username = Username}}) ->
+    case rabbit_mgmt_util:vhost(ReqData0) of
         not_found ->
-            rabbit_mgmt_util:not_found(vhost_not_found, ReqData, Context);
+            rabbit_mgmt_util:not_found(vhost_not_found, ReqData0, Context);
         VHost ->
             rabbit_mgmt_util:with_decode(
-                [value], ReqData, Context,
-                fun([Value], _Body) ->
+                [value], ReqData0, Context,
+                fun([Value], _Body, ReqData) ->
                     Name = rabbit_mgmt_util:id(name, ReqData),
                     case rabbit_vhost_limit:update_limit(VHost, Name, Value,
                                                          Username) of
