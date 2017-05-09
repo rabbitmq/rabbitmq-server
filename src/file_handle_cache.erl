@@ -149,7 +149,7 @@
          open_with_absolute_path/3]).
 -export([obtain/0, obtain/1, release/0, release/1, transfer/1, transfer/2,
          set_limit/1, get_limit/0, info_keys/0, with_handle/1, with_handle/2,
-         info/0, info/1, clear_read_cache/0]).
+         info/0, info/1, clear_read_cache/0, clear_process_read_cache/0]).
 -export([ulimit/0]).
 
 -export([start_link/0, start_link/2, init/1, handle_call/3, handle_cast/2,
@@ -164,8 +164,6 @@
 -define(OBTAIN_LIMIT(LIMIT), trunc((LIMIT * 0.9) - 2)).
 -define(CLIENT_ETS_TABLE, file_handle_cache_client).
 -define(ELDERS_ETS_TABLE, file_handle_cache_elders).
-
--include("rabbit.hrl"). % For #amqqueue record definition.
 
 %%----------------------------------------------------------------------------
 
@@ -601,35 +599,7 @@ info() -> info(?INFO_KEYS).
 info(Items) -> gen_server2:call(?SERVER, {info, Items}, infinity).
 
 clear_read_cache() ->
-    case application:get_env(rabbit, fhc_read_buffering) of
-        {ok, true} ->
-            gen_server2:cast(?SERVER, clear_read_cache),
-            clear_vhost_read_cache(rabbit_vhost:list());
-        _ -> %% undefined or {ok, false}
-            ok
-    end.
-
-clear_vhost_read_cache([]) ->
-    ok;
-clear_vhost_read_cache([VHost | Rest]) ->
-    clear_queue_read_cache(rabbit_amqqueue:list(VHost)),
-    clear_vhost_read_cache(Rest).
-
-clear_queue_read_cache([]) ->
-    ok;
-clear_queue_read_cache([#amqqueue{pid = MPid, slave_pids = SPids} | Rest]) ->
-    %% Limit the action to the current node.
-    Pids = [P || P <- [MPid | SPids], node(P) =:= node()],
-    %% This function is executed in the context of the backing queue
-    %% process because the read buffer is stored in the process
-    %% dictionary.
-    Fun = fun(_, State) ->
-                  _ = clear_process_read_cache(),
-                  State
-          end,
-    [rabbit_amqqueue:run_backing_queue(Pid, rabbit_variable_queue, Fun)
-     || Pid <- Pids],
-    clear_queue_read_cache(Rest).
+    gen_server2:cast(?SERVER, clear_read_cache).
 
 clear_process_read_cache() ->
     [
