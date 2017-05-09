@@ -58,7 +58,7 @@ to_json(ReqData, Context) ->
                            ReqData, Context).
 
 accept_content(ReqData0, Context = #context{user = #user{username = ActingUser}}) ->
-    Username = rabbit_mgmt_util:id(user, ReqData),
+    Username = rabbit_mgmt_util:id(user, ReqData0),
     rabbit_mgmt_util:with_decode(
       [], ReqData0, Context,
       fun(_, User, ReqData) ->

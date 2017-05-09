@@ -56,7 +56,7 @@ do_it(ReqData0, Context) ->
     VHost = rabbit_mgmt_util:vhost(ReqData0),
     Q = rabbit_mgmt_util:id(queue, ReqData0),
     rabbit_mgmt_util:with_decode(
-      [ackmode, count, encoding], ReqData, Context,
+      [ackmode, count, encoding], ReqData0, Context,
       fun([AckModeBin, CountBin, EncBin], Body, ReqData) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
