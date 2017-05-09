@@ -639,7 +639,7 @@ auth_phase_1_0(Response,
                                               auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
-        {refused, Msg, Args} ->
+        {refused, _User, Msg, Args} ->
             protocol_error(
               ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~s login refused: ~s",
               [Name, io_lib:format(Msg, Args)]);
