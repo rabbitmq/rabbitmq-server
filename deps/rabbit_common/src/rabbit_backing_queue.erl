@@ -54,19 +54,19 @@
 
 -spec info_keys() -> rabbit_types:info_keys().
 
-%% Called on startup with a list of durable queue names. The queues
-%% aren't being started at this point, but this call allows the
+%% Called on startup with a vhost and a list of durable queue names on this vhost.
+%% The queues aren't being started at this point, but this call allows the
 %% backing queue to perform any checking necessary for the consistency
 %% of those queues, or initialise any other shared resources.
 %%
 %% The list of queue recovery terms returned as {ok, Terms} must be given
 %% in the same order as the list of queue names supplied.
--callback start([rabbit_amqqueue:name()]) -> rabbit_types:ok(recovery_terms()).
+-callback start(rabbit_types:vhost(), [rabbit_amqqueue:name()]) -> rabbit_types:ok(recovery_terms()).
 
-%% Called to tear down any state/resources. NB: Implementations should
+%% Called to tear down any state/resources for vhost. NB: Implementations should
 %% not depend on this function being called on shutdown and instead
 %% should hook into the rabbit supervision hierarchy.
--callback stop() -> 'ok'.
+-callback stop(rabbit_types:vhost()) -> 'ok'.
 
 %% Initialise the backing queue and its state.
 %%
