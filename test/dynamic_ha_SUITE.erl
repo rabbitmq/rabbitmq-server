@@ -569,6 +569,6 @@ apply_policy(Config, N, {exactly, Exactly}) ->
       Config, N, ?POLICY, {<<"exactly">>, Exactly},
       [{<<"ha-sync-mode">>, <<"automatic">>}]).
 
-forget_cluster_node(Config, Node, Removee) ->
+forget_cluster_node(Config, Node, NodeToRemove) ->
     rabbit_ct_broker_helpers:rabbitmqctl(
-      Config, Node, ["forget_cluster_node", "--offline", Removee]).
+      Config, Node, ["forget_cluster_node", "--offline", NodeToRemove]).
