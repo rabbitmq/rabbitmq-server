@@ -44,11 +44,13 @@ OCF_RESKEY_ctl_default="/usr/sbin/rabbitmqctl"
 OCF_RESKEY_nodename_default="rabbit@localhost"
 OCF_RESKEY_log_base_default="/var/log/rabbitmq"
 OCF_RESKEY_pid_file_default="/var/run/rabbitmq/pid"
+OCF_RESKEY_limit_nofile_default=65535
 : ${OCF_RESKEY_server=${OCF_RESKEY_server_default}}
 : ${OCF_RESKEY_ctl=${OCF_RESKEY_ctl_default}}
 : ${OCF_RESKEY_nodename=${OCF_RESKEY_nodename_default}}
 : ${OCF_RESKEY_log_base=${OCF_RESKEY_log_base_default}}
 : ${OCF_RESKEY_pid_file=${OCF_RESKEY_pid_file_default}}
+: ${OCF_RESKEY_limit_nofile=${OCF_RESKEY_limit_nofile_default}}
 
 meta_data() {
     cat <<END
@@ -144,6 +146,14 @@ Location of the file in which the pid will be stored
 <content type="string" default="${OCF_RESKEY_pid_file_default}" />
 </parameter>
 
+<parameter name="limit_nofile" unique="0" required="0">
+<longdesc lang="en">
+Soft and hard limit for NOFILE
+</longdesc>
+<shortdesc lang="en">NOFILE limit</shortdesc>
+<content type="string" default="${OCF_RESKEY_limit_nofile_default}" />
+</parameter>
+
 </parameters>
 
 <actions>
@@ -176,6 +186,7 @@ RABBITMQ_LOG_BASE=$OCF_RESKEY_log_base
 RABBITMQ_MNESIA_BASE=$OCF_RESKEY_mnesia_base
 RABBITMQ_SERVER_START_ARGS=$OCF_RESKEY_server_start_args
 RABBITMQ_PID_FILE=$OCF_RESKEY_pid_file
+RABBITMQ_LIMIT_NOFILE=$OCF_RESKEY_limit_nofile
 [ ! -z $RABBITMQ_NODENAME ] && NODENAME_ARG="-n $RABBITMQ_NODENAME"
 [ ! -z $RABBITMQ_NODENAME ]            && export RABBITMQ_NODENAME
 
@@ -275,6 +286,9 @@ rabbit_start() {
     fi
 
     export_vars
+
+    # RabbitMQ requires high soft and hard limits for NOFILE
+    set_limits
 
     setsid sh -c "$RABBITMQ_SERVER > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err" &
 
