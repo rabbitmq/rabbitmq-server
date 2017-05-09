@@ -16,9 +16,11 @@
 
 -module(clustering_SUITE).
 
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").

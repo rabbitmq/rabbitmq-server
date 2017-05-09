@@ -60,11 +60,11 @@ to_json(ReqData, Context) ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
     end.
 
-accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
-    Name = id(ReqData),
+accept_content(ReqData0, Context = #context{user = #user{username = Username}}) ->
+    Name = id(ReqData0),
     rabbit_mgmt_util:with_decode(
-      [], ReqData, Context,
-      fun(_, VHost) ->
+      [], ReqData0, Context,
+      fun(_, VHost, ReqData) ->
               put_vhost(Name, rabbit_mgmt_util:parse_bool(
                                 maps:get(tracing, VHost, undefined)),
                         Username),

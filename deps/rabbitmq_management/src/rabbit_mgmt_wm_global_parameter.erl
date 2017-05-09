@@ -56,10 +56,10 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(parameter(ReqData)),
                            ReqData, Context).
 
-accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
+accept_content(ReqData0, Context = #context{user = #user{username = Username}}) ->
     rabbit_mgmt_util:with_decode(
-      [value], ReqData, Context,
-      fun([Value], _) ->
+      [value], ReqData0, Context,
+      fun([Value], _, ReqData) ->
               case rabbit_runtime_parameters:set_global(
                      name(ReqData),
                      if

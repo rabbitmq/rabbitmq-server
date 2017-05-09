@@ -224,23 +224,15 @@ responder_map(FunctionName) ->
 reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
-reply0(Facts, ReqData0, Context) ->
-    ReqData =
-        case cowboy_req:method(ReqData0) of
-            {<<"POST">>, _} ->
-                % after a state changing operation it is best to close
-                % the keep-alive connection
-                set_resp_header(<<"Connection">>, "close", ReqData0);
-            _ -> ReqData0
-        end,
+reply0(Facts, ReqData, Context) ->
     ReqData1 = set_resp_header(<<"Cache-Control">>, "no-cache", ReqData),
     try
         case cowboy_req:meta(media_type, ReqData1) of
             {{<<"application">>, <<"bert">>, _}, _} ->
                 {term_to_binary(Facts), ReqData1, Context};
             _ ->
-                {rabbit_json:encode(rabbit_mgmt_format:format_nulls(Facts)), ReqData1,
-                 Context}
+                {rabbit_json:encode(rabbit_mgmt_format:format_nulls(Facts)),
+                 ReqData1, Context}
         end
     catch exit:{json_encode, E} ->
             Error = iolist_to_binary(
@@ -536,7 +528,7 @@ with_decode(Keys, Body, ReqData, Context, Fun) ->
     case decode(Keys, Body) of
         {error, Reason}    -> bad_request(Reason, ReqData, Context);
         {ok, Values, JSON} -> try
-                                  Fun(Values, JSON)
+                                  Fun(Values, JSON, ReqData)
                               catch {error, Error} ->
                                       bad_request(Error, ReqData, Context)
                               end

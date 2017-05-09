@@ -97,8 +97,11 @@ web_contexts(ReqData) ->
         [fmt_contexts(N) || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData)]),
       ["description", "port", "node"]).
 
-fmt_contexts(N) ->
-    [[{node, pget(name, N)} | C] || C <- pget(contexts, N, [])].
+fmt_contexts(Node) ->
+    [fmt_context(Node, C) || C <- pget(contexts, Node, [])].
+
+fmt_context(Node, C) ->
+  rabbit_mgmt_format:web_context([{node, pget(name, Node)} | C]).
 
 erlang_version() -> list_to_binary(rabbit_misc:otp_release()).
 

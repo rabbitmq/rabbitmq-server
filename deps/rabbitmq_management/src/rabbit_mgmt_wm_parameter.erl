@@ -22,8 +22,6 @@
          delete_resource/2]).
 -export([variances/2]).
 
--import(rabbit_misc, [pget/2]).
-
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -57,14 +55,14 @@ to_json(ReqData, Context) ->
         rabbit_mgmt_wm_parameters:fix_shovel_publish_properties(parameter(ReqData))),
                            ReqData, Context).
 
-accept_content(ReqData, Context = #context{user = User}) ->
-    case rabbit_mgmt_util:vhost(ReqData) of
+accept_content(ReqData0, Context = #context{user = User}) ->
+    case rabbit_mgmt_util:vhost(ReqData0) of
         not_found ->
-            rabbit_mgmt_util:not_found(vhost_not_found, ReqData, Context);
+            rabbit_mgmt_util:not_found(vhost_not_found, ReqData0, Context);
         VHost ->
             rabbit_mgmt_util:with_decode(
-              [value], ReqData, Context,
-              fun([Value], _) ->
+              [value], ReqData0, Context,
+              fun([Value], _, ReqData) ->
                       case rabbit_runtime_parameters:set(
                              VHost, component(ReqData), name(ReqData),
                              if

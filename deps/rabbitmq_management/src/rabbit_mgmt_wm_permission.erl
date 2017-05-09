@@ -54,17 +54,17 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(perms(ReqData), ReqData, Context).
 
-accept_content(ReqData, Context = #context{user = #user{username = Username}}) ->
-    case perms(ReqData) of
+accept_content(ReqData0, Context = #context{user = #user{username = Username}}) ->
+    case perms(ReqData0) of
          not_found ->
             rabbit_mgmt_util:bad_request(vhost_or_user_not_found,
-                                         ReqData, Context);
+                                         ReqData0, Context);
          _         ->
-            User = rabbit_mgmt_util:id(user, ReqData),
-            VHost = rabbit_mgmt_util:id(vhost, ReqData),
+            User = rabbit_mgmt_util:id(user, ReqData0),
+            VHost = rabbit_mgmt_util:id(vhost, ReqData0),
             rabbit_mgmt_util:with_decode(
-              [configure, write, read], ReqData, Context,
-              fun([Conf, Write, Read], _) ->
+              [configure, write, read], ReqData0, Context,
+              fun([Conf, Write, Read], _, ReqData) ->
                       rabbit_auth_backend_internal:set_permissions(
                         User, VHost, Conf, Write, Read, Username),
                       {true, ReqData, Context}

@@ -52,12 +52,12 @@ content_types_accepted(ReqData, Context) ->
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
 
-do_it(ReqData, Context) ->
-    VHost = rabbit_mgmt_util:vhost(ReqData),
-    X = rabbit_mgmt_util:id(exchange, ReqData),
+do_it(ReqData0, Context) ->
+    VHost = rabbit_mgmt_util:vhost(ReqData0),
+    X = rabbit_mgmt_util:id(exchange, ReqData0),
     rabbit_mgmt_util:with_decode(
-      [routing_key, properties, payload, payload_encoding], ReqData, Context,
-      fun ([RoutingKey, Props0, Payload0, Enc], _) when is_binary(Payload0) ->
+      [routing_key, properties, payload, payload_encoding], ReqData0, Context,
+      fun ([RoutingKey, Props0, Payload0, Enc], _, ReqData) when is_binary(Payload0) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->
@@ -85,7 +85,7 @@ do_it(ReqData, Context) ->
                                 bad(Err, ReqData, Context)
                         end
                 end);
-          ([_RoutingKey, _Props, _Payload, _Enc], _) ->
+          ([_RoutingKey, _Props, _Payload, _Enc], _, _ReqData) ->
               throw({error, payload_not_string})
       end).
 
