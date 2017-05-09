@@ -304,10 +304,15 @@
    %%
    %% {hipe_compile, true},
 
-   %% Timeout used when waiting for Mnesia tables in a cluster to
+   %% Number of times to retry while waiting for Mnesia tables in a cluster to
    %% become available.
    %%
-   %% {mnesia_table_loading_timeout, 30000},
+   %% {mnesia_table_loading_retry_limit, 10},
+
+   %% Time to wait per retry for Mnesia tables in a cluster to become
+   %% available.
+   %%
+   %% {mnesia_table_loading_retry_timeout, 30000},
 
    %% Size in bytes below which to embed messages in the queue index. See
    %% http://www.rabbitmq.com/persistence-conf.html
