@@ -125,7 +125,8 @@ init_source(State = #{name := Name,
                     _ -> unlimited
                 end,
     State#{source => Src#{remaining => Remaining,
-                          remaining_unacked => Remaining}}.
+                          remaining_unacked => Remaining,
+                          last_acked_tag => 0}}.
 
 -spec init_dest(state()) -> state().
 init_dest(State) -> State.
@@ -230,19 +231,35 @@ close_dest(#{dest := #{current := #{conn := Conn}}}) ->
 close_dest(_Config) -> ok.
 
 -spec ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
-% TODO support multiple by keeping track of last ack
-ack(Tag, false, State = #{source := #{current := #{session := Session}}}) ->
-    % TODO: the tag should be the deliveryid
+ack(Tag, true, State = #{source := #{current := #{session := Session},
+                                     last_acked_tag := LastTag} = Src}) ->
+    First = LastTag + 1,
+    error_logger:info_msg("multi acking ~p - ~p~n", [First, Tag]),
+    ok = amqp10_client_session:disposition(Session, receiver, First,
+                                           Tag, true, accepted),
+    State#{source => Src#{last_acked_tag => Tag}};
+ack(Tag, false, State = #{source := #{current :=
+                                      #{session := Session}} = Src}) ->
+    error_logger:info_msg("acking ~p~n", [Tag]),
     ok = amqp10_client_session:disposition(Session, receiver, Tag,
                                            Tag, true, accepted),
-    State.
+    State#{source => Src#{last_acked_tag => Tag}}.
 
 -spec nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
-nack(Tag, false, State = #{source := #{current := #{session := Session}}}) ->
-    % TODO: the tag should be the deliveryid
+nack(Tag, false, State = #{source :=
+                           #{current := #{session := Session}} = Src}) ->
+    error_logger:info_msg("nacking ~p~n", [Tag]),
+    % the tag is the same as the deliveryid
     ok = amqp10_client_session:disposition(Session, receiver, Tag,
                                            Tag, false, rejected),
-    State.
+    State#{source => Src#{last_nacked_tag => Tag}};
+nack(Tag, true, State = #{source := #{current := #{session := Session},
+                                     last_nacked_tag := LastTag} = Src}) ->
+    First = LastTag + 1,
+    error_logger:info_msg("multi nacking ~p - ~p~n", [First, Tag]),
+    ok = amqp10_client_session:disposition(Session, receiver, First,
+                                           Tag, true, accepted),
+    State#{source => Src#{last_nacked_tag => Tag}}.
 
 -spec forward(Tag :: tag(), Props :: #{atom() => any()},
               Payload :: binary(), state()) -> state().

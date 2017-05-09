@@ -184,19 +184,13 @@ change_definition(Config) ->
       end).
 
 autodelete(Config) ->
-    % %% amqp10 cannot currently support queue-length as many brokers
-    % %% don't appear to support flow echo requests.
-    % autodelete_case(Config, {<<"on-confirm">>, 5, 5, 5}, fun autodelete_do/2),
-    % autodelete_case(Config, {<<"on-publish">>, 5, 5, 5}, fun autodelete_do/2),
-    % % due to amqp10 mandatory flow control we can support
-    % % no-ack with explicit count
-    % autodelete_case(Config, {<<"no-ack">>, 5, 5, 5}, fun autodelete_do/2),
-
-    % autodelete_case(Config, {<<"on-confirm">>, 5, 5, 5},
-    %                 fun autodelete_amqp091_src/2),
-    % autodelete_case(Config, {<<"on-publish">>, 5, 5, 5},
-    %                 fun autodelete_amqp091_src/2),
     autodelete_case(Config, {<<"on-confirm">>, 5, 5, 5},
+                    fun autodelete_amqp091_src/2),
+    autodelete_case(Config, {<<"on-publish">>, 5, 5, 5},
+                    fun autodelete_amqp091_src/2),
+    autodelete_case(Config, {<<"on-confirm">>, 5, 5, 5},
+                    fun autodelete_amqp091_dest/2),
+    autodelete_case(Config, {<<"on-publish">>, 5, 5, 5},
                     fun autodelete_amqp091_dest/2),
     ok.
 
