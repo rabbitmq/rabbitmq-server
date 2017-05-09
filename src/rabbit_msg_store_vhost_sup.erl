@@ -17,7 +17,7 @@ start_link(Type, VhostsClientRefs, StartupFunState) when is_map(VhostsClientRefs
 
 init([Type, VhostsClientRefs, StartupFunState]) ->
     ets:new(Type, [named_table, public]),
-    {ok, {{simple_one_for_one, 1, 1},
+    {ok, {{simple_one_for_one, 0, 1},
         [{rabbit_msg_store_vhost, {rabbit_msg_store_vhost_sup, start_store_for_vhost,
                                    [Type, VhostsClientRefs, StartupFunState]},
            transient, infinity, supervisor, [rabbit_msg_store]}]}}.
