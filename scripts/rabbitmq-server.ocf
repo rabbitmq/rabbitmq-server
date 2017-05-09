@@ -30,7 +30,7 @@
 ##   OCF_RESKEY_mnesia_base
 ##   OCF_RESKEY_server_start_args
 ##   OCF_RESKEY_pid_file
-##   OCF_RESKEY_limit_nofile_default
+##   OCF_RESKEY_limit_nofile
 
 #######################################################################
 # Initialization:
