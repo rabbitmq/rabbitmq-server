@@ -224,6 +224,14 @@ handle_info({'DOWN', _, process, BlockHandler, Reason},
     ?LOG_WARN("Connection (~p): Unregistering block handler ~p because it died. "
               "Reason: ~p~n", [self(), BlockHandler, Reason]),
     {noreply, State#state{block_handler = none}};
+handle_info({'EXIT', BlockHandler, Reason},
+            State = #state{block_handler = {BlockHandler, Ref}}) ->
+    ?LOG_WARN("Connection (~p): Unregistering block handler ~p because it died. "
+              "Reason: ~p~n", [self(), BlockHandler, Reason]),
+    erlang:demonitor(Ref, [flush]),
+    {noreply, State#state{block_handler = none}};
+handle_info({'EXIT', _Pid, _Reason}, State) ->
+    {noreply, State};
 handle_info(Info, State) ->
     callback(handle_message, [Info], State).
 
