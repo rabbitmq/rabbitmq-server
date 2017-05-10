@@ -11,6 +11,7 @@ define PROJECT_ENV
 	    {group_lookup_base,     none},
 	    {dn_lookup_bind,        as_user},
 	    {other_bind,            as_user},
+	    {anon_auth,             false},
 	    {vhost_access_query,    {constant, true}},
 	    {resource_access_query, {constant, true}},
 	    {tag_queries,           [{administrator, {constant, false}}]},
