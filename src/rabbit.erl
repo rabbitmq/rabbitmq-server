@@ -471,7 +471,7 @@ stop() ->
         undefined -> ok;
         _         ->
             rabbit_log:info("RabbitMQ hasn't finished starting yet. Waiting for startup to finish before stopping..."),
-            await_startup(true)
+            wait_to_finish_booting()
     end,
     rabbit_log:info("RabbitMQ is asked to stop...~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
@@ -641,19 +641,32 @@ handle_app_error(Term) ->
     end.
 
 await_startup() ->
-    await_startup(false).
+    case is_booting() of
+        true -> wait_to_finish_booting();
+        false ->
+            case is_running() of
+                true -> ok;
+                false -> wait_to_start_booting(),
+                         wait_to_finish_booting()
+            end
+    end.
 
-await_startup(HaveSeenRabbitBoot) ->
-    %% We don't take absence of rabbit_boot as evidence we've started,
-    %% since there's a small window before it is registered.
+is_booting() ->
+    whereis(rabbit_boot) /= undefined.
+
+wait_to_start_booting() ->
     case whereis(rabbit_boot) of
-        undefined -> case HaveSeenRabbitBoot orelse is_running() of
-                         true  -> ok;
-                         false -> timer:sleep(100),
-                                  await_startup(false)
-                     end;
+        undefined -> timer:sleep(100),
+                     wait_to_start_booting();
+        _         -> ok
+    end.
+
+wait_to_finish_booting() ->
+    case whereis(rabbit_boot) of
+        undefined -> true = is_running(),
+                     ok;
         _         -> timer:sleep(100),
-                     await_startup(true)
+                     wait_to_finish_booting()
     end.
 
 status() ->
