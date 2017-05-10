@@ -787,7 +787,7 @@ wait_for_application(Node, Pid, Application) ->
 
 wait_for_startup(Node, Pid) ->
     while_process_is_alive(
-      Node, Pid, fun() -> rpc:call(Node, rabbit, await_startup2, []) =:= ok end).
+      Node, Pid, fun() -> rpc:call(Node, rabbit, await_startup, []) =:= ok end).
 
 while_process_is_alive(Node, Pid, Activity) ->
     case rabbit_misc:is_os_process_alive(Pid) of

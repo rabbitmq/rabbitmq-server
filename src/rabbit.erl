@@ -19,7 +19,7 @@
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
-         stop_and_halt/0, await_startup/0, await_startup2/0, status/0, is_running/0,
+         stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
 -export([start/2, stop/1]).
@@ -604,22 +604,6 @@ handle_app_error(Term) ->
     end.
 
 await_startup() ->
-    await_startup(false).
-
-await_startup(HaveSeenRabbitBoot) ->
-    %% We don't take absence of rabbit_boot as evidence we've started,
-    %% since there's a small window before it is registered.
-    case whereis(rabbit_boot) of
-        undefined -> case HaveSeenRabbitBoot orelse is_running() of
-                         true  -> ok;
-                         false -> timer:sleep(100),
-                                  await_startup(false)
-                     end;
-        _         -> timer:sleep(100),
-                     await_startup(true)
-    end.
-
-await_startup2() ->
     case is_booting() of
         true -> wait_to_finish_booting();
         false ->
