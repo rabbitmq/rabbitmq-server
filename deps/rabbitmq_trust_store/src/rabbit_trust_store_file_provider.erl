@@ -8,41 +8,27 @@
 
 -define(DIRECTORY_OR_FILE_NAME_EXISTS, eexist).
 
--record(directory_state, {
-    directory_path,
-    directory_change_time}).
-
--type cert_id() :: {FileName :: string(), ChangeTime :: integer()}.
+-type cert_id() :: {FileName :: string(),
+                    ChangeTime :: integer(),
+                    Hash :: integer()}.
 
 -spec list_certs(Config :: list())
     -> no_change | {ok, [{cert_id(), list()}], State}
-    when State :: #directory_state{}.
+    when State :: nostate.
 list_certs(Config) ->
     Path = directory_path(Config),
-    NewChangeTime = modification_time(Path),
     Certs = list_certs_0(Path),
-    {ok, Certs, #directory_state{directory_path = Path,
-                                 directory_change_time = NewChangeTime}}.
+    {ok, Certs, nostate}.
 
 -spec list_certs(Config :: list(), State)
     -> no_change | {ok, [{cert_id(), list()}], State}
-    when State :: #directory_state{}.
-list_certs(Config, #directory_state{directory_path = DirPath,
-                                    directory_change_time = ChangeTime}) ->
-    Path = directory_path(Config, DirPath),
-    NewChangeTime = modification_time(Path),
-    case NewChangeTime > ChangeTime of
-        false ->
-            no_change;
-        true  ->
-            Certs = list_certs_0(Path),
-            {ok, Certs, #directory_state{directory_path = Path,
-                                         directory_change_time = NewChangeTime}}
-    end.
+    when State :: nostate.
+list_certs(Config, _) ->
+    list_certs(Config).
 
 -spec load_cert(cert_id(), list(), Config :: list())
     -> {ok, Cert :: public_key:der_encoded()}.
-load_cert({FileName, _}, _, Config) ->
+load_cert({FileName, _, _}, _, Config) ->
     Path = directory_path(Config),
     Cert = extract_cert(Path, FileName),
     rabbit_log:info(
@@ -63,7 +49,9 @@ list_certs_0(Path) ->
     lists:map(
         fun(FileName) ->
             AbsName = filename:absname(FileName, Path),
-            CertId = {FileName, modification_time(AbsName)},
+            CertId = {FileName,
+                      modification_time(AbsName),
+                      file_content_hash(AbsName)},
             {CertId, [{name, FileName}]}
         end,
         FileNames).
@@ -71,6 +59,10 @@ list_certs_0(Path) ->
 modification_time(Path) ->
     {ok, Info} = file:read_file_info(Path, [{time, posix}]),
     Info#file_info.mtime.
+
+file_content_hash(Path) ->
+    {ok, Data} = file:read_file(Path),
+    erlang:phash2(Data).
 
 directory_path(Config) ->
     directory_path(Config, default_directory()).
