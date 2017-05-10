@@ -9,6 +9,7 @@
 /logs/
 /plugins/
 /xrefr
+*.plt
 
 rabbitmq_amqp1_0.d
 

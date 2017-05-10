@@ -41,7 +41,8 @@ groups() ->
           reject,
           redelivery,
           routing,
-          invalid_routes
+          invalid_routes,
+          auth_failure
         ]},
       {java, [], [
           roundtrip,
@@ -185,6 +186,9 @@ invalid_routes(Config) ->
     run(Config, [
         {dotnet, "invalid_routes"}
       ]).
+
+auth_failure(Config) ->
+    run(Config, [ {dotnet, "auth_failure"} ]).
 
 run(Config, Flavors) ->
     ClientLibrary = ?config(amqp10_client_library, Config),

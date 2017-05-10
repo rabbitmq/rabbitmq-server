@@ -1,4 +1,4 @@
-%%-define(debug, true).
+-define(debug, true).
 
 -ifdef(debug).
 -define(DEBUG0(F), ?SAFE(io:format(F, []))).
