@@ -389,7 +389,8 @@ with_ldap({error, _} = E, _Fun, _State) ->
 %% of interest, so this could still be more efficient.
 with_ldap({ok, Creds}, Fun, Servers) ->
     Opts0 = [{port, env(port)},
-             {idle_timeout, env(idle_timeout)}],
+             {idle_timeout, env(idle_timeout)},
+             {anon_auth, env(anon_auth)}],
     Opts1 = case env(log) of
                 network ->
                     Pre = "    LDAP network traffic: ",
