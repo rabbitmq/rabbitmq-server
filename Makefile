@@ -377,8 +377,9 @@ install-windows-scripts: install-windows-escripts
 
 install-windows-docs: install-windows-erlapp
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/etc
-	$(inst_verbose) xmlto -o . xhtml-nochunks \
-		$(DEPS_DIR)/rabbit/docs/rabbitmq-service.xml
+	$(inst_verbose) mandoc -T html \
+		< $(DEPS_DIR)/rabbit/docs/rabbitmq-service.8 \
+		> rabbitmq-service.html
 	$(verbose) elinks -dump -no-references -no-numbering \
 		rabbitmq-service.html \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
