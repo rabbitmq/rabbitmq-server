@@ -46,7 +46,8 @@ start_link(Type, Name, Config) ->
 init([Type, Name, Config0]) ->
     gen_server2:cast(self(), init),
     Config = case Type of
-                static -> Config0;
+                static ->
+                     Config0;
                 dynamic ->
                     ClusterName = rabbit_nodes:cluster_name(),
                     {ok, Conf} = rabbit_shovel_parameters:parse(Name,

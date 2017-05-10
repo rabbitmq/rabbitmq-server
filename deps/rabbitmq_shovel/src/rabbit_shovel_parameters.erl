@@ -148,7 +148,7 @@ amqp10_dest_validation(Def, User) ->
      {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2, optional},
      {<<"dest-application-properties">>, fun validate_amqp10_map/2, optional},
      {<<"dest-message-annotations">>, fun validate_amqp10_map/2, optional},
-     % TOOD: restrict to allowed fields
+     % TODO: restrict to allowed fields
      {<<"dest-properties">>, fun validate_amqp10_map/2, optional}
     ].
 
@@ -287,7 +287,7 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
     DestDeclFun = fun (Conn, _Ch) ->
                       case DestQ of
                           none -> ok;
-                          _    -> ensure_queue(Conn, DestQ)
+                          _ -> ensure_queue(Conn, DestQ)
                       end
               end,
     {X, Key} = case DestQ of

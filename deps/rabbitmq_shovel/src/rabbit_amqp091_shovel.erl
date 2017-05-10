@@ -27,26 +27,25 @@
 parse(_Name, {source, Source}) ->
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
-      resource_decl => decl_fun(Source),
+      resource_decl => decl_fun(sources, Source),
       queue => proplists:get_value(queue, Source),
       delete_after => proplists:get_value(delete_after, Source, never),
       prefetch_count => proplists:get_value(prefetch_count, Source,
                                             ?DEFAULT_PREFETCH)};
 parse(Name, {destination, Dest}) ->
-    MakPubProps = make_parse_publish(publish_properties),
     PubProp = proplists:get_value(publish_properties, Dest, []),
-    MakPubFields = make_parse_publish(publish_fields),
+    PropsFun = try_make_parse_publish(publish_properties, PubProp),
     PubFields = proplists:get_value(publish_fields, Dest, []),
-    PropsFun = MakPubProps(PubProp),
+    PubFieldsFun = try_make_parse_publish(publish_fields, PubFields),
     AFH = proplists:get_value(add_forward_headers, Dest, false),
     ATH = proplists:get_value(add_timestamp_header, Dest, false),
     PropsFun1 = add_forward_headers_fun(Name, AFH, PropsFun),
     PropsFun2 = add_timestamp_header_fun(ATH, PropsFun1),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Dest),
-      resource_decl  => decl_fun(Dest),
+      resource_decl  => decl_fun(destinations, Dest),
       props_fun => PropsFun2,
-      fields_fun => MakPubFields(PubFields),
+      fields_fun => PubFieldsFun,
       add_forward_headers => AFH,
       add_timestamp_header => ATH}.
 
@@ -60,7 +59,6 @@ init_source(Conf = #{ack_mode := AckMode,
                                  current := {Conn, Chan, _},
                                  prefetch_count := Prefetch,
                                  resource_decl := Decl} = Src}) ->
-
     Decl(Conn, Chan),
 
     NoAck = AckMode =:= no_ack,
@@ -101,7 +99,6 @@ init_dest(Conf = #{ack_mode := AckMode,
         _ ->
             ok
     end,
-    % TODO: should state like unacked be kept separate from config map?
     Conf#{dest => Dst#{unacked => #{}}}.
 
 ack(Tag, Multi, State = #{source := #{current := {_, Chan, _}}}) ->
@@ -311,15 +308,20 @@ remaining(_Ch, #{source := #{delete_after := Count}}) ->
     Count.
 
 %%% PARSING
-make_parse_publish(publish_fields) ->
-    make_parse_publish1(record_info(fields, 'basic.publish'));
-make_parse_publish(publish_properties) ->
-    make_parse_publish1(record_info(fields, 'P_basic')).
 
-make_parse_publish1(ValidFields) ->
-    fun (Fields) -> make_publish_fun(Fields, ValidFields) end.
+try_make_parse_publish(Key, Fields) ->
+    try make_parse_publish(Key, Fields)
+    catch
+        throw:{error, Reason} ->
+             fail({invalid_parameter_value, Key, Reason})
+    end.
 
-make_publish_fun(Fields, ValidFields) ->
+make_parse_publish(publish_fields, Fields) ->
+    make_publish_fun(Fields, record_info(fields, 'basic.publish'));
+make_parse_publish(publish_properties, Fields) ->
+    make_publish_fun(Fields, record_info(fields, 'P_basic')).
+
+make_publish_fun(Fields, ValidFields) when is_list(Fields) ->
     SuppliedFields = proplists:get_keys(Fields),
     case SuppliedFields -- ValidFields of
         [] ->
@@ -331,7 +333,9 @@ make_publish_fun(Fields, ValidFields) ->
             end;
         Unexpected ->
             fail({unexpected_fields, Unexpected, ValidFields})
-    end.
+    end;
+make_publish_fun(Fields, _) ->
+    fail({require_list, Fields}).
 
 make_field_indices(Valid, Fields) ->
     make_field_indices(Fields, field_map(Valid, 2), []).
@@ -394,13 +398,16 @@ parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
 parse_declaration({[Method | Rest], Acc}) ->
     parse_declaration({[{Method, []} | Rest], Acc}).
 
-decl_fun(Endpoint) ->
-    Decl = parse_declaration(
-              {proplists:get_value(declarations, Endpoint, []), []}),
-    fun (_Conn, Ch) ->
-            [begin
-                 error_logger:info_msg("shovel declaring ~p  ~p~n", [Ch, M]),
-                 amqp_channel:call(Ch, M)
-             end || M <- lists:reverse(Decl)]
-    end.
+decl_fun(Key, Endpoint) ->
+     try Decl = parse_declaration(
+                  {proplists:get_value(declarations, Endpoint, []), []}),
+            fun (_Conn, Ch) ->
+                    [begin
+                         error_logger:info_msg("shovel declaring ~p  ~p~n", [Ch, M]),
+                         amqp_channel:call(Ch, M)
+                     end || M <- lists:reverse(Decl)]
+            end
+     catch throw:{error, Reason} ->
+             fail({invalid_parameter_value, Key, Reason})
+     end.
 

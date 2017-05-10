@@ -138,8 +138,7 @@ source_uri(#{source := #{current := #{uri := Uri}}}) -> Uri.
 dest_uri(#{dest := #{current := #{uri := Uri}}}) -> Uri.
 
 -spec handle_source(Msg :: any(), state()) -> not_handled | state().
-handle_source({amqp10_msg, LinkRef, Msg}, State) ->
-    ?INFO("handling msg ~p link_ref ~p~n", [Msg, LinkRef]),
+handle_source({amqp10_msg, _LinkRef, Msg}, State) ->
     Tag = amqp10_msg:delivery_id(Msg),
     [Payload] = amqp10_msg:body(Msg),
     rabbit_shovel_behaviour:forward(Tag, #{}, Payload, State);

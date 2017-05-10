@@ -66,7 +66,11 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(Testcase, Config) ->
+init_per_testcase(Testcase, Config0) ->
+    SrcQ = list_to_binary(atom_to_list(Testcase) ++ "_src"),
+    DestQ = list_to_binary(atom_to_list(Testcase) ++ "_dest"),
+    DestQ2 = list_to_binary(atom_to_list(Testcase) ++ "_dest2"),
+    Config = [{srcq, SrcQ}, {destq, DestQ}, {destq2, DestQ2} | Config0],
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
@@ -77,14 +81,16 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 simple(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
     with_session(Config,
       fun (Sess) ->
               shovel_test_utils:set_param(
                 Config,
                 <<"test">>, [{<<"src-protocol">>, <<"amqp10">>},
-                             {<<"src-address">>,  <<"src">>},
+                             {<<"src-address">>, Src},
                              {<<"dest-protocol">>, <<"amqp10">>},
-                             {<<"dest-address">>, <<"dest">>},
+                             {<<"dest-address">>, Dest},
                              {<<"dest-add-forward-headers">>, true},
                              {<<"dest-add-timestamp-header">>, true},
                              {<<"dest-application-properties">>,
@@ -94,7 +100,7 @@ simple(Config) ->
                              {<<"dest-message-annotations">>,
                               [{<<"message-ann-key">>, <<"message-ann-value">>}]}
                             ]),
-              Msg = publish_expect(Sess, <<"src">>, <<"dest">>, <<"tag1">>,
+              Msg = publish_expect(Sess, Src, Dest, <<"tag1">>,
                                    <<"hello">>),
               ?assertMatch(#{user_id := <<"guest">>,
                              creation_time := _}, amqp10_msg:properties(Msg)),
@@ -108,14 +114,16 @@ simple(Config) ->
       end).
 
 simple_amqp10_dest(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
     with_session(Config,
       fun (Sess) ->
               shovel_test_utils:set_param(
                 Config,
                 <<"test">>, [{<<"src-protocol">>, <<"amqp091">>},
-                             {<<"src-queue">>,  <<"src">>},
+                             {<<"src-queue">>,  Src},
                              {<<"dest-protocol">>, <<"amqp10">>},
-                             {<<"dest-address">>, <<"dest">>},
+                             {<<"dest-address">>, Dest},
                              {<<"dest-add-forward-headers">>, true},
                              {<<"dest-add-timestamp-header">>, true},
                              {<<"dest-application-properties">>,
@@ -125,7 +133,7 @@ simple_amqp10_dest(Config) ->
                              {<<"dest-message-annotations">>,
                               [{<<"message-ann-key">>, <<"message-ann-value">>}]}
                             ]),
-              Msg = publish_expect(Sess, <<"src">>, <<"dest">>, <<"tag1">>,
+              Msg = publish_expect(Sess, Src, Dest, <<"tag1">>,
                                    <<"hello">>),
               ct:pal("simple_amqp10_dest msg ~p~n", [Msg]),
               ?assertMatch(#{user_id := <<"guest">>,
@@ -141,19 +149,21 @@ simple_amqp10_dest(Config) ->
       end).
 
 simple_amqp10_src(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
     with_session(Config,
       fun (Sess) ->
               shovel_test_utils:set_param(
                 Config,
                 <<"test">>, [{<<"src-protocol">>, <<"amqp10">>},
-                             {<<"src-address">>,  <<"src">>},
+                             {<<"src-address">>,  Src},
                              {<<"dest-protocol">>, <<"amqp091">>},
-                             {<<"dest-queue">>, <<"dest">>},
+                             {<<"dest-queue">>, Dest},
                              {<<"add-forward-headers">>, true},
                              {<<"dest-add-timestamp-header">>, true},
                              {<<"publish-properties">>, [{<<"cluster_id">>, <<"x">>}]}
                             ]),
-              _Msg = publish_expect(Sess, <<"src">>, <<"dest">>, <<"tag1">>,
+              _Msg = publish_expect(Sess, Src, Dest, <<"tag1">>,
                                     <<"hello">>),
               % the fidelity loss is quite high when consuming using the amqp10
               % plugin. For example custom headers aren't current translated.
@@ -162,25 +172,28 @@ simple_amqp10_src(Config) ->
       end).
 
 change_definition(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Dest2 = ?config(destq2, Config),
     with_session(Config,
       fun (Sess) ->
               shovel_test_utils:set_param(Config, <<"test">>,
-                                          [{<<"src-address">>,  <<"src">>},
+                                          [{<<"src-address">>,  Src},
                                            {<<"src-protocol">>, <<"amqp10">>},
                                            {<<"dest-protocol">>, <<"amqp10">>},
-                                           {<<"dest-address">>, <<"dest">>}]),
-              publish_expect(Sess, <<"src">>, <<"dest">>, <<"tag2">>,<<"hello">>),
+                                           {<<"dest-address">>, Dest}]),
+              publish_expect(Sess, Src, Dest, <<"tag2">>,<<"hello">>),
               shovel_test_utils:set_param(Config, <<"test">>,
-                                          [{<<"src-address">>,  <<"src">>},
+                                          [{<<"src-address">>,  Src},
                                            {<<"src-protocol">>, <<"amqp10">>},
                                            {<<"dest-protocol">>, <<"amqp10">>},
-                                           {<<"dest-address">>, <<"dest2">>}]),
-              publish_expect(Sess, <<"src">>, <<"dest2">>, <<"tag3">>, <<"hello">>),
-              expect_empty(Sess, <<"dest">>),
+                                           {<<"dest-address">>, Dest2}]),
+              publish_expect(Sess, Src, Dest2, <<"tag3">>, <<"hello">>),
+              expect_empty(Sess, Dest),
               shovel_test_utils:clear_param(Config, <<"test">>),
-              publish_expect(Sess, <<"src">>, <<"src">>, <<"tag4">>, <<"hello2">>),
-              expect_empty(Sess, <<"dest">>),
-              expect_empty(Sess, <<"dest2">>)
+              publish_expect(Sess, Src, Src, <<"tag4">>, <<"hello2">>),
+              expect_empty(Sess, Dest),
+              expect_empty(Sess, Dest2)
       end).
 
 autodelete(Config) ->
@@ -198,57 +211,63 @@ autodelete_case(Config, Args, CaseFun) ->
     with_session(Config, CaseFun(Config, Args)).
 
 autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
     fun (Session) ->
-            publish_count(Session, <<"src">>, <<"hello">>, 10),
+            publish_count(Session, Src, <<"hello">>, 10),
             shovel_test_utils:set_param_nowait(
               Config,
-              <<"test">>, [{<<"src-address">>,    <<"src">>},
+              <<"test">>, [{<<"src-address">>,    Src},
                            {<<"src-protocol">>,   <<"amqp10">>},
                            {<<"src-delete-after">>, After},
                            {<<"src-prefetch-count">>, 5},
-                           {<<"dest-address">>,   <<"dest">>},
+                           {<<"dest-address">>,   Dest},
                            {<<"dest-protocol">>,   <<"amqp10">>},
                            {<<"ack-mode">>,     AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Session, <<"dest">>, <<"hello">>, ExpDest),
-            expect_count(Session, <<"src">>, <<"hello">>, ExpSrc)
+            expect_count(Session, Dest, <<"hello">>, ExpDest),
+            expect_count(Session, Src, <<"hello">>, ExpSrc)
     end.
 
 autodelete_amqp091_src(Config, {AckMode, After, ExpSrc, ExpDest}) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
     fun (Session) ->
-            publish_count(Session, <<"src">>, <<"hello">>, 10),
+            publish_count(Session, Src, <<"hello">>, 10),
             shovel_test_utils:set_param_nowait(
               Config,
-              <<"test">>, [{<<"src-queue">>, <<"src">>},
+              <<"test">>, [{<<"src-queue">>, Src},
                            {<<"src-protocol">>, <<"amqp091">>},
                            {<<"src-delete-after">>, After},
                            {<<"src-prefetch-count">>, 5},
-                           {<<"dest-address">>, <<"dest">>},
+                           {<<"dest-address">>, Dest},
                            {<<"dest-protocol">>, <<"amqp10">>},
                            {<<"ack-mode">>, AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Session, <<"dest">>, <<"hello">>, ExpDest),
-            expect_count(Session, <<"src">>, <<"hello">>, ExpSrc)
+            expect_count(Session, Dest, <<"hello">>, ExpDest),
+            expect_count(Session, Src, <<"hello">>, ExpSrc)
     end.
 
 autodelete_amqp091_dest(Config, {AckMode, After, ExpSrc, ExpDest}) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
     fun (Session) ->
-            publish_count(Session, <<"src">>, <<"hello">>, 10),
+            publish_count(Session, Src, <<"hello">>, 10),
             shovel_test_utils:set_param_nowait(
               Config,
-              <<"test">>, [{<<"src-address">>, <<"src">>},
+              <<"test">>, [{<<"src-address">>, Src},
                            {<<"src-protocol">>, <<"amqp10">>},
                            {<<"src-delete-after">>, After},
                            {<<"src-prefetch-count">>, 5},
-                           {<<"dest-queue">>, <<"dest">>},
+                           {<<"dest-queue">>, Dest},
                            {<<"dest-protocol">>, <<"amqp091">>},
                            {<<"ack-mode">>, AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Session, <<"dest">>, <<"hello">>, ExpDest),
-            expect_count(Session, <<"src">>, <<"hello">>, ExpSrc)
+            expect_count(Session, Dest, <<"hello">>, ExpDest),
+            expect_count(Session, Src, <<"hello">>, ExpSrc)
     end.
 
 %%----------------------------------------------------------------------------
@@ -260,7 +279,6 @@ with_session(Config, Fun) ->
     {ok, Sess} = amqp10_client:begin_session(Conn),
     Fun(Sess),
     amqp10_client:close_connection(Conn),
-    cleanup(Config),
     ok.
 
 publish(Sender, Tag, Payload) when is_binary(Payload) ->
@@ -304,6 +322,7 @@ expect(Receiver, _Payload) ->
     receive
         {amqp10_msg, Receiver, InMsg} ->
             [P] = amqp10_msg:body(InMsg),
+            ct:pal("expect received ~p~n", [P]),
             % #{content_type := ?UNSHOVELLED} = amqp10_msg:properties(InMsg),
             % #{durable := true} = amqp10_msg:headers(InMsg),
             InMsg
@@ -369,19 +388,6 @@ lookup_user(Config, Name) ->
     {ok, User} = rabbit_ct_broker_helpers:rpc(Config, 0,
       rabbit_access_control, check_user_login, [Name, []]),
     User.
-
-cleanup(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, cleanup1, [Config]).
-
-cleanup1(_Config) ->
-    [rabbit_runtime_parameters:clear(rabbit_misc:pget(vhost, P),
-                                     rabbit_misc:pget(component, P),
-                                     rabbit_misc:pget(name, P),
-                                     <<"acting-user">>) ||
-        P <- rabbit_runtime_parameters:list()],
-    [rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>)
-     || Q <- rabbit_amqqueue:list()].
 
 await_autodelete(Config, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,

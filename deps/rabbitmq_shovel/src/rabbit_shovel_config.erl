@@ -68,10 +68,17 @@ parse(ShovelName, Config0) ->
                 {error, _} = Err -> Err;
                 _ ->
                     Config = convert_from_legacy(Config0),
-                    parse_current(ShovelName, Config)
+                    try_parse_current(ShovelName, Config)
             end;
         false ->
-            parse_current(ShovelName, Config0)
+            try_parse_current(ShovelName, Config0)
+    end.
+
+try_parse_current(ShovelName, Config) ->
+    try
+        parse_current(ShovelName, Config)
+    catch throw:{error, Reason} ->
+            {error, {invalid_shovel_configuration, ShovelName, Reason}}
     end.
 
 parse_current(ShovelName, Config) ->
@@ -108,11 +115,14 @@ ensure_defaults(ShovelConfig, ParsedShovel) ->
                     ParsedShovel#shovel.reconnect_delay}).
 
 enrich_shovel_config(Config, Defaults) ->
+    error_logger:info_msg("enrich_shovel_config ~p ~p~n", [Config, Defaults]),
     Config1 = proplists:unfold(Config),
     case [E || E <- Config1, not (is_tuple(E) andalso tuple_size(E) == 2)] of
         []      -> case duplicate_keys(Config1) of
-                       []   -> return(lists:ukeysort(1, Config1 ++ Defaults));
-                       Dups -> fail({duplicate_parameters, Dups})
+                       [] ->
+                           return(lists:ukeysort(1, Config1 ++ Defaults));
+                       Dups ->
+                           fail({duplicate_parameters, Dups})
                    end;
         Invalid -> fail({invalid_parameters, Invalid})
     end.
@@ -122,20 +132,20 @@ parse_shovel_config_proplist(Config) ->
     Fields = record_info(fields, shovel) -- ?IGNORE_FIELDS,
     Keys = dict:fetch_keys(Dict) -- ?EXTRA_KEYS,
     case {Keys -- Fields, Fields -- Keys} of
-        {[], []}      -> {_Pos, Dict1} =
-                             lists:foldl(
-                               fun (FieldName, {Pos, Acc}) ->
-                                       {Pos + 1,
-                                        dict:update(FieldName,
-                                                    fun (V) -> {V, Pos} end,
-                                                    Acc)}
-                               end, {2, Dict}, Fields),
-                         return(Dict1);
+        {[], []} -> {_Pos, Dict1} =
+                        lists:foldl(
+                          fun (FieldName, {Pos, Acc}) ->
+                                  {Pos + 1,
+                                   dict:update(FieldName,
+                                               fun (V) -> {V, Pos} end,
+                                               Acc)}
+                          end, {2, Dict}, Fields),
+                    return(Dict1);
         {[], Missing} -> fail({missing_parameters, Missing});
-        {Unknown, _}  -> fail({unrecognised_parameters, Unknown})
+        {Unknown, _} -> fail({unrecognised_parameters, Unknown})
     end.
 
-parse_shovel_config_dict(Name, Dict) ->
+parse_shovel_config_dict(_Name, Dict) ->
     Cfg = run_state_monad(
             [fun (Shovel) ->
                      {ok, Value} = dict:find(Key, Dict),
@@ -150,18 +160,9 @@ parse_shovel_config_dict(Name, Dict) ->
                          {fun parse_non_negative_integer/1, prefetch_count},
                          {fun parse_ack_mode/1,             ack_mode},
                          {fun parse_binary/1,               queue},
-                         make_parse_publish(publish_fields),
-                         make_parse_publish(publish_properties),
                          {fun parse_non_negative_number/1,  reconnect_delay}]],
             #shovel{}),
-    Cfg1 = case dict:find(add_forward_headers, Dict) of
-        {ok, true} -> add_forward_headers_fun(Name, Cfg);
-        _          -> Cfg
-    end,
-    case dict:find(add_timestamp_header, Dict) of
-        {ok, true} -> add_timestamp_header_fun(Cfg1);
-        _          -> Cfg1
-    end.
+    Cfg.
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
@@ -191,24 +192,13 @@ parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
                                        fun check_uri/1),
                        {Brokers, []}),
 
-    ResourceDecls =
-        case proplists:get_value(declarations, Endpoint, []) of
-            Decls when is_list(Decls) ->
-                Decls;
-            Decls ->
-                fail({expected_list, declarations, Decls})
-        end,
-    {[], ResourceDecls1} =
-        run_state_monad(
-          lists:duplicate(length(ResourceDecls), fun parse_declaration/1),
-          {ResourceDecls, []}),
-
-    DeclareFun =
-        fun (_Conn, Ch) ->
-                [amqp_channel:call(Ch, M) || M <- lists:reverse(ResourceDecls1)]
-        end,
-    return({#endpoint{uris = Brokers1,
-                      resource_declaration = DeclareFun},
+    case proplists:get_value(declarations, Endpoint, []) of
+        Decls when is_list(Decls) ->
+            ok;
+        Decls ->
+            fail({expected_list, declarations, Decls})
+    end,
+    return({#endpoint{uris = Brokers1},
             Pos});
 parse_endpoint({Endpoint, _Pos}) ->
     fail({require_list, Endpoint}).
@@ -220,31 +210,6 @@ check_uri({[Uri | Uris], Acc}) ->
         {error, _} = Err ->
             throw(Err)
     end.
-
-parse_declaration({[], Acc}) ->
-    {[], Acc};
-parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
-    FieldNames = try rabbit_framing_amqp_0_9_1:method_fieldnames(Method)
-                 catch exit:Reason -> fail(Reason)
-                 end,
-    case proplists:get_keys(Props) -- FieldNames of
-        []            -> ok;
-        UnknownFields -> fail({unknown_fields, Method, UnknownFields})
-    end,
-    {Res, _Idx} = lists:foldl(
-                    fun (K, {R, Idx}) ->
-                            NewR = case proplists:get_value(K, Props) of
-                                       undefined -> R;
-                                       V         -> setelement(Idx, R, V)
-                                   end,
-                            {NewR, Idx + 1}
-                    end, {rabbit_framing_amqp_0_9_1:method_record(Method), 2},
-                    FieldNames),
-    parse_declaration({Rest, [Res | Acc]});
-parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
-    fail({expected_method_field_list, Method, Props});
-parse_declaration({[Method | Rest], Acc}) ->
-    parse_declaration({[{Method, []} | Rest], Acc}).
 
 parse_non_negative_integer({N, Pos}) when is_integer(N) andalso N >= 0 ->
     return({N, Pos});
@@ -269,70 +234,10 @@ parse_ack_mode({WrongVal, _Pos}) ->
     fail({ack_mode_value_requires_one_of, {no_ack, on_publish, on_confirm},
           WrongVal}).
 
-make_parse_publish(publish_fields) ->
-    {make_parse_publish1(record_info(fields, 'basic.publish')), publish_fields};
-make_parse_publish(publish_properties) ->
-    {make_parse_publish1(record_info(fields, 'P_basic')), publish_properties}.
-
-make_parse_publish1(ValidFields) ->
-    fun ({Fields, Pos}) when is_list(Fields) ->
-            make_publish_fun(Fields, Pos, ValidFields);
-        ({Fields, _Pos}) ->
-            fail({require_list, Fields})
-    end.
-
-make_publish_fun(Fields, Pos, ValidFields) ->
-    SuppliedFields = proplists:get_keys(Fields),
-    case SuppliedFields -- ValidFields of
-        [] ->
-            FieldIndices = make_field_indices(ValidFields, Fields),
-            Fun = fun (_SrcUri, _DestUri, Publish) ->
-                          lists:foldl(fun ({Pos1, Value}, Pub) ->
-                                              setelement(Pos1, Pub, Value)
-                                      end, Publish, FieldIndices)
-                  end,
-            return({Fun, Pos});
-        Unexpected ->
-            fail({unexpected_fields, Unexpected, ValidFields})
-    end.
-
-make_field_indices(Valid, Fields) ->
-    make_field_indices(Fields, field_map(Valid, 2), []).
-
-make_field_indices([], _Idxs , Acc) ->
-    lists:reverse(Acc);
-make_field_indices([{Key, Value} | Rest], Idxs, Acc) ->
-    make_field_indices(Rest, Idxs, [{dict:fetch(Key, Idxs), Value} | Acc]).
-
-field_map(Fields, Idx0) ->
-    {Dict, _IdxMax} =
-        lists:foldl(fun (Field, {Dict1, Idx1}) ->
-                            {dict:store(Field, Idx1, Dict1), Idx1 + 1}
-                    end, {dict:new(), Idx0}, Fields),
-    Dict.
-
-duplicate_keys(PropList) ->
+duplicate_keys(PropList) when is_list(PropList) ->
+    error_logger:info_msg("duplicate_keys ~p~n", [PropList]),
     proplists:get_keys(
       lists:foldl(fun (K, L) -> lists:keydelete(K, 1, L) end, PropList,
-                  proplists:get_keys(PropList))).
-
-add_forward_headers_fun(Name, #shovel{publish_properties = PubProps} = Cfg) ->
-    PubProps2 =
-        fun(SrcUri, DestUri, Props) ->
-                rabbit_shovel_util:update_headers(
-                  [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
-                   {<<"shovel-type">>,  <<"static">>},
-                   {<<"shovel-name">>,  list_to_binary(atom_to_list(Name))}],
-                  [], SrcUri, DestUri, PubProps(SrcUri, DestUri, Props))
-        end,
-    Cfg#shovel{publish_properties = PubProps2}.
-
-add_timestamp_header_fun(#shovel{publish_properties = PubProps} = Cfg) ->
-    PubProps2 =
-        fun(SrcUri, DestUri, Props) ->
-            rabbit_shovel_util:add_timestamp_header(
-                PubProps(SrcUri, DestUri, Props))
-        end,
-    Cfg#shovel{publish_properties = PubProps2}.
-
-
+                  proplists:get_keys(PropList)));
+duplicate_keys(Fields) ->
+    fail({require_list, Fields}).
