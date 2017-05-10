@@ -221,12 +221,12 @@ handle_cast({register_blocked_handler, HandlerPid}, State) ->
 %% @private
 handle_info({'DOWN', _, process, BlockHandler, Reason},
             State = #state{block_handler = {BlockHandler, _Ref}}) ->
-    ?LOG_WARN("Connection (~p): Unregistering block handler ~p because it died. "
+    ?LOG_WARN("Connection (~p): Unregistering connection.{blocked,unblocked} handler ~p because it died. "
               "Reason: ~p~n", [self(), BlockHandler, Reason]),
     {noreply, State#state{block_handler = none}};
 handle_info({'EXIT', BlockHandler, Reason},
             State = #state{block_handler = {BlockHandler, Ref}}) ->
-    ?LOG_WARN("Connection (~p): Unregistering block handler ~p because it died. "
+    ?LOG_WARN("Connection (~p): Unregistering connection.{blocked,unblocked} handler ~p because it died. "
               "Reason: ~p~n", [self(), BlockHandler, Reason]),
     erlang:demonitor(Ref, [flush]),
     {noreply, State#state{block_handler = none}};
