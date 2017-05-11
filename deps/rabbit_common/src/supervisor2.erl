@@ -142,8 +142,6 @@
            [ChildSpec :: child_spec()]}}
     | ignore.
 
--callback prep_stop() -> ok.
-
 -define(restarting(_Pid_), {restarting,_Pid_}).
 
 %%% ---------------------------------------------------
@@ -631,7 +629,6 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 	{ok, State1} ->
 	    {noreply, State1};
 	{shutdown, State1} ->
-            prep_stop(State1),
 	    {stop, shutdown, State1}
     end;
 
@@ -804,8 +801,7 @@ restart_child(Pid, Reason, State) ->
 try_restart(RestartType, Reason, Child, State) ->
     case handle_restart(RestartType, Reason, Child, State) of
         {ok, NState}       -> {noreply, NState};
-        {shutdown, State2} -> prep_stop(State2),
-                              {stop, shutdown, State2}
+        {shutdown, State2} -> {stop, shutdown, State2}
     end.
 
 do_restart(RestartType, Reason, Child, State) ->
@@ -1508,16 +1504,3 @@ report_progress(Child, SupName) ->
     Progress = [{supervisor, SupName},
 		{started, extract_child(Child)}],
     error_logger:info_report(progress, Progress).
-
-prep_stop(#state{module = Mod}) ->
-    %% Catch any exception - including non-existing prep_stop -
-    %% and continue stopping the supervision tree.
-    %% This is only executed when children are terminating,
-    %% because any other call from a top supervisor or application
-    %% will cause a deadlock stopping applications within prep_stop.
-    try
-        Mod:prep_stop()
-    catch
-        _:_ ->
-            ok
-    end.
