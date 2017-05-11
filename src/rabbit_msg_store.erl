@@ -1765,8 +1765,12 @@ build_index(Gatherer, Left, [],
 build_index(Gatherer, Left, [File|Files], State) ->
     ok = gatherer:fork(Gatherer),
     ok = worker_pool:submit_async(
-           fun () -> build_index_worker(Gatherer, State,
-                                        Left, File, Files)
+           fun () ->
+                link(Gatherer),
+                ok = build_index_worker(Gatherer, State,
+                                   Left, File, Files),
+                unlink(Gatherer),
+                ok
            end),
     build_index(Gatherer, File, Files, State).
 
