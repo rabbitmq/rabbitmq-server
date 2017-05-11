@@ -33,7 +33,7 @@ WARNING_OPTS += +debug_info \
 		+warn_export_vars \
 		+warn_shadow_vars \
 		+warn_obsolete_guard
-ERLC_OPTS += -Werror $(WARNING_OPTS)
+ERLC_OPTS += +nowarn_export_all -Werror $(WARNING_OPTS)
 TEST_ERLC_OPTS += +nowarn_export_all $(WARNING_OPTS)
 
 define compare_version
