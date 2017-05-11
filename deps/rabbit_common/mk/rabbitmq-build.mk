@@ -56,20 +56,33 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 # cth_styledout
 #   This hook will change the output of common_test to something more
 #   concise and colored.
+#
+# On Jenkins, in addition to those common_test hooks, enable JUnit-like
+# report. Jenkins parses those reports so the results can be browsed
+# from its UI. Furthermore, it displays a graph showing evolution of the
+# results over time.
 
-CTH_DEPS = cth_fail_fast cth_styledout
-dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
-dep_cth_styledout = git https://github.com/rabbitmq/cth_styledout.git master
-CTH_OPTS = -ct_hooks cth_fail_fast and cth_styledout
+CT_HOOKS ?=
 
+RMQ_CT_HOOKS = cth_fail_fast cth_styledout
 ifdef TRAVIS
-TEST_DEPS += $(CTH_DEPS)
-CT_OPTS += $(CTH_OPTS)
+CT_HOOKS += $(RMQ_CT_HOOKS)
+TEST_DEPS += $(RMQ_CT_HOOKS)
 endif
 ifdef CONCOURSE
-TEST_DEPS += $(CTH_DEPS)
-CT_OPTS += $(CTH_OPTS)
+CT_HOOKS += $(RMQ_CT_HOOKS)
+TEST_DEPS += $(RMQ_CT_HOOKS)
 endif
+ifdef JENKINS_HOME
+CT_HOOKS += cth_surefire $(RMQ_CT_HOOKS)
+TEST_DEPS += $(RMQ_CT_HOOKS)
+endif
+
+dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
+dep_cth_styledout = git https://github.com/rabbitmq/cth_styledout.git master
+
+CT_HOOKS_PARAM_VALUE = $(patsubst %,and %,$(CT_HOOKS))
+CT_OPTS += -ct_hooks $(wordlist 2,$(words $(CT_HOOKS_PARAM_VALUE)),$(CT_HOOKS_PARAM_VALUE))
 
 # Disable most messages on Travis because it might exceed the limit
 # set by Travis.
@@ -89,14 +102,6 @@ CT_QUIET_FLAGS = -verbosity 50 \
 
 ifdef TRAVIS
 CT_OPTS += $(CT_QUIET_FLAGS)
-endif
-
-# Enable JUnit-like report on Jenkins. Jenkins parses those reports so
-# the results can be browsed from its UI. Furthermore, it displays a
-# graph showing evolution of the results over time.
-
-ifdef JENKINS_HOME
-CT_OPTS += -ct_hooks cth_surefire
 endif
 
 # On CI, set $RABBITMQ_CT_SKIP_AS_ERROR so that any skipped
