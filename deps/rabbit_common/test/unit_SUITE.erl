@@ -33,12 +33,22 @@ groups() ->
         encrypt_decrypt_term,
         version_equivalence,
         version_minor_equivalence_properties,
-        version_comparison
+        version_comparison,
+        pid_decompose_compose
       ]}
     ].
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
+
+pid_decompose_compose(_Config) ->
+    Pid = self(),
+    {Node, Cre, Id, Ser} = rabbit_misc:decompose_pid(Pid),
+    Node = node(Pid),
+    Pid = rabbit_misc:compose_pid(Node, Cre, Id, Ser),
+    OtherNode = 'some_node@localhost',
+    PidOnOtherNode = rabbit_misc:pid_change_node(Pid, OtherNode),
+    {OtherNode, Cre, Id, Ser} = rabbit_misc:decompose_pid(PidOnOtherNode).
 
 encrypt_decrypt(_Config) ->
     %% Take all available block ciphers.

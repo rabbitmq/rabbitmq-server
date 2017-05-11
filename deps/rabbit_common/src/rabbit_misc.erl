@@ -19,6 +19,10 @@
 -include("rabbit_framing.hrl").
 -include("rabbit_misc.hrl").
 
+-ifdef(TEST).
+-export([decompose_pid/1, compose_pid/4]).
+-endif.
+
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4, quit/1,
          protocol_error/3, protocol_error/4, protocol_error/1]).
@@ -732,9 +736,11 @@ node_to_fake_pid(Node) ->
 decompose_pid(Pid) when is_pid(Pid) ->
     %% see http://erlang.org/doc/apps/erts/erl_ext_dist.html (8.10 and
     %% 8.7)
-    <<131,103,100,NodeLen:16,NodeBin:NodeLen/binary,Id:32,Ser:32,Cre:8>>
-        = term_to_binary(Pid),
-    Node = binary_to_term(<<131,100,NodeLen:16,NodeBin:NodeLen/binary>>),
+    Node = node(Pid),
+    BinPid = term_to_binary(Pid),
+    ByteSize = byte_size(BinPid),
+    NodeByteSize = (ByteSize - 11),
+    <<131, 103, _NodePrefix:NodeByteSize/binary, Id:32, Ser:32, Cre:8>> = BinPid,
     {Node, Cre, Id, Ser}.
 
 compose_pid(Node, Cre, Id, Ser) ->
