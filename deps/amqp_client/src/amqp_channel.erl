@@ -512,18 +512,27 @@ handle_info(timed_out_flushing_channel, State) ->
               "connection closing~n", [self()]),
     {stop, timed_out_flushing_channel, State};
 %% @private
+handle_info({'DOWN', _, process, ReturnHandler, shutdown},
+            State = #state{return_handler = {ReturnHandler, _Ref}}) ->
+    {noreply, State#state{return_handler = none}};
 handle_info({'DOWN', _, process, ReturnHandler, Reason},
             State = #state{return_handler = {ReturnHandler, _Ref}}) ->
     ?LOG_WARN("Channel (~p): Unregistering return handler ~p because it died. "
               "Reason: ~p~n", [self(), ReturnHandler, Reason]),
     {noreply, State#state{return_handler = none}};
 %% @private
+handle_info({'DOWN', _, process, ConfirmHandler, shutdown},
+            State = #state{confirm_handler = {ConfirmHandler, _Ref}}) ->
+    {noreply, State#state{confirm_handler = none}};
 handle_info({'DOWN', _, process, ConfirmHandler, Reason},
             State = #state{confirm_handler = {ConfirmHandler, _Ref}}) ->
     ?LOG_WARN("Channel (~p): Unregistering confirm handler ~p because it died. "
               "Reason: ~p~n", [self(), ConfirmHandler, Reason]),
     {noreply, State#state{confirm_handler = none}};
 %% @private
+handle_info({'DOWN', _, process, FlowHandler, shutdown},
+            State = #state{flow_handler = {FlowHandler, _Ref}}) ->
+    {noreply, State#state{flow_handler = none}};
 handle_info({'DOWN', _, process, FlowHandler, Reason},
             State = #state{flow_handler = {FlowHandler, _Ref}}) ->
     ?LOG_WARN("Channel (~p): Unregistering flow handler ~p because it died. "
