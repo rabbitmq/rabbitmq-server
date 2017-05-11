@@ -372,6 +372,8 @@ maybe_process_deferred_recv(State = #state{ deferred_recv = Data, socket = Sock 
     handle_info({inet_async, Sock, noref, {ok, Data}},
                 State#state{ deferred_recv = undefined }).
 
+maybe_emit_stats(undefined) ->
+    ok;
 maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
                             fun() -> emit_stats(State) end).
