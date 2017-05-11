@@ -88,9 +88,9 @@ run_starting(Config) ->
     shovel_test_utils:set_param_nowait(
       Config,
       <<"test">>, [{<<"src-queue">>,  <<"src">>},
-                   {<<"dest-queue">>, <<"dest">>}]),                    
+                   {<<"dest-queue">>, <<"dest">>}]),
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Opts = #{node => A},    
+    Opts = #{node => A},
     case ?CMD:run([], Opts) of
         {stream, [{{<<"/">>, <<"test">>}, dynamic, starting, _}]} ->
             ok;
@@ -114,7 +114,7 @@ run_running(Config) ->
     shovel_test_utils:set_param(
       Config,
       <<"test">>, [{<<"src-queue">>,  <<"src">>},
-                   {<<"dest-queue">>, <<"dest">>}]),                    
+                   {<<"dest-queue">>, <<"dest">>}]),
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
     {stream, [{{<<"/">>, <<"test">>}, dynamic, {running, _}, _}]}

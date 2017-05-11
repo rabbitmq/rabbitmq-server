@@ -135,7 +135,6 @@ simple_amqp10_dest(Config) ->
                             ]),
               Msg = publish_expect(Sess, Src, Dest, <<"tag1">>,
                                    <<"hello">>),
-              ct:pal("simple_amqp10_dest msg ~p~n", [Msg]),
               ?assertMatch(#{user_id := <<"guest">>,
                              creation_time := _}, amqp10_msg:properties(Msg)),
               ?assertMatch(#{<<"shovel-name">> := <<"test">>,
@@ -321,10 +320,7 @@ expect_one(Session, Dest, Payload) ->
 expect(Receiver, _Payload) ->
     receive
         {amqp10_msg, Receiver, InMsg} ->
-            [P] = amqp10_msg:body(InMsg),
-            ct:pal("expect received ~p~n", [P]),
-            % #{content_type := ?UNSHOVELLED} = amqp10_msg:properties(InMsg),
-            % #{durable := true} = amqp10_msg:headers(InMsg),
+            [_] = amqp10_msg:body(InMsg),
             InMsg
     after 4000 ->
               throw(timeout_in_expect_waiting_for_delivery)
@@ -353,7 +349,6 @@ publish_count(Session, Address, Payload, Count) ->
      amqp10_client:detach_link(Sender).
 
 expect_count(Session, Address, Payload, Count) ->
-    ct:pal("expect_count ~b on ~p~n", [Count, Address]),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"dynamic-receiver",
                                                           Address/binary>>,

@@ -132,10 +132,12 @@ decr_remaining_unacked(State = #{source := #{remaining_unacked := N} = Src}) ->
 
 decr_remaining(_N, State = #{source := #{remaining := unlimited}}) ->
     State;
-decr_remaining(N, State = #{source := #{remaining := M} = Src}) ->
+decr_remaining(N, State = #{source := #{remaining := M} = Src,
+                            name := Name}) ->
     case M > N of
         true  -> State#{source => Src#{remaining => M - N}};
         false ->
-            error_logger:info_msg("shutting down shovel, none remaining ~p~n", [State]),
+            error_logger:info_msg("shutting down shovel ~s, none remaining ~p~n",
+                                  [Name, State]),
             exit({shutdown, autodelete})
     end.

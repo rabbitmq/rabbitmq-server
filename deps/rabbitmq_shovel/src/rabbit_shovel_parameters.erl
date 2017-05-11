@@ -39,7 +39,6 @@ unregister() ->
     rabbit_registry:unregister(runtime_parameter, <<"shovel">>).
 
 validate(_VHost, <<"shovel">>, Name, Def, User) ->
-    error_logger:info_msg("validating ~p~n", [Def]),
     Validations =
         shovel_validation()
         ++ src_validation(Def, User)

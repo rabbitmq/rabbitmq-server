@@ -109,8 +109,7 @@ connect_dest(State = #{name := Name,
                                      uri => Uri}}}.
 
 -spec init_source(state()) -> state().
-init_source(State = #{name := Name,
-                      source := #{current := #{link := Link},
+init_source(State = #{source := #{current := #{link := Link},
                                   prefetch_count := Prefetch} = Src}) ->
     {Credit, RenewAfter} = case Src of
                                #{delete_after := R} when is_integer(R) ->
@@ -144,27 +143,23 @@ handle_source({amqp10_msg, _LinkRef, Msg}, State) ->
     rabbit_shovel_behaviour:forward(Tag, #{}, Payload, State);
 handle_source({amqp10_event, {connection, Conn, opened}},
               State = #{source := #{current := #{conn := Conn}}}) ->
-    ?INFO("Source connection opened.", []),
     State;
 handle_source({amqp10_event, {connection, Conn, {closed, Why}}},
-              #{source := #{current := #{conn := Conn}}}) ->
-    ?INFO("Source connection closed. Reason: ~p~n", [Why]),
+              #{source := #{current := #{conn := Conn}},
+                name := Name}) ->
+    ?INFO("Shovel ~s source connection closed. Reason: ~p~n", [Name, Why]),
     {stop, {inbound_conn_closed, Why}};
 handle_source({amqp10_event, {session, Sess, begun}},
               State = #{source := #{current := #{session := Sess}}}) ->
-    ?INFO("Source session begun", []),
     State;
 handle_source({amqp10_event, {session, Sess, {ended, Why}}},
               #{source := #{current := #{session := Sess}}}) ->
-    ?INFO("Source session ended. Reason: ~p~n", [Why]),
     {stop, {inbound_session_ended, Why}};
 handle_source({amqp10_event, {link, Link, {detached, Why}}},
               #{source := #{current := #{link := Link}}}) ->
-    ?INFO("Source link detached. Reason: ~p~n", [Why]),
     {stop, {inbound_link_detached, Why}};
-handle_source({amqp10_event, {link, Link, Evt}},
+handle_source({amqp10_event, {link, Link, _Evt}},
               State= #{source := #{current := #{link := Link}}}) ->
-    ?INFO("Source link event: ~p~n", [Evt]),
     State;
 handle_source({'EXIT', Conn, Reason},
               #{source := #{current := #{conn := Conn}}}) ->
@@ -175,7 +170,8 @@ handle_source(_Msg, _State) ->
 -spec handle_dest(Msg :: any(), state()) -> not_handled | state().
 handle_dest({amqp10_disposition, {Result, Tag}},
             State0 = #{ack_mode := on_confirm,
-                       dest := #{unacked := Unacked} = Dst}) ->
+                       dest := #{unacked := Unacked} = Dst,
+                       name := Name}) ->
     State = State0#{dest => Dst#{unacked => maps:remove(Tag, Unacked)}},
     rabbit_shovel_behaviour:decr_remaining(
       1,
@@ -185,33 +181,29 @@ handle_dest({amqp10_disposition, {Result, Tag}},
           {#{Tag := IncomingTag}, rejected} ->
               rabbit_shovel_behaviour:nack(IncomingTag, false, State);
           _ -> % not found - this should ideally not happen
-              error_logger:warning_msg("amqp10 destination disposition tag not"
-                                       "found: ~p~n", [Tag]),
+              error_logger:warning_msg("Shovel ~s amqp10 destination disposition tag not"
+                                       "found: ~p~n", [Name, Tag]),
               State
       end);
 handle_dest({amqp10_event, {connection, Conn, opened}},
             State = #{dest := #{current := #{conn := Conn}}}) ->
-    ?INFO("Destination connection opened.", []),
     State;
 handle_dest({amqp10_event, {connection, Conn, {closed, Why}}},
-            #{dest := #{current := #{conn := Conn}}}) ->
-    ?INFO("Destination connection closed. Reason: ~p~n", [Why]),
+            #{name := Name,
+              dest := #{current := #{conn := Conn}}}) ->
+    ?INFO("Shovel ~s destination connection closed. Reason: ~p~n", [Name, Why]),
     {stop, {outbound_conn_died, Why}};
 handle_dest({amqp10_event, {session, Sess, begun}},
             State = #{dest := #{current := #{session := Sess}}}) ->
-    ?INFO("Destination session begun", []),
     State;
 handle_dest({amqp10_event, {session, Sess, {ended, Why}}},
             #{dest := #{current := #{session := Sess}}}) ->
-    ?INFO("Destination session ended. Reason: ~p~n", [Why]),
     {stop, {outbound_conn_died, Why}};
 handle_dest({amqp10_event, {link, Link, {detached, Why}}},
             #{dest := #{current := #{link := Link}}}) ->
-    ?INFO("Destination link detached. Reason: ~p~n", [Why]),
     {stop, {outbound_link_detached, Why}};
-handle_dest({amqp10_event, {link, Link, Evt}},
+handle_dest({amqp10_event, {link, Link, _Evt}},
             State= #{dest := #{current := #{link := Link}}}) ->
-    ?INFO("Destination link event: ~p~n", [Evt]),
     State;
 handle_dest({'EXIT', Conn, Reason},
             #{dest := #{current := #{conn := Conn}}}) ->
@@ -233,13 +225,11 @@ close_dest(_Config) -> ok.
 ack(Tag, true, State = #{source := #{current := #{session := Session},
                                      last_acked_tag := LastTag} = Src}) ->
     First = LastTag + 1,
-    error_logger:info_msg("multi acking ~p - ~p~n", [First, Tag]),
     ok = amqp10_client_session:disposition(Session, receiver, First,
                                            Tag, true, accepted),
     State#{source => Src#{last_acked_tag => Tag}};
 ack(Tag, false, State = #{source := #{current :=
                                       #{session := Session}} = Src}) ->
-    error_logger:info_msg("acking ~p~n", [Tag]),
     ok = amqp10_client_session:disposition(Session, receiver, Tag,
                                            Tag, true, accepted),
     State#{source => Src#{last_acked_tag => Tag}}.
@@ -247,7 +237,6 @@ ack(Tag, false, State = #{source := #{current :=
 -spec nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 nack(Tag, false, State = #{source :=
                            #{current := #{session := Session}} = Src}) ->
-    error_logger:info_msg("nacking ~p~n", [Tag]),
     % the tag is the same as the deliveryid
     ok = amqp10_client_session:disposition(Session, receiver, Tag,
                                            Tag, false, rejected),
@@ -255,16 +244,14 @@ nack(Tag, false, State = #{source :=
 nack(Tag, true, State = #{source := #{current := #{session := Session},
                                      last_nacked_tag := LastTag} = Src}) ->
     First = LastTag + 1,
-    error_logger:info_msg("multi nacking ~p - ~p~n", [First, Tag]),
     ok = amqp10_client_session:disposition(Session, receiver, First,
                                            Tag, true, accepted),
     State#{source => Src#{last_nacked_tag => Tag}}.
 
 -spec forward(Tag :: tag(), Props :: #{atom() => any()},
               Payload :: binary(), state()) -> state().
-forward(Tag, _Props, _Payload,
+forward(_Tag, _Props, _Payload,
         #{source := #{remaining_unacked := 0}} = State) ->
-    error_logger:info_msg("dropping ~p~n", [Tag]),
     State;
 forward(Tag, Props, Payload,
         #{dest := #{current := #{link := Link},
@@ -275,7 +262,6 @@ forward(Tag, Props, Payload,
     Msg = add_timestamp_header(
             State, set_message_properties(
                      Props, add_forward_headers(State, Msg0))),
-    error_logger:info_msg("forwarding ~p ", [Msg]),
     ok = amqp10_client:send_msg(Link, Msg),
     rabbit_shovel_behaviour:decr_remaining_unacked(
       case AckMode of

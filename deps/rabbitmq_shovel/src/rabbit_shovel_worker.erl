@@ -74,13 +74,13 @@ handle_cast(init, State = #state{config = Config}) ->
     {noreply, State1}.
 
 
-handle_info(Msg, State = #state{config = Config}) ->
+handle_info(Msg, State = #state{config = Config, name = Name}) ->
     case rabbit_shovel_behaviour:handle_source(Msg, Config) of
         not_handled ->
             case rabbit_shovel_behaviour:handle_dest(Msg, Config) of
                 not_handled ->
-                    error_logger:info_msg("message not handled! ~p ~p~n",
-                                          [Msg, Config]),
+                    error_logger:info_msg("Shovel ~p message not handled! ~p~n",
+                                          [Name, Msg]),
                     {noreply, State};
                 {stop, Reason} ->
                     {stop, Reason, State};

@@ -83,5 +83,4 @@ parse_configuration(_Defaults, _, _Acc) ->
     {error, require_list_of_shovel_configurations}.
 
 validate_shovel_config(ShovelName, ShovelConfig) ->
-    error_logger:info_msg("validating ~p ~p", [ShovelName, ShovelConfig]),
     rabbit_shovel_config:parse(ShovelName, ShovelConfig).

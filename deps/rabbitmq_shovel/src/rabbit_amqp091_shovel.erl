@@ -403,7 +403,6 @@ decl_fun(Key, Endpoint) ->
                   {proplists:get_value(declarations, Endpoint, []), []}),
             fun (_Conn, Ch) ->
                     [begin
-                         error_logger:info_msg("shovel declaring ~p  ~p~n", [Ch, M]),
                          amqp_channel:call(Ch, M)
                      end || M <- lists:reverse(Decl)]
             end

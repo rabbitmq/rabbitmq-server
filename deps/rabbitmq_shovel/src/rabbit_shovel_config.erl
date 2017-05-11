@@ -115,7 +115,6 @@ ensure_defaults(ShovelConfig, ParsedShovel) ->
                     ParsedShovel#shovel.reconnect_delay}).
 
 enrich_shovel_config(Config, Defaults) ->
-    error_logger:info_msg("enrich_shovel_config ~p ~p~n", [Config, Defaults]),
     Config1 = proplists:unfold(Config),
     case [E || E <- Config1, not (is_tuple(E) andalso tuple_size(E) == 2)] of
         []      -> case duplicate_keys(Config1) of
@@ -235,7 +234,6 @@ parse_ack_mode({WrongVal, _Pos}) ->
           WrongVal}).
 
 duplicate_keys(PropList) when is_list(PropList) ->
-    error_logger:info_msg("duplicate_keys ~p~n", [PropList]),
     proplists:get_keys(
       lists:foldl(fun (K, L) -> lists:keydelete(K, 1, L) end, PropList,
                   proplists:get_keys(PropList)));

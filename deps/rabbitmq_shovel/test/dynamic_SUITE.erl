@@ -233,7 +233,6 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
             amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
             publish_count(Ch, <<>>, <<"src">>, <<"hello">>, 100),
             Ret = amqp_channel:wait_for_confirms(Ch),
-            ct:pal("wait ret ~p~n", [Ret]),
             shovel_test_utils:set_param_nowait(
               Config,
               <<"test">>, [{<<"src-queue">>,    <<"src">>},
