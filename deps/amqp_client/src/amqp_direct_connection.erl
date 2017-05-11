@@ -78,6 +78,8 @@ handle_message({'DOWN', _MRef, process, _ConnSup, shutdown}, State) ->
     {stop, {shutdown, node_down}, State};
 handle_message({'DOWN', _MRef, process, _ConnSup, Reason}, State) ->
     {stop, {remote_node_down, Reason}, State};
+handle_message({'EXIT', Pid, Reason}, State) ->
+    {stop, rabbit_misc:format("stopping because dependent process ~p died: ~p", [Pid, Reason]), State};
 handle_message(Msg, State) ->
     {stop, {unexpected_msg, Msg}, State}.
 

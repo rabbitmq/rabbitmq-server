@@ -230,8 +230,9 @@ handle_info({'EXIT', BlockHandler, Reason},
               "Reason: ~p~n", [self(), BlockHandler, Reason]),
     erlang:demonitor(Ref, [flush]),
     {noreply, State#state{block_handler = none}};
-handle_info({'EXIT', _Pid, _Reason}, State) ->
-    {noreply, State};
+%% propagate the exit to the module that will stop with a sensible reason logged
+handle_info({'EXIT', _Pid, _Reason} = Info, State) ->
+    callback(handle_message, [Info], State);
 handle_info(Info, State) ->
     callback(handle_message, [Info], State).
 
