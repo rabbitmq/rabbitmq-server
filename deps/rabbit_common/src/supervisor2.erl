@@ -142,13 +142,7 @@
            [ChildSpec :: child_spec()]}}
     | ignore.
 
-%% Optional callback prep_stop/0. It cannot be exported as Erlang/OTP doesn't
-%% support definition of optional callbacks.
-%%
-%% Currently used to stop application dependencies.
-%%
-%% -callback prep_stop() -> ok.
-%%
+-callback prep_stop() -> ok.
 
 -define(restarting(_Pid_), {restarting,_Pid_}).
 
