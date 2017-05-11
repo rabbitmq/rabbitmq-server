@@ -50,7 +50,7 @@ stop_applications(Apps) ->
 
 start_applications(Apps, ErrorHandler) ->
     manage_applications(fun lists:foldl/3,
-                        fun application:start/1,
+                        fun start/1,
                         fun application:stop/1,
                         already_started,
                         ErrorHandler,
@@ -62,7 +62,7 @@ stop_applications(Apps, ErrorHandler) ->
                             rabbit_log:info("Stopping application '~s'", [App]),
                             application:stop(App)
                         end,
-                        fun application:start/1,
+                        fun start/1,
                         not_started,
                         ErrorHandler,
                         Apps).
@@ -124,3 +124,9 @@ manage_applications(Iterate, Do, Undo, SkipError, ErrorHandler, Apps) ->
             end, [], Apps),
     ok.
 
+start(rabbit) ->
+    %% Stops the Erlang VM when the rabbit application stops abnormally
+    %% i.e. message store reaches its restart limit
+    application:start(rabbit, transient);
+start(App) ->
+    application:start(App).
