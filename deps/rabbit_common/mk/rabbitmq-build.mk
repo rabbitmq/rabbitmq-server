@@ -55,7 +55,7 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 #
 # cth_styledout
 #   This hook will change the output of common_test to something more
-#   consise and colored.
+#   concise and colored.
 
 CTH_DEPS = cth_fail_fast cth_styledout
 dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
