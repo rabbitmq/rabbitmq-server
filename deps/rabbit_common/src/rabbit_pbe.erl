@@ -23,12 +23,20 @@
 %% Supported ciphers and hashes
 
 supported_ciphers() ->
-    proplists:get_value(ciphers, crypto:supports())
-        -- [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm].
+    NotSupportedByUs = [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm],
+    SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
+    lists:filter(fun(Cipher) ->
+        not lists:member(Cipher, NotSupportedByUs)
+    end,
+    SupportedByCrypto).
 
 supported_hashes() ->
-    proplists:get_value(hashs, crypto:supports())
-        -- [md4, ripemd160].
+    NotSupportedByUs = [md4, ripemd160],
+    SupportedByCrypto = proplists:get_value(hashs, crypto:supports()),
+    lists:filter(fun(Hash) ->
+        not lists:member(Hash, NotSupportedByUs)
+    end,
+    SupportedByCrypto).
 
 %% Default encryption parameters (keep those in sync with rabbit.app.src)
 default_cipher() ->
