@@ -1,13 +1,17 @@
 # AMQP 1.0 client
 
-This is an erlang client for the [AMQP 1.0](https://www.amqp.org/resources/specifications) protocol.
+This is an experimental Erlang client for the [AMQP 1.0](https://www.amqp.org/resources/specifications) protocol.
 
 It's primary purpose is to be used in RabbitMQ related projects but it is a
 generic client.
 
-## Status
+## Project Maturity and Status
 
-Incomplete but usable.
+This project is very young and not 100% feature complete. It is used in the next generation of the
+RabbitMQ Shovel plugin.
+
+This client library is not officially supported by Pivotal at this time.
+
 
 ## API
 
