@@ -3,6 +3,7 @@
 open System
 open System.Threading
 open Amqp
+open Amqp.Sasl
 open Amqp.Framing
 open Amqp.Types
 
@@ -303,17 +304,28 @@ module Test =
                 assertEqual (ae.Error.Condition) (Symbol cond)
             | _ -> failwith "invalid expection thrown"
 
+    let authFailure uri =
+        try
+            let u = Uri uri
+            let uri = sprintf "amqp://blah:blah@%s:%i" u.Host u.Port
+            let c = Connection(Address uri)
+            failwith "expected exception not received"
+        with
+        | :? Amqp.AmqpException ->
+            ()
+
 
 let (|AsLower|) (s: string) =
     match s with
     | null -> null
     | _ -> s.ToLowerInvariant()
 
-
-
 [<EntryPoint>]
 let main argv =
     match List.ofArray argv with
+    | [AsLower "auth_failure"; uri] ->
+        authFailure uri
+        0
     | [AsLower "roundtrip"; uri] ->
         roundtrip uri
         0

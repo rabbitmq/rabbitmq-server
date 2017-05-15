@@ -639,7 +639,13 @@ auth_phase_1_0(Response,
                                               auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
-        {refused, Msg, Args} ->
+        {refused, _User, Msg, Args} ->
+            %% We don't trust the client at this point - force them to wait
+            %% for a bit before sending the sasl outcome frame
+            %% so they can't DOS us with repeated failed logins etc.
+            timer:sleep(?SILENT_CLOSE_DELAY * 1000),
+            Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 1}},
+            ok = send_on_channel0(Sock, Outcome, rabbit_amqp1_0_sasl),
             protocol_error(
               ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~s login refused: ~s",
               [Name, io_lib:format(Msg, Args)]);
