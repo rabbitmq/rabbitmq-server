@@ -35,10 +35,12 @@ LOCAL_DEPS = xmerl
 DEPS = rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers rabbit
 
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
+	      rabbit_common/mk/rabbitmq-test.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
