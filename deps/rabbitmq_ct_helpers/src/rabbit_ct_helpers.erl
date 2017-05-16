@@ -318,9 +318,12 @@ ensure_ssl_certs(Config) ->
             Config1 = merge_app_env(Config,
               {rabbit, [
                   {ssl_options, [
-                      {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
-                      {certfile, filename:join([CertsDir, "server", "cert.pem"])},
-                      {keyfile, filename:join([CertsDir, "server", "key.pem"])},
+                      {cacertfile,
+                       filename:join([CertsDir, "testca", "cacert.pem"])},
+                      {certfile,
+                       filename:join([CertsDir, "server", "cert.pem"])},
+                      {keyfile,
+                       filename:join([CertsDir, "server", "key.pem"])},
                       {verify, Verify},
                       {fail_if_no_peer_cert, FailIfNoPeerCert}
                     ]}]}),
