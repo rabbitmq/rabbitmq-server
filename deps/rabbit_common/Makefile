@@ -38,11 +38,14 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 -include development.pre.mk
 
+DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-test.mk
+DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
+	      $(PROJECT)/mk/rabbitmq-hexpm.mk \
+	      $(PROJECT)/mk/rabbitmq-dist.mk \
+	      $(PROJECT)/mk/rabbitmq-test.mk \
+	      $(PROJECT)/mk/rabbitmq-tools.mk
+
 include mk/rabbitmq-components.mk
-include mk/rabbitmq-build.mk
 include erlang.mk
-include mk/rabbitmq-hexpm.mk
-include mk/rabbitmq-dist.mk
-include mk/rabbitmq-tools.mk
 
 -include development.post.mk
