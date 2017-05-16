@@ -284,7 +284,7 @@ new_message(Tag, Payload, #{ack_mode := AckMode,
     amqp10_msg:set_application_properties(AppProps, Msg).
 
 add_timestamp_header(#{dest := #{add_timestamp_header := true}}, Msg) ->
-    P =#{creation_time => os:system_time(millisecond)},
+    P =#{creation_time => os:system_time(milli_seconds)},
     amqp10_msg:set_properties(P, Msg);
 add_timestamp_header(_, Msg) -> Msg.
 
