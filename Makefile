@@ -132,6 +132,7 @@ EXTRA_SOURCES += $(USAGES_ERL)
 .DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
