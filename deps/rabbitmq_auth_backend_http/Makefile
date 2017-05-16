@@ -14,6 +14,7 @@ endef
 LOCAL_DEPS = inets
 DEPS = rabbit_common rabbit amqp_client
 
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
