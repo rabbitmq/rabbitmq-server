@@ -13,6 +13,7 @@ BUILD_DEPS = rabbitmq_codegen
 DEPS = rabbit_common rabbit amqp_client
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 EXTRA_SOURCES += include/rabbit_amqp1_0_framing.hrl \
