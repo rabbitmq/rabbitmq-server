@@ -31,6 +31,7 @@ endef
 DEPS = ranch rabbit_common rabbit amqp_client ranch_proxy_protocol
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 ELIXIR_LIB_DIR = $(shell elixir -e 'IO.puts(:code.lib_dir(:elixir))')
