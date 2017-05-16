@@ -3,6 +3,7 @@ PROJECT = rabbitmq_auth_backend_cache
 DEPS = rabbit_common
 TEST_DEPS += rabbit rabbitmq_ct_helpers
 
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
