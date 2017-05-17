@@ -387,11 +387,20 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
                                          last_blocked_by = none,
                                          last_blocked_at = never}},
     try
-        run({?MODULE, recvloop,
-             [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
-                                            State, #v1.stats_timer),
-                                          handshake, 8)]}),
-        log(info, "closing AMQP connection ~p (~s)~n", [self(), dynamic_connection_name(Name)])
+        case run({?MODULE, recvloop,
+                  [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
+                                                 State, #v1.stats_timer),
+                                               handshake, 8)]}) of
+            %% connection was closed cleanly by the client
+            #v1{connection = #connection{user  = #user{username = Username},
+                                         vhost = VHost}} ->
+                log(info, "closing AMQP connection ~p (~s, vhost: '~s', user: '~s')~n",
+                    [self(), dynamic_connection_name(Name), VHost, Username]);
+            %% just to be more defensive
+            _ ->
+                log(info, "closing AMQP connection ~p (~s)~n",
+                    [self(), dynamic_connection_name(Name)])
+            end
     catch
         Ex ->
           log_connection_exception(dynamic_connection_name(Name), Ex)
@@ -413,6 +422,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
 log_connection_exception(Name, Ex) ->
     Severity = case Ex of
                    connection_closed_with_no_data_received -> debug;
+                   {connection_closed_abruptly, _}         -> warning;
                    connection_closed_abruptly              -> warning;
                    _                                       -> error
                end,
@@ -422,6 +432,17 @@ log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
     %% Long line to avoid extra spaces and line breaks in log
     log(Severity, "closing AMQP connection ~p (~s):~nmissed heartbeats from client, timeout: ~ps~n",
         [self(), Name, TimeoutSec]);
+log_connection_exception(Severity, Name, {connection_closed_abruptly,
+                                          #v1{connection = #connection{user  = #user{username = Username},
+                                                                       vhost = VHost}}}) ->
+    log(Severity, "closing AMQP connection ~p (~s, vhost: '~s', user: '~s'):~nclient unexpectedly closed TCP connection~n",
+        [self(), Name, VHost, Username]);
+%% when client abruptly closes connection before connection.open/authentication/authorization
+%% succeeded, don't log username and vhost as 'none'
+log_connection_exception(Severity, Name, {connection_closed_abruptly, _}) ->
+    log(Severity, "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
+        [self(), Name]);
+%% old exception structure
 log_connection_exception(Severity, Name, connection_closed_abruptly) ->
     log(Severity, "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
         [self(), Name]);
@@ -490,7 +511,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             recvloop(Deb, [Data | Buf], BufLen + size(Data),
                      State#v1{pending_recv = false});
         closed when State#v1.connection_state =:= closed ->
-            ok;
+            State;
         closed when CS =:= pre_init andalso Buf =:= [] ->
             stop(tcp_healthcheck, State);
         closed ->
@@ -506,7 +527,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                                   ?MODULE, Deb, {Buf, BufLen, State});
         {other, Other}  ->
             case handle_other(Other, State) of
-                stop     -> ok;
+                stop     -> State;
                 NewState -> recvloop(Deb, Buf, BufLen, NewState)
             end
     end.
@@ -519,7 +540,7 @@ stop(tcp_healthcheck, State) ->
     throw(connection_closed_with_no_data_received);
 stop(closed, State) ->
     maybe_emit_stats(State),
-    throw(connection_closed_abruptly);
+    throw({connection_closed_abruptly, State});
 stop(Reason, State) ->
     maybe_emit_stats(State),
     throw({inet_error, Reason}).
@@ -1129,7 +1150,7 @@ handle_method0(MethodName, FieldsBin,
                        State)
     catch throw:{inet_error, E} when E =:= closed; E =:= enotconn ->
             maybe_emit_stats(State),
-            throw(connection_closed_abruptly);
+            throw({connection_closed_abruptly, State});
           exit:#amqp_error{method = none} = Reason ->
             handle_exception(State, 0, Reason#amqp_error{method = MethodName});
           Type:Reason ->
