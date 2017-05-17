@@ -387,11 +387,20 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
                                          last_blocked_by = none,
                                          last_blocked_at = never}},
     try
-        run({?MODULE, recvloop,
-             [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
-                                            State, #v1.stats_timer),
-                                          handshake, 8)]}),
-        log(info, "closing AMQP connection ~p (~s)~n", [self(), dynamic_connection_name(Name)])
+        case run({?MODULE, recvloop,
+                  [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
+                                                 State, #v1.stats_timer),
+                                               handshake, 8)]}) of
+            %% connection was closed cleanly by the client
+            #v1{connection = #connection{user  = #user{username = Username},
+                                         vhost = VHost}} ->
+                log(info, "closing AMQP connection ~p (~s, vhost: '~s', user: '~s')~n",
+                    [self(), dynamic_connection_name(Name), VHost, Username]);
+            %% just to be more defensive
+            _ ->
+                log(info, "closing AMQP connection ~p (~s)~n",
+                    [self(), dynamic_connection_name(Name)])
+            end
     catch
         Ex ->
           log_connection_exception(dynamic_connection_name(Name), Ex)
@@ -490,7 +499,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             recvloop(Deb, [Data | Buf], BufLen + size(Data),
                      State#v1{pending_recv = false});
         closed when State#v1.connection_state =:= closed ->
-            ok;
+            State;
         closed when CS =:= pre_init andalso Buf =:= [] ->
             stop(tcp_healthcheck, State);
         closed ->
@@ -506,7 +515,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                                   ?MODULE, Deb, {Buf, BufLen, State});
         {other, Other}  ->
             case handle_other(Other, State) of
-                stop     -> ok;
+                stop     -> State;
                 NewState -> recvloop(Deb, Buf, BufLen, NewState)
             end
     end.
