@@ -38,6 +38,8 @@
          forward/4
         ]).
 
+-import(rabbit_misc, [pget/2, pget/3]).
+
 -define(INFO(Text, Args), error_logger:info_msg(Text, Args)).
 
 -type state() :: rabbit_shovel_behaviour:state().
@@ -322,12 +324,6 @@ set_message_properties(Props, Msg) ->
                         #{content_type => rabbit_data_coercion:to_binary(Ct)}, M);
                  (_, _, M) -> M
               end, Msg, Props).
-
-pget(K, PList) ->
-    rabbit_misc:pget(K, PList).
-
-pget(K, PList, Default) ->
-    rabbit_misc:pget(K, PList, Default).
 
 gen_unique_name(Pre0, Post0) ->
     Pre = rabbit_data_coercion:to_binary(Pre0),
