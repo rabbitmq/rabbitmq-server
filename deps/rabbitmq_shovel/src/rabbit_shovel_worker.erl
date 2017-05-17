@@ -103,7 +103,7 @@ terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
     rabbit_shovel_status:remove({VHost, Name}),
     ok;
 terminate(Reason, State) ->
-    error_logger:info_msg("terminating static worker ~p ~p~n", [State, Reason]),
+    error_logger:info_msg("terminating static worker with ~p ~n", [Reason]),
     close_connections(State),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, Reason}),

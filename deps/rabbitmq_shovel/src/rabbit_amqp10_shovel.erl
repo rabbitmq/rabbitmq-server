@@ -1,3 +1,19 @@
+%%  The contents of this file are subject to the Mozilla Public License
+%%  Version 1.1 (the "License"); you may not use this file except in
+%%  compliance with the License. You may obtain a copy of the License
+%%  at http://www.mozilla.org/MPL/
+%%
+%%  Software distributed under the License is distributed on an "AS IS"
+%%  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%%  the License for the specific language governing rights and
+%%  limitations under the License.
+%%
+%%  The Original Code is RabbitMQ.
+%%
+%%  The Initial Developer of the Original Code is GoPivotal, Inc.
+%%  Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(rabbit_amqp10_shovel).
 
 -behaviour(rabbit_shovel_behaviour).
@@ -173,18 +189,19 @@ handle_dest({amqp10_disposition, {Result, Tag}},
                        dest := #{unacked := Unacked} = Dst,
                        name := Name}) ->
     State = State0#{dest => Dst#{unacked => maps:remove(Tag, Unacked)}},
-    rabbit_shovel_behaviour:decr_remaining(
-      1,
-      case {Unacked, Result} of
-          {#{Tag := IncomingTag}, accepted} ->
-              rabbit_shovel_behaviour:ack(IncomingTag, false, State);
-          {#{Tag := IncomingTag}, rejected} ->
-              rabbit_shovel_behaviour:nack(IncomingTag, false, State);
-          _ -> % not found - this should ideally not happen
-              error_logger:warning_msg("Shovel ~s amqp10 destination disposition tag not"
-                                       "found: ~p~n", [Name, Tag]),
-              State
-      end);
+    {Decr, State} =
+        case {Unacked, Result} of
+            {#{Tag := IncomingTag}, accepted} ->
+                {1, rabbit_shovel_behaviour:ack(IncomingTag, false, State)};
+            {#{Tag := IncomingTag}, rejected} ->
+                {1, rabbit_shovel_behaviour:nack(IncomingTag, false, State)};
+            _ -> % not found - this should ideally not happen
+                error_logger:warning_msg("Shovel ~s amqp10 destination "
+                                         "disposition tag not found: ~p~n",
+                                         [Name, Tag]),
+                {0, State}
+        end,
+    rabbit_shovel_behaviour:decr_remaining(Decr, State);
 handle_dest({amqp10_event, {connection, Conn, opened}},
             State = #{dest := #{current := #{conn := Conn}}}) ->
     State;
@@ -307,11 +324,10 @@ set_message_properties(Props, Msg) ->
               end, Msg, Props).
 
 pget(K, PList) ->
-    {K, V} = proplists:lookup(K, PList),
-    V.
+    rabbit_misc:pget(K, PList).
 
 pget(K, PList, Default) ->
-    proplists:get_value(K, PList, Default).
+    rabbit_misc:pget(K, PList, Default).
 
 gen_unique_name(Pre0, Post0) ->
     Pre = rabbit_data_coercion:to_binary(Pre0),
