@@ -285,23 +285,20 @@
 </div>
 
 <div class="section-hidden administrator-only">
-<h2>Import / export definitions</h2>
+<h2>Export definitions</h2>
 <div class="hider">
-  <form  method="post" enctype="multipart/form-data">
     <table class="two-col-layout">
       <tr>
         <td>
-          <h3>Export</h3>
           <p>
             <label for="download-filename">Filename for download:</label><br/>
             <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" />
           </p>
         </td>
         <td>
-          <h3>Import</h3>
           <p>
-            <label>Definitions file:</label><br/>
-            <input type="file" name="file"/>
+            <button id="download-definitions">Download broker definitions</button>
+            <span class="help" id="export-definitions"></span>
           </p>
         </td>
       </tr>
@@ -319,6 +316,32 @@
             <input type="hidden" name="vhost" value="all"/>
 <% } %>
         </td>
+      </tr>
+    </table>
+</div>
+</div>
+
+<div class="section-hidden administrator-only">
+<h2>Import definitions</h2>
+<div class="hider">
+  <form  method="post" enctype="multipart/form-data">
+    <table class="two-col-layout">
+      <tr>
+        <td>
+          <p>
+            <label>Definitions file:</label><br/>
+            <input type="file" name="file"/>
+          </p>
+        </td>
+        <td>
+          <p>
+            <input type="hidden" name="redirect" value="../../#/import-succeeded"/>
+            <input type="submit" value="Upload broker definitions"  onclick="submit_import($(this).closest('form')[0])" />
+            <span class="help" id="import-definitions"></span>
+          </p>
+        </td>
+      </tr>
+      <tr>
         <td>
          <% if (vhosts_interesting) { %>
           <label>Virtual host:</label>
@@ -332,21 +355,6 @@
 <% } else { %>
             <input type="hidden" name="vhost" value="all"/>
 <% } %>
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <p>
-            <button id="download-definitions">Download broker definitions</button>
-            <span class="help" id="export-definitions"></span>
-          </p>
-        </td>
-        <td>
-          <p>
-            <input type="hidden" name="redirect" value="../../#/import-succeeded"/>
-            <input type="submit" value="Upload broker definitions"  onclick="submit_import($(this).closest('form')[0])" />
-            <span class="help" id="import-definitions"></span>
-          </p>
         </td>
       </tr>
     </table>
