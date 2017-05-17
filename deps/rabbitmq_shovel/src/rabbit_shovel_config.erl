@@ -236,6 +236,6 @@ parse_ack_mode({WrongVal, _Pos}) ->
 duplicate_keys(PropList) when is_list(PropList) ->
     proplists:get_keys(
       lists:foldl(fun (K, L) -> lists:keydelete(K, 1, L) end, PropList,
-                  proplists:get_keys(PropList)));
-duplicate_keys(Fields) ->
-    fail({require_list, Fields}).
+                  proplists:get_keys(PropList))).
+% duplicate_keys(Fields) ->
+%     fail({require_list, Fields}).
