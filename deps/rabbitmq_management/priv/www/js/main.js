@@ -522,13 +522,17 @@ function show_popup(type, text, mode) {
 
 
 function submit_import(form) {
-    var confirm_upload = confirm('Are you sure? Vhost configuration will be overriden.');
-    if (confirm_upload == true) {
-        var idx = $("select[name='vhost-upload'] option:selected").index();
-        var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-upload'] option:selected").val()));
-        form.action ="api/definitions" + vhost + '?auth=' + get_cookie_value('auth');
-        form.submit();
-        window.location.replace("../../#/import-succeeded");
+    if (form.file.value) {
+        var confirm_upload = confirm('Are you sure? Vhost configuration will be overriden.');
+        if (confirm_upload == true) {
+            var idx = $("select[name='vhost-upload'] option:selected").index();
+            var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-upload'] option:selected").val()));
+            form.action ="api/definitions" + vhost + '?auth=' + get_cookie_value('auth');
+            form.submit();
+            window.location.replace("../../#/import-succeeded");
+        } else {
+            return false;
+        }
     } else {
         return false;
     }
