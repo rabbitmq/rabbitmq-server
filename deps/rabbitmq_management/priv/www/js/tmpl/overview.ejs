@@ -335,8 +335,7 @@
         </td>
         <td>
           <p>
-            <input type="hidden" name="redirect" value="../../#/import-succeeded"/>
-            <input type="submit" value="Upload broker definitions"  onclick="submit_import($(this).closest('form')[0])" />
+            <input type="submit" value="Upload broker definitions" onclick="submit_import($(this).closest('form')[0]); return false"/>
             <span class="help" id="import-definitions"></span>
           </p>
         </td>
