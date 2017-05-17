@@ -710,6 +710,7 @@ hibernate(GS2State = #gs2_state { timeout_state = TimeoutState }) ->
 
 pre_hibernate(GS2State = #gs2_state { state   = State,
                                       mod     = Mod }) ->
+    rabbit_event:stop_stats_timer(GS2State, #gs2_state.timer),
     case erlang:function_exported(Mod, handle_pre_hibernate, 1) of
         true ->
             case catch Mod:handle_pre_hibernate(State) of
@@ -723,16 +724,17 @@ pre_hibernate(GS2State = #gs2_state { state   = State,
     end.
 
 post_hibernate(GS2State = #gs2_state { state = State,
-                                       mod   = Mod }) ->
+                                       mod   = Mod,
+                                       init_stats_fun = InitStatsFun }) ->
     case erlang:function_exported(Mod, handle_post_hibernate, 1) of
         true ->
             case catch Mod:handle_post_hibernate(State) of
                 {noreply, NState} ->
-                    process_next_msg(GS2State #gs2_state { state = NState,
-                                                           time  = infinity });
+                    process_next_msg(InitStatsFun(GS2State #gs2_state { state = NState,
+                                                                        time  = infinity }));
                 {noreply, NState, Time} ->
-                    process_next_msg(GS2State #gs2_state { state = NState,
-                                                           time  = Time });
+                    process_next_msg(InitStatsFun(GS2State #gs2_state { state = NState,
+                                                                        time  = Time }));
                 Reply ->
                     handle_common_termination(Reply, post_hibernate, GS2State)
             end;
@@ -743,7 +745,7 @@ post_hibernate(GS2State = #gs2_state { state = State,
             %% still set to hibernate, iff that msg is the very msg
             %% that woke us up (or the first msg we receive after
             %% waking up).
-            process_next_msg(GS2State #gs2_state { time = hibernate })
+            process_next_msg(InitStatsFun(GS2State #gs2_state { time = hibernate }))
     end.
 
 adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
