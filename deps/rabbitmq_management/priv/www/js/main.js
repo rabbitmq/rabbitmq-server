@@ -523,10 +523,10 @@ function show_popup(type, text, mode) {
 
 function submit_import(form) {
     if (form.file.value) {
-        var confirm_upload = confirm('Are you sure? Vhost configuration will be overriden.');
-        if (confirm_upload == true) {
+        var confirm_upload = confirm('Are you sure to you want import a definitions file? Some entities (vhosts, users, queues, etc) may be overwritten!');
+        if (confirm_upload === true) {
             var idx = $("select[name='vhost-upload'] option:selected").index();
-            var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-upload'] option:selected").val()));
+            var vhost = ((idx <= 0) ? "" : "/" + esc($("select[name='vhost-upload'] option:selected").val()));
             form.action ="api/definitions" + vhost + '?auth=' + get_cookie_value('auth');
             form.submit();
             window.location.replace("../../#/import-succeeded");
