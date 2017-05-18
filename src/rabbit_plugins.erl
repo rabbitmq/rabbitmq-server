@@ -213,8 +213,7 @@ strictly_plugins(Plugins, AllPlugins) ->
       end, Plugins).
 
 strictly_plugins(Plugins) ->
-    ExpandDir = plugins_expand_dir(),
-    AllPlugins = list(ExpandDir),
+    AllPlugins = list(plugins_dist_dir()),
     lists:filter(
       fun(Name) ->
               is_strictly_plugin(lists:keyfind(Name, #plugin.name, AllPlugins))
