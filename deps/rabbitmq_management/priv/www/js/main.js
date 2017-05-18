@@ -523,7 +523,7 @@ function show_popup(type, text, mode) {
 
 function submit_import(form) {
     if (form.file.value) {
-        var confirm_upload = confirm('Are you sure to you want import a definitions file? Some entities (vhosts, users, queues, etc) may be overwritten!');
+        var confirm_upload = confirm('Are you sure you want to import a definitions file? Some entities (vhosts, users, queues, etc) may be overwritten!');
         if (confirm_upload === true) {
             var idx = $("select[name='vhost-upload'] option:selected").index();
             var vhost = ((idx <= 0) ? "" : "/" + esc($("select[name='vhost-upload'] option:selected").val()));
