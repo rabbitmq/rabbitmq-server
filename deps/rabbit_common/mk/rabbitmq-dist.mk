@@ -136,7 +136,7 @@ $(error DIST_PLUGINS_LIST ($(DIST_PLUGINS_LIST)) is missing)
 endif
 
 $(eval $(foreach app, \
-  $(filter-out rabbit, \
+  $(filter-out rabbit looking_glass lz4, \
   $(sort $(notdir $(shell cat $(DIST_PLUGINS_LIST)))) $(PROJECT)), \
   $(call ez_target,$(app))))
 endif

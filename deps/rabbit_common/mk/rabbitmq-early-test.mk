@@ -71,3 +71,29 @@ endif
 ifdef JENKINS_HOME
 export RABBITMQ_CT_SKIP_AS_ERROR = true
 endif
+
+# --------------------------------------------------------------------
+# Looking Glass rules.
+# --------------------------------------------------------------------
+
+ifneq ("$(RABBITMQ_TRACER)","")
+BUILD_DEPS += looking_glass
+dep_looking_glass = git https://github.com/rabbitmq/looking-glass master
+ERL_LIBS := "$(ERL_LIBS):../looking_glass:../lz4"
+export RABBITMQ_TRACER
+endif
+
+define lg_callgrind.erl
+lg_callgrind:profile_many("traces.lz4.*", "callgrind.out", #{running => true}),
+halt().
+endef
+
+.PHONY: profile clean-profile
+
+profile:
+	$(gen_verbose) $(call erlang,$(call lg_callgrind.erl))
+
+clean:: clean-profile
+
+clean-profile:
+	$(gen_verbose) rm -f traces.lz4.* callgrind.out.*
