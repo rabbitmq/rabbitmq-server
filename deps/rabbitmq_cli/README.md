@@ -33,7 +33,7 @@ work with earlier server releases.
 
 ### Requirements
 
-Building this project requires [Elixir](http://elixir-lang.org/) 1.3.1 or greater.
+Building this project requires [Elixir](http://elixir-lang.org/) 1.4.4 or greater.
 
 Command line tools depend on [rabbitmq-common](https://github.com/rabbitmq/rabbitmq-common).
 Dependencies are being resolved by `erlang.mk`
