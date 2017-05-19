@@ -43,11 +43,6 @@ CT_OPTS += -ct_hooks $(wordlist 2,$(words $(CT_HOOKS_PARAM_VALUE)),$(CT_HOOKS_PA
 # Disable most messages on Travis because it might exceed the limit
 # set by Travis.
 #
-# On Concourse, we keep the default verbosity. With Erlang 19.2+, the
-# cth_styledout hook will change the output to something concise and all
-# messages are available in in HTML reports. With Erlang up-to 19.1,
-# stdout will be flooded with messages, but we'll live with that.
-#
 # CAUTION: All arguments after -erl_args are passed to the emulator and
 # common_test doesn't interpret them! Therefore, all common_test flags
 # *MUST* appear before.
