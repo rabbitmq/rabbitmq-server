@@ -24,6 +24,7 @@ ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR)
 endif
 
 TEST_ERLC_OPTS += +nowarn_export_all
+ERLC_OPTS += +nowarn_export_all
 
 define compare_version
 $(shell awk 'BEGIN {
