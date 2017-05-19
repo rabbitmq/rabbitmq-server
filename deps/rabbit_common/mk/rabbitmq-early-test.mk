@@ -17,20 +17,21 @@
 # from its UI. Furthermore, it displays a graph showing evolution of the
 # results over time.
 
-CT_HOOKS ?=
+CT_HOOKS ?= cth_styledout
+TEST_DEPS += cth_styledout
 
-RMQ_CT_HOOKS = cth_fail_fast cth_styledout
+RMQ_CI_CT_HOOKS = cth_fail_fast
 ifdef TRAVIS
-CT_HOOKS += $(RMQ_CT_HOOKS)
-TEST_DEPS += $(RMQ_CT_HOOKS)
+CT_HOOKS += $(RMQ_CI_CT_HOOKS)
+TEST_DEPS += $(RMQ_CI_CT_HOOKS)
 endif
 ifdef CONCOURSE
-CT_HOOKS += $(RMQ_CT_HOOKS)
-TEST_DEPS += $(RMQ_CT_HOOKS)
+CT_HOOKS += $(RMQ_CI_CT_HOOKS)
+TEST_DEPS += $(RMQ_CI_CT_HOOKS)
 endif
 ifdef JENKINS_HOME
-CT_HOOKS += cth_surefire $(RMQ_CT_HOOKS)
-TEST_DEPS += $(RMQ_CT_HOOKS)
+CT_HOOKS += cth_surefire $(RMQ_CI_CT_HOOKS)
+TEST_DEPS += $(RMQ_CI_CT_HOOKS)
 endif
 
 dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
