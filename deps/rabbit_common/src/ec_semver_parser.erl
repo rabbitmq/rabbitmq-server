@@ -1,5 +1,5 @@
 %%% Imported from https://github.com/erlware/erlware_commons.git
-%%% Commit 603441a0363d5433de2139759991c640846c3a62
+%%% Commit 09168347525916e291c8aa6e3073e260e5f4a116
 
 -module(ec_semver_parser).
 -export([parse/1,file/1]).
@@ -15,7 +15,7 @@
 -define(p_zero_or_more,true).
 
 
--compile(export_all).
+
 -spec file(file:name()) -> any().
 file(Filename) -> case file:read_file(Filename) of {ok,Bin} -> parse(Bin); Err -> Err end.
 
