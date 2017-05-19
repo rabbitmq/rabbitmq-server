@@ -3,7 +3,6 @@
 # --------------------------------------------------------------------
 
 TEST_ERLC_OPTS += -Werror +nowarn_export_all
-ERLC_OPTS += +nowarn_export_all
 
 define compare_version
 $(shell awk 'BEGIN {
