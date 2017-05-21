@@ -28,5 +28,7 @@ docs/*.html
 # Tracing tools
 *-ttb
 *.ti
+*.lz4*
+callgrind.out*
 
 PACKAGES/*
