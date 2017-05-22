@@ -39,5 +39,5 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
     "Asking node #{node_name} its Erlang cookie hash..."
   end
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.ErlangString
+  def formatter(), do: RabbitMQ.CLI.Formatters.String
 end

@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   use RabbitMQ.CLI.DefaultOutput
   alias RabbitMQ.CLI.Core.OsPid, as: OsPid
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.ErlangString
+  def formatter(), do: RabbitMQ.CLI.Formatters.String
 
   def merge_defaults(args, opts), do: {args, opts}
 

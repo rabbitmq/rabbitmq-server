@@ -13,20 +13,23 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-# Same idea as RabbitMQ.CLI.Formatters.Erlang but uses "~s" (as in io_lib)
-# to format values instead of "~p~".
-defmodule RabbitMQ.CLI.Formatters.ErlangString do
+## Prints values from a command as strings(if possible)
+defmodule RabbitMQ.CLI.Formatters.String do
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_output(output, _) do
-    :io_lib.format("~s", [output])
-    |> to_string
+    Helpers.string_or_inspect(output)
   end
 
   def format_stream(stream, options) do
     Stream.map(stream,
-      fn({:error, msg}) -> {:error, msg};
-        (element) -> format_output(element, options)
+      fn
+        ({:error, err}) ->
+          {:error, err};
+        (el) ->
+          format_output(el, options)
       end)
   end
 end

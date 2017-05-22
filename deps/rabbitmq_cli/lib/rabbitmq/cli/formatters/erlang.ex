@@ -22,21 +22,6 @@ defmodule RabbitMQ.CLI.Formatters.Erlang do
   end
 
   def format_stream(stream, options) do
-    elements = Stream.scan(stream, :empty,
-      fn
-        ({:error, msg}, _) ->
-          {:error, msg};
-        (element, previous) ->
-          separator = case previous do
-                        :empty -> "";
-                        _      -> ","
-                      end
-        format_element(element, separator, options)
-      end)
-    Stream.concat([["["], elements, ["]"]])
-  end
-
-  def format_element(val, separator, options) do
-    separator <> format_output(val, options)
+    [format_output(Enum.to_list(stream), options)]
   end
 end
