@@ -81,7 +81,7 @@ ebin/$(PROJECT).app:: ebin/ $(COMPAT_FILES)
 	$(verbose) awk "\
 		/{modules,/ { \
 		line=\$$0; \
-		sub(/$(lastword $(MODULES))/, \"$(lastword $(MODULES)),$(call comma_list,$(COMPAT_MODULES))\", line); \
+		sub(/$(lastword $(MODULES))]}/, \"$(lastword $(MODULES)),$(call comma_list,$(COMPAT_MODULES))]}\", line); \
 		print line; \
 		next; \
 		} { print; }" < "$@" > "$@.compat"
