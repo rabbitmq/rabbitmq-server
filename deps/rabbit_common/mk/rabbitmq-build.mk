@@ -2,7 +2,7 @@
 # Compiler flags.
 # --------------------------------------------------------------------
 
-TEST_ERLC_OPTS += -Werror +nowarn_export_all
+TEST_ERLC_OPTS += +nowarn_export_all
 
 define compare_version
 $(shell awk 'BEGIN {
