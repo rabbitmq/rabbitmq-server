@@ -109,7 +109,7 @@ defmodule RabbitMQCtl.MixfileBase do
       {:temp, "~> 0.4", only: :test},
       {:json, "~> 1.0.0"},
       {:csv, "~> 1.4.4"},
-      {:simetric, "~> 0.1.0"}
+      {:simetric, "~> 0.2.0"}
     ]
   end
 
