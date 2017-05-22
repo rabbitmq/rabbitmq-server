@@ -147,9 +147,7 @@ start_link() ->
 
 -spec init(list()) -> {ok, state()}.
 init([]) ->
-  {ok, Region} = rabbitmq_aws_config:region(),
-  {_, State} = load_credentials(#state{region = Region}),
-  {ok, State}.
+  {ok, #state{}}.
 
 
 terminate(_, _) ->
@@ -160,35 +158,13 @@ code_change(_, _, State) ->
   {ok, State}.
 
 
-handle_call({request, Service, Method, Headers, Path, Body, Options, Host}, _From, State) ->
-  {Response, NewState} = perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
-  {reply, Response, NewState};
-
-handle_call(get_state, _, State) ->
-  {reply, {ok, State}, State};
-
-handle_call(refresh_credentials, _, State) ->
-  {Reply, NewState} = load_credentials(State),
-  {reply, Reply, NewState};
-
-handle_call({set_credentials, AccessKey, SecretAccessKey}, _, State) ->
-  {reply, ok, State#state{access_key = AccessKey,
-                          secret_access_key = SecretAccessKey,
-                          security_token = undefined,
-                          expiration = undefined,
-                          error = undefined,
-                          region = State#state.region}};
-
-handle_call({set_region, Region}, _, State) ->
-  {reply, ok, State#state{access_key = State#state.access_key,
-                         secret_access_key = State#state.secret_access_key,
-                         security_token = State#state.security_token,
-                         expiration = State#state.expiration,
-                         error = State#state.error,
-                         region = Region}};
-
-handle_call(_Request, _From, State) ->
-  {noreply, State}.
+handle_call(Msg, _From, #state{region = undefined}) ->
+    %% Delay initialisation until a RabbitMQ plugin require the AWS backend
+    {ok, Region} = rabbitmq_aws_config:region(),
+    {_, State} = load_credentials(#state{region = Region}),
+    handle_msg(Msg, State);
+handle_call(Msg, _From, State) ->
+    handle_msg(Msg, State).
 
 
 handle_cast(_Request, State) ->
@@ -201,6 +177,35 @@ handle_info(_Info, State) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+handle_msg({request, Service, Method, Headers, Path, Body, Options, Host}, State) ->
+    {Response, NewState} = perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
+    {reply, Response, NewState};
+
+handle_msg(get_state, State) ->
+    {reply, {ok, State}, State};
+
+handle_msg(refresh_credentials, State) ->
+    {Reply, NewState} = load_credentials(State),
+    {reply, Reply, NewState};
+
+handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
+    {reply, ok, State#state{access_key = AccessKey,
+                            secret_access_key = SecretAccessKey,
+                            security_token = undefined,
+                            expiration = undefined,
+                            error = undefined,
+                            region = State#state.region}};
+
+handle_msg({set_region, Region}, State) ->
+    {reply, ok, State#state{access_key = State#state.access_key,
+                            secret_access_key = State#state.secret_access_key,
+                            security_token = State#state.security_token,
+                            expiration = State#state.expiration,
+                            error = State#state.error,
+                            region = Region}};
+
+handle_msg(_Request, State) ->
+    {noreply, State}.
 
 -spec endpoint(State :: state, Host :: string(),
                Service :: string(), Path :: string()) -> string().
