@@ -41,13 +41,16 @@
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 parse(_Name, {source, Source}) ->
+    Prefetch = parse_parameter(prefetch_count, fun parse_non_negative_integer/1,
+                 proplists:get_value(prefetch_count, Source, ?DEFAULT_PREFETCH)),
+    Queue = parse_parameter(queue, fun parse_binary/1,
+                            proplists:get_value(queue, Source)),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
-      resource_decl => decl_fun(sources, Source),
-      queue => proplists:get_value(queue, Source),
+      resource_decl => decl_fun(Source),
+      queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
-      prefetch_count => proplists:get_value(prefetch_count, Source,
-                                            ?DEFAULT_PREFETCH)};
+      prefetch_count => Prefetch};
 parse(Name, {destination, Dest}) ->
     PubProp = proplists:get_value(publish_properties, Dest, []),
     PropsFun = try_make_parse_publish(publish_properties, PubProp),
@@ -59,7 +62,7 @@ parse(Name, {destination, Dest}) ->
     PropsFun2 = add_timestamp_header_fun(ATH, PropsFun1),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Dest),
-      resource_decl  => decl_fun(destinations, Dest),
+      resource_decl  => decl_fun(Dest),
       props_fun => PropsFun2,
       fields_fun => PubFieldsFun,
       add_forward_headers => AFH,
@@ -326,11 +329,7 @@ remaining(_Ch, #{source := #{delete_after := Count}}) ->
 %%% PARSING
 
 try_make_parse_publish(Key, Fields) ->
-    try make_parse_publish(Key, Fields)
-    catch
-        throw:{error, Reason} ->
-             fail({invalid_parameter_value, Key, Reason})
-    end.
+    make_parse_publish(Key, Fields).
 
 make_parse_publish(publish_fields, Fields) ->
     make_publish_fun(Fields, record_info(fields, 'basic.publish'));
@@ -348,10 +347,12 @@ make_publish_fun(Fields, ValidFields) when is_list(Fields) ->
                                 end, Publish, FieldIndices)
             end;
         Unexpected ->
-            fail({unexpected_fields, Unexpected, ValidFields})
+            fail({invalid_parameter_value, publish_properties,
+                  {unexpected_fields, Unexpected, ValidFields}})
     end;
 make_publish_fun(Fields, _) ->
-    fail({require_list, Fields}).
+    fail({invalid_parameter_value, publish_properties,
+          {require_list, Fields}}).
 
 make_field_indices(Valid, Fields) ->
     make_field_indices(Fields, field_map(Valid, 2), []).
@@ -414,15 +415,29 @@ parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
 parse_declaration({[Method | Rest], Acc}) ->
     parse_declaration({[{Method, []} | Rest], Acc}).
 
-decl_fun(Key, Endpoint) ->
-     try Decl = parse_declaration(
-                  {proplists:get_value(declarations, Endpoint, []), []}),
-            fun (_Conn, Ch) ->
-                    [begin
-                         amqp_channel:call(Ch, M)
-                     end || M <- lists:reverse(Decl)]
-            end
-     catch throw:{error, Reason} ->
-             fail({invalid_parameter_value, Key, Reason})
-     end.
+decl_fun(Endpoint) ->
+    Decl = parse_declaration({proplists:get_value(declarations, Endpoint, []),
+                              []}),
+    fun (_Conn, Ch) ->
+            [begin
+                 amqp_channel:call(Ch, M)
+             end || M <- lists:reverse(Decl)]
+    end.
 
+parse_parameter(Param, Fun, Value) ->
+    try
+        Fun(Value)
+    catch
+        _:{error, Err} ->
+            fail({invalid_parameter_value, Param, Err})
+    end.
+
+parse_non_negative_integer(N) when is_integer(N) andalso N >= 0 ->
+    N;
+parse_non_negative_integer(N) ->
+    fail({require_non_negative_integer, N}).
+
+parse_binary(Binary) when is_binary(Binary) ->
+    Binary;
+parse_binary(NotABinary) ->
+    fail({require_binary, NotABinary}).

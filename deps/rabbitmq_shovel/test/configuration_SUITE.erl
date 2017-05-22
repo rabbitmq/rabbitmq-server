@@ -119,20 +119,16 @@ invalid_legacy_configuration1(_Config) ->
     {duplicate_parameters, [queue]} =
         test_broken_shovel_config([{queue, <<"">>} | Config]),
 
-    {missing_parameters, Missing} =
+    {missing_parameter, _} =
         test_broken_shovel_config([]),
-    [destinations, queue, sources] = lists:sort(Missing),
-
-    {unrecognised_parameters, [invalid]} =
-        test_broken_shovel_config([{invalid, invalid} | Config]),
 
     {require_list, invalid} =
         test_broken_shovel_sources(invalid),
 
-    {missing_endpoint_parameter, broker_or_brokers} =
+    {missing_parameter, broker} =
         test_broken_shovel_sources([]),
 
-    {expected_list, brokers, invalid} =
+    {require_list, brokers, invalid} =
         test_broken_shovel_sources([{brokers, invalid}]),
 
     {expected_string_uri, 42} =
@@ -144,7 +140,7 @@ invalid_legacy_configuration1(_Config) ->
     {{unable_to_parse_uri, no_scheme}, "invalid"} =
         test_broken_shovel_sources([{broker, "invalid"}]),
 
-    {expected_list,declarations, invalid} =
+    {require_list, invalid} =
         test_broken_shovel_sources([{broker, "amqp://"},
                                     {declarations, invalid}]),
     {unknown_method_name, 42} =
@@ -210,11 +206,9 @@ test_broken_shovel_config(Config) ->
     Error.
 
 test_broken_shovel_sources(Sources) ->
-    {invalid_parameter_value, sources, Error} =
-        test_broken_shovel_config([{sources, Sources},
-                                   {destinations, [{broker, "amqp://"}]},
-                                   {queue, <<"">>}]),
-    Error.
+    test_broken_shovel_config([{sources, Sources},
+                               {destinations, [{broker, "amqp://"}]},
+                               {queue, <<"">>}]).
 
 valid_legacy_configuration(Config) ->
     ok = setup_legacy_shovels(Config),

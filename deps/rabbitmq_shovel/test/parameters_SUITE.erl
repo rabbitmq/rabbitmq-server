@@ -128,9 +128,9 @@ test_parse_amqp091(Params) ->
 
     #'P_basic'{headers = HeadersResult,
                delivery_mode = 2,
-               cluster_id = <<"x">>} = PBasic = PropsFun("amqp://localhost:5672",
-                                                         "amqp://remotehost:5672",
-                                                         #'P_basic'{headers = undefined}),
+               cluster_id = <<"x">>} = PropsFun("amqp://localhost:5672",
+                                                "amqp://remotehost:5672",
+                                                #'P_basic'{headers = undefined}),
     {_, array, [{table, Shovelled}]} = lists:keyfind(<<"x-shovelled">>, 1, HeadersResult),
     {_, long, _} = lists:keyfind(<<"x-shovelled-timestamp">>, 1, HeadersResult),
 
