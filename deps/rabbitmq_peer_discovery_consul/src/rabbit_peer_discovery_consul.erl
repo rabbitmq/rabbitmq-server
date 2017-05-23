@@ -25,7 +25,7 @@
          post_registration/0]).
 -export([init_health_check_notifier/0, send_health_check_pass/0]).
 %% useful for debugging from the REPL with RABBITMQ_ALLOW_INPUT
--export([config_map/0, service_id/0, service_address/0]).
+-export([service_id/0, service_address/0]).
 
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(UTIL_MODULE,   rabbit_peer_discovery_util).
@@ -163,7 +163,7 @@ supports_registration() ->
 
 -spec register() -> ok | {error, Reason :: string()}.
 register() ->
-  M = config_map(),
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   case registration_body() of
     {ok, Body} ->
       rabbit_log:debug("Consul registration body: ~s", [Body]),
@@ -181,7 +181,7 @@ register() ->
 
 -spec unregister() -> ok | {error, Reason :: string()}.
 unregister() ->
-  M  = config_map(),
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   ID = service_id(),
   rabbit_log:debug("Unregistering with Consul using service ID '~s'", [ID]),
   case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
@@ -207,18 +207,6 @@ post_registration() ->
 %% Implementation
 %%
 
--spec config_map() -> #{atom() => peer_discovery_config_value()}.
-
-config_map() ->
-    case application:get_env(rabbit, autocluster) of
-        undefined         -> #{};
-        {ok, Autocluster} ->
-            case proplists:get_value(?BACKEND_CONFIG_KEY, Autocluster) of
-                undefined -> #{};
-                Proplist  -> maps:from_list(Proplist)
-            end
-    end.
-
 -spec get_config_key(Key :: atom(), Map :: #{atom() => peer_discovery_config_value()})
              -> peer_discovery_config_value().
 
@@ -230,7 +218,7 @@ get_config_key(Key, Map) ->
 init_health_check_notifier() ->
   case rabbit_peer_discovery:backend() of
     ?MODULE ->
-      M = config_map(),
+      M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
       case get_config_key(consul_svc_ttl, M) of
         undefined -> ok;
         %% in seconds
@@ -289,14 +277,16 @@ extract_nodes([H | T], Nodes) ->
 
 -spec maybe_add_acl(QArgs :: list()) -> list().
 maybe_add_acl(QArgs) ->
-  case get_config_key(consul_acl_token, config_map()) of
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+  case get_config_key(consul_acl_token, M) of
     "undefined" -> QArgs;
     ACL         -> lists:append(QArgs, [{token, ACL}])
   end.
 
 -spec list_nodes_query_args() -> list().
 list_nodes_query_args() ->
-  maybe_add_acl(list_nodes_query_args(get_config_key(cluster_name, config_map()))).
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+  maybe_add_acl(list_nodes_query_args(get_config_key(cluster_name, M))).
 
 -spec list_nodes_query_args(ClusterName :: string()) -> list().
 list_nodes_query_args(Cluster) ->
@@ -304,7 +294,8 @@ list_nodes_query_args(Cluster) ->
     "undefined" -> [];
     _           -> [{tag, Cluster}]
   end,
-  list_nodes_query_args(ClusterTag, get_config_key(consul_include_nodes_with_warnings, config_map())).
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+  list_nodes_query_args(ClusterTag, get_config_key(consul_include_nodes_with_warnings, M)).
 
 -spec list_nodes_query_args(Args :: list(), AllowWarn :: atom()) -> list().
 list_nodes_query_args(Value, Warn) ->
@@ -344,7 +335,8 @@ registration_body_add_id() ->
 
 -spec registration_body_add_name(Payload :: list()) -> list().
 registration_body_add_name(Payload) ->
-  Name = list_to_atom(get_config_key(consul_svc, config_map())),
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+  Name = list_to_atom(get_config_key(consul_svc, M)),
   lists:append(Payload, [{'Name', Name}]).
 
 -spec registration_body_maybe_add_address(Payload :: list())
@@ -359,7 +351,8 @@ registration_body_maybe_add_address(Payload, Address) ->
   lists:append(Payload, [{'Address', list_to_atom(Address)}]).
 
 registration_body_maybe_add_check(Payload) ->
-  TTL = get_config_key(consul_svc_ttl, config_map()),
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+  TTL = get_config_key(consul_svc_ttl, M),
   registration_body_maybe_add_check(Payload, TTL).
 
 -spec registration_body_maybe_add_check(Payload :: list(),
@@ -382,11 +375,13 @@ registration_body_maybe_add_check(Payload, TTL) ->
 
 -spec registration_body_add_port(Payload :: list()) -> list().
 registration_body_add_port(Payload) ->
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   lists:append(Payload,
-               [{'Port', get_config_key(consul_svc_port, config_map())}]).
+               [{'Port', get_config_key(consul_svc_port, M)}]).
 
 registration_body_maybe_add_deregister(Payload) ->
-    Deregister = get_config_key(consul_deregister_after, config_map()),
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    Deregister = get_config_key(consul_deregister_after, M),
     registration_body_maybe_add_deregister(Payload, Deregister).
 
 -spec registration_body_maybe_add_deregister(Payload :: list(),
@@ -400,7 +395,8 @@ registration_body_maybe_add_deregister(Payload, Deregister_After) ->
 
 -spec registration_body_maybe_add_tag(Payload :: list()) -> list().
 registration_body_maybe_add_tag(Payload) ->
-  Value = get_config_key(cluster_name, config_map()),
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+  Value = get_config_key(cluster_name, M),
   registration_body_maybe_add_tag(Payload, Value).
 
 -spec registration_body_maybe_add_tag(Payload :: list(),
@@ -423,7 +419,7 @@ validate_addr_parameters(_, _) ->
 
 -spec service_address() -> string().
 service_address() ->
-  M = config_map(),
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   validate_addr_parameters(get_config_key(consul_svc_addr_auto, M),
       get_config_key(consul_svc_addr_nodename, M)),
   service_address(get_config_key(consul_svc_addr, M),
@@ -447,7 +443,8 @@ service_address(_, false, NIC, _) ->
 
 -spec service_id() -> string().
 service_id() ->
-  service_id(get_config_key(consul_svc, config_map()),
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+  service_id(get_config_key(consul_svc, M),
              service_address()).
 
 -spec service_id(Name :: string(), Address :: string()) -> string().
@@ -461,7 +458,7 @@ service_ttl(Value) ->
 
 -spec maybe_add_domain(Domain :: atom()) -> atom().
 maybe_add_domain(Value) ->
-  M = config_map(),
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   case get_config_key(consul_use_longname, M) of
       true ->
           list_to_atom(string:join([atom_to_list(Value),
@@ -482,7 +479,7 @@ maybe_add_domain(Value) ->
 
 send_health_check_pass() ->
   Service = string:join(["service", service_id()], ":"),
-  M = config_map(),
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   rabbit_log:debug("Running Consul health check"),
   case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
                                        get_config_key(consul_host, M),
