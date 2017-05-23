@@ -27,7 +27,7 @@
 %%
 %% The most obvious use case for runtime parameters is policies but
 %% there are others:
-%% 
+%%
 %% * Plugin-specific parameters that only make sense at runtime,
 %%   e.g. Federation and Shovel link settings
 %% * Exchange and queue decorators
@@ -368,7 +368,7 @@ lookup_component(Component) ->
 
 format(Term) ->
     {ok, JSON} = rabbit_misc:json_encode(rabbit_misc:term_to_json(Term)),
-    list_to_binary(JSON).
+    iolist_to_binary(JSON).
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of
