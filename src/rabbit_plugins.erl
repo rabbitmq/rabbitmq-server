@@ -262,12 +262,12 @@ prepare_plugin(#plugin{type = ez, name = Name, location = Location}, ExpandDir) 
                 [PluginAppDescPath|_] ->
                     prepare_dir_plugin(PluginAppDescPath);
                 _ ->
-                    rabbit_log:error("Plugin archive '~s' doesn't contain .app file~n", [Location]),
-                    throw({no_plugin_app_file_in_archive, Name, Location})
+                    rabbit_log:error("Plugin archive '~s' doesn't contain an .app file~n", [Location]),
+                    throw({app_file_missing, Name, Location})
             end;
         {error, Reason} ->
-            rabbit_log:error("Plugin archive '~s' unpacking failed: ~p~n", [Location, Reason]),
-            throw({plugin_unpack_failed, Name, Location, Reason})
+            rabbit_log:error("Could not unzip plugin archive '~s': ~p~n", [Location, Reason]),
+            throw({failed_to_unzip_plugin, Name, Location, Reason})
     end;
 prepare_plugin(#plugin{type = dir, location = Location, name = Name},
                _ExpandDir) ->
@@ -276,7 +276,7 @@ prepare_plugin(#plugin{type = dir, location = Location, name = Name},
             prepare_dir_plugin(PluginAppDescPath);
         _ ->
             rabbit_log:error("Plugin directory '~s' doesn't contain an .app file~n", [Location]),
-            throw({no_plugin_app_file_in_directory, Name, Location})
+            throw({app_file_missing, Name, Location})
     end.
 
 plugin_info({ez, EZ}) ->
