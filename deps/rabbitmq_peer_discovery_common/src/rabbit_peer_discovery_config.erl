@@ -19,7 +19,7 @@
 
 -include("rabbit_peer_discovery.hrl").
 
--export([get/3]).
+-export([get/3, config_map/1]).
 
 %%
 %% API
@@ -36,6 +36,18 @@ get(Key, Mapping, Config) ->
             throw({badkey, Key});
         true  ->
             get_with_entry_meta(Key, maps:get(Key, Mapping), Config)
+    end.
+
+-spec config_map(atom()) -> #{atom() => peer_discovery_config_value()}.
+
+config_map(BackendConfigKey) ->
+    case application:get_env(rabbit, autocluster) of
+        undefined         -> #{};
+        {ok, Autocluster} ->
+            case proplists:get_value(BackendConfigKey, Autocluster) of
+                undefined -> #{};
+                Proplist  -> maps:from_list(Proplist)
+            end
     end.
 
 %%
