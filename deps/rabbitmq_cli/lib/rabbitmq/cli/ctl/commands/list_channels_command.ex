@@ -58,13 +58,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
 
   def run([_|_] = args, %{node: node_name, timeout: timeout}) do
       info_keys = Enum.map(args, &String.to_atom/1)
-      nodes = Helpers.nodes_in_cluster(node_name)
-      RpcStream.receive_list_items(node_name,
-                                   :rabbit_channel, :emit_info_all,
-                                   [nodes, info_keys],
-                                   timeout,
-                                   info_keys,
-                                   Kernel.length(nodes))
+      Helpers.with_nodes_in_cluster(node_name, fn(nodes) ->
+        RpcStream.receive_list_items(node_name,
+                                     :rabbit_channel, :emit_info_all,
+                                     [nodes, info_keys],
+                                     timeout,
+                                     info_keys,
+                                     Kernel.length(nodes))
+      end)
   end
 
   def banner(_, _), do: "Listing channels ..."

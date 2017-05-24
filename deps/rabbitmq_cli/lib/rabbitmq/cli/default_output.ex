@@ -15,23 +15,20 @@
 
 
 defmodule RabbitMQ.CLI.DefaultOutput do
-  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
-  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
   # When `use RabbitMQ.CLI.DefaultOutput` is invoked,
   # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/3.
   defmacro __using__(_) do
     quote do
-      def output(result, opts) do
-        RabbitMQ.CLI.DefaultOutput.output(result, opts, __MODULE__)
+      def output(result, _opts) do
+        RabbitMQ.CLI.DefaultOutput.output(result)
       end
     end
   end
 
-  def output(result, opts, module) do
+  def output(result) do
     result
     |> normalize_output()
-    |> format_output(opts, module)
+    |> format_output()
   end
 
   def mnesia_running_error(node_name) do
@@ -42,41 +39,28 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output(:ok), do: :ok
   defp normalize_output({:ok, _} = input), do: input
   defp normalize_output({:stream, _} = input), do: input
-  defp normalize_output({:badrpc_multi, err, _}), do: {:badrpc, err}
-  defp normalize_output({:badrpc, :nodedown} = input), do: input
-  defp normalize_output({:badrpc, :timeout} = input), do: input
+  defp normalize_output({:badrpc_multi, err, _}), do: {:error, {:badrpc, err}}
+  defp normalize_output({:badrpc, :nodedown} = input), do: {:error, input}
+  defp normalize_output({:badrpc, :timeout} = input), do: {:error, input}
   defp normalize_output({:error, format, args})
     when (is_list(format) or is_binary(format)) and is_list(args) do
-      {:error, :rabbit_misc.format(format, args)}
+      {:error, to_string(:rabbit_misc.format(format, args))}
+  end
+  defp normalize_output({:error_string, string}) do
+    {:error, to_string(string)}
   end
   defp normalize_output({:error, _} = input), do: input
-  defp normalize_output({:error_string, _} = input), do: input
   defp normalize_output(unknown) when is_atom(unknown), do: {:error, unknown}
   defp normalize_output({unknown, _} = input) when is_atom(unknown), do: {:error, input}
   defp normalize_output(result) when not is_atom(result), do: {:ok, result}
 
-  defp format_output({:badrpc, :nodedown} = result, opts, _) do
-    diagnostics = get_node_diagnostics(opts[:node])
-    {:error, ExitCodes.exit_code_for(result),
-     "Error: unable to connect to node '#{opts[:node]}': nodedown\n" <>
-     diagnostics}
+  defp format_output({:error, _} = result) do
+    result
   end
-  defp format_output({:badrpc, :timeout} = result, opts, module) do
-    op = CommandModules.module_to_command(module)
-    {:error, ExitCodes.exit_code_for(result),
-     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{opts[:timeout]}"}
-  end
-  defp format_output({:error, err} = result, _, _) do
-    string_err = Helpers.string_or_inspect(err)
-    {:error, ExitCodes.exit_code_for(result), "Error:\n#{string_err}"}
-  end
-  defp format_output({:error_string, error_string}, _, _) do
-    {:error, ExitCodes.exit_software, to_string(error_string)}
-  end
-  defp format_output(:ok, _, _) do
+  defp format_output(:ok) do
     :ok
   end
-  defp format_output({:ok, output}, _, _) do
+  defp format_output({:ok, output}) do
     case Enumerable.impl_for(output) do
       nil            -> {:ok, output};
       ## Do not streamify plain maps
@@ -84,14 +68,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
       _              -> {:stream, output}
     end
   end
-  defp format_output({:stream, stream}, _, _) do
+  defp format_output({:stream, stream}) do
     {:stream, stream}
-  end
-
-  defp get_node_diagnostics(nil) do
-    "Node is not defined"
-  end
-  defp get_node_diagnostics(node_name) do
-    to_string(:rabbit_nodes.diagnostics([node_name]))
   end
 end

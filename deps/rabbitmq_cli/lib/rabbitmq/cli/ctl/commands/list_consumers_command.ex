@@ -35,10 +35,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
         err -> err
       end
   end
+
   def merge_defaults([], opts) do
     {Enum.map(@info_keys, &Atom.to_string/1), Map.merge(%{vhost: "/"}, opts)}
   end
-  def merge_defaults(args, opts), do: {args, opts}
+  def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
 
 
   def usage() do
@@ -52,9 +53,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
 
   def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
       info_keys = Enum.map(args, &String.to_atom/1)
-      nodes = Helpers.nodes_in_cluster(node_name)
-      RpcStream.receive_list_items(node_name, :rabbit_amqqueue, :emit_consumers_all,
-        [nodes, vhost], timeout, info_keys)
+      Helpers.with_nodes_in_cluster(node_name, fn(nodes) ->
+        RpcStream.receive_list_items(node_name,
+          :rabbit_amqqueue, :emit_consumers_all,
+          [nodes, vhost], timeout, info_keys)
+      end)
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing consumers on vhost #{vhost} ..."

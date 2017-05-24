@@ -17,6 +17,7 @@
 # collection using start/finish_collection.
 # Primary purpose is to translate stream from CTL,
 # so there is no need for multiple collection levels
+alias RabbitMQ.CLI.Formatters.FormatterHelpers, as: FormatterHelpers
 
 defmodule RabbitMQ.CLI.Formatters.Json do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
@@ -28,16 +29,14 @@ defmodule RabbitMQ.CLI.Formatters.Json do
 
   def format_stream(stream, options) do
     elements = Stream.scan(stream, :empty,
-                           fn
-                           ({:error, msg}, _) ->
-                             {:error, msg};
-                           (element, previous) ->
-                             separator = case previous do
-                               :empty -> "";
-                               _      -> ","
-                             end
-                             format_element(element, separator, options)
-                           end)
+                           FormatterHelpers.without_errors_2(
+                            fn(element, previous) ->
+                              separator = case previous do
+                                :empty -> "";
+                                _      -> ","
+                              end
+                              format_element(element, separator, options)
+                            end))
     Stream.concat([["["], elements, ["]"]])
   end
 

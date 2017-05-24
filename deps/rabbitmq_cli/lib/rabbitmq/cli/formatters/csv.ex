@@ -22,32 +22,29 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
   def format_stream(stream, _) do
     ## Flatten list_consumers
     Stream.flat_map(stream,
-                    fn({:error, msg}) ->
-                        [{:error, msg}];
-                      ([first | _] = element) ->
-                        case Keyword.keyword?(first) or is_map(first) do
-                          true  -> element;
-                          false -> [element]
-                        end
-                      (other) ->
-                        [other]
-                    end)
+                    FormatterHelpers.without_errors_1(
+                      fn([first | _] = element) ->
+                          case Keyword.keyword?(first) or is_map(first) do
+                            true  -> element;
+                            false -> [element]
+                          end
+                        (other) ->
+                          [other]
+                      end))
     ## Add info_items names
     |> Stream.transform(:init,
-                        fn
-                          ({:error, msg}, _) ->
-                            {:error, msg};
-                          (element, :init) ->
-                            {
-                              case keys(element) do
-                                nil -> [values(element)];
-                                ks  -> [ks, values(element)]
-                              end,
-                              :next
-                             };
-                          (element, :next) ->
-                            {[values(element)], :next}
-                          end)
+                        FormatterHelpers.without_errors_2(
+                          fn(element, :init) ->
+                              {
+                                case keys(element) do
+                                  nil -> [values(element)];
+                                  ks  -> [ks, values(element)]
+                                end,
+                                :next
+                               };
+                            (element, :next) ->
+                              {[values(element)], :next}
+                            end))
     |> CSV.encode([delimiter: ""])
   end
 

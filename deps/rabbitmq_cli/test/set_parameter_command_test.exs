@@ -142,7 +142,6 @@ defmodule SetParameterCommandTest do
     result_param = context[:vhost] |> list_parameters |> List.first
 
     assert result_param[:value] == context[:value]
-    assert result_param[:vhost] == context[:vhost]
     assert result_param[:component] == context[:component_name]
     assert result_param[:name] == context[:key]
   end

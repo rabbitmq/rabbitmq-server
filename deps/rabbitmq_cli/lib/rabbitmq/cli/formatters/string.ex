@@ -16,6 +16,7 @@
 ## Prints values from a command as strings(if possible)
 defmodule RabbitMQ.CLI.Formatters.String do
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Formatters.FormatterHelpers, as: FormatterHelpers
 
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
@@ -25,11 +26,9 @@ defmodule RabbitMQ.CLI.Formatters.String do
 
   def format_stream(stream, options) do
     Stream.map(stream,
-      fn
-        ({:error, err}) ->
-          {:error, err};
-        (el) ->
-          format_output(el, options)
-      end)
+      FormatterHelpers.without_errors_1(
+        fn(el) ->
+            format_output(el, options)
+        end))
   end
 end

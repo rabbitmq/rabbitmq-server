@@ -23,9 +23,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def validate(_, _), do: :ok
+
   def merge_defaults(args, opts), do: {args, opts}
 
   def scopes(), do: [:ctl, :diagnostics, :plugins]
+
+  def switches(), do: [list_commands: :boolean]
+  def aliases(), do: [l: :list_commands]
 
   def run([command_name], opts) do
     CommandModules.load(opts)
@@ -39,7 +43,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     end
   end
   def run(_, opts) do
-    all_usage(opts)
+    CommandModules.load(opts)
+    case opts[:list_commands] do
+      true  -> commands();
+      _     -> all_usage(opts)
+    end
   end
 
   def output(result, _) do
@@ -51,9 +59,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   end
 
   def all_usage(opts) do
-    CommandModules.load(opts)
     Enum.join(tool_usage(program_name(opts)) ++
               options_usage() ++
+              ["Commands:"] ++
               commands() ++
               input_types(), "\n")
   end
@@ -99,7 +107,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     ["
 General options:
     -n node
-    -q
+    -q quiet
     -t timeout
     -l longnames
 
@@ -123,17 +131,16 @@ Some commands accept an optional virtual host parameter for which
 to display results. The default value is \"/\".\n"]
   end
 
-  defp commands() do
-    ["Commands:" |
-     # Enum.map obtains the usage string for each command module.
-     # Enum.each prints them all.
-     CommandModules.module_map
-     |>  Map.values
-     |>  Enum.sort
-     |>  Enum.map(&(&1.usage))
-     |>  List.flatten
-     |>  Enum.sort
-     |>  Enum.map(fn(cmd_usage) -> "    #{cmd_usage}" end)]
+  def commands() do
+    # Enum.map obtains the usage string for each command module.
+    # Enum.each prints them all.
+    CommandModules.module_map
+    |>  Map.values
+    |>  Enum.sort
+    |>  Enum.map(&(&1.usage))
+    |>  List.flatten
+    |>  Enum.sort
+    |>  Enum.map(fn(cmd_usage) -> "    #{cmd_usage}" end)
   end
 
   defp input_types(command) do

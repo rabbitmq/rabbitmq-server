@@ -16,8 +16,6 @@
 
 defmodule RabbitMQ.CLI.Core.Output do
 
-  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
-
   def format_output(:ok, _, _) do
     :ok
   end
@@ -45,9 +43,8 @@ defmodule RabbitMQ.CLI.Core.Output do
   end
   def print_output_0({:stream, stream}, printer, printer_state) do
     case print_output_stream(stream, printer, printer_state) do
-      :ok                 -> :ok;
-      {:error, msg} = err ->
-        {:error, ExitCodes.exit_code_for(err), msg}
+      :ok               -> :ok;
+      {:error, _} = err -> err
     end
   end
 

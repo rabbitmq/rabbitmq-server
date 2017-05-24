@@ -180,4 +180,63 @@ defmodule RabbitMQCtlTest do
       error_check(cmd, exit_ok())
     end) == out
   end
+
+
+## ------------------------- Error formatting ---------------------------------
+
+  test "badrpc nodedown error" do
+    exit_code = exit_unavailable()
+    node = :example@node
+    {:error, ^exit_code,
+     "Error: unable to connect to node 'example@node': nodedown" <> diag} =
+        RabbitMQCtl.handle_command_output(
+          {:error, {:badrpc, :nodedown}},
+          :no_command, %{node: node}, [])
+
+    assert diag =~ ~r/DIAGNOSTICS/
+    assert diag =~ ~r/attempted to contact/
+
+    localnode = :non_existent_node@localhost
+    {:error, ^exit_code,
+     "Error: unable to connect to node 'non_existent_node@localhost': nodedown" <> diag} =
+        RabbitMQCtl.handle_command_output(
+          {:error, {:badrpc, :nodedown}},
+          :no_command, %{node: localnode}, [])
+    assert diag =~ ~r/DIAGNOSTICS/
+    assert diag =~ ~r/attempted to contact/
+    assert diag =~ ~r/suggestion: start the node/
+  end
+
+  test "badrpc timeout error" do
+    exit_code = exit_tempfail()
+    timeout = 1000
+    nodename = :node@host
+    err_msg = "Error: operation example on node node@host timed out. Timeout: #{timeout}"
+    {:error, ^exit_code, ^err_msg} =
+      RabbitMQCtl.handle_command_output(
+          {:error, {:badrpc, :timeout}},
+          ExampleCommand,%{timeout: timeout, node: nodename}, ["example"])
+  end
+
+  test "generic error" do
+    exit_code = exit_software()
+    {:error, ^exit_code, "Error:\nerror message"} =
+      RabbitMQCtl.handle_command_output({:error, "error message"}, :no_command, %{}, [])
+  end
+
+  test "inspect arbitrary error" do
+    exit_code = exit_software()
+    error = %{i: [am: "arbitrary", error: 1]}
+    inspected = inspect(error)
+    {:error, ^exit_code, "Error:\n" <> ^inspected} =
+      RabbitMQCtl.handle_command_output({:error, error}, :no_command, %{}, [])
+  end
+
+  test "atom error" do
+    exit_code = exit_software()
+    {:error, ^exit_code, "Error:\nerror_message"} =
+      RabbitMQCtl.handle_command_output({:error, :error_message}, :no_command, %{}, [])
+  end
+
 end
+

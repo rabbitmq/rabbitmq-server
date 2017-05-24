@@ -21,15 +21,13 @@ defmodule RabbitMQ.CLI.Formatters.Table do
 
   def format_stream(stream, options) do
     Stream.flat_map(stream,
-                fn
-                ({:error, msg}) ->
-                  {:error, msg};
-                (element) ->
-                  case format_output(element, options) do
-                    list when is_list(list) -> list;
-                    other                   -> [other]
-                  end
-                end)
+                FormatterHelpers.without_errors_1(
+                  fn(element) ->
+                      case format_output(element, options) do
+                        list when is_list(list) -> list;
+                        other                   -> [other]
+                      end
+                    end))
   end
 
   def format_output(output, options) when is_map(output) do

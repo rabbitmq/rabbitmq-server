@@ -64,10 +64,9 @@ defmodule WaitCommandTest do
   end
 
   test "output: default output is fine", context do
-    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_software
-    assert match?({:error, ^exit_code, "Error:\nmessage"}, @command.output({:error, "message"}, context[:opts]))
-    assert match?({:error, ^exit_code, "Error:\nmessage"}, @command.output({:error, :message}, context[:opts]))
-    assert match?({:error, ^exit_code, "Error:\nmessage"}, @command.output(:message, context[:opts]))
+    assert match?({:error, "message"}, @command.output({:error, "message"}, context[:opts]))
+    assert match?({:error, :message}, @command.output({:error, :message}, context[:opts]))
+    assert match?({:error, :message}, @command.output(:message, context[:opts]))
     assert match?({:ok, "ok"}, @command.output({:ok, "ok"}, context[:opts]))
     assert match?(:ok, @command.output(:ok, context[:opts]))
     assert match?({:ok, "ok"}, @command.output("ok", context[:opts]))

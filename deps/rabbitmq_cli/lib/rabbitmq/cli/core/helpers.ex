@@ -79,9 +79,13 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   def power_as_int(num, x, y), do: round(num * (:math.pow(x, y)))
 
   def nodes_in_cluster(node, timeout \\ :infinity) do
+    with_nodes_in_cluster(node, fn(nodes) -> nodes end, timeout)
+  end
+
+  def with_nodes_in_cluster(node, fun, timeout \\ :infinity) do
     case :rpc.call(node, :rabbit_mnesia, :cluster_nodes, [:running], timeout) do
-      {:badrpc, _} = err -> throw(err);
-      value              -> value
+      {:badrpc, _} = err -> err
+      value              -> fun.(value)
     end
   end
 

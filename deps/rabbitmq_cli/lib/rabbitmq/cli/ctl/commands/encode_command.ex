@@ -15,6 +15,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{
@@ -99,15 +100,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def run(_, _) do
     {:error, "Incorrect usage of the encode command."}
-  end
-
-  # skip the default output (otherwise, formatting issue with Erlang lists/strings
-  # which are then treated as Elixir streams and get displayed on several lines
-  def output(result, opts) do
-    case result do
-      {:error, _} -> RabbitMQ.CLI.DefaultOutput.output(result, opts, __MODULE__)
-      {:ok, _}    -> result
-    end
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang

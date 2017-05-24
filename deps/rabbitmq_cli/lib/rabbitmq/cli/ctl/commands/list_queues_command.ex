@@ -70,18 +70,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
         other          -> other
       end
       info_keys = Enum.map(args, &String.to_atom/1)
-      nodes = Helpers.nodes_in_cluster(node_name)
-      offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
-      local_mfa = {:rabbit_amqqueue, :emit_info_local, [vhost, info_keys]}
-      online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
-      {chunks, mfas} = case {local_opt, offline, online} do
-        # Local takes precedence
-        {true, _, _}      -> {1, [local_mfa]};
-        {_, true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
-        {_, false, true}  -> {Kernel.length(nodes), [online_mfa]};
-        {_, true, false}  -> {1, [offline_mfa]}
-      end
-      RpcStream.receive_list_items(node_name, mfas, timeout, info_keys, chunks)
+      Helpers.with_nodes_in_cluster(node_name, fn(nodes) ->
+        offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
+        local_mfa = {:rabbit_amqqueue, :emit_info_local, [vhost, info_keys]}
+        online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
+        {chunks, mfas} = case {local_opt, offline, online} do
+          # Local takes precedence
+          {true, _, _}      -> {1, [local_mfa]};
+          {_, true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
+          {_, false, true}  -> {Kernel.length(nodes), [online_mfa]};
+          {_, true, false}  -> {1, [offline_mfa]}
+        end
+        RpcStream.receive_list_items(node_name, mfas, timeout, info_keys, chunks)
+      end)
   end
 
   defp default_opts() do

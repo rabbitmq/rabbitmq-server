@@ -17,7 +17,6 @@ alias RabbitMQ.CLI.Core.Distribution, as: Distribution
 
 defmodule DostributionTest do
   use ExUnit.Case, async: false
-  import TestHelper
 
   setup_all do
     :net_kernel.stop()

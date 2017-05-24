@@ -133,8 +133,8 @@ defmodule ListParametersCommandTest do
   @tag vhost: @vhost
   test "run: multiple parameters returned in list", context do
     parameters = [
-      %{vhost: @vhost, component: "federation-upstream", name: "my-upstream", value: "{\"uri\":\"amqp://\"}"},
-      %{vhost: @vhost, component: "exchange-delete-in-progress", name: "my-key", value: "{\"foo\":\"bar\"}"}
+      %{component: "federation-upstream", name: "my-upstream", value: "{\"uri\":\"amqp://\"}"},
+      %{component: "exchange-delete-in-progress", name: "my-key", value: "{\"foo\":\"bar\"}"}
     ]
     parameters
     |> Enum.map(
@@ -163,7 +163,6 @@ defmodule ListParametersCommandTest do
     [param] = params
     assert MapSet.new(param) == MapSet.new([component: context[:component_name],
                                             name: context[:key],
-                                            value: context[:value],
-                                            vhost: context[:vhost]])
+                                            value: context[:value]])
   end
 end

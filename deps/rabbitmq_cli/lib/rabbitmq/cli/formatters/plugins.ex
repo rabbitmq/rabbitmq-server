@@ -12,6 +12,7 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+alias RabbitMQ.CLI.Formatters.FormatterHelpers, as: FormatterHelpers
 
 defmodule RabbitMQ.CLI.Formatters.Plugins do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
@@ -58,12 +59,11 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
   end
 
   def format_stream(stream, options) do
-    Stream.map(stream, fn
-      ({:error, msg}) ->
-        {:error, msg};
-      (element) ->
-        format_output(element, options)
-    end)
+    Stream.map(stream,
+      FormatterHelpers.without_errors_1(
+        fn(element) ->
+            format_output(element, options)
+        end))
   end
 
   defp format_plugins(plugins, format) do

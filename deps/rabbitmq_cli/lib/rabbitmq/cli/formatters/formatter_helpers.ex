@@ -17,6 +17,24 @@ defmodule RabbitMQ.CLI.Formatters.FormatterHelpers do
   import RabbitCommon.Records
   use Bitwise
 
+  @type error :: {:error, term()} | {:error, integer(), String.t() | [String.t()]}
+
+  @spec without_errors_1((el -> result)) :: error() | result when el: term(), result: term()
+  def without_errors_1(fun) do
+    fn({:error, _} = err)    -> err;
+      ({:error, _, _} = err) -> err;
+      (other) -> fun.(other)
+    end
+  end
+
+  @spec without_errors_1((el, acc -> result)) :: error() | result when el: term(), result: term(), acc: term()
+  def without_errors_2(fun) do
+    fn({:error, _} = err, _acc)    -> err;
+      ({:error, _, _} = err, _acc) -> err;
+      (other, acc) -> fun.(other, acc)
+    end
+  end
+
   defmacro is_u8(x) do
     quote do
       (unquote(x) >= 0 and unquote(x) <= 255)

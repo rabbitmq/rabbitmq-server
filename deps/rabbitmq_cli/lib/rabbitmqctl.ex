@@ -24,6 +24,11 @@ defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
   alias RabbitMQ.CLI.Core.Parser, as: Parser
 
+  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
+
+  # Enable unit tests for private functions
+  @compile if Mix.env == :test, do: :export_all
+
   @type options() :: Map.t
   @type command_result() :: {:error, ExitCodes.exit_code, term()} | term()
 
@@ -35,18 +40,11 @@ defmodule RabbitMQCtl do
     auto_complete(script_basename, args)
   end
   def main(unparsed_command) do
-    exec_command(unparsed_command, fn(command, output, options) ->
-        formatter = get_formatter(command, options)
-        printer = get_printer(options)
-
-        output
-        |> Output.format_output(formatter, options)
-        |> Output.print_output(printer, options)
-      end)
+    exec_command(unparsed_command)
     |> handle_shutdown
   end
 
-  def exec_command(unparsed_command, output_fun) do
+  def exec_command(unparsed_command) do
     {command, command_name, arguments, parsed_options, invalid} =
       Parser.parse(unparsed_command)
     case {command, invalid} do
@@ -69,19 +67,39 @@ defmodule RabbitMQCtl do
       _ ->
         options = parsed_options |> merge_all_defaults |> normalize_options
         with_distribution(options, fn() ->
-          case execute_command(options, command, arguments) do
-            {:error, _, _} = err ->
-              err;
-            {:validation_failure, err} ->
-              validation_error(err, command, unparsed_command, options);
-            output  ->
-              output_fun.(command, output, options)
-          end
+          execute_command(options, command, arguments)
+          |> handle_command_output(command, options, unparsed_command)
         end)
     end
   end
 
-  def handle_shutdown({:error, exit_code, output}) do
+  defp handle_command_output(output, command, options, unparsed_command) do
+    case output do
+      {:error, _, _} = err ->
+        err;
+      {:error, _} = err ->
+        format_error(err, options, command);
+      {:validation_failure, err} ->
+        validation_error(err, command, unparsed_command, options);
+      _  ->
+        result = process_output(output, command, options)
+        case result do
+          {:error, _} = err -> format_error(err, options, command);
+          other             -> other
+        end
+    end
+  end
+
+  defp process_output(output, command, options) do
+    formatter = get_formatter(command, options)
+    printer = get_printer(options)
+
+    output
+    |> Output.format_output(formatter, options)
+    |> Output.print_output(printer, options)
+  end
+
+  defp handle_shutdown({:error, exit_code, output}) do
     output_device = case exit_code == ExitCodes.exit_ok do
       true  -> :stdio;
       false -> :stderr
@@ -92,7 +110,7 @@ defmodule RabbitMQCtl do
     end
     exit_program(exit_code)
   end
-  def handle_shutdown(_) do
+  defp handle_shutdown(_) do
     exit_program(ExitCodes.exit_ok)
   end
 
@@ -176,14 +194,14 @@ defmodule RabbitMQCtl do
     default_formatter(command)
   end
 
-  def get_printer(%{printer: printer}) do
+  defp get_printer(%{printer: printer}) do
     module_name = String.to_atom("RabbitMQ.CLI.Printers." <> Macro.camelize(printer))
     case Code.ensure_loaded(module_name) do
       {:module, _}      -> module_name;
       {:error, :nofile} -> default_printer()
     end
   end
-  def get_printer(_) do
+  defp get_printer(_) do
     default_printer()
   end
 
@@ -194,7 +212,7 @@ defmodule RabbitMQCtl do
   def default_formatter(command) do
     case function_exported?(command, :formatter, 0) do
       true  -> command.formatter;
-      false -> RabbitMQ.CLI.Formatters.Inspect
+      false -> RabbitMQ.CLI.Formatters.String
     end
   end
 
@@ -238,6 +256,29 @@ defmodule RabbitMQCtl do
   defp exit_program(code) do
     :net_kernel.stop
     exit({:shutdown, code})
+  end
+
+  defp format_error({:error, {:badrpc, :nodedown} = result}, opts, _) do
+    diagnostics = get_node_diagnostics(opts[:node])
+    {:error, ExitCodes.exit_code_for(result),
+     "Error: unable to connect to node '#{opts[:node]}': nodedown\n" <>
+     diagnostics}
+  end
+  defp format_error({:error, {:badrpc, :timeout} = result}, opts, module) do
+    op = CommandModules.module_to_command(module)
+    {:error, ExitCodes.exit_code_for(result),
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{opts[:timeout]}"}
+  end
+  defp format_error({:error, err} = result, _, _) do
+    string_err = Helpers.string_or_inspect(err)
+    {:error, ExitCodes.exit_code_for(result), "Error:\n#{string_err}"}
+  end
+
+  defp get_node_diagnostics(nil) do
+    "Node is not defined"
+  end
+  defp get_node_diagnostics(node_name) do
+    to_string(:rabbit_nodes.diagnostics([node_name]))
   end
 
   @spec with_distribution(options(), (() -> command_result())) :: command_result()

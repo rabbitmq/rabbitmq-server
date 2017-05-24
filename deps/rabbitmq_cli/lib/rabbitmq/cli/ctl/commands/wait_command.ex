@@ -17,7 +17,6 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
@@ -35,9 +34,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def banner(_, %{node: node_name}), do: "Waiting for node #{node_name} ..."
 
-  def output({:error, err}, opts) do
+  def output({:error, err}, _opts) do
     case format_error(err) do
-      :undefined -> RabbitMQ.CLI.DefaultOutput.output({:error, err}, opts, __MODULE__);
+      :undefined -> RabbitMQ.CLI.DefaultOutput.output({:error, err});
       error_str  -> {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software, error_str}
     end
   end
