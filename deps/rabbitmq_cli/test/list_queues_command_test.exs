@@ -72,7 +72,7 @@ defmodule ListQueuesCommandTest do
   @tag test_timeout: 0
   test "run: zero timeout causes command to return badrpc", context do
     assert run_command_to_list(@command, [["name"], context[:opts]]) ==
-      [{:badrpc, {:timeout, 0.0}}]
+      [{:error, {:badrpc, {:timeout, 0.0}}}]
   end
 
   @tag test_timeout: 1
@@ -83,7 +83,7 @@ defmodule ListQueuesCommandTest do
         declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
     assert run_command_to_list(@command, [["name"], context[:opts]]) ==
-      [{:badrpc, {:timeout, 0.001}}]
+      [{:error, {:badrpc, {:timeout, 0.001}}}]
     for i <- 1..n do
         delete_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end

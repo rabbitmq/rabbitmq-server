@@ -51,19 +51,19 @@ defmodule RpcStreamTest do
   test "emission timeout 0 return badrpc" do
     items = receive_list_items_to_list([Kernel.node, TestHelper, :emit_list, [[]], 0, []])
 
-    assert [{:badrpc, {:timeout, 0.0}}] == items
+    assert [{:error, {:badrpc, {:timeout, 0.0}}}] == items
   end
 
   test "emission timeout return badrpc with timeout value in seconds" do
     timeout_fun = fn(x) -> :timer.sleep(1000); x end
     items = receive_list_items_to_list([Kernel.node, TestHelper, :emit_list_map, [[1,2,3], timeout_fun], 100, []])
-    assert [{:badrpc, {:timeout, 0.1}}] == items
+    assert [{:error, {:badrpc, {:timeout, 0.1}}}] == items
   end
 
   test "emission timeout in progress return badrpc with timeout value in seconds as last element" do
     timeout_fun = fn(x) -> :timer.sleep(100); x end
     items = receive_list_items_to_list([Kernel.node, TestHelper, :emit_list_map, [[1,2,3], timeout_fun], 150, []])
-    assert [1, {:badrpc, {:timeout, 0.15}}] == items
+    assert [1, {:error, {:badrpc, {:timeout, 0.15}}}] == items
   end
 
 
