@@ -218,4 +218,36 @@ topic_permission_checks1(_Config) ->
         Perm,
         Context
     ) || Perm <- Permissions],
+
+    %% expand variables
+    rabbit_auth_backend_internal:set_topic_permissions(
+        <<"guest">>, <<"other-vhost">>, <<"amq.topic">>,
+        "services.{vhost}.accounts.{username}.notifications",
+        "services.{vhost}.accounts.{username}.notifications", <<"acting-user">>
+    ),
+    %% routing key OK
+    [true = rabbit_auth_backend_internal:check_topic_access(
+        User,
+        Topic#resource{virtual_host = <<"other-vhost">>},
+        Perm,
+        #{routing_key => <<"services.other-vhost.accounts.guest.notifications">>,
+          expand_map  => #{
+              <<"username">> => <<"guest">>,
+              <<"vhost">>    => <<"other-vhost">>
+          }
+        }
+    ) || Perm <- Permissions],
+    %% routing key KO
+    [false = rabbit_auth_backend_internal:check_topic_access(
+        User,
+        Topic#resource{virtual_host = <<"other-vhost">>},
+        Perm,
+        #{routing_key => <<"services.default.accounts.dummy.notifications">>,
+            expand_map  => #{
+                <<"username">> => <<"guest">>,
+                <<"vhost">>    => <<"other-vhost">>
+            }
+        }
+    ) || Perm <- Permissions],
+
     ok.
