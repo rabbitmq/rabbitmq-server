@@ -25,6 +25,8 @@
          parse/2,
          source_uri/1,
          dest_uri/1,
+         source_protocol/1,
+         dest_protocol/1,
          connect_source/1,
          init_source/1,
          connect_dest/1,
@@ -132,6 +134,9 @@ nack(Tag, Multi, State = #{source := #{current := {_, Chan, _}}}) ->
 
 source_uri(#{source := #{current := {_, _, Uri}}}) -> Uri.
 dest_uri(#{dest := #{current := {_, _, Uri}}}) -> Uri.
+
+source_protocol(_State) -> amqp091.
+dest_protocol(_State) -> amqp091.
 
 forward(IncomingTag, Props, Payload,
         State0 = #{dest := #{props_fun := PropsFun,

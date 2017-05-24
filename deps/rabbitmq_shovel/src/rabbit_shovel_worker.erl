@@ -119,8 +119,12 @@ code_change(_OldVsn, State, _Extra) ->
 report_running(#state{config = Config} = State) ->
     InUri = rabbit_shovel_behaviour:source_uri(Config),
     OutUri = rabbit_shovel_behaviour:dest_uri(Config),
+    InProto = rabbit_shovel_behaviour:source_protocol(Config),
+    OutProto = rabbit_shovel_behaviour:dest_protocol(Config),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {running, [{src_uri,  InUri},
+                                           {src_protocol, InProto},
+                                           {dest_protocol, OutProto},
                                            {dest_uri, OutUri}]}).
 
 

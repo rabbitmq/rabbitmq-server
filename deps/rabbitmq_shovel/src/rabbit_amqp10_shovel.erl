@@ -25,6 +25,8 @@
          parse/2,
          source_uri/1,
          dest_uri/1,
+         source_protocol/1,
+         dest_protocol/1,
          connect_source/1,
          init_source/1,
          connect_dest/1,
@@ -56,10 +58,10 @@ parse(_Name, {destination, Conf}) ->
       uris => Uris,
       unacked => #{},
       target_address => pget(target_address, Conf),
-      delivery_annotations => maps:from_list(pget(delivery_annotations, Conf, [])),
-      message_annotations => maps:from_list(pget(message_annotations, Conf, [])),
       properties => maps:from_list(pget(properties, Conf, [])),
       application_properties => maps:from_list(pget(application_properties, Conf, [])),
+      delivery_annotations => maps:from_list(pget(delivery_annotations, Conf, [])),
+      message_annotations => maps:from_list(pget(message_annotations, Conf, [])),
       add_forward_headers => pget(add_forward_headers, Conf, false),
       add_timestamp_header => pget(add_timestamp_header, Conf, false)
      };
@@ -153,6 +155,9 @@ source_uri(#{source := #{current := #{uri := Uri}}}) -> Uri.
 
 -spec dest_uri(state()) -> uri().
 dest_uri(#{dest := #{current := #{uri := Uri}}}) -> Uri.
+
+source_protocol(_State) -> amqp10.
+dest_protocol(_State) -> amqp10.
 
 -spec handle_source(Msg :: any(), state()) -> not_handled | state().
 handle_source({amqp10_msg, _LinkRef, Msg}, State) ->
