@@ -6,7 +6,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 DEPS = rabbit_common rabbit rabbitmq_management rabbitmq_shovel
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_amqp1_0
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
