@@ -141,7 +141,7 @@ init_from_config() ->
             {ok, _} ->
                 e(invalid_cluster_nodes_conf)
         end,
-    rabbit_log:info("All discovered existing cluster peers: ~p~n",
+    rabbit_log:info("All discovered existing cluster peers: ~s~n",
                     [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
     Peers = nodes_excl_me(DiscoveredNodes),
     case Peers of
