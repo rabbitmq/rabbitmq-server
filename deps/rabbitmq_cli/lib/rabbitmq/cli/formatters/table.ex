@@ -20,13 +20,19 @@ defmodule RabbitMQ.CLI.Formatters.Table do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_stream(stream, options) do
+    ## Flatten list_consumers
     Stream.flat_map(stream,
-                FormatterHelpers.without_errors_1(
-                  fn(element) ->
-                      case format_output(element, options) do
-                        list when is_list(list) -> list;
-                        other                   -> [other]
-                      end
+                    fn([first | _] = element) ->
+                        case Keyword.keyword?(first) or is_map(first) do
+                          true  -> element;
+                          false -> [element]
+                        end
+                      (other) ->
+                        [other]
+                    end)
+    |> Stream.map(FormatterHelpers.without_errors_1(
+                    fn(element) ->
+                      format_output(element, options)
                     end))
   end
 
@@ -37,17 +43,11 @@ defmodule RabbitMQ.CLI.Formatters.Table do
   def format_output([], _) do
     ""
   end
-  def format_output([first|_] = output, options)do
+  def format_output(output, options)do
     escaped = escaped?(options)
     case Keyword.keyword?(output) do
         true  -> format_line(output, escaped);
-        false ->
-          case Keyword.keyword?(first) or is_map(first) do
-            true ->
-              Enum.map(output, fn(el) -> format_line(el, escaped) end);
-            false ->
-              format_inspect(output)
-          end
+        false -> format_inspect(output)
     end
   end
   def format_output(other, _) do

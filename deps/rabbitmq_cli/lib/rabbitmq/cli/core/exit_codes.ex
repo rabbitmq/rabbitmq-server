@@ -42,6 +42,7 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   def exit_code_for({:validation_failure, {:bad_option, _}}),      do: exit_usage()
   def exit_code_for({:validation_failure, _}),                     do: exit_usage()
   def exit_code_for({:badrpc, :timeout}),       do: exit_tempfail()
+  def exit_code_for({:badrpc, {:timeout, _}}),  do: exit_tempfail()
   def exit_code_for({:badrpc, :nodedown}),      do: exit_unavailable()
   def exit_code_for({:error, _}),               do: exit_software()
 

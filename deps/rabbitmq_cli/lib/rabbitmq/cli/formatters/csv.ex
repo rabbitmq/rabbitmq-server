@@ -22,15 +22,14 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
   def format_stream(stream, _) do
     ## Flatten list_consumers
     Stream.flat_map(stream,
-                    FormatterHelpers.without_errors_1(
-                      fn([first | _] = element) ->
-                          case Keyword.keyword?(first) or is_map(first) do
-                            true  -> element;
-                            false -> [element]
-                          end
-                        (other) ->
-                          [other]
-                      end))
+                    fn([first | _] = element) ->
+                        case Keyword.keyword?(first) or is_map(first) do
+                          true  -> element;
+                          false -> [element]
+                        end
+                      (other) ->
+                        [other]
+                    end)
     ## Add info_items names
     |> Stream.transform(:init,
                         FormatterHelpers.without_errors_2(
