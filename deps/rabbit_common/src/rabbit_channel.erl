@@ -791,7 +791,15 @@ check_internal_exchange(_) ->
 
 check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}, RoutingKey, Permission) ->
     Resource = Name#resource{kind = topic},
-    Context = #{routing_key => RoutingKey},
+    #user{username = Username} = User,
+    #resource{virtual_host = VHost} = Resource,
+
+    Context = #{routing_key => RoutingKey,
+                expand_map  => #{
+                    <<"username">> => Username,
+                    <<"vhost">>    => VHost
+                }
+    },
     Cache = case get(topic_permission_cache) of
                 undefined -> [];
                 Other     -> Other
