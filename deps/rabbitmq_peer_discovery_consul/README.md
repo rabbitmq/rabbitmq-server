@@ -10,7 +10,7 @@ by Gavin Roy).
 This plugin requires RabbitMQ 3.7.0 or later.
 
 For a Consul-based peer discovery and cluster formation
-mechanism that supports 3.6.x, see [rabbitmq-autocluster](https://github.com/rabbitmq/rabbitmq-autocluster)).
+mechanism that supports 3.6.x, see [rabbitmq-autocluster](https://github.com/rabbitmq/rabbitmq-autocluster).
 
 
 ## Contributing
