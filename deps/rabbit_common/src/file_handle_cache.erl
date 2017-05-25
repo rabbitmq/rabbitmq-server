@@ -543,9 +543,9 @@ set_maximum_since_use(MaximumAge) ->
            fun ({{Ref, fhc_handle},
                  Handle = #handle { hdl = Hdl, last_used_at = Then }}, Rep) ->
                    case Hdl =/= closed andalso
-                        time_compat:convert_time_unit(Now - Then,
-                                                      native,
-                                                      micro_seconds)
+                        erlang:convert_time_unit(Now - Then,
+                                                 native,
+                                                 micro_seconds)
                           >= MaximumAge of
                        true  -> soft_close(Ref, Handle) orelse Rep;
                        false -> Rep
@@ -1412,7 +1412,7 @@ reduce(State = #fhc_state { open_pending          = OpenPending,
                                      opened         = Opened,
                                      blocked        = Blocked } = CState] =
                               ets:lookup(Clients, Pid),
-                          TimeDiff = time_compat:convert_time_unit(
+                          TimeDiff = erlang:convert_time_unit(
                             Now - Eldest, native, micro_seconds),
                           case Blocked orelse PendingCloses =:= Opened of
                               true  -> Accs;

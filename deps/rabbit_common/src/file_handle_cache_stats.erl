@@ -62,5 +62,5 @@ timer_tc(Thunk) ->
     T1 = erlang:monotonic_time(),
     Res = Thunk(),
     T2 = erlang:monotonic_time(),
-    Diff = time_compat:convert_time_unit(T2 - T1, native, micro_seconds),
+    Diff = erlang:convert_time_unit(T2 - T1, native, micro_seconds),
     {Diff, Res}.
