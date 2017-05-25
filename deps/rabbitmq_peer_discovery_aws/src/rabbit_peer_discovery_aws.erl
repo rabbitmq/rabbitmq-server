@@ -77,7 +77,7 @@
 %% API
 %%
 
--spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
+-spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}}.
 
 list_nodes() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
@@ -143,7 +143,10 @@ maybe_set_region(Value) ->
     rabbit_log:debug("Setting region: ~p", [Value]),
     rabbitmq_aws:set_region(Value).
 
-get_autoscaling_group_node_list(error, _) -> {error, instance_discovery};
+get_autoscaling_group_node_list(error, _) ->
+    rabbit_log:warning("Cannot discover any nodes because the AWS "
+                       "instance id could not be fetched.", []),
+    {ok, {[], disc}};
 get_autoscaling_group_node_list(Instance, Tag) ->
     case get_all_autoscaling_instances([]) of
         {ok, Instances} ->
@@ -152,13 +155,26 @@ get_autoscaling_group_node_list(Instance, Tag) ->
                     rabbit_log:debug("Fetching autoscaling = Group: ~p", [Group]),
                     Values = get_autoscaling_instances(Instances, Group, []),
                     rabbit_log:debug("Fetching autoscaling = Instances: ~p", [Values]),
-                    Names = get_hostname_by_instance_ids(Values, Tag),
-                    rabbit_log:debug("Fetching autoscaling = DNS: ~p", [Names]),
-                    {ok, {[?UTIL_MODULE:node_name(N) || N <- Names], disc}};
-                error -> {error, autoscaling_group_not_found}
+                    case get_hostname_by_instance_ids(Values, Tag) of
+                        error ->
+                            rabbit_log:warning("Cannot discover any nodes because the AWS "
+                                               "instance description could not be fetched.", []),
+                            {ok, {[], disc}};
+                        Names ->
+                            rabbit_log:debug("Fetching autoscaling = DNS: ~p", [Names]),
+                            {ok, {[?UTIL_MODULE:node_name(N) || N <- Names], disc}}
+                    end;
+                error ->
+                    rabbit_log:warning("Cannot discover any nodes because the AWS "
+                                       "autoscaling group could not be found in "
+                                       "the description. Check that your instance"
+                                       " belongs to an autoscaling group.", []),
+                    {ok, {[], disc}}
             end;
-        error ->
-            {error, describe_autoscaling_instances}
+        _ ->
+            rabbit_log:warning("Cannot discover any nodes because the AWS "
+                               "autoscaling description could not be fetched.", []),
+            {ok, {[], disc}}
     end.
 
 get_autoscaling_instances([], _, Accum) -> Accum;
@@ -262,9 +278,10 @@ maybe_add_tag_filters([{Key, Value}|T], QArgs, Num) ->
         QArgs),
       Num+1).
 
--spec get_node_list_from_tags(tags()) -> {error, atom()} | {ok, [node()]}.
+-spec get_node_list_from_tags(tags()) -> {ok, {[node()], disc}}.
 get_node_list_from_tags([]) ->
-    {error, no_configured_tags};
+    rabbit_log:warning("Cannot discover any nodes because AWS tags are not configured!", []),
+    {ok, {[], disc}};
 get_node_list_from_tags(Tags) ->
     {ok, {[?UTIL_MODULE:node_name(N) || N <- get_hostname_by_tags(Tags)], disc}}.
 
@@ -293,7 +310,15 @@ get_hostname_by_tags(Tags) ->
     QArgs = [{"Action", "DescribeInstances"}, {"Version", "2015-10-01"}],
     QArgs2 = lists:keysort(1, maybe_add_tag_filters(Tags, QArgs, 1)),
     Path = "/?" ++ rabbitmq_aws_urilib:build_query_string(QArgs2),
-    get_hostname_names(Path).
+    case get_hostname_names(Path) of
+        error ->
+            rabbit_log:warning("Cannot discover any nodes because the AWS "
+                               "instance description by tags: ~p, could not "
+                               "be fetched.", [Tags]),
+            [];
+        Names ->
+            Names
+    end.
 
 -spec select_hostname() -> string().
 select_hostname() ->
