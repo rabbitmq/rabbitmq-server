@@ -59,8 +59,8 @@ get() ->
     lists:sort(ets:tab2list(?TABLE)).
 
 timer_tc(Thunk) ->
-    T1 = time_compat:monotonic_time(),
+    T1 = erlang:monotonic_time(),
     Res = Thunk(),
-    T2 = time_compat:monotonic_time(),
+    T2 = erlang:monotonic_time(),
     Diff = time_compat:convert_time_unit(T2 - T1, native, micro_seconds),
     {Diff, Res}.
