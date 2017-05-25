@@ -15,15 +15,52 @@ dispatcher_add(function(sammy) {
                    'dynamic-shovel', '#/dynamic-shovels');
         });
     sammy.put('#/shovel-parameters', function() {
-            var num_keys = ['prefetch-count', 'reconnect-delay'];
-            var bool_keys = ['add-forward-headers'];
+            // patch up the protocol selectors
+            var src_proto = this.params['src-protocol-selector'];
+            this.params['src-protocol'] = src_proto.substr(0, src_proto.indexOf('-'));
+            var dest_proto = this.params['dest-protocol-selector'];
+            this.params['dest-protocol'] = dest_proto.substr(0, dest_proto.indexOf('-'));
+
+            //remove fields not required by the selected protocol
+            if (this.params['src-protocol'] == 'amqp10') {
+                remove_params_with(this, 'amqp091-src');
+            } else {
+                remove_params_with(this, 'amqp10-src');
+            }
+            if (this.params['dest-protocol'] == 'amqp10') {
+                remove_params_with(this, 'amqp091-dest');
+            } else {
+                remove_params_with(this, 'amqp10-dest');
+            }
+
+            var trimProtoPrefix = function (x) {
+                if(x.startsWith('amqp10-') || x.startsWith('amqp091-')) {
+                    return x.substr(x.indexOf('-') + 1, x.length);
+                }
+                return x;
+            };
+
+            rekey_params(this, trimProtoPrefix);
+
+            var num_keys = ['src-prefetch-count', 'reconnect-delay'];
+
+            //copy the correct delete-after value
+            if (this.params['src-delete-after-selector'] == 'never') {
+                this.params['src-delete-after'] = 'never';
+            } else if (this.params['src-delete-after-selector'] == 'number') {
+                num_keys.push('src-delete-after');
+            }
+
+            delete this.params['src-delete-after-selector'];
+
+            var bool_keys = ['dest-add-forward-headers'];
             var arrayable_keys = ['src-uri', 'dest-uri'];
             var redirect = this.params['redirect'];
-            if (redirect != undefined) {
+            if (redirect !== undefined) {
                 delete this.params['redirect'];
             }
             put_parameter(this, [], num_keys, bool_keys, arrayable_keys);
-            if (redirect != undefined) {
+            if (redirect !== undefined) {
                 go_to(redirect);
             }
             return false;
@@ -41,6 +78,9 @@ NAVIGATION['Admin'][0]['Shovel Management'] = ['#/dynamic-shovels', "policymaker
 
 HELP['shovel-uri'] =
     'Both source and destination can be either a local or remote broker. See the "URI examples" pane for examples of how to construct URIs. If connecting to a cluster, you can enter several URIs here separated by spaces.';
+
+HELP['shovel-address'] =
+    'The AMQP 1.0 address representing the source or target node.'
 
 HELP['shovel-queue-exchange'] =
     'You can set both source and destination as either a queue or an exchange. If you choose "queue", it will be declared beforehand; if you choose "exchange" it will not, but an appropriate binding and queue will be created when the source is an exchange.';
@@ -72,24 +112,52 @@ HELP['shovel-delete-after'] =
        <dd>The shovel will check the length of the queue when it starts up. It will transfer that many messages, and then delete itself.</dd>\
 </dl>';
 
+function remove_params_with(sammy, prefix) {
+    for (var i in sammy.params) {
+        if(i.startsWith(prefix)) {
+            delete sammy.params[i];
+        }
+    }
+}
+
+function rekey_params(sammy, func) {
+    for (var i in sammy.params) {
+        var k = func(i);
+        if(i != k) {
+            var v = sammy.params[i];
+            delete sammy.params[i];
+            sammy.params[k] = v;
+        }
+    }
+}
 function link_shovel(vhost, name) {
     return _link_to(name, '#/dynamic-shovels/' + esc(vhost) + '/' + esc(name));
 }
 
 function fmt_shovel_endpoint(prefix, shovel) {
     var txt = '';
-    if (shovel[prefix + '-queue']) {
-        txt += fmt_string(shovel[prefix + '-queue']) + '<sub>queue</sub>';
+    if(shovel[prefix + "-protocol"] == 'amqp10') {
+        txt += fmt_string(shovel[prefix + '-address']);
     } else {
-        if (shovel[prefix + '-exchange']) {
-            txt += fmt_string(shovel[prefix + '-exchange']);
+        if (shovel[prefix + '-queue']) {
+            txt += fmt_string(shovel[prefix + '-queue']) + '<sub>queue</sub>';
         } else {
-            txt += '<i>as published</i>';
+            if (shovel[prefix + '-exchange']) {
+                txt += fmt_string(shovel[prefix + '-exchange']);
+            } else {
+                txt += '<i>as published</i>';
+            }
+            if (shovel[prefix + '-exchange-key']) {
+                txt += ' : ' + fmt_string(shovel[prefix + '-exchange-key']);
+            }
+            txt += '<sub>exchange</sub>';
         }
-        if (shovel[prefix + '-exchange-key']) {
-            txt += ' : ' + fmt_string(shovel[prefix + '-exchange-key']);
-        }
-        txt += '<sub>exchange</sub>';
     }
+
     return txt;
+}
+
+function fallback_value(shovel, key1, key2) {
+    var v = shovel.value[key1];
+    return (v !== undefined ? v : shovel.value[key2]);
 }

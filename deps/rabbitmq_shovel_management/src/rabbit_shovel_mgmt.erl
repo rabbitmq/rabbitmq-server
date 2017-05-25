@@ -128,6 +128,8 @@ lookup_src_dest(dynamic, {VHost, Name}) ->
         Props ->
             Def = pget(value, Props),
             Ks = [<<"src-queue">>, <<"src-exchange">>, <<"src-exchange-key">>,
-                  <<"dest-queue">>,<<"dest-exchange">>,<<"dest-exchange-key">>],
+                  <<"dest-queue">>,<<"dest-exchange">>,<<"dest-exchange-key">>,
+                  <<"src-address">>, <<"dest-address">>, <<"src-protocol">>,
+                  <<"dest-protocol">>],
             [{definition, [{K, V} || {K, V} <- Def, lists:member(K, Ks)]}]
     end.
