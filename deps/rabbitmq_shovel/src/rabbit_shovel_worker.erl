@@ -122,10 +122,10 @@ report_running(#state{config = Config} = State) ->
     InProto = rabbit_shovel_behaviour:source_protocol(Config),
     OutProto = rabbit_shovel_behaviour:dest_protocol(Config),
     rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {running, [{src_uri,  InUri},
-                                           {src_protocol, InProto},
-                                           {dest_protocol, OutProto},
-                                           {dest_uri, OutUri}]}).
+                                {running, [{src_uri,  rabbit_data_coercion:to_binary(InUri)},
+                                           {src_protocol, rabbit_data_coercion:to_binary(InProto)},
+                                           {dest_protocol, rabbit_data_coercion:to_binary(OutProto)},
+                                           {dest_uri, rabbit_data_coercion:to_binary(OutUri)}]}).
 
 
 %% for static shovels, name is an atom from the configuration file
