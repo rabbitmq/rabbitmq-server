@@ -1,0 +1,15 @@
+[Unit]
+Description=RabbitMQ Messaging Server
+After=network.target
+
+[Service]
+Type=simple
+User=rabbitmq
+SyslogIdentifier=rabbitmq
+EnvironmentFile=/etc/rabbitmq/rabbitmq-env.conf
+
+ExecStart=/usr/sbin/rabbitmq-server
+ExecStop=/usr/sbin/rabbitmqctl stop
+
+[Install]
+WantedBy=multi-user.target
