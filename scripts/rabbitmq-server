@@ -29,6 +29,8 @@ case "$(uname -s)" in
   CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait
            # will not be able to make sense of it anyway
            ;;
+  MINGW*)  # Same for mingw
+           ;;
   *)       # When -detached is passed, we don't write the pid, since it'd be the
            # wrong one
            detached=""
