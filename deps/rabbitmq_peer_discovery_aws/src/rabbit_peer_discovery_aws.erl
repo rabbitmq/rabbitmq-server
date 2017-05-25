@@ -140,40 +140,40 @@ maybe_set_credentials(AccessKey, SecretKey) ->
 %%
 maybe_set_region("undefined") -> ok;
 maybe_set_region(Value) ->
-    rabbit_log:debug("Setting region: ~p", [Value]),
+    rabbit_log:debug("Setting AWS region to ~p", [Value]),
     rabbitmq_aws:set_region(Value).
 
 get_autoscaling_group_node_list(error, _) ->
-    rabbit_log:warning("Cannot discover any nodes because the AWS "
-                       "instance id could not be fetched.", []),
+    rabbit_log:warning("Cannot discover any nodes: failed to fetch this node's EC2 "
+                       "instance id from ~s", [?INSTANCE_ID_URL]),
     {ok, {[], disc}};
 get_autoscaling_group_node_list(Instance, Tag) ->
     case get_all_autoscaling_instances([]) of
         {ok, Instances} ->
             case find_autoscaling_group(Instances, Instance) of
                 {ok, Group} ->
-                    rabbit_log:debug("Fetching autoscaling = Group: ~p", [Group]),
+                    rabbit_log:debug("Performing autoscaling group discovery, group: ~p", [Group]),
                     Values = get_autoscaling_instances(Instances, Group, []),
-                    rabbit_log:debug("Fetching autoscaling = Instances: ~p", [Values]),
+                    rabbit_log:debug("Performing autoscaling group discovery, found instances: ~p", [Values]),
                     case get_hostname_by_instance_ids(Values, Tag) of
                         error ->
-                            rabbit_log:warning("Cannot discover any nodes because the AWS "
-                                               "instance description could not be fetched.", []),
+                            rabbit_log:error("Cannot discover any nodes: DescribeInstances "
+                                             "API call failed.", []),
                             {ok, {[], disc}};
                         Names ->
-                            rabbit_log:debug("Fetching autoscaling = DNS: ~p", [Names]),
+                            rabbit_log:debug("Performing autoscaling group-based discovery, hostnames: ~p", [Names]),
                             {ok, {[?UTIL_MODULE:node_name(N) || N <- Names], disc}}
                     end;
                 error ->
-                    rabbit_log:warning("Cannot discover any nodes because the AWS "
-                                       "autoscaling group could not be found in "
-                                       "the description. Check that your instance"
+                    rabbit_log:warning("Cannot discover any nodes because no AWS "
+                                       "autoscaling group could be found in "
+                                       "the instance description. Make sure that this instance"
                                        " belongs to an autoscaling group.", []),
                     {ok, {[], disc}}
             end;
         _ ->
-            rabbit_log:warning("Cannot discover any nodes because the AWS "
-                               "autoscaling description could not be fetched.", []),
+            rabbit_log:warning("Cannot discover any nodes because AWS "
+                               "autoscaling group description API call failed.", []),
             {ok, {[], disc}}
     end.
 
@@ -302,7 +302,7 @@ get_hostname_names(Path) ->
             ReservationSet = proplists:get_value("reservationSet", Response),
             get_hostname_name_from_reservation_set(ReservationSet, []);
         {error, Reason} ->
-            rabbit_log:error("Error fetching node list: ~p", [Reason]),
+            rabbit_log:error("Error fetching node list via EC2 API, request path: ~s, error: ~p", [Path, Reason]),
             error
     end.
 
@@ -312,9 +312,8 @@ get_hostname_by_tags(Tags) ->
     Path = "/?" ++ rabbitmq_aws_urilib:build_query_string(QArgs2),
     case get_hostname_names(Path) of
         error ->
-            rabbit_log:warning("Cannot discover any nodes because the AWS "
-                               "instance description by tags: ~p, could not "
-                               "be fetched.", [Tags]),
+            rabbit_log:warning("Cannot discover any nodes because AWS "
+                               "instance description with tags ~p failed", [Tags]),
             [];
         Names ->
             Names
