@@ -35,7 +35,7 @@
 -export([get_total_memory/0, get_vm_limit/0,
          get_check_interval/0, set_check_interval/1,
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
-         get_memory_limit/0]).
+         get_memory_limit/0, get_memory_use/1]).
 
 %% for tests
 -export([parse_line_linux/1]).
@@ -73,6 +73,8 @@
 -spec get_vm_memory_high_watermark() -> vm_memory_high_watermark().
 -spec set_vm_memory_high_watermark(vm_memory_high_watermark()) -> 'ok'.
 -spec get_memory_limit() -> non_neg_integer().
+-spec get_memory_use(bytes) -> {non_neg_integer(),  float() | infinity};
+                    (ratio) -> float() | infinity.
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -105,6 +107,19 @@ set_vm_memory_high_watermark(Fraction) ->
 
 get_memory_limit() ->
     gen_server:call(?MODULE, get_memory_limit, infinity).
+
+get_memory_use(bytes) ->
+    MemoryLimit = get_memory_limit(),
+    {erlang:memory(total), case MemoryLimit > 0.0 of
+                               true  -> MemoryLimit;
+                               false -> infinity
+                           end};
+get_memory_use(ratio) ->
+    MemoryLimit = get_memory_limit(),
+    case MemoryLimit > 0.0 of
+        true  -> erlang:memory(total) / MemoryLimit;
+        false -> infinity
+    end.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks

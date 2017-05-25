@@ -19,7 +19,7 @@
 %% If you are tempted to add include("rabbit.hrl"). here, don't. Using record
 %% defs here leads to pain later.
 
--compile([export_all]).
+-compile([nowarn_export_all, export_all]).
 
 -rabbit_upgrade({remove_user_scope,     mnesia, []}).
 -rabbit_upgrade({hash_passwords,        mnesia, []}).
