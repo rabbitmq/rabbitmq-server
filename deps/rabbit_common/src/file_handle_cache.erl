@@ -538,7 +538,7 @@ clear(Ref) ->
       end).
 
 set_maximum_since_use(MaximumAge) ->
-    Now = time_compat:monotonic_time(),
+    Now = erlang:monotonic_time(),
     case lists:foldl(
            fun ({{Ref, fhc_handle},
                  Handle = #handle { hdl = Hdl, last_used_at = Then }}, Rep) ->
@@ -692,7 +692,7 @@ get_or_reopen(RefNewOrReopens) ->
             {ok, [Handle || {_Ref, Handle} <- OpenHdls]};
         {OpenHdls, ClosedHdls} ->
             Oldest = oldest(get_age_tree(),
-                            fun () -> time_compat:monotonic_time() end),
+                            fun () -> erlang:monotonic_time() end),
             case gen_server2:call(?SERVER, {open, self(), length(ClosedHdls),
                                             Oldest}, infinity) of
                 ok ->
@@ -728,7 +728,7 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
            end,
     case prim_file:open(Path, Mode) of
         {ok, Hdl} ->
-            Now = time_compat:monotonic_time(),
+            Now = erlang:monotonic_time(),
             {{ok, _Offset}, Handle1} =
                 maybe_seek(Offset, reset_read_buffer(
                                      Handle#handle{hdl              = Hdl,
@@ -764,7 +764,7 @@ sort_handles([{Ref, _} | RefHdls], RefHdlsA, [{Ref, Handle} | RefHdlsB], Acc) ->
     sort_handles(RefHdls, RefHdlsA, RefHdlsB, [Handle | Acc]).
 
 put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
-    Now = time_compat:monotonic_time(),
+    Now = erlang:monotonic_time(),
     age_tree_update(Then, Now, Ref),
     put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
 
@@ -1405,7 +1405,7 @@ reduce(State = #fhc_state { open_pending          = OpenPending,
                             elders                = Elders,
                             clients               = Clients,
                             timer_ref             = TRef }) ->
-    Now = time_compat:monotonic_time(),
+    Now = erlang:monotonic_time(),
     {CStates, Sum, ClientCount} =
         ets:foldl(fun ({Pid, Eldest}, {CStatesAcc, SumAcc, CountAcc} = Accs) ->
                           [#cstate { pending_closes = PendingCloses,
