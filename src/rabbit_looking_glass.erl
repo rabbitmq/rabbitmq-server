@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_tracer).
+-module(rabbit_looking_glass).
 
 -export([boot/0]).
 -export([connections/0]).
