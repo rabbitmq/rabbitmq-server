@@ -183,7 +183,7 @@ check_topic_access(#auth_user{username = Username},
                          end,
             PermRegexpExpanded = expand_topic_permission(
                 PermRegexp,
-                maps:get(expand_map, Context, undefined)
+                maps:get(variable_map, Context, undefined)
             ),
             case re:run(maps:get(routing_key, Context), PermRegexpExpanded, [{capture, none}]) of
                 match    -> true;

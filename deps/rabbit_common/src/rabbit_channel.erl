@@ -789,13 +789,13 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
-check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}, RoutingKey, Permission) ->
+check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
+                          #ch{user = User = #user{username = Username}},
+                          RoutingKey,
+                          Permission) ->
     Resource = Name#resource{kind = topic},
-    #user{username = Username} = User,
-    #resource{virtual_host = VHost} = Resource,
-
-    Context = #{routing_key => RoutingKey,
-                expand_map  => #{
+    Context = #{routing_key   => RoutingKey,
+                variable_map  => #{
                     <<"username">> => Username,
                     <<"vhost">>    => VHost
                 }
