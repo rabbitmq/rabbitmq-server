@@ -79,13 +79,20 @@
 %%----------------------------------------------------------------------------
 
 get_total_memory() ->
-    try
-        get_total_memory(os:type())
-    catch _:Error ->
-            rabbit_log:warning(
-              "Failed to get total system memory: ~n~p~n~p~n",
-              [Error, erlang:get_stacktrace()]),
-            unknown
+    case application:get_env(rabbit, total_memory_available_override_value) of
+        {ok, Value} ->
+            case rabbit_resource_monitor_misc:parse_information_unit(Value) of
+                {ok, ParsedTotal} ->
+                    ParsedTotal;
+                {error, parse_error} ->
+                    rabbit_log:warning(
+                      "The override value for the total memmory available is "
+                      "not a valid value: ~p, getting total from the system.~n",
+                      [Value]),
+                    get_total_memory_from_os()
+            end;
+        undefined ->
+            get_total_memory_from_os()
     end.
 
 get_vm_limit() -> get_vm_limit(os:type()).
@@ -164,6 +171,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% Server Internals
 %%----------------------------------------------------------------------------
+get_total_memory_from_os() ->
+    try
+        get_total_memory(os:type())
+    catch _:Error ->
+            rabbit_log:warning(
+              "Failed to get total system memory: ~n~p~n~p~n",
+              [Error, erlang:get_stacktrace()]),
+            unknown
+    end.
 
 set_mem_limits(State, MemLimit) ->
     case erlang:system_info(wordsize) of
