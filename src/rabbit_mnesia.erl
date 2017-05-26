@@ -141,7 +141,7 @@ init_from_config() ->
             {ok, _} ->
                 e(invalid_cluster_nodes_conf)
         end,
-    rabbit_log:info("All discovered existing cluster peers: ~p~n",
+    rabbit_log:info("All discovered existing cluster peers: ~s~n",
                     [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
     Peers = nodes_excl_me(DiscoveredNodes),
     case Peers of
@@ -160,7 +160,7 @@ init_from_config() ->
 join_discovered_peers(TryNodes, NodeType) ->
     case find_reachable_peer_to_cluster_with(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
-            rabbit_log:info("Node '~p' selected for auto-clustering~n", [Node]),
+            rabbit_log:info("Node '~s' selected for auto-clustering~n", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
             init_db_and_upgrade(DiscNodes, NodeType, true, _Retry = true),
             rabbit_connection_tracking:boot(),

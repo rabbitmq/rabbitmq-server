@@ -306,20 +306,32 @@ list_global() ->
         end).
 
 list_formatted(VHost) ->
-    [pset(value, rabbit_json:encode(pget(value, P)), P) || P <- list(VHost)].
+    [ format_parameter(info_keys(), P) || P <- list(VHost) ].
+
+format_parameter(InfoKeys, P) ->
+    lists:foldr(fun
+                    (value, Acc) ->
+                        [{value, rabbit_json:encode(pget(value, P))} | Acc];
+                    (Key, Acc)   ->
+                        case lists:keyfind(Key, 1, P) of
+                            false      -> Acc;
+                            {Key, Val} -> [{Key, Val} | Acc]
+                        end
+                end,
+                [], InfoKeys).
 
 list_formatted(VHost, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref,
-      fun(P) -> pset(value, rabbit_json:encode(pget(value, P)), P) end, list(VHost)).
+      fun(P) -> format_parameter(info_keys(), P) end, list(VHost)).
 
 list_global_formatted() ->
-    [pset(value, rabbit_json:encode(pget(value, P)), P) || P <- list_global()].
+    [ format_parameter(global_info_keys(), P) || P <- list_global() ].
 
 list_global_formatted(Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
         AggregatorPid, Ref,
-        fun(P) -> pset(value, rabbit_json:encode(pget(value, P)), P) end, list_global()).
+        fun(P) -> format_parameter(global_info_keys(), P) end, list_global()).
 
 lookup(VHost, Component, Name) ->
     case lookup0({VHost, Component, Name}, rabbit_misc:const(not_found)) of

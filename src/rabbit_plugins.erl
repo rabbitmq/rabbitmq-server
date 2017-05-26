@@ -157,7 +157,7 @@ extract_schema(#plugin{type = dir, location = Location}, SchemaDir) ->
 
 %% @doc Lists the plugins which are currently running.
 active() ->
-    InstalledPlugins = plugin_names(list(plugins_expand_dir())),
+    InstalledPlugins = plugin_names(list(plugins_dist_dir())),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
             lists:member(App, InstalledPlugins)].
 
@@ -213,8 +213,7 @@ strictly_plugins(Plugins, AllPlugins) ->
       end, Plugins).
 
 strictly_plugins(Plugins) ->
-    ExpandDir = plugins_expand_dir(),
-    AllPlugins = list(ExpandDir),
+    AllPlugins = list(plugins_dist_dir()),
     lists:filter(
       fun(Name) ->
               is_strictly_plugin(lists:keyfind(Name, #plugin.name, AllPlugins))
@@ -280,10 +279,8 @@ prepare_plugins(Enabled) ->
         {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
                                       [ExpandDir, E2]}})
     end,
-    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ValidPlugins],
 
-    [prepare_dir_plugin(PluginAppDescPath) ||
-        PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")],
+    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ValidPlugins],
     Wanted.
 
 maybe_warn_about_invalid_plugins([]) ->
@@ -460,11 +457,37 @@ delete_recursively(Fn) ->
         {error, {Path, E}} -> {error, {cannot_delete, Path, E}}
     end.
 
-prepare_plugin(#plugin{type = ez, location = Location}, ExpandDir) ->
-    zip:unzip(Location, [{cwd, ExpandDir}]);
-prepare_plugin(#plugin{type = dir, name = Name, location = Location},
-               ExpandDir) ->
-    rabbit_file:recursive_copy(Location, filename:join([ExpandDir, Name])).
+find_unzipped_app_file(ExpandDir, Files) ->
+    StripComponents = length(filename:split(ExpandDir)),
+    [ X || X <- Files,
+           [_AppName, "ebin", MaybeAppFile] <-
+               [lists:nthtail(StripComponents, filename:split(X))],
+           lists:suffix(".app", MaybeAppFile)
+    ].
+
+prepare_plugin(#plugin{type = ez, name = Name, location = Location}, ExpandDir) ->
+    case zip:unzip(Location, [{cwd, ExpandDir}]) of
+        {ok, Files} ->
+            case find_unzipped_app_file(ExpandDir, Files) of
+                [PluginAppDescPath|_] ->
+                    prepare_dir_plugin(PluginAppDescPath);
+                _ ->
+                    rabbit_log:error("Plugin archive '~s' doesn't contain an .app file~n", [Location]),
+                    throw({app_file_missing, Name, Location})
+            end;
+        {error, Reason} ->
+            rabbit_log:error("Could not unzip plugin archive '~s': ~p~n", [Location, Reason]),
+            throw({failed_to_unzip_plugin, Name, Location, Reason})
+    end;
+prepare_plugin(#plugin{type = dir, location = Location, name = Name},
+               _ExpandDir) ->
+    case filelib:wildcard(Location ++ "/ebin/*.app") of
+        [PluginAppDescPath|_] ->
+            prepare_dir_plugin(PluginAppDescPath);
+        _ ->
+            rabbit_log:error("Plugin directory '~s' doesn't contain an .app file~n", [Location]),
+            throw({app_file_missing, Name, Location})
+    end.
 
 plugin_info({ez, EZ}) ->
     case read_app_file(EZ) of
