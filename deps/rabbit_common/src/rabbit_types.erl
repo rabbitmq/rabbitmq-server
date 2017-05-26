@@ -186,4 +186,6 @@
 -type(proc_name() :: term()).
 -type(proc_type_and_name() :: {atom(), proc_name()}).
 
--type(topic_access_context() :: #{routing_key => rabbit_router:routing_key(), _ => _}).
+-type(topic_access_context() :: #{routing_key  => rabbit_router:routing_key(),
+                                  variable_map => map(),
+                                  _ => _}).
