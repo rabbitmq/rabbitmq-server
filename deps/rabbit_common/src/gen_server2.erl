@@ -708,8 +708,9 @@ hibernate(GS2State = #gs2_state { timeout_state = TimeoutState }) ->
     proc_lib:hibernate(?MODULE, wake_hib,
                        [GS2State #gs2_state { timeout_state = TS }]).
 
-pre_hibernate(GS2State = #gs2_state { state   = State,
-                                      mod     = Mod }) ->
+pre_hibernate(GS2State0 = #gs2_state { state   = State,
+                                       mod     = Mod }) ->
+    GS2State = maybe_stop_stats(GS2State0),
     case erlang:function_exported(Mod, handle_pre_hibernate, 1) of
         true ->
             case catch Mod:handle_pre_hibernate(State) of
@@ -722,8 +723,10 @@ pre_hibernate(GS2State = #gs2_state { state   = State,
             hibernate(GS2State)
     end.
 
-post_hibernate(GS2State = #gs2_state { state = State,
-                                       mod   = Mod }) ->
+post_hibernate(GS2State0 = #gs2_state { state = State,
+                                        mod   = Mod,
+                                        init_stats_fun = InitStatsFun }) ->
+    GS2State = InitStatsFun(GS2State0),
     case erlang:function_exported(Mod, handle_post_hibernate, 1) of
         true ->
             case catch Mod:handle_post_hibernate(State) of
@@ -1381,5 +1384,10 @@ emit_stats(GS2State = #gs2_state{queue = Queue}) ->
       #gs2_state.timer, emit_gen_server2_stats).
 
 stop_stats(GS2State) ->
-    _ = rabbit_event:stop_stats_timer(GS2State, #gs2_state.timer),
+    maybe_stop_stats(GS2State),
     rabbit_core_metrics:gen_server2_deleted(self()).
+
+maybe_stop_stats(#gs2_state{timer = undefined} = GS2State) ->
+    GS2State;
+maybe_stop_stats(GS2State) ->
+    rabbit_event:stop_stats_timer(GS2State, #gs2_state.timer).
