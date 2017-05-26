@@ -42,12 +42,15 @@ resource_exists(ReqData, Context) ->
          _               -> true
      end, ReqData, Context}.
 
-
 to_json(ReqData, Context) ->
     try
-        rabbit_mgmt_util:reply_list_or_paginate(
-          rabbit_mgmt_format:strip_pids(
-              augmented(ReqData, Context)), ReqData, Context)
+        rabbit_mgmt_util:unaugmented_reply_list_or_paginate(
+          basic(ReqData),
+          fun is_sort_order_compatible_with_basic/1,
+          fun (Items) ->
+                  rabbit_mgmt_format:strip_pids(augment(Items, ReqData, Context))
+          end,
+          ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
@@ -58,9 +61,18 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
+%% XXX Implement full check to accept all valid sorts, not only the default one
+is_sort_order_compatible_with_basic(["vhost", "name"]) ->
+    true;
+is_sort_order_compatible_with_basic(_) ->
+    false.
+
 augmented(ReqData, Context) ->
+    augment(basic(ReqData), ReqData, Context).
+
+augment(Basic, ReqData, Context) ->
     rabbit_mgmt_db:augment_queues(
-      rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
+      rabbit_mgmt_util:filter_vhost(Basic, ReqData, Context),
       rabbit_mgmt_util:range_ceil(ReqData), basic).
 
 basic(ReqData) ->

@@ -34,7 +34,8 @@
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
          args/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
-         sort_list/2, destination_type/1, reply_list_or_paginate/3]).
+         sort_list/2, destination_type/1, reply_list_or_paginate/3,
+         unaugmented_reply_list_or_paginate/5]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
          range_ceil/1, floor/2, ceil/1, ceil/2]).
@@ -240,7 +241,7 @@ get_value_param(Name, ReqData) ->
 
 reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
     SortList =
-    sort_list(
+    sort_list_and_paginate(
           extract_columns_list(Facts, ReqData),
           DefaultSorts,
           get_value_param(<<"sort">>, ReqData),
@@ -255,10 +256,82 @@ get_sort_reverse(ReqData) ->
         V -> list_to_atom(V)
     end.
 
-reply_list_or_paginate(Facts, ReqData, Context) ->
+
+-spec is_pagination_requested(#pagination{} | undefined) -> boolean().
+is_pagination_requested(undefined) ->
+    false;
+is_pagination_requested(#pagination{}) ->
+    true.
+
+-spec maybe_augment_facts(boolean(), AugmentFn, [Fact]) -> [AugmentedFact] when
+      Fact :: [{atom(), term()}],
+      AugmentedFact :: [{atom(), term()}],
+      AugmentFn :: fun ((Fact) -> AugmentedFact).
+maybe_augment_facts(false, _, Facts) ->
+    Facts;
+maybe_augment_facts(true, Fn, Facts) ->
+    Fn(Facts).
+
+-spec maybe_augment_paged_facts(boolean(), AugmentFn, [ItemsTuple|OtherTuple]) -> [AugmentedItemsTuple|OtherTuple] when
+      Fact :: [{atom(), term()}],
+      ItemsTuple :: {items, [Fact]},
+      AugmentedFact :: [{atom(), term()}],
+      AugmentedItemsTuple :: {items, [AugmentedFact]},
+      OtherTuple :: {atom(), term()},
+      AugmentFn :: fun ((Fact) -> AugmentedFact).
+maybe_augment_paged_facts(ShouldAugment, AugmentFn, PagingResult) ->
+    maybe_augment_facts(
+      ShouldAugment,
+      fun (PagingResultForwarded) ->
+              lists:map(fun ({items, Facts}) ->
+                                {items, AugmentFn(Facts)};
+                            (Other) ->
+                                Other
+                        end, PagingResultForwarded)
+      end,
+     PagingResult).
+
+%% Augmenting items with calculated stats (with the help of exometer)
+%% is quite expensive, so when request is paged and sort order doesn't
+%% reference augmented columns, we can postpone augmentation until the
+%% list is reduced by paging.
+-spec unaugmented_reply_list_or_paginate(
+        [BasicFact],
+        CanAugmentAfterPaginationPredicate,
+        AugmentFn,
+        cowboy_req:req(),
+        #context{}) -> {binary(), cowboy_req:req(), #context{}} when
+      BasicFact :: {atom(), term()},
+      AugmentedFact :: {atom(), term()},
+      SortColumn :: string(),
+      CanAugmentAfterPaginationPredicate :: fun (([SortColumn]) -> boolean()),
+      AugmentFn :: fun ((BasicFact) -> AugmentedFact).
+unaugmented_reply_list_or_paginate(BasicFacts,
+                                   CanAugmentAfterPaginationPredicate,
+                                   AugmentFn,
+                                   ReqData,
+                                   Context) ->
+    with_valid_pagination(
+      ReqData, Context,
+      fun(Pagination) ->
+              DefaultSorts = ["vhost", "name"],
+              SortParam = merge_sorts_from_req(DefaultSorts, ReqData),
+              AugmentAfterPagination = is_pagination_requested(Pagination) andalso CanAugmentAfterPaginationPredicate(SortParam),
+              FactsForPagination = maybe_augment_facts(not AugmentAfterPagination, AugmentFn, BasicFacts),
+              SortedFacts = sort_list(
+                              extract_columns_list(FactsForPagination, ReqData),
+                              DefaultSorts,
+                              SortParam,
+                              get_sort_reverse(ReqData)),
+              PagedFacts = filter_and_paginate(SortedFacts, Pagination),
+              FinalFacts = maybe_augment_paged_facts(AugmentAfterPagination, AugmentFn, PagedFacts),
+              reply(FinalFacts, ReqData, Context)
+      end).
+
+with_valid_pagination(ReqData, Context, Fun) ->
     try
         Pagination = pagination_params(ReqData),
-        reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
+        Fun(Pagination)
     catch error:badarg ->
         Reason = iolist_to_binary(
                io_lib:format("Pagination parameters are invalid", [])),
@@ -268,32 +341,54 @@ reply_list_or_paginate(Facts, ReqData, Context) ->
             invalid_pagination(ErrorType, Reason, ReqData, Context)
     end.
 
+reply_list_or_paginate(Facts, ReqData, Context) ->
+    with_valid_pagination(
+      ReqData, Context,
+      fun(Pagination) ->
+              reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
+      end).
 
-sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false,
+merge_sorts_from_req(DefaultSorts, ReqData) ->
+    merge_sorts(DefaultSorts, get_value_param(<<"sort">>, ReqData)).
+
+merge_sorts(DefaultSorts, Extra) ->
+    case Extra of
+        undefined -> DefaultSorts;
+        Extra     -> [Extra | DefaultSorts]
+    end.
+
+%% XXX sort_list_and_paginate/2 is a more proper name for this function, keeping it
+%% with this name for backwards compatibility
+-spec sort_list([Fact], [string()]) -> [Fact] when
+      Fact :: [{atom(), term()}].
+sort_list(Facts, Sorts) -> sort_list_and_paginate(Facts, Sorts, undefined, false,
   undefined).
 
-sort_list(Facts, _, [], _, _) ->
+-spec sort_list([Fact], [SortColumn], [SortColumn], boolean()) -> [Fact] when
+      Fact :: [{atom(), term()}],
+      SortColumn :: string().
+sort_list(Facts, _, [], _) ->
     %% Do not sort when we are explicitly requsted to sort with an
     %% empty sort columns list. Note that this clause won't match when
     %% 'sort' parameter is not provided in a HTTP request at all.
     Facts;
-sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
-    SortList = case Sort of
-           undefined -> DefaultSorts;
-           Extra     -> [Extra | DefaultSorts]
-           end,
+sort_list(Facts, DefaultSorts, Sort, Reverse) ->
+    SortList = merge_sorts(DefaultSorts, Sort),
     %% lists:sort/2 is much more expensive than lists:sort/1
     Sorted = [V || {_K, V} <- lists:sort(
                                 [{sort_key(F, SortList), F} || F <- Facts])],
+    maybe_reverse(Sorted, Reverse).
 
+sort_list_and_paginate(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
+    filter_and_paginate(sort_list(Facts, DefaultSorts, Sort, Reverse), Pagination).
+
+filter_and_paginate(Sorted, Pagination) ->
     ContextList = maybe_filter_context(Sorted, Pagination),
-    range_filter(maybe_reverse(ContextList, Reverse), Pagination, Sorted).
+    range_filter(ContextList, Pagination, Sorted).
 
 %%
 %% Filtering functions
 %%
-
-
 maybe_filter_context(List, #pagination{name = Name, use_regex = UseRegex}) when
       is_list(Name) ->
     lists:filter(fun(ListF) ->
