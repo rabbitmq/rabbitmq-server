@@ -43,7 +43,7 @@
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
--define(ONE_MB, 1048576).
+-define(ONE_MB, 1000000).
 
 %% For an unknown OS, we assume that we have 1GB of memory. It'll be
 %% wrong. Scale by vm_memory_high_watermark in configuration to get a
