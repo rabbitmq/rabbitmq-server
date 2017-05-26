@@ -230,8 +230,8 @@ topic_permission_checks1(_Config) ->
         User,
         Topic#resource{virtual_host = <<"other-vhost">>},
         Perm,
-        #{routing_key => <<"services.other-vhost.accounts.guest.notifications">>,
-          expand_map  => #{
+        #{routing_key   => <<"services.other-vhost.accounts.guest.notifications">>,
+          variable_map  => #{
               <<"username">> => <<"guest">>,
               <<"vhost">>    => <<"other-vhost">>
           }
@@ -242,11 +242,11 @@ topic_permission_checks1(_Config) ->
         User,
         Topic#resource{virtual_host = <<"other-vhost">>},
         Perm,
-        #{routing_key => <<"services.default.accounts.dummy.notifications">>,
-            expand_map  => #{
-                <<"username">> => <<"guest">>,
-                <<"vhost">>    => <<"other-vhost">>
-            }
+        #{routing_key   => <<"services.default.accounts.dummy.notifications">>,
+          variable_map  => #{
+              <<"username">> => <<"guest">>,
+              <<"vhost">>    => <<"other-vhost">>
+          }
         }
     ) || Perm <- Permissions],
 
