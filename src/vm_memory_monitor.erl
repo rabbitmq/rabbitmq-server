@@ -48,7 +48,7 @@
 %% For an unknown OS, we assume that we have 1GB of memory. It'll be
 %% wrong. Scale by vm_memory_high_watermark in configuration to get a
 %% sensible value.
--define(MEMORY_SIZE_FOR_UNKNOWN_OS, 1073741824).
+-define(MEMORY_SIZE_FOR_UNKNOWN_OS, ?ONE_MB * 1000).
 -define(DEFAULT_VM_MEMORY_HIGH_WATERMARK, 0.4).
 
 -record(state, {total_memory,
@@ -258,16 +258,16 @@ start_timer(Timeout) ->
 %% Windows has 2GB and 8TB of address space for 32 and 64 bit accordingly.
 get_vm_limit({win32,_OSname}) ->
     case erlang:system_info(wordsize) of
-        4 -> 2*1024*1024*1024;          %% 2 GB for 32 bits  2^31
-        8 -> 8*1024*1024*1024*1024      %% 8 TB for 64 bits  2^42
+        4 -> 2*1000*1000*1000;          %% 2 GB for 32 bits  2^31
+        8 -> 8*1000*1000*1000*1000      %% 8 TB for 64 bits  2^42
     end;
 
 %% On a 32-bit machine, if you're using more than 2 gigs of RAM you're
 %% in big trouble anyway.
 get_vm_limit(_OsType) ->
     case erlang:system_info(wordsize) of
-        4 -> 2*1024*1024*1024;          %% 2 GB for 32 bits  2^31
-        8 -> 256*1024*1024*1024*1024    %% 256 TB for 64 bits 2^48
+        4 -> 2*1000*1000*1000;          %% 2 GB for 32 bits  2^31
+        8 -> 256*1000*1000*1000*1000    %% 256 TB for 64 bits 2^48
              %%http://en.wikipedia.org/wiki/X86-64#Virtual_address_space_details
     end.
 
@@ -346,6 +346,10 @@ parse_line_mach(Line) ->
 
 %% A line looks like "MemTotal:         502968 kB"
 %% or (with broken OS/modules) "Readahead      123456 kB"
+%%
+%% Note that while /proc/meminfo output claims to be in kilobytes (kB, 1000 bytes),
+%% it is actually in kibibytes (1024 bytes) for historical reasons, according
+%% to RHEL documentation: https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Deployment_Guide/s2-proc-meminfo.html.
 parse_line_linux(Line) ->
     {Name, Value, UnitRest} =
         case string:tokens(Line, ":") of
@@ -360,6 +364,8 @@ parse_line_linux(Line) ->
         end,
     Value1 = case UnitRest of
         []     -> list_to_integer(Value); %% no units
+        %% the value is actually in kebibytes, see
+        %% https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Deployment_Guide/s2-proc-meminfo.html
         ["kB"] -> list_to_integer(Value) * 1024
     end,
     {list_to_atom(Name), Value1}.
@@ -371,11 +377,11 @@ parse_line_sunos(Line) ->
             [Value1 | UnitsRest] = string:tokens(RHS, " "),
             Value2 = case UnitsRest of
                          ["Gigabytes"] ->
-                             list_to_integer(Value1) * ?ONE_MB * 1024;
+                             list_to_integer(Value1) * ?ONE_MB * 1000;
                          ["Megabytes"] ->
                              list_to_integer(Value1) * ?ONE_MB;
                          ["Kilobytes"] ->
-                             list_to_integer(Value1) * 1024;
+                             list_to_integer(Value1) * 1000;
                          _ ->
                              Value1 ++ UnitsRest %% no known units
                      end,
