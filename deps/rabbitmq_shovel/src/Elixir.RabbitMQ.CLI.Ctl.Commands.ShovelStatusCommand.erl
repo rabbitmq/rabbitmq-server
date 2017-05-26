@@ -91,7 +91,10 @@ fmt_ts({{YY, MM, DD}, {Hour, Min, Sec}}) ->
 
 fmt_status({'running' = St, Proplist}, Map) ->
     Map#{state => St,
+         source_protocol => proplists:get_value(src_protocol, Proplist,
+                                                undefined),
          source => proplists:get_value(src_uri, Proplist),
+         destination_protocol => proplists:get_value(dest_protocol, Proplist, undefined),
          destination => proplists:get_value(dest_uri, Proplist),
          termination_reason => <<>>};
 fmt_status('starting' = St, Map) ->
