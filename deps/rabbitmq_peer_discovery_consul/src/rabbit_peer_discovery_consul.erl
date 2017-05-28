@@ -26,6 +26,8 @@
 -export([init_health_check_notifier/0, send_health_check_pass/0]).
 %% useful for debugging from the REPL with RABBITMQ_ALLOW_INPUT
 -export([service_id/0, service_address/0]).
+%% for tests
+-export([build_registration_body/0, service_ttl/1]).
 
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(UTIL_MODULE,   rabbit_peer_discovery_util).
