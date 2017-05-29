@@ -45,10 +45,10 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     try
         rabbit_mgmt_util:unaugmented_reply_list_or_paginate(
-          basic(ReqData),
+          basic_vhost_filtered(ReqData, Context),
           fun is_sort_order_compatible_with_basic/1,
           fun (Items) ->
-                  rabbit_mgmt_format:strip_pids(augment(Items, ReqData, Context))
+                  rabbit_mgmt_format:strip_pids(augment(Items, ReqData))
           end,
           ReqData, Context)
     catch
@@ -60,6 +60,18 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
 %%--------------------------------------------------------------------
+%% Exported functions
+
+basic(ReqData) ->
+    [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
+        [rabbit_mgmt_format:queue(Q#amqqueue{state = down}) ||
+            Q <- down_queues(ReqData)].
+
+augmented(ReqData, Context) ->
+    augment(rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context), ReqData).
+
+%%--------------------------------------------------------------------
+%% Private helpers
 
 %% XXX Implement full check to accept all valid sorts, not only the default one
 is_sort_order_compatible_with_basic(["vhost", "name"]) ->
@@ -67,18 +79,11 @@ is_sort_order_compatible_with_basic(["vhost", "name"]) ->
 is_sort_order_compatible_with_basic(_) ->
     false.
 
-augmented(ReqData, Context) ->
-    augment(basic(ReqData), ReqData, Context).
+augment(Basic, ReqData) ->
+    rabbit_mgmt_db:augment_queues(Basic, rabbit_mgmt_util:range_ceil(ReqData), basic).
 
-augment(Basic, ReqData, Context) ->
-    rabbit_mgmt_db:augment_queues(
-      rabbit_mgmt_util:filter_vhost(Basic, ReqData, Context),
-      rabbit_mgmt_util:range_ceil(ReqData), basic).
-
-basic(ReqData) ->
-    [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
-        [rabbit_mgmt_format:queue(Q#amqqueue{state = down}) ||
-            Q <- down_queues(ReqData)].
+basic_vhost_filtered(ReqData, Context) ->
+    rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context).
 
 queues0(ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list/1).

@@ -315,8 +315,9 @@ unaugmented_reply_list_or_paginate(BasicFacts,
       ReqData, Context,
       fun(Pagination) ->
               DefaultSorts = ["vhost", "name"],
-              SortParam = merge_sorts_from_req(DefaultSorts, ReqData),
-              AugmentAfterPagination = is_pagination_requested(Pagination) andalso CanAugmentAfterPaginationPredicate(SortParam),
+              SortParam = get_value_param(<<"sort">>, ReqData),
+              MentionedSortColumns = lists:usort(merge_sorts(DefaultSorts, SortParam)),
+              AugmentAfterPagination = is_pagination_requested(Pagination) andalso CanAugmentAfterPaginationPredicate(MentionedSortColumns),
               FactsForPagination = maybe_augment_facts(not AugmentAfterPagination, AugmentFn, BasicFacts),
               SortedFacts = sort_list(
                               extract_columns_list(FactsForPagination, ReqData),
@@ -347,9 +348,6 @@ reply_list_or_paginate(Facts, ReqData, Context) ->
       fun(Pagination) ->
               reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
       end).
-
-merge_sorts_from_req(DefaultSorts, ReqData) ->
-    merge_sorts(DefaultSorts, get_value_param(<<"sort">>, ReqData)).
 
 merge_sorts(DefaultSorts, Extra) ->
     case Extra of
