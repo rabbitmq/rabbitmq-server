@@ -26,6 +26,7 @@ all() ->
     [
      {group, registration_body_tests}
      %% , {group, registration_tests}
+     , {group, list_node_tests}
      %% , {group, other_tests}
     ].
 
@@ -47,6 +48,13 @@ groups() ->
      %%             %% registeration_failure_test,
      %%             %% unregisteration_test
      %%            ]},
+     , {list_node_tests, [], [
+                 list_nodes_default_values_test,
+                 list_nodes_without_acl_token_test,
+                 list_nodes_with_acl_token_test,
+                 list_nodes_with_cluster_name_token_test,
+                 list_nodes_with_cluster_name_and_acl_token_test
+                ]}
      %% , {other_tests, [], [
      %%             %% nodelist_test,
      %%             %% send_health_check_pass_test,
@@ -59,20 +67,26 @@ end_per_group(_, Config)  -> Config.
 
 reset() ->
     application:unset_env(rabbit, autocluster),
+    os:unsetenv("CLUSTER_NAME"),
+    os:unsetenv("CONSUL_SCHEME"),
+    os:unsetenv("CONSUL_HOST"),
+    os:unsetenv("CONSUL_PORT"),
+    os:unsetenv("CONSUL_ACL_TOKEN"),
     os:unsetenv("CONSUL_SVC"),
     os:unsetenv("CONSUL_SVC_ADDR"),
     os:unsetenv("CONSUL_SVC_ADDR_AUTO"),
     os:unsetenv("CONSUL_SVC_ADDR_NIC"),
     os:unsetenv("CONSUL_SVC_ADDR_NODENAME"),
     os:unsetenv("CONSUL_SVC_TTL"),
-    os:unsetenv("CONSUL_DEREGISTER_AFTER").
+    os:unsetenv("CONSUL_DEREGISTER_AFTER"),
+    meck:new(rabbit_peer_discovery_httpc, []).
 
 init_per_testcase(_TC, Config) ->
     reset(),
     Config.
 
 end_per_testcase(_TC, Config) ->
-    reset(),
+    meck:unload(rabbit_peer_discovery_httpc),
     Config.
 
 
@@ -153,111 +167,108 @@ service_id_with_unset_address_test(_Config) ->
 service_ttl_default_test(_Config) ->
    ?assertEqual("30s", rabbit_peer_discovery_consul:service_ttl(30)).
 
+list_nodes_default_values_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+             fun(Scheme, Host, Port, Path, Args) ->
+               ?assertEqual("http", Scheme),
+               ?assertEqual("localhost", Host),
+               ?assertEqual(8500, Port),
+               ?assertEqual([v1, health, service, "rabbitmq"], Path),
+               ?assertEqual([passing], Args),
+               {error, "testing"}
+             end),
+           ?assertEqual({ok, {[], disc}}, rabbit_peer_discovery_consul:list_nodes()),
+           ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+list_nodes_without_acl_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+             fun(Scheme, Host, Port, Path, Args) ->
+               ?assertEqual("https", Scheme),
+               ?assertEqual("consul.service.consul", Host),
+               ?assertEqual(8501, Port),
+               ?assertEqual([v1, health, service, "rabbit"], Path),
+               ?assertEqual([passing], Args),
+               {error, "testing"}
+             end),
+           os:putenv("CONSUL_SCHEME", "https"),
+           os:putenv("CONSUL_HOST", "consul.service.consul"),
+           os:putenv("CONSUL_PORT", "8501"),
+           os:putenv("CONSUL_SVC", "rabbit"),
+           ?assertEqual({ok, {[], disc}}, rabbit_peer_discovery_consul:list_nodes()),
+           ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+list_nodes_with_acl_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+             fun(Scheme, Host, Port, Path, Args) ->
+               ?assertEqual("http", Scheme),
+               ?assertEqual("consul.service.consul", Host),
+               ?assertEqual(8500, Port),
+               ?assertEqual([v1, health, service, "rabbitmq"], Path),
+               ?assertEqual([passing, {token, "token-value"}], Args),
+               {error, "testing"}
+             end),
+           os:putenv("CONSUL_HOST", "consul.service.consul"),
+           os:putenv("CONSUL_PORT", "8500"),
+           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+           ?assertEqual({ok, {[], disc}}, rabbit_peer_discovery_consul:list_nodes()),
+           ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+list_nodes_with_cluster_name_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+             fun(Scheme, Host, Port, Path, Args) ->
+               ?assertEqual("http", Scheme),
+               ?assertEqual("consul.service.consul", Host),
+               ?assertEqual(8500, Port),
+               ?assertEqual([v1, health, service, "rabbitmq"], Path),
+               ?assertEqual([passing, {token, "token-value"}], Args),
+               {error, "testing"}
+             end),
+           os:putenv("CONSUL_HOST", "consul.service.consul"),
+           os:putenv("CONSUL_PORT", "8500"),
+           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+           ?assertEqual({ok, {[], disc}}, rabbit_peer_discovery_consul:list_nodes()),
+           ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+list_nodes_with_cluster_name_and_acl_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+             fun(Scheme, Host, Port, Path, Args) ->
+               ?assertEqual("http", Scheme),
+               ?assertEqual("localhost", Host),
+               ?assertEqual(8500, Port),
+               ?assertEqual([v1, health, service, "rabbitmq"], Path),
+               ?assertEqual([passing, {tag, "qa"}, {token, "token-value"}], Args),
+               {error, "testing"}
+             end),
+           os:putenv("CLUSTER_NAME", "qa"),
+           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+           ?assertEqual({ok, {[], disc}}, rabbit_peer_discovery_consul:list_nodes()),
+           ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
 
 %% nodelist_test() ->
 %%   {
 %%     foreach,
 %%     fun() ->
 %%       autocluster_testing:reset(),
-%%       meck:new(autocluster_httpc, []),
-%%       [autocluster_httpc]
+%%       meck:new(rabbit_peer_discovery_httpc, []),
+%%       [rabbit_peer_discovery_httpc]
 %%     end,
 %%     fun autocluster_testing:on_finish/1,
 %%     [
-%%       {"default values",
-%%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
-%%             fun(Scheme, Host, Port, Path, Args) ->
-%%               ?assertEqual("http", Scheme),
-%%               ?assertEqual("localhost", Host),
-%%               ?assertEqual(8500, Port),
-%%               ?assertEqual([v1, health, service, "rabbitmq"], Path),
-%%               ?assertEqual([passing], Args),
-%%               {error, "testing"}
-%%             end),
-%%           ?assertEqual({error, "testing"}, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
-%%         end},
-%%       {"without token",
-%%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
-%%             fun(Scheme, Host, Port, Path, Args) ->
-%%               ?assertEqual("https", Scheme),
-%%               ?assertEqual("consul.service.consul", Host),
-%%               ?assertEqual(8501, Port),
-%%               ?assertEqual([v1, health, service, "rabbit"], Path),
-%%               ?assertEqual([passing], Args),
-%%               {error, "testing"}
-%%             end),
-%%           os:putenv("CONSUL_SCHEME", "https"),
-%%           os:putenv("CONSUL_HOST", "consul.service.consul"),
-%%           os:putenv("CONSUL_PORT", "8501"),
-%%           os:putenv("CONSUL_SVC", "rabbit"),
-%%           ?assertEqual({error, "testing"}, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
-%%         end},
-%%       {"with token",
-%%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
-%%             fun(Scheme, Host, Port, Path, Args) ->
-%%               ?assertEqual("http", Scheme),
-%%               ?assertEqual("consul.service.consul", Host),
-%%               ?assertEqual(8500, Port),
-%%               ?assertEqual([v1, health, service, "rabbitmq"], Path),
-%%               ?assertEqual([passing, {token, "token-value"}], Args),
-%%               {error, "testing"}
-%%             end),
-%%           os:putenv("CONSUL_HOST", "consul.service.consul"),
-%%           os:putenv("CONSUL_PORT", "8500"),
-%%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
-%%           ?assertEqual({error, "testing"}, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
-%%         end},
-%%       {"with cluster name",
-%%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
-%%             fun(Scheme, Host, Port, Path, Args) ->
-%%               ?assertEqual("http", Scheme),
-%%               ?assertEqual("localhost", Host),
-%%               ?assertEqual(8500, Port),
-%%               ?assertEqual([v1, health, service, "rabbitmq"], Path),
-%%               ?assertEqual([passing, {tag,"bob"}], Args),
-%%               {error, "testing"}
-%%             end),
-%%           os:putenv("CLUSTER_NAME", "bob"),
-%%           ?assertEqual({error, "testing"}, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
-%%         end},
-%%       {"with cluster name and token",
-%%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
-%%             fun(Scheme, Host, Port, Path, Args) ->
-%%               ?assertEqual("http", Scheme),
-%%               ?assertEqual("localhost", Host),
-%%               ?assertEqual(8500, Port),
-%%               ?assertEqual([v1, health, service, "rabbitmq"], Path),
-%%               ?assertEqual([passing, {tag,"bob"}, {token, "token-value"}], Args),
-%%               {error, "testing"}
-%%             end),
-%%           os:putenv("CLUSTER_NAME", "bob"),
-%%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
-%%           ?assertEqual({error, "testing"}, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
-%%         end},
 %%       {"return result",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
+%%           meck:expect(rabbit_peer_discovery_httpc, get,
 %%             fun(_, _, _, _, _) ->
 %%               Body = "[{\"Node\": {\"Node\": \"rabbit2.internal.domain\", \"Address\": \"10.20.16.160\"}, \"Checks\": [{\"Node\": \"rabbit2.internal.domain\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit2.internal.domain\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}, {\"Node\": {\"Node\": \"rabbit1.internal.domain\", \"Address\": \"10.20.16.159\"}, \"Checks\": [{\"Node\": \"rabbit1.internal.domain\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit1.internal.domain\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}]",
 %%               rabbit_misc:json_decode(Body)
 %%             end),
 %%           Expectation = {ok,['rabbit@rabbit1', 'rabbit@rabbit2']},
 %%           ?assertEqual(Expectation, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"return result with consul long name",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
+%%           meck:expect(rabbit_peer_discovery_httpc, get,
 %%             fun(_, _, _, _, _) ->
 %%               Body = "[{\"Node\": {\"Node\": \"rabbit2\", \"Address\": \"10.20.16.160\"}, \"Checks\": [{\"Node\": \"rabbit2\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit2\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}, {\"Node\": {\"Node\": \"rabbit1\", \"Address\": \"10.20.16.159\"}, \"Checks\": [{\"Node\": \"rabbit1\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit1\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}]",
 %%               rabbit_misc:json_decode(Body)
@@ -265,11 +276,11 @@ service_ttl_default_test(_Config) ->
 %%           os:putenv("CONSUL_USE_LONGNAME", "true"),
 %%           Expectation = {ok,['rabbit@rabbit1.node.consul', 'rabbit@rabbit2.node.consul']},
 %%           ?assertEqual(Expectation, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"return result with long name and custom domain",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
+%%           meck:expect(rabbit_peer_discovery_httpc, get,
 %%             fun(_, _, _, _, _) ->
 %%               Body = "[{\"Node\": {\"Node\": \"rabbit2\", \"Address\": \"10.20.16.160\"}, \"Checks\": [{\"Node\": \"rabbit2\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit2\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}, {\"Node\": {\"Node\": \"rabbit1\", \"Address\": \"10.20.16.159\"}, \"Checks\": [{\"Node\": \"rabbit1\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit1\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}]",
 %%               rabbit_misc:json_decode(Body)
@@ -278,22 +289,22 @@ service_ttl_default_test(_Config) ->
 %%           os:putenv("CONSUL_DOMAIN", "mydomain"),
 %%           Expectation = {ok,['rabbit@rabbit1.node.mydomain', 'rabbit@rabbit2.node.mydomain']},
 %%           ?assertEqual(Expectation, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"return result with srv address",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
+%%           meck:expect(rabbit_peer_discovery_httpc, get,
 %%             fun(_, _, _, _, _) ->
 %%               Body = "[{\"Node\": {\"Node\": \"rabbit2.internal.domain\", \"Address\": \"10.20.16.160\"}, \"Checks\": [{\"Node\": \"rabbit2.internal.domain\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq:172.172.16.4.50\", \"Output\": \"\"}, {\"Node\": \"rabbit2.internal.domain\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"172.16.4.51\", \"Port\": 5672, \"ID\": \"rabbitmq:172.16.4.51\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}, {\"Node\": {\"Node\": \"rabbit1.internal.domain\", \"Address\": \"10.20.16.159\"}, \"Checks\": [{\"Node\": \"rabbit1.internal.domain\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit1.internal.domain\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"172.172.16.51\", \"Port\": 5672, \"ID\": \"rabbitmq:172.172.16.51\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}]",
 %%               rabbit_misc:json_decode(Body)
 %%             end),
 %%           Expectation = {ok,['rabbit@172.16.4.51','rabbit@172.172.16.51']},
 %%           ?assertEqual(Expectation, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"return result with warnings allowed",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
+%%           meck:expect(rabbit_peer_discovery_httpc, get,
 %%             fun(_, _, _, _, []) ->
 %%                     rabbit_misc:json_decode(with_warnings());
 %%                (_, _, _, _, [passing]) ->
@@ -302,11 +313,11 @@ service_ttl_default_test(_Config) ->
 %%           os:putenv("CONSUL_INCLUDE_NODES_WITH_WARNINGS", "true"),
 %%           Expectation = {ok,['rabbit@172.16.4.51']},
 %%           ?assertEqual(Expectation, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"return result with no warnings allowed",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
+%%           meck:expect(rabbit_peer_discovery_httpc, get,
 %%             fun(_, _, _, _, []) ->
 %%                     rabbit_misc:json_decode(with_warnings());
 %%                (_, _, _, _, [passing]) ->
@@ -314,7 +325,7 @@ service_ttl_default_test(_Config) ->
 %%             end),
 %%           Expectation = {ok,['rabbit@172.16.4.51', 'rabbit@172.172.16.51']},
 %%           ?assertEqual(Expectation, autocluster_consul:nodelist()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end}
 %%     ]
 %%   }.
@@ -325,18 +336,18 @@ service_ttl_default_test(_Config) ->
 %%     foreach,
 %%     fun() ->
 %%       autocluster_testing:reset(),
-%%       meck:new(autocluster_httpc, []),
+%%       meck:new(rabbit_peer_discovery_httpc, []),
 %%       meck:new(autocluster_util, [passthrough]),
 %%       meck:new(timer, [unstick, passthrough]),
 %%       meck:new(autocluster_log, []),
-%%       [autocluster_httpc, autocluster_util, timer, autocluster_log]
+%%       [rabbit_peer_discovery_httpc, autocluster_util, timer, autocluster_log]
 %%     end,
 %%     fun autocluster_testing:on_finish/1,
 %%     [
 %%       {"default values",
 %%         fun() ->
 %%           meck:expect(autocluster_log, debug, fun(_Message) -> ok end),
-%%           meck:expect(autocluster_httpc, post,
+%%           meck:expect(rabbit_peer_discovery_httpc, post,
 %%             fun(Scheme, Host, Port, Path, Args, Body) ->
 %%               ?assertEqual("http", Scheme),
 %%               ?assertEqual("localhost", Host),
@@ -357,11 +368,11 @@ service_ttl_default_test(_Config) ->
 %%           ?assertEqual(ok, autocluster_consul:register()),
 %%           ?assert(meck:validate(autocluster_log)),
 %%           ?assert(meck:validate(timer)),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"with cluster",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, post,
+%%           meck:expect(rabbit_peer_discovery_httpc, post,
 %%             fun(Scheme, Host, Port, Path, Args, Body) ->
 %%               ?assertEqual("http", Scheme),
 %%               ?assertEqual("localhost", Host),
@@ -374,10 +385,10 @@ service_ttl_default_test(_Config) ->
 %%             end),
 %%           os:putenv("CLUSTER_NAME", "test-rabbit"),
 %%           ?assertEqual(ok, autocluster_consul:register()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"without token",  fun() ->
-%%           meck:expect(autocluster_httpc, post,
+%%           meck:expect(rabbit_peer_discovery_httpc, post,
 %%             fun(Scheme, Host, Port, Path, Args, Body) ->
 %%               ?assertEqual("https", Scheme),
 %%               ?assertEqual("consul.service.consul", Host),
@@ -395,11 +406,11 @@ service_ttl_default_test(_Config) ->
 %%           os:putenv("CONSUL_SVC_ADDR", "10.0.0.1"),
 %%           os:putenv("CONSUL_SVC_PORT", "5671"),
 %%           ?assertEqual(ok, autocluster_consul:register()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"with token",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, post,
+%%           meck:expect(rabbit_peer_discovery_httpc, post,
 %%             fun(Scheme, Host, Port, Path, Args, Body) ->
 %%               ?assertEqual("http", Scheme),
 %%               ?assertEqual("consul.service.consul", Host),
@@ -414,13 +425,13 @@ service_ttl_default_test(_Config) ->
 %%           os:putenv("CONSUL_PORT", "8500"),
 %%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
 %%           ?assertEqual(ok, autocluster_consul:register()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"with auto addr",
 %%         fun() ->
 %%           meck:expect(autocluster_util, node_hostname, fun(true) -> "bob.consul.node";
 %%                                                           (false) -> "bob" end),
-%%           meck:expect(autocluster_httpc, post,
+%%           meck:expect(rabbit_peer_discovery_httpc, post,
 %%             fun(Scheme, Host, Port, Path, Args, Body) ->
 %%               ?assertEqual("http", Scheme),
 %%               ?assertEqual("consul.service.consul", Host),
@@ -436,14 +447,14 @@ service_ttl_default_test(_Config) ->
 %%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
 %%           os:putenv("CONSUL_SVC_ADDR_AUTO", "true"),
 %%           ?assertEqual(ok, autocluster_consul:register()),
-%%           ?assert(meck:validate(autocluster_httpc)),
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
 %%           ?assert(meck:validate(autocluster_util))
 %%         end},
 %%       {"with auto addr from nodename",
 %%         fun() ->
 %%           meck:expect(autocluster_util, node_hostname, fun(true) -> "bob.consul.node";
 %%                                                           (false) -> "bob" end),
-%%           meck:expect(autocluster_httpc, post,
+%%           meck:expect(rabbit_peer_discovery_httpc, post,
 %%             fun(Scheme, Host, Port, Path, Args, Body) ->
 %%               ?assertEqual("http", Scheme),
 %%               ?assertEqual("consul.service.consul", Host),
@@ -460,7 +471,7 @@ service_ttl_default_test(_Config) ->
 %%           os:putenv("CONSUL_SVC_ADDR_AUTO", "true"),
 %%           os:putenv("CONSUL_SVC_ADDR_NODENAME", "true"),
 %%           ?assertEqual(ok, autocluster_consul:register()),
-%%           ?assert(meck:validate(autocluster_httpc)),
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
 %%           ?assert(meck:validate(autocluster_util))
 %%         end},
 %%       {"with auto addr nic",
@@ -470,7 +481,7 @@ service_ttl_default_test(_Config) ->
 %%               ?assertEqual("en0", NIC),
 %%               {ok, "172.16.4.50"}
 %%             end),
-%%           meck:expect(autocluster_httpc, post,
+%%           meck:expect(rabbit_peer_discovery_httpc, post,
 %%             fun(Scheme, Host, Port, Path, Args, Body) ->
 %%               ?assertEqual("http", Scheme),
 %%               ?assertEqual("consul.service.consul", Host),
@@ -486,7 +497,7 @@ service_ttl_default_test(_Config) ->
 %%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
 %%           os:putenv("CONSUL_SVC_ADDR_NIC", "en0"),
 %%           ?assertEqual(ok, autocluster_consul:register()),
-%%           ?assert(meck:validate(autocluster_httpc)),
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
 %%           ?assert(meck:validate(autocluster_util))
 %%         end
 %%       },
@@ -494,7 +505,7 @@ service_ttl_default_test(_Config) ->
 %%         meck:expect(timer, apply_interval, fun(_, _, _, _) ->
 %%           {error, "should not be called"}
 %%          end),
-%%         meck:expect(autocluster_httpc, post, fun (_, _, _, _, _, _) -> {ok, []} end),
+%%         meck:expect(rabbit_peer_discovery_httpc, post, fun (_, _, _, _, _, _) -> {ok, []} end),
 %%         os:putenv("CONSUL_SVC_TTL", ""),
 %%         ?assertEqual(ok, autocluster_consul:register()),
 %%         ?assert(meck:validate(timer))
@@ -510,14 +521,14 @@ service_ttl_default_test(_Config) ->
 %%     [
 %%       {"on error",
 %%         fun() ->
-%%           meck:new(autocluster_httpc),
-%%           meck:expect(autocluster_httpc, post,
+%%           meck:new(rabbit_peer_discovery_httpc),
+%%           meck:expect(rabbit_peer_discovery_httpc, post,
 %%             fun(_Scheme, _Host, _Port, _Path, _Args, _body) ->
 %%               {error, "testing"}
 %%             end),
 %%           ?assertEqual({error, "testing"}, autocluster_consul:register()),
-%%           ?assert(meck:validate(autocluster_httpc)),
-%%           meck:unload(autocluster_httpc)
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
+%%           meck:unload(rabbit_peer_discovery_httpc)
 %%         end
 %%       },
 %%       {"on json encode error",
@@ -541,15 +552,15 @@ service_ttl_default_test(_Config) ->
 %%     foreach,
 %%     fun() ->
 %%       autocluster_testing:reset(),
-%%       meck:new(autocluster_httpc, []),
+%%       meck:new(rabbit_peer_discovery_httpc, []),
 %%       meck:new(autocluster_log, []),
-%%       [autocluster_httpc, autocluster_log]
+%%       [rabbit_peer_discovery_httpc, autocluster_log]
 %%     end,
 %%     fun autocluster_testing:on_finish/1,
 %%     [
 %%       {"default values",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
+%%           meck:expect(rabbit_peer_discovery_httpc, get,
 %%             fun(Scheme, Host, Port, Path, Args) ->
 %%               ?assertEqual("http", Scheme),
 %%               ?assertEqual("localhost", Host),
@@ -559,11 +570,11 @@ service_ttl_default_test(_Config) ->
 %%               {ok, []}
 %%             end),
 %%           ?assertEqual(ok, autocluster_consul:send_health_check_pass()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"without token",
 %%         fun() ->
-%%           meck:expect(autocluster_httpc, get,
+%%           meck:expect(rabbit_peer_discovery_httpc, get,
 %%             fun(Scheme, Host, Port, Path, Args) ->
 %%               ?assertEqual("https", Scheme),
 %%               ?assertEqual("consul.service.consul", Host),
@@ -577,10 +588,10 @@ service_ttl_default_test(_Config) ->
 %%           os:putenv("CONSUL_PORT", "8501"),
 %%           os:putenv("CONSUL_SVC", "rabbit"),
 %%           ?assertEqual(ok, autocluster_consul:send_health_check_pass()),
-%%           ?assert(meck:validate(autocluster_httpc))
+%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"with token", fun() ->
-%%         meck:expect(autocluster_httpc, get,
+%%         meck:expect(rabbit_peer_discovery_httpc, get,
 %%           fun(Scheme, Host, Port, Path, Args) ->
 %%             ?assertEqual("http", Scheme),
 %%             ?assertEqual("consul.service.consul", Host),
@@ -593,18 +604,18 @@ service_ttl_default_test(_Config) ->
 %%         os:putenv("CONSUL_PORT", "8500"),
 %%         os:putenv("CONSUL_ACL_TOKEN", "token-value"),
 %%         ?assertEqual(ok, autocluster_consul:send_health_check_pass()),
-%%         ?assert(meck:validate(autocluster_httpc))
+%%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%        end},
 %%       {"on error", fun() ->
 %%         meck:expect(autocluster_log, error, fun(_Message, _Args) ->
 %%           ok
 %%           end),
-%%         meck:expect(autocluster_httpc, get,
+%%         meck:expect(rabbit_peer_discovery_httpc, get,
 %%           fun(_Scheme, _Host, _Port, _Path, _Args) ->
 %%             {error, "testing"}
 %%           end),
 %%         ?assertEqual(ok, autocluster_consul:send_health_check_pass()),
-%%         ?assert(meck:validate(autocluster_httpc)),
+%%         ?assert(meck:validate(rabbit_peer_discovery_httpc)),
 %%         ?assert(meck:validate(autocluster_log))
 %%        end}
 %%     ]
@@ -616,13 +627,13 @@ service_ttl_default_test(_Config) ->
 %%     foreach,
 %%     fun() ->
 %%       autocluster_testing:reset(),
-%%       meck:new(autocluster_httpc, []),
-%%       [autocluster_httpc]
+%%       meck:new(rabbit_peer_discovery_httpc, []),
+%%       [rabbit_peer_discovery_httpc]
 %%     end,
 %%     fun autocluster_testing:on_finish/1,
 %%     [
 %%       {"default values", fun() ->
-%%         meck:expect(autocluster_httpc, get,
+%%         meck:expect(rabbit_peer_discovery_httpc, get,
 %%           fun(Scheme, Host, Port, Path, Args) ->
 %%             ?assertEqual("http", Scheme),
 %%             ?assertEqual("localhost", Host),
@@ -632,10 +643,10 @@ service_ttl_default_test(_Config) ->
 %%             {ok, []}
 %%           end),
 %%         ?assertEqual(ok, autocluster_consul:unregister()),
-%%         ?assert(meck:validate(autocluster_httpc))
+%%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%                          end},
 %%       {"without token", fun() ->
-%%         meck:expect(autocluster_httpc, get,
+%%         meck:expect(rabbit_peer_discovery_httpc, get,
 %%           fun(Scheme, Host, Port, Path, Args) ->
 %%             ?assertEqual("https", Scheme),
 %%             ?assertEqual("consul.service.consul", Host),
@@ -651,10 +662,10 @@ service_ttl_default_test(_Config) ->
 %%         os:putenv("CONSUL_SVC_ADDR", "10.0.0.1"),
 %%         os:putenv("CONSUL_SVC_PORT", "5671"),
 %%         ?assertEqual(ok, autocluster_consul:unregister()),
-%%         ?assert(meck:validate(autocluster_httpc))
+%%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%        end},
 %%       {"with token", fun() ->
-%%         meck:expect(autocluster_httpc, get,
+%%         meck:expect(rabbit_peer_discovery_httpc, get,
 %%           fun(Scheme, Host, Port, Path, Args) ->
 %%             ?assertEqual("http", Scheme),
 %%             ?assertEqual("consul.service.consul", Host),
@@ -667,15 +678,15 @@ service_ttl_default_test(_Config) ->
 %%         os:putenv("CONSUL_PORT", "8500"),
 %%         os:putenv("CONSUL_ACL_TOKEN", "token-value"),
 %%         ?assertEqual(ok, autocluster_consul:unregister()),
-%%         ?assert(meck:validate(autocluster_httpc))
+%%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%        end},
 %%       {"on error", fun() ->
-%%         meck:expect(autocluster_httpc, get,
+%%         meck:expect(rabbit_peer_discovery_httpc, get,
 %%           fun(_Scheme, _Host, _Port, _Path, _Args) ->
 %%             {error, "testing"}
 %%           end),
 %%         ?assertEqual({error, "testing"}, autocluster_consul:unregister()),
-%%         ?assert(meck:validate(autocluster_httpc))
+%%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%        end}
 %%     ]
 %%   }.
