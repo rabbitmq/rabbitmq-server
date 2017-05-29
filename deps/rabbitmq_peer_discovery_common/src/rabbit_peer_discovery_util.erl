@@ -43,6 +43,8 @@
 getenv(Key) ->
   process_getenv_value(Key, os:getenv(Key)).
 
+-define(DEFAULT_NODE_PREFIX, "rabbit").
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -269,8 +271,12 @@ node_name_parse(_, _, Parts) ->
 %%--------------------------------------------------------------------
 -spec node_prefix() -> string().
 node_prefix() ->
-  Value = rabbit_data_coercion:to_list(getenv("RABBITMQ_NODENAME")),
-  lists:nth(1, string:tokens(Value, "@")).
+  case getenv("RABBITMQ_NODENAME") of
+      false -> ?DEFAULT_NODE_PREFIX;
+      Value ->
+          rabbit_data_coercion:to_list(getenv("RABBITMQ_NODENAME")),
+          lists:nth(1, string:tokens(Value, "@"))
+  end.
 
 
 %%--------------------------------------------------------------------
