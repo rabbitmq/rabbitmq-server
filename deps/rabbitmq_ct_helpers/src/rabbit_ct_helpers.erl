@@ -47,8 +47,14 @@
 
 log_environment() ->
     Vars = lists:sort(fun(A, B) -> A =< B end, os:getenv()),
-    ct:pal(?LOW_IMPORTANCE, "Environment variables:~n~s", [
-        [io_lib:format("  ~s~n", [V]) || V <- Vars]]).
+    case file:native_name_encoding() of
+        latin1 ->
+            ct:pal(?LOW_IMPORTANCE, "Environment variables:~n~s",
+                   [[io_lib:format("  ~s~n", [V]) || V <- Vars]]);
+        utf8 ->
+            ct:pal(?LOW_IMPORTANCE, "Environment variables:~n~ts",
+                   [[io_lib:format("  ~ts~n", [V]) || V <- Vars]])
+    end.
 
 run_setup_steps(Config) ->
     run_setup_steps(Config, []).
