@@ -25,7 +25,7 @@
 all() ->
     [
      {group, registration_body_tests}
-     %% , {group, registration_tests}
+     , {group, registration_tests}
      , {group, list_node_tests}
      %% , {group, other_tests}
     ].
@@ -43,11 +43,11 @@ groups() ->
                  service_id_with_unset_address_test,
                  service_ttl_default_test
                 ]}
-     %% , {registration_tests, [], [
-     %%             %% registeration_test,
-     %%             %% registeration_failure_test,
-     %%             %% unregisteration_test
-     %%            ]},
+     , {registration_tests, [], [
+                 registration_with_all_default_values_test,
+                 registration_with_cluster_name_test,
+                 registration_without_acl_token_test
+                ]}
      , {list_node_tests, [], [
                  list_nodes_default_values_test,
                  list_nodes_without_acl_token_test,
@@ -66,7 +66,6 @@ groups() ->
      %%             %% send_health_check_pass_test,
      %%            ]}
     ].
-
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config)  -> Config.
@@ -89,13 +88,26 @@ reset() ->
                                  "CONSUL_DEREGISTER_AFTER",
                                  "CONSUL_INCLUDE_NODES_WITH_WARNINGS",
                                  "CONSUL_USE_LONGNAME"
-                                ]],
-    meck:new(rabbit_peer_discovery_httpc, []).
+                                ]].
 
+init_per_testcase(TC, Config) when TC =:= registration_with_all_default_values_test;
+                                   TC =:= registration_with_cluster_name_test;
+                                   TC =:= registration_without_acl_token_test ->
+    reset(),
+    %%meck:new(rabbit_peer_discovery_util, [passthrough]),
+    meck:new(rabbit_log, []),
+    meck:new(rabbit_peer_discovery_httpc, []),
+    Config;
 init_per_testcase(_TC, Config) ->
     reset(),
+    meck:new(rabbit_peer_discovery_httpc, []),
     Config.
 
+end_per_testcase(TC, Config) when TC =:= registration_with_all_default_values_test ->
+    [meck:unload(M) || M <- [rabbit_peer_discovery_httpc,
+                             %% rabbit_peer_discovery_util,
+                             rabbit_log]],
+    Config;
 end_per_testcase(_TC, Config) ->
     meck:unload(rabbit_peer_discovery_httpc),
     Config.
@@ -376,6 +388,61 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
                         rabbit_peer_discovery_consul:list_nodes()),
            ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
+registration_with_all_default_values_test(_Config) ->
+          meck:expect(rabbit_log, debug, fun(_Message) -> ok end),
+          meck:expect(rabbit_peer_discovery_httpc, post,
+            fun(Scheme, Host, Port, Path, Args, Body) ->
+              ?assertEqual("http", Scheme),
+              ?assertEqual("localhost", Host),
+              ?assertEqual(8500, Port),
+              ?assertEqual([v1, agent, service, register], Path),
+              ?assertEqual([], Args),
+              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
+              ?assertEqual(Expect, Body),
+              {ok, []}
+            end),
+          ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
+          ?assert(meck:validate(rabbit_log)),
+          ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+registration_with_cluster_name_test(_Config) ->
+          meck:expect(rabbit_peer_discovery_httpc, post,
+            fun(Scheme, Host, Port, Path, Args, Body) ->
+              ?assertEqual("http", Scheme),
+              ?assertEqual("localhost", Host),
+              ?assertEqual(8500, Port),
+              ?assertEqual([v1, agent, service, register], Path),
+              ?assertEqual([], Args),
+              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"},\"Tags\":[\"test-rabbit\"]}">>,
+              ?assertEqual(Expect, Body),
+              {ok, []}
+            end),
+          os:putenv("CLUSTER_NAME", "test-rabbit"),
+          ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
+          ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+registration_without_acl_token_test(_Config) ->
+          meck:expect(rabbit_peer_discovery_httpc, post,
+            fun(Scheme, Host, Port, Path, Args, Body) ->
+              ?assertEqual("https", Scheme),
+              ?assertEqual("consul.service.consul", Host),
+              ?assertEqual(8501, Port),
+              ?assertEqual([v1, agent, service, register], Path),
+              ?assertEqual([], Args),
+              Expect = <<"{\"ID\":\"rabbit:10.0.0.1\",\"Name\":\"rabbit\",\"Address\":\"10.0.0.1\",\"Port\":5671,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
+              ?assertEqual(Expect, Body),
+              {ok, []}
+            end),
+          os:putenv("CONSUL_SCHEME", "https"),
+          os:putenv("CONSUL_HOST", "consul.service.consul"),
+          os:putenv("CONSUL_PORT", "8501"),
+          os:putenv("CONSUL_SVC", "rabbit"),
+          os:putenv("CONSUL_SVC_ADDR", "10.0.0.1"),
+          os:putenv("CONSUL_SVC_PORT", "5671"),
+          ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
+          ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+
 %% registeration_test() ->
 %%   {
 %%     foreach,
@@ -389,49 +456,6 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%     end,
 %%     fun autocluster_testing:on_finish/1,
 %%     [
-%%       {"default values",
-%%         fun() ->
-%%           meck:expect(autocluster_log, debug, fun(_Message) -> ok end),
-%%           meck:expect(rabbit_peer_discovery_httpc, post,
-%%             fun(Scheme, Host, Port, Path, Args, Body) ->
-%%               ?assertEqual("http", Scheme),
-%%               ?assertEqual("localhost", Host),
-%%               ?assertEqual(8500, Port),
-%%               ?assertEqual([v1, agent, service, register], Path),
-%%               ?assertEqual([], Args),
-%%               Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
-%%               ?assertEqual(Expect, Body),
-%%               {ok, []}
-%%             end),
-%%           meck:expect(timer, apply_interval, fun(Interval, M, F, A) ->
-%%             ?assertEqual(Interval, 15000),
-%%             ?assertEqual(M, autocluster_consul),
-%%             ?assertEqual(F, send_health_check_pass),
-%%             ?assertEqual(A, []),
-%%             {ok, "started"}
-%%           end),
-%%           ?assertEqual(ok, autocluster_consul:register()),
-%%           ?assert(meck:validate(autocluster_log)),
-%%           ?assert(meck:validate(timer)),
-%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
-%%         end},
-%%       {"with cluster",
-%%         fun() ->
-%%           meck:expect(rabbit_peer_discovery_httpc, post,
-%%             fun(Scheme, Host, Port, Path, Args, Body) ->
-%%               ?assertEqual("http", Scheme),
-%%               ?assertEqual("localhost", Host),
-%%               ?assertEqual(8500, Port),
-%%               ?assertEqual([v1, agent, service, register], Path),
-%%               ?assertEqual([], Args),
-%%               Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"},\"Tags\":[\"test-rabbit\"]}">>,
-%%               ?assertEqual(Expect, Body),
-%%               {ok, []}
-%%             end),
-%%           os:putenv("CLUSTER_NAME", "test-rabbit"),
-%%           ?assertEqual(ok, autocluster_consul:register()),
-%%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
-%%         end},
 %%       {"without token",  fun() ->
 %%           meck:expect(rabbit_peer_discovery_httpc, post,
 %%             fun(Scheme, Host, Port, Path, Args, Body) ->
@@ -450,7 +474,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%           os:putenv("CONSUL_SVC", "rabbit"),
 %%           os:putenv("CONSUL_SVC_ADDR", "10.0.0.1"),
 %%           os:putenv("CONSUL_SVC_PORT", "5671"),
-%%           ?assertEqual(ok, autocluster_consul:register()),
+%%           ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
 %%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"with token",
@@ -469,7 +493,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%           os:putenv("CONSUL_HOST", "consul.service.consul"),
 %%           os:putenv("CONSUL_PORT", "8500"),
 %%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
-%%           ?assertEqual(ok, autocluster_consul:register()),
+%%           ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
 %%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"with auto addr",
@@ -491,7 +515,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%           os:putenv("CONSUL_PORT", "8500"),
 %%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
 %%           os:putenv("CONSUL_SVC_ADDR_AUTO", "true"),
-%%           ?assertEqual(ok, autocluster_consul:register()),
+%%           ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
 %%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
 %%           ?assert(meck:validate(autocluster_util))
 %%         end},
@@ -515,7 +539,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
 %%           os:putenv("CONSUL_SVC_ADDR_AUTO", "true"),
 %%           os:putenv("CONSUL_SVC_ADDR_NODENAME", "true"),
-%%           ?assertEqual(ok, autocluster_consul:register()),
+%%           ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
 %%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
 %%           ?assert(meck:validate(autocluster_util))
 %%         end},
@@ -541,7 +565,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%           os:putenv("CONSUL_PORT", "8500"),
 %%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
 %%           os:putenv("CONSUL_SVC_ADDR_NIC", "en0"),
-%%           ?assertEqual(ok, autocluster_consul:register()),
+%%           ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
 %%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
 %%           ?assert(meck:validate(autocluster_util))
 %%         end
@@ -552,7 +576,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%          end),
 %%         meck:expect(rabbit_peer_discovery_httpc, post, fun (_, _, _, _, _, _) -> {ok, []} end),
 %%         os:putenv("CONSUL_SVC_TTL", ""),
-%%         ?assertEqual(ok, autocluster_consul:register()),
+%%         ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
 %%         ?assert(meck:validate(timer))
 %%        end}
 %%     ]
@@ -571,20 +595,20 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%             fun(_Scheme, _Host, _Port, _Path, _Args, _body) ->
 %%               {error, "testing"}
 %%             end),
-%%           ?assertEqual({error, "testing"}, autocluster_consul:register()),
+%%           ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:register()),
 %%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
 %%           meck:unload(rabbit_peer_discovery_httpc)
 %%         end
 %%       },
 %%       {"on json encode error",
 %%         fun() ->
-%%           meck:new(autocluster_consul, [passthrough]),
+%%           meck:new(rabbit_peer_discovery_consul, [passthrough]),
 %%           meck:new(autocluster_log, [passthrough]),
-%%           meck:expect(autocluster_consul, build_registration_body, 0, {foo}),
+%%           meck:expect(rabbit_peer_discovery_consul, build_registration_body, 0, {foo}),
 %%           meck:expect(autocluster_log, error, 2, ok),
-%%           ?assertEqual({error,{bad_term,{foo}}}, autocluster_consul:register()),
-%%           ?assert(meck:validate(autocluster_consul)),
-%%           meck:unload(autocluster_consul),
+%%           ?assertEqual({error,{bad_term,{foo}}}, rabbit_peer_discovery_consul:register()),
+%%           ?assert(meck:validate(rabbit_peer_discovery_consul)),
+%%           meck:unload(rabbit_peer_discovery_consul),
 %%           meck:unload(autocluster_log)
 %%         end
 %%       }
@@ -614,7 +638,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%               ?assertEqual([], Args),
 %%               {ok, []}
 %%             end),
-%%           ?assertEqual(ok, autocluster_consul:send_health_check_pass()),
+%%           ?assertEqual(ok, rabbit_peer_discovery_consul:send_health_check_pass()),
 %%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"without token",
@@ -632,7 +656,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%           os:putenv("CONSUL_HOST", "consul.service.consul"),
 %%           os:putenv("CONSUL_PORT", "8501"),
 %%           os:putenv("CONSUL_SVC", "rabbit"),
-%%           ?assertEqual(ok, autocluster_consul:send_health_check_pass()),
+%%           ?assertEqual(ok, rabbit_peer_discovery_consul:send_health_check_pass()),
 %%           ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%         end},
 %%       {"with token", fun() ->
@@ -648,7 +672,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%         os:putenv("CONSUL_HOST", "consul.service.consul"),
 %%         os:putenv("CONSUL_PORT", "8500"),
 %%         os:putenv("CONSUL_ACL_TOKEN", "token-value"),
-%%         ?assertEqual(ok, autocluster_consul:send_health_check_pass()),
+%%         ?assertEqual(ok, rabbit_peer_discovery_consul:send_health_check_pass()),
 %%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%        end},
 %%       {"on error", fun() ->
@@ -659,7 +683,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%           fun(_Scheme, _Host, _Port, _Path, _Args) ->
 %%             {error, "testing"}
 %%           end),
-%%         ?assertEqual(ok, autocluster_consul:send_health_check_pass()),
+%%         ?assertEqual(ok, rabbit_peer_discovery_consul:send_health_check_pass()),
 %%         ?assert(meck:validate(rabbit_peer_discovery_httpc)),
 %%         ?assert(meck:validate(autocluster_log))
 %%        end}
@@ -687,7 +711,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%             ?assertEqual([], Args),
 %%             {ok, []}
 %%           end),
-%%         ?assertEqual(ok, autocluster_consul:unregister()),
+%%         ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
 %%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%                          end},
 %%       {"without token", fun() ->
@@ -706,7 +730,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%         os:putenv("CONSUL_SVC", "rabbit"),
 %%         os:putenv("CONSUL_SVC_ADDR", "10.0.0.1"),
 %%         os:putenv("CONSUL_SVC_PORT", "5671"),
-%%         ?assertEqual(ok, autocluster_consul:unregister()),
+%%         ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
 %%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%        end},
 %%       {"with token", fun() ->
@@ -722,7 +746,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%         os:putenv("CONSUL_HOST", "consul.service.consul"),
 %%         os:putenv("CONSUL_PORT", "8500"),
 %%         os:putenv("CONSUL_ACL_TOKEN", "token-value"),
-%%         ?assertEqual(ok, autocluster_consul:unregister()),
+%%         ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
 %%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%        end},
 %%       {"on error", fun() ->
@@ -730,7 +754,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 %%           fun(_Scheme, _Host, _Port, _Path, _Args) ->
 %%             {error, "testing"}
 %%           end),
-%%         ?assertEqual({error, "testing"}, autocluster_consul:unregister()),
+%%         ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:unregister()),
 %%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
 %%        end}
 %%     ]
