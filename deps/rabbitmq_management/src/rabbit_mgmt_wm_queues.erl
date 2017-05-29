@@ -73,11 +73,11 @@ augmented(ReqData, Context) ->
 %%--------------------------------------------------------------------
 %% Private helpers
 
-%% XXX Implement full check to accept all valid sorts, not only the default one
-is_sort_order_compatible_with_basic(["vhost", "name"]) ->
-    true;
-is_sort_order_compatible_with_basic(_) ->
-    false.
+is_sort_order_compatible_with_basic(MentionedSortColumns) ->
+    SafeColumns = ["vhost", "name", "durable", "auto_delete", "exclusive",
+                   "owner_pid", "arguments", "pid", "state"],
+    SafeColumnsSet = sets:from_list(SafeColumns),
+    sets:is_subset(sets:from_list(MentionedSortColumns), SafeColumnsSet).
 
 augment(Basic, ReqData) ->
     rabbit_mgmt_db:augment_queues(Basic, rabbit_mgmt_util:range_ceil(ReqData), basic).
