@@ -145,13 +145,13 @@ assert_code(CodesExpected, CodeAct, Type, Path, Body) when is_list(CodesExpected
         true ->
             ok;
         false ->
-            throw({expected, CodesExpected, got, CodeAct, type, Type,
+            error({expected, CodesExpected, got, CodeAct, type, Type,
                    path, Path, body, Body})
     end;
 assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     case CodeExp of
         CodeAct -> ok;
-        _       -> throw({expected, CodeExp, got, CodeAct, type, Type,
+        _       -> error({expected, CodeExp, got, CodeAct, type, Type,
                           path, Path, body, Body})
     end.
 
@@ -170,17 +170,17 @@ cleanup(I) ->
 assert_list(Exp, Act) ->
     case length(Exp) == length(Act) of
         true  -> ok;
-        false -> throw({expected, Exp, actual, Act})
+        false -> error({expected, Exp, actual, Act})
     end,
     [case length(lists:filter(fun(ActI) -> test_item(ExpI, ActI) end, Act)) of
          1 -> ok;
-         N -> throw({found, N, ExpI, in, Act})
+         N -> error({found, N, ExpI, in, Act})
      end || ExpI <- Exp].
 
 assert_item(Exp, Act) ->
     case test_item0(Exp, Act) of
         [] -> ok;
-        Or -> throw(Or)
+        Or -> error(Or)
     end.
 
 test_item(Exp, Act) ->
@@ -196,7 +196,7 @@ test_item0(Exp, Act) ->
 assert_keys(Exp, Act) ->
     case test_key0(Exp, Act) of
         [] -> ok;
-        Or -> throw(Or)
+        Or -> error(Or)
     end.
 
 test_key0(Exp, Act) ->
@@ -205,7 +205,7 @@ test_key0(Exp, Act) ->
 assert_no_keys(NotExp, Act) ->
     case test_no_key0(NotExp, Act) of
         [] -> ok;
-        Or -> throw(Or)
+        Or -> error(Or)
     end.
 
 test_no_key0(Exp, Act) ->
