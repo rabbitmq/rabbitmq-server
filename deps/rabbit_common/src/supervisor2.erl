@@ -880,7 +880,8 @@ do_restart_delay({RestartType, Delay}, Reason, Child, State) ->
             _TRef = erlang:send_after(trunc(Delay*1000), self(),
                                       {delayed_restart,
                                        {{RestartType, Delay}, Reason, Child}}),
-            {ok, state_del_child(Child, State)}
+            OldPid = Child#child.pid,
+            {ok, replace_child(Child#child{pid=restarting(OldPid)}, State)}
     end.
 
 restart(Child, State) ->
