@@ -679,7 +679,7 @@ bindings_post_test(Config) ->
     "../../../../%2F/e/myexchange/q/myqueue/~" = pget("location", Headers1),
     Headers2 = http_post(Config, "/bindings/%2f/e/myexchange/q/myqueue", BArgs, [?CREATED, ?NO_CONTENT]),
     %% Args hash is calculated from a table, generated from args.
-    Hash = rabbit_misc:base64url(erlang:md5(term_to_binary([{<<"foo">>,longstr,<<"bar">>}]))),
+    Hash = table_hash([{<<"foo">>,longstr,<<"bar">>}]),
     PropertiesKey = "routing~" ++ Hash,
     PropertiesKeyBin = list_to_binary(PropertiesKey),
     "../../../../%2F/e/myexchange/q/myqueue/" ++ PropertiesKey =
@@ -1244,13 +1244,20 @@ arguments_test(Config) ->
         pget(arguments, http_get(Config, "/exchanges/%2f/myexchange", ?OK)),
     [{'x-expires', 1800000}] =
         pget(arguments, http_get(Config, "/queues/%2f/myqueue", ?OK)),
-    true = lists:sort([{'x-match', <<"all">>}, {foo, <<"bar">>}]) =:=
-    lists:sort(pget(arguments,
-            http_get(Config, "/bindings/%2f/e/myexchange/q/myqueue/" ++
-                     "~nXOkVwqZzUOdS9_HcBWheg", ?OK))),
+    ArgsTable = [{<<"foo">>,longstr,<<"bar">>}, {<<"x-match">>, longstr, <<"all">>}],
+    Hash = table_hash(ArgsTable),
+    PropertiesKey = [$~] ++ Hash,
+    Expected = lists:sort([{'x-match', <<"all">>}, {foo, <<"bar">>}]),
+    Actual = lists:sort(pget(arguments,
+                http_get(Config, "/bindings/%2f/e/myexchange/q/myqueue/" ++
+                         PropertiesKey, ?OK))),
+    Expected = Actual,
     http_delete(Config, "/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete(Config, "/queues/%2f/myqueue", ?NO_CONTENT),
     passed.
+
+table_hash(Table) ->
+    rabbit_misc:base64url(erlang:md5(term_to_binary(Table))).
 
 arguments_table_test(Config) ->
     Args = [{'upstreams', [<<"amqp://localhost/%2f/upstream1">>,
