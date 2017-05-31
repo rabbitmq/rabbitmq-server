@@ -12,7 +12,7 @@ endef
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-DEPS = rabbit_common rabbitmq_peer_discovery_common rabbit
+DEPS = rabbit_common rabbitmq_peer_discovery_common rabbitmq_aws rabbit
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers ct_helper
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
 
