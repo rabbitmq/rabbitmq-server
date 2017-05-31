@@ -29,7 +29,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   end
 
   def output({:ok, {[], _}}, _options) do
-      {:ok, "No peers discovered"}
+      {:error, RabbitMQ.CLI.Core.ExitCodes.exit_ok(), "No peers discovered"}
   end
   def output({:ok, {nodes, _}}, _options) do
     {:ok, nodes}
