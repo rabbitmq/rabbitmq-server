@@ -85,32 +85,8 @@ simple(Config) ->
     Dest = ?config(destq, Config),
     with_session(Config,
       fun (Sess) ->
-              shovel_test_utils:set_param(
-                Config,
-                <<"test">>, [{<<"src-protocol">>, <<"amqp10">>},
-                             {<<"src-address">>, Src},
-                             {<<"dest-protocol">>, <<"amqp10">>},
-                             {<<"dest-address">>, Dest},
-                             {<<"dest-add-forward-headers">>, true},
-                             {<<"dest-add-timestamp-header">>, true},
-                             {<<"dest-application-properties">>,
-                              [{<<"app-prop-key">>, <<"app-prop-value">>}]},
-                             {<<"dest-properties">>,
-                              [{<<"user_id">>, <<"guest">>}]},
-                             {<<"dest-message-annotations">>,
-                              [{<<"message-ann-key">>, <<"message-ann-value">>}]}
-                            ]),
-              Msg = publish_expect(Sess, Src, Dest, <<"tag1">>,
-                                   <<"hello">>),
-              ?assertMatch(#{user_id := <<"guest">>,
-                             creation_time := _}, amqp10_msg:properties(Msg)),
-              ?assertMatch(#{<<"shovel-name">> := <<"test">>,
-                             <<"shovel-type">> := <<"dynamic">>,
-                             <<"shovelled-by">> := _,
-                             <<"app-prop-key">> := <<"app-prop-value">>
-                            }, amqp10_msg:application_properties(Msg)),
-              ?assertMatch(#{<<"message-ann-key">> := <<"message-ann-value">>},
-                           amqp10_msg:message_annotations(Msg))
+              test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp10">>,
+                                      <<"src-address">>)
       end).
 
 simple_amqp10_dest(Config) ->
@@ -118,34 +94,34 @@ simple_amqp10_dest(Config) ->
     Dest = ?config(destq, Config),
     with_session(Config,
       fun (Sess) ->
-              shovel_test_utils:set_param(
-                Config,
-                <<"test">>, [{<<"src-protocol">>, <<"amqp091">>},
-                             {<<"src-queue">>,  Src},
-                             {<<"dest-protocol">>, <<"amqp10">>},
-                             {<<"dest-address">>, Dest},
-                             {<<"dest-add-forward-headers">>, true},
-                             {<<"dest-add-timestamp-header">>, true},
-                             {<<"dest-application-properties">>,
-                              [{<<"app-prop-key">>, <<"app-prop-value">>}]},
-                             {<<"dest-properties">>,
-                              [{<<"user_id">>, <<"guest">>}]},
-                             {<<"dest-message-annotations">>,
-                              [{<<"message-ann-key">>, <<"message-ann-value">>}]}
-                            ]),
-              Msg = publish_expect(Sess, Src, Dest, <<"tag1">>,
-                                   <<"hello">>),
-              ?assertMatch(#{user_id := <<"guest">>,
-                             creation_time := _}, amqp10_msg:properties(Msg)),
-              ?assertMatch(#{<<"shovel-name">> := <<"test">>,
-                             <<"shovel-type">> := <<"dynamic">>,
-                             <<"shovelled-by">> := _,
-                             <<"app-prop-key">> := <<"app-prop-value">>
-                            }, amqp10_msg:application_properties(Msg)),
-              ?assertMatch(#{<<"message-ann-key">> := <<"message-ann-value">>},
-                           amqp10_msg:message_annotations(Msg)),
-              ok
+              test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp091">>,
+                                      <<"src-queue">>)
       end).
+
+test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
+    shovel_test_utils:set_param(Config, <<"test">>,
+                                [{<<"src-protocol">>, Protocol},
+                                 {ProtocolSrc, Src},
+                                 {<<"dest-protocol">>, <<"amqp10">>},
+                                 {<<"dest-address">>, Dest},
+                                 {<<"dest-add-forward-headers">>, true},
+                                 {<<"dest-add-timestamp-header">>, true},
+                                 {<<"dest-application-properties">>,
+                                  [{<<"app-prop-key">>, <<"app-prop-value">>}]},
+                                 {<<"dest-properties">>,
+                                  [{<<"user_id">>, <<"guest">>}]},
+                                 {<<"dest-message-annotations">>,
+                                  [{<<"message-ann-key">>,
+                                    <<"message-ann-value">>}]}]),
+    Msg = publish_expect(Sess, Src, Dest, <<"tag1">>, <<"hello">>),
+    ?assertMatch((#{user_id := <<"guest">>, creation_time := _}),
+                 (amqp10_msg:properties(Msg))),
+    ?assertMatch((#{<<"shovel-name">> := <<"test">>,
+                    <<"shovel-type">> := <<"dynamic">>, <<"shovelled-by">> := _,
+                    <<"app-prop-key">> := <<"app-prop-value">>}),
+                 (amqp10_msg:application_properties(Msg))),
+    ?assertMatch((#{<<"message-ann-key">> := <<"message-ann-value">>}),
+                 (amqp10_msg:message_annotations(Msg))).
 
 simple_amqp10_src(Config) ->
     Src = ?config(srcq, Config),

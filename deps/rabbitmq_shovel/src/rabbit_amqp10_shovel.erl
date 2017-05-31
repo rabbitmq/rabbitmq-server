@@ -78,23 +78,9 @@ connect_source(State = #{name := Name,
                          ack_mode := AckMode,
                          source := #{uris := [Uri | _],
                                      source_address := Addr} = Src}) ->
-    {ok, Config} = amqp10_client:parse_uri(Uri),
-    {ok, Conn} = amqp10_client:open_connection(Config),
-    link(Conn),
-    {ok, Sess} = amqp10_client:begin_session(Conn),
-    LinkName = begin
-                   LinkName0 = gen_unique_name(Name, "-receiver"),
-                   rabbit_data_coercion:to_binary(LinkName0)
-               end,
-    % mixed settlement mode covers all the ack_modes
-    SettlementMode = case AckMode of
-                         no_ack -> settled;
-                         _ -> unsettled
-                     end,
-    Durability = maps:get(durability, Src, unsettled_state),
-    {ok, LinkRef} = amqp10_client:attach_receiver_link(Sess, LinkName, Addr,
-                                                       SettlementMode,
-                                                       Durability),
+    AttachFun = fun amqp10_client:attach_receiver_link/5,
+    {Conn, Sess, LinkRef} = connect(Name, AckMode, Uri, "-receiver", Addr, Src,
+                                    AttachFun),
     State#{source => Src#{current => #{conn => Conn,
                                        session => Sess,
                                        link => LinkRef,
@@ -105,28 +91,35 @@ connect_dest(State = #{name := Name,
                        ack_mode := AckMode,
                        dest := #{uris := [Uri | _],
                                  target_address := Addr} = Dst}) ->
+    AttachFun = fun amqp10_client:attach_sender_link_sync/5,
+    {Conn, Sess, LinkRef} = connect(Name, AckMode, Uri, "-sender", Addr, Dst,
+                                    AttachFun),
+    State#{dest => Dst#{current => #{conn => Conn,
+                                     session => Sess,
+                                     link => LinkRef,
+                                     uri => Uri}}}.
+
+connect(Name, AckMode, Uri, Postfix, Addr, Map, AttachFun) ->
     {ok, Config} = amqp10_client:parse_uri(Uri),
     {ok, Conn} = amqp10_client:open_connection(Config),
     link(Conn),
     {ok, Sess} = amqp10_client:begin_session(Conn),
     LinkName = begin
-                   LinkName0 = gen_unique_name(Name, "-sender"),
+                   LinkName0 = gen_unique_name(Name, Postfix),
                    rabbit_data_coercion:to_binary(LinkName0)
                end,
+    % mixed settlement mode covers all the ack_modes
     SettlementMode = case AckMode of
                          no_ack -> settled;
                          _ -> unsettled
                      end,
     % needs to be sync, i.e. awaits the 'attach' event as
     % else we may try to use the link before it is ready
-    Durability = maps:get(durability, Dst, unsettled_state),
-    {ok, LinkRef} = amqp10_client:attach_sender_link_sync(Sess, LinkName, Addr,
-                                                          SettlementMode,
-                                                          Durability),
-    State#{dest => Dst#{current => #{conn => Conn,
-                                     session => Sess,
-                                     link => LinkRef,
-                                     uri => Uri}}}.
+    Durability = maps:get(durability, Map, unsettled_state),
+    {ok, LinkRef} = AttachFun(Sess, LinkName, Addr,
+                              SettlementMode,
+                              Durability),
+    {Conn, Sess, LinkRef}.
 
 -spec init_source(state()) -> state().
 init_source(State = #{source := #{current := #{link := Link},
