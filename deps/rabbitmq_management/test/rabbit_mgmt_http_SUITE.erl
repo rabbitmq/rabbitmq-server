@@ -752,7 +752,9 @@ bindings_post_test(Config) ->
     Headers1 = http_post(Config, "/bindings/%2f/e/myexchange/q/myqueue", #{}, {group, '2xx'}),
     "../../../../%2F/e/myexchange/q/myqueue/~" = pget("location", Headers1),
     Headers2 = http_post(Config, "/bindings/%2f/e/myexchange/q/myqueue", BArgs, {group, '2xx'}),
-    PropertiesKey = "routing~V4mGFgnPNrdtRmluZIxTDA",
+    %% Args hash is calculated from a table, generated from args.
+    Hash = rabbit_misc:base64url(erlang:md5(term_to_binary([{<<"foo">>,longstr,<<"bar">>}]))),
+    PropertiesKey = "routing~" ++ Hash,
     PropertiesKeyBin = list_to_binary(PropertiesKey),
     "../../../../%2F/e/myexchange/q/myqueue/" ++ PropertiesKey =
         pget("location", Headers2),
