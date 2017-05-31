@@ -91,7 +91,7 @@ pubsub(Config) ->
 
     {ok, {<<"CONNECTED">>, _, <<>>}} = sjs_recv(WS),
 
-    Dst = "/topic/test-" ++ stomp:list_to_hex(binary_to_list(crypto:rand_bytes(8))),
+    Dst = "/topic/test-" ++ stomp:list_to_hex(binary_to_list(crypto:strong_rand_bytes(8))),
 
     ok = sjs_send(WS, "SUBSCRIBE", [{"destination", Dst},
                                     {"id", "s0"}]),
