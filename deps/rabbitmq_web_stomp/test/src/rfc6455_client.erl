@@ -101,7 +101,7 @@ start_conn(State, AuthInfo, Protocols) ->
         _  -> "Sec-Websocket-Protocol: " ++ string:join(Protocols, ", ")
     end,
 
-    Key = base64:encode_to_string(crypto:rand_bytes(16)),
+    Key = base64:encode_to_string(crypto:strong_rand_bytes(16)),
     gen_tcp:send(Socket,
         "GET " ++ State#state.path ++ " HTTP/1.1\r\n" ++
         "Host: " ++ State#state.addr ++ "\r\n" ++
@@ -178,7 +178,7 @@ do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid}, R) ->
     end.
 
 encode_frame(F, O, Payload) ->
-    Mask = crypto:rand_bytes(4),
+    Mask = crypto:strong_rand_bytes(4),
     MaskedPayload = apply_mask(Mask, iolist_to_binary(Payload)),
 
     L = byte_size(MaskedPayload),
