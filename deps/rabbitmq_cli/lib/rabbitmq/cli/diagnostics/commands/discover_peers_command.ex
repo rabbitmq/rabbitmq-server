@@ -29,7 +29,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   end
 
   def output({:ok, {[], _}}, _options) do
-      {:error, RabbitMQ.CLI.Core.ExitCodes.exit_ok(), "No peers discovered"}
+    # This is a trick to print a string without formatting it first.
+    # Insert your favorite "error, operation completed successfully" joke here.
+    #
+    # TODO: use a new or command-specific formatter instead?
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_ok(), "No peers discovered"}
   end
   def output({:ok, {nodes, _}}, _options) do
     {:ok, nodes}
