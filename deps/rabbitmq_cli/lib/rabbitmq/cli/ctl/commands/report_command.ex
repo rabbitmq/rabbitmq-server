@@ -28,7 +28,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-
   def scopes(), do: [:ctl, :diagnostics]
 
   def merge_defaults(args, opts), do: {args, opts}
@@ -38,9 +37,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   defp merge_run(command, args, opts) do
     {args, opts} = command.merge_defaults(args, opts)
-    command.run(args, opts)
+    Stream.concat(banner_list(command.banner(args, opts)), command.run(args, opts))
   end
 
+  defp banner_list(banner) when is_list(banner) do
+    banner
+  end
+  defp banner_list(banner) when is_binary(banner) do
+    [banner]
+  end
 
   def run([], %{node: node_name} = opts) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :list, []) do
@@ -63,12 +68,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
                merge_run(ListBindingsCommand, [], opts),
                merge_run(ListPermissionsCommand, [], opts)]
             end)
-        data ++ vhost_data
+        Stream.concat(data ++ vhost_data)
     end
   end
 
   def usage, do: "report"
-
 
   def banner(_,%{node: node_name}), do: "Reporting server status of node #{node_name} ..."
 end
