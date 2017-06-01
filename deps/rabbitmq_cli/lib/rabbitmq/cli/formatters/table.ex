@@ -50,10 +50,6 @@ defmodule RabbitMQ.CLI.Formatters.Table do
         false -> format_inspect(output)
     end
   end
-  def format_output(other, _) do
-    format_inspect(other)
-  end
-
 
   defp escaped?(_), do: true
 
