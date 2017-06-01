@@ -243,10 +243,16 @@ handle_dest(_Msg, _State) ->
 
 close_source(#{source := #{current := {Conn, _, _}}}) ->
     catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT),
+    ok;
+close_source(_) ->
+    %% It never connected, connection doesn't exist
     ok.
 
 close_dest(#{dest := #{current := {Conn, _, _}}}) ->
     catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT),
+    ok;
+close_dest(_) ->
+    %% It never connected, connection doesn't exist
     ok.
 
 confirm_to_inbound(ConfirmFun, Seq, Multiple,
