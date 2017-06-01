@@ -31,7 +31,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def switches(), do: [list_commands: :boolean]
   def aliases(), do: [l: :list_commands]
 
-  def run([command_name], opts) do
+  def run([command_name|_], opts) do
     CommandModules.load(opts)
     case CommandModules.module_map[command_name] do
       nil ->
