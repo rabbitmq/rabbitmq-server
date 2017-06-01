@@ -833,11 +833,39 @@ drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
                          #message_properties{expiry = Exp} -> Exp
                      end, State1).
 
+drop_expired_queue_msgs(State = #q{backing_queue_state = BQS,
+                                  backing_queue       = BQ }) ->
+    ExpireAll = fun (_) -> true end,
+    {_, State1} =
+        with_dlx(
+          State#q.dlx,
+          fun (X) -> dead_letter_all_msgs(ExpireAll, X, State) end,
+          fun () -> {Next, BQS1} = BQ:dropwhile(ExpireAll, BQS),
+                    {Next, State#q{backing_queue_state = BQS1}} end),
+    State1.
+
 with_dlx(undefined, _With,  Without) -> Without();
 with_dlx(DLX,        With,  Without) -> case rabbit_exchange:lookup(DLX) of
                                             {ok, X}            -> With(X);
                                             {error, not_found} -> Without()
                                         end.
+
+dead_letter_all_msgs(ExpirePred, X, State = #q{backing_queue = BQ, q = #amqqueue{name = Name}}) ->
+    %% In the event that the dead letter exchange had previous bindings to the queue,
+    %% bindings are removed from the destination before dead-lettering.
+    %% A manual call to remove_bindings for the exchange is necessary for exchanges like
+    %% the consistent hash exchange because they also keep internal routes which
+    %% do not get removed as a result of removing the bindings from the queue.
+    DLX = X#exchange.name,
+    Bindings = [ B || {binding, DLX, _, _, _}=B <- rabbit_binding:list_for_destination(Name)],
+    rabbit_misc:execute_mnesia_transaction(
+        fun() -> 
+            rabbit_binding:remove_for_destination(Name),
+            rabbit_exchange:callback(X, remove_bindings, transaction, [X, Bindings])
+        end),
+    dead_letter_msgs(fun (DLFun, Acc, BQS1) ->
+                             BQ:fetchwhile(ExpirePred, DLFun, Acc, BQS1)
+                     end, queue_expired, X, State).
 
 dead_letter_expired_msgs(ExpirePred, X, State = #q{backing_queue = BQ}) ->
     dead_letter_msgs(fun (DLFun, Acc, BQS1) ->
@@ -1370,7 +1398,9 @@ handle_cast({sync_start, _, _}, State = #q{q = #amqqueue{name = Name}}) ->
 
 handle_info({maybe_expire, Vsn}, State = #q{args_policy_version = Vsn}) ->
     case is_unused(State) of
-        true  -> stop(State);
+        true  -> 
+            State1 = drop_expired_queue_msgs(State),
+            stop(State1);
         false -> noreply(State#q{expiry_timer_ref = undefined})
     end;
 
