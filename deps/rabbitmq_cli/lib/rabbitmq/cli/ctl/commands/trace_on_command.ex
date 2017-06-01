@@ -25,7 +25,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOnCommand do
     {[], Map.merge(%{vhost: "/"}, opts)}
   end
   def run([], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_trace, :start, [vhost])
+    case :rabbit_misc.rpc_call(node_name, :rabbit_trace, :start, [vhost]) do
+      :ok   -> {:ok, "Trace enabled for vhost #{vhost}"};
+      other -> other
+    end
   end
 
   def usage, do: "trace_on [-p <vhost>]"

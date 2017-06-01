@@ -18,7 +18,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
   def merge_defaults(_, opts) do
@@ -26,11 +25,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
   end
 
   def run([], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_trace, :stop, [vhost])
+    case :rabbit_misc.rpc_call(node_name, :rabbit_trace, :stop, [vhost]) do
+      :ok   -> {:ok, "Trace disbled for vhost #{vhost}"};
+      other -> other
+    end
   end
 
   def usage, do: "trace_off [-p <vhost>]"
-
 
   def banner(_, %{vhost: vhost}), do: "Stopping tracing for vhost \"#{vhost}\" ..."
 end
