@@ -72,6 +72,9 @@ dep_rabbitmq_message_timestamp        = git_rmq rabbitmq-message-timestamp $(cur
 dep_rabbitmq_metronome                = git_rmq rabbitmq-metronome $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_mqtt                     = git_rmq rabbitmq-mqtt $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_objc_client              = git_rmq rabbitmq-objc-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_aws       = git_rmq rabbitmq-peer-discovery-aws $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_common    = git_rmq rabbitmq-peer-discovery-common $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_consul    = git_rmq rabbitmq-peer-discovery-consul $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
@@ -91,7 +94,6 @@ dep_rabbitmq_web_stomp_examples       = git_rmq rabbitmq-web-stomp-examples $(cu
 dep_rabbitmq_web_mqtt                 = git_rmq rabbitmq-web-mqtt $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_web_mqtt_examples        = git_rmq rabbitmq-web-mqtt-examples $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live master
-dep_sockjs                            = git_rmq sockjs-erlang $(current_rmq_ref) $(base_rmq_ref) master
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref) master
 
 dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(current_rmq_ref) $(base_rmq_ref) master
@@ -104,7 +106,11 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 
 dep_cowboy_commit = 1.0.4
 dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
+# Last commit of PropEr supporting Erlang R16B03.
+dep_proper_commit = 735d972758d8bd85b12483626fe1b66450d6a6fe
 dep_ranch_commit = 1.3.1
+# Last commit of sockjs support Erlang R16B03 and 17.x.
+dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 5af2b588c812c318b19bc105b577a759c71c3e0a
 dep_webmachine_commit = 1.10.8p2
 
 RABBITMQ_COMPONENTS = amqp_client \
@@ -142,6 +148,9 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_metronome \
 		      rabbitmq_mqtt \
 		      rabbitmq_objc_client \
+		      rabbitmq_peer_discovery_aws \
+		      rabbitmq_peer_discovery_common \
+		      rabbitmq_peer_discovery_consul \
 		      rabbitmq_recent_history_exchange \
 		      rabbitmq_routing_node_stamp \
 		      rabbitmq_rtopic_exchange \
