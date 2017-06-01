@@ -62,10 +62,19 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   end
   defp format_output({:ok, output}) do
     case Enumerable.impl_for(output) do
-      nil            -> {:ok, output};
+      nil ->
+        {:ok, output};
       ## Do not streamify plain maps
-      Enumerable.Map -> {:ok, output};
-      _              -> {:stream, output}
+      Enumerable.Map ->
+        {:ok, output};
+      ## Do not streamify keyword lists
+      Enumerable.List ->
+        case Keyword.keyword?(output) do
+          true  -> {:ok, output};
+          false -> {:stream, output}
+        end;
+      _ ->
+        {:stream, output}
     end
   end
   defp format_output({:stream, stream}) do
