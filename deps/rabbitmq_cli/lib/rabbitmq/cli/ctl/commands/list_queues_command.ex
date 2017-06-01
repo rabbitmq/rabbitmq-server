@@ -69,7 +69,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
         {false, false} -> {true, true};
         other          -> other
       end
-      info_keys = Enum.map(args, &String.to_atom/1)
+      info_keys = InfoKeys.prepare_info_keys(args)
       Helpers.with_nodes_in_cluster(node_name, fn(nodes) ->
         offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
         local_mfa = {:rabbit_amqqueue, :emit_info_local, [vhost, info_keys]}

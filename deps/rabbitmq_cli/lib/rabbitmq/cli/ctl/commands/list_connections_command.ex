@@ -54,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   end
 
   def run([_|_] = args, %{node: node_name, timeout: timeout}) do
-      info_keys = Enum.map(args, &String.to_atom/1)
+      info_keys = InfoKeys.prepare_info_keys(args)
       Helpers.with_nodes_in_cluster(node_name, fn(nodes) ->
         RpcStream.receive_list_items(node_name,
                                      :rabbit_networking,

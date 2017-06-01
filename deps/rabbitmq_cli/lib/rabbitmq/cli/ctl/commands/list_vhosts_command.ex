@@ -51,26 +51,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   end
 
   defp filter_by_arg(vhosts, [_|_] = args) do
-    case bad_args = Enum.filter(args, fn arg -> invalid_arg?(arg) end) do
-      [_|_] -> {:error, {:bad_info_key, bad_args}}
-      []    ->
-        symbol_args = args |> Enum.map(&(String.to_atom(&1))) |> Enum.uniq
-        vhosts
-        |> Enum.map(
-          fn(vhost) ->
-            Enum.filter_map(
-              symbol_args,
-              fn(arg) -> vhost[arg] != nil end,
-              fn(arg) -> {arg, vhost[arg]} end
-            )
-          end
+    symbol_args = InfoKeys.prepare_info_keys(args)
+    vhosts
+    |> Enum.map(
+      fn(vhost) ->
+        Enum.filter_map(
+          symbol_args,
+          fn(arg) -> vhost[arg] != nil end,
+          fn(arg) -> {arg, vhost[arg]} end
         )
-    end
+      end
+    )
   end
-
-  defp invalid_arg?("name"), do: false
-  defp invalid_arg?("tracing"), do: false
-  defp invalid_arg?(_), do: true
 
   def banner(_,_), do: "Listing vhosts ..."
 

@@ -17,12 +17,19 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   import RabbitCommon.Records
 
   def validate_info_keys(args, valid_keys) do
-    info_keys = Enum.map(args, &String.to_atom/1)
+    info_keys = prepare_info_keys(args)
     case invalid_info_keys(info_keys, valid_keys) do
       [_|_] = bad_info_keys ->
         {:validation_failure, {:bad_info_key, bad_info_keys}}
       [] -> {:ok, info_keys}
     end
+  end
+
+  def prepare_info_keys(args) do
+    args
+    |> Enum.flat_map(fn(arg) -> String.split(arg, ",", [trim: true]) end)
+    |> Enum.map(&String.to_atom/1)
+    |> Enum.uniq
   end
 
   def with_valid_info_keys(args, valid_keys, fun) do
