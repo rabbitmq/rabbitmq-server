@@ -19,8 +19,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
-  def merge_defaults([], opts) do
-    {[], Map.merge(%{vhost: "/"}, opts)}
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
   def scopes(), do: [:ctl, :diagnostics]

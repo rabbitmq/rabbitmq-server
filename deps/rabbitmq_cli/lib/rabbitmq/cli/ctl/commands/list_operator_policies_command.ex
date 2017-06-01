@@ -23,8 +23,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListOperatorPoliciesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def merge_defaults([], opts) do
-    {[], Map.merge(%{vhost: "/"}, opts)}
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
   def validate([_|_], _) do

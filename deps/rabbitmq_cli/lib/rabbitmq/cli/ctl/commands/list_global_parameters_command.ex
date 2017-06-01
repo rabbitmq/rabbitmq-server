@@ -20,8 +20,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def merge_defaults([], opts) do
-    {[], opts}
+  def merge_defaults(args, opts) do
+    {args, opts}
   end
 
   def scopes(), do: [:ctl, :diagnostics]
