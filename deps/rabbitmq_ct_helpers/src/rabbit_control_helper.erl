@@ -33,8 +33,7 @@ command(Command, Node, Args, Opts) ->
 
 command_with_output(Command, Node, Args, Opts) ->
     Formatted = format_command(Command, Node, Args, Opts),
-    CommandResult = 'Elixir.RabbitMQCtl':exec_command(
-        Formatted, fun(_,Output,_) -> Output end),
+    CommandResult = 'Elixir.RabbitMQCtl':exec_command(Formatted),
     ct:pal("Executed command ~p against node ~p~nResult: ~p~n", [Formatted, Node, CommandResult]),
     CommandResult.
 
