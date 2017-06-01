@@ -49,8 +49,8 @@ groups() ->
                  registration_without_acl_token_test,
                  registration_with_acl_token_test
                  , registration_with_auto_addr_test
-                 %% , registration_with_auto_addr_from_nodename_test
-                 %% , registration_with_auto_addr_nic_test
+                 , registration_with_auto_addr_from_nodename_test
+                 , registration_with_auto_addr_nic_test
                 ]}
      , {list_node_tests, [], [
                  list_nodes_default_values_test,
@@ -88,6 +88,7 @@ reset() ->
                                  "CONSUL_SVC_ADDR_AUTO",
                                  "CONSUL_SVC_ADDR_NIC",
                                  "CONSUL_SVC_ADDR_NODENAME",
+                                 "CONSUL_SVC_PORT",
                                  "CONSUL_SVC_TTL",
                                  "CONSUL_DOMAIN",
                                  "CONSUL_DEREGISTER_AFTER",
@@ -97,11 +98,11 @@ reset() ->
 
 init_per_testcase(_TC, Config) ->
     reset(),
-    %% meck:new(rabbit_log, []),
-    %% meck:new(rabbit_peer_discovery_httpc, []),
+    meck:new(rabbit_log, []),
+    meck:new(rabbit_peer_discovery_httpc, []),
     Config.
 
-end_per_testcase(TC, Config) ->
+end_per_testcase(_TC, Config) ->
     reset(),
     Config.
 
@@ -458,12 +459,8 @@ registration_with_acl_token_test(_Config) ->
 
 registration_with_auto_addr_test(_Config) ->
            meck:new(rabbit_peer_discovery_util, [passthrough]),
-           ct:pal("rabbit_peer_discovery_util:module_info: ~p", [rabbit_peer_discovery_util:module_info()]),
-           ct:pal("rabbit_peer_discovery_util_meck_original:module_info: ~p", [rabbit_peer_discovery_util_meck_original:module_info()]),
            meck:expect(rabbit_peer_discovery_util, node_hostname, fun(true)  -> "bob.consul.node";
                                                                      (false) -> "bob" end),
-           ct:pal("rabbit_peer_discovery_util:module_info: ~p", [rabbit_peer_discovery_util:module_info()]),
-           ct:pal("rabbit_peer_discovery_util_meck_original:module_info: ~p", [rabbit_peer_discovery_util_meck_original:module_info()]),
            meck:expect(rabbit_peer_discovery_httpc, post,
              fun(Scheme, Host, Port, Path, Args, Body) ->
                ?assertEqual("http", Scheme),
@@ -484,6 +481,7 @@ registration_with_auto_addr_test(_Config) ->
            ?assert(meck:validate(rabbit_peer_discovery_util)).
 
 registration_with_auto_addr_from_nodename_test(_Config) ->
+          meck:new(rabbit_peer_discovery_util, [passthrough]),
           meck:expect(rabbit_peer_discovery_util, node_hostname, fun(true)  -> "bob.consul.node";
                                                                     (false) -> "bob" end),
           meck:expect(rabbit_peer_discovery_httpc, post,
@@ -507,6 +505,7 @@ registration_with_auto_addr_from_nodename_test(_Config) ->
           ?assert(meck:validate(rabbit_peer_discovery_util)).
 
 registration_with_auto_addr_nic_test(_Config) ->
+          meck:new(rabbit_peer_discovery_util, [passthrough]),
           meck:expect(rabbit_peer_discovery_util, nic_ipv4,
             fun(NIC) ->
               ?assertEqual("en0", NIC),
