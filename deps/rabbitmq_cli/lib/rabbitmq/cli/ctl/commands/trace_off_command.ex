@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
 
   def run([], %{node: node_name, vhost: vhost}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_trace, :stop, [vhost]) do
-      :ok   -> {:ok, "Trace disbled for vhost #{vhost}"};
+      :ok   -> {:ok, "Trace disabled for vhost #{vhost}"};
       other -> other
     end
   end
