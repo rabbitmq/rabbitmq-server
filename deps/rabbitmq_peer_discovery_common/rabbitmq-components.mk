@@ -46,6 +46,7 @@ dep_rabbitmq_auth_backend_cache       = git_rmq rabbitmq-auth-backend-cache $(cu
 dep_rabbitmq_auth_backend_http        = git_rmq rabbitmq-auth-backend-http $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_backend_ldap        = git_rmq rabbitmq-auth-backend-ldap $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_mechanism_ssl       = git_rmq rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_aws                      = git_rmq rabbitmq-aws $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_boot_steps_visualiser    = git_rmq rabbitmq-boot-steps-visualiser $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_clusterer                = git_rmq rabbitmq-clusterer $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_cli                      = git_rmq rabbitmq-cli $(current_rmq_ref) $(base_rmq_ref) master
@@ -104,12 +105,14 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy_commit = 1.1.0
+dep_cowboy_commit = 1.0.4
 dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
-dep_ranch_commit = 1.3.2
-dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d36dbf5e1e64942d9b0a1daf
+# Last commit of PropEr supporting Erlang R16B03.
+dep_proper_commit = 735d972758d8bd85b12483626fe1b66450d6a6fe
+dep_ranch_commit = 1.3.1
+# Last commit of sockjs support Erlang R16B03 and 17.x.
+dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 5af2b588c812c318b19bc105b577a759c71c3e0a
 dep_webmachine_commit = 1.10.8p2
-dep_ranch_proxy_protocol = git git://github.com/heroku/ranch_proxy_protocol.git 1.4.2
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
@@ -120,6 +123,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_auth_backend_http \
 		      rabbitmq_auth_backend_ldap \
 		      rabbitmq_auth_mechanism_ssl \
+		      rabbitmq_aws \
 		      rabbitmq_boot_steps_visualiser \
 		      rabbitmq_clusterer \
 		      rabbitmq_cli \
