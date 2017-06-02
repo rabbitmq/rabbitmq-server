@@ -46,6 +46,7 @@ dep_rabbitmq_auth_backend_cache       = git_rmq rabbitmq-auth-backend-cache $(cu
 dep_rabbitmq_auth_backend_http        = git_rmq rabbitmq-auth-backend-http $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_backend_ldap        = git_rmq rabbitmq-auth-backend-ldap $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_auth_mechanism_ssl       = git_rmq rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_aws                      = git_rmq rabbitmq-aws $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_boot_steps_visualiser    = git_rmq rabbitmq-boot-steps-visualiser $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_clusterer                = git_rmq rabbitmq-clusterer $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_cli                      = git_rmq rabbitmq-cli $(current_rmq_ref) $(base_rmq_ref) master
@@ -72,6 +73,9 @@ dep_rabbitmq_message_timestamp        = git_rmq rabbitmq-message-timestamp $(cur
 dep_rabbitmq_metronome                = git_rmq rabbitmq-metronome $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_mqtt                     = git_rmq rabbitmq-mqtt $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_objc_client              = git_rmq rabbitmq-objc-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_aws       = git_rmq rabbitmq-peer-discovery-aws $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_common    = git_rmq rabbitmq-peer-discovery-common $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_consul    = git_rmq rabbitmq-peer-discovery-consul $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
@@ -119,6 +123,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_auth_backend_http \
 		      rabbitmq_auth_backend_ldap \
 		      rabbitmq_auth_mechanism_ssl \
+		      rabbitmq_aws \
 		      rabbitmq_boot_steps_visualiser \
 		      rabbitmq_clusterer \
 		      rabbitmq_cli \
@@ -145,6 +150,9 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_metronome \
 		      rabbitmq_mqtt \
 		      rabbitmq_objc_client \
+		      rabbitmq_peer_discovery_aws \
+		      rabbitmq_peer_discovery_common \
+		      rabbitmq_peer_discovery_consul \
 		      rabbitmq_recent_history_exchange \
 		      rabbitmq_routing_node_stamp \
 		      rabbitmq_rtopic_exchange \
