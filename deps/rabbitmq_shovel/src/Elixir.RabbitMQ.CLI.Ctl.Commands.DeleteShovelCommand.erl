@@ -54,7 +54,7 @@ run([Name], #{node := Node, vhost := Vhost}) ->
     rabbit_misc:rpc_call(Node, rabbit_runtime_parameters, clear,
                          [Vhost, <<"shovel">>, Name,
                           'Elixir.RabbitMQ.CLI.Core.Helpers':cli_acting_user()]).
-        
+
 
 switches() ->
     [].
@@ -63,4 +63,4 @@ aliases() ->
     [].
 
 output(E, Opts) ->
-    'Elixir.RabbitMQ.CLI.DefaultOutput':output(E, Opts, ?MODULE).
+    'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).

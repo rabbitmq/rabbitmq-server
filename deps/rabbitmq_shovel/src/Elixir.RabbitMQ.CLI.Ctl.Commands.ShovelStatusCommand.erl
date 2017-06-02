@@ -28,7 +28,8 @@
          switches/0,
          aliases/0,
          output/2,
-         scopes/0
+         scopes/0,
+         formatter/0
         ]).
 
 
@@ -40,6 +41,9 @@ usage() ->
 
 flags() ->
     [].
+
+formatter() ->
+    'Elixir.RabbitMQ.CLI.Formatters.Table'.
 
 validate(_,_) ->
     ok.
@@ -73,7 +77,7 @@ output({stream, ShovelStatus}, _) ->
                  || {Name, Type, Status, Timestamp} <- ShovelStatus],
     {stream, Formatted};
 output(E, Opts) ->
-    'Elixir.RabbitMQ.CLI.DefaultOutput':output(E, Opts, ?MODULE).
+    'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).
 
 scopes() ->
     ['ctl', 'diagnostics'].
