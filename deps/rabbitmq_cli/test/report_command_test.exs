@@ -42,7 +42,9 @@ defmodule ReportTest do
   end
 
   test "run: report request on a named, active RMQ node is successful", context do
-    assert match?([_|_], @command.run([], context[:opts]))
+    output = @command.run([], context[:opts]) |> Enum.to_list
+
+    true = Enum.all?(output, fn({:error, _}) -> false; ({:error, _, _}) -> false; (_) -> true end)
   end
 
   test "run: report request on nonexistent RabbitMQ node returns nodedown" do
