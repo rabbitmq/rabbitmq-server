@@ -261,7 +261,7 @@ accept_ack(Ref, Sock) ->
     ok = ranch:accept_ack(Ref),
     case tune_buffer_size(Sock) of
         ok         -> ok;
-        {error, _} -> rabbit_net:fast_close(Sock),
+        {error, _} -> fast_close(Sock),
                       exit(normal)
     end,
     ok = file_handle_cache:obtain().
