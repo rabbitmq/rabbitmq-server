@@ -70,4 +70,4 @@ aliases() ->
     [].
 
 output(Output, Opts) ->
-    'Elixir.RabbitMQ.CLI.DefaultOutput':output(Output, Opts, ?MODULE).
+    'Elixir.RabbitMQ.CLI.DefaultOutput':output(Output).

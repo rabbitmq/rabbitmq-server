@@ -28,7 +28,8 @@
          switches/0,
          aliases/0,
          output/2,
-         scopes/0
+         scopes/0,
+         formatter/0
         ]).
 
 
@@ -44,22 +45,25 @@ flags() ->
 validate(_,_) ->
     ok.
 
+formatter() ->
+    'Elixir.RabbitMQ.CLI.Formatters.Erlang'.
+
 merge_defaults(A, Opts) ->
     {A, maps:merge(#{only_down => false}, Opts)}.
 
 banner(_, #{node := Node, only_down := true}) ->
-    erlang:iolist_to_binary([<<"Federation links down on node ">>,
-                             atom_to_binary(Node, utf8)]);
+    erlang:iolist_to_binary([<<"Listing federation links, which are down on node ">>,
+                             atom_to_binary(Node, utf8), <<"...">>]);
 banner(_, #{node := Node, only_down := false}) ->
-    erlang:iolist_to_binary([<<"Federation status of node ">>,
-                             atom_to_binary(Node, utf8)]).
+    erlang:iolist_to_binary([<<"Listing federation links of node ">>,
+                             atom_to_binary(Node, utf8), <<"...">>]).
 
-run(_Args, #{node := Node, only_down := Down}) ->
+run(_Args, #{node := Node, only_down := OnlyDown}) ->
     case rabbit_misc:rpc_call(Node, rabbit_federation_status, status, []) of
         {badrpc, _} = Error ->
             Error;
         Status ->
-            {stream, filter(Status, Down)}
+            {stream, filter(Status, OnlyDown)}
     end.
 
 switches() ->
@@ -82,7 +86,7 @@ output({stream, FederationStatus}, _) ->
                  end || St <- FederationStatus],
     {stream, Formatted};
 output(E, Opts) ->
-    'Elixir.RabbitMQ.CLI.DefaultOutput':output(E, Opts, ?MODULE).
+    'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).
 
 scopes() ->
     ['ctl', 'diagnostics'].
@@ -92,11 +96,11 @@ scopes() ->
 %%----------------------------------------------------------------------------
 fmt_ts({{YY, MM, DD}, {Hour, Min, Sec}}) ->
     erlang:list_to_binary(
-      io_lib:format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w", 
+      io_lib:format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w",
                     [YY, MM, DD, Hour, Min, Sec])).
 
-filter(Status, _IsDown = false) ->
+filter(Status, _OnlyDown = false) ->
     Status;
-filter(Status, _IsDown = true) ->
+filter(Status, _OnlyDown = true) ->
     [St || St <- Status,
            not lists:member(proplists:get_value(status, St), [running, starting])].
