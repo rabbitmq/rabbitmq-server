@@ -140,15 +140,15 @@ dest_uri(#{dest := #{current := {_, _, Uri}}}) -> Uri.
 source_protocol(_State) -> amqp091.
 dest_protocol(_State) -> amqp091.
 
-source_endpoint(#{shovel_type := static}) ->
-    [];
 source_endpoint(#{source := #{queue := <<>>,
                               source_exchange := SrcX,
                               source_exchange_key := SrcXKey}}) ->
     [{src_exchange, SrcX},
      {src_exchange_key, SrcXKey}];
 source_endpoint(#{source := #{queue := Queue}}) ->
-    [{src_queue, Queue}].
+    [{src_queue, Queue}];
+source_endpoint(_Config) ->
+    [].
 
 dest_endpoint(#{shovel_type := static}) ->
     [];
