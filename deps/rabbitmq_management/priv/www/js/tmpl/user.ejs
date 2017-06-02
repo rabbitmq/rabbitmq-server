@@ -25,6 +25,8 @@
 
 <%= format('permissions', {'mode': 'user', 'permissions': permissions, 'vhosts': vhosts, 'parent': user}) %>
 
+<%= format('topic-permissions', {'mode': 'user', 'topic_permissions': topic_permissions, 'vhosts': vhosts, 'parent': user, 'exchanges': exchanges}) %>
+
 <div class="section-hidden">
   <h2>Update this user</h2>
   <div class="hider">

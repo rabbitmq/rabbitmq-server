@@ -27,6 +27,8 @@
 
 <%= format('permissions', {'mode': 'vhost', 'permissions': permissions, 'users': users, 'parent': vhost}) %>
 
+<%= format('topic-permissions', {'mode': 'vhost', 'topic_permissions': topic_permissions, 'users':users, 'parent': vhost, 'exchanges': exchanges}) %>
+
 <div class="section-hidden">
 <h2>Delete this vhost</h2>
 <div class="hider">

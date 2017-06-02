@@ -74,7 +74,13 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
     User = rabbit_mgmt_util:id(user, ReqData),
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    rabbit_auth_backend_internal:clear_topic_permissions(User, VHost, Username),
+    case rabbit_mgmt_util:id(exchange, ReqData) of
+        none ->
+            rabbit_auth_backend_internal:clear_topic_permissions(User, VHost, Username);
+        Exchange ->
+            rabbit_auth_backend_internal:clear_topic_permissions(User, VHost, Exchange,
+                                                                 Username)
+    end,
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->

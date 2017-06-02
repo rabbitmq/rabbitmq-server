@@ -154,7 +154,9 @@ dispatcher_add(function(sammy) {
                                                  'msg-rates-vhost',
                                                  'data-rates-vhost']}},
                     'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
-                    'users': '/users/'},
+                    'topic_permissions': '/vhosts/' + esc(this.params['id']) + '/topic-permissions',
+                    'users': '/users/',
+                    'exchanges' : '/exchanges/' + esc(this.params['id'])},
                 'vhost', '#/vhosts');
         });
 
@@ -177,9 +179,12 @@ dispatcher_add(function(sammy) {
                                options: {sort:true}},
                      'permissions': '/permissions'}, 'users');
     sammy.get('#/users/:id', function() {
+        var vhosts = JSON.parse(sync_get('/vhosts'));
             render({'user': '/users/' + esc(this.params['id']),
                     'permissions': '/users/' + esc(this.params['id']) + '/permissions',
-                    'vhosts': '/vhosts/'}, 'user',
+                    'topic_permissions': '/users/' + esc(this.params['id']) + '/topic-permissions',
+                    'vhosts': '/vhosts/',
+                    'exchanges': '/exchanges/' + esc(vhosts[0].name)}, 'user',
                    '#/users');
         });
     sammy.put('#/users-add', function() {
@@ -205,6 +210,16 @@ dispatcher_add(function(sammy) {
         });
     sammy.del('#/permissions', function() {
             if (sync_delete(this, '/permissions/:vhost/:username'))
+                update();
+            return false;
+        });
+    sammy.put('#/topic-permissions', function() {
+            if (sync_put(this, '/topic-permissions/:vhost/:username'))
+                update();
+            return false;
+        });
+    sammy.del('#/topic-permissions', function() {
+            if (sync_delete(this, '/topic-permissions/:vhost/:username/:exchange'))
                 update();
             return false;
         });
