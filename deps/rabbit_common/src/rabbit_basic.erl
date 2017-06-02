@@ -72,12 +72,6 @@
             rabbit_types:content().
 
 -spec header_routes(undefined | rabbit_framing:amqp_table()) -> [string()].
--spec build_content
-        (rabbit_framing:amqp_property_record(), binary() | [binary()]) ->
-            rabbit_types:content().
--spec from_content
-        (rabbit_types:content()) ->
-            {rabbit_framing:amqp_property_record(), binary()}.
 -spec parse_expiration
         (rabbit_framing:amqp_property_record()) ->
             rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any()).
@@ -114,28 +108,11 @@ delivery(Mandatory, Confirm, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, confirm = Confirm, sender = self(),
               message = Message, msg_seq_no = MsgSeqNo, flow = noflow}.
 
-build_content(Properties, BodyBin) when is_binary(BodyBin) ->
-    build_content(Properties, [BodyBin]);
-
-build_content(Properties, PFR) ->
-    %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
-    {ClassId, _MethodId} =
-        rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
-    #content{class_id = ClassId,
-             properties = Properties,
-             properties_bin = none,
-             protocol = none,
-             payload_fragments_rev = PFR}.
+build_content(Properties, Body) ->
+    rabbit_basic_common:build_content(Properties, Body).
 
 from_content(Content) ->
-    #content{class_id = ClassId,
-             properties = Props,
-             payload_fragments_rev = FragmentsRev} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
-    %% basic.publish hasn't changed so we can just hard-code amqp_0_9_1
-    {ClassId, _MethodId} =
-        rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
-    {Props, list_to_binary(lists:reverse(FragmentsRev))}.
+    rabbit_basic_common:from_content(Content).
 
 %% This breaks the spec rule forbidding message modification
 strip_header(#content{properties = #'P_basic'{headers = undefined}}
