@@ -82,12 +82,6 @@
         (rabbit_framing:amqp_property_record()) ->
             rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any()).
 
--spec msg_size
-        (rabbit_types:content() | rabbit_types:message()) -> non_neg_integer().
-
--spec maybe_gc_large_msg
-        (rabbit_types:content() | rabbit_types:message()) -> non_neg_integer().
-
 %%----------------------------------------------------------------------------
 
 %% Convenience function, for avoiding round-trips in calls across the
@@ -301,24 +295,8 @@ parse_expiration(#'P_basic'{expiration = Expiration}) ->
             {error, {leftover_string, S}}
     end.
 
-%% Some processes (channel, writer) can get huge amounts of binary
-%% garbage when processing huge messages at high speed (since we only
-%% do enough reductions to GC every few hundred messages, and if each
-%% message is 1MB then that's ugly). So count how many bytes of
-%% message we have processed, and force a GC every so often.
 maybe_gc_large_msg(Content) ->
-    Size = msg_size(Content),
-    Current = case get(msg_size_for_gc) of
-                  undefined -> 0;
-                  C         -> C
-              end,
-    New = Current + Size,
-    put(msg_size_for_gc, case New > 1000000 of
-                             true  -> erlang:garbage_collect(),
-                                      0;
-                             false -> New
-                         end),
-    Size.
+    rabbit_writer:maybe_gc_large_msg(Content).
 
-msg_size(#content{payload_fragments_rev = PFR}) -> iolist_size(PFR);
-msg_size(#basic_message{content = Content})     -> msg_size(Content).
+msg_size(Content) ->
+    rabbit_writer:msg_size(Content).
