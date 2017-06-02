@@ -1,4 +1,5 @@
 %% The contents of this file are subject to the Mozilla Public License
+
 %% Version 1.1 (the "License"); you may not use this file except in
 %% compliance with the License. You may obtain a copy of the License
 %% at http://www.mozilla.org/MPL/
@@ -34,8 +35,6 @@
 -spec names(string()) ->
           rabbit_types:ok_or_error2([{string(), integer()}], term()).
 -spec diagnostics([node()]) -> string().
--spec make({string(), string()} | string()) -> node().
--spec parts(node() | string()) -> {string(), string()}.
 -spec cookie_hash() -> string().
 -spec is_running(node(), atom()) -> boolean().
 -spec is_process_running(node(), atom()) -> boolean().
@@ -177,17 +176,11 @@ diagnose_connect(Host, Port) ->
             E
     end.
 
-make({Prefix, Suffix}) -> list_to_atom(lists:append([Prefix, "@", Suffix]));
-make(NodeStr)          -> make(parts(NodeStr)).
+make(NodeStr) ->
+    rabbit_nodes_common:make(NodeStr).
 
-parts(Node) when is_atom(Node) ->
-    parts(atom_to_list(Node));
 parts(NodeStr) ->
-    case lists:splitwith(fun (E) -> E =/= $@ end, NodeStr) of
-        {Prefix, []}     -> {_, Suffix} = parts(node()),
-                            {Prefix, Suffix};
-        {Prefix, Suffix} -> {Prefix, tl(Suffix)}
-    end.
+    rabbit_nodes_common:parts(NodeStr).
 
 cookie_hash() ->
     base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
