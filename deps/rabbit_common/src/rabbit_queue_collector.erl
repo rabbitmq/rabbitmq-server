@@ -34,7 +34,6 @@
 
 -spec start_link(rabbit_types:proc_name()) -> rabbit_types:ok_pid_or_error().
 -spec register(pid(), pid()) -> 'ok'.
--spec delete_all(pid()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 
@@ -45,7 +44,7 @@ register(CollectorPid, Q) ->
     gen_server:call(CollectorPid, {register, Q}, infinity).
 
 delete_all(CollectorPid) ->
-    gen_server:call(CollectorPid, delete_all, infinity).
+    rabbit_queue_collector_common:delete_all(CollectorPid).
 
 %%----------------------------------------------------------------------------
 
