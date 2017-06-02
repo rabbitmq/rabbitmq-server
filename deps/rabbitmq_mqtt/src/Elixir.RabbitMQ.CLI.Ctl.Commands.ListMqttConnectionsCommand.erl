@@ -54,7 +54,7 @@ run(Args, #{node := NodeName,
                     verbose := Verbose}) ->
     InfoKeys = case Verbose of
         true  -> ?INFO_ITEMS;
-        false -> lists:map(fun(Bin) -> binary_to_atom(Bin, utf8) end, Args)
+        false -> 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
     end,
     Nodes = 'Elixir.RabbitMQ.CLI.Core.Helpers':nodes_in_cluster(NodeName),
 
@@ -70,4 +70,4 @@ run(Args, #{node := NodeName,
 banner(_, _) -> <<"Listing MQTT connections ...">>.
 
 output(Result, Opts) ->
-    'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result, Opts, ?MODULE).
+    'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).
