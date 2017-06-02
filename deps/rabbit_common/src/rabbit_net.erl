@@ -17,13 +17,14 @@
 -module(rabbit_net).
 -include("rabbit.hrl").
 
+-include_lib("kernel/include/inet.hrl").
 -include_lib("ssl/src/ssl_api.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
          setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
          peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
-         accept_ack/2, unwrap_socket/1, maybe_get_proxy_socket/1]).
+         accept_ack/2, tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1]).
 
 %%---------------------------------------------------------------------------
 
@@ -245,9 +246,28 @@ socket_ends(Sock, Direction = inbound) when is_tuple(Sock) ->
 maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
 maybe_ntoab(Host)                     -> Host.
 
+tcp_host({0,0,0,0}) ->
+    hostname();
+
+tcp_host({0,0,0,0,0,0,0,0}) ->
+    hostname();
+
+tcp_host(IPAddress) ->
+    case inet:gethostbyaddr(IPAddress) of
+        {ok, #hostent{h_name = Name}} -> Name;
+        {error, _Reason} -> rabbit_misc:ntoa(IPAddress)
+    end.
+
+hostname() ->
+    {ok, Hostname} = inet:gethostname(),
+    case inet:gethostbyname(Hostname) of
+        {ok,    #hostent{h_name = Name}} -> Name;
+        {error, _Reason}                 -> Hostname
+    end.
+
 rdns(Addr) ->
     case application:get_env(rabbit, reverse_dns_lookups) of
-        {ok, true} -> list_to_binary(rabbit_networking:tcp_host(Addr));
+        {ok, true} -> list_to_binary(tcp_host(Addr));
         _          -> Addr
     end.
 
