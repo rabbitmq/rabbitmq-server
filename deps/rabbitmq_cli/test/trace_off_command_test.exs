@@ -70,17 +70,17 @@ defmodule TraceOffCommandTest do
   @tag target: get_rabbit_hostname(), vhost: @default_vhost
   test "run: calls to trace_off are idempotent", context do
     @command.run([], context[:opts])
-    assert @command.run([], context[:opts]) == :ok
+    assert @command.run([], context[:opts]) == {:ok, "Trace disbled for vhost #{@default_vhost}"}
   end
 
   @tag vhost: @test_vhost
   test "run: on an active node, trace_off command works on named vhost", context do
-    assert @command.run([], context[:opts]) == :ok
+    assert @command.run([], context[:opts]) == {:ok, "Trace disbled for vhost #{@test_vhost}"}
   end
 
   @tag vhost: "toast"
   test "run: Turning tracing off on invalid host returns successfully", context do
-    assert @command.run([], context[:opts]) == :ok
+    assert @command.run([], context[:opts]) == {:ok, "Trace disbled for vhost toast"}
   end
 
   @tag vhost: @default_vhost
