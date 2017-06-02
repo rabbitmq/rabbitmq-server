@@ -235,15 +235,15 @@ handle_message({'$gen_call', From, flush}, State) ->
     State1;
 handle_message({send_command_and_notify, QPid, ChPid, MethodRecord}, State) ->
     State1 = internal_send_command_async(MethodRecord, State),
-    rabbit_amqqueue:notify_sent(QPid, ChPid),
+    rabbit_amqqueue_common:notify_sent(QPid, ChPid),
     State1;
 handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
                State) ->
     State1 = internal_send_command_async(MethodRecord, Content, State),
-    rabbit_amqqueue:notify_sent(QPid, ChPid),
+    rabbit_amqqueue_common:notify_sent(QPid, ChPid),
     State1;
 handle_message({'DOWN', _MRef, process, QPid, _Reason}, State) ->
-    rabbit_amqqueue:notify_sent_queue_down(QPid),
+    rabbit_amqqueue_common:notify_sent_queue_down(QPid),
     State;
 handle_message({inet_reply, _, ok}, State) ->
     rabbit_event:ensure_stats_timer(State, #wstate.stats_timer, emit_stats);
