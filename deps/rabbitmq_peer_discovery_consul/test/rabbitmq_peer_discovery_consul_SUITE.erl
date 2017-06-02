@@ -26,6 +26,7 @@ all() ->
     [
      {group, registration_body_tests}
      , {group, registration_tests}
+     , {group, unregistration_tests}
      , {group, list_node_tests}
      , {group, other_tests}
     ].
@@ -52,6 +53,12 @@ groups() ->
                  registration_with_auto_addr_from_nodename_test,
                  registration_with_auto_addr_nic_test,
                  registration_generic_error_test
+                ]}
+     , {unregistration_tests, [], [
+                 unregistration_with_all_defaults_test,
+                 unregistration_without_acl_token_test,
+                 unregistration_with_acl_token_test,
+                 unregistration_with_generic_error_test
                 ]}
      , {list_node_tests, [], [
                  list_nodes_default_values_test,
@@ -599,74 +606,63 @@ health_check_error_handling_test(_Config) ->
          ?assert(meck:validate(rabbit_peer_discovery_httpc)),
          ?assert(meck:validate(rabbit_log)).
 
-%% unregisteration_test() ->
-%%   {
-%%     foreach,
-%%     fun() ->
-%%       autocluster_testing:reset(),
-%%       meck:new(rabbit_peer_discovery_httpc, []),
-%%       [rabbit_peer_discovery_httpc]
-%%     end,
-%%     fun autocluster_testing:on_finish/1,
-%%     [
-%%       {"default values", fun() ->
-%%         meck:expect(rabbit_peer_discovery_httpc, get,
-%%           fun(Scheme, Host, Port, Path, Args) ->
-%%             ?assertEqual("http", Scheme),
-%%             ?assertEqual("localhost", Host),
-%%             ?assertEqual(8500, Port),
-%%             ?assertEqual([v1, agent, service, deregister, "rabbitmq"], Path),
-%%             ?assertEqual([], Args),
-%%             {ok, []}
-%%           end),
-%%         ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
-%%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
-%%                          end},
-%%       {"without token", fun() ->
-%%         meck:expect(rabbit_peer_discovery_httpc, get,
-%%           fun(Scheme, Host, Port, Path, Args) ->
-%%             ?assertEqual("https", Scheme),
-%%             ?assertEqual("consul.service.consul", Host),
-%%             ?assertEqual(8501, Port),
-%%             ?assertEqual([v1, agent, service, deregister,"rabbit:10.0.0.1"], Path),
-%%             ?assertEqual([], Args),
-%%             {ok, []}
-%%           end),
-%%         os:putenv("CONSUL_SCHEME", "https"),
-%%         os:putenv("CONSUL_HOST", "consul.service.consul"),
-%%         os:putenv("CONSUL_PORT", "8501"),
-%%         os:putenv("CONSUL_SVC", "rabbit"),
-%%         os:putenv("CONSUL_SVC_ADDR", "10.0.0.1"),
-%%         os:putenv("CONSUL_SVC_PORT", "5671"),
-%%         ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
-%%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
-%%        end},
-%%       {"with token", fun() ->
-%%         meck:expect(rabbit_peer_discovery_httpc, get,
-%%           fun(Scheme, Host, Port, Path, Args) ->
-%%             ?assertEqual("http", Scheme),
-%%             ?assertEqual("consul.service.consul", Host),
-%%             ?assertEqual(8500, Port),
-%%             ?assertEqual([v1, agent, service, deregister,"rabbitmq"], Path),
-%%             ?assertEqual([{token, "token-value"}], Args),
-%%             {ok, []}
-%%           end),
-%%         os:putenv("CONSUL_HOST", "consul.service.consul"),
-%%         os:putenv("CONSUL_PORT", "8500"),
-%%         os:putenv("CONSUL_ACL_TOKEN", "token-value"),
-%%         ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
-%%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
-%%        end},
-%%       {"on error", fun() ->
-%%         meck:expect(rabbit_peer_discovery_httpc, get,
-%%           fun(_Scheme, _Host, _Port, _Path, _Args) ->
-%%             {error, "testing"}
-%%           end),
-%%         ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:unregister()),
-%%         ?assert(meck:validate(rabbit_peer_discovery_httpc))
-%%        end}
-%%     ]
-%%   }.
+
+unregistration_with_all_defaults_test(_Config) ->
+         meck:expect(rabbit_peer_discovery_httpc, get,
+           fun(Scheme, Host, Port, Path, Args) ->
+             ?assertEqual("http", Scheme),
+             ?assertEqual("localhost", Host),
+             ?assertEqual(8500, Port),
+             ?assertEqual([v1, agent, service, deregister, "rabbitmq"], Path),
+             ?assertEqual([], Args),
+             {ok, []}
+           end),
+         ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
+         ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+
+unregistration_without_acl_token_test(_Config) ->
+         meck:expect(rabbit_peer_discovery_httpc, get,
+           fun(Scheme, Host, Port, Path, Args) ->
+             ?assertEqual("https", Scheme),
+             ?assertEqual("consul.service.consul", Host),
+             ?assertEqual(8501, Port),
+             ?assertEqual([v1, agent, service, deregister,"rabbit:10.0.0.1"], Path),
+             ?assertEqual([], Args),
+             {ok, []}
+           end),
+         os:putenv("CONSUL_SCHEME", "https"),
+         os:putenv("CONSUL_HOST", "consul.service.consul"),
+         os:putenv("CONSUL_PORT", "8501"),
+         os:putenv("CONSUL_SVC", "rabbit"),
+         os:putenv("CONSUL_SVC_ADDR", "10.0.0.1"),
+         os:putenv("CONSUL_SVC_PORT", "5671"),
+         ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
+         ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+unregistration_with_acl_token_test(_Config) ->
+         meck:expect(rabbit_peer_discovery_httpc, get,
+           fun(Scheme, Host, Port, Path, Args) ->
+             ?assertEqual("http", Scheme),
+             ?assertEqual("consul.service.consul", Host),
+             ?assertEqual(8500, Port),
+             ?assertEqual([v1, agent, service, deregister,"rabbitmq"], Path),
+             ?assertEqual([{token, "token-value"}], Args),
+             {ok, []}
+           end),
+         os:putenv("CONSUL_HOST", "consul.service.consul"),
+         os:putenv("CONSUL_PORT", "8500"),
+         os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+         ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
+         ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+unregistration_with_generic_error_test(_Config) ->
+         meck:expect(rabbit_peer_discovery_httpc, get,
+           fun(_Scheme, _Host, _Port, _Path, _Args) ->
+             {error, "testing"}
+           end),
+         ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:unregister()),
+         ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 %%%
 %%% Implementation
