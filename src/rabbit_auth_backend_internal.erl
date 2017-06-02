@@ -283,7 +283,7 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
               end
       end, [ConfigurePerm, WritePerm, ReadPerm]),
     R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_misc:with_user_and_vhost(
+          rabbit_vhost:with_user_and_vhost(
             Username, VHostPath,
             fun () -> ok = mnesia:write(
                              rabbit_user_permission,
@@ -305,7 +305,7 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
 
 clear_permissions(Username, VHostPath) ->
     R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_misc:with_user_and_vhost(
+          rabbit_vhost:with_user_and_vhost(
             Username, VHostPath,
             fun () ->
                     ok = mnesia:delete({rabbit_user_permission,
@@ -390,7 +390,7 @@ list_vhost_permissions(VHostPath, Ref, AggregatorPid) ->
 list_user_vhost_permissions(Username, VHostPath) ->
     list_permissions(
       user_vhost_perms_info_keys(),
-      rabbit_misc:with_user_and_vhost(
+      rabbit_vhost:with_user_and_vhost(
         Username, VHostPath, match_user_vhost(Username, VHostPath))).
 
 extract_user_permission_params(Keys, #user_permission{
