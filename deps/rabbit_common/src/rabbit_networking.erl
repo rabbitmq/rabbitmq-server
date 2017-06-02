@@ -46,7 +46,6 @@
 -export([connections_local/0]).
 
 -include("rabbit.hrl").
--include_lib("kernel/include/inet.hrl").
 
 %% IANA-suggested ephemeral port range is 49152 to 65535
 -define(FIRST_TEST_BIND_PORT, 49152).
@@ -316,24 +315,8 @@ force_connection_event_refresh(Ref) ->
 
 %%--------------------------------------------------------------------
 
-tcp_host({0,0,0,0}) ->
-    hostname();
-
-tcp_host({0,0,0,0,0,0,0,0}) ->
-    hostname();
-
 tcp_host(IPAddress) ->
-    case inet:gethostbyaddr(IPAddress) of
-        {ok, #hostent{h_name = Name}} -> Name;
-        {error, _Reason} -> rabbit_misc:ntoa(IPAddress)
-    end.
-
-hostname() ->
-    {ok, Hostname} = inet:gethostname(),
-    case inet:gethostbyname(Hostname) of
-        {ok,    #hostent{h_name = Name}} -> Name;
-        {error, _Reason}                 -> Hostname
-    end.
+    rabbit_net:tcp_host(IPAddress).
 
 cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 
