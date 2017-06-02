@@ -234,16 +234,13 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
                 User, VHost, Capabilities, CollectorPid, Limiter], []).
 
 do(Pid, Method) ->
-    do(Pid, Method, none).
+    rabbit_channel_common:do(Pid, Method).
 
 do(Pid, Method, Content) ->
-    gen_server2:cast(Pid, {method, Method, Content, noflow}).
+    rabbit_channel_common:do(Pid, Method, Content).
 
 do_flow(Pid, Method, Content) ->
-    %% Here we are tracking messages sent by the rabbit_reader
-    %% process. We are accessing the rabbit_reader process dictionary.
-    credit_flow:send(Pid),
-    gen_server2:cast(Pid, {method, Method, Content, flow}).
+    rabbit_channel_common:do_flow(Pid, Method, Content).
 
 flush(Pid) ->
     gen_server2:call(Pid, flush, infinity).
@@ -340,7 +337,7 @@ refresh_config_local() ->
     ok.
 
 ready_for_close(Pid) ->
-    gen_server2:cast(Pid, ready_for_close).
+    rabbit_channel_common:ready_for_close(Pid).
 
 force_event_refresh(Ref) ->
     [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
