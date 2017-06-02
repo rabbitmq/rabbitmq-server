@@ -435,7 +435,7 @@ enable_cover(Dirs) ->
                 end, ok, Dirs).
 
 start_cover(NodesS) ->
-    {ok, _} = cover:start([rabbit_nodes:make(N) || N <- NodesS]),
+    {ok, _} = cover:start([rabbit_nodes_common:make(N) || N <- NodesS]),
     ok.
 
 report_cover() -> report_cover(["."]).
