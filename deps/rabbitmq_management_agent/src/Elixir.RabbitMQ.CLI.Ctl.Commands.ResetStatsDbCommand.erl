@@ -56,4 +56,4 @@ run(_Args, #{node := Node, all := false}) ->
     rabbit_misc:rpc_call(Node, rabbit_mgmt_storage, reset, []).
 
 output(Output, Opts) ->
-    'Elixir.RabbitMQ.CLI.DefaultOutput':output(Output, Opts, ?MODULE).
+    'Elixir.RabbitMQ.CLI.DefaultOutput':output(Output).
