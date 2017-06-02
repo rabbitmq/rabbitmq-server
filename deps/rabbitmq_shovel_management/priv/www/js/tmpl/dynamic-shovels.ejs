@@ -17,7 +17,7 @@
     <th>Auto-delete</th>
   </tr>
   <tr>
-    <th></th>
+    <th colspan="2"></th>
     <th>Protocol</th>
     <th>Uri</th>
     <th>Endpoint</th>
@@ -41,11 +41,11 @@
      <td><%= link_shovel(shovel.vhost, shovel.name) %></td>
      <td><%= fmt_string(shovel.value['src-protocol']) %></td>
      <td><%= fmt_shortened_uri(shovel.value['src-uri']) %></td>
-     <td><%= fmt_shovel_endpoint('src', shovel.value) %></td>
+     <td><%= fmt_shovel_endpoint('src-', shovel.value) %></td>
      <td><%= shovel.value['src-prefetch-count'] %></td>
      <td><%= fmt_string(shovel.value['dest-protocol']) %></td>
      <td><%= fmt_shortened_uri(shovel.value['dest-uri']) %></td>
-     <td><%= fmt_shovel_endpoint('dest', shovel.value) %></td>
+     <td><%= fmt_shovel_endpoint('dest-', shovel.value) %></td>
      <td><%= fmt_boolean(fallback_value(shovel, 'dest-add-forward-headers', 'add-forward-headers')) %></td>
      <td class="r"><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
      <td class="c"><%= fmt_string(shovel.value['ack-mode']) %></td>

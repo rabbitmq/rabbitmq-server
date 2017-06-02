@@ -136,19 +136,19 @@ function link_shovel(vhost, name) {
 
 function fmt_shovel_endpoint(prefix, shovel) {
     var txt = '';
-    if(shovel[prefix + "-protocol"] == 'amqp10') {
-        txt += fmt_string(shovel[prefix + '-address']);
+    if(shovel[prefix + "protocol"] == 'amqp10') {
+        txt += fmt_string(shovel[prefix + 'address']);
     } else {
-        if (shovel[prefix + '-queue']) {
-            txt += fmt_string(shovel[prefix + '-queue']) + '<sub>queue</sub>';
+        if (shovel[prefix + 'queue']) {
+            txt += fmt_string(shovel[prefix + 'queue']) + '<sub>queue</sub>';
         } else {
-            if (shovel[prefix + '-exchange']) {
-                txt += fmt_string(shovel[prefix + '-exchange']);
+            if (shovel[prefix + 'exchange']) {
+                txt += fmt_string(shovel[prefix + 'exchange']);
             } else {
                 txt += '<i>as published</i>';
             }
-            if (shovel[prefix + '-exchange-key']) {
-                txt += ' : ' + fmt_string(shovel[prefix + '-exchange-key']);
+            if (shovel[prefix + 'exchange_key']) {
+                txt += ' : ' + fmt_string(shovel[prefix + 'exchange_key']);
             }
             txt += '<sub>exchange</sub>';
         }
