@@ -82,7 +82,10 @@ scopes() ->
 %% Formatting
 %%----------------------------------------------------------------------------
 fmt_name({Vhost, Name}, Map) ->
-    Map#{name => Name, vhost => Vhost}.
+    Map#{name => Name, vhost => Vhost};
+fmt_name(Name, Map) ->
+    %% Static shovel names don't contain the vhost
+    Map#{name => Name}.
 
 fmt_ts({{YY, MM, DD}, {Hour, Min, Sec}}) ->
     erlang:list_to_binary(
