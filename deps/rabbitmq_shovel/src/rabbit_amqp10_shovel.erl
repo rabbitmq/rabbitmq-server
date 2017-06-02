@@ -27,6 +27,8 @@
          dest_uri/1,
          source_protocol/1,
          dest_protocol/1,
+         source_endpoint/1,
+         dest_endpoint/1,
          connect_source/1,
          init_source/1,
          connect_dest/1,
@@ -151,6 +153,18 @@ dest_uri(#{dest := #{current := #{uri := Uri}}}) -> Uri.
 
 source_protocol(_State) -> amqp10.
 dest_protocol(_State) -> amqp10.
+
+source_endpoint(#{shovel_type := static}) ->
+    [];
+source_endpoint(#{shovel_type := dynamic,
+                  source := #{source_address := Addr}}) ->
+    [{src_address, Addr}].
+
+dest_endpoint(#{shovel_type := static}) ->
+    [];
+dest_endpoint(#{shovel_type := dynamic,
+                dest := #{target_address := Addr}}) ->
+    [{dest_address, Addr}].
 
 -spec handle_source(Msg :: any(), state()) -> not_handled | state().
 handle_source({amqp10_msg, _LinkRef, Msg}, State) ->

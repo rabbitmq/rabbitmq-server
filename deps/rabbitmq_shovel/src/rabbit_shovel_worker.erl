@@ -121,12 +121,18 @@ report_running(#state{config = Config} = State) ->
     OutUri = rabbit_shovel_behaviour:dest_uri(Config),
     InProto = rabbit_shovel_behaviour:source_protocol(Config),
     OutProto = rabbit_shovel_behaviour:dest_protocol(Config),
+    InEndpoint = rabbit_shovel_behaviour:source_endpoint(Config),
+    OutEndpoint = rabbit_shovel_behaviour:dest_endpoint(Config),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {running, [{src_uri,  rabbit_data_coercion:to_binary(InUri)},
                                            {src_protocol, rabbit_data_coercion:to_binary(InProto)},
                                            {dest_protocol, rabbit_data_coercion:to_binary(OutProto)},
-                                           {dest_uri, rabbit_data_coercion:to_binary(OutUri)}]}).
+                                           {dest_uri, rabbit_data_coercion:to_binary(OutUri)}]
+                                 ++ props_to_binary(InEndpoint) ++ props_to_binary(OutEndpoint)
+                                }).
 
+props_to_binary(Props) ->
+    [{K, rabbit_data_coercion:to_binary(V)} || {K, V} <- Props].
 
 %% for static shovels, name is an atom from the configuration file
 get_connection_name(ShovelName) when is_atom(ShovelName) ->

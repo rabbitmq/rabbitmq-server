@@ -332,12 +332,18 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
                           false -> P1
                       end
                   end,
-    #{module => rabbit_amqp091_shovel,
-      uris => DestURIs,
-      resource_decl => DestDeclFun,
-      fields_fun => PubFun,
-      props_fun => PubPropsFun
-     }.
+    %% Details are only used for status report in rabbitmqctl, as vhost is not
+    %% available to query the runtime parameters.
+    Details = maps:from_list([{K, V} || {K, V} <- [{dest_exchange, DestX},
+                                                   {dest_exchange_key, DestXKey},
+                                                   {dest_queue, DestQ}],
+                                        V =/= none]),
+    maps:merge(#{module => rabbit_amqp091_shovel,
+                 uris => DestURIs,
+                 resource_decl => DestDeclFun,
+                 fields_fun => PubFun,
+                 props_fun => PubPropsFun
+                }, Details).
 
 parse_amqp10_source(Def) ->
     Uris = get_uris(<<"src-uri">>, Def),
@@ -373,13 +379,18 @@ parse_amqp091_source(Def) ->
                        pget(<<"delete-after">>, Def, <<"never">>)),
     PrefetchCount = pget(<<"src-prefetch-count">>, Def,
                          pget(<<"prefetch-count">>, Def, 1000)),
-    {#{module => rabbit_amqp091_shovel,
-       uris => SrcURIs,
-       resource_decl => SrcDeclFun,
-       queue => Queue,
-       delete_after => opt_b2a(DeleteAfter),
-       prefetch_count => PrefetchCount
-      }, DestHeaders}.
+    %% Details are only used for status report in rabbitmqctl, as vhost is not
+    %% available to query the runtime parameters.
+    Details = maps:from_list([{K, V} || {K, V} <- [{source_exchange, SrcX},
+                                                   {source_exchange_key, SrcXKey}],
+                                        V =/= none]),
+    {maps:merge(#{module => rabbit_amqp091_shovel,
+                  uris => SrcURIs,
+                  resource_decl => SrcDeclFun,
+                  queue => Queue,
+                  delete_after => opt_b2a(DeleteAfter),
+                  prefetch_count => PrefetchCount
+                 }, Details), DestHeaders}.
 
 get_uris(Key, Def) ->
     URIs = case pget(Key, Def) of

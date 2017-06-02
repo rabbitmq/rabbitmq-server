@@ -27,6 +27,8 @@
          dest_uri/1,
          source_protocol/1,
          dest_protocol/1,
+         source_endpoint/1,
+         dest_endpoint/1,
          connect_source/1,
          init_source/1,
          connect_dest/1,
@@ -137,6 +139,22 @@ dest_uri(#{dest := #{current := {_, _, Uri}}}) -> Uri.
 
 source_protocol(_State) -> amqp091.
 dest_protocol(_State) -> amqp091.
+
+source_endpoint(#{shovel_type := static}) ->
+    [];
+source_endpoint(#{source := #{queue := <<>>,
+                              source_exchange := SrcX,
+                              source_exchange_key := SrcXKey}}) ->
+    [{src_exchange, SrcX},
+     {src_exchange_key, SrcXKey}];
+source_endpoint(#{source := #{queue := Queue}}) ->
+    [{src_queue, Queue}].
+
+dest_endpoint(#{shovel_type := static}) ->
+    [];
+dest_endpoint(#{dest := Dest}) ->
+    Keys = [dest_exchange, dest_exchange_key, dest_queue],
+    maps:to_list(maps:filter(fun(K, _) -> proplists:is_defined(K, Keys) end, Dest)).
 
 forward(IncomingTag, Props, Payload,
         State0 = #{dest := #{props_fun := PropsFun,

@@ -90,13 +90,13 @@ fmt_ts({{YY, MM, DD}, {Hour, Min, Sec}}) ->
                     [YY, MM, DD, Hour, Min, Sec])).
 
 fmt_status({'running' = St, Proplist}, Map) ->
-    Map#{state => St,
-         source_protocol => proplists:get_value(src_protocol, Proplist,
-                                                undefined),
-         source => proplists:get_value(src_uri, Proplist),
-         destination_protocol => proplists:get_value(dest_protocol, Proplist, undefined),
-         destination => proplists:get_value(dest_uri, Proplist),
-         termination_reason => <<>>};
+    maps:merge(Map#{state => St,
+                    source_protocol => proplists:get_value(src_protocol, Proplist,
+                                                           undefined),
+                    source => proplists:get_value(src_uri, Proplist),
+                    destination_protocol => proplists:get_value(dest_protocol, Proplist, undefined),
+                    destination => proplists:get_value(dest_uri, Proplist),
+                    termination_reason => <<>>}, details_to_map(Proplist));
 fmt_status('starting' = St, Map) ->
     Map#{state => St,
          source => <<>>,
@@ -107,3 +107,11 @@ fmt_status({'terminated' = St, Reason}, Map) ->
          termination_reason => list_to_binary(io_lib:format("~p", [Reason])),
          source => <<>>,
          destination => <<>>}.
+
+details_to_map(Proplist) ->
+    Keys = [{src_address, source_address}, {src_queue, source_queue},
+            {src_exchange, source_exchange}, {src_exchange_key, source_exchange_key},
+            {dest_address, destination_address}, {dest_queue, destination_queue},
+            {dest_exchange, destination_exchange}, {dest_exchange_key, destination_exchange_key}],
+    maps:from_list([{New, proplists:get_value(Old, Proplist)}
+                    || {Old, New} <- Keys, proplists:is_defined(Old, Proplist)]).

@@ -31,6 +31,8 @@
          dest_uri/1,
          source_protocol/1,
          dest_protocol/1,
+         source_endpoint/1,
+         dest_endpoint/1,
          forward/4,
          ack/3,
          nack/3,
@@ -71,6 +73,9 @@
 
 -callback source_protocol(state()) -> atom().
 -callback dest_protocol(state()) -> atom().
+
+-callback source_endpoint(state()) -> proplists:proplist().
+-callback dest_endpoint(state()) -> proplists:proplist().
 
 -callback close_dest(state()) -> ok.
 -callback close_source(state()) -> ok.
@@ -136,6 +141,12 @@ source_protocol(#{source := #{module := Mod}} = State) ->
 
 dest_protocol(#{dest := #{module := Mod}} = State) ->
     Mod:dest_protocol(State).
+
+source_endpoint(#{source := #{module := Mod}} = State) ->
+    Mod:source_endpoint(State).
+
+dest_endpoint(#{dest := #{module := Mod}} = State) ->
+    Mod:dest_endpoint(State).
 
 -spec forward(tag(), #{atom() => any()}, binary(), state()) -> state().
 forward(Tag, Props, Payload, #{dest := #{module := Mod}} = State) ->
