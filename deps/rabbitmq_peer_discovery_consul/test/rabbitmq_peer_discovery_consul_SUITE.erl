@@ -47,10 +47,11 @@ groups() ->
                  registration_with_all_default_values_test,
                  registration_with_cluster_name_test,
                  registration_without_acl_token_test,
-                 registration_with_acl_token_test
-                 , registration_with_auto_addr_test
-                 , registration_with_auto_addr_from_nodename_test
-                 , registration_with_auto_addr_nic_test
+                 registration_with_acl_token_test,
+                 registration_with_auto_addr_test,
+                 registration_with_auto_addr_from_nodename_test,
+                 registration_with_auto_addr_nic_test,
+                 registration_generic_error_test
                 ]}
      , {list_node_tests, [], [
                  list_nodes_default_values_test,
@@ -530,91 +531,13 @@ registration_with_auto_addr_nic_test(_Config) ->
           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
           ?assert(meck:validate(rabbit_peer_discovery_util)).
 
-%% registeration_test() ->
-%%   {
-%%     foreach,
-%%     fun() ->
-%%       autocluster_testing:reset(),
-%%       meck:new(rabbit_peer_discovery_httpc, []),
-%%       meck:new(autocluster_util, [passthrough]),
-%%       meck:new(timer, [unstick, passthrough]),
-%%       meck:new(autocluster_log, []),
-%%       [rabbit_peer_discovery_httpc, autocluster_util, timer, autocluster_log]
-%%     end,
-%%     fun autocluster_testing:on_finish/1,
-%%     [
-%%       {"with auto addr nic",
-%%         fun() ->
-%%           meck:expect(rabbit_peer_discovery_util, nic_ipv4,
-%%             fun(NIC) ->
-%%               ?assertEqual("en0", NIC),
-%%               {ok, "172.16.4.50"}
-%%             end),
-%%           meck:expect(rabbit_peer_discovery_httpc, post,
-%%             fun(Scheme, Host, Port, Path, Args, Body) ->
-%%               ?assertEqual("http", Scheme),
-%%               ?assertEqual("consul.service.consul", Host),
-%%               ?assertEqual(8500, Port),
-%%               ?assertEqual([v1, agent, service, register], Path),
-%%               ?assertEqual([{token, "token-value"}], Args),
-%%               Expect = <<"{\"ID\":\"rabbitmq:172.16.4.50\",\"Name\":\"rabbitmq\",\"Address\":\"172.16.4.50\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
-%%               ?assertEqual(Expect, Body),
-%%               {ok, []}
-%%             end),
-%%           os:putenv("CONSUL_HOST", "consul.service.consul"),
-%%           os:putenv("CONSUL_PORT", "8500"),
-%%           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
-%%           os:putenv("CONSUL_SVC_ADDR_NIC", "en0"),
-%%           ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
-%%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
-%%           ?assert(meck:validate(rabbit_peer_discovery_util))
-%%         end
-%%       },
-%%       {"ttl disabled - periodic health check not started", fun() ->
-%%         meck:expect(timer, apply_interval, fun(_, _, _, _) ->
-%%           {error, "should not be called"}
-%%          end),
-%%         meck:expect(rabbit_peer_discovery_httpc, post, fun (_, _, _, _, _, _) -> {ok, []} end),
-%%         os:putenv("CONSUL_SVC_TTL", ""),
-%%         ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
-%%         ?assert(meck:validate(timer))
-%%        end}
-%%     ]
-%%   }.
-
-%% registeration_failure_test() ->
-%%   {
-%%     foreach,
-%%     fun autocluster_testing:on_start/0,
-%%     fun autocluster_testing:on_finish/1,
-%%     [
-%%       {"on error",
-%%         fun() ->
-%%           meck:new(rabbit_peer_discovery_httpc),
-%%           meck:expect(rabbit_peer_discovery_httpc, post,
-%%             fun(_Scheme, _Host, _Port, _Path, _Args, _body) ->
-%%               {error, "testing"}
-%%             end),
-%%           ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:register()),
-%%           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
-%%           meck:unload(rabbit_peer_discovery_httpc)
-%%         end
-%%       },
-%%       {"on json encode error",
-%%         fun() ->
-%%           meck:new(rabbit_peer_discovery_consul, [passthrough]),
-%%           meck:new(autocluster_log, [passthrough]),
-%%           meck:expect(rabbit_peer_discovery_consul, build_registration_body, 0, {foo}),
-%%           meck:expect(autocluster_log, error, 2, ok),
-%%           ?assertEqual({error,{bad_term,{foo}}}, rabbit_peer_discovery_consul:register()),
-%%           ?assert(meck:validate(rabbit_peer_discovery_consul)),
-%%           meck:unload(rabbit_peer_discovery_consul),
-%%           meck:unload(autocluster_log)
-%%         end
-%%       }
-%%     ]
-%%   }.
-
+registration_generic_error_test(_Config) ->
+         meck:expect(rabbit_peer_discovery_httpc, post,
+           fun(_Scheme, _Host, _Port, _Path, _Args, _Body) ->
+             {error, "testing"}
+           end),
+         ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:register()),
+         ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 %% send_health_check_pass_test() ->
 %%   {
