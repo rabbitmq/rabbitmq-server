@@ -181,7 +181,7 @@
 -spec execute_mnesia_tx_with_tail
         (thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B)).
 -spec ensure_ok(ok_or_error(), atom()) -> 'ok'.
--spec tcp_name(atom(), inet:ip_address(), rabbit_networking:ip_port()) ->
+-spec tcp_name(atom(), inet:ip_address(), rabbit_net:ip_port()) ->
           atom().
 -spec format_inet_error(atom()) -> string().
 -spec upmap(fun ((A) -> B), [A]) -> [B].

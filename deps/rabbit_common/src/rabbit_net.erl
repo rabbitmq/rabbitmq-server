@@ -35,7 +35,7 @@
 
 %%---------------------------------------------------------------------------
 
--export_type([socket/0]).
+-export_type([socket/0, ip_port/0, hostname/0]).
 
 -type stat_option() ::
         'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
@@ -45,6 +45,8 @@
 -type socket() :: port() | ssl:sslsocket().
 -type opts() :: [{atom(), any()} |
                  {raw, non_neg_integer(), non_neg_integer(), binary()}].
+-type hostname() :: inet:hostname().
+-type ip_port() :: inet:port_number().
 -type host_or_ip() :: binary() | inet:ip_address().
 -spec is_ssl(socket()) -> boolean().
 -spec ssl_info(socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
@@ -73,16 +75,16 @@
 -spec close(socket()) -> ok_or_any_error().
 -spec fast_close(socket()) -> ok_or_any_error().
 -spec sockname(socket()) ->
-          ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()}).
+          ok_val_or_error({inet:ip_address(), ip_port()}).
 -spec peername(socket()) ->
-          ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()}).
+          ok_val_or_error({inet:ip_address(), ip_port()}).
 -spec peercert(socket()) ->
           'nossl' | ok_val_or_error(rabbit_ssl:certificate()).
 -spec connection_string(socket(), 'inbound' | 'outbound') ->
           ok_val_or_error(string()).
 -spec socket_ends(socket(), 'inbound' | 'outbound') ->
-          ok_val_or_error({host_or_ip(), rabbit_networking:ip_port(),
-                           host_or_ip(), rabbit_networking:ip_port()}).
+          ok_val_or_error({host_or_ip(), ip_port(),
+                           host_or_ip(), ip_port()}).
 -spec is_loopback(socket() | inet:ip_address()) -> boolean().
 -spec accept_ack(any(), socket()) -> ok.
 

@@ -54,8 +54,8 @@
 
 -export_type([ip_port/0, hostname/0]).
 
--type hostname() :: inet:hostname().
--type ip_port() :: inet:port_number().
+-type hostname() :: rabbit_net:hostname().
+-type ip_port() :: rabbit_net:ip_port().
 
 -type family() :: atom().
 -type listener_config() :: ip_port() |
