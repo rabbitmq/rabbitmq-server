@@ -33,12 +33,47 @@ defmodule WaitCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname()}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 500}}
   end
 
-  test "validate: with extra arguments returns an arg count error", context do
+  test "validate: cannot have both pid and pidfile", context do
+    {:validation_failure, "Cannot specify both pid and pidfile"} =
+      @command.validate(["pid_file"], Map.merge(context[:opts], %{pid: 123}))
+  end
+
+  test "validate: should have either pid or pidfile", context do
+    {:validation_failure, "No pid or pidfile specified"} =
+      @command.validate([], context[:opts])
+  end
+
+  test "validate: with more than one argument returns an arg count error", context do
     assert @command.validate(["pid_file", "extra"], context[:opts]) == {:validation_failure, :too_many_args}
-    assert @command.validate([], context[:opts]) == {:validation_failure, :not_enough_args}
+  end
+
+  test "run: times out waiting for non-existent pid file", context do
+    {:error, {:timeout, _}} = @command.run(["pid_file"], context[:opts]) |> Enum.to_list |> List.last
+  end
+
+  test "run: fails if pid process does not exist", context do
+    non_existent_pid = get_non_existent_os_pid()
+    {:error, :process_not_running} =
+      @command.run([], Map.merge(context[:opts], %{pid: non_existent_pid}))
+      |> Enum.to_list
+      |> List.last
+  end
+
+  test "run: times out if unable to communicate with the node", context do
+    pid = String.to_integer(System.get_pid())
+    {:error, {:timeout, _}} =
+      @command.run([], Map.merge(context[:opts], %{pid: pid, node: :nonode@nohost}))
+      |> Enum.to_list
+      |> List.last
+  end
+
+  test "run: happy path", context do
+    pid = :erlang.list_to_integer(:rpc.call(context[:opts][:node], :os, :getpid, []))
+    output = @command.run([], Map.merge(context[:opts], %{pid: pid}))
+    assert_stream_without_errors(output)
   end
 
   test "banner", context do
@@ -70,5 +105,12 @@ defmodule WaitCommandTest do
     assert match?({:ok, "ok"}, @command.output({:ok, "ok"}, context[:opts]))
     assert match?(:ok, @command.output(:ok, context[:opts]))
     assert match?({:ok, "ok"}, @command.output("ok", context[:opts]))
+  end
+
+  def get_non_existent_os_pid(pid \\ 2) do
+    case :rabbit_misc.is_os_process_alive(to_charlist(pid)) do
+      true  -> get_non_existent_os_pid(pid + 1)
+      false -> pid
+    end
   end
 end

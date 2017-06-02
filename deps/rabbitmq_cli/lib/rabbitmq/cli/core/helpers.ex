@@ -205,18 +205,56 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   # Streamify function sequence.
   # Execution can be terminated by an error {:error, _}.
   # The error will be the last element in the stream.
-  def stream_until_error(funs) do
+  # def stream_until_error(funs) do
+  #   Stream.transform(
+  #     funs, :just,
+  #     fn(f, :just) ->
+  #         case f.() do
+  #           {:error, _} = err -> {[err], :nothing};
+  #           other             -> {[other], :just}
+  #         end;
+  #       (_, :nothing) ->
+  #         {:halt, :nothing}
+  #   end)
+  # end
+
+  # Streamify a function sequence passing result
+  # Execution can be terminated by an error {:error, _}.
+  # The error will be the last element in the stream.
+  # Functions can return {:ok, val}, so val will be passed
+  # to then next function, or {:ok, val, output} where
+  # val will be passed and output will be put into the stream
+  def stream_until_error_parametrised(funs, init) do
     Stream.transform(
-      funs, :just,
-      fn
-        (f, :just) ->
-          case f.() do
+      funs, {:just, init},
+      fn(f, {:just, val}) ->
+          case f.(val) do
             {:error, _} = err -> {[err], :nothing};
-            other             -> {[other], :just}
+            :ok               -> {[], {:just, val}};
+            {:ok, new_val}        -> {[], {:just, new_val}};
+            {:ok, new_val, out}   -> {[out], {:just, new_val}}
           end;
         (_, :nothing) ->
           {:halt, :nothing}
-    end)
+      end)
+  end
+
+  # Streamify function sequence.
+  # Execution can be terminated by an error {:error, _}.
+  # The error will be the last element in the stream.
+  def stream_until_error(funs) do
+    stream_until_error_parametrised(
+      Enum.map(
+        funs,
+        fn(fun) ->
+          fn(:no_param) ->
+            case fun.() do
+              {:error, _} = err -> err;
+              other             -> {:ok, :no_param, other}
+            end
+          end
+        end),
+      :no_param)
   end
 
   def apply_if_exported(mod, fun, args, default) do
