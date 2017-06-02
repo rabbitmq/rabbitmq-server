@@ -223,7 +223,7 @@ queue_pid(Node, QName) ->
     case State of
         crashed ->
             case rabbit_amqqueue_sup_sup:find_for_vhost(VHost, Node) of
-                {error, {queue_supervisor_not_found, Result}} -> {error, no_sup};
+                {error, {queue_supervisor_not_found, _}} -> {error, no_sup};
                 {ok, SPid} ->
                     case sup_child(Node, SPid) of
                        {ok, _}           -> QPid;   %% restarting
