@@ -86,7 +86,7 @@ end_per_group(_, Config)  -> Config.
 
 reset() ->
     meck:unload(),
-    application:unset_env(rabbit, autocluster),
+    application:unset_env(rabbit, cluster_formation),
     [os:unsetenv(Var) || Var <- [
                                  "CLUSTER_NAME",
                                  "CONSUL_SCHEME",
@@ -272,7 +272,7 @@ list_nodes_with_cluster_name_and_acl_token_test(_Config) ->
            ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 list_nodes_return_value_basic_test(_Config) ->
-    application:set_env(rabbit, autocluster,
+    application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
                          {randomized_startup_delay_range, {0, 1}},
@@ -291,7 +291,7 @@ list_nodes_return_value_basic_test(_Config) ->
            ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 list_nodes_return_value_basic_long_node_name_test(_Config) ->
-    application:set_env(rabbit, autocluster,
+    application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
                          {randomized_startup_delay_range, {0, 1}},
@@ -311,7 +311,7 @@ list_nodes_return_value_basic_long_node_name_test(_Config) ->
            ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 list_nodes_return_value_long_node_name_and_custom_domain_test(_Config) ->
-    application:set_env(rabbit, autocluster,
+    application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
                          {randomized_startup_delay_range, {0, 1}},
@@ -332,7 +332,7 @@ list_nodes_return_value_long_node_name_and_custom_domain_test(_Config) ->
            ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 list_nodes_return_value_srv_address_test(_Config) ->
-    application:set_env(rabbit, autocluster,
+    application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
                          {randomized_startup_delay_range, {0, 1}},
@@ -351,7 +351,7 @@ list_nodes_return_value_srv_address_test(_Config) ->
            ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 list_nodes_return_value_nodes_in_warning_state_included_test(_Config) ->
-    application:set_env(rabbit, autocluster,
+    application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
                          {randomized_startup_delay_range, {0, 1}},
@@ -372,7 +372,7 @@ list_nodes_return_value_nodes_in_warning_state_included_test(_Config) ->
            ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
-    application:set_env(rabbit, autocluster,
+    application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
                          {randomized_startup_delay_range, {0, 1}},
