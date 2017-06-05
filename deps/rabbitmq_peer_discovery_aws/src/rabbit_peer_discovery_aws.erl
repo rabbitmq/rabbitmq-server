@@ -24,7 +24,7 @@
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0,
          post_registration/0]).
 
--type tags() :: [{string(), string()}].
+-type tags() :: map().
 -type filters() :: [{string(), string()}].
 
 -ifdef(TEST).
@@ -268,15 +268,16 @@ build_instance_list_qargs([H|T], Accum) ->
     build_instance_list_qargs(T, lists:append([{Key, H}], Accum)).
 
 -spec maybe_add_tag_filters(tags(), filters(), integer()) -> filters().
-maybe_add_tag_filters([], QArgs, _) -> QArgs;
-maybe_add_tag_filters([{Key, Value}|T], QArgs, Num) ->
-    maybe_add_tag_filters(
-      T,
-      lists:append(
-        [{"Filter." ++ integer_to_list(Num) ++ ".Name", "tag:" ++ Key},
-         {"Filter." ++ integer_to_list(Num) ++ ".Value.1", Value}],
-        QArgs),
-      Num+1).
+maybe_add_tag_filters(Tags, QArgs, Num) ->
+    {Filters, _} =
+        maps:fold(fun(Key, Value, {AccQ, AccN}) ->
+                          {lists:append(
+                             [{"Filter." ++ integer_to_list(AccN) ++ ".Name", "tag:" ++ Key},
+                              {"Filter." ++ integer_to_list(AccN) ++ ".Value.1", Value}],
+                             AccQ),
+                           AccN + 1}
+                  end, {QArgs, Num}, Tags),
+    Filters.
 
 -spec get_node_list_from_tags(tags()) -> {ok, {[node()], disc}}.
 get_node_list_from_tags([]) ->
@@ -341,7 +342,9 @@ instance_id() ->
 -spec get_tags() -> tags().
 get_tags() ->
     Tags = get_config_key(aws_ec2_tags, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
-    if
-        Tags == "unused" -> [{"ignore", "me"}]; %% this is to trick dialyzer
-        true -> Tags
+    case Tags of
+        "unused" -> [{"ignore", "me"}]; %% this is to trick dialyzer;
+        Value when is_list(Value) ->
+            maps:from_list(Value);
+        _ -> Tags
     end.

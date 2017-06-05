@@ -39,10 +39,13 @@ groups() ->
 %%%
 
 maybe_add_tag_filters(_Config) ->
-    Tags = [{"region", "us-west-2"}, {"service", "rabbitmq"}],
-    Expectation = [{"Filter.2.Name", "tag:service"}, {"Filter.2.Value.1", "rabbitmq"},
-                   {"Filter.1.Name", "tag:region"}, {"Filter.1.Value.1", "us-west-2"}],
-    Result = rabbit_peer_discovery_aws:maybe_add_tag_filters(Tags, [], 1),
+    Tags = maps:from_list([{"region", "us-west-2"}, {"service", "rabbitmq"}]),
+    Expectation = lists:sort(
+                    [{"Filter.2.Name", "tag:service"},
+                     {"Filter.2.Value.1", "rabbitmq"},
+                     {"Filter.1.Name", "tag:region"},
+                     {"Filter.1.Value.1", "us-west-2"}]),
+    Result = lists:sort(rabbit_peer_discovery_aws:maybe_add_tag_filters(Tags, [], 1)),
     ?assertEqual(Expectation, Result).
 
 get_hostname_name_from_reservation_set(_Config) ->
