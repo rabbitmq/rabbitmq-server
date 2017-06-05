@@ -79,7 +79,7 @@ NAVIGATION['Admin'][0]['Shovel Management'] = ['#/dynamic-shovels', "policymaker
 HELP['shovel-uri'] =
     'Both source and destination can be either a local or remote broker. See the "URI examples" pane for examples of how to construct URIs. If connecting to a cluster, you can enter several URIs here separated by spaces.';
 
-HELP['shovel-address'] =
+HELP['shovel-amqp10-address'] =
     'The AMQP 1.0 address representing the source or target node.'
 
 HELP['shovel-queue-exchange'] =
@@ -104,7 +104,7 @@ HELP['shovel-ack-mode'] =
        <dd>Message acknowledgements are not used. The fastest option, but may lose messages in the event of network or broker failures.</dd>\
 </dl>';
 
-HELP['shovel-delete-after'] =
+HELP['shovel-amqp091-auto-delete'] =
     '<dl>\
        <dt><code>Never</code></dt>\
        <dd>The shovel never deletes itself; it will persist until it is explicitly removed.</dd>\
@@ -112,6 +112,13 @@ HELP['shovel-delete-after'] =
        <dd>The shovel will check the length of the queue when it starts up. It will transfer that many messages, and then delete itself.</dd>\
 </dl>';
 
+HELP['shovel-amqp10-auto-delete'] =
+    '<dl>\
+       <dt><code>Never</code></dt>\
+       <dd>The shovel never deletes itself; it will persist until it is explicitly removed.</dd>\
+       <dt><code>After num messages</code></dt>\
+       <dd>The shovel will delete itself after the given number of messages have been transferred.</dd>\
+</dl>';
 function remove_params_with(sammy, prefix) {
     for (var i in sammy.params) {
         if(i.startsWith(prefix)) {
