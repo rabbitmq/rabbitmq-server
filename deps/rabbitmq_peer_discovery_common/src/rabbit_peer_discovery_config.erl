@@ -41,10 +41,10 @@ get(Key, Mapping, Config) ->
 -spec config_map(atom()) -> #{atom() => peer_discovery_config_value()}.
 
 config_map(BackendConfigKey) ->
-    case application:get_env(rabbit, autocluster) of
+    case application:get_env(rabbit, cluster_formation) of
         undefined         -> #{};
-        {ok, Autocluster} ->
-            case proplists:get_value(BackendConfigKey, Autocluster) of
+        {ok, ClusterFormation} ->
+            case proplists:get_value(BackendConfigKey, ClusterFormation) of
                 undefined -> #{};
                 Proplist  -> maps:from_list(Proplist)
             end
