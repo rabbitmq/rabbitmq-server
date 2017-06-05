@@ -1,0 +1,73 @@
+%% host
+
+{mapping, "cluster_formation.consul.host", "rabbit.cluster_formation.peer_discovery_consul.consul_host", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_host",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.host", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% port
+
+{mapping, "cluster_formation.consul.port", "rabbit.cluster_formation.peer_discovery_consul.consul_port", [
+    {datatype, integer}, {validators, ["port"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_port",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.port", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% scheme
+
+{mapping, "cluster_formation.consul.scheme", "rabbit.cluster_formation.peer_discovery_consul.consul_scheme", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_scheme",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.scheme", Conf, "http") of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% ACL token
+
+{mapping, "cluster_formation.consul.acl_token", "rabbit.cluster_formation.peer_discovery_consul.consul_acl_token", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_acl_token",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.acl_token", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% cluster name
+
+{mapping, "cluster_formation.consul.cluster_name", "rabbit.cluster_formation.peer_discovery_consul.cluster_name", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.cluster_name",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.cluster_name", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
