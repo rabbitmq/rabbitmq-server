@@ -127,14 +127,14 @@
 -spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
 
 list_nodes() ->
-    case application:get_env(rabbit, autocluster) of
+    case application:get_env(rabbit, cluster_formation) of
       undefined         ->
         {ok, {[], disc}};
-      {ok, Autocluster} ->
-        case proplists:get_value(?BACKEND_CONFIG_KEY, Autocluster) of
+      {ok, ClusterFormation} ->
+        case proplists:get_value(?BACKEND_CONFIG_KEY, ClusterFormation) of
             undefined ->
               rabbit_log:warning("Peer discovery backend is set to ~s "
-                                 "but final config does not contain rabbit.autocluster.peer_discovery_consul. "
+                                 "but final config does not contain rabbit.cluster_formation.peer_discovery_consul. "
                                  "Cannot discover any nodes because Consul cluster details are not configured!",
                                  [?MODULE]),
               {ok, {[], disc}};
