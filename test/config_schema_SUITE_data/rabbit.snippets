@@ -84,30 +84,30 @@ default_permissions.write = .*",
         {default_user_tags,[administrator]},
         {default_permissions,[<<".*">>,<<".*">>,<<".*">>]}]}],
   []},
- {autocluster,
-  "autocluster.peer_discovery_backend = rabbit_peer_discovery_classic_config
-autocluster.classic_config.nodes.peer1 = rabbit@hostname1
-autocluster.classic_config.nodes.peer2 = rabbit@hostname2
-autocluster.node_type = disc",
+ {cluster_formation,
+  "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
+cluster_formation.classic_config.nodes.peer1 = rabbit@hostname1
+cluster_formation.classic_config.nodes.peer2 = rabbit@hostname2
+cluster_formation.node_type = disc",
   [{rabbit,
-       [{autocluster,
+       [{cluster_formation,
             [{peer_discovery_backend,rabbit_peer_discovery_classic_config},
              {node_type,disc}]},
         {cluster_nodes,{[rabbit@hostname2,rabbit@hostname1],disc}}]}],
   []},
- {autocluster_disK,
-  "autocluster.peer_discovery_backend = rabbit_peer_discovery_classic_config
-   autocluster.classic_config.nodes.peer1 = rabbit@hostname1
-   autocluster.classic_config.nodes.peer2 = rabbit@hostname2
-   autocluster.node_type = disk",
+ {cluster_formation_disK,
+  "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
+   cluster_formation.classic_config.nodes.peer1 = rabbit@hostname1
+   cluster_formation.classic_config.nodes.peer2 = rabbit@hostname2
+   cluster_formation.node_type = disk",
   [{rabbit,
-       [{autocluster,
+       [{cluster_formation,
             [{peer_discovery_backend,rabbit_peer_discovery_classic_config},
              {node_type,disc}]},
         {cluster_nodes,{[rabbit@hostname2,rabbit@hostname1],disc}}]}],
   []},
- {autocluster_ram_ignored,
-  "autocluster.node_type = ram",[],[]},
+ {cluster_formation_ram_ignored,
+  "cluster_formation.node_type = ram",[],[]},
  {tcp_listen_options,
   "tcp_listen_options.backlog = 128
 tcp_listen_options.nodelay = true
@@ -320,29 +320,29 @@ tcp_listen_options.exit_on_close = false",
   "tcp_listen_options.linger.timeout = 100",
   [{rabbit,[{tcp_listen_options,[{linger,{false,100}}]}]}],
   []},
- {autocluster_dns,
-  "autocluster.peer_discovery_backend = rabbit_peer_discovery_dns
-   autocluster.dns.hostname = 192.168.0.2.xip.io
-   autocluster.node_type = disc",
+ {cluster_formation_dns,
+  "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_dns
+   cluster_formation.dns.hostname = 192.168.0.2.xip.io
+   cluster_formation.node_type = disc",
   [{rabbit,
-       [{autocluster,
+       [{cluster_formation,
             [{peer_discovery_dns,[{hostname,<<"192.168.0.2.xip.io">>}]},
              {peer_discovery_backend,rabbit_peer_discovery_dns},
              {node_type,disc}]}]}],
   []},
- {autocluster_classic,
-  "autocluster.peer_discovery_backend = rabbit_peer_discovery_classic_config
-   autocluster.node_type = disc",
+ {cluster_formation_classic,
+  "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
+   cluster_formation.node_type = disc",
   [{rabbit,
-       [{autocluster,
+       [{cluster_formation,
             [{peer_discovery_backend,rabbit_peer_discovery_classic_config},
              {node_type,disc}]}]}],
   []},
- {autocluster_classic_ram,
-  "autocluster.peer_discovery_backend = rabbit_peer_discovery_classic_config
-   autocluster.node_type = ram",
+ {cluster_formation_classic_ram,
+  "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
+   cluster_formation.node_type = ram",
   [{rabbit,
-       [{autocluster,
+       [{cluster_formation,
             [{peer_discovery_backend,rabbit_peer_discovery_classic_config},
              {node_type,ram}]}]}],
   []},
