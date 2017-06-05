@@ -41,7 +41,7 @@
 -spec backend() -> atom().
 
 backend() ->
-  case application:get_env(rabbit, autocluster) of
+  case application:get_env(rabbit, cluster_formation) of
     {ok, Proplist} ->
       proplists:get_value(peer_discovery_backend, Proplist, ?DEFAULT_BACKEND);
     undefined      ->
@@ -53,7 +53,7 @@ backend() ->
 -spec node_type() -> rabbit_types:node_type().
 
 node_type() ->
-  case application:get_env(rabbit, autocluster) of
+  case application:get_env(rabbit, cluster_formation) of
     {ok, Proplist} ->
       proplists:get_value(node_type, Proplist, ?DEFAULT_NODE_TYPE);
     undefined      ->
@@ -147,7 +147,7 @@ inject_randomized_delay() ->
 -spec randomized_delay_range_in_ms() -> {integer(), integer()}.
 
 randomized_delay_range_in_ms() ->
-  {Min, Max} = case application:get_env(rabbit, autocluster) of
+  {Min, Max} = case application:get_env(rabbit, cluster_formation) of
                    {ok, Proplist} ->
                        proplists:get_value(randomized_startup_delay_range, Proplist, ?DEFAULT_STARTUP_RANDOMIZED_DELAY);
                    undefined      ->

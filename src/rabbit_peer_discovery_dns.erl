@@ -31,14 +31,14 @@
 -spec list_nodes() -> {ok, Nodes :: list()} | {error, Reason :: string()}.
 
 list_nodes() ->
-    case application:get_env(rabbit, autocluster) of
+    case application:get_env(rabbit, cluster_formation) of
       undefined         ->
         {[], disc};
-      {ok, Autocluster} ->
-        case proplists:get_value(peer_discovery_dns, Autocluster) of
+      {ok, ClusterFormation} ->
+        case proplists:get_value(peer_discovery_dns, ClusterFormation) of
             undefined ->
               rabbit_log:warning("Peer discovery backend is set to ~s "
-                                 "but final config does not contain rabbit.autocluster.peer_discovery_dns. "
+                                 "but final config does not contain rabbit.cluster_formation.peer_discovery_dns. "
                                  "Cannot discover any nodes because seed hostname is not configured!",
                                  [?MODULE]),
               {[], disc};
