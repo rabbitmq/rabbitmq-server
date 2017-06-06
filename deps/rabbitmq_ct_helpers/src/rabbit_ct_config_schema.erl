@@ -25,8 +25,7 @@ init_schemas(App, Config) ->
     RabbitSchema = filename:join([DepsDir, "rabbit", "priv", "schema", "rabbitmq.schema"]),
     Schemas = case App of
         rabbit -> [RabbitSchema];
-        _      -> [RabbitSchema,
-                   filename:join([DepsDir, App, "priv", "schema", atom_to_list(App) ++ ".schema"])]
+        _      -> [RabbitSchema, find_app_schema(App, DepsDir)]
     end,
     ct:pal("Schemas ~p~n", [Schemas]),
     SchemaDir = filename:join(?config(data_dir, Config), "schema"),
@@ -44,6 +43,23 @@ init_schemas(App, Config) ->
         {results_dir, ResultsDir},
         {conf_snippets, Snippets}
         ]).
+
+find_app_schema(App, DepsDir) ->
+    Schema = filename:join([DepsDir, App, "priv", get_schema_for(App)]),
+    does_schema_exist(filelib:is_regular(Schema), App, DepsDir, Schema, cont).
+
+does_schema_exist(true, _App, _DepsDir, Schema, _) ->
+    Schema;
+does_schema_exist(false, App, _DepsDir, _Schema, stop) ->
+    ct:fail("Could not find schema for app: ~p~n", [App]);
+does_schema_exist(false, App, DepsDir, _Schema, cont) ->
+    % If not in umbrella, priv will be at ../priv
+    PrivDir = filename:join([DepsDir, "..", "priv"]),
+    Schema = filename:join([PrivDir, get_schema_for(App)]),
+    does_schema_exist(filelib:is_regular(Schema), App, DepsDir, Schema, stop).
+
+get_schema_for(App) ->
+    filename:join(["schema", atom_to_list(App) ++ ".schema"]).
 
 copy_to(File, Dir) ->
     BaseName = filename:basename(File),
