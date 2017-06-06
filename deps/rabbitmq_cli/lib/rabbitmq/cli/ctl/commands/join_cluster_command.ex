@@ -60,6 +60,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     "Clustering node #{node_name} with #{target_node}"
   end
 
+  def output({:ok, :already_member}, _) do
+    {:ok, "The node is already a member of this cluster"}
+  end
   def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
      RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
