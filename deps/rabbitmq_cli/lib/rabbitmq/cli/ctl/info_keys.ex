@@ -28,6 +28,7 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   def prepare_info_keys(args) do
     args
     |> Enum.flat_map(fn(arg) -> String.split(arg, ",", [trim: true]) end)
+    |> Enum.map(&String.trim/1)
     |> Enum.map(&String.to_atom/1)
     |> Enum.uniq
   end
