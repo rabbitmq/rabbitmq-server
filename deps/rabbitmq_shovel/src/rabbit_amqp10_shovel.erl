@@ -202,18 +202,18 @@ handle_dest({amqp10_disposition, {Result, Tag}},
             State0 = #{ack_mode := on_confirm,
                        dest := #{unacked := Unacked} = Dst,
                        name := Name}) ->
-    State = State0#{dest => Dst#{unacked => maps:remove(Tag, Unacked)}},
+    State1 = State0#{dest => Dst#{unacked => maps:remove(Tag, Unacked)}},
     {Decr, State} =
         case {Unacked, Result} of
             {#{Tag := IncomingTag}, accepted} ->
-                {1, rabbit_shovel_behaviour:ack(IncomingTag, false, State)};
+                {1, rabbit_shovel_behaviour:ack(IncomingTag, false, State1)};
             {#{Tag := IncomingTag}, rejected} ->
-                {1, rabbit_shovel_behaviour:nack(IncomingTag, false, State)};
+                {1, rabbit_shovel_behaviour:nack(IncomingTag, false, State1)};
             _ -> % not found - this should ideally not happen
                 error_logger:warning_msg("Shovel ~s amqp10 destination "
                                          "disposition tag not found: ~p~n",
                                          [Name, Tag]),
-                {0, State}
+                {0, State1}
         end,
     rabbit_shovel_behaviour:decr_remaining(Decr, State);
 handle_dest({amqp10_event, {connection, Conn, opened}},
