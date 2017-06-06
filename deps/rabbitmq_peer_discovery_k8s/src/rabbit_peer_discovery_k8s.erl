@@ -62,7 +62,7 @@
                                                    default_value = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
                                                   },
           k8s_namespace_path                 => #peer_discovery_config_entry_meta{
-                                                   type          = strin,
+                                                   type          = string,
                                                    env_variable  = "K8S_NAMESPACE_PATH",
                                                    default_value = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
                                                   },
