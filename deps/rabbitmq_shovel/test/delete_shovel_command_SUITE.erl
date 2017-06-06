@@ -79,7 +79,7 @@ delete(Config) ->
     shovel_test_utils:set_param(
       Config,
       <<"myshovel">>, [{<<"src-queue">>,  <<"src">>},
-                       {<<"dest-queue">>, <<"dest">>}]),                    
+                       {<<"dest-queue">>, <<"dest">>}]),
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A, vhost => <<"/">>},
     ok = ?CMD:run([<<"myshovel">>], Opts),

@@ -21,13 +21,11 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
-%% for testing purposes
+%% for testing purposes - TODO: remove
 -export([get_connection_name/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
-
--define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 -record(state, {inbound_conn, inbound_ch, outbound_conn, outbound_ch,
                 name, type, config, inbound_uri, outbound_uri, unacked,
@@ -45,126 +43,59 @@ start_link(Type, Name, Config) ->
 %% Gen Server Implementation
 %%---------------------------
 
-init([Type, Name, Config]) ->
+init([Type, Name, Config0]) ->
     gen_server2:cast(self(), init),
-    {ok, Shovel} = parse(Type, Name, Config),
-    {ok, #state{name = Name, type = Type, config = Shovel}}.
-
-parse(static,  Name, Config) -> rabbit_shovel_config:parse(Name, Config);
-parse(dynamic, Name, Config) -> rabbit_shovel_parameters:parse(Name, Config).
+    Config = case Type of
+                static ->
+                     Config0;
+                dynamic ->
+                    ClusterName = rabbit_nodes:cluster_name(),
+                    {ok, Conf} = rabbit_shovel_parameters:parse(Name,
+                                                                ClusterName,
+                                                                Config0),
+                    Conf
+            end,
+    {ok, #state{name = Name, type = Type, config = Config}}.
 
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(init, State = #state{config = Config}) ->
-    #shovel{sources = Sources, destinations = Destinations} = Config,
-    #state{name = Name} = State,
-    {InboundConn, InboundChan, InboundURI} =
-        make_conn_and_chan(Sources#endpoint.uris, Name),
-    {OutboundConn, OutboundChan, OutboundURI} =
-        make_conn_and_chan(Destinations#endpoint.uris, Name),
-
+    Config1 = rabbit_shovel_behaviour:connect_source(Config),
+    Config2 =  rabbit_shovel_behaviour:connect_dest(Config1),
     %% Don't trap exits until we have established connections so that
     %% if we try to shut down while waiting for a connection to be
     %% established then we don't block
     process_flag(trap_exit, true),
-
-    (Sources#endpoint.resource_declaration)(InboundConn, InboundChan),
-    (Destinations#endpoint.resource_declaration)(OutboundConn, OutboundChan),
-
-    NoAck = Config#shovel.ack_mode =:= no_ack,
-    case NoAck of
-        false ->
-            Prefetch = Config#shovel.prefetch_count,
-            #'basic.qos_ok'{} =
-            amqp_channel:call(
-              InboundChan, #'basic.qos'{prefetch_count = Prefetch}),
-            ok;
-
-        true  -> ok
-    end,
-
-    case Config#shovel.ack_mode of
-        on_confirm ->
-            #'confirm.select_ok'{} =
-                amqp_channel:call(OutboundChan, #'confirm.select'{}),
-            ok = amqp_channel:register_confirm_handler(OutboundChan, self());
-        _ ->
-            ok
-    end,
-
-    Remaining = remaining(InboundChan, Config),
-    case Remaining of
-        0 -> exit({shutdown, autodelete});
-        _ -> ok
-    end,
-
-    #'basic.consume_ok'{} =
-        amqp_channel:subscribe(
-          InboundChan, #'basic.consume'{queue  = Config#shovel.queue,
-                                        no_ack = NoAck},
-          self()),
-
-    State1 =
-        State#state{inbound_conn = InboundConn, inbound_ch = InboundChan,
-                    outbound_conn = OutboundConn, outbound_ch = OutboundChan,
-                    inbound_uri = InboundURI,
-                    outbound_uri = OutboundURI,
-                    remaining = Remaining,
-                    remaining_unacked = Remaining,
-                    unacked = gb_trees:empty()},
+    Config3 = rabbit_shovel_behaviour:init_dest(Config2),
+    Config4 = rabbit_shovel_behaviour:init_source(Config3),
+    State1 = State#state{config = Config4},
     ok = report_running(State1),
     {noreply, State1}.
 
-handle_info(#'basic.consume_ok'{}, State) ->
-    {noreply, State};
 
-handle_info({#'basic.deliver'{delivery_tag = Tag,
-                              exchange = Exchange, routing_key = RoutingKey},
-             Msg = #amqp_msg{props = Props = #'P_basic'{}}},
-            State = #state{inbound_uri  = InboundURI,
-                           outbound_uri = OutboundURI,
-                           config = #shovel{publish_properties = PropsFun,
-                                            publish_fields     = FieldsFun}}) ->
-    Method = #'basic.publish'{exchange = Exchange, routing_key = RoutingKey},
-    Method1 = FieldsFun(InboundURI, OutboundURI, Method),
-    Msg1 = Msg#amqp_msg{props = PropsFun(InboundURI, OutboundURI, Props)},
-    {noreply, publish(Tag, Method1, Msg1, State)};
+handle_info(Msg, State = #state{config = Config, name = Name}) ->
+    case rabbit_shovel_behaviour:handle_source(Msg, Config) of
+        not_handled ->
+            case rabbit_shovel_behaviour:handle_dest(Msg, Config) of
+                not_handled ->
+                    error_logger:info_msg("Shovel ~p message not handled! ~p~n",
+                                          [Name, Msg]),
+                    {noreply, State};
+                {stop, Reason} ->
+                    {stop, Reason, State};
+                Config1 ->
+                    {noreply, State#state{config = Config1}}
+            end;
+        {stop, Reason} ->
+            {stop, Reason, State};
+        Config1 ->
+            {noreply, State#state{config = Config1}}
+    end.
 
-handle_info(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
-            State = #state{config = #shovel{ack_mode = on_confirm}}) ->
-    {noreply, confirm_to_inbound(
-                fun (DTag, Multi) ->
-                        #'basic.ack'{delivery_tag = DTag, multiple = Multi}
-                end, Seq, Multiple, State)};
-
-handle_info(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
-            State = #state{config = #shovel{ack_mode = on_confirm}}) ->
-    {noreply, confirm_to_inbound(
-                fun (DTag, Multi) ->
-                        #'basic.nack'{delivery_tag = DTag, multiple = Multi}
-                end, Seq, Multiple, State)};
-
-handle_info(#'basic.cancel'{}, State = #state{name = Name}) ->
-    rabbit_log:warning("Shovel ~p received 'basic.cancel' from the broker~n",
-                       [Name]),
-    {stop, {shutdown, restart}, State};
-
-handle_info({'EXIT', InboundConn, Reason},
-            State = #state{inbound_conn = InboundConn}) ->
-    {stop, {inbound_conn_died, Reason}, State};
-
-handle_info({'EXIT', OutboundConn, Reason},
-            State = #state{outbound_conn = OutboundConn}) ->
-    {stop, {outbound_conn_died, Reason}, State}.
-
-terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
-                         outbound_conn = undefined, outbound_ch = undefined,
-                         name = Name, type = Type}) ->
-    rabbit_shovel_status:report(Name, Type, {terminated, Reason}),
-    ok;
 terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
                                                  type = dynamic}) ->
+    error_logger:info_msg("terminating dynamic worker ~p~n", [{VHost, Name}]),
     close_connections(State),
     %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
     put(shovel_worker_autodelete, true),
@@ -172,6 +103,7 @@ terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
     rabbit_shovel_status:remove({VHost, Name}),
     ok;
 terminate(Reason, State) ->
+    error_logger:info_msg("terminating static worker with ~p ~n", [Reason]),
     close_connections(State),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, Reason}),
@@ -184,64 +116,23 @@ code_change(_OldVsn, State, _Extra) ->
 %% Helpers
 %%---------------------------
 
-confirm_to_inbound(MsgCtr, Seq, Multiple, State =
-                       #state{inbound_ch = InboundChan, unacked = Unacked}) ->
-    ok = amqp_channel:cast(
-           InboundChan, MsgCtr(gb_trees:get(Seq, Unacked), Multiple)),
-    {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
-    decr_remaining(Removed, State#state{unacked = Unacked1}).
+report_running(#state{config = Config} = State) ->
+    InUri = rabbit_shovel_behaviour:source_uri(Config),
+    OutUri = rabbit_shovel_behaviour:dest_uri(Config),
+    InProto = rabbit_shovel_behaviour:source_protocol(Config),
+    OutProto = rabbit_shovel_behaviour:dest_protocol(Config),
+    InEndpoint = rabbit_shovel_behaviour:source_endpoint(Config),
+    OutEndpoint = rabbit_shovel_behaviour:dest_endpoint(Config),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {running, [{src_uri,  rabbit_data_coercion:to_binary(InUri)},
+                                           {src_protocol, rabbit_data_coercion:to_binary(InProto)},
+                                           {dest_protocol, rabbit_data_coercion:to_binary(OutProto)},
+                                           {dest_uri, rabbit_data_coercion:to_binary(OutUri)}]
+                                 ++ props_to_binary(InEndpoint) ++ props_to_binary(OutEndpoint)
+                                }).
 
-remove_delivery_tags(Seq, false, Unacked, 0) ->
-    {gb_trees:delete(Seq, Unacked), 1};
-remove_delivery_tags(Seq, true, Unacked, Count) ->
-    case gb_trees:is_empty(Unacked) of
-        true  -> {Unacked, Count};
-        false -> {Smallest, _Val, Unacked1} = gb_trees:take_smallest(Unacked),
-                 case Smallest > Seq of
-                     true  -> {Unacked, Count};
-                     false -> remove_delivery_tags(Seq, true, Unacked1, Count+1)
-                 end
-    end.
-
-report_running(State) ->
-    rabbit_shovel_status:report(
-      State#state.name, State#state.type,
-      {running, [{src_uri,  State#state.inbound_uri},
-                 {dest_uri, State#state.outbound_uri}]}).
-
-publish(_Tag, _Method, _Msg, State = #state{remaining_unacked = 0}) ->
-    %% We are in on-confirm mode, and are autodelete. We have
-    %% published all the messages we need to; we just wait for acks to
-    %% come back. So drop subsequent messages on the floor to be
-    %% requeued later.
-    State;
-
-publish(Tag, Method, Msg,
-        State = #state{inbound_ch = InboundChan, outbound_ch = OutboundChan,
-                       config = Config, unacked = Unacked}) ->
-    Seq = case Config#shovel.ack_mode of
-              on_confirm  -> amqp_channel:next_publish_seqno(OutboundChan);
-              _           -> undefined
-          end,
-    ok = amqp_channel:call(OutboundChan, Method, Msg),
-    decr_remaining_unacked(
-      case Config#shovel.ack_mode of
-          no_ack     -> decr_remaining(1, State);
-          on_confirm -> State#state{unacked = gb_trees:insert(
-                                                Seq, Tag, Unacked)};
-          on_publish -> ok = amqp_channel:cast(
-                               InboundChan, #'basic.ack'{delivery_tag = Tag}),
-                        decr_remaining(1, State)
-      end).
-
-make_conn_and_chan(URIs, ShovelName) ->
-    URI = lists:nth(rand:uniform(length(URIs)), URIs),
-    {ok, AmqpParam} = amqp_uri:parse(URI),
-    ConnName = get_connection_name(ShovelName),
-    {ok, Conn} = amqp_connection:start(AmqpParam, ConnName),
-    link(Conn),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
-    {Conn, Chan, list_to_binary(amqp_uri:remove_credentials(URI))}.
+props_to_binary(Props) ->
+    [{K, rabbit_data_coercion:to_binary(V)} || {K, V} <- Props].
 
 %% for static shovels, name is an atom from the configuration file
 get_connection_name(ShovelName) when is_atom(ShovelName) ->
@@ -258,33 +149,6 @@ get_connection_name({_, Name}) when is_binary(Name) ->
 get_connection_name(_) ->
     <<"Shovel">>.
 
-remaining(_Ch, #shovel{delete_after = never}) ->
-    unlimited;
-remaining(Ch, #shovel{delete_after = 'queue-length', queue = Queue}) ->
-    #'queue.declare_ok'{message_count = N} =
-        amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
-                                               passive = true}),
-    N;
-remaining(_Ch, #shovel{delete_after = Count}) ->
-    Count.
-
-decr_remaining(_N, State = #state{remaining = unlimited}) ->
-    State;
-decr_remaining(N,  State = #state{remaining = M}) ->
-    case M > N of
-        true  -> State#state{remaining = M - N};
-        false -> exit({shutdown, autodelete})
-    end.
-
-decr_remaining_unacked(State = #state{remaining_unacked = unlimited}) ->
-    State;
-decr_remaining_unacked(State = #state{remaining_unacked = 0}) ->
-    State;
-decr_remaining_unacked(State = #state{remaining_unacked = N}) ->
-    State#state{remaining_unacked = N - 1}.
-
-close_connections(State) ->
-    catch amqp_connection:close(State#state.inbound_conn,
-                                ?MAX_CONNECTION_CLOSE_TIMEOUT),
-    catch amqp_connection:close(State#state.outbound_conn,
-                                ?MAX_CONNECTION_CLOSE_TIMEOUT).
+close_connections(#state{config = Conf}) ->
+    ok = rabbit_shovel_behaviour:close_source(Conf),
+    ok = rabbit_shovel_behaviour:close_dest(Conf).

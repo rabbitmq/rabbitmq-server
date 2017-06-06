@@ -216,12 +216,13 @@ change_definition(Config) ->
       end).
 
 autodelete(Config) ->
+    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50}),
     autodelete_case(Config, {<<"on-confirm">>, <<"queue-length">>,  0, 100}),
-    autodelete_case(Config, {<<"on-confirm">>, 50,                 50,  50}),
     autodelete_case(Config, {<<"on-publish">>, <<"queue-length">>,  0, 100}),
     autodelete_case(Config, {<<"on-publish">>, 50,                 50,  50}),
     %% no-ack is not compatible with explicit count
-    autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}).
+    autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}),
+    ok.
 
 autodelete_case(Config, Args) ->
     with_ch(Config, autodelete_do(Config, Args)).
@@ -236,11 +237,12 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
               Config,
               <<"test">>, [{<<"src-queue">>,    <<"src">>},
                            {<<"dest-queue">>,   <<"dest">>},
+                           {<<"src-prefetch-count">>, 50},
                            {<<"ack-mode">>,     AckMode},
                            {<<"delete-after">>, After}]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Ch, <<"src">>, <<"hello">>, ExpSrc),
-            expect_count(Ch, <<"dest">>, <<"hello">>, ExpDest)
+            expect_count(Ch, <<"dest">>, <<"hello">>, ExpDest),
+            expect_count(Ch, <<"src">>, <<"hello">>, ExpSrc)
     end.
 
 validation(Config) ->
@@ -371,7 +373,7 @@ expect(Ch, Q, Payload) ->
     Msg = receive
               {#'basic.deliver'{}, #amqp_msg{payload = Payload} = M} ->
                   M
-          after 1000 ->
+          after 4000 ->
                   exit({not_received, Payload})
           end,
     amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
@@ -381,10 +383,15 @@ expect_empty(Ch, Q) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{ queue = Q }).
 
 publish_count(Ch, X, Key, M, Count) ->
-    [publish(Ch, X, Key, M) || _ <- lists:seq(1, Count)].
+    [begin
+
+         publish(Ch, X, Key, M)
+     end || _ <- lists:seq(1, Count)].
 
 expect_count(Ch, Q, M, Count) ->
-    [expect(Ch, Q, M) || _ <- lists:seq(1, Count)],
+    [begin
+         expect(Ch, Q, M)
+     end || _ <- lists:seq(1, Count)],
     expect_empty(Ch, Q).
 
 invalid_param(Config, Value, User) ->

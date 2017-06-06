@@ -16,7 +16,8 @@
 
 -module(rabbit_shovel_util).
 
--export([update_headers/5, add_timestamp_header/1]).
+-export([update_headers/5,
+         add_timestamp_header/1]).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
@@ -33,7 +34,7 @@ update_headers(Prefix, Suffix, SrcURI, DestURI,
     Props#'P_basic'{headers = Headers2}.
 
 add_timestamp_header(Props = #'P_basic'{headers = undefined}) ->
-    add_timestamp_header(Props#'P_basic'{headers = []});    
+    add_timestamp_header(Props#'P_basic'{headers = []});
 add_timestamp_header(Props = #'P_basic'{headers = Headers}) ->
     Headers2 = rabbit_misc:set_table_value(Headers,
                                            ?TIMESTAMP_HEADER,

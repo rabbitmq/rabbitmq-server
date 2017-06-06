@@ -21,7 +21,7 @@
 -include("rabbit_shovel.hrl").
 
 -export([validate/5, notify/5, notify_clear/4]).
--export([register/0, unregister/0, parse/2]).
+-export([register/0, unregister/0, parse/3]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -39,22 +39,13 @@ unregister() ->
     rabbit_registry:unregister(runtime_parameter, <<"shovel">>).
 
 validate(_VHost, <<"shovel">>, Name, Def, User) ->
-    [case pget2(<<"src-exchange">>, <<"src-queue">>, Def) of
-         zero -> {error, "Must specify 'src-exchange' or 'src-queue'", []};
-         one  -> ok;
-         both -> {error, "Cannot specify 'src-exchange' and 'src-queue'", []}
-     end,
-     case pget2(<<"dest-exchange">>, <<"dest-queue">>, Def) of
-         zero -> ok;
-         one  -> ok;
-         both -> {error, "Cannot specify 'dest-exchange' and 'dest-queue'", []}
-     end,
-     case {pget(<<"delete-after">>, Def), pget(<<"ack-mode">>, Def)} of
-         {N, <<"no-ack">>} when is_integer(N) ->
-             {error, "Cannot specify 'no-ack' and numerical 'delete-after'", []};
-         _ ->
-             ok
-     end | rabbit_parameter_validation:proplist(Name, validation(User), Def)];
+    Validations =
+        shovel_validation()
+        ++ src_validation(Def, User)
+        ++ dest_validation(Def, User),
+    validate_src(Def)
+    ++ validate_dest(Def)
+    ++ rabbit_parameter_validation:proplist(Name, Validations, Def);
 
 validate(_VHost, _Component, Name, _Term, _User) ->
     {error, "name not recognised: ~p", [Name]}.
@@ -74,23 +65,103 @@ notify_clear(VHost, <<"shovel">>, Name, _Username) ->
 
 %%----------------------------------------------------------------------------
 
-validation(User) ->
-    [{<<"src-uri">>,         validate_uri_fun(User), mandatory},
-     {<<"dest-uri">>,        validate_uri_fun(User), mandatory},
+validate_src(Def) ->
+    case protocols(Def)  of
+        {amqp091, _} -> validate_amqp091_src(Def);
+        {amqp10, _} -> []
+    end.
+
+validate_dest(Def) ->
+    case protocols(Def)  of
+        {_, amqp091} -> validate_amqp091_dest(Def);
+        {_, amqp10} -> []
+    end.
+
+validate_amqp091_src(Def) ->
+    [case pget2(<<"src-exchange">>, <<"src-queue">>, Def) of
+         zero -> {error, "Must specify 'src-exchange' or 'src-queue'", []};
+         one  -> ok;
+         both -> {error, "Cannot specify 'src-exchange' and 'src-queue'", []}
+     end,
+     case {pget(<<"delete-after">>, Def), pget(<<"ack-mode">>, Def)} of
+         {N, <<"no-ack">>} when is_integer(N) ->
+             {error, "Cannot specify 'no-ack' and numerical 'delete-after'", []};
+         _ ->
+             ok
+     end].
+
+validate_amqp091_dest(Def) ->
+    [case pget2(<<"dest-exchange">>, <<"dest-queue">>, Def) of
+         zero -> ok;
+         one  -> ok;
+         both -> {error, "Cannot specify 'dest-exchange' and 'dest-queue'", []}
+     end].
+
+shovel_validation() ->
+    [{<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
+     {<<"ack-mode">>, rabbit_parameter_validation:enum(
+                        ['no-ack', 'on-publish', 'on-confirm']), optional},
+     {<<"src-protocol">>,
+      rabbit_parameter_validation:enum(['amqp10', 'amqp091']), optional},
+     {<<"dest-protocol">>,
+      rabbit_parameter_validation:enum(['amqp10', 'amqp091']), optional}
+    ].
+
+src_validation(Def, User) ->
+    case protocols(Def)  of
+        {amqp091, _} -> amqp091_src_validation(Def, User);
+        {amqp10, _} -> amqp10_src_validation(Def, User)
+    end.
+
+
+amqp10_src_validation(Def, User) ->
+    [
+     {<<"src-uri">>, validate_uri_fun(User), mandatory},
+     {<<"src-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
+     {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
+     {<<"src-delete-after">>, fun validate_delete_after/2, optional}
+    ].
+
+amqp091_src_validation(Def, User) ->
+    [
+     {<<"src-uri">>,         validate_uri_fun(User), mandatory},
      {<<"src-exchange">>,    fun rabbit_parameter_validation:binary/2,optional},
      {<<"src-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
      {<<"src-queue">>,       fun rabbit_parameter_validation:binary/2,optional},
+     {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
+     {<<"src-prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
+     {<<"delete-after">>, fun validate_delete_after/2, optional},
+     {<<"src-delete-after">>, fun validate_delete_after/2, optional}
+    ].
+
+dest_validation(Def, User) ->
+    case protocols(Def)  of
+        {_, amqp091} -> amqp091_dest_validation(Def, User);
+        {_, amqp10} -> amqp10_dest_validation(Def, User)
+    end.
+
+amqp10_dest_validation(Def, User) ->
+    [{<<"dest-uri">>, validate_uri_fun(User), mandatory},
+     {<<"dest-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
+     {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"dest-application-properties">>, fun validate_amqp10_map/2, optional},
+     {<<"dest-message-annotations">>, fun validate_amqp10_map/2, optional},
+     % TODO: restrict to allowed fields
+     {<<"dest-properties">>, fun validate_amqp10_map/2, optional}
+    ].
+
+amqp091_dest_validation(Def, User) ->
+    [{<<"dest-uri">>,        validate_uri_fun(User), mandatory},
      {<<"dest-exchange">>,   fun rabbit_parameter_validation:binary/2,optional},
      {<<"dest-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
      {<<"dest-queue">>,      fun rabbit_parameter_validation:binary/2,optional},
-     {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
-     {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
+     {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
+     {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"publish-properties">>, fun validate_properties/2,  optional},
-     {<<"ack-mode">>,        rabbit_parameter_validation:enum(
-                               ['no-ack', 'on-publish', 'on-confirm']), optional},
-     {<<"delete-after">>,    fun validate_delete_after/2, optional}
+     {<<"dest-publish-properties">>, fun validate_properties/2,  optional}
     ].
 
 validate_uri_fun(User) ->
@@ -136,6 +207,11 @@ validate_delete_after(Name,  Term) ->
     {error, "~s should be number, \"never\" or \"queue-length\", actually was "
      "~p", [Name, Term]}.
 
+validate_amqp10_map(Name, Terms) ->
+    Str = fun rabbit_parameter_validation:binary/2,
+    Validation = [{K, Str, optional} || {K, _} <- Terms],
+    rabbit_parameter_validation:proplist(Name, Validation, Terms).
+
 %% TODO headers?
 validate_properties(Name, Term) ->
     Str = fun rabbit_parameter_validation:binary/2,
@@ -157,33 +233,60 @@ validate_properties(Name, Term) ->
 
 %%----------------------------------------------------------------------------
 
-parse({VHost, Name}, Def) ->
-    SrcURIs  = get_uris(<<"src-uri">>,       Def),
+parse({VHost, Name}, ClusterName, Def) ->
+    {Source, SourceHeaders} = parse_source(Def),
+    {ok, #{name => Name,
+           shovel_type => dynamic,
+           source => Source,
+           dest => parse_dest({VHost, Name}, ClusterName, Def,
+                                      SourceHeaders),
+           ack_mode => translate_ack_mode(pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
+           reconnect_delay => pget(<<"reconnect-delay">>, Def,
+                                   ?DEFAULT_RECONNECT_DELAY)}}.
+
+parse_source(Def) ->
+    case protocols(Def) of
+        {amqp10, _} -> parse_amqp10_source(Def);
+        {amqp091, _} -> parse_amqp091_source(Def)
+    end.
+
+parse_dest(VHostName, ClusterName, Def, SourceHeaders) ->
+    case protocols(Def) of
+        {_, amqp10} ->
+            parse_amqp10_dest(VHostName, ClusterName, Def, SourceHeaders);
+        {_, amqp091} ->
+            parse_amqp091_dest(VHostName, ClusterName, Def, SourceHeaders)
+    end.
+
+parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
+    Uris = get_uris(<<"dest-uri">>, Def),
+    Address = pget(<<"dest-address">>, Def),
+    Properties = pget(<<"dest-properties">>, Def, []),
+    AppProperties = pget(<<"dest-application-properties">>, Def, []),
+    MessageAnns = pget(<<"dest-message-annotations">>, Def, []),
+    #{module => rabbit_amqp10_shovel,
+      uris => Uris,
+      target_address => Address,
+      message_annotations => maps:from_list(MessageAnns),
+      application_properties => maps:from_list(AppProperties ++ SourceHeaders),
+      properties => maps:from_list(
+                      lists:map(fun({K, V}) ->
+                                        {rabbit_data_coercion:to_atom(K), V}
+                                end, Properties)),
+      add_timestamp_header => pget(<<"dest-add-timestamp-header">>, Def, false),
+      add_forward_headers => pget(<<"dest-add-forward-headers">>, Def, false),
+      unacked => #{}
+     }.
+
+parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
     DestURIs = get_uris(<<"dest-uri">>,      Def),
-    SrcX     = pget(<<"src-exchange">>,      Def, none),
-    SrcXKey  = pget(<<"src-exchange-key">>,  Def, <<>>), %% [1]
-    SrcQ     = pget(<<"src-queue">>,         Def, none),
     DestX    = pget(<<"dest-exchange">>,     Def, none),
     DestXKey = pget(<<"dest-exchange-key">>, Def, none),
     DestQ    = pget(<<"dest-queue">>,        Def, none),
-    %% [1] src-exchange-key is never ignored if src-exchange is set
-    {SrcFun, Queue, Table1} =
-        case SrcQ of
-            none -> {fun (_Conn, Ch) ->
-                             Ms = [#'queue.declare'{exclusive = true},
-                                   #'queue.bind'{routing_key = SrcXKey,
-                                                 exchange    = SrcX}],
-                             [amqp_channel:call(Ch, M) || M <- Ms]
-                     end, <<>>, [{<<"src-exchange">>,     SrcX},
-                                 {<<"src-exchange-key">>, SrcXKey}]};
-            _    -> {fun (Conn, _Ch) ->
-                             ensure_queue(Conn, SrcQ)
-                     end, SrcQ, [{<<"src-queue">>, SrcQ}]}
-        end,
-    DestFun = fun (Conn, _Ch) ->
+    DestDeclFun = fun (Conn, _Ch) ->
                       case DestQ of
                           none -> ok;
-                          _    -> ensure_queue(Conn, DestQ)
+                          _ -> ensure_queue(Conn, DestQ)
                       end
               end,
     {X, Key} = case DestQ of
@@ -204,41 +307,90 @@ parse({VHost, Name}, Def) ->
                          _    -> P1#'basic.publish'{routing_key = Key}
                      end
              end,
-    AddHeaders = pget(<<"add-forward-headers">>, Def, false),
-    Table0 = [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
+    AddHeadersLegacy = pget(<<"add-forward-headers">>, Def, false),
+    AddHeaders = pget(<<"dest-add-forward-headers">>, Def, AddHeadersLegacy),
+    Table0 = [{<<"shovelled-by">>, ClusterName},
               {<<"shovel-type">>,  <<"dynamic">>},
               {<<"shovel-name">>,  Name},
               {<<"shovel-vhost">>, VHost}],
-    SetProps = lookup_indices(pget(<<"publish-properties">>, Def, []),
+    SetProps = lookup_indices(pget(<<"dest-publish-properties">>, Def,
+                                   pget(<<"publish-properties">>, Def, [])),
                               record_info(fields, 'P_basic')),
-    AddTimestampHeader = pget(<<"add-timestamp-header">>, Def, false),
+    AddTimestampHeaderLegacy = pget(<<"add-timestamp-header">>, Def, false),
+    AddTimestampHeader = pget(<<"dest-add-timestamp-header">>, Def,
+                              AddTimestampHeaderLegacy),
     PubPropsFun = fun (SrcURI, DestURI, P0) ->
                       P  = set_properties(P0, SetProps),
                       P1 = case AddHeaders of
-                          true  -> rabbit_shovel_util:update_headers(
-                                     Table0, Table1 ++ Table2,
-                                     SrcURI, DestURI, P);
-                          false -> P
+                               true -> rabbit_shovel_util:update_headers(
+                                          Table0, SourceHeaders ++ Table2,
+                                          SrcURI, DestURI, P);
+                               false -> P
                       end,
                       case AddTimestampHeader of
                           true  -> rabbit_shovel_util:add_timestamp_header(P1);
                           false -> P1
                       end
                   end,
-    {ok, #shovel{
-       sources            = #endpoint{uris                 = SrcURIs,
-                                      resource_declaration = SrcFun},
-       destinations       = #endpoint{uris                 = DestURIs,
-                                      resource_declaration = DestFun},
-       prefetch_count     = pget(<<"prefetch-count">>, Def, 1000),
-       ack_mode           = translate_ack_mode(
-                              pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
-       publish_fields     = PubFun,
-       publish_properties = PubPropsFun,
-       queue              = Queue,
-       reconnect_delay    = pget(<<"reconnect-delay">>, Def, 1),
-       delete_after       = opt_b2a(pget(<<"delete-after">>, Def, <<"never">>))
-      }}.
+    %% Details are only used for status report in rabbitmqctl, as vhost is not
+    %% available to query the runtime parameters.
+    Details = maps:from_list([{K, V} || {K, V} <- [{dest_exchange, DestX},
+                                                   {dest_exchange_key, DestXKey},
+                                                   {dest_queue, DestQ}],
+                                        V =/= none]),
+    maps:merge(#{module => rabbit_amqp091_shovel,
+                 uris => DestURIs,
+                 resource_decl => DestDeclFun,
+                 fields_fun => PubFun,
+                 props_fun => PubPropsFun
+                }, Details).
+
+parse_amqp10_source(Def) ->
+    Uris = get_uris(<<"src-uri">>, Def),
+    Address = pget(<<"src-address">>, Def),
+    DeleteAfter = pget(<<"src-delete-after">>, Def, <<"never">>),
+    PrefetchCount = pget(<<"src-prefetch-count">>, Def, 1000),
+    Headers = [],
+    {#{module => rabbit_amqp10_shovel,
+       uris => Uris,
+       source_address => Address,
+       delete_after => opt_b2a(DeleteAfter),
+       prefetch_count => PrefetchCount}, Headers}.
+
+parse_amqp091_source(Def) ->
+    SrcURIs = get_uris(<<"src-uri">>, Def),
+    SrcX = pget(<<"src-exchange">>,Def, none),
+    SrcXKey = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
+    SrcQ = pget(<<"src-queue">>, Def, none),
+    {SrcDeclFun, Queue, DestHeaders} =
+    case SrcQ of
+        none -> {fun (_Conn, Ch) ->
+                         Ms = [#'queue.declare'{exclusive = true},
+                               #'queue.bind'{routing_key = SrcXKey,
+                                             exchange    = SrcX}],
+                         [amqp_channel:call(Ch, M) || M <- Ms]
+                 end, <<>>, [{<<"src-exchange">>,     SrcX},
+                             {<<"src-exchange-key">>, SrcXKey}]};
+        _ -> {fun (Conn, _Ch) ->
+                      ensure_queue(Conn, SrcQ)
+              end, SrcQ, [{<<"src-queue">>, SrcQ}]}
+    end,
+    DeleteAfter = pget(<<"src-delete-after">>, Def,
+                       pget(<<"delete-after">>, Def, <<"never">>)),
+    PrefetchCount = pget(<<"src-prefetch-count">>, Def,
+                         pget(<<"prefetch-count">>, Def, 1000)),
+    %% Details are only used for status report in rabbitmqctl, as vhost is not
+    %% available to query the runtime parameters.
+    Details = maps:from_list([{K, V} || {K, V} <- [{source_exchange, SrcX},
+                                                   {source_exchange_key, SrcXKey}],
+                                        V =/= none]),
+    {maps:merge(#{module => rabbit_amqp091_shovel,
+                  uris => SrcURIs,
+                  resource_decl => SrcDeclFun,
+                  queue => Queue,
+                  delete_after => opt_b2a(DeleteAfter),
+                  prefetch_count => PrefetchCount
+                 }, Details), DestHeaders}.
 
 get_uris(Key, Def) ->
     URIs = case pget(Key, Def) of
@@ -259,7 +411,7 @@ ensure_queue(Conn, Queue) ->
     catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
             {ok, Ch2} = amqp_connection:open_channel(Conn),
             amqp_channel:call(Ch2, #'queue.declare'{queue   = Queue,
-                                                   durable = true}),
+                                                    durable = true}),
             catch amqp_channel:close(Ch2)
 
     after
@@ -282,3 +434,16 @@ list_find(K, L) -> list_find(K, L, 1).
 list_find(K, [K|_], N) -> N;
 list_find(K, [],   _N) -> exit({not_found, K});
 list_find(K, [_|L], N) -> list_find(K, L, N + 1).
+
+protocols(Def) ->
+    Src = case lists:keyfind(<<"src-protocol">>, 1, Def) of
+              {_, SrcProtocol} ->
+                  rabbit_data_coercion:to_atom(SrcProtocol);
+              false -> amqp091
+          end,
+    Dst = case lists:keyfind(<<"dest-protocol">>, 1, Def) of
+              {_, DstProtocol} ->
+                  rabbit_data_coercion:to_atom(DstProtocol);
+              false -> amqp091
+          end,
+    {Src, Dst}.

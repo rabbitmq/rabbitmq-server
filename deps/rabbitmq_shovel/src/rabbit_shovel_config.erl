@@ -25,15 +25,135 @@
 -define(IGNORE_FIELDS, [delete_after]).
 -define(EXTRA_KEYS, [add_forward_headers, add_timestamp_header]).
 
-parse(ShovelName, Config) ->
-    {ok, Defaults} = application:get_env(defaults),
-    try
-        {ok, parse_shovel_config_dict(
-               ShovelName, parse_shovel_config_proplist(
-                             enrich_shovel_config(Config, Defaults)))}
-    catch throw:{error, Reason} ->
-            {error, {invalid_shovel_configuration, ShovelName, Reason}}
+resolve_module(amqp091) -> rabbit_amqp091_shovel;
+resolve_module(amqp10) -> rabbit_amqp10_shovel.
+
+is_legacy(Config) ->
+    not proplists:is_defined(source, Config).
+
+get_brokers(Props) ->
+    case proplists:get_value(brokers, Props) of
+        undefined ->
+            [get_value(broker, Props)];
+        Brokers ->
+            Brokers
     end.
+
+convert_from_legacy(Config) ->
+    S = get_value(sources, Config),
+    validate(S),
+    SUris = get_brokers(S),
+    validate_uris(brokers, SUris),
+    D = get_value(destinations, Config),
+    validate(D),
+    DUris = get_brokers(D),
+    validate_uris(brokers, DUris),
+    Q = get_value(queue, Config),
+    DA = proplists:get_value(delete_after, Config, never),
+    Pref = proplists:get_value(prefetch_count, Config, ?DEFAULT_PREFETCH),
+    RD = proplists:get_value(reconnect_delay, Config, ?DEFAULT_RECONNECT_DELAY),
+    AckMode = proplists:get_value(ack_mode, Config, ?DEFAULT_ACK_MODE),
+    validate_ack_mode(AckMode),
+    PubFields = proplists:get_value(publish_fields, Config, []),
+    PubProps = proplists:get_value(publish_properties, Config, []),
+    AFH = proplists:get_value(add_forward_headers, Config, false),
+    ATH = proplists:get_value(add_timestamp_header, Config, false),
+    SourceDecls = proplists:get_value(declarations, S, []),
+    validate_list(SourceDecls),
+    DestDecls = proplists:get_value(declarations, D, []),
+    validate_list(DestDecls),
+    [{source, [{protocol, amqp091},
+               {uris, SUris},
+               {declarations, SourceDecls},
+               {queue, Q},
+               {delete_after, DA},
+               {prefetch_count, Pref}]},
+     {destination, [{protocol, amqp091},
+                    {uris, DUris},
+                    {declarations, DestDecls},
+                    {publish_properties, PubProps},
+                    {publish_fields, PubFields},
+                    {add_forward_headers, AFH},
+                    {add_timestamp_header, ATH}]},
+     {ack_mode, AckMode},
+     {reconnect_delay, RD}].
+
+parse(ShovelName, Config0) ->
+    try
+        validate(Config0),
+        case is_legacy(Config0) of
+            true ->
+                Config = convert_from_legacy(Config0),
+                parse_current(ShovelName, Config);
+            false ->
+                parse_current(ShovelName, Config0)
+        end
+    catch throw:{error, Reason} ->
+              {error, {invalid_shovel_configuration, ShovelName, Reason}};
+          throw:Reason ->
+              {error, {invalid_shovel_configuration, ShovelName, Reason}}
+    end.
+
+validate(Props) ->
+    validate_proplist(Props),
+    validate_duplicates(Props).
+
+validate_proplist(Props) when is_list (Props) ->
+    case lists:filter(fun ({_, _}) -> false;
+                          (_) -> true
+                      end, Props) of
+        [] -> ok;
+        Invalid ->
+            throw({invalid_parameters, Invalid})
+    end;
+validate_proplist(X) ->
+    throw({require_list, X}).
+
+validate_duplicates(Props) ->
+    case duplicate_keys(Props) of
+        [] -> ok;
+        Invalid ->
+            throw({duplicate_parameters, Invalid})
+    end.
+
+validate_list(L) when is_list(L) -> ok;
+validate_list(L) ->
+    throw({require_list, L}).
+
+validate_uris(Key, L) when not is_list(L) ->
+    throw({require_list, Key, L});
+validate_uris(Key, []) ->
+    throw({expected_non_empty_list, Key});
+validate_uris(_Key, L) ->
+    validate_uris0(L).
+
+validate_uris0([Uri | Uris]) ->
+    case amqp_uri:parse(Uri) of
+        {ok, _Params} ->
+            validate_uris0(Uris);
+        {error, _} = Err ->
+            throw(Err)
+    end;
+validate_uris0([]) -> ok.
+
+parse_current(ShovelName, Config) ->
+    {source, Source} = proplists:lookup(source, Config),
+    validate(Source),
+    SrcMod = resolve_module(proplists:get_value(protocol, Source, amqp091)),
+    {destination, Destination} = proplists:lookup(destination, Config),
+    validate(Destination),
+    DstMod = resolve_module(proplists:get_value(protocol, Destination, amqp091)),
+    AckMode = proplists:get_value(ack_mode, Config, no_ack),
+    validate_ack_mode(AckMode),
+    {ok, #{name => ShovelName,
+           shovel_type => static,
+           ack_mode => AckMode,
+           reconnect_delay => proplists:get_value(reconnect_delay, Config,
+                                                  ?DEFAULT_RECONNECT_DELAY),
+           source => rabbit_shovel_behaviour:parse(SrcMod, ShovelName,
+                                                   {source, Source}),
+           dest => rabbit_shovel_behaviour:parse(DstMod, ShovelName,
+                                                 {destination, Destination})}}.
 
 %% ensures that any defaults that have been applied to a parsed
 %% shovel, are written back to the original proplist
@@ -43,230 +163,26 @@ ensure_defaults(ShovelConfig, ParsedShovel) ->
                    {reconnect_delay,
                     ParsedShovel#shovel.reconnect_delay}).
 
-enrich_shovel_config(Config, Defaults) ->
-    Config1 = proplists:unfold(Config),
-    case [E || E <- Config1, not (is_tuple(E) andalso tuple_size(E) == 2)] of
-        []      -> case duplicate_keys(Config1) of
-                       []   -> return(lists:ukeysort(1, Config1 ++ Defaults));
-                       Dups -> fail({duplicate_parameters, Dups})
-                   end;
-        Invalid -> fail({invalid_parameters, Invalid})
-    end.
-
-parse_shovel_config_proplist(Config) ->
-    Dict = dict:from_list(Config),
-    Fields = record_info(fields, shovel) -- ?IGNORE_FIELDS,
-    Keys = dict:fetch_keys(Dict) -- ?EXTRA_KEYS,
-    case {Keys -- Fields, Fields -- Keys} of
-        {[], []}      -> {_Pos, Dict1} =
-                             lists:foldl(
-                               fun (FieldName, {Pos, Acc}) ->
-                                       {Pos + 1,
-                                        dict:update(FieldName,
-                                                    fun (V) -> {V, Pos} end,
-                                                    Acc)}
-                               end, {2, Dict}, Fields),
-                         return(Dict1);
-        {[], Missing} -> fail({missing_parameters, Missing});
-        {Unknown, _}  -> fail({unrecognised_parameters, Unknown})
-    end.
-
-parse_shovel_config_dict(Name, Dict) ->
-    Cfg = run_state_monad(
-            [fun (Shovel) ->
-                     {ok, Value} = dict:find(Key, Dict),
-                     try {ParsedValue, Pos} = Fun(Value),
-                          return(setelement(Pos, Shovel, ParsedValue))
-                     catch throw:{error, Reason} ->
-                             fail({invalid_parameter_value, Key, Reason})
-                     end
-             end || {Fun, Key} <-
-                        [{fun parse_endpoint/1,             sources},
-                         {fun parse_endpoint/1,             destinations},
-                         {fun parse_non_negative_integer/1, prefetch_count},
-                         {fun parse_ack_mode/1,             ack_mode},
-                         {fun parse_binary/1,               queue},
-                         make_parse_publish(publish_fields),
-                         make_parse_publish(publish_properties),
-                         {fun parse_non_negative_number/1,  reconnect_delay}]],
-            #shovel{}),
-    Cfg1 = case dict:find(add_forward_headers, Dict) of
-        {ok, true} -> add_forward_headers_fun(Name, Cfg);
-        _          -> Cfg
-    end,
-    case dict:find(add_timestamp_header, Dict) of
-        {ok, true} -> add_timestamp_header_fun(Cfg1);
-        _          -> Cfg1
-    end.
-
-%% --=: Plain state monad implementation start :=--
-run_state_monad(FunList, State) ->
-    lists:foldl(fun (Fun, StateN) -> Fun(StateN) end, State, FunList).
-
-return(V) -> V.
-
 -spec fail(term()) -> no_return().
 fail(Reason) -> throw({error, Reason}).
-%% --=: end :=--
 
-parse_endpoint({Endpoint, Pos}) when is_list(Endpoint) ->
-    Brokers = case proplists:get_value(brokers, Endpoint) of
-                  undefined ->
-                      case proplists:get_value(broker, Endpoint) of
-                          undefined -> fail({missing_endpoint_parameter,
-                                             broker_or_brokers});
-                          B         -> [B]
-                      end;
-                  Bs when is_list(Bs) ->
-                      Bs;
-                  B ->
-                      fail({expected_list, brokers, B})
-              end,
-    {[], Brokers1} = run_state_monad(
-                       lists:duplicate(length(Brokers),
-                                       fun check_uri/1),
-                       {Brokers, []}),
-
-    ResourceDecls =
-        case proplists:get_value(declarations, Endpoint, []) of
-            Decls when is_list(Decls) ->
-                Decls;
-            Decls ->
-                fail({expected_list, declarations, Decls})
-        end,
-    {[], ResourceDecls1} =
-        run_state_monad(
-          lists:duplicate(length(ResourceDecls), fun parse_declaration/1),
-          {ResourceDecls, []}),
-
-    DeclareFun =
-        fun (_Conn, Ch) ->
-                [amqp_channel:call(Ch, M) || M <- lists:reverse(ResourceDecls1)]
-        end,
-    return({#endpoint{uris = Brokers1,
-                      resource_declaration = DeclareFun},
-            Pos});
-parse_endpoint({Endpoint, _Pos}) ->
-    fail({require_list, Endpoint}).
-
-check_uri({[Uri | Uris], Acc}) ->
-    case amqp_uri:parse(Uri) of
-        {ok, _Params} ->
-            return({Uris, [Uri | Acc]});
-        {error, _} = Err ->
-            throw(Err)
-    end.
-
-parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
-    FieldNames = try rabbit_framing_amqp_0_9_1:method_fieldnames(Method)
-                 catch exit:Reason -> fail(Reason)
-                 end,
-    case proplists:get_keys(Props) -- FieldNames of
-        []            -> ok;
-        UnknownFields -> fail({unknown_fields, Method, UnknownFields})
-    end,
-    {Res, _Idx} = lists:foldl(
-                    fun (K, {R, Idx}) ->
-                            NewR = case proplists:get_value(K, Props) of
-                                       undefined -> R;
-                                       V         -> setelement(Idx, R, V)
-                                   end,
-                            {NewR, Idx + 1}
-                    end, {rabbit_framing_amqp_0_9_1:method_record(Method), 2},
-                    FieldNames),
-    return({Rest, [Res | Acc]});
-parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
-    fail({expected_method_field_list, Method, Props});
-parse_declaration({[Method | Rest], Acc}) ->
-    parse_declaration({[{Method, []} | Rest], Acc}).
-
-parse_non_negative_integer({N, Pos}) when is_integer(N) andalso N >= 0 ->
-    return({N, Pos});
-parse_non_negative_integer({N, _Pos}) ->
-    fail({require_non_negative_integer, N}).
-
-parse_non_negative_number({N, Pos}) when is_number(N) andalso N >= 0 ->
-    return({N, Pos});
-parse_non_negative_number({N, _Pos}) ->
-    fail({require_non_negative_number, N}).
-
-parse_binary({Binary, Pos}) when is_binary(Binary) ->
-    return({Binary, Pos});
-parse_binary({NotABinary, _Pos}) ->
-    fail({require_binary, NotABinary}).
-
-parse_ack_mode({Val, Pos}) when Val =:= no_ack orelse
+validate_ack_mode(Val) when Val =:= no_ack orelse
                                 Val =:= on_publish orelse
                                 Val =:= on_confirm ->
-    return({Val, Pos});
-parse_ack_mode({WrongVal, _Pos}) ->
-    fail({ack_mode_value_requires_one_of, {no_ack, on_publish, on_confirm},
-          WrongVal}).
+    ok;
+validate_ack_mode(WrongVal) ->
+    fail({invalid_parameter_value, ack_mode,
+          {ack_mode_value_requires_one_of, {no_ack, on_publish, on_confirm},
+          WrongVal}}).
 
-make_parse_publish(publish_fields) ->
-    {make_parse_publish1(record_info(fields, 'basic.publish')), publish_fields};
-make_parse_publish(publish_properties) ->
-    {make_parse_publish1(record_info(fields, 'P_basic')), publish_properties}.
-
-make_parse_publish1(ValidFields) ->
-    fun ({Fields, Pos}) when is_list(Fields) ->
-            make_publish_fun(Fields, Pos, ValidFields);
-        ({Fields, _Pos}) ->
-            fail({require_list, Fields})
-    end.
-
-make_publish_fun(Fields, Pos, ValidFields) ->
-    SuppliedFields = proplists:get_keys(Fields),
-    case SuppliedFields -- ValidFields of
-        [] ->
-            FieldIndices = make_field_indices(ValidFields, Fields),
-            Fun = fun (_SrcUri, _DestUri, Publish) ->
-                          lists:foldl(fun ({Pos1, Value}, Pub) ->
-                                              setelement(Pos1, Pub, Value)
-                                      end, Publish, FieldIndices)
-                  end,
-            return({Fun, Pos});
-        Unexpected ->
-            fail({unexpected_fields, Unexpected, ValidFields})
-    end.
-
-make_field_indices(Valid, Fields) ->
-    make_field_indices(Fields, field_map(Valid, 2), []).
-
-make_field_indices([], _Idxs , Acc) ->
-    lists:reverse(Acc);
-make_field_indices([{Key, Value} | Rest], Idxs, Acc) ->
-    make_field_indices(Rest, Idxs, [{dict:fetch(Key, Idxs), Value} | Acc]).
-
-field_map(Fields, Idx0) ->
-    {Dict, _IdxMax} =
-        lists:foldl(fun (Field, {Dict1, Idx1}) ->
-                            {dict:store(Field, Idx1, Dict1), Idx1 + 1}
-                    end, {dict:new(), Idx0}, Fields),
-    Dict.
-
-duplicate_keys(PropList) ->
+duplicate_keys(PropList) when is_list(PropList) ->
     proplists:get_keys(
       lists:foldl(fun (K, L) -> lists:keydelete(K, 1, L) end, PropList,
                   proplists:get_keys(PropList))).
 
-add_forward_headers_fun(Name, #shovel{publish_properties = PubProps} = Cfg) ->
-    PubProps2 =
-        fun(SrcUri, DestUri, Props) ->
-                rabbit_shovel_util:update_headers(
-                  [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
-                   {<<"shovel-type">>,  <<"static">>},
-                   {<<"shovel-name">>,  list_to_binary(atom_to_list(Name))}],
-                  [], SrcUri, DestUri, PubProps(SrcUri, DestUri, Props))
-        end,
-    Cfg#shovel{publish_properties = PubProps2}.
-
-add_timestamp_header_fun(#shovel{publish_properties = PubProps} = Cfg) ->
-    PubProps2 =
-        fun(SrcUri, DestUri, Props) ->
-            rabbit_shovel_util:add_timestamp_header(
-                PubProps(SrcUri, DestUri, Props))
-        end,
-    Cfg#shovel{publish_properties = PubProps2}.
-
-
+get_value(Key, Props) ->
+    case proplists:get_value(Key, Props) of
+        undefined ->
+            throw({missing_parameter, Key});
+        V -> V
+    end.

@@ -11,4 +11,7 @@
 /xrefr
 *.plt
 
+elvis
+elvis.config
+
 /rabbitmq_shovel.d
