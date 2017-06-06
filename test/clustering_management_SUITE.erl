@@ -135,7 +135,7 @@ join_and_part_cluster(Config) ->
 
     %% Allow clustering with already clustered node
     ok = stop_app(Rabbit),
-    {ok, already_member} = join_cluster(Rabbit, Hare),
+    ok = join_cluster(Rabbit, Hare),
     ok = start_app(Rabbit),
 
     stop_reset_start(Rabbit),
