@@ -223,6 +223,7 @@ function update_manual(div, query) {
         path = current_reqs['node']['path'] + '?' + query + '=true';
         template = query;
     }
+
     var data = JSON.parse(sync_get(path));
 
     replace_content(div, format(template, data));
@@ -598,6 +599,12 @@ function postprocess() {
                 $('#' + param + '-div').slideUp(100);
             }
         }
+    });
+    $('.list-exchanges').change(function() {
+        var selected = $(this).val();
+        var data = {'exchanges' : JSON.parse(sync_get('/exchanges/' + esc(selected)))};
+        replace_content('list-exchanges', format('list-exchanges', data));
+        postprocess_partial();
     });
     $('.help').die().live('click', function() {
         help($(this).attr('id'));

@@ -132,6 +132,7 @@ dispatcher() ->
      {"/permissions/:vhost/:user",                             rabbit_mgmt_wm_permission, []},
      {"/topic-permissions",                                    rabbit_mgmt_wm_topic_permissions, []},
      {"/topic-permissions/:vhost/:user",                       rabbit_mgmt_wm_topic_permission, []},
+     {"/topic-permissions/:vhost/:user/:exchange",             rabbit_mgmt_wm_topic_permission, []},
      {"/aliveness-test/:vhost",                                rabbit_mgmt_wm_aliveness_test, []},
      {"/healthchecks/node",                                    rabbit_mgmt_wm_healthchecks, []},
      {"/healthchecks/node/:node",                              rabbit_mgmt_wm_healthchecks, []},

@@ -1,0 +1,5 @@
+<select name="exchange">
+        <% for (var i = 0; i < exchanges.length; i++) { %>
+           <option value="<%= fmt_string(exchanges[i].name) %>"><%= fmt_exchange(exchanges[i].name) %></option>
+        <% } %>
+</select>

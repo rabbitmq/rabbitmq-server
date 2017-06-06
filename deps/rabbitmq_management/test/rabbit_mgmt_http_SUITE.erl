@@ -526,14 +526,21 @@ topic_permissions_list_test(Config) ->
     http_put(Config, "/topic-permissions/myvhost2/myuser1", TopicPerms, {group, '2xx'}),
     http_put(Config, "/topic-permissions/myvhost1/myuser2", TopicPerms, {group, '2xx'}),
 
-    3 = length(http_get(Config, "/topic-permissions")),
-    2 = length(http_get(Config, "/users/myuser1/topic-permissions")),
+    TopicPerms2 = [{exchange, <<"amq.direct">>}, {write, <<"^a">>}, {read, <<"^b">>}],
+    http_put(Config, "/topic-permissions/myvhost1/myuser1", TopicPerms2, {group, '2xx'}),
+
+    4 = length(http_get(Config, "/topic-permissions")),
+    3 = length(http_get(Config, "/users/myuser1/topic-permissions")),
     1 = length(http_get(Config, "/users/myuser2/topic-permissions")),
-    2 = length(http_get(Config, "/vhosts/myvhost1/topic-permissions")),
+    3 = length(http_get(Config, "/vhosts/myvhost1/topic-permissions")),
     1 = length(http_get(Config, "/vhosts/myvhost2/topic-permissions")),
 
     http_get(Config, "/users/notmyuser/topic-permissions", ?NOT_FOUND),
     http_get(Config, "/vhosts/notmyvhost/topic-permissions", ?NOT_FOUND),
+
+    %% Delete permissions for a single vhost-user-exchange combination
+    http_delete(Config, "/topic-permissions/myvhost1/myuser1/amq.direct", {group, '2xx'}),
+    3 = length(http_get(Config, "/topic-permissions")),
 
     http_delete(Config, "/users/myuser1", {group, '2xx'}),
     http_delete(Config, "/users/myuser2", {group, '2xx'}),
