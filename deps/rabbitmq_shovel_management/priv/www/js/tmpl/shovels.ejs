@@ -17,8 +17,8 @@
     <th>Virtual Host</th>
 <% } %>
     <th>State</th>
-    <th colspan="2">Source</th>
-    <th colspan="2">Destination</th>
+    <th colspan="3">Source</th>
+    <th colspan="3">Destination</th>
     <th>Last changed</th>
   </tr>
  </thead>
@@ -49,15 +49,12 @@
   </tr>
 <% } else { %>
     <td><%= fmt_state('green', shovel.state) %></td>
-    <% if (shovel.definition == undefined) { %>
-      <td colspan="2"><%= fmt_string(shovel.src_uri) %></td>
-      <td colspan="2"><%= fmt_string(shovel.dest_uri) %></td>
-    <% } else { %>
+      <td><%= fmt_string(shovel.src_protocol) %></td>
       <td><%= fmt_string(shovel.src_uri) %></td>
-      <td><%= fmt_shovel_endpoint('src', shovel.definition) %></td>
+      <td><%= fmt_shovel_endpoint('src_', shovel) %></td>
+      <td><%= fmt_string(shovel.dest_protocol) %></td>
       <td><%= fmt_string(shovel.dest_uri) %></td>
-      <td><%= fmt_shovel_endpoint('dest', shovel.definition) %></td>
-    <% } %>
+      <td><%= fmt_shovel_endpoint('dest_', shovel) %></td>
     <td><%= shovel.timestamp %></td>
   </tr>
 <% } %>

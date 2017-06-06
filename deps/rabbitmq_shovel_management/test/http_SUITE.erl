@@ -29,10 +29,11 @@ all() ->
 
 groups() ->
     [
-      {non_parallel_tests, [], [
-          shovels,
-          dynamic_plugin_enable_disable
-        ]}
+     {non_parallel_tests, [], [
+                               amqp10_shovels,
+                               shovels,
+                               dynamic_plugin_enable_disable
+                              ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -96,6 +97,35 @@ start_inets(Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 
+amqp10_shovels(Config) ->
+    Port = integer_to_binary(
+             rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+    http_put(Config, "/parameters/shovel/%2f/my-dynamic-amqp10",
+                  #{value => #{'src-protocol' => <<"amqp10">>,
+                               'src-uri' => <<"amqp://localhost:", Port/binary>>,
+                               'src-address'  => <<"test">>,
+                               'dest-protocol' => <<"amqp10">>,
+                               'dest-uri' => <<"amqp://localhost:", Port/binary>>,
+                               'dest-address' => <<"test2">>}}, ?CREATED),
+    Shovel = #{name => <<"my-dynamic-amqp10">>,
+               src_protocol => <<"amqp10">>,
+               dest_protocol => <<"amqp10">>,
+               type => <<"dynamic">>},
+    Static = #{name => <<"my-static">>,
+               src_protocol => <<"amqp091">>,
+               dest_protocol => <<"amqp091">>,
+               type => <<"static">>},
+    % sleep to give the shovel time to emit a full report
+    % that includes the protocols used.
+    timer:sleep(2000),
+    Assert = fun (Req, User, Res) ->
+                     assert_list(Res, http_get(Config, Req, User, User, ?OK))
+             end,
+    Assert("/shovels", "guest", [Static, Shovel]),
+    http_delete(Config,  "/parameters/shovel/%2f/my-dynamic-amqp10",
+                ?NO_CONTENT),
+    ok.
+
 shovels(Config) ->
     http_put(Config, "/users/admin",
       #{password => <<"admin">>, tags => <<"administrator">>}, ?CREATED),
@@ -110,9 +140,11 @@ shovels(Config) ->
     http_put(Config, "/permissions/v/mon",    Perms, ?CREATED),
 
     [http_put(Config, "/parameters/shovel/" ++ V ++ "/my-dynamic",
-              #{value => #{'src-uri'    => <<"amqp://">>,
-                           'dest-uri'   => <<"amqp://">>,
+              #{value => #{'src-protocol' => <<"amqp091">>,
+                           'src-uri'    => <<"amqp://">>,
                            'src-queue'  => <<"test">>,
+                           'dest-protocol' => <<"amqp091">>,
+                           'dest-uri'   => <<"amqp://">>,
                            'dest-queue' => <<"test2">>}}, ?CREATED)
      || V <- ["%2f", "v"]],
     Static = #{name => <<"my-static">>,

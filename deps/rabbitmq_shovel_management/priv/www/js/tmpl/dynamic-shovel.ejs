@@ -10,7 +10,7 @@
       </tr>
       <tr>
         <th> </th>
-        <td><%= fmt_shovel_endpoint('src', shovel.value) %></td>
+        <td><%= fmt_shovel_endpoint('src-', shovel.value) %></td>
       </tr>
       <tr>
         <th>Destination</th>
@@ -18,11 +18,11 @@
       </tr>
       <tr>
         <th> </th>
-        <td><%= fmt_shovel_endpoint('dest', shovel.value) %></td>
+        <td><%= fmt_shovel_endpoint('dest-', shovel.value) %></td>
       </tr>
       <tr>
         <th>Prefetch count</th>
-        <td><%= fmt_string(shovel.value['prefetch-count']) %></td>
+        <td><%= fmt_string(fallback_value(shovel, 'src-prefetch-count', 'prefetch-count')) %></td>
       </tr>
       <tr>
         <th>Reconnect delay</th>
@@ -30,7 +30,7 @@
       </tr>
       <tr>
         <th>Add headers</th>
-        <td><%= fmt_boolean(shovel.value['add-forward-headers']) %></td>
+        <td><%= fmt_boolean(fallback_value(shovel, 'dest-add-forward-headers', 'add-forward-headers')) %></td>
       </tr>
       <tr>
         <th>Ack mode</th>
@@ -38,7 +38,7 @@
       </tr>
       <tr>
         <th>Auto-delete</th>
-        <td><%= fmt_string(shovel.value['delete-after']) %></td>
+        <td><%= fmt_string(fallback_value(shovel, 'src-delete-after', 'delete-after')) %></td>
       </tr>
     </table>
   </div>
