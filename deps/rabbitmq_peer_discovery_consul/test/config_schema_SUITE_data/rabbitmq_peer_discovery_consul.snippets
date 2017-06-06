@@ -8,10 +8,7 @@
                                  ]}]}],
  [rabbitmq_peer_discovery_consul]}
 
- , {consul_host_absent,
-  "",
-  [],
- [rabbitmq_peer_discovery_consul]}
+
 
  , {consul_port,
   "cluster_formation.consul.port = 9700",
@@ -33,6 +30,7 @@
                                  ]}]}],
  [rabbitmq_peer_discovery_consul]}
 
+
  , {consul_scheme,
   "cluster_formation.consul.scheme = https",
   [{rabbit, [{cluster_formation, [
@@ -41,6 +39,7 @@
                                                           ]}
                                  ]}]}],
  [rabbitmq_peer_discovery_consul]}
+
 
  , {consul_acl_token,
   "cluster_formation.consul.acl_token = abcdef",
@@ -51,10 +50,7 @@
                                  ]}]}],
  [rabbitmq_peer_discovery_consul]}
 
- , {consul_acl_token_absent,
-  "",
-  [],
- [rabbitmq_peer_discovery_consul]}
+
 
  , {consul_cluster_name,
   "cluster_formation.consul.cluster_name = abcdef",
@@ -65,10 +61,109 @@
                                  ]}]}],
  [rabbitmq_peer_discovery_consul]}
 
- , {consul_cluster_name_absent,
+
+
+ , {consul_domain,
+  "cluster_formation.consul.domain = abcdef",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_domain, "abcdef"}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
+
+ , {consul_svc,
+  "cluster_formation.consul.svc = abcdef",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc, "abcdef"}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
+
+ , {consul_svc_addr,
+  "cluster_formation.consul.svc_addr = abcdef",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_addr, "abcdef"}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
+
+ , {consul_svc_addr_auto,
+  "cluster_formation.consul.svc_addr_auto = true",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_addr_auto, true}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
+
+
+ , {consul_svc_addr_nic,
+  "cluster_formation.consul.svc_addr_nic = abcdef",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_addr_nic, "abcdef"}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
+
+
+ , {consul_svc_addr_use_nodename,
+  "cluster_formation.consul.svc_addr_use_nodename = true",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_addr_nodename, true}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
+
+ , {consul_svc_port,
+  "cluster_formation.consul.svc_port = 5673",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_port, 5673}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
+ , {consul_svc_ttl,
+  "cluster_formation.consul.svc_ttl = 60",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_ttl, 60}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
+ , {consul_use_longname,
+  "cluster_formation.consul.use_longname = true",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_use_longname, true}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
+ , {all_values_absent,
   "",
   [],
  [rabbitmq_peer_discovery_consul]}
-
 
 ].
