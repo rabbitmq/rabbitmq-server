@@ -206,6 +206,8 @@ assert_code({group, '4xx'} = CodeExp, CodeAct, Type, Path, Body) ->
         _   -> error({expected, CodeExp, got, CodeAct, type, Type,
                           path, Path, body, Body})
     end;
+assert_code(CodeExp, CodeAct, Type, Path, Body) when is_list(CodeExp) ->
+    assert_code({one_of, CodeExp}, CodeAct, Type, Path, Body);
 assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     case CodeExp of
         CodeAct -> ok;
