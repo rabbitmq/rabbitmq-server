@@ -82,7 +82,7 @@ on_finish(_Config) ->
     reset().
 
 reset() ->
-    application:unset_env(rabbit, autocluster),
+    application:unset_env(rabbit, cluster_formation),
     os:unsetenv("AWS_USE_PRIVATE_IP").
 
 reservation_set() ->
