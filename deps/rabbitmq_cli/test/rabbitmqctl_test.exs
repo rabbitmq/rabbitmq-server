@@ -191,7 +191,8 @@ defmodule RabbitMQCtlTest do
      "Error: unable to connect to node 'example@node': nodedown" <> diag} =
         RabbitMQCtl.handle_command_output(
           {:error, {:badrpc, :nodedown}},
-          :no_command, %{node: node}, [])
+          :no_command, %{node: node}, [],
+          fn(output, _, _) -> output end)
 
     assert diag =~ ~r/DIAGNOSTICS/
     assert diag =~ ~r/attempted to contact/
@@ -201,7 +202,8 @@ defmodule RabbitMQCtlTest do
      "Error: unable to connect to node 'non_existent_node@localhost': nodedown" <> diag} =
         RabbitMQCtl.handle_command_output(
           {:error, {:badrpc, :nodedown}},
-          :no_command, %{node: localnode}, [])
+          :no_command, %{node: localnode}, [],
+          fn(output, _, _) -> output end)
     assert diag =~ ~r/DIAGNOSTICS/
     assert diag =~ ~r/attempted to contact/
     assert diag =~ ~r/suggestion: start the node/
@@ -215,13 +217,17 @@ defmodule RabbitMQCtlTest do
     {:error, ^exit_code, ^err_msg} =
       RabbitMQCtl.handle_command_output(
           {:error, {:badrpc, :timeout}},
-          ExampleCommand,%{timeout: timeout, node: nodename}, ["example"])
+          ExampleCommand,%{timeout: timeout, node: nodename}, ["example"],
+          fn(output, _, _) -> output end)
   end
 
   test "generic error" do
     exit_code = exit_software()
     {:error, ^exit_code, "Error:\nerror message"} =
-      RabbitMQCtl.handle_command_output({:error, "error message"}, :no_command, %{}, [])
+      RabbitMQCtl.handle_command_output(
+        {:error, "error message"},
+        :no_command, %{}, [],
+        fn(output, _, _) -> output end)
   end
 
   test "inspect arbitrary error" do
@@ -229,13 +235,19 @@ defmodule RabbitMQCtlTest do
     error = %{i: [am: "arbitrary", error: 1]}
     inspected = inspect(error)
     {:error, ^exit_code, "Error:\n" <> ^inspected} =
-      RabbitMQCtl.handle_command_output({:error, error}, :no_command, %{}, [])
+      RabbitMQCtl.handle_command_output(
+        {:error, error},
+        :no_command, %{}, [],
+        fn(output, _, _) -> output end)
   end
 
   test "atom error" do
     exit_code = exit_software()
     {:error, ^exit_code, "Error:\nerror_message"} =
-      RabbitMQCtl.handle_command_output({:error, :error_message}, :no_command, %{}, [])
+      RabbitMQCtl.handle_command_output(
+        {:error, :error_message},
+        :no_command, %{}, [],
+        fn(output, _, _) -> output end)
   end
 
 end
