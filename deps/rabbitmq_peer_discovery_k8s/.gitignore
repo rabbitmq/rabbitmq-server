@@ -15,3 +15,5 @@
 /rebar.lock
 /test/ct.cover.spec
 /xrefr
+
+/rabbitmq_peer_discovery_k8s.d
