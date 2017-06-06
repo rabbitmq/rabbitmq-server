@@ -29,8 +29,8 @@ for (var i = 0; i < topic_permissions.length; i++) {
              <td><%= link_vhost(permission.vhost) %></td>
 <% } %>
              <td><%= fmt_exchange(permission.exchange) %></td>
-             <td><%= fmt_string(permission.read) %></td>
              <td><%= fmt_string(permission.write) %></td>
+             <td><%= fmt_string(permission.read) %></td>
              <td class="c">
                <form action="#/topic-permissions" method="delete" class="confirm">
                  <input type="hidden" name="username" value="<%= fmt_string(permission.user) %>"/>
