@@ -47,9 +47,9 @@
                                                    default_value = false
                                                   },
           aws_ec2_tags                       => #peer_discovery_config_entry_meta{
-                                                   type          = proplist,
+                                                   type          = map,
                                                    env_variable  = "AWS_EC2_TAGS",
-                                                   default_value = []
+                                                   default_value = #{}
                                                   },
           aws_access_key                     => #peer_discovery_config_entry_meta{
                                                    type          = string,
@@ -343,7 +343,6 @@ instance_id() ->
 get_tags() ->
     Tags = get_config_key(aws_ec2_tags, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
     case Tags of
-        "unused" -> [{"ignore", "me"}]; %% this is to trick dialyzer;
         Value when is_list(Value) ->
             maps:from_list(Value);
         _ -> Tags
