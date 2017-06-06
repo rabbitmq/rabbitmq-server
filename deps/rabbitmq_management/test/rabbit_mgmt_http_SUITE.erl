@@ -759,7 +759,9 @@ bindings_post_test(Config) ->
     Headers1 = http_post(Config, "/bindings/%2f/e/myexchange/q/myqueue", #{}, {group, '2xx'}),
     "../../../../%2F/e/myexchange/q/myqueue/~" = pget("location", Headers1),
     Headers2 = http_post(Config, "/bindings/%2f/e/myexchange/q/myqueue", BArgs, {group, '2xx'}),
-    PropertiesKey = "routing~V4mGFgnPNrdtRmluZIxTDA",
+    %% Args hash is calculated from a table, generated from args.
+    Hash = table_hash([{<<"foo">>,longstr,<<"bar">>}]),
+    PropertiesKey = "routing~" ++ Hash,
     PropertiesKeyBin = list_to_binary(PropertiesKey),
     "../../../../%2F/e/myexchange/q/myqueue/" ++ PropertiesKey =
         pget("location", Headers2),
@@ -1330,15 +1332,23 @@ arguments_test(Config) ->
         maps:get(arguments, http_get(Config, "/exchanges/%2f/myexchange", ?OK)),
     #{'x-expires' := 1800000} =
         maps:get(arguments, http_get(Config, "/queues/%2f/arguments_test", ?OK)),
+
+    ArgsTable = [{<<"foo">>,longstr,<<"bar">>}, {<<"x-match">>, longstr, <<"all">>}],
+    Hash = table_hash(ArgsTable),
+    PropertiesKey = [$~] ++ Hash,
+
     assert_item(
         #{'x-match' => <<"all">>, foo => <<"bar">>},
         maps:get(arguments,
             http_get(Config, "/bindings/%2f/e/myexchange/q/arguments_test/" ++
-            "~nXOkVwqZzUOdS9_HcBWheg", ?OK))
+            PropertiesKey, ?OK))
     ),
     http_delete(Config, "/exchanges/%2f/myexchange", {group, '2xx'}),
     http_delete(Config, "/queues/%2f/arguments_test", {group, '2xx'}),
     passed.
+
+table_hash(Table) ->
+    rabbit_misc:base64url(erlang:md5(term_to_binary(Table))).
 
 arguments_table_test(Config) ->
     Args = #{'upstreams' => [<<"amqp://localhost/%2f/upstream1">>,
