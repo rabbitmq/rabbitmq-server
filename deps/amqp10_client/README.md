@@ -1,9 +1,9 @@
-# AMQP 1.0 client
+# Erlang AMQP 1.0 client
 
-This is an experimental Erlang client for the [AMQP 1.0](https://www.amqp.org/resources/specifications) protocol.
+This is an experimental [Erlang client for the AMQP 1.0](https://www.amqp.org/resources/specifications) protocol.
 
 It's primary purpose is to be used in RabbitMQ related projects but it is a
-generic client.
+generic client that was tested with at least 4 implementations of AMQP 1.0.
 
 ## Project Maturity and Status
 
