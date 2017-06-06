@@ -89,18 +89,8 @@ conserve_resources(Pid, disk, {_, Conserve, Node}) when node(Pid) =:= Node ->
 conserve_resources(_Pid, _Source, _Conserve) ->
     ok.
 
-memory_use(bytes) ->
-    MemoryLimit = vm_memory_monitor:get_memory_limit(),
-    {erlang:memory(total), case MemoryLimit > 0.0 of
-                               true  -> MemoryLimit;
-                               false -> infinity
-                           end};
-memory_use(ratio) ->
-    MemoryLimit = vm_memory_monitor:get_memory_limit(),
-    case MemoryLimit > 0.0 of
-        true  -> erlang:memory(total) / MemoryLimit;
-        false -> infinity
-    end.
+memory_use(Type) ->
+    vm_memory_monitor:get_memory_use(Type).
 
 %%----------------------------------------------------------------------------
 %% Gen_server callbacks

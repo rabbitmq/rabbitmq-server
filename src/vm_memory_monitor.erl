@@ -35,7 +35,7 @@
 -export([get_total_memory/0, get_vm_limit/0,
          get_check_interval/0, set_check_interval/1,
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
-         get_memory_limit/0]).
+         get_memory_limit/0, get_memory_use/1]).
 
 %% for tests
 -export([parse_line_linux/1]).
@@ -73,19 +73,28 @@
 -spec get_vm_memory_high_watermark() -> vm_memory_high_watermark().
 -spec set_vm_memory_high_watermark(vm_memory_high_watermark()) -> 'ok'.
 -spec get_memory_limit() -> non_neg_integer().
+-spec get_memory_use(bytes) -> {non_neg_integer(),  float() | infinity};
+                    (ratio) -> float() | infinity.
 
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
 
 get_total_memory() ->
-    try
-        get_total_memory(os:type())
-    catch _:Error ->
-            rabbit_log:warning(
-              "Failed to get total system memory: ~n~p~n~p~n",
-              [Error, erlang:get_stacktrace()]),
-            unknown
+    case application:get_env(rabbit, total_memory_available_override_value) of
+        {ok, Value} ->
+            case rabbit_resource_monitor_misc:parse_information_unit(Value) of
+                {ok, ParsedTotal} ->
+                    ParsedTotal;
+                {error, parse_error} ->
+                    rabbit_log:warning(
+                      "The override value for the total memmory available is "
+                      "not a valid value: ~p, getting total from the system.~n",
+                      [Value]),
+                    get_total_memory_from_os()
+            end;
+        undefined ->
+            get_total_memory_from_os()
     end.
 
 get_vm_limit() -> get_vm_limit(os:type()).
@@ -105,6 +114,19 @@ set_vm_memory_high_watermark(Fraction) ->
 
 get_memory_limit() ->
     gen_server:call(?MODULE, get_memory_limit, infinity).
+
+get_memory_use(bytes) ->
+    MemoryLimit = get_memory_limit(),
+    {erlang:memory(total), case MemoryLimit > 0.0 of
+                               true  -> MemoryLimit;
+                               false -> infinity
+                           end};
+get_memory_use(ratio) ->
+    MemoryLimit = get_memory_limit(),
+    case MemoryLimit > 0.0 of
+        true  -> erlang:memory(total) / MemoryLimit;
+        false -> infinity
+    end.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -164,6 +186,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% Server Internals
 %%----------------------------------------------------------------------------
+get_total_memory_from_os() ->
+    try
+        get_total_memory(os:type())
+    catch _:Error ->
+            rabbit_log:warning(
+              "Failed to get total system memory: ~n~p~n~p~n",
+              [Error, erlang:get_stacktrace()]),
+            unknown
+    end.
 
 set_mem_limits(State, MemLimit) ->
     case erlang:system_info(wordsize) of

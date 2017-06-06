@@ -270,10 +270,14 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
         eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl eval \
             '{ok, P} = application:get_env(rabbit, plugins_dir),
              {ok, E} = application:get_env(rabbit, enabled_plugins_file),
+             B = os:getenv("RABBITMQ_MNESIA_BASE"),
+             M = os:getenv("RABBITMQ_MNESIA_DIR"),
              io:format(
                "plugins_dir=\"~s\"~n"
-               "enabled_plugins_file=\"~s\"~n", [P, E]).' \
-            2>/dev/null | head -n 2) || :)
+               "enabled_plugins_file=\"~s\"~n"
+               "mnesia_base=\"~s\"~n"
+               "mnesia_dir=\"~s\"~n", [P, E, B, M]).' \
+            2>/dev/null | head -n 4) || :)
         if [ "${plugins_dir}" -a \
              "$RABBITMQ_PLUGINS_DIR_source" != 'environment' ]; then
             RABBITMQ_PLUGINS_DIR="${plugins_dir}"
@@ -281,6 +285,14 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
         if [ "${enabled_plugins_file}" -a \
              "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
             RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
+        fi
+        if [ "${mnesia_base}" -a \
+             "$RABBITMQ_MNESIA_BASE_source" != 'environment' ]; then
+            RABBITMQ_MNESIA_BASE="${mnesia_base}"
+        fi
+        if [ "${mnesia_dir}" -a \
+             "$RABBITMQ_MNESIA_DIR_source" != 'environment' ]; then
+            RABBITMQ_MNESIA_DIR="${mnesia_dir}"
         fi
     fi
 

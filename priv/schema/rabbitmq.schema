@@ -775,28 +775,41 @@ end}.
 {mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size",
     [{datatype, bytesize}, {validators, ["size_less_than_2G"]}]}.
 
-%% Peer discovery backend used by autoclustering.
+%% Peer discovery backend used by cluster formation.
 %%
 
-{mapping, "autocluster.peer_discovery_backend", "rabbit.autocluster.peer_discovery_backend", [
+{mapping, "cluster_formation.peer_discovery_backend", "rabbit.cluster_formation.peer_discovery_backend", [
     {datatype, atom}
 ]}.
 
-%% Own node type used by autoclustering.
+{translation, "rabbit.cluster_formation.peer_discovery_backend",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.peer_discovery_backend", Conf, rabbit_peer_discovery_classic_config) of
+        classic_config -> rabbit_peer_discovery_classic_config;
+        classic        -> rabbit_peer_discovery_classic_config;
+        config         -> rabbit_peer_discovery_classic_config;
+        dns            -> rabbit_peer_discovery_dns;
+        aws            -> rabbit_peer_discovery_aws;
+        consul         -> rabbit_peer_discovery_consul;
+        Module         -> Module
+    end
+end}.
+
+%% Own node type, used by cluster formation.
 %%
 
-{mapping, "autocluster.node_type", "rabbit.autocluster.node_type", [
+{mapping, "cluster_formation.node_type", "rabbit.cluster_formation.node_type", [
     {datatype, {enum, [disc, disk, ram]}}
 ]}.
 
-{translation, "rabbit.autocluster.node_type",
+{translation, "rabbit.cluster_formation.node_type",
 fun(Conf) ->
     %% if peer discovery backend isn't configured, don't generate
     %% node type
-    case cuttlefish:conf_get("autocluster.peer_discovery_backend", Conf, undefined) of
+    case cuttlefish:conf_get("cluster_formation.peer_discovery_backend", Conf, undefined) of
         undefined -> cuttlefish:unset();
         _Backend  ->
-            case cuttlefish:conf_get("autocluster.node_type", Conf) of
+            case cuttlefish:conf_get("cluster_formation.node_type", Conf) of
                 disc      -> disc;
                 %% always cast to `disc`
                 disk      -> disc;
@@ -806,7 +819,7 @@ fun(Conf) ->
     end
 end}.
 
-%% Classic config-driven autocluster backend.
+%% Classic config-driven peer discuvery backend.
 %%
 %% Make clustering happen *automatically* at startup - only applied
 %% to nodes that have just been reset or started for the first time.
@@ -815,17 +828,17 @@ end}.
 %%
 %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
-{mapping, "autocluster.classic_config.nodes.$node", "rabbit.cluster_nodes",
+{mapping, "cluster_formation.classic_config.nodes.$node", "rabbit.cluster_nodes",
     [{datatype, atom}]}.
 
 {translation, "rabbit.cluster_nodes",
 fun(Conf) ->
-    Nodes = [V || {_, V} <- cuttlefish_variable:filter_by_prefix("autocluster.classic_config.nodes", Conf)],
+    Nodes = [V || {_, V} <- cuttlefish_variable:filter_by_prefix("cluster_formation.classic_config.nodes", Conf)],
 
     case Nodes of
         []    -> cuttlefish:unset();
         Other ->
-            case cuttlefish:conf_get("autocluster.node_type", Conf, disc) of
+            case cuttlefish:conf_get("cluster_formation.node_type", Conf, disc) of
                 disc -> {Other, disc};
                 %% Always cast to `disc`
                 disk -> {Other, disc};
@@ -837,12 +850,12 @@ end}.
 %% DNS (A records and reverse lookups)-based peer discovery.
 %%
 
-{mapping, "autocluster.dns.hostname", "rabbit.autocluster.peer_discovery_dns.hostname",
+{mapping, "cluster_formation.dns.hostname", "rabbit.cluster_formation.peer_discovery_dns.hostname",
     [{datatype, string}]}.
 
-{translation, "rabbit.autocluster.peer_discovery_dns.hostname",
+{translation, "rabbit.cluster_formation.peer_discovery_dns.hostname",
 fun(Conf) ->
-    case cuttlefish:conf_get("autocluster.dns.hostname", Conf, undefined) of
+    case cuttlefish:conf_get("cluster_formation.dns.hostname", Conf, undefined) of
         undefined -> cuttlefish:unset();
         Value     -> list_to_binary(Value)
     end

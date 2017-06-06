@@ -246,6 +246,10 @@
    %%
    %% {memory_monitor_interval, 2500},
 
+   %% The total memory available can be calculated from the OS resources
+   %% - default option - or provided as a configuration parameter:
+   %% {total_memory_available_override_value, "5000MB"},
+
    %% Set disk free limit (in bytes). Once free disk space reaches this
    %% lower bound, a disk alarm will be set - see the documentation
    %% listed above for more details.
