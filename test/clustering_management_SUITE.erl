@@ -135,7 +135,8 @@ join_and_part_cluster(Config) ->
 
     %% Allow clustering with already clustered node
     ok = stop_app(Rabbit),
-    ok = join_cluster(Rabbit, Hare),
+    {ok, <<"The node is already a member of this cluster">>} =
+        join_cluster(Rabbit, Hare),
     ok = start_app(Rabbit),
 
     stop_reset_start(Rabbit),
@@ -388,10 +389,9 @@ force_boot(Config) ->
 change_cluster_node_type(Config) ->
     [Rabbit, Hare, _Bunny] = cluster_members(Config),
 
-    %% Trying to change the ram node when not clustered should always fail
+    %% Trying to change the node to the ram type when not clustered should always fail
     ok = stop_app(Rabbit),
     assert_failure(fun () -> change_cluster_node_type(Rabbit, ram) end),
-    assert_failure(fun () -> change_cluster_node_type(Rabbit, disc) end),
     ok = start_app(Rabbit),
 
     ok = stop_app(Rabbit),
@@ -643,7 +643,7 @@ wait_for_pid_file_to_contain_running_process_pid(PidFile, Attempts, Timeout) ->
     Pid = pid_from_file(PidFile),
     case rabbit_misc:is_os_process_alive(Pid) of
         true  -> ok;
-        false -> 
+        false ->
             ct:sleep(Timeout),
             wait_for_pid_file_to_contain_running_process_pid(PidFile, Attempts - 1, Timeout)
     end.
