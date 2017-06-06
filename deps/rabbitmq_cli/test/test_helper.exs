@@ -462,4 +462,9 @@ defmodule TestHelper do
     assert asorted == bsorted
   end
 
+  def assert_stream_without_errors(stream) do
+    true = Enum.all?(stream, fn({:error, _}) -> false;
+                               ({:error, _, _}) -> false;
+                               (_) -> true end)
+  end
 end

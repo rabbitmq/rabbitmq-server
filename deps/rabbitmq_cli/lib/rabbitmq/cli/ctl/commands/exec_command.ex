@@ -34,11 +34,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
     {:validation_failure, "Expression must not be blank"}
   end
 
-  def validate([_], _), do: :ok
+  def validate([string], _) do
+    try do
+      Code.compile_string(string)
+    rescue
+      ex in SyntaxError ->
+        {:validation_failure, "SyntaxError: " <> Exception.message(ex)}
+      _e ->
+        :ok
+    end
+  end
 
   def run([expr], %{} = opts) do
-    {val, _} = Code.eval_string(expr, [options: opts])
-    {:ok, val}
+    try do
+      {val, _} = Code.eval_string(expr, [options: opts], __ENV__)
+      {:ok, val}
+    rescue ex ->
+      {:error, Exception.message(ex)}
+    end
   end
 
   def usage, do: "exec <expr>"
