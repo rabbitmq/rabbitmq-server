@@ -1,8 +1,9 @@
 %%% vi:ts=4 sw=4 et
 
 %%% Imported from https://github.com/erlware/erlware_commons.git
-%%% Commit 603441a0363d5433de2139759991c640846c3a62
-%%% We export normalize/1 here
+%%% Commit 09168347525916e291c8aa6e3073e260e5f4a116
+%%% - We export normalize/1.
+%%% - We add a few more testcases around string/binary comparison.
 
 %%%-------------------------------------------------------------------
 %%% @copyright (C) 2011, Erlware LLC
@@ -371,7 +372,6 @@ eql_test() ->
                                "1.0.0.1+build.2")),
     ?assertMatch(true, not eql("FFF", "BBB")),
     ?assertMatch(true, not eql("1", "1BBBB")).
-
 
 gt_test() ->
     ?assertMatch(true, gt("1.0.0-alpha.1",

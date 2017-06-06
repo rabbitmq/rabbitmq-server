@@ -1,4 +1,13 @@
 # --------------------------------------------------------------------
+# %-on-concourse dependencies.
+# --------------------------------------------------------------------
+
+ifneq ($(words $(filter %-on-concourse,$(MAKECMDGOALS))),0)
+TEST_DEPS += ci
+dep_ci = git git@github.com:rabbitmq/rabbitmq-ci master
+endif
+
+# --------------------------------------------------------------------
 # Common Test flags.
 # --------------------------------------------------------------------
 
@@ -17,20 +26,21 @@
 # from its UI. Furthermore, it displays a graph showing evolution of the
 # results over time.
 
-CT_HOOKS ?=
+CT_HOOKS ?= cth_styledout
+TEST_DEPS += cth_styledout
 
-RMQ_CT_HOOKS = cth_fail_fast cth_styledout
+RMQ_CI_CT_HOOKS = cth_fail_fast
 ifdef TRAVIS
-CT_HOOKS += $(RMQ_CT_HOOKS)
-TEST_DEPS += $(RMQ_CT_HOOKS)
+CT_HOOKS += $(RMQ_CI_CT_HOOKS)
+TEST_DEPS += $(RMQ_CI_CT_HOOKS)
 endif
 ifdef CONCOURSE
-CT_HOOKS += $(RMQ_CT_HOOKS)
-TEST_DEPS += $(RMQ_CT_HOOKS)
+CT_HOOKS += $(RMQ_CI_CT_HOOKS)
+TEST_DEPS += $(RMQ_CI_CT_HOOKS)
 endif
 ifdef JENKINS_HOME
-CT_HOOKS += cth_surefire $(RMQ_CT_HOOKS)
-TEST_DEPS += $(RMQ_CT_HOOKS)
+CT_HOOKS += cth_surefire $(RMQ_CI_CT_HOOKS)
+TEST_DEPS += $(RMQ_CI_CT_HOOKS)
 endif
 
 dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
@@ -41,11 +51,6 @@ CT_OPTS += -ct_hooks $(wordlist 2,$(words $(CT_HOOKS_PARAM_VALUE)),$(CT_HOOKS_PA
 
 # Disable most messages on Travis because it might exceed the limit
 # set by Travis.
-#
-# On Concourse, we keep the default verbosity. With Erlang 19.2+, the
-# cth_styledout hook will change the output to something concise and all
-# messages are available in in HTML reports. With Erlang up-to 19.1,
-# stdout will be flooded with messages, but we'll live with that.
 #
 # CAUTION: All arguments after -erl_args are passed to the emulator and
 # common_test doesn't interpret them! Therefore, all common_test flags
