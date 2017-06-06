@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
       ^normalized_type -> {:ok, "Node type is already #{normalized_type}"};
       _ ->
         :rabbit_misc.rpc_call(node_name,
-                              :rabbit_mnesia, :change_cluster_node_type, [:ram])
+                              :rabbit_mnesia, :change_cluster_node_type, [normalized_type])
     end
   end
 
