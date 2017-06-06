@@ -99,4 +99,6 @@ normalize(Type, Value) when Type =:= integer ->
 normalize(Type, Value) when Type =:= string ->
   rabbit_peer_discovery_util:as_string(Value);
 normalize(Type, Value) when Type =:= proplist ->
-  rabbit_peer_discovery_util:as_proplist(Value).
+  rabbit_peer_discovery_util:as_proplist(Value);
+normalize(Type, Value) when Type =:= map ->
+  rabbit_peer_discovery_util:as_map(Value).

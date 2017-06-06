@@ -25,7 +25,8 @@
          node_hostname/1,
          node_name/1,
          parse_port/1,
-         as_proplist/1
+         as_proplist/1,
+         as_map/1
         ]).
 
 
@@ -316,5 +317,34 @@ as_proplist(List) when is_list(List) ->
     end;
 as_proplist(Value) ->
     rabbit_log:error("Unexpected data type for proplist value: ~p.~n",
+                          [Value]),
+    [].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a map from a JSON structure (environment variable) or
+%% the settings key, converts from proplists.
+%% @end
+%%--------------------------------------------------------------------
+-spec as_map(Value :: string() | [{string(), string()}]) ->
+                    #{}.
+as_map([Tuple | _] = Json) when is_tuple(Tuple) ->
+    maps:from_list(Json);
+as_map([]) ->
+    #{};
+as_map(List) when is_list(List) ->
+    Value = rabbit_data_coercion:to_binary(List),
+    case rabbit_json:try_decode(Value) of
+        {ok, Map} ->
+            Map;
+        {error, Error} ->
+            rabbit_log:error("Unexpected data type for map value: ~p. JSON parser returned an error: ~p!~n",
+                             [Value, Error]),
+            []
+    end;
+as_map(Map) when is_map(Map) ->
+    Map;
+as_map(Value) ->
+    rabbit_log:error("Unexpected data type for map value: ~p.~n",
                           [Value]),
     [].
