@@ -782,6 +782,19 @@ end}.
     {datatype, atom}
 ]}.
 
+{translation, "rabbit.cluster_formation.peer_discovery_backend",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.peer_discovery_backend", Conf, rabbit_peer_discovery_classic_config) of
+        classic_config -> rabbit_peer_discovery_classic_config;
+        classic        -> rabbit_peer_discovery_classic_config;
+        config         -> rabbit_peer_discovery_classic_config;
+        dns            -> rabbit_peer_discovery_dns;
+        aws            -> rabbit_peer_discovery_aws;
+        consul         -> rabbit_peer_discovery_consul;
+        Module         -> Module
+    end
+end}.
+
 %% Own node type, used by cluster formation.
 %%
 
