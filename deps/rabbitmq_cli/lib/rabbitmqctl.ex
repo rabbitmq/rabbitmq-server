@@ -40,11 +40,11 @@ defmodule RabbitMQCtl do
     auto_complete(script_basename, args)
   end
   def main(unparsed_command) do
-    exec_command(unparsed_command)
+    exec_command(unparsed_command, &process_output/3)
     |> handle_shutdown
   end
 
-  def exec_command(unparsed_command) do
+  def exec_command(unparsed_command, output_fun) do
     {command, command_name, arguments, parsed_options, invalid} =
       Parser.parse(unparsed_command)
     case {command, invalid} do
@@ -68,12 +68,12 @@ defmodule RabbitMQCtl do
         options = parsed_options |> merge_all_defaults |> normalize_options
         with_distribution(options, fn() ->
           execute_command(options, command, arguments)
-          |> handle_command_output(command, options, unparsed_command)
+          |> handle_command_output(command, options, unparsed_command, output_fun)
         end)
     end
   end
 
-  defp handle_command_output(output, command, options, unparsed_command) do
+  defp handle_command_output(output, command, options, unparsed_command, output_fun) do
     case output do
       {:error, _, _} = err ->
         err;
@@ -82,11 +82,7 @@ defmodule RabbitMQCtl do
       {:validation_failure, err} ->
         validation_error(err, command, unparsed_command, options);
       _  ->
-        result = process_output(output, command, options)
-        case result do
-          {:error, _} = err -> format_error(err, options, command);
-          other             -> other
-        end
+        output_fun.(output, command, options)
     end
   end
 
@@ -97,6 +93,10 @@ defmodule RabbitMQCtl do
     output
     |> Output.format_output(formatter, options)
     |> Output.print_output(printer, options)
+    |> case do
+         {:error, _} = err -> format_error(err, options, command);
+         other             -> other
+       end
   end
 
   defp handle_shutdown({:error, exit_code, output}) do
