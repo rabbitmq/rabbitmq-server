@@ -181,10 +181,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
     {:error, :timeout}
   end
   def wait_for_loop(timeout, sleep, fun) do
+    time  = :erlang.system_time(:milli_seconds)
     case fun.() do
       {:error, :loop} ->
-        :timer.sleep(sleep)
-        wait_for_loop(timeout - sleep, sleep, fun);
+        time_to_fun = :erlang.system_time(:milli_seconds) - time
+        time_taken = case {time_to_fun > timeout, time_to_fun > sleep} do
+          ## The function took longer than timeout
+          {true, _}      -> time_to_fun;
+          ## The function took longer than sleep
+          {false, true}  -> time_to_fun;
+          ## We need to sleep
+          {false, false} -> :timer.sleep(sleep)
+                            time_to_fun + sleep
+        end
+        wait_for_loop(timeout - time_taken, sleep, fun);
       other -> other
     end
   end
