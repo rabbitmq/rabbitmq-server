@@ -70,6 +70,16 @@
                                                    type          = string,
                                                    env_variable  = "K8S_SERVICE_NAME",
                                                    default_value = "rabbitmq"
+                                                  },
+          k8s_address_type                   => #peer_discovery_config_entry_meta{
+                                                   type          = string,
+                                                   env_variable  = "K8S_ADDRESS_TYPE",
+                                                   default_value = "ip"
+                                                  },
+          k8s_hostname_suffix                => #peer_discovery_config_entry_meta{
+                                                   type          = string,
+                                                   env_variable  = "K8S_HOSTNAME_SUFFIX",
+                                                   default_value = ""
                                                   }
          }).
 
@@ -140,7 +150,7 @@ make_request() ->
 %% @end
 %%
 node_name(Address) ->
-    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),    
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     ?UTIL_MODULE:node_name(
        ?UTIL_MODULE:as_string(Address) ++ get_config_key(k8s_hostname_suffix, M)).
 
@@ -151,28 +161,25 @@ node_name(Address) ->
 %% @end
 %%
 maybe_ready_address(Subset) ->
-    case proplists:get_value(<<"notReadyAddresses">>, Subset) of
+    case maps:get(<<"notReadyAddresses">>, Subset, undefined) of
       undefined -> ok;
       NotReadyAddresses ->
             Formatted = string:join([binary_to_list(get_address(X))
-                                     || {struct, X} <- NotReadyAddresses], ", "),
+                                     || X <- NotReadyAddresses], ", "),
             rabbit_log:info("k8s endpoint listing returned nodes not yet ready: ~s",
                             [Formatted])
     end,
-    case proplists:get_value(<<"addresses">>, Subset) of
-      undefined -> [];
-      Address -> Address
-    end.
+    maps:get(<<"addresses">>, Subset, []).
 
 %% @doc Return a list of nodes
 %%    see http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_endpoints
 %% @end
 %%
--spec extract_node_list({struct, term()}) -> [binary()].
-extract_node_list({struct, Response}) ->
+-spec extract_node_list(term()) -> [binary()].
+extract_node_list(Response) ->
     IpLists = [[get_address(Address)
-		|| {struct, Address} <- maybe_ready_address(Subset)]
-	       || {struct, Subset} <- proplists:get_value(<<"subsets">>, Response)],
+		|| Address <- maybe_ready_address(Subset)]
+	       || Subset <- maps:get(<<"subsets">>, Response, [])],
     sets:to_list(sets:union(lists:map(fun sets:from_list/1, IpLists))).
 
 
@@ -190,4 +197,4 @@ base_path() ->
 
 get_address(Address) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    proplists:get_value(list_to_binary(get_config_key(k8s_address_type, M)), Address).
+    maps:get(list_to_binary(get_config_key(k8s_address_type, M)), Address).
