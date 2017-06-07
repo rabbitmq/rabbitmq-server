@@ -166,7 +166,7 @@ ensure_erlang_mk_depsdir(Config) ->
         true  -> set_config(Config, {erlang_mk_depsdir, Path});
         false -> {skip,
                   "deps directory required, " ++
-                  "please set DEPSD_DIR or 'erlang_mk_depsdir' " ++
+                  "please set DEPS_DIR or 'erlang_mk_depsdir' " ++
                   "in ct config"}
     end.
 
