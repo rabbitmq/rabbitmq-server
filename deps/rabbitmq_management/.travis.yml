@@ -1,8 +1,8 @@
+# vim:sw=2:et:
 sudo: false
-language: erlang
-notifications:
-  email:
-    - alerts@rabbitmq.com
+
+language: generic
+
 addons:
   apt:
     packages:
@@ -28,6 +28,10 @@ before_script:
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
+  # Remove all kiex installations. This makes sure that the Erlang
+  # Solutions one is picked: it's after the kiex installations in $PATH.
+  - kiex list known
+  - kiex install 1.5.1
 
 script: make tests
 
