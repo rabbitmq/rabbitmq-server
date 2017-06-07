@@ -364,12 +364,6 @@ defmodule TestHelper do
     end
   end
 
-  def assert_stream_without_errors(stream) do
-    true = Enum.all?(stream, fn({:error, _}) -> false;
-                               ({:error, _, _}) -> false;
-                               (_) -> true end)
-  end
-
   def vhost_exists?(vhost) do
     Enum.any?(list_vhosts(), fn(v) -> v[:name] == vhost end)
   end

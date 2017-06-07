@@ -76,8 +76,14 @@ defmodule WaitCommandTest do
     assert_stream_without_errors(output)
   end
 
-  test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Waiting for node #{get_rabbit_hostname()}/
+  test "run: happy path in quiet mode", context do
+    pid = :erlang.list_to_integer(:rpc.call(context[:opts][:node], :os, :getpid, []))
+    output = @command.run([], Map.merge(context[:opts], %{pid: pid, quiet: true}))
+    [] = Enum.to_list(output)
+  end
+
+  test "no banner", context do
+    nil = @command.banner([], context[:opts])
   end
 
   test "output: process not running error", context do

@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback usage() :: String.t | [String.t]
   @callback validate(List.t, Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, String.t}}
   @callback merge_defaults(List.t, Map.t) :: {List.t, Map.t}
-  @callback banner(List.t, Map.t) :: String.t
+  @callback banner(List.t, Map.t) :: String.t | nil
   @callback run(List.t, Map.t) :: any
   # Coerces run/2 return value into the standard command output form
   # that is then formatted, printed and returned as an exit code.

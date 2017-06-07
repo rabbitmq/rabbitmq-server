@@ -41,49 +41,58 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   def scopes(), do: [:ctl, :diagnostics]
 
 
-  def run([pid_file], %{node: node_name, timeout: timeout}) do
+  def run([pid_file], %{node: node_name, timeout: timeout} = opts) do
     app_names = :rabbit_and_plugins
+    quiet = opts[:quiet] || false
 
     Helpers.stream_until_error_parametrised(
       [
-        log("Waiting for pid file '#{pid_file}' to appear"),
+        log("Waiting for pid file '#{pid_file}' to appear", quiet),
         fn(_)   -> wait_for_pid_file(pid_file, timeout) end,
-        log_param(fn(pid) -> "pid is #{pid}" end),
+        log_param(fn(pid) -> "pid is #{pid}" end, quiet),
       ]
       ++
-      wait_for_pid_funs(node_name, app_names, timeout),
+      wait_for_pid_funs(node_name, app_names, timeout, quiet),
       :init)
   end
-  def run([], %{node: node_name, pid: pid, timeout: timeout}) do
+  def run([], %{node: node_name, pid: pid, timeout: timeout} = opts) do
     app_names = :rabbit_and_plugins
+    quiet = opts[:quiet] || false
 
     Helpers.stream_until_error_parametrised(
-      wait_for_pid_funs(node_name, app_names, timeout),
+      wait_for_pid_funs(node_name, app_names, timeout, quiet),
       pid)
   end
 
-  defp wait_for_pid_funs(node_name, app_names, timeout) do
+  defp wait_for_pid_funs(node_name, app_names, timeout, quiet) do
     app_names_formatted = :io_lib.format('~p', [app_names])
     [
-      log_param(fn(pid) -> "Waiting for erlang distribution on node '#{node_name}' while OS process '#{pid}' is running" end),
+      log_param(fn(pid) -> "Waiting for erlang distribution on node '#{node_name}' while OS process '#{pid}' is running" end, quiet),
       fn(pid) -> wait_for_erlang_distribution(pid, node_name, timeout) end,
-      log("Waiting for applications '#{app_names_formatted}' to start on node '#{node_name}'"),
+      log("Waiting for applications '#{app_names_formatted}' to start on node '#{node_name}'", quiet),
       fn(_)   -> wait_for_application(node_name, app_names) end,
-      log("Applications '#{app_names_formatted}' are running on node '#{node_name}'")
+      log("Applications '#{app_names_formatted}' are running on node '#{node_name}'", quiet)
     ]
   end
 
-  defp log(string) do
+  defp log(_string, _quiet = true) do
+    fn(val) -> {:ok, val} end
+  end
+  defp log(string, _quiet = false) do
     fn(val) -> {:ok, val, string} end
   end
 
-  defp log_param(fun) do
+  defp log_param(_fun, _quiet = true) do
+    fn(val) -> {:ok, val} end
+  end
+  defp log_param(fun, _quiet = false) do
     fn(val) -> {:ok, val, fun.(val)} end
   end
 
   def usage, do: "wait [<pid_file>] [--pid|-P <pid>]"
 
-  def banner(_, %{node: node_name}), do: "Waiting for node #{node_name} ..."
+  ## Banners are included in wait steps
+  def banner(_, _), do: nil
 
   def output({:error, err}, _opts) do
     case format_error(err) do
