@@ -143,7 +143,15 @@ init_source(State = #{source := #{current := #{link := Link},
                           last_acked_tag => 0}}.
 
 -spec init_dest(state()) -> state().
-init_dest(State) -> State.
+init_dest(#{name := Name,
+            shovel_type := Type,
+            dest := #{add_forward_headers := true} = Dst} = State) ->
+    Props = #{<<"shovelled-by">> => rabbit_nodes:cluster_name(),
+              <<"shovel-type">> => rabbit_data_coercion:to_binary(Type),
+              <<"shovel-name">> => rabbit_data_coercion:to_binary(Name)},
+    State#{dest => Dst#{cached_forward_headers => Props}};
+init_dest(State) ->
+    State.
 
 -spec source_uri(state()) -> uri().
 source_uri(#{source := #{current := #{uri := Uri}}}) -> Uri.
@@ -319,12 +327,7 @@ add_timestamp_header(#{dest := #{add_timestamp_header := true}}, Msg) ->
     amqp10_msg:set_properties(P, Msg);
 add_timestamp_header(_, Msg) -> Msg.
 
-add_forward_headers(#{name := Name,
-                      shovel_type := Type,
-                      dest := #{add_forward_headers := true}}, Msg) ->
-      Props = #{<<"shovelled-by">> => rabbit_nodes:cluster_name(),
-                <<"shovel-type">> => rabbit_data_coercion:to_binary(Type),
-                <<"shovel-name">> => rabbit_data_coercion:to_binary(Name)},
+add_forward_headers(#{dest := #{cached_forward_headers := Props}}, Msg) ->
       amqp10_msg:set_application_properties(Props, Msg);
 add_forward_headers(_, Msg) -> Msg.
 
