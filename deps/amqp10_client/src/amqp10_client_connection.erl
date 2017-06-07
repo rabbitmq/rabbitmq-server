@@ -62,6 +62,9 @@
       max_frame_size => non_neg_integer(), % TODO: constrain to large than 512
       outgoing_max_frame_size => non_neg_integer() | undefined,
       idle_time_out => non_neg_integer(),
+      % set to a negative value to allow a sender to "overshoot" the flow
+      % control by this margin
+      transfer_limit_margin => integer(),
       sasl => none | anon | {plain, User :: binary(), Pwd :: binary()}
   }.
 
@@ -449,4 +452,5 @@ sasl_to_bin({plain, _, _}) -> <<"PLAIN">>;
 sasl_to_bin(anon) -> <<"ANONYMOUS">>.
 
 config_defaults() ->
-    #{sasl => none}.
+    #{sasl => none,
+      transfer_limit_margin => 0}.
