@@ -1,10 +1,10 @@
 %% region
 
-{mapping, "cluster_formation.aws.region", "rabbit.cluster_formation.peer_discovery_aws.aws_region", [
+{mapping, "cluster_formation.aws.region", "rabbit.cluster_formation.peer_discovery_aws.aws_ec2_region", [
     {datatype, string}
 ]}.
 
-{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_region",
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_ec2_region",
 fun(Conf) ->
     case cuttlefish:conf_get("cluster_formation.aws.region", Conf, undefined) of
         undefined -> cuttlefish:unset();
@@ -84,6 +84,6 @@ fun(Conf) ->
         none -> [];
         _ ->
             Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.aws.instance_tags", Conf),
-            [ V || {_, V} <- Settings ]
+            [ {lists:last(K), V} || {K, V} <- Settings ]
     end
 end}.
