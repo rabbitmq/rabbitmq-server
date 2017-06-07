@@ -1,5 +1,6 @@
 PROJECT = rabbitmq_peer_discovery_common
 PROJECT_DESCRIPTION = Modules shared by various peer discovery backends
+PROJECT_MOD = rabbit_peer_discovery_common_app
 
 LOCAL_DEPS = inets
 DEPS = rabbit_common rabbit
