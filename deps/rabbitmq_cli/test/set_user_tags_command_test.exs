@@ -25,12 +25,12 @@ defmodule SetUserTagsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
     add_user @user, @password
 
     on_exit([], fn ->
       delete_user(@user)
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -50,7 +50,7 @@ defmodule SetUserTagsCommandTest do
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target}
 
     assert @command.run([@user, :imperator], opts) == {:badrpc, :nodedown}

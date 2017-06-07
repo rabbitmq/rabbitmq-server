@@ -25,11 +25,9 @@ defmodule SetGlobalParameterCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
 
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-    end)
+
+
 
     :ok
   end
@@ -65,7 +63,7 @@ defmodule SetGlobalParameterCommandTest do
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target}
 
     assert @command.run([@key, @value], opts) == {:badrpc, :nodedown}

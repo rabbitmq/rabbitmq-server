@@ -24,12 +24,12 @@ defmodule SetDiskFreeLimitCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
     set_disk_free_limit(@default_limit)
 
     on_exit([], fn ->
       set_disk_free_limit(@default_limit)
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 

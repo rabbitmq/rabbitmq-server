@@ -22,12 +22,7 @@ defmodule EnvironmentCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
 
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-
-    end)
 
     :ok
   end
@@ -49,7 +44,7 @@ defmodule EnvironmentCommandTest do
 
   test "run: environment request on nonexistent RabbitMQ node returns nodedown" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target}
 
     assert @command.run([], opts) == {:badrpc, :nodedown}

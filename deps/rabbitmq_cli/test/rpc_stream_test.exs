@@ -1,19 +1,12 @@
 defmodule RpcStreamTest do
   use ExUnit.Case, async: false
 
-  import TestHelper
-
   require RabbitMQ.CLI.Ctl.RpcStream
   alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
 
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-
-    end)
 
     :ok
 

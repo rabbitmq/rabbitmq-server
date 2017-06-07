@@ -28,7 +28,7 @@ defmodule ListPluginsCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
     node = get_rabbit_hostname()
-    :net_kernel.connect_node(node)
+
     {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
                                                 :application, :get_env,
                                                 [:rabbit, :enabled_plugins_file])
@@ -49,19 +49,15 @@ defmodule ListPluginsCommandTest do
       set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname(), opts)
     end)
 
-    :erlang.disconnect_node(node)
-
 
     {:ok, opts: opts}
   end
 
   setup context do
-    :net_kernel.connect_node(get_rabbit_hostname())
+
     reset_enabled_plugins_to_preconfigured_defaults(context)
 
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-    end)
+
 
     {
       :ok,

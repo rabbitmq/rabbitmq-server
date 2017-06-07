@@ -22,7 +22,7 @@ defmodule ClearTopicPermissionsTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
     add_user(@user, @password)
     add_vhost(@specific_vhost)
 
@@ -30,7 +30,7 @@ defmodule ClearTopicPermissionsTest do
       clear_topic_permissions(@user, @specific_vhost)
       delete_user(@user)
       delete_vhost(@specific_vhost)
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 

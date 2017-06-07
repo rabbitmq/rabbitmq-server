@@ -27,14 +27,14 @@ defmodule ListPermissionsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
 
     add_vhost @vhost
     set_permissions @user, @vhost, ["^guest-.*", ".*", ".*"]
 
     on_exit([], fn ->
       delete_vhost @vhost
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -67,8 +67,8 @@ defmodule ListPermissionsCommandTest do
 
   test "run: on a bad RabbitMQ node, return a badrpc" do
     target = :jake@thedog
-    opts = %{node: :jake@thedog, timeout: :infinity, vhost: "/"}
-    :net_kernel.connect_node(target)
+    opts = %{node: target, timeout: :infinity, vhost: "/"}
+
     assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 

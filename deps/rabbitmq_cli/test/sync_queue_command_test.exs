@@ -23,13 +23,13 @@ defmodule SyncQueueCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
 
     start_rabbitmq_app()
 
     on_exit([], fn ->
       start_rabbitmq_app()
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -64,7 +64,7 @@ defmodule SyncQueueCommandTest do
 
   test "run: request to a non-existent RabbitMQ node returns a nodedown" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target, vhost: @vhost}
     assert match?({:badrpc, :nodedown}, @command.run(["q1"], opts))
   end

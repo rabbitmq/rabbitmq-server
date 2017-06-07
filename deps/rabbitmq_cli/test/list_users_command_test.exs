@@ -26,12 +26,7 @@ defmodule ListUsersCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
 
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-
-    end)
 
     std_result = [
       [{:user,@guest},{:tags,[:administrator]}],

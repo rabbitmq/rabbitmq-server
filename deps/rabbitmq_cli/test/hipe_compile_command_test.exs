@@ -24,13 +24,11 @@ defmodule HipeCompileCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
 
     start_rabbitmq_app()
 
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-    end)
+
   end
 
   setup do

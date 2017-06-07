@@ -30,7 +30,7 @@ defmodule SetPolicyCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
 
     add_vhost @vhost
 
@@ -38,7 +38,7 @@ defmodule SetPolicyCommandTest do
 
     on_exit([], fn ->
       delete_vhost @vhost
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -105,7 +105,7 @@ defmodule SetPolicyCommandTest do
 
   test "run: an unreachable node throws a badrpc" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target, vhost: "/", priority: 0, apply_to: "all"}
 
     assert @command.run([@key, @pattern, @value], opts) == {:badrpc, :nodedown}

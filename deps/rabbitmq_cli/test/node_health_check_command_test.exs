@@ -22,13 +22,13 @@ defmodule NodeHealthCheckCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
     reset_vm_memory_high_watermark()
 
     on_exit([], fn ->
       reset_vm_memory_high_watermark()
 
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -68,7 +68,7 @@ defmodule NodeHealthCheckCommandTest do
 
   test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
 
     assert match?({:badrpc, :nodedown}, @command.run([], %{node: target, timeout: 70000}))
   end

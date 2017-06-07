@@ -22,13 +22,13 @@ defmodule ForceResetCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
 
     start_rabbitmq_app()
 
     on_exit([], fn ->
       start_rabbitmq_app()
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -63,7 +63,7 @@ defmodule ForceResetCommandTest do
 
   test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target}
     assert match?({:badrpc, :nodedown}, @command.run([], opts))
   end

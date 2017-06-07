@@ -28,7 +28,7 @@ defmodule ListTopicPermissionsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
 
     add_vhost(@vhost)
     add_user(@user, @password)
@@ -39,7 +39,7 @@ defmodule ListTopicPermissionsCommandTest do
       clear_topic_permissions(@user, @vhost)
       delete_user(@user)
       delete_vhost @vhost
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -72,8 +72,8 @@ defmodule ListTopicPermissionsCommandTest do
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     target = :jake@thedog
-    opts = %{node: :jake@thedog, timeout: :infinity, vhost: "/"}
-    :net_kernel.connect_node(target)
+    opts = %{node: target, timeout: :infinity, vhost: "/"}
+
     assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 

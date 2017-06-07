@@ -20,13 +20,6 @@ defmodule DiscoverPeersCommandTest do
   @command RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
-
-
-    on_exit(fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-    end)
-
     :ok
   end
 

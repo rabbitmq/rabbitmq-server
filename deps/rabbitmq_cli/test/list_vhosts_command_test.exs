@@ -26,7 +26,7 @@ defmodule ListVhostsCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
 
     add_vhost @vhost1
     add_vhost @vhost2
@@ -35,7 +35,7 @@ defmodule ListVhostsCommandTest do
     on_exit([], fn ->
       delete_vhost @vhost1
       delete_vhost @vhost2
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -104,8 +104,8 @@ defmodule ListVhostsCommandTest do
 
   test "run: on a bad RabbitMQ node, return a badrpc" do
     target = :jake@thedog
-    opts = %{node: :jake@thedog, timeout: :infinity}
-    :net_kernel.connect_node(target)
+    opts = %{node: target, timeout: :infinity}
+
     assert @command.run(["name"], opts) == {:badrpc, :nodedown}
   end
 

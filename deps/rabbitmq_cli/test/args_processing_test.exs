@@ -36,11 +36,6 @@ defmodule ArgsProcessingTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-
-    end)
     :ok
   end
 
@@ -49,7 +44,7 @@ defmodule ArgsProcessingTest do
     {:ok, opts: %{node: get_rabbit_hostname(), timeout: 50_000, vhost: "/"}}
   end
 
-  test "merge defaults does not fail because of args", context do
+  test "merge defaults does not fail because of args", _context do
     commands = all_commands()
     Enum.each(commands,
       fn(command) ->
