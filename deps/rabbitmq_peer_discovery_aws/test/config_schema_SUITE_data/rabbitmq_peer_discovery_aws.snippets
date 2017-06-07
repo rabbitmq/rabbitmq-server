@@ -1,0 +1,69 @@
+[{http_log,
+  "listeners.tcp.default = 5672
+   collect_statistics_interval = 10000
+   management.http_log_dir = test/config_schema_SUITE_data/rabbit-mgmt
+   management.rates_mode = basic",
+  [{rabbit,[{tcp_listeners,[5672]},{collect_statistics_interval,10000}]},
+   {rabbitmq_management,
+       [{http_log_dir,"test/config_schema_SUITE_data/rabbit-mgmt"},
+        {rates_mode,basic}]}],
+  [rabbitmq_management]},
+ {listener_port,
+  "management.listener.port = 12345",
+  [{rabbitmq_management,[{listener,[{port,12345}]}]}],
+  [rabbitmq_management]},
+ {ssl,
+  "management.listener.port = 15671
+   management.listener.ssl = true
+   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.listener.ssl_opts.certfile = test/config_schema_SUITE_data/certs/cert.pem
+   management.listener.ssl_opts.keyfile = test/config_schema_SUITE_data/certs/key.pem",
+  [{rabbitmq_management,
+       [{listener,
+            [{port,15671},
+             {ssl,true},
+             {ssl_opts,
+                 [{cacertfile,
+                      "test/config_schema_SUITE_data/certs/cacert.pem"},
+                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                  {keyfile,
+                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
+  [rabbitmq_management]},
+ {retention_policies,
+  "management.sample_retention_policies.global.minute  = 5
+   management.sample_retention_policies.global.hour    = 60
+   management.sample_retention_policies.global.day = 1200
+
+   management.sample_retention_policies.basic.minute = 5
+   management.sample_retention_policies.basic.hour   = 60
+
+   management.sample_retention_policies.detailed.10 = 5",
+  [{rabbitmq_management,
+       [{sample_retention_policies,
+            [{global,[{60,5},{3600,60},{86400,1200}]},
+             {basic,[{60,5},{3600,60}]},
+             {detailed,[{10,5}]}]}]}],
+  [rabbitmq_management]},
+ {listener_pi,
+  "management.listener.port = 15672
+   management.listener.ip   = 127.0.0.1",
+  [{rabbitmq_management,[{listener,[{port,15672},{ip,"127.0.0.1"}]}]}],
+  [rabbitmq_management]},
+ {ssl_port,
+  "management.listener.port = 15672
+   management.listener.ssl  = true
+
+   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.listener.ssl_opts.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   management.listener.ssl_opts.keyfile    = test/config_schema_SUITE_data/certs/key.pem",
+  [{rabbitmq_management,
+       [{listener,
+            [{port,15672},
+             {ssl,true},
+             {ssl_opts,
+                 [{cacertfile,
+                      "test/config_schema_SUITE_data/certs/cacert.pem"},
+                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                  {keyfile,
+                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
+  [rabbitmq_management]}].
