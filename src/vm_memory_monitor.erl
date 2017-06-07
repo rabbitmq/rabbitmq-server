@@ -43,7 +43,7 @@
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_MEMORY_CHECK_INTERVAL, 1000).
--define(ONE_MB, 1048576).
+-define(ONE_MiB, 1048576).
 
 %% For an unknown OS, we assume that we have 1GB of memory. It'll be
 %% wrong. Scale by vm_memory_high_watermark in configuration to get a
@@ -214,9 +214,10 @@ set_mem_limits(State, MemLimit) ->
                              memory_limit = undefined } ->
                         error_logger:warning_msg(
                           "Unknown total memory size for your OS ~p. "
-                          "Assuming memory size is ~pMB.~n",
+                          "Assuming memory size is ~p MiB (~p bytes).~n",
                           [os:type(),
-                           trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/?ONE_MB)]);
+                           trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/?ONE_MiB),
+                           ?MEMORY_SIZE_FOR_UNKNOWN_OS]);
                     _ ->
                         ok
                 end,
@@ -227,18 +228,20 @@ set_mem_limits(State, MemLimit) ->
         case get_vm_limit() of
             Limit when Limit < TotalMemory ->
                 error_logger:warning_msg(
-                  "Only ~pMB of ~pMB memory usable due to "
+                  "Only ~p MiB (~p bytes) of ~p MiB (~p bytes) memory usable due to "
                   "limited address space.~n"
                   "Crashes due to memory exhaustion are possible - see~n"
                   "http://www.rabbitmq.com/memory.html#address-space~n",
-                  [trunc(V/?ONE_MB) || V <- [Limit, TotalMemory]]),
+                  [trunc(Limit/?ONE_MiB), Limit, trunc(TotalMemory/?ONE_MiB),
+                   TotalMemory]),
                 Limit;
             _ ->
                 TotalMemory
         end,
     MemLim = interpret_limit(parse_mem_limit(MemLimit), UsableMemory),
-    error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
-                          [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),
+    error_logger:info_msg("Memory limit set to ~p MiB (~p bytes) of ~p MiB (~p bytes) total.~n",
+                          [trunc(MemLim/?ONE_MiB), MemLim, trunc(TotalMemory/?ONE_MiB),
+                           TotalMemory]),
     internal_update(State #state { total_memory    = TotalMemory,
                                    memory_limit    = MemLim,
                                    memory_config_limit = MemLimit}).
@@ -402,9 +405,9 @@ parse_line_sunos(Line) ->
             [Value1 | UnitsRest] = string:tokens(RHS, " "),
             Value2 = case UnitsRest of
                          ["Gigabytes"] ->
-                             list_to_integer(Value1) * ?ONE_MB * 1024;
+                             list_to_integer(Value1) * ?ONE_MiB * 1024;
                          ["Megabytes"] ->
-                             list_to_integer(Value1) * ?ONE_MB;
+                             list_to_integer(Value1) * ?ONE_MiB;
                          ["Kilobytes"] ->
                              list_to_integer(Value1) * 1024;
                          _ ->
