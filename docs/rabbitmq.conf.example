@@ -386,7 +386,7 @@
 ## Disabling background GC may reduce latency for client operations,
 ## keeping it enabled may reduce median RAM usage.
 ##
-# background_gc_enabled = true
+# background_gc_enabled = false
 
 ## Target (desired) interval (in milliseconds) at which we run background GC.
 ## The actual interval will vary depending on how long it takes to execute
