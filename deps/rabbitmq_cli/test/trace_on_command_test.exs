@@ -25,12 +25,12 @@ defmodule TraceOnCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
     add_vhost(@test_vhost)
 
     on_exit([], fn ->
       delete_vhost(@test_vhost)
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -62,7 +62,7 @@ defmodule TraceOnCommandTest do
 
   test "run: on an invalid RabbitMQ node, return a nodedown" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target, vhost: "/"}
 
     assert @command.run([], opts) == {:badrpc, :nodedown}

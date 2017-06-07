@@ -26,12 +26,12 @@ defmodule CloseConnectionCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
     close_all_connections(get_rabbit_hostname())
 
     on_exit([], fn ->
       close_all_connections(get_rabbit_hostname())
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -68,7 +68,7 @@ defmodule CloseConnectionCommandTest do
 
   test "run: a close_connection request on nonexistent RabbitMQ node returns nodedown" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target}
     assert match?({:badrpc, :nodedown}, @command.run(["<rabbit@localhost.1.2.1>", "test"], opts))
   end

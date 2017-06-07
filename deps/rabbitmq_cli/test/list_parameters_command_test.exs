@@ -29,7 +29,7 @@ defmodule ListParametersCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
     node = get_rabbit_hostname()
-    :net_kernel.connect_node(node)
+
 
     {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
                                                 :application, :get_env,
@@ -54,7 +54,7 @@ defmodule ListParametersCommandTest do
     on_exit(fn ->
       set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname(), opts)
       delete_vhost @vhost
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -96,7 +96,7 @@ defmodule ListParametersCommandTest do
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target, vhost: @vhost, timeout: :infinity}
 
     assert @command.run([], opts) == {:badrpc, :nodedown}

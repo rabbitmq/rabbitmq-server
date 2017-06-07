@@ -16,7 +16,6 @@
 
 defmodule DefaultOutputTest do
   use ExUnit.Case, async: false
-  import RabbitMQ.CLI.Core.ExitCodes
 
   test "ok is passed as is" do
     assert match?(:ok, ExampleCommand.output(:ok, %{}))
@@ -40,7 +39,6 @@ defmodule DefaultOutputTest do
   end
 
   test "badrpc is an error" do
-    node = :example@node
     {:error, {:badrpc, :nodedown}} =
       ExampleCommand.output({:badrpc, :nodedown}, %{})
 
@@ -96,12 +94,12 @@ defmodule DefaultOutputTest do
     assert match?({:stream, [1,2,3]}, ExampleCommandWithCustomOutput.output([1,2,3], %{}))
 
     {:error, {:badrpc, :nodedown}} =
-      ExampleCommandWithCustomOutput.output({:badrpc, :nodedown}, %{node: node})
+      ExampleCommandWithCustomOutput.output({:badrpc, :nodedown}, %{})
     {:error, {:badrpc, :timeout}} =
       ExampleCommandWithCustomOutput.output({:badrpc, :timeout}, %{})
 
     error = %{i: [am: "arbitrary", error: 1]}
-    {:error, error} = ExampleCommandWithCustomOutput.output({:error, error}, %{})
+    {:error, ^error} = ExampleCommandWithCustomOutput.output({:error, error}, %{})
 
     {:error, "I am string"} =
       ExampleCommandWithCustomOutput.output({:error_string, "I am string"}, %{})

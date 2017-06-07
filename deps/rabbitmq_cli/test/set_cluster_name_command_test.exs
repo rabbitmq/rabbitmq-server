@@ -22,12 +22,7 @@ defmodule SetClusterNameCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    :net_kernel.connect_node(get_rabbit_hostname())
 
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-
-    end)
 
     :ok
   end

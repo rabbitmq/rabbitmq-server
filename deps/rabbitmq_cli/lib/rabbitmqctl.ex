@@ -153,18 +153,11 @@ defmodule RabbitMQCtl do
     opts
   end
 
-
-  defp maybe_connect_to_rabbitmq(HelpCommand, _), do: nil
-  defp maybe_connect_to_rabbitmq(_, node) do
-    Helpers.connect_to_rabbitmq(node)
-  end
-
   defp execute_command(options, command, arguments) do
     {arguments, options} = command.merge_defaults(arguments, options)
     case command.validate(arguments, options) do
       :ok ->
         maybe_print_banner(command, arguments, options)
-        maybe_connect_to_rabbitmq(command, options[:node])
         maybe_run_command(command, arguments, options)
       {:validation_failure, _} = err -> err
     end

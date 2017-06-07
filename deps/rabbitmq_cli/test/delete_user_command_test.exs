@@ -24,13 +24,6 @@ defmodule DeleteUserCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
-
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-
-    end)
-
     :ok
   end
 
@@ -57,7 +50,7 @@ defmodule DeleteUserCommandTest do
 
   test "run: An invalid Rabbit node returns a bad rpc message" do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target}
 
     assert @command.run(["username"], opts) == {:badrpc, :nodedown}

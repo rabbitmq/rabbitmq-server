@@ -29,39 +29,13 @@ defmodule HelpersTest do
     :ok
   end
 
-  setup context do
-    on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
-    :ok
-  end
-
 ## --------------------- get_rabbit_hostname()/0 tests -------------------------
 
 test "RabbitMQ hostname is properly formed" do
     assert @subject.get_rabbit_hostname() |> Atom.to_string =~ ~r/rabbit@\w+/
   end
 
-## ------------------- connect_to_rabbitmq/0,1 tests --------------------
-
-  test "RabbitMQ default hostname connects" do
-    assert @subject.connect_to_rabbitmq() == true
-  end
-
-  @tag target: get_rabbit_hostname()
-  test "RabbitMQ specified hostname atom connects", context do
-    assert @subject.connect_to_rabbitmq(context[:target]) == true
-  end
-
-  @tag target: get_rabbit_hostname() |> Atom.to_string
-  test "RabbitMQ specified hostname string connects", context do
-    assert @subject.connect_to_rabbitmq(context[:target]) == true
-  end
-
-  @tag target: :jake@thedog
-  test "Invalid specified hostname atom doesn't connect", context do
-    assert @subject.connect_to_rabbitmq(context[:target]) == false
-  end
-
-  ## ------------------- memory_unit* tests --------------------
+## ------------------- memory_unit* tests --------------------
 
   test "an invalid memory unit fails " do
     assert @subject.memory_unit_absolute(10, "gigantibytes") == {:bad_argument, ["gigantibytes"]}

@@ -22,13 +22,13 @@ defmodule UpdateClusterNodesCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
+
 
     start_rabbitmq_app()
 
     on_exit([], fn ->
       start_rabbitmq_app()
-      :erlang.disconnect_node(get_rabbit_hostname())
+
 
     end)
 
@@ -61,7 +61,7 @@ defmodule UpdateClusterNodesCommandTest do
 
   test "run: request to an unreachable node returns nodedown", context do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{
       node: target
     }
@@ -73,7 +73,7 @@ defmodule UpdateClusterNodesCommandTest do
 
   test "run: specifying an unreachable node as seed returns nodedown", context do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     stop_rabbitmq_app()
     assert match?(
       {:badrpc_multi, :nodedown, [_]},

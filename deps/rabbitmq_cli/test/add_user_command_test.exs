@@ -22,12 +22,6 @@ defmodule AddUserCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname())
-
-    on_exit([], fn ->
-      :erlang.disconnect_node(get_rabbit_hostname())
-
-    end)
 
     :ok
   end
@@ -56,7 +50,7 @@ defmodule AddUserCommandTest do
   @tag user: "someone", password: "password"
   test "run: request to a non-existent node returns nodedown", context do
     target = :jake@thedog
-    :net_kernel.connect_node(target)
+
     opts = %{node: target}
     assert match?({:badrpc, :nodedown}, @command.run([context[:user], context[:password]], opts))
   end
