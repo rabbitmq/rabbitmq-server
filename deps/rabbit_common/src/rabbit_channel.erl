@@ -67,6 +67,8 @@
 %% Internal
 -export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
 -export([get_vhost/1, get_user/1]).
+%% For testing
+-export([build_topic_variable_map/3]).
 
 -record(ch, {
   %% starting | running | flow | closing
@@ -373,6 +375,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
              true   -> flow;
              false  -> noflow
            end,
+
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
@@ -790,15 +793,15 @@ check_internal_exchange(_) ->
     ok.
 
 check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
-                          #ch{user = User = #user{username = Username}},
+                          #ch{user = User = #user{username = Username}, conn_pid = ConnPid},
                           RoutingKey,
                           Permission) ->
     Resource = Name#resource{kind = topic},
+    VariableMap = build_topic_variable_map(
+        amqp_connection:info(ConnPid, [amqp_params]),
+        VHost, Username),
     Context = #{routing_key   => RoutingKey,
-                variable_map  => #{
-                    <<"username">> => Username,
-                    <<"vhost">>    => VHost
-                }
+                variable_map  => VariableMap
     },
     Cache = case get(topic_permission_cache) of
                 undefined -> [];
@@ -813,6 +816,19 @@ check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost
     end;
 check_topic_authorisation(_, _, _, _) ->
     ok.
+
+build_topic_variable_map(AmqpParams, VHost, Username) ->
+    VariableFromAmqpParams = extract_topic_variable_map_from_amqp_params(AmqpParams),
+    maps:merge(VariableFromAmqpParams, #{<<"vhost">> => VHost, <<"username">> => Username}).
+
+%% use tuple representation of amqp_params to avoid coupling.
+%% get variable map only from amqp_params_direct, not amqp_params_network.
+%% amqp_params_direct are usually used from plugins (e.g. MQTT, STOMP)
+extract_topic_variable_map_from_amqp_params([{amqp_params, {amqp_params_direct, _, _, _, _,
+                                             {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}]) ->
+    proplists:get_value(variable_map, AdditionalInfo, #{});
+extract_topic_variable_map_from_amqp_params(_) ->
+    #{}.
 
 check_msg_size(Content) ->
     Size = rabbit_basic:maybe_gc_large_msg(Content),
