@@ -139,7 +139,7 @@ inject_randomized_delay() ->
                              true  -> Min;
                              false -> RandomVal
                          end,
-            rabbit_log:info("Will wait for ~p milliseconds before proceeding with regitration...", [Effective]),
+            rabbit_log:info("Will wait for ~p milliseconds before proceeding with registration...", [Effective]),
             timer:sleep(Effective),
             ok
     end.
