@@ -45,7 +45,7 @@ init_schemas(App, Config) ->
         ]).
 
 find_app_schema(App, DepsDir) ->
-    Schema = filename:join([DepsDir, App, "priv", get_schema_for(App)]),
+    Schema = get_schema_for([DepsDir, App, "priv"], App),
     does_schema_exist(filelib:is_regular(Schema), App, DepsDir, Schema, cont).
 
 does_schema_exist(true, _App, _DepsDir, Schema, _) ->
@@ -54,12 +54,11 @@ does_schema_exist(false, App, _DepsDir, _Schema, stop) ->
     ct:fail("Could not find schema for app: ~p~n", [App]);
 does_schema_exist(false, App, DepsDir, _Schema, cont) ->
     % If not in umbrella, priv will be at ../priv
-    PrivDir = filename:join([DepsDir, "..", "priv"]),
-    Schema = filename:join([PrivDir, get_schema_for(App)]),
+    Schema = get_schema_for([DepsDir, "..", "priv"], App),
     does_schema_exist(filelib:is_regular(Schema), App, DepsDir, Schema, stop).
 
-get_schema_for(App) ->
-    filename:join(["schema", atom_to_list(App) ++ ".schema"]).
+get_schema_for(Prefix, App) ->
+    filename:join(Prefix ++ ["schema", atom_to_list(App) ++ ".schema"]).
 
 copy_to(File, Dir) ->
     BaseName = filename:basename(File),
