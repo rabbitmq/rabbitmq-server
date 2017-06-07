@@ -213,7 +213,7 @@ set_limits(VHost = #vhost{}, Limits) ->
 
 
 dir(Vhost) ->
-    <<Num:128>> = erlang:md5(term_to_binary(Vhost)),
+    <<Num:128>> = erlang:md5(Vhost),
     rabbit_misc:format("~.36B", [Num]).
 
 msg_store_dir_path(VHost) ->
