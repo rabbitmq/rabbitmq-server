@@ -40,15 +40,15 @@ fun(Conf) ->
     end
 end}.
 
-%% secret_key_id
+%% secret_key
 
-{mapping, "cluster_formation.aws.secret_key_id", "rabbit.cluster_formation.peer_discovery_aws.aws_secret_key", [
+{mapping, "cluster_formation.aws.secret_key", "rabbit.cluster_formation.peer_discovery_aws.aws_secret_key", [
     {datatype, string}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_aws.aws_secret_key",
 fun(Conf) ->
-    case cuttlefish:conf_get("cluster_formation.aws.secret_key_id", Conf, undefined) of
+    case cuttlefish:conf_get("cluster_formation.aws.secret_key", Conf, undefined) of
         undefined -> cuttlefish:unset();
         Value     -> Value
     end
