@@ -325,7 +325,7 @@
 
    %% Whether or not to enable background GC.
    %%
-   %% {background_gc_enabled, true},
+   %% {background_gc_enabled, false},
    %%
    %% Interval (in milliseconds) at which we run background GC.
    %%
