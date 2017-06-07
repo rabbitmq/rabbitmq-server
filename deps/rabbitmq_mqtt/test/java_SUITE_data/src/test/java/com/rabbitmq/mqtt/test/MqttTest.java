@@ -11,7 +11,7 @@
 //  The Original Code is RabbitMQ.
 //
 //  The Initial Developer of the Original Code is GoPivotal, Inc.
-//  Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+//  Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 //
 
 package com.rabbitmq.mqtt.test;
@@ -736,6 +736,23 @@ public class MqttTest implements MqttCallback {
         waitForTestDelay();
         Assert.assertEquals(0, receivedMessages.size());
         client2.disconnect();
+    }
+
+    @Test public void topicAuthorisationVariableExpansion() throws Exception {
+        client.connect(conOpt);
+        client.setCallback(this);
+        String topicWithExpandedVariables = "guest/" + clientId + "/a";
+        client.subscribe(topicWithExpandedVariables);
+        publish(client, topicWithExpandedVariables, 1, "content".getBytes());
+        waitAtMost(timeout).until(receivedMessagesSize(),equalTo(1));
+        assertTrue(client.isConnected());
+        try {
+            publish(client, "guest/WrongClientId/a", 1, "content".getBytes());
+            fail("Publishing on a forbidden topic, an exception should have been thrown");
+            client.disconnect();
+        } catch(Exception e) {
+            // OK
+        }
     }
 
     @Test public void interopM2A() throws MqttException, IOException, InterruptedException, TimeoutException {
