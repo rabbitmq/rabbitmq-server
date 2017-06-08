@@ -20,7 +20,7 @@
 -include("rabbit.hrl").
 
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0]).
+         post_registration/0, lock/1, unlock/1]).
 %% for tests
 -export([discover_nodes/2, discover_hostnames/2]).
 
@@ -71,6 +71,15 @@ unregister() ->
 post_registration() ->
     ok.
 
+-spec lock(Node :: atom()) -> not_supported.
+
+lock(_Node) ->
+    not_supported.
+
+-spec unlock(Data :: term()) -> ok.
+
+unlock(_Data) ->
+    ok.
 
 %%
 %% Implementation

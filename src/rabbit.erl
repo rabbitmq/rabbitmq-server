@@ -327,11 +327,7 @@ broker_start() ->
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
     maybe_sd_notify(),
-    ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())),
-    %% See rabbitmq/rabbitmq-server#1202 for details.
-    rabbit_peer_discovery:maybe_inject_randomized_delay(),
-    rabbit_peer_discovery:maybe_register(),
-    ok.
+    ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())).
 
 %% Try to send systemd ready notification if it makes sense in the
 %% current environment. standard_error is used intentionally in all
