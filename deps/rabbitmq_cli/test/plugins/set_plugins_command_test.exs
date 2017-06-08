@@ -19,7 +19,6 @@ defmodule SetPluginsCommandTest do
 
   @command RabbitMQ.CLI.Plugins.Commands.SetCommand
 
-  #RABBITMQ_PLUGINS_DIR=~/dev/master/deps RABBITMQ_ENABLED_PLUGINS_FILE=/var/folders/cl/jnydxpf92rg76z05m12hlly80000gq/T/rabbitmq-test-instances/rabbit/enabled_plugins RABBITMQ_HOME=~/dev/master/deps/rabbit ./rabbitmq-plugins list_plugins
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()

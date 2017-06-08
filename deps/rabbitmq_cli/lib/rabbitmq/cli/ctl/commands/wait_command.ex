@@ -30,9 +30,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], %{pid: _}), do: {:validation_failure, "Cannot specify both pid and pidfile"}
-  def validate([], %{pid: _}), do: :ok
-  def validate([], _), do: {:validation_failure, "No pid or pidfile specified"}
-  def validate([_], _), do: :ok
+  def validate([],  %{pid: _} = opts), do: RabbitMQ.CLI.Ctl.Validators.rabbit_is_loaded([], opts)
+  def validate([],  _), do: {:validation_failure, "No pid or pidfile specified"}
+  def validate([_], opts), do: RabbitMQ.CLI.Ctl.Validators.rabbit_is_loaded([], opts)
 
   def switches(), do: [pid: :integer]
 
@@ -128,9 +128,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   end
 
   defp wait_for_application(node_name, :rabbit_and_plugins) do
-    case :rpc.call(node_name, :rabbit, :await_startup, []) do
-      :ok               -> :ok;
-      {:badrpc, reason} -> {:error, {:badrpc, reason}}
+    case :rabbit.await_startup(node_name) do
+      {:badrpc, err} -> {:error, {:badrpc, err}};
+      other          -> other
     end
   end
 
@@ -149,7 +149,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
     case is_os_process_alive(pid) do
       true ->
         case Node.ping(node_name) do
-          :pong -> :ok;
+          :pong -> :ok
           :pang -> {:error, :pang}
         end;
       false -> {:error, :process_not_running}

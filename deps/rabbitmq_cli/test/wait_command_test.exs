@@ -22,14 +22,13 @@ defmodule WaitCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
+    rabbitmq_home = :rabbit_misc.rpc_call(get_rabbit_hostname(), :code, :lib_dir, [:rabbit])
 
-
-    :ok
+    {:ok, opts: %{node: get_rabbit_hostname(),
+                  rabbitmq_home: rabbitmq_home,
+                  timeout: 500}}
   end
 
-  setup do
-    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 500}}
-  end
 
   test "validate: cannot have both pid and pidfile", context do
     {:validation_failure, "Cannot specify both pid and pidfile"} =
@@ -43,6 +42,12 @@ defmodule WaitCommandTest do
 
   test "validate: with more than one argument returns an arg count error", context do
     assert @command.validate(["pid_file", "extra"], context[:opts]) == {:validation_failure, :too_many_args}
+  end
+
+  test "validate: failure to load rabbit application is reported as an error", context do
+    options = Map.merge(Map.delete(context[:opts], :rabbitmq_home), %{pid: 123})
+    {:validation_failure, {:unable_to_load_rabbit, _}} =
+      @command.validate([], options)
   end
 
   test "run: times out waiting for non-existent pid file", context do

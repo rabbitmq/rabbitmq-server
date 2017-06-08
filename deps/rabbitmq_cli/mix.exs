@@ -50,7 +50,7 @@ defmodule RabbitMQCtl.MixfileBase do
 
 
   defp add_modules(app, :test) do
-    # There are issue with building a package without this line ¯\_(ツ)_/¯
+    # There are issues with building a package without this line ¯\_(ツ)_/¯
     Mix.Project.get
     path = Mix.Project.compile_path
     mods = modules_from(Path.wildcard("#{path}/*.beam"))

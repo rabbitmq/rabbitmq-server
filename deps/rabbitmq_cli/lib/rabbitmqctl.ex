@@ -267,6 +267,16 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_code_for(result),
      "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{to}"}
   end
+  defp format_error({:error, {:timeout, to} = result}, opts, module) do
+    op = CommandModules.module_to_command(module)
+    {:error, ExitCodes.exit_code_for(result),
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{to}"}
+  end
+  defp format_error({:error, :timeout = result}, opts, module) do
+    op = CommandModules.module_to_command(module)
+    {:error, ExitCodes.exit_code_for(result),
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{opts[:timeout]}"}
+  end
   defp format_error({:error, err} = result, _, _) do
     string_err = Helpers.string_or_inspect(err)
     {:error, ExitCodes.exit_code_for(result), "Error:\n#{string_err}"}
