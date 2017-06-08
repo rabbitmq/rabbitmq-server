@@ -3,7 +3,7 @@
 # --------------------------------------------------------------------
 
 ifneq ($(words $(filter %-on-concourse,$(MAKECMDGOALS))),0)
-TEST_DEPS += ci
+TEST_DEPS += ci $(RMQ_CI_CT_HOOKS)
 dep_ci = git git@github.com:rabbitmq/rabbitmq-ci master
 endif
 
