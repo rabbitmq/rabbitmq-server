@@ -15,7 +15,8 @@
 %%
 -module(app_utils).
 
--export([load_applications/1, start_applications/1, start_applications/2,
+-export([load_applications/1,
+         start_applications/1, start_applications/2, start_applications/3,
          stop_applications/1, stop_applications/2, app_dependency_order/2,
          app_dependencies/1]).
 
@@ -49,8 +50,11 @@ stop_applications(Apps) ->
             end).
 
 start_applications(Apps, ErrorHandler) ->
+    start_applications(Apps, ErrorHandler, #{}).
+
+start_applications(Apps, ErrorHandler, AppModes) ->
     manage_applications(fun lists:foldl/3,
-                        fun start/1,
+                        fun(App) -> start(App, AppModes) end,
                         fun application:stop/1,
                         already_started,
                         ErrorHandler,
@@ -62,7 +66,7 @@ stop_applications(Apps, ErrorHandler) ->
                             rabbit_log:info("Stopping application '~s'", [App]),
                             application:stop(App)
                         end,
-                        fun start/1,
+                        fun(App) -> start(App, #{}) end,
                         not_started,
                         ErrorHandler,
                         Apps).
@@ -124,15 +128,11 @@ manage_applications(Iterate, Do, Undo, SkipError, ErrorHandler, Apps) ->
             end, [], Apps),
     ok.
 
--ifdef(TEST).
--define(APP_MODE, transient).
--else.
--define(APP_MODE, temporary).
--endif.
+start(App, Modes) ->
+    Mode = maps:get(App, Modes, default_mode(App)),
+    application:start(App, Mode).
 
-start(rabbit) ->
-    %% Stops the Erlang VM when the rabbit application stops abnormally
-    %% i.e. message store reaches its restart limit
-    application:start(rabbit, ?APP_MODE);
-start(App) ->
-    application:start(App).
+%% Stops the Erlang VM when the rabbit application stops abnormally
+%% i.e. message store reaches its restart limit
+default_mode(rabbit) -> transient;
+default_mode(_)      -> temporary.
