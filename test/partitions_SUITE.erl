@@ -379,7 +379,19 @@ partial_to_full(Config) ->
 partial_pause_minority(Config) ->
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     set_mode(Config, pause_minority),
+    %% We suspend rabbit_node_monitor on C while we block the link
+    %% between A and B. This should make sure C's rabbit_node_monitor
+    %% processes both partial partition checks from A and B at about
+    %% the same time, and thus increase the chance both A and B decides
+    %% there is a partial partition.
+    %%
+    %% Without this, one node may see the partial partition and stop,
+    %% before the other node sees it. In this case, the other node
+    %% doesn't stop and this testcase fails.
+    suspend_node_monitor(Config, C),
     block([{A, B}]),
+    timer:sleep(?DELAY),
+    resume_node_monitor(Config, C),
     [await_running(N, false) || N <- [A, B]],
     await_running(C, true),
     unblock([{A, B}]),
