@@ -2403,10 +2403,11 @@ reduce_memory_use(State = #vqstate {
 %% When using lazy queues, there are no alphas, so we don't need to
 %% call push_alphas_to_betas/2.
 reduce_memory_use(State = #vqstate {
-                             mode = lazy,
+                             mode             = lazy,
                              ram_pending_ack  = RPA,
                              ram_msg_count    = RamMsgCount,
-                             target_ram_count = TargetRamCount }) ->
+                             target_ram_count = TargetRamCount,
+                             io_batch_size    = IoBatchSize }) ->
     State1 = #vqstate { q3 = Q3 } =
         case chunk_size(RamMsgCount + gb_trees:size(RPA), TargetRamCount) of
             0  -> State;
@@ -2414,13 +2415,22 @@ reduce_memory_use(State = #vqstate {
                   State2
         end,
 
+    %% In normal case, permitted_beta_count() for lazy queues always
+    %% returns the length of Q3 (if RAM duration > 0) or the next
+    %% segment boundary (if RAM duration == 0), thus chunk_size() will
+    %% always return 0 (because Permitted >= Current). So in normal
+    %% conditions, push_betas_to_deltas() is never called.
+    %%
+    %% However, when a default queue is converted to a lazy queue,
+    %% Q3 could hold more messages than usual. In this case,
+    %% push_betas_to_deltas() will be called.
     State3 =
         case chunk_size(?QUEUE:len(Q3),
                         permitted_beta_count(State1)) of
-            0  ->
-                State1;
-            S2 ->
-                push_betas_to_deltas(S2, State1)
+            S2 when S2 >= IoBatchSize ->
+                push_betas_to_deltas(S2, State1);
+            _  ->
+                State1
         end,
     garbage_collect(),
     State3.
@@ -2446,15 +2456,14 @@ limit_ram_acks(Quota, State = #vqstate { ram_pending_ack  = RPA,
 
 permitted_beta_count(#vqstate { len = 0 }) ->
     infinity;
-permitted_beta_count(#vqstate { mode             = lazy,
-                                target_ram_count = TargetRamCount}) ->
-    TargetRamCount;
 permitted_beta_count(#vqstate { target_ram_count = 0, q3 = Q3 }) ->
     lists:min([?QUEUE:len(Q3), rabbit_queue_index:next_segment_boundary(0)]);
 permitted_beta_count(#vqstate { q1               = Q1,
                                 q4               = Q4,
                                 target_ram_count = TargetRamCount,
                                 len              = Len }) ->
+    %% In the case of lazy queues, Q1 and Q4 are always empty, that's
+    %% why BetaDelta == Len.
     BetaDelta = Len - ?QUEUE:len(Q1) - ?QUEUE:len(Q4),
     lists:max([rabbit_queue_index:next_segment_boundary(0),
                BetaDelta - ((BetaDelta * BetaDelta) div
