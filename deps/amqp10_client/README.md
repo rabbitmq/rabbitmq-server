@@ -23,13 +23,18 @@ The `connection_config` map contains various configuration properties.
 -type connection_config() ::
     #{container_id => binary(), % mandatory
       address => inet:socket_address() | inet:hostname(), % mandatory
-      hostname => binary(), % required by some brokers such as Azure ServiceBus
       port => inet:port_number(), % mandatory
+      % the dns name of the target host
+      % required by some vendors such as Azure ServiceBus
+      hostname => binary(),
       tls_opts => {secure_port, [ssl:ssl_option()]}, % optional
       notify => pid(), % Pid to receive protocol notifications. Set to self() if not provided
       max_frame_size => non_neg_integer(), % incoming max frame size
       idle_time_out => non_neg_integer(), % heartbeat
-      sasl => none | anon | {plain, User :: binary(), Password :: binary()}
+      sasl => none | anon | {plain, User :: binary(), Password :: binary(),
+      % set this to a negative value to allow a sender to "overshoot" the flow
+      % control by this margin
+      transfer_limit_margin => 0 | neg_integer()}
   }.
 
 ```

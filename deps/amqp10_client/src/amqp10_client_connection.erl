@@ -52,16 +52,21 @@
 
 -type amqp10_socket() :: {tcp, gen_tcp:socket()} | {ssl, ssl:socket()}.
 
+-type milliseconds() :: non_neg_integer().
+
 -type connection_config() ::
-    #{container_id => binary(),
+    #{container_id => binary(), % AMQP container id
+      hostname => binary(), % the dns name of the target host
       address => inet:socket_address() | inet:hostname(),
-      hostname => binary(),
       port => inet:port_number(),
       tls_opts => {secure_port, [ssl:ssl_option()]},
-      notify => pid(),
+      notify => pid(), % the pid to send connection events to
       max_frame_size => non_neg_integer(), % TODO: constrain to large than 512
       outgoing_max_frame_size => non_neg_integer() | undefined,
-      idle_time_out => non_neg_integer(),
+      idle_time_out => milliseconds(),
+      % set to a negative value to allow a sender to "overshoot" the flow
+      % control by this margin
+      transfer_limit_margin => 0 | neg_integer(),
       sasl => none | anon | {plain, User :: binary(), Pwd :: binary()}
   }.
 
@@ -449,4 +454,5 @@ sasl_to_bin({plain, _, _}) -> <<"PLAIN">>;
 sasl_to_bin(anon) -> <<"ANONYMOUS">>.
 
 config_defaults() ->
-    #{sasl => none}.
+    #{sasl => none,
+      transfer_limit_margin => 0}.

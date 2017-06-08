@@ -352,6 +352,8 @@ parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
                              Acc#{max_frame_size => list_to_integer(V)};
                         ("hostname", V, Acc) ->
                              Acc#{hostname => list_to_binary(V)};
+                        ("transfer_limit_margin", V, Acc) ->
+                             Acc#{transfer_limit_margin => list_to_integer(V)};
                         (_, _, Acc) -> Acc
                      end, #{address => Host,
                             port => Port,
