@@ -37,6 +37,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
   def validate([string], _) do
     try do
       Code.compile_string(string)
+      :ok
     rescue
       ex in SyntaxError ->
         {:validation_failure, "SyntaxError: " <> Exception.message(ex)}
