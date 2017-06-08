@@ -20,14 +20,18 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
+-include_lib("rabbitmq_peer_discovery_consul/include/rabbit_peer_discovery_consul.hrl").
 
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0]).
--export([init_health_check_notifier/0, send_health_check_pass/0]).
+         post_registration/0, lock/1, unlock/1]).
+-export([send_health_check_pass/0]).
+-export([session_ttl_update_callback/1]).
 %% useful for debugging from the REPL with RABBITMQ_ALLOW_INPUT
 -export([service_id/0, service_address/0]).
 %% for tests
--export([build_registration_body/0, service_ttl/1]).
+-ifdef(TEST).
+-compile(export_all).
+-endif.
 
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(UTIL_MODULE,   rabbit_peer_discovery_util).
@@ -35,90 +39,6 @@
 -define(BACKEND_CONFIG_KEY, peer_discovery_consul).
 
 -define(CONSUL_CHECK_NOTES, "RabbitMQ Consul-based peer discovery plugin TTL check").
-
--define(CONFIG_MAPPING,
-         #{
-          cluster_name                       => #peer_discovery_config_entry_meta{
-                                                   type          = string,
-                                                   env_variable  = "CLUSTER_NAME",
-                                                   default_value = "undefined"
-                                                  },
-          consul_acl_token                   => #peer_discovery_config_entry_meta{
-                                                   type          = string,
-                                                   env_variable  = "CONSUL_ACL_TOKEN",
-                                                   default_value = "undefined"
-                                                  },
-          consul_include_nodes_with_warnings => #peer_discovery_config_entry_meta{
-                                                   type          = atom,
-                                                   env_variable  = "CONSUL_INCLUDE_NODES_WITH_WARNINGS",
-                                                   default_value = false
-                                                  },
-          consul_scheme                      => #peer_discovery_config_entry_meta{
-                                                   type          = string,
-                                                   env_variable  = "CONSUL_SCHEME",
-                                                   default_value = "http"
-                                                  },
-          consul_host                        => #peer_discovery_config_entry_meta{
-                                                   type          = string,
-                                                   env_variable  = "CONSUL_HOST",
-                                                   default_value = "localhost"
-                                                  },
-          consul_port                        => #peer_discovery_config_entry_meta{
-                                                   type          = port,
-                                                   env_variable  = "CONSUL_PORT",
-                                                   default_value = 8500
-                                                  },
-          consul_domain                      => #peer_discovery_config_entry_meta{
-                                                   type          = string,
-                                                   env_variable  = "CONSUL_DOMAIN",
-                                                   default_value = "consul"
-                                                  },
-          consul_svc                         => #peer_discovery_config_entry_meta{
-                                                   type          = string,
-                                                   env_variable  = "CONSUL_SVC",
-                                                   default_value = "rabbitmq"
-                                                  },
-          consul_svc_addr                    => #peer_discovery_config_entry_meta{
-                                                   type          = string,
-                                                   env_variable  = "CONSUL_SVC_ADDR",
-                                                   default_value = "undefined"
-                                                  },
-          consul_svc_addr_auto               => #peer_discovery_config_entry_meta{
-                                                   type          = atom,
-                                                   env_variable  = "CONSUL_SVC_ADDR_AUTO",
-                                                   default_value = false
-                                                  },
-          consul_svc_addr_nic                => #peer_discovery_config_entry_meta{
-                                                   type          = string,
-                                                   env_variable  = "CONSUL_SVC_ADDR_NIC",
-                                                   default_value = "undefined"
-                                                  },
-          consul_svc_addr_nodename           => #peer_discovery_config_entry_meta{
-                                                   type          = atom,
-                                                   env_variable  = "CONSUL_SVC_ADDR_NODENAME",
-                                                   default_value = false
-                                                  },
-          consul_svc_port                    => #peer_discovery_config_entry_meta{
-                                                   type          = integer,
-                                                   env_variable  = "CONSUL_SVC_PORT",
-                                                   default_value = 5672
-                                                  },
-          consul_svc_ttl                     => #peer_discovery_config_entry_meta{
-                                                   type          = integer,
-                                                   env_variable  = "CONSUL_SVC_TTL",
-                                                   default_value = 30
-                                                  },
-          consul_deregister_after            => #peer_discovery_config_entry_meta{
-                                                   type          = integer,
-                                                   env_variable  = "CONSUL_DEREGISTER_AFTER",
-                                                   default_value = ""
-                                                  },
-          consul_use_longname                => #peer_discovery_config_entry_meta{
-                                                   type          = atom,
-                                                   env_variable  = "CONSUL_USE_LONGNAME",
-                                                   default_value = false
-                                                  }
-         }).
 
 %%
 %% API
@@ -200,47 +120,49 @@ unregister() ->
           Error
   end.
 
--spec post_registration() -> ok | {error, Reason :: string()}.
+-spec post_registration() -> ok.
 
 post_registration() ->
-    init_health_check_notifier().
+    ok.
+
+-spec lock(Node :: string()) -> {ok, Data :: term()} | {error, Reason :: string()}.
+
+lock(Node) ->
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    case create_session(Node, get_config_key(consul_svc_ttl, M)) of
+        {ok, SessionId} ->
+            TRef = start_session_ttl_updater(SessionId),
+            Now = erlang:system_time(seconds),
+            EndTime = Now + get_config_key(lock_wait_time, M),
+            lock(TRef, SessionId, Now, EndTime);
+        {error, Reason} ->
+            {error, lists:flatten(io_lib:format("Error while creating a session, reason: ~s",
+                                                [Reason]))}
+    end.
+
+-spec unlock({SessionId :: string(), TRef :: timer:tref()}) -> ok.
+
+unlock({SessionId, TRef}) ->
+    timer:cancel(TRef),
+    rabbit_log:debug("Stopped session renewal"),
+    case release_lock(SessionId) of
+        {ok, true} ->
+            ok;
+        {ok, false} ->
+            {error, lists:flatten(io_lib:format("Error while releasing the lock, session ~s may have been invalidated", [SessionId]))};
+        {error, _} = Err ->
+            Err
+    end.
 
 %%
 %% Implementation
 %%
 
 -spec get_config_key(Key :: atom(), Map :: #{atom() => peer_discovery_config_value()})
-             -> peer_discovery_config_value().
+                    -> peer_discovery_config_value().
 
 get_config_key(Key, Map) ->
     ?CONFIG_MODULE:get(Key, ?CONFIG_MAPPING, Map).
-
--spec init_health_check_notifier() -> ok.
-
-init_health_check_notifier() ->
-  case rabbit_peer_discovery:backend() of
-    ?MODULE ->
-      M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-      case get_config_key(consul_svc_ttl, M) of
-        undefined -> ok;
-        %% in seconds
-        Interval  ->
-          %% We cannot use timer:apply_interval/4 here because this
-          %% function is executed in a short live process and when it
-          %% exits, the timer module will automatically cancel the
-          %% timer.
-          %%
-          %% Instead we delegate to a locally registered gen_server,
-          %% `rabbitmq_peer_discovery_consul_health_check_helper`.
-          %%
-          %% The value is 1/2 of what's configured to avoid a race
-          %% condition between check TTL expiration and in flight
-          %% notifications
-          rabbitmq_peer_discovery_consul_health_check_helper:start_timer(Interval * 500),
-          ok
-      end;
-    _ -> ok
-  end.
 
 -spec filter_nodes(ConsulResult :: list(), AllowWarning :: atom()) -> list().
 filter_nodes(Nodes, Warn) ->
@@ -536,3 +458,252 @@ wait_for_list_nodes(N) ->
             timer:sleep(1000),
             wait_for_list_nodes(N - 1)
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Create a session to be acquired for a common key
+%% @end
+%%--------------------------------------------------------------------
+-spec create_session(string(), pos_integer()) -> {ok, string()} | {error, Reason::string()}.
+create_session(Name, TTL) ->
+    case consul_session_create(maybe_add_acl([]),
+                               [{'Name', Name},
+                                {'TTL', list_to_atom(service_ttl(TTL))}]) of
+        {ok, Response} ->
+            {ok, get_session_id(Response)};
+        {error, _} = Err ->
+            Err
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Create session
+%% @end
+%%--------------------------------------------------------------------
+-spec consul_session_create(Query, Body) -> {ok, term()} | {error, Reason::string()} when
+      Query :: [autocluster_httpc:query_component()],
+      Body :: term().
+consul_session_create(Query, Body) ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    case serialize_json_body(Body) of
+        {ok, Serialized} ->
+            rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
+                                            get_config_key(consul_host, M),
+                                            get_config_key(consul_port, M),
+                                            [v1, session, create], Query, Serialized);
+        {error, _} = Err ->
+            Err
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Process the result of JSON encoding the request body payload,
+%% returning the body as a binary() value or the error returned by
+%% the JSON serialization library.
+%% @end
+%%--------------------------------------------------------------------
+-spec serialize_json_body(term()) -> {ok, Payload :: binary()} | {error, atom()}.
+serialize_json_body([]) -> {ok, []};
+serialize_json_body(Payload) ->
+    case rabbit_json:try_encode(Payload) of
+        {ok, Body} -> {ok, Body};
+        {error, Reason} -> {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Extract session ID from Consul response
+%% @end
+%%--------------------------------------------------------------------
+-spec get_session_id(term()) -> string().
+get_session_id(#{<<"ID">> := ID}) -> binary:bin_to_list(ID).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Start periodically renewing an existing session ttl
+%% @end
+%%--------------------------------------------------------------------
+-spec start_session_ttl_updater(string()) -> ok.
+start_session_ttl_updater(SessionId) ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    Interval = get_config_key(consul_svc_ttl, M),
+    rabbit_log:debug("Starting session renewal"),
+    {ok, TRef} = timer:apply_interval(Interval * 500, ?MODULE,
+                                      session_ttl_update_callback, [SessionId]),
+    TRef.
+
+%%
+%% @doc
+%% Tries to acquire lock. If the lock is held by someone else, waits until it
+%% is released, or too much time has passed
+%% @end
+-spec lock(timer:tref(), string(), pos_integer(), pos_integer()) -> {ok, string()} | {error, string()}.
+lock(TRef, _, Now, EndTime) when EndTime < Now ->
+    timer:cancel(TRef),
+    {error, "Acquiring lock taking too long, bailing out"};
+lock(TRef, SessionId, _, EndTime) ->
+    case acquire_lock(SessionId) of
+        {ok, true} ->
+            {ok, {SessionId, TRef}};
+        {ok, false} ->
+            case get_lock_status() of
+                {ok, {SessionHeld, ModifyIndex}} ->
+                    Wait = max(EndTime - erlang:system_time(seconds), 0),
+                    case wait_for_lock_release(SessionHeld, ModifyIndex, Wait) of
+                        ok ->
+                            lock(TRef, SessionId, erlang:system_time(seconds), EndTime);
+                        {error, Reason} ->
+                            timer:cancel(TRef),
+                            {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~s",[Reason]))}
+                    end;
+                {error, Reason} ->
+                    timer:cancel(TRef),
+                    {error, lists:flatten(io_lib:format("Error obtaining lock status, reason: ~s", [Reason]))}
+            end;
+        {error, Reason} ->
+            timer:cancel(TRef),
+            {error, lists:flatten(io_lib:format("Error while acquiring lock, reason: ~s", [Reason]))}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Acquire session for a key
+%% @end
+%%--------------------------------------------------------------------
+-spec acquire_lock(string()) -> {ok, term()} | {error, string()}.
+acquire_lock(SessionId) ->
+    consul_kv_write(startup_lock_path(), maybe_add_acl([{acquire, SessionId}]), []).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Release a previously acquired lock held by a given session
+%% @end
+%%--------------------------------------------------------------------
+-spec release_lock(string()) -> {ok, term()} | {error, string()}.
+release_lock(SessionId) ->
+    consul_kv_write(startup_lock_path(), maybe_add_acl([{release, SessionId}]), []).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Write KV store key value
+%% @end
+%%--------------------------------------------------------------------
+-spec consul_kv_write(Path, Query, Body) -> {ok, term()} | {error, string()} when
+      Path :: [rabbit_peer_discovery_httpc:path_component()],
+      Query :: [rabbit_peer_discovery_httpc:path_component()],
+      Body :: term().
+consul_kv_write(Path, Query, Body) ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    case serialize_json_body(Body) of
+        {ok, Serialized} ->
+            rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
+                                            get_config_key(consul_host, M),
+                                            get_config_key(consul_port, M),
+                                  [v1, kv] ++ Path, Query, Serialized);
+        {error, _} = Err ->
+            Err
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Read KV store key value
+%% @end
+%%--------------------------------------------------------------------
+-spec consul_kv_read(Path, Query) -> {ok, term()} | {error, string()} when
+      Path :: [rabbit_peer_discovery_httpc:path_component()],
+      Query :: [rabbit_peer_discovery_httpc:path_component()].
+consul_kv_read(Path, Query) ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
+                                    get_config_key(consul_host, M),
+                                    get_config_key(consul_port, M),
+                                    [v1, kv] ++ Path, Query).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Get lock status
+%% XXX: probably makes sense to wrap output in a record to be
+%% more future-proof
+%% @end
+%%--------------------------------------------------------------------
+-spec get_lock_status() -> {ok, term()} | {error, string()}.
+get_lock_status() ->
+    case consul_kv_read(startup_lock_path(), maybe_add_acl([])) of
+        {ok, [KeyData | _]} ->
+            SessionHeld = maps:get(<<"Session">>, KeyData, undefined) =/= undefined,
+            ModifyIndex = maps:get(<<"ModifyIndex">>, KeyData),
+            {ok, {SessionHeld, ModifyIndex}};
+        {error, _} = Err ->
+            Err
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns consul path for startup lock
+%% @end
+%%--------------------------------------------------------------------
+-spec startup_lock_path() -> [rabbit_peer_discovery_httpc:path_component()].
+startup_lock_path() ->
+    base_path() ++ ["startup_lock"].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Return a list of path segments that are the base path for all
+%% consul kv keys related to current cluster.
+%% @end
+%%--------------------------------------------------------------------
+-spec base_path() -> [rabbit_peer_discovery_httpc:path_component()].
+base_path() ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    [get_config_key(consul_lock_prefix, M), get_config_key(cluster_name, M)].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Wait for lock to be released if it has been acquired by another node
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_lock_release(atom(), pos_integer(), pos_integer()) -> ok | {error, string()}.
+wait_for_lock_release(false, _, _) -> ok;
+wait_for_lock_release(_, Index, Wait) ->
+    case consul_kv_read(startup_lock_path(),
+                        maybe_add_acl([{index, Index},
+                                       {wait, service_ttl(Wait)}])) of
+        {ok, _}          -> ok;
+        {error, _} = Err -> Err
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Renew an existing session
+%% @end
+%%--------------------------------------------------------------------
+-spec session_ttl_update_callback(string()) -> string().
+session_ttl_update_callback(SessionId) ->
+    _ = consul_session_renew(SessionId, maybe_add_acl([])),
+    SessionId.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Renew session TTL
+%% @end
+%%--------------------------------------------------------------------
+-spec consul_session_renew(string(), [rabbit_peer_discovery_httpc:path_component()]) -> {ok, term()} | {error, string()}.
+consul_session_renew(SessionId, Query) ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
+                                    get_config_key(consul_host, M),
+                                    get_config_key(consul_port, M),
+                                    [v1, session, renew, list_to_atom(SessionId)], Query, []).
