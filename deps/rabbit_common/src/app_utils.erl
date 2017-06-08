@@ -124,9 +124,15 @@ manage_applications(Iterate, Do, Undo, SkipError, ErrorHandler, Apps) ->
             end, [], Apps),
     ok.
 
+-ifdef(TEST).
+-define(APP_MODE, transient).
+-else.
+-define(APP_MODE, temporary).
+-endif.
+
 start(rabbit) ->
     %% Stops the Erlang VM when the rabbit application stops abnormally
     %% i.e. message store reaches its restart limit
-    application:start(rabbit, transient);
+    application:start(rabbit, ?APP_MODE);
 start(App) ->
     application:start(App).
