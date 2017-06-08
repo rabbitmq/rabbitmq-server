@@ -40,4 +40,21 @@ defmodule ExecCommandTest do
     {:validation_failure, _} = @command.validate(["s,f"], %{})
   end
 
+  test "validate: sucess" do
+    :ok = @command.validate([":ok"], %{})
+  end
+
+  test "run: executes elixir code" do
+    {:ok, :ok} = @command.run([":ok"], %{})
+    node = Node.self()
+    {:ok, ^node} = @command.run(["Node.self()"], %{})
+    {:ok, 3} = @command.run(["1 + 2"], %{})
+  end
+
+  test "run: binds options variable" do
+    opts = %{my: :custom, option: 123}
+    {:ok, ^opts} = @command.run(["options"], opts)
+    {:ok, 123} = @command.run(["options[:option]"], opts)
+  end
+
 end
