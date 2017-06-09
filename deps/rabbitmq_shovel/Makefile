@@ -19,7 +19,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 DEPS = rabbit_common rabbit amqp_client amqp10_client
-dep_amqp10_client = git git@github.com:rabbitmq/rabbitmq-amqp1.0-client.git master
+dep_amqp10_client = git https://github.com/rabbitmq/rabbitmq-amqp1.0-client.git master
 
 LOCAL_DEPS = crypto
 
