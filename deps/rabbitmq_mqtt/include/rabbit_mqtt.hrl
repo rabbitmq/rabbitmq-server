@@ -88,7 +88,6 @@
      client_id,
      clean_sess,
      will_msg,
-     channels,
      exchange,
      ssl_login_name,
      retainer_pid,
