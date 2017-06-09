@@ -55,12 +55,11 @@ run([Name], #{node := Node, vhost := Vhost}) ->
                          [Vhost, <<"shovel">>, Name,
                           'Elixir.RabbitMQ.CLI.Core.Helpers':cli_acting_user()]).
 
-
 switches() ->
     [].
 
 aliases() ->
     [].
 
-output(E, Opts) ->
+output(E, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).

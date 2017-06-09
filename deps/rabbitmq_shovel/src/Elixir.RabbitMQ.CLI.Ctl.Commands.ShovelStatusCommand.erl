@@ -69,14 +69,14 @@ switches() ->
 aliases() ->
     [].
 
-output({stream, ShovelStatus}, _) ->
+output({stream, ShovelStatus}, _Opts) ->
     Formatted = [fmt_name(Name,
                           fmt_status(Status,
                                      #{type => Type,
                                        last_changed => fmt_ts(Timestamp)}))
                  || {Name, Type, Status, Timestamp} <- ShovelStatus],
     {stream, Formatted};
-output(E, Opts) ->
+output(E, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).
 
 scopes() ->
