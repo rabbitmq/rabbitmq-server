@@ -46,7 +46,8 @@
 
 parse(_Name, {source, Source}) ->
     Prefetch = parse_parameter(prefetch_count, fun parse_non_negative_integer/1,
-                 proplists:get_value(prefetch_count, Source, ?DEFAULT_PREFETCH)),
+                               proplists:get_value(prefetch_count, Source,
+                                                   ?DEFAULT_PREFETCH)),
     Queue = parse_parameter(queue, fun parse_binary/1,
                             proplists:get_value(queue, Source)),
     #{module => ?MODULE,
@@ -279,8 +280,8 @@ confirm_to_inbound(ConfirmFun, Seq, Multiple,
     State = ConfirmFun(InTag, Multiple, State0),
     {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
     rabbit_shovel_behaviour:decr_remaining(Removed,
-                                          State#{dest =>
-                                                 Dst#{unacked => Unacked1}}).
+                                           State#{dest =>
+                                                  Dst#{unacked => Unacked1}}).
 
 publish(_Tag, _Method, _Msg, State = #{source := #{remaining_unacked := 0}}) ->
     %% We are in on-confirm mode, and are autodelete. We have

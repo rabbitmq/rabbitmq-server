@@ -140,7 +140,7 @@ init_source(State = #{source := #{current := #{link := Link},
                 end,
     State#{source => Src#{remaining => Remaining,
                           remaining_unacked => Remaining,
-                          last_acked_tag => 0}}.
+                          last_acked_tag => -1}}.
 
 -spec init_dest(state()) -> state().
 init_dest(#{name := Name,

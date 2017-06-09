@@ -32,7 +32,10 @@ groups() ->
       {non_parallel_tests, [], [
           simple,
           change_definition,
-          autodelete,
+          autodelete_amqp091_src_on_confirm,
+          autodelete_amqp091_src_on_publish,
+          autodelete_amqp091_dest_on_confirm,
+          autodelete_amqp091_dest_on_publish,
           simple_amqp10_dest,
           simple_amqp10_src
         ]}
@@ -171,14 +174,23 @@ change_definition(Config) ->
               expect_empty(Sess, Dest2)
       end).
 
-autodelete(Config) ->
-    autodelete_case(Config, {<<"on-confirm">>, 5, 5, 5},
+autodelete_amqp091_src_on_confirm(Config) ->
+    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50},
                     fun autodelete_amqp091_src/2),
-    autodelete_case(Config, {<<"on-publish">>, 5, 5, 5},
+    ok.
+
+autodelete_amqp091_src_on_publish(Config) ->
+    autodelete_case(Config, {<<"on-publish">>, 50, 50, 50},
                     fun autodelete_amqp091_src/2),
-    autodelete_case(Config, {<<"on-confirm">>, 5, 5, 5},
+    ok.
+
+autodelete_amqp091_dest_on_confirm(Config) ->
+    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50},
                     fun autodelete_amqp091_dest/2),
-    autodelete_case(Config, {<<"on-publish">>, 5, 5, 5},
+    ok.
+
+autodelete_amqp091_dest_on_publish(Config) ->
+    autodelete_case(Config, {<<"on-publish">>, 50, 50, 50},
                     fun autodelete_amqp091_dest/2),
     ok.
 
@@ -189,7 +201,7 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     fun (Session) ->
-            publish_count(Session, Src, <<"hello">>, 10),
+            publish_count(Session, Src, <<"hello">>, 100),
             shovel_test_utils:set_param_nowait(
               Config,
               <<"test">>, [{<<"src-address">>,    Src},
@@ -209,7 +221,7 @@ autodelete_amqp091_src(Config, {AckMode, After, ExpSrc, ExpDest}) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     fun (Session) ->
-            publish_count(Session, Src, <<"hello">>, 10),
+            publish_count(Session, Src, <<"hello">>, 100),
             shovel_test_utils:set_param_nowait(
               Config,
               <<"test">>, [{<<"src-queue">>, Src},
@@ -229,7 +241,7 @@ autodelete_amqp091_dest(Config, {AckMode, After, ExpSrc, ExpDest}) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     fun (Session) ->
-            publish_count(Session, Src, <<"hello">>, 10),
+            publish_count(Session, Src, <<"hello">>, 100),
             shovel_test_utils:set_param_nowait(
               Config,
               <<"test">>, [{<<"src-address">>, Src},
@@ -296,7 +308,6 @@ expect_one(Session, Dest, Payload) ->
 expect(Receiver, _Payload) ->
     receive
         {amqp10_msg, Receiver, InMsg} ->
-            [_] = amqp10_msg:body(InMsg),
             InMsg
     after 4000 ->
               throw(timeout_in_expect_waiting_for_delivery)
