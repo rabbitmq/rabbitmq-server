@@ -129,6 +129,18 @@ class TestLifecycle(base.BaseTest):
         self.assertEquals("Invalid header", errorReceived['headers']['message'])
         self.assertEquals("'message-id' is not allowed on 'SEND'.\n", errorReceived['message'])
 
+    def test_send_recv_header(self):
+        ''' Test sending a custom header and receiving it back '''
+        dest = '/queue/custom-header'
+        hdrs = {'x-custom-header-1': 'value1',
+                'x-custom-header-2': 'value2',
+                'custom-header-3': 'value3'}
+        self.listener.reset(1)
+        recv_hdrs = self.simple_test_send_rec(dest, headers=hdrs)
+        self.assertEquals('value1', recv_hdrs['x-custom-header-1'])
+        self.assertEquals('value2', recv_hdrs['x-custom-header-2'])
+        self.assertEquals('value3', recv_hdrs['custom-header-3'])
+
     def test_disconnect(self):
         ''' Test DISCONNECT command'''
         self.conn.disconnect()

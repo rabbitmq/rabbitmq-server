@@ -5,6 +5,7 @@ import test_runner
 if __name__ == '__main__':
     modules = [
         'ack',
+        'amqp_headers',
         'destinations',
         'errors',
         'lifecycle',
