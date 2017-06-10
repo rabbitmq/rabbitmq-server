@@ -93,11 +93,21 @@ pubsub(Config) ->
     ok = raw_send(WS, "SUBSCRIBE", [{"destination", Dst},
                                     {"id", "s0"}]),
 
-    ok = raw_send(WS, "SEND", [{"destination", Dst},
-                              {"content-length", "3"}], <<"a\x00a">>),
+    CustHdr1K = "x-custom-hdr-1",
+    CustHdr1 = {CustHdr1K, "value1"},
+    CustHdr2K = "x-custom-hdr-2",
+    CustHdr2 = {CustHdr2K, "value2"},
+    CustHdr3K = "custom-hdr-3",
+    CustHdr3 = {CustHdr3K, "value3"},
+    ok = raw_send(WS, "SEND", [{"destination", Dst}, {"content-length", "3"},
+                               CustHdr1, CustHdr2, CustHdr3], <<"a\x00a">>),
 
     {<<"MESSAGE">>, H, <<"a\x00a">>} = raw_recv(WS),
+
     Dst = binary_to_list(proplists:get_value(<<"destination">>, H)),
+    CustHdr1 = {CustHdr1K, binary_to_list(proplists:get_value(list_to_binary(CustHdr1K), H))},
+    CustHdr2 = {CustHdr2K, binary_to_list(proplists:get_value(list_to_binary(CustHdr2K), H))},
+    CustHdr3 = {CustHdr3K, binary_to_list(proplists:get_value(list_to_binary(CustHdr3K), H))},
 
     {close, _} = rfc6455_client:close(WS),
     ok.
