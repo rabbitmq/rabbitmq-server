@@ -100,7 +100,9 @@ terminate(_Reason, #state{node = Node} = State) ->
 
 i(type, _State) -> direct;
 i(pid,  _State) -> self();
-%% AMQP Params
+
+%% Mandatory connection parameters
+
 i(node,              #state{node = N})   -> N;
 i(user,              #state{params = P}) -> P#amqp_params_direct.username;
 i(user_who_performed_action, St) -> i(user, St);
@@ -108,7 +110,14 @@ i(vhost,             #state{params = P}) -> P#amqp_params_direct.virtual_host;
 i(client_properties, #state{params = P}) ->
     P#amqp_params_direct.client_properties;
 i(connected_at,      #state{connected_at = T}) -> T;
+
+%%
 %% Optional adapter info
+%%
+
+%% adapter_info can be undefined e.g. when we were
+%% not granted access to a vhost
+i(_Key,         #state{adapter_info = I}) when I =:= undefined -> unknown;
 i(protocol,     #state{adapter_info = I}) -> I#amqp_adapter_info.protocol;
 i(host,         #state{adapter_info = I}) -> I#amqp_adapter_info.host;
 i(port,         #state{adapter_info = I}) -> I#amqp_adapter_info.port;
