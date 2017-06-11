@@ -117,7 +117,7 @@ i(connected_at,      #state{connected_at = T}) -> T;
 
 %% adapter_info can be undefined e.g. when we were
 %% not granted access to a vhost
-i(_Key,         #state{adapter_info = I}) when I =:= undefined -> unknown;
+i(_Key,         #state{adapter_info = undefined}) -> unknown;
 i(protocol,     #state{adapter_info = I}) -> I#amqp_adapter_info.protocol;
 i(host,         #state{adapter_info = I}) -> I#amqp_adapter_info.host;
 i(port,         #state{adapter_info = I}) -> I#amqp_adapter_info.port;
