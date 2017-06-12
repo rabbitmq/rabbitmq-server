@@ -1,0 +1,41 @@
+%% region
+
+{mapping, "cluster_formation.k8s.region", "rabbit.cluster_formation.peer_discovery_k8s.k8s_region", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_region",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.region", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% host
+
+{mapping, "cluster_formation.k8s.host", "rabbit.cluster_formation.peer_discovery_k8s.k8s_host", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_host",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.host", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% service_name
+
+{mapping, "cluster_formation.k8s.service_name", "rabbit.cluster_formation.peer_discovery_k8s.k8s_service_name", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_service_name",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.service_name", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.

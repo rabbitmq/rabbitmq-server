@@ -1,0 +1,32 @@
+[
+    {k8s_region, "cluster_formation.k8s.region = us-west-1", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_k8s, [
+                        {k8s_region, "us-west-1"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_k8s]
+    },
+    {k8s_host, "cluster_formation.k8s.host = k8s.eng.megacorp.local", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_k8s, [
+                        {k8s_host, "k8s.eng.megacorp.local"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_k8s]
+    },
+    {k8s_service_name, "cluster_formation.k8s.service_name = kubernetes-service", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_k8s, [
+                        {k8s_service_name, "kubernetes-service"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_k8s]
+    }
+].
