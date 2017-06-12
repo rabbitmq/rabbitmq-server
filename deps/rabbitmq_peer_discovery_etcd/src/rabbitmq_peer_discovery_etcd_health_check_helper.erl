@@ -24,7 +24,10 @@
 
 -behaviour(gen_server).
 
--export([start_link/0, start_timer/1]).
+-include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
+-include("rabbit_peer_discovery_etcd.hrl").
+
+-export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -38,22 +41,32 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-start_timer(Interval) ->
-    gen_server:call(?MODULE, {start_timer, Interval}, infinity).
-
-
-
 init([]) ->
-    {ok, #state{timer_ref = undefined}}.
-
-handle_call({start_timer, Interval}, _From, #state{timer_ref = undefined} = State) ->
-    rabbit_log:info("Starting etcd health check notifier (effective interval: ~p milliseconds)", [Interval]),
-    {ok, TRef} = timer:apply_interval(Interval, rabbit_peer_discovery_etcd,
-                                      update_node_key, []),
-    {reply, ok, State#state{timer_ref = TRef}};
-
-handle_call({start_timer, _Interval}, _From, State) ->
-    {reply, ok, State};
+    Map = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    case ?CONFIG_MODULE:get(etcd_node_ttl, ?CONFIG_MAPPING, Map) of
+        undefined ->
+            {ok, #state{}};
+        %% in seconds
+        Interval  ->
+            %% We cannot use timer:apply_interval/4 here because this
+            %% function is executed in a short live process and when it
+            %% exits, the timer module will automatically cancel the
+            %% timer.
+            %%
+            %% Instead we delegate to a locally registered gen_server,
+            %% `rabbitmq_peer_discovery_etcd_health_check_helper`.
+            %%
+            %% The value is 1/2 of what's configured to avoid a race
+            %% condition between check TTL expiration and in flight
+            %% notifications
+            rabbit_log:info("Starting etcd health check notifier "
+                            "(effective interval: ~p milliseconds)",
+                            [Interval]),
+            {ok, TRef} = timer:apply_interval(Interval * 500,
+                                              rabbit_peer_discovery_etcd,
+                                              update_node_key, []),
+            {ok, #state{timer_ref = TRef}}
+    end.
 
 handle_call(_Msg, _From, State) ->
     {reply, not_understood, State}.
