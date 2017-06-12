@@ -26,7 +26,8 @@
          node_name/1,
          parse_port/1,
          as_proplist/1,
-         as_map/1
+         as_map/1,
+         stringify_error/1
         ]).
 
 
@@ -348,3 +349,11 @@ as_map(Value) ->
     rabbit_log:error("Unexpected data type for map value: ~p.~n",
                           [Value]),
     [].
+
+-spec stringify_error({ok, term()} | {error, term()}) -> {ok, term()} | {error, string()}.
+stringify_error({ok, _} = Res) ->
+    Res;
+stringify_error({error, Str}) when is_list(Str) ->
+    {error, Str};
+stringify_error({error, Term}) ->
+    {error, lists:flatten(io_lib:format("~p", [Term]))}.
