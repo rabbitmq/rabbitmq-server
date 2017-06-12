@@ -69,5 +69,5 @@ run([Id], #{node := Node}) ->
 aliases() ->
     [].
 
-output(Output, Opts) ->
+output(Output, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Output).

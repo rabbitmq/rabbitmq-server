@@ -85,7 +85,7 @@ output({stream, FederationStatus}, _) ->
                      Map1#{last_changed => fmt_ts(Timestamp)}
                  end || St <- FederationStatus],
     {stream, Formatted};
-output(E, Opts) ->
+output(E, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).
 
 scopes() ->
