@@ -48,3 +48,7 @@
 -callback unregister() -> ok | {error, Reason :: string()}.
 
 -callback post_registration()   -> ok | {error, Reason :: string()}.
+
+-callback lock(Node :: atom())   -> {ok, Data :: term()} | not_supported | {error, Reason :: string()}.
+
+-callback unlock(Data :: term()) -> ok | {error, Reason :: string()}.
