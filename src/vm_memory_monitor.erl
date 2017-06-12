@@ -117,14 +117,14 @@ get_memory_limit() ->
 
 get_memory_use(bytes) ->
     MemoryLimit = get_memory_limit(),
-    {erlang:memory(total), case MemoryLimit > 0.0 of
-                               true  -> MemoryLimit;
-                               false -> infinity
-                           end};
+    {get_used_memory(), case MemoryLimit > 0.0 of
+                            true  -> MemoryLimit;
+                            false -> infinity
+                        end};
 get_memory_use(ratio) ->
     MemoryLimit = get_memory_limit(),
     case MemoryLimit > 0.0 of
-        true  -> erlang:memory(total) / MemoryLimit;
+        true  -> get_used_memory() / MemoryLimit;
         false -> infinity
     end.
 
@@ -268,7 +268,7 @@ parse_mem_limit(_) ->
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed      = Alarmed,
                                  alarm_funs   = {AlarmSet, AlarmClear} }) ->
-    MemUsed = erlang:memory(total),
+    MemUsed = get_used_memory(),
     NewAlarmed = MemUsed > MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} -> emit_update_info(set, MemUsed, MemLimit),
@@ -365,6 +365,42 @@ get_total_memory({unix, aix}) ->
 get_total_memory(_OsType) ->
     unknown.
 
+
+get_ps_memory() ->
+    OsPid = os:getpid(),
+    Cmd = "ps -p " ++ OsPid ++ " -o rss=",
+    CmdOutput = cmd(Cmd),
+    case re:run(CmdOutput, "[0-9]+", [{capture, first, list}]) of
+        {match, [Match]} ->
+            {ok, list_to_integer(Match) * 1024};
+        _ ->
+            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
+    end.
+
+get_system_process_resident_memory({unix,darwin}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix, linux}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix,freebsd}) ->
+    {error, not_implemented_for_os};
+
+get_system_process_resident_memory({unix,openbsd}) ->
+    {error, not_implemented_for_os};
+
+get_system_process_resident_memory({win32,_OSname}) ->
+    {error, not_implemented_for_os};
+
+get_system_process_resident_memory({unix, sunos}) ->
+    {error, not_implemented_for_os};
+
+get_system_process_resident_memory({unix, aix}) ->
+    {error, not_implemented_for_os};
+
+get_system_process_resident_memory(_OsType) ->
+    {error, not_implemented_for_os}.
+
 %% A line looks like "Foo bar: 123456."
 parse_line_mach(Line) ->
     [Name, RHS | _Rest] = string:tokens(Line, ":"),
@@ -446,4 +482,35 @@ read_proc_file(IoDevice, Acc) ->
     case file:read(IoDevice, ?BUFFER_SIZE) of
         {ok, Res} -> read_proc_file(IoDevice, [Res | Acc]);
         eof       -> Acc
+    end.
+
+
+%% Memory reported by erlang:memory(total) is not supposed to
+%% be equal to the total size of all pages mapped to the emulator,
+%% according to http://erlang.org/doc/man/erlang.html#memory-0
+%% erlang:memory(total) under-reports memory usage by around 20%
+-spec get_used_memory() -> Bytes :: integer().
+get_used_memory() ->
+    case application:get_env(rabbit, vm_memory_use_process_rss, false) of
+        true ->
+            case get_system_process_resident_memory() of
+                {ok, MemInBytes} ->
+                    MemInBytes;
+                {error, Reason}  ->
+                    rabbit_log:debug("Unable to get system memory used. Reason: ~p."
+                                     " Falling back to erlang memory reporting",
+                                     [Reason]),
+                    erlang:memory(total)
+            end;
+        false ->
+            erlang:memory(total)
+    end.
+
+
+-spec get_system_process_resident_memory() -> {ok, Bytes :: integer()} | {error, term()}.
+get_system_process_resident_memory() ->
+    try
+        get_system_process_resident_memory(os:type())
+    catch _:Error ->
+            {error, {"Failed to get process resident memory", Error}}
     end.
