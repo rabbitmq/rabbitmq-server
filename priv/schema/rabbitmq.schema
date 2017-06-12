@@ -791,6 +791,9 @@ fun(Conf) ->
         dns            -> rabbit_peer_discovery_dns;
         aws            -> rabbit_peer_discovery_aws;
         consul         -> rabbit_peer_discovery_consul;
+        etcd           -> rabbit_peer_discovery_etcd;
+        kubernetes     -> rabbit_peer_discovery_k8s;
+        k8s            -> rabbit_peer_discovery_k8s;
         Module         -> Module
     end
 end}.
