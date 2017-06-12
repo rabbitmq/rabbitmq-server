@@ -1256,7 +1256,7 @@ make_publish_delivered(IsPersistent, PayloadFun, PropFun, N) ->
      PropFun(N, #message_properties{size = 10})}.
 
 queue_name(Config, Name) ->
-    Name1 = rabbit_ct_helpers:config_to_testcase_name(Config, Name),
+    Name1 = iolist_to_binary(rabbit_ct_helpers:config_to_testcase_name(Config, Name)),
     queue_name(Name1).
 
 queue_name(Name) ->
