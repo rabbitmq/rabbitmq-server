@@ -1,0 +1,42 @@
+%% region
+
+{mapping, "cluster_formation.etcd.region", "rabbit.cluster_formation.peer_discovery_etcd.etcd_region", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_region",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.region", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% host
+
+{mapping, "cluster_formation.etcd.host", "rabbit.cluster_formation.peer_discovery_etcd.etcd_host", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_host",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.host", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% ttl
+
+{mapping, "cluster_formation.etcd.ttl", "rabbit.cluster_formation.peer_discovery_etcd.etcd_ttl", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_ttl",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.ttl", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.

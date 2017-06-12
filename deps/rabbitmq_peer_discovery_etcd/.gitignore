@@ -3,6 +3,7 @@
 .*.sw?
 *.beam
 *.coverdata
+tags
 /.erlang.mk/
 /cover/
 /deps/
