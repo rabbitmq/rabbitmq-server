@@ -84,7 +84,7 @@ init_per_testcase0(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_permissions, [
         <<"user">>, <<"/">>, <<".*">>, <<".*">>, <<".*">>, <<"acting-user">>]),
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_topic_permissions, [
-        <<"user">>, <<"/">>, <<"amq.topic">>, <<"^Authorised">>, <<"^Authorised">>, <<"acting-user">>]),
+        <<"user">>, <<"/">>, <<"amq.topic">>, <<"^{username}.Authorised">>, <<"^{username}.Authorised">>, <<"acting-user">>]),
     Version = ?config(version, Config),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass", StompPort),
@@ -100,8 +100,8 @@ end_per_testcase0(Config) ->
 publish_topic_authorisation(Config) ->
     ClientFoo = ?config(client_foo, Config),
 
-    AuthorizedTopic = "/topic/AuthorisedTopic",
-    RestrictedTopic = "/topic/RestrictedTopic",
+    AuthorizedTopic = "/topic/user.AuthorisedTopic",
+    RestrictedTopic = "/topic/user.RestrictedTopic",
 
     %% send on authorised topic
     rabbit_stomp_client:send(
@@ -123,8 +123,8 @@ publish_topic_authorisation(Config) ->
 subscribe_topic_authorisation(Config) ->
     ClientFoo = ?config(client_foo, Config),
 
-    AuthorizedTopic = "/topic/AuthorisedTopic",
-    RestrictedTopic = "/topic/RestrictedTopic",
+    AuthorizedTopic = "/topic/user.AuthorisedTopic",
+    RestrictedTopic = "/topic/user.RestrictedTopic",
 
     %% subscribe to authorised topic
     rabbit_stomp_client:send(
