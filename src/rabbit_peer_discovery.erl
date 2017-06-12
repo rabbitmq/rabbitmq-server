@@ -23,8 +23,9 @@
 -export([discover_cluster_nodes/0, backend/0, node_type/0,
          normalize/1, format_discovered_nodes/1, log_configured_backend/0,
          register/0, unregister/0, maybe_register/0, maybe_unregister/0,
-         maybe_inject_randomized_delay/0]).
--export([append_node_prefix/1, node_prefix/0]).
+         maybe_inject_randomized_delay/0, lock/0, unlock/1]).
+-export([append_node_prefix/1, node_prefix/0, retry_timeout/0,
+         lock_acquisition_failure_mode/0]).
 
 -define(DEFAULT_BACKEND,   rabbit_peer_discovery_classic_config).
 %% what node type is used by default for this node when joining
@@ -60,7 +61,27 @@ node_type() ->
       ?DEFAULT_NODE_TYPE
   end.
 
+-spec retry_timeout() -> {Retries :: integer(), Timeout :: integer()}.
 
+retry_timeout() ->
+    case application:get_env(rabbit, cluster_formation) of
+        {ok, Proplist} ->
+            Retries = proplists:get_value(lock_retry_limit, Proplist, 10),
+            Timeout = proplists:get_value(lock_retry_timeout, Proplist, 30000),
+            {Retries, Timeout};
+        undefined ->
+            {10, 30000}
+    end.
+
+-spec lock_acquisition_failure_mode() -> ignore | fail.
+
+lock_acquisition_failure_mode() ->
+    case application:get_env(rabbit, cluster_formation) of
+        {ok, Proplist} ->
+            proplists:get_value(lock_acquisition_failure_mode, Proplist, fail);
+        undefined      ->
+            fail
+  end.
 
 -spec log_configured_backend() -> ok.
 
@@ -183,6 +204,34 @@ unregister() ->
       ok
   end.
 
+-spec lock() -> ok | {ok, Data :: term()} | not_supported | {error, Reason :: string()}.
+
+lock() ->
+    Backend = backend(),
+    rabbit_log:info("Will try to lock with peer discovery backend ~s", [Backend]),
+    case Backend:lock(node()) of
+        {error, Reason} = Error ->
+            rabbit_log:error("Failed to lock with peer discovery backend ~s: ~p",
+                             [Backend, Reason]),
+            Error;
+        Any ->
+            Any
+    end.
+
+-spec unlock(Data :: term()) -> ok | {error, Reason :: string()}.
+
+unlock(Data) ->
+    Backend = backend(),
+    rabbit_log:info("Will try to unlock with peer discovery backend ~s", [Backend]),
+    case Backend:unlock(Data) of
+        {error, Reason} = Error ->
+            rabbit_log:error("Failed to unlock with peer discovery backend ~s: ~p, "
+                             "lock data: ~p",
+                             [Backend, Reason, Data]),
+            Error;
+        Any ->
+            Any
+    end.
 
 %%
 %% Implementation
