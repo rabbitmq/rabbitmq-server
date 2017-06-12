@@ -233,7 +233,7 @@ decode_body(?CONTENT_JSON, Body) ->
 %%
 parse_response({error, Reason}) ->
   rabbit_log:debug("HTTP Error ~p", [Reason]),
-  {error, Reason};
+  {error, lists:flatten(io_lib:format("~p", [Reason]))};
 
 parse_response({ok, 200, Body})  -> {ok, decode_body(?CONTENT_JSON, Body)};
 parse_response({ok, 201, Body})  -> {ok, decode_body(?CONTENT_JSON, Body)};
