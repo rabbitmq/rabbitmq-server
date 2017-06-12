@@ -29,6 +29,7 @@ all() ->
      , {group, unregistration_tests}
      , {group, list_node_tests}
      , {group, other_tests}
+     , {group, lock_tests}
     ].
 
 groups() ->
@@ -79,6 +80,33 @@ groups() ->
                  health_check_with_acl_token_test,
                  health_check_error_handling_test
                 ]}
+    , {lock_tests, [], [
+                        startup_lock_path_with_prefix_test,
+                        startup_lock_path_default_value_test,
+                        startup_lock_path_with_cluster_name_test,
+                        create_session_with_token_test,
+                        create_session_without_token_test,
+                        get_lock_status_with_token_test,
+                        get_lock_status_with_session_test,
+                        get_lock_status_without_session_test,
+                        wait_for_lock_release_with_session_with_token_test,
+                        wait_for_lock_release_with_session_without_token_test,
+                        wait_for_lock_release_without_session_test,
+                        acquire_lock_with_token_test,
+                        acquire_lock_not_acquired_test,
+                        acquire_lock_successfully_acquired_test,
+                        release_lock_with_token_test,
+                        release_lock_not_released_test,
+                        release_lock_successfully_released_test,
+                        consul_kv_read_custom_values_test,
+                        consul_kv_read_default_values_test,
+                        consul_kv_write_custom_values_test,
+                        consul_kv_write_default_values_test,
+                        consul_session_renew_custom_values_test,
+                        consul_session_renew_default_values_test,
+                        consul_session_create_custom_values_test,
+                        consul_session_create_default_values_test
+                       ]}
     ].
 
 init_per_group(_, Config) -> Config.
@@ -103,7 +131,8 @@ reset() ->
                                  "CONSUL_DOMAIN",
                                  "CONSUL_DEREGISTER_AFTER",
                                  "CONSUL_INCLUDE_NODES_WITH_WARNINGS",
-                                 "CONSUL_USE_LONGNAME"
+                                 "CONSUL_USE_LONGNAME",
+                                 "CONSUL_LOCK_PREFIX"
                                 ]].
 
 init_per_testcase(_TC, Config) ->
@@ -663,6 +692,340 @@ unregistration_with_generic_error_test(_Config) ->
            end),
          ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:unregister()),
          ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+startup_lock_path_default_value_test(_Config) ->
+    Expectation = ["rabbitmq", "default", "startup_lock"],
+    ?assertEqual(Expectation, rabbit_peer_discovery_consul:startup_lock_path()).
+
+startup_lock_path_with_prefix_test(_Config) ->
+    Expectation = ["myprefix", "default", "startup_lock"],
+    os:putenv("CONSUL_LOCK_PREFIX", "myprefix"),
+    ?assertEqual(Expectation, rabbit_peer_discovery_consul:startup_lock_path()).
+
+startup_lock_path_with_cluster_name_test(_Config) ->
+    os:putenv("CLUSTER_NAME", "mycluster"),
+    Expectation = ["rabbitmq", "mycluster", "startup_lock"],
+    ?assertEqual(Expectation, rabbit_peer_discovery_consul:startup_lock_path()).
+
+create_session_without_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, session, create], Path),
+                        ?assertEqual([], Args),
+                        Expect = <<"{\"Name\":\"node-name\",\"TTL\":\"30s\"}">>,
+                        ?assertEqual(Expect, Body),
+                        {ok, #{<<"ID">> => <<"session-id">>}}
+                end),
+    ?assertEqual({ok, "session-id"}, rabbit_peer_discovery_consul:create_session('node-name', 30)),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+create_session_with_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, session, create], Path),
+                        ?assertEqual([{token, "token-value"}], Args),
+                        Expect = <<"{\"Name\":\"node-name\",\"TTL\":\"30s\"}">>,
+                        ?assertEqual(Expect, Body),
+                        {ok, #{<<"ID">> => <<"session-id">>}}
+                end),
+    os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+    ?assertEqual({ok, "session-id"}, rabbit_peer_discovery_consul:create_session('node-name', 30)),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+get_lock_status_without_session_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+                fun(Scheme, Host, Port, Path, Args) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([], Args),
+                        {ok, [#{<<"LockIndex">> => 3,
+                                <<"Key">> => <<"rabbitmq/default/startup_lock">>,
+                                <<"Flags">> => 0,
+                                <<"Value">> => <<"W3t9XQ==">>,
+                                <<"Session">> => <<"session-id">>,
+                                <<"CreateIndex">> => 8,
+                                <<"ModifyIndex">> => 21}]}
+                end),
+    ?assertEqual({ok, {true, 21}}, rabbit_peer_discovery_consul:get_lock_status()),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+get_lock_status_with_session_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+                fun(Scheme, Host, Port, Path, Args) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([], Args),
+                        {ok, [#{<<"LockIndex">> => 3,
+                                <<"Key">> => <<"rabbitmq/default/startup_lock">>,
+                                <<"Flags">> => 0,
+                                <<"Value">> => <<"W3t9XQ==">>,
+                                <<"CreateIndex">> => 8,
+                                <<"ModifyIndex">> => 21}]}
+                end),
+    ?assertEqual({ok, {false, 21}}, rabbit_peer_discovery_consul:get_lock_status()),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+get_lock_status_with_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+                fun(Scheme, Host, Port, Path, Args) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([{token, "token-value"}], Args),
+                        {ok, [#{<<"LockIndex">> => 3,
+                                <<"Key">> => <<"rabbitmq/default/startup_lock">>,
+                                <<"Flags">> => 0,
+                                <<"Value">> => <<"W3t9XQ==">>,
+                                <<"CreateIndex">> => 8,
+                                <<"ModifyIndex">> => 21}]}
+                end),
+    os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+    ?assertEqual({ok, {false, 21}}, rabbit_peer_discovery_consul:get_lock_status()),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+wait_for_lock_release_with_session_without_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+                fun(Scheme, Host, Port, Path, Args) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([{index, 42}, {wait, "300s"}], Args),
+                        {ok, []}
+                end),
+    ?assertEqual(ok, rabbit_peer_discovery_consul:wait_for_lock_release(true, 42, 300)),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+wait_for_lock_release_with_session_with_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+                fun(Scheme, Host, Port, Path, Args) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([{index, 42}, {wait, "300s"}, {token, "token-value"}], Args),
+                        {ok, []}
+                end),
+    os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+    ?assertEqual(ok, rabbit_peer_discovery_consul:wait_for_lock_release(true, 42, 300)),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+wait_for_lock_release_without_session_test(_Config) ->
+    ?assertEqual(ok, rabbit_peer_discovery_consul:wait_for_lock_release(false, 0, 0)).
+
+acquire_lock_successfully_acquired_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([{acquire, session_id}], Args),
+                        ?assertEqual([], Body),
+                        {ok, true}
+                end),
+    ?assertEqual({ok, true}, rabbit_peer_discovery_consul:acquire_lock(session_id)),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+acquire_lock_not_acquired_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([{acquire, session_id}], Args),
+                        ?assertEqual([], Body),
+                        {ok, false}
+                end),
+    ?assertEqual({ok, false}, rabbit_peer_discovery_consul:acquire_lock(session_id)),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+acquire_lock_with_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([{acquire, session_id}, {token, "token-value"}], Args),
+                        ?assertEqual([], Body),
+                        {ok, true}
+                end),
+    os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+    ?assertEqual({ok, true}, rabbit_peer_discovery_consul:acquire_lock(session_id)),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+release_lock_successfully_released_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([{release, session_id}], Args),
+                        ?assertEqual([], Body),
+                        {ok, true}
+                end),
+    ?assertEqual({ok, true}, rabbit_peer_discovery_consul:release_lock(session_id)),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+release_lock_not_released_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([{release, session_id}], Args),
+                        ?assertEqual([], Body),
+                        {ok, false}
+                end),
+    ?assertEqual({ok, false}, rabbit_peer_discovery_consul:release_lock(session_id)),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+release_lock_with_token_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
+                        ?assertEqual([{release, session_id}, {token, "token-value"}], Args),
+                        ?assertEqual([], Body),
+                        {ok, true}
+                end),
+    os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+    ?assertEqual({ok, true}, rabbit_peer_discovery_consul:release_lock(session_id)).
+
+consul_kv_read_default_values_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+                fun(Scheme, Host, Port, Path, Args) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "path", "to", "key"], Path),
+                        ?assertEqual([{acquire, session_id}], Args),
+                        {ok, []}
+                end),
+    ?assertEqual({ok, []}, rabbit_peer_discovery_consul:consul_kv_read(["path", "to", "key"], [{acquire, session_id}])),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+consul_kv_read_custom_values_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, get,
+                fun(Scheme, Host, Port, Path, Args) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("consul.node.consul", Host),
+                        ?assertEqual(8501, Port),
+                        ?assertEqual([v1, kv, "path", "to", "key"], Path),
+                        ?assertEqual([{acquire, session_id}], Args),
+                        {ok, []}
+            end),
+    os:putenv("CONSUL_HOST", "consul.node.consul"),
+    os:putenv("CONSUL_PORT", "8501"),
+    ?assertEqual({ok, []}, rabbit_peer_discovery_consul:consul_kv_read(["path", "to", "key"], [{acquire, session_id}])),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+consul_kv_write_default_values_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, kv, "path", "to", "key"], Path),
+                        ?assertEqual([{acquire, session_id}], Args),
+                        ?assertEqual([], Body),
+                        {ok, []}
+                end),
+    ?assertEqual({ok, []}, rabbit_peer_discovery_consul:consul_kv_write(["path", "to", "key"], [{acquire, session_id}], [])),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+consul_kv_write_custom_values_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("consul.node.consul", Host),
+                        ?assertEqual(8501, Port),
+                        ?assertEqual([v1, kv, "path", "to", "key"], Path),
+                        ?assertEqual([{acquire, session_id}], Args),
+                        ?assertEqual([], Body),
+                        {ok, []}
+                end),
+    os:putenv("CONSUL_HOST", "consul.node.consul"),
+    os:putenv("CONSUL_PORT", "8501"),
+    ?assertEqual({ok, []}, rabbit_peer_discovery_consul:consul_kv_write(["path", "to", "key"], [{acquire, session_id}], [])),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+consul_session_create_default_values_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, session, create], Path),
+                        ?assertEqual([], Args),
+                        ?assertEqual([], Body),
+                        {ok, []}
+                end),
+    ?assertEqual({ok, []}, rabbit_peer_discovery_consul:consul_session_create([], [])),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+consul_session_create_custom_values_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("consul.node.consul", Host),
+                        ?assertEqual(8501, Port),
+                        ?assertEqual([v1, session, create], Path),
+                        ?assertEqual([], Args),
+                        ?assertEqual([], Body),
+                        {ok, []}
+            end),
+    os:putenv("CONSUL_HOST", "consul.node.consul"),
+    os:putenv("CONSUL_PORT", "8501"),
+    ?assertEqual({ok, []}, rabbit_peer_discovery_consul:consul_session_create([], [])),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+consul_session_renew_default_values_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("localhost", Host),
+                        ?assertEqual(8500, Port),
+                        ?assertEqual([v1, session, renew, session_id], Path),
+                        ?assertEqual([], Args),
+                        ?assertEqual([], Body),
+                        {ok, []}
+                end),
+    ?assertEqual({ok, []}, rabbit_peer_discovery_consul:consul_session_renew("session_id", [])),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+consul_session_renew_custom_values_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+                fun(Scheme, Host, Port, Path, Args, Body) ->
+                        ?assertEqual("http", Scheme),
+                        ?assertEqual("consul.node.consul", Host),
+                        ?assertEqual(8501, Port),
+                        ?assertEqual([v1, session, renew, session_id], Path),
+                        ?assertEqual([], Args),
+                        ?assertEqual([], Body),
+                        {ok, []}
+                end),
+    os:putenv("CONSUL_HOST", "consul.node.consul"),
+    os:putenv("CONSUL_PORT", "8501"),
+    ?assertEqual({ok, []}, rabbit_peer_discovery_consul:consul_session_renew("session_id", [])),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 %%%
 %%% Implementation
