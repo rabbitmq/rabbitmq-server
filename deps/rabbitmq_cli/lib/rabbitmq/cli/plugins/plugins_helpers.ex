@@ -66,7 +66,8 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
             err
         end;
       :offline ->
-        %{mode: :offline, set: Enum.sort(enabled_plugins)}
+        %{mode: :offline,
+          set: Enum.sort(enabled_plugins)}
     end
   end
 

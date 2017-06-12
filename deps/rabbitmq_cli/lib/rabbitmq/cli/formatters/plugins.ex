@@ -21,15 +21,13 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
                     options) do
     legend(status, format, options) ++ format_plugins(plugins, format)
   end
-  def format_output(%{mode: :offline}, _options) do
-    ["Offline change; changes will take effect at broker restart."]
-  end
   def format_output(%{enabled: enabled, mode: _} = output, options) do
     case length(enabled) do
       0 -> ["Plugin configuration unchanged."];
       _ -> ["The following plugins have been enabled:" |
             for plugin <- enabled do "  #{plugin}" end] ++ [""]++
-            applying(output, options)
+            applying(output, options) ++
+            log_offline(output)
     end
   end
   def format_output(%{disabled: disabled, mode: _} = output, options) do
@@ -37,7 +35,8 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
       0 -> ["Plugin configuration unchanged."];
       _ -> ["The following plugins have been disabled:" |
             for plugin <- disabled do "  #{plugin}" end] ++ [""] ++
-            applying(output, options)
+            applying(output, options) ++
+            log_offline(output)
     end
   end
   ## Do not print enabled/disabled for set command
@@ -147,8 +146,19 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
     "[failed to contact #{node} - status not shown]"
   end
 
-  defp applying(%{mode: :offline}, _) do
-    []
+  defp applying(%{mode: :offline, enabled: enabled}, _) do
+    enabled_message = case length(enabled) do
+      0   -> "nothing to do";
+      len -> "enabled #{len} plugins"
+    end
+    [enabled_message <> "."]
+  end
+  defp applying(%{mode: :offline, disabled: disabled}, _) do
+    disabled_message = case length(disabled) do
+      0   -> "nothing to do";
+      len -> "disabled #{len} plugins"
+    end
+    [disabled_message <> "."]
   end
   defp applying(%{mode: :online, started: started, stopped: stopped}, _) do
     stopped_message = case length(stopped) do
@@ -164,6 +174,13 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
       msg -> msg
     end
     [change_message <> "."]
+  end
+
+  defp log_offline(%{mode: :offline}) do
+    ["Offline change; changes will take effect at broker restart."]
+  end
+  defp log_offline(_) do
+    []
   end
 
 end
