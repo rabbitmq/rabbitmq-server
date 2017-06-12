@@ -694,11 +694,11 @@ unregistration_with_generic_error_test(_Config) ->
          ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 startup_lock_path_default_value_test(_Config) ->
-    Expectation = ["rabbitmq", "undefined", "startup_lock"],
+    Expectation = ["rabbitmq", "default", "startup_lock"],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:startup_lock_path()).
 
 startup_lock_path_with_prefix_test(_Config) ->
-    Expectation = ["myprefix", "undefined", "startup_lock"],
+    Expectation = ["myprefix", "default", "startup_lock"],
     os:putenv("CONSUL_LOCK_PREFIX", "myprefix"),
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:startup_lock_path()).
 
@@ -744,10 +744,10 @@ get_lock_status_without_session_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([], Args),
                         {ok, [#{<<"LockIndex">> => 3,
-                                <<"Key">> => <<"rabbitmq/undefined/startup_lock">>,
+                                <<"Key">> => <<"rabbitmq/default/startup_lock">>,
                                 <<"Flags">> => 0,
                                 <<"Value">> => <<"W3t9XQ==">>,
                                 <<"Session">> => <<"session-id">>,
@@ -763,10 +763,10 @@ get_lock_status_with_session_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([], Args),
                         {ok, [#{<<"LockIndex">> => 3,
-                                <<"Key">> => <<"rabbitmq/undefined/startup_lock">>,
+                                <<"Key">> => <<"rabbitmq/default/startup_lock">>,
                                 <<"Flags">> => 0,
                                 <<"Value">> => <<"W3t9XQ==">>,
                                 <<"CreateIndex">> => 8,
@@ -781,10 +781,10 @@ get_lock_status_with_token_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([{token, "token-value"}], Args),
                         {ok, [#{<<"LockIndex">> => 3,
-                                <<"Key">> => <<"rabbitmq/undefined/startup_lock">>,
+                                <<"Key">> => <<"rabbitmq/default/startup_lock">>,
                                 <<"Flags">> => 0,
                                 <<"Value">> => <<"W3t9XQ==">>,
                                 <<"CreateIndex">> => 8,
@@ -800,7 +800,7 @@ wait_for_lock_release_with_session_without_token_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([{index, 42}, {wait, "300s"}], Args),
                         {ok, []}
                 end),
@@ -813,7 +813,7 @@ wait_for_lock_release_with_session_with_token_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([{index, 42}, {wait, "300s"}, {token, "token-value"}], Args),
                         {ok, []}
                 end),
@@ -830,7 +830,7 @@ acquire_lock_successfully_acquired_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([{acquire, session_id}], Args),
                         ?assertEqual([], Body),
                         {ok, true}
@@ -844,7 +844,7 @@ acquire_lock_not_acquired_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([{acquire, session_id}], Args),
                         ?assertEqual([], Body),
                         {ok, false}
@@ -858,7 +858,7 @@ acquire_lock_with_token_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([{acquire, session_id}, {token, "token-value"}], Args),
                         ?assertEqual([], Body),
                         {ok, true}
@@ -873,7 +873,7 @@ release_lock_successfully_released_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([{release, session_id}], Args),
                         ?assertEqual([], Body),
                         {ok, true}
@@ -887,7 +887,7 @@ release_lock_not_released_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([{release, session_id}], Args),
                         ?assertEqual([], Body),
                         {ok, false}
@@ -901,7 +901,7 @@ release_lock_with_token_test(_Config) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
-                        ?assertEqual([v1, kv, "rabbitmq", "undefined", "startup_lock"], Path),
+                        ?assertEqual([v1, kv, "rabbitmq", "default", "startup_lock"], Path),
                         ?assertEqual([{release, session_id}, {token, "token-value"}], Args),
                         ?assertEqual([], Body),
                         {ok, true}

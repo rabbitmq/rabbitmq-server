@@ -215,8 +215,8 @@ list_nodes_query_args() ->
 -spec list_nodes_query_args(ClusterName :: string()) -> list().
 list_nodes_query_args(Cluster) ->
   ClusterTag = case Cluster of
-    "undefined" -> [];
-    _           -> [{tag, Cluster}]
+    "default" -> [];
+    _         -> [{tag, Cluster}]
   end,
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   list_nodes_query_args(ClusterTag, get_config_key(consul_include_nodes_with_warnings, M)).
@@ -326,7 +326,7 @@ registration_body_maybe_add_tag(Payload) ->
 -spec registration_body_maybe_add_tag(Payload :: list(),
                                       ClusterName :: string())
     -> list().
-registration_body_maybe_add_tag(Payload, "undefined") -> Payload;
+registration_body_maybe_add_tag(Payload, "default") -> Payload;
 registration_body_maybe_add_tag(Payload, Cluster) ->
   lists:append(Payload, [{'Tags', [list_to_atom(Cluster)]}]).
 

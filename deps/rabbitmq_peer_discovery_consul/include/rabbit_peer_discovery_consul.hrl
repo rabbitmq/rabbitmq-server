@@ -3,7 +3,7 @@
           cluster_name                       => #peer_discovery_config_entry_meta{
                                                    type          = string,
                                                    env_variable  = "CLUSTER_NAME",
-                                                   default_value = "undefined"
+                                                   default_value = "default"
                                                   },
           consul_acl_token                   => #peer_discovery_config_entry_meta{
                                                    type          = string,
