@@ -1348,7 +1348,7 @@ arguments_test(Config) ->
     passed.
 
 table_hash(Table) ->
-    rabbit_misc:base64url(erlang:md5(term_to_binary(Table))).
+    binary_to_list(rabbit_mgmt_format:args_hash(Table)).
 
 arguments_table_test(Config) ->
     Args = #{'upstreams' => [<<"amqp://localhost/%2f/upstream1">>,
