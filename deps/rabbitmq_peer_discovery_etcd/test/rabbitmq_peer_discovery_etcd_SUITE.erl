@@ -31,9 +31,36 @@ groups() ->
     [
      {unit, [], [
                  extract_nodes_test
-                 %% , base_path_test
+                 , base_path_defaults_test
+                 , nodes_path_defaults_test
+                 , list_nodes_without_existing_directory_test
                 ]}
     ].
+
+
+reset() ->
+    meck:unload(),
+    application:unset_env(rabbit, cluster_formation),
+    [os:unsetenv(Var) || Var <- [
+                                 "CLUSTER_NAME",
+                                 "ETCD_SCHEME",
+                                 "ETCD_HOST",
+                                 "ETCD_PORT",
+                                 "ETCD_PREFIX",
+                                 "ETCD_NODE_TTL",
+                                 "LOCK_WAIT_TIME"
+                                ]].
+
+init_per_testcase(_TC, Config) ->
+    reset(),
+    meck:new(rabbit_log, []),
+    Config.
+
+end_per_testcase(_TC, Config) ->
+    reset(),
+    Config.
+
+
 
 %%
 %% Test cases
@@ -60,5 +87,31 @@ extract_nodes_test(_Config) ->
     Expectation = ['rabbit@172.17.0.7', 'rabbit@172.17.0.5'],
   ?assertEqual(Expectation, rabbit_peer_discovery_etcd:extract_nodes(Values)).
 
-%% base_path_test(_Config) ->
-%%   ?assertEqual([v2, keys, "rabbitmq", "default"], rabbit_peer_discovery_etcd:base_path(M)).
+
+base_path_defaults_test(_Config) ->
+  ?assertEqual([v2, keys, "rabbitmq", "default"],
+               rabbit_peer_discovery_etcd:base_path(#{})).
+
+
+nodes_path_defaults_test(_Config) ->
+  ?assertEqual([v2, keys, "rabbitmq", "default", nodes, rabbit_data_coercion:to_list(node())],
+               rabbit_peer_discovery_etcd:node_path(#{})).
+
+
+list_nodes_without_existing_directory_test(_Config) ->
+    meck:new(rabbit_peer_discovery_httpc, [passthrough]),
+    EtcdNodesResponse = [{<<"action">>, <<"get">>},
+                               {<<"node">>,
+                                   [{<<"key">>, <<"/rabbitmq/default">>},
+                                         {<<"dir">>, true},
+                                         {<<"nodes">>,
+                                          [[{<<"key">>, <<"/rabbitmq/default/autocluster-etcd-4">>},
+                                                    {<<"value">>, <<"enabled">>},
+                                                    {<<"expiration">>, <<"2016-07-04T12:47:17.245647965Z">>},
+                                                    {<<"ttl">>, 23},
+                                                    {<<"modifiedIndex">>, 3976},
+                                                    {<<"createdIndex">>, 3976}]]}]}],
+    meck:sequence(rabbit_peer_discovery_httpc, get, 5, [{error, "404"}, EtcdNodesResponse]),
+    meck:expect(rabbit_peer_discovery_httpc, put, fun (_, _, _, _, _, _) -> {ok, ok} end),
+    rabbit_peer_discovery_etcd:list_nodes(),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
