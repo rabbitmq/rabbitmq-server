@@ -784,6 +784,99 @@ has been granted access, and the permissions the user has for operations
 on resources in these virtual hosts:
 .sp
 .Dl rabbitmqctl list_user_permissions tonyg
+.\" ------------------------------------
+.It Cm set_topic_permissions Oo Fl p Ar vhost Oc Ar user Ar exchange Ar write Ar read
+.Bl -tag -width Ds
+.It Ar vhost
+The name of the virtual host to which to grant the user access,
+defaulting to
+.Qq / .
+.It Ar user
+The name of the user the permissions apply to in the target virtual host.
+.It Ar exchange
+The name of the topic exchange the authorisation check will be applied to.
+.It Ar write
+A regular expression matching the routing key of the published message.
+.It Ar read
+A regular expression matching the routing key of the consumed message.
+.El
+.Pp
+Sets user topic permissions.
+.Pp
+For example, this command instructs the RabbitMQ broker to let the
+user named
+.Qq tonyg
+publish and consume messages going through the
+.Qq amp.topic
+exchange of the 
+.Qq /myvhost 
+virtual host with a routing key starting with
+.Qq tonyg- : 
+.sp
+.Dl rabbitmqctl set_topic_permissions -p /myvhost tonyg amq.topic Qo ^tonyg-.* Qc Qo ^tonyg-.* Qc
+.Pp
+Note topic permissions support variable expansion for the following variables:
+username, vhost, and client_id (only when using MQTT). The previous example could be made more generic by using
+.Qq ^{username}-.* :
+.sp
+.Dl rabbitmqctl set_topic_permissions -p /myvhost tonyg amq.topic Qo ^{username}-.* Qc Qo ^{username}-.* Qc
+.\" ------------------------------------
+.It Cm clear_topic_permissions Oo Fl p Ar vhost Oc Ar username Oo Ar exchange Oc
+.Bl -tag -width Ds
+.It Ar vhost
+The name of the virtual host to which to clear the topic permissions,
+defaulting to
+.Qq / .
+.It Ar username
+The name of the user to clear topic permissions to the specified virtual host.
+.It Ar exchange
+The name of the topic exchange to clear topic permissions, defaulting to all the 
+topic exchanges the given user has topic permissions for.
+.El
+.Pp
+Clear user topic permissions.
+.Pp
+For example, this command instructs the RabbitMQ broker to remove topic permissions for user
+named
+.Qq tonyg
+for the topic exchange
+.Qq amq.topic
+in the virtual host called
+.Qq /myvhost :
+.sp
+.Dl rabbitmqctl clear_topic_permissions -p /myvhost tonyg amq.topic
+.\" ------------------------------------
+.It Cm list_topic_permissions Op Fl p Ar vhost
+.Bl -tag -width Ds
+.It Ar vhost
+The name of the virtual host for which to list the users topic permissions.
+Defaults to
+.Qq / .
+.El
+.Pp
+Lists topic permissions in a virtual host.
+.Pp
+For example, this command instructs the RabbitMQ broker to list all the
+users which have been granted topic permissions in the virtual host called
+.Qq /myvhost:
+.sp
+.Dl rabbitmqctl list_topic_permissions -p /myvhost
+.\" ------------------------------------
+.It Cm list_user_topic_permissions Ar username
+.Bl -tag -width Ds
+.It Ar username
+The name of the user for which to list the topic permissions.
+.El
+.Pp
+Lists user topic permissions.
+.Pp
+For example, this command instructs the RabbitMQ broker to list all the
+virtual hosts to which the user named
+.Qq tonyg
+has been granted access, and the topic permissions the user has in these virtual hosts:
+.sp
+.Dl rabbitmqctl list_topic_user_permissions tonyg
+
 .El
 .Ss Parameter Management
 Certain features of RabbitMQ (such as the federation plugin) are
