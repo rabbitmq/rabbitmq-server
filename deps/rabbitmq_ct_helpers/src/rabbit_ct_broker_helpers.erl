@@ -55,7 +55,8 @@
     set_partition_handling_mode_globally/2,
     enable_dist_proxy_manager/1,
     enable_dist_proxy/1,
-    enable_dist_proxy_on_node/3,
+    start_dist_proxy_on_node/2,
+    disconnect_from_other_nodes/2,
     block_traffic_between/2,
     allow_traffic_between/2,
 
@@ -634,20 +635,38 @@ enable_dist_proxy(Config) ->
     NodeConfigs = rabbit_ct_broker_helpers:get_node_configs(Config),
     Nodes = [?config(nodename, NodeConfig) || NodeConfig <- NodeConfigs],
     ManagerNode = node(),
+    %% We first start the proxy process on all nodes, then we close the
+    %% existing connection.
+    %%
+    %% If we do that in a single loop, i.e. start the proxy on node 1
+    %% and disconnect it, then, start the proxy on node 2 and disconnect
+    %% it, etc., there is a chance that the connection is reopened
+    %% by a node where the proxy is still disabled. Therefore, that
+    %% connection would bypass the proxy process even though we believe
+    %% it to be enabled.
     ok = lists:foreach(
       fun(NodeConfig) ->
           ok = rabbit_ct_broker_helpers:rpc(Config,
             ?config(nodename, NodeConfig),
-            ?MODULE, enable_dist_proxy_on_node,
-            [NodeConfig, ManagerNode, Nodes])
+            ?MODULE, start_dist_proxy_on_node,
+            [NodeConfig, ManagerNode])
+      end, NodeConfigs),
+    ok = lists:foreach(
+      fun(NodeConfig) ->
+          ok = rabbit_ct_broker_helpers:rpc(Config,
+            ?config(nodename, NodeConfig),
+            ?MODULE, disconnect_from_other_nodes,
+            [NodeConfig, Nodes])
       end, NodeConfigs),
     Config.
 
-enable_dist_proxy_on_node(NodeConfig, ManagerNode, Nodes) ->
-    Nodename = ?config(nodename, NodeConfig),
+start_dist_proxy_on_node(NodeConfig, ManagerNode) ->
     DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
     ProxyPort = ?config(tcp_port_erlang_dist_proxy, NodeConfig),
-    ok = inet_tcp_proxy:start(ManagerNode, DistPort, ProxyPort),
+    ok = inet_tcp_proxy:start(ManagerNode, DistPort, ProxyPort).
+
+disconnect_from_other_nodes(NodeConfig, Nodes) ->
+    Nodename = ?config(nodename, NodeConfig),
     ok = inet_tcp_proxy:reconnect(Nodes -- [Nodename]).
 
 block_traffic_between(NodeA, NodeB) ->
