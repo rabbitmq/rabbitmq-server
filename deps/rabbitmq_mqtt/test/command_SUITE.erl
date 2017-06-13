@@ -106,7 +106,7 @@ run(Config) ->
                                   {username, <<"guest">>},
                                   {password, <<"guest">>},
                                   {puback_timeout, 1}]),
-    ct:sleep(100),
+    ct:sleep(200),
 
     [[{client_id, <<"simpleClient">>}, {user, <<"guest">>}],
      [{client_id, <<"simpleClient1">>}, {user, <<"guest">>}]] =
@@ -123,6 +123,7 @@ run(Config) ->
         lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
 
     start_amqp_connection(direct, Node, Port),
+    ct:sleep(200),
 
     %% Still two MQTT connections, one direct AMQP 0-9-1 connection
     [[{client_id, <<"simpleClient">>}],
@@ -131,17 +132,22 @@ run(Config) ->
 
     %% Verbose returns all keys
     Infos = lists:map(fun(El) -> atom_to_binary(El, utf8) end, ?INFO_ITEMS),
-    AllKeys = 'Elixir.Enum':to_list(?COMMAND:run(Infos, Opts)),
-    AllKeys = 'Elixir.Enum':to_list(?COMMAND:run([], Opts#{verbose => true})),
+    AllKeys1 = 'Elixir.Enum':to_list(?COMMAND:run(Infos, Opts)),
+    AllKeys2 = 'Elixir.Enum':to_list(?COMMAND:run([], Opts#{verbose => true})),
 
     %% There are two connections
-    [First, _Second] = AllKeys,
+    [FirstPL, _]  = AllKeys1,
+    [SecondPL, _] = AllKeys2,
+
+    First         = maps:from_list(lists:usort(FirstPL)),
+    Second        = maps:from_list(lists:usort(SecondPL)),
 
     %% Keys are INFO_ITEMS
     KeysCount = length(?INFO_ITEMS),
-    KeysCount = length(First),
+    ?assert(KeysCount =:= maps:size(First)),
+    ?assert(KeysCount =:= maps:size(Second)),
 
-    {Keys, _} = lists:unzip(First),
+    Keys = maps:keys(First),
 
     [] = Keys -- ?INFO_ITEMS,
     [] = ?INFO_ITEMS -- Keys.

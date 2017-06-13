@@ -69,5 +69,5 @@ run(Args, #{node := NodeName,
 
 banner(_, _) -> <<"Listing MQTT connections ...">>.
 
-output(Result, Opts) ->
+output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).
