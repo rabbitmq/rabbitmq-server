@@ -133,11 +133,12 @@ identity(#entry{key       = {#resource{virtual_host = VHost,
             {upstream,  UpstreamName},
             {id, Id}].
 
-unique_id(Key) ->
+unique_id(Key = {#resource{}, UpName, ResName}) when is_binary(UpName), is_binary(ResName) ->
+    PHash = erlang:phash2(Key, 1 bsl 32),
     << << case N >= 10 of
               true -> N - 10 + $a;
               false -> N + $0 end >>
-       || <<N:4>> <= crypto:hash(sha, term_to_binary(Key)) >>.
+       || <<N:4>> <=  <<PHash:32>> >>.
 
 split_status({running, ConnName})         -> [{status,           running},
                                               {local_connection, ConnName}];
