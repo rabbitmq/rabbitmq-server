@@ -384,19 +384,30 @@ get_system_process_resident_memory({unix, linux}) ->
     get_ps_memory();
 
 get_system_process_resident_memory({unix,freebsd}) ->
-    {error, not_implemented_for_os};
+    get_ps_memory();
 
 get_system_process_resident_memory({unix,openbsd}) ->
-    {error, not_implemented_for_os};
+    get_ps_memory();
 
 get_system_process_resident_memory({win32,_OSname}) ->
-    {error, not_implemented_for_os};
+    OsPid = os:getpid(),
+    Cmd = " tasklist /fi \"pid eq " ++ OsPid ++ "\" /fo LIST 2>&1 ",
+    CmdOutput = os:cmd(Cmd),
+    %% Memory usage is displayed in kilobytes
+    %% with comma-separated thousands
+    case re:run(CmdOutput, "Mem Usage:\\s+([0-9,]+)\\s+K", [{capture, all_but_first, list}]) of
+        {match, [Match]} ->
+            NoCommas = [ N || N <- Match, N =/= $, ],
+            {ok, list_to_integer(NoCommas) * 1024};
+        _ ->
+            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
+    end;
 
 get_system_process_resident_memory({unix, sunos}) ->
-    {error, not_implemented_for_os};
+    get_ps_memory();
 
 get_system_process_resident_memory({unix, aix}) ->
-    {error, not_implemented_for_os};
+    get_ps_memory();
 
 get_system_process_resident_memory(_OsType) ->
     {error, not_implemented_for_os}.
