@@ -14,6 +14,7 @@ plugins/
 rabbitmq_stomp.d
 
 # Python testsuite.
+.python-version
 *.pyc
 test/python_SUITE_data/deps/pika/pika/
 test/python_SUITE_data/deps/pika/pika-git/

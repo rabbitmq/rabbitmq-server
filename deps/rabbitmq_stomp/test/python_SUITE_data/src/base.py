@@ -103,11 +103,11 @@ class BaseTest(unittest.TestCase):
             self.conn.disconnect()
             self.conn.stop()
 
-   def simple_test_send_rec(self, dest, route = None):
+   def simple_test_send_rec(self, dest, headers={}):
         self.listener.reset()
 
         self.subscribe_dest(self.conn, dest, None)
-        self.conn.send(dest, "foo")
+        self.conn.send(dest, "foo", headers=headers)
 
         self.assertTrue(self.listener.await(), "Timeout, no message received")
 
@@ -119,6 +119,7 @@ class BaseTest(unittest.TestCase):
         msg = self.listener.messages[0]
         self.assertEquals("foo", msg['message'])
         self.assertEquals(dest, msg['headers']['destination'])
+        return msg['headers']
 
    def assertListener(self, errMsg, numMsgs=0, numErrs=0, numRcts=0, timeout=10):
         if numMsgs + numErrs + numRcts > 0:
