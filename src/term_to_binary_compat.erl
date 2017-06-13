@@ -20,7 +20,7 @@
 
 -export([queue_name_to_binary/1]).
 
-queue_name_to_binary(#resource{kind = queue} = {resource, VHost, queue, Name}) ->
+queue_name_to_binary(#resource{kind = queue, virtual_host = VHost, name = Name}) ->
     VHostBSize = byte_size(VHost),
     NameBSize = byte_size(Name),
     <<131,                              %% Binary format "version"
