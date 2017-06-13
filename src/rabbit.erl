@@ -584,7 +584,7 @@ decrypt_list([Value|Tail], Algo, Acc) ->
 
 stop_apps(Apps) ->
     rabbit_log:info(
-        lists:flatten(["Stopping RabbitMQ applications and their dependencies in the following order: ~n",
+        lists:flatten(["Stopping RabbitMQ applications and their dependencies in the following order:~n",
                        ["    ~p~n" || _ <- Apps]]),
         lists:reverse(Apps)),
     ok = app_utils:stop_applications(
