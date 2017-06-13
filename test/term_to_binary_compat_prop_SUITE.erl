@@ -27,9 +27,10 @@ all() ->
     %% The test should run on OTP < 20 (erts < 9)
     case erts_gt_8() of
         true ->
-            [];
+            [string_and_binary_tuple_2_to_binary];
         false ->
-            [queue_name_to_binary]
+            [queue_name_to_binary,
+             string_and_binary_tuple_2_to_binary]
     end.
 
 erts_gt_8() ->
@@ -47,6 +48,10 @@ end_per_suite(Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+string_and_binary_tuple_2_to_binary(Config) ->
+    Fun = fun() -> prop_string_and_binary_tuple_2_to_binary(Config) end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 10000).
+
 queue_name_to_binary(Config) ->
     Fun = fun () -> prop_queue_name_to_binary(Config) end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 10000).
@@ -58,5 +63,14 @@ prop_queue_name_to_binary(_Config) ->
                 Resource = rabbit_misc:r(Vhost, queue, QName),
                 Legacy = term_to_binary_compat:queue_name_to_binary(Resource),
                 Current = term_to_binary(Resource),
+                Current =:= Legacy
+            end).
+
+prop_string_and_binary_tuple_2_to_binary(_Config) ->
+    ?FORALL({First, Second}, {union([string(), binary()]), union([string(), binary()])},
+            begin
+                Tuple = {First, Second},
+                Legacy = term_to_binary_compat:string_and_binary_tuple_2_to_binary(Tuple),
+                Current = term_to_binary(Tuple),
                 Current =:= Legacy
             end).
