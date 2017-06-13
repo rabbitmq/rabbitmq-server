@@ -105,7 +105,7 @@ epmd_port() ->
     end.
 
 dist_working_diagnostics(Node) ->
-    case rabbit:is_running(Node) of
+    case is_process_running(Node, rabbit) of
         true  -> [{"  * node ~s up, 'rabbit' application running", [Node]}];
         false -> [{"  * node ~s up, 'rabbit' application not running~n"
                    "  * running applications on ~s: ~p~n"

@@ -30,8 +30,6 @@ $(CONCOURSE_TASK): $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
 	$(verbose) cat $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) | while read -r file; do \
 		echo "  - name: $$(basename "$$file")" >> "$@"; \
 		done
-	$(verbose) $(foreach hook,$(RMQ_CI_CT_HOOKS), \
-		echo '  - name: $(hook)' >> "$@")
 	$(verbose) echo 'outputs:' >> "$@"
 	$(verbose) echo '  - name: test-output' >> "$@"
 ifeq ($(CONCOURSE_PLATFORM),linux)

@@ -130,7 +130,8 @@ collect_monitors([Monitor|Rest]) ->
             %% this clause means that process has gracefully
             %% terminated even before we've started monitoring.
             collect_monitors(Rest);
-        {'DOWN', _, process, Pid, Reason} ->
+        {'DOWN', _, process, Pid, Reason} when Reason =/= normal,
+                                               Reason =/= noproc ->
             exit({emitter_exit, Pid, Reason})
     end.
 
