@@ -68,8 +68,13 @@ error_handler(Thunk) ->
                     %% over; die quietly.
                     ok;
                   _:X ->
-                    io:format(user, "TCP proxy died with ~p~n At ~p~n",
+                    error_logger:error_msg(
+                      "TCP proxy died with ~p~n At ~p~n",
+                      [X, erlang:get_stacktrace()]),
+                    io:format(standard_error,
+                              "TCP proxy died with ~p~n At ~p~n",
                               [X, erlang:get_stacktrace()]),
+                    timer:sleep(1000),
                     erlang:halt(1)
             end
     end.
