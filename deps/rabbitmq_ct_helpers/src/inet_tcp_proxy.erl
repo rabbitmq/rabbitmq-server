@@ -48,11 +48,11 @@ is_enabled() ->
     lists:member(?NODES_TO_BLOCK, ets:all()).
 
 allow(Node) ->
-    error_logger:info_msg("(~s) Allowing distribution between ~s and ~s~n",
+    rabbit_log:warning("(~s) Allowing distribution between ~s and ~s~n",
       [?MODULE, node(), Node]),
     true = ets:delete(?NODES_TO_BLOCK, Node).
 block(Node) ->
-    error_logger:info_msg("(~s) BLOCKING distribution between ~s and ~s~n",
+    rabbit_log:warning("(~s) BLOCKING distribution between ~s and ~s~n",
       [?MODULE, node(), Node]),
     true = ets:insert(?NODES_TO_BLOCK, {Node, block}).
 
@@ -82,6 +82,9 @@ error_handler(Thunk) ->
 go(Parent, Port, ProxyPort) ->
     ets:new(?NODES_TO_BLOCK, [public, named_table]),
     ets:new(?NODES_BLOCKED, [public, named_table]),
+    rabbit_log:info(
+      "(~s) Listening on proxy port ~p~n",
+      [?MODULE, ProxyPort]),
     {ok, Sock} = gen_tcp:listen(ProxyPort, [inet,
                                             {reuseaddr, true}]),
     Parent ! ready,
@@ -95,8 +98,12 @@ accept_loop(ListenSock, Port) ->
 
 run_it(SockIn, Port) ->
     case {inet:peername(SockIn), inet:sockname(SockIn)} of
-        {{ok, {_Addr, SrcPort}}, {ok, {Addr, _OtherPort}}} ->
+        {{ok, {_Addr, SrcPort}}, {ok, {Addr, OtherPort}}} ->
             {ok, Remote, This} = inet_tcp_proxy_manager:lookup(SrcPort),
+            rabbit_log:info(
+              "(~s) => Incoming proxied connection from node ~s (port ~b) "
+              "to node ~s (port ~b)~n",
+              [?MODULE, Remote, SrcPort, This, OtherPort]),
             case node() of
                 This  -> ok;
                 _     -> exit({not_me, node(), This})
@@ -134,6 +141,9 @@ run_loop(Sockets, RemoteNode, Buf0) ->
                 true  -> run_loop(Sockets, RemoteNode, Buf)
             end;
         {tcp_closed, Sock} ->
+            rabbit_log:info(
+              "(~s) Distribution closed between ~s and ~s~n",
+              [?MODULE, node(), RemoteNode]),
             gen_tcp:close(other(Sock, Sockets));
         X ->
             exit({weirdness, X})

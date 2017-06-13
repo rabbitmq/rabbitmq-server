@@ -69,7 +69,11 @@ do_setup(Kernel, Node, Type, MyNode, LongOrShortNames,SetupTime) ->
                         undefined -> []
                     end,
                     ProxyPort = case inet_tcp_proxy:is_enabled() of
-                        true  -> proplists:get_value(TcpPort, PortsMap, TcpPort);
+                        true  -> P = proplists:get_value(TcpPort, PortsMap, TcpPort),
+                                 error_logger:info_msg(
+                                   "Using inet_tcp_proxy to connect to ~s (remote port changed from ~b to ~b)~n",
+                                   [Node, TcpPort, P]),
+                                 P;
                         false -> TcpPort
                     end,
 		    case inet_tcp:connect(Ip, ProxyPort,
