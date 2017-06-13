@@ -19,11 +19,12 @@
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
-         stop_and_halt/0, await_startup/0, status/0, is_running/0, alarms/0,
+         stop_and_halt/0, await_startup/0, await_startup/1,
+         status/0, is_running/0, alarms/0,
          is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
 -export([start/2, stop/1, prep_stop/1]).
--export([start_apps/1, stop_apps/1]).
+-export([start_apps/1, start_apps/2, stop_apps/1]).
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
 
 -ifdef(TEST).
@@ -266,6 +267,8 @@
 -spec boot_delegate() -> 'ok'.
 -spec recover() -> 'ok'.
 -spec start_apps([app_name()]) -> 'ok'.
+-spec start_apps([app_name()],
+                 #{app_name() => permanent|transient|temporary}) -> 'ok'.
 -spec stop_apps([app_name()]) -> 'ok'.
 
 %%----------------------------------------------------------------------------
@@ -327,11 +330,7 @@ broker_start() ->
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
     maybe_sd_notify(),
-    ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())),
-    %% See rabbitmq/rabbitmq-server#1202 for details.
-    rabbit_peer_discovery:maybe_inject_randomized_delay(),
-    rabbit_peer_discovery:maybe_register(),
-    ok.
+    ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())).
 
 %% Try to send systemd ready notification if it makes sense in the
 %% current environment. standard_error is used intentionally in all
@@ -471,7 +470,7 @@ stop() ->
         undefined -> ok;
         _         ->
             rabbit_log:info("RabbitMQ hasn't finished starting yet. Waiting for startup to finish before stopping..."),
-            wait_for_boot_to_finish()
+            ok = wait_for_boot_to_finish(node())
     end,
     rabbit_log:info("RabbitMQ is asked to stop...~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
@@ -506,6 +505,9 @@ stop_and_halt() ->
     ok.
 
 start_apps(Apps) ->
+    start_apps(Apps, #{}).
+
+start_apps(Apps, AppModes) ->
     app_utils:load_applications(Apps),
 
     ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
@@ -545,7 +547,8 @@ start_apps(Apps) ->
         true  -> ok                    %% will run during start of rabbit app
     end,
     ok = app_utils:start_applications(OrderedApps,
-                                      handle_app_error(could_not_start)).
+                                      handle_app_error(could_not_start),
+                                      AppModes).
 
 %% This function retrieves the correct IoDevice for requesting
 %% input. The problem with using the default IoDevice is that
@@ -641,32 +644,52 @@ handle_app_error(Term) ->
     end.
 
 await_startup() ->
-    case is_booting() of
-        true -> wait_for_boot_to_finish();
+    await_startup(node()).
+
+await_startup(Node) ->
+    case is_booting(Node) of
+        true -> wait_for_boot_to_finish(Node);
         false ->
-            case is_running() of
+            case is_running(Node) of
                 true -> ok;
-                false -> wait_for_boot_to_start(),
-                         wait_for_boot_to_finish()
+                false -> wait_for_boot_to_start(Node),
+                         wait_for_boot_to_finish(Node)
             end
     end.
 
-is_booting() ->
-    whereis(rabbit_boot) /= undefined.
-
-wait_for_boot_to_start() ->
-    case whereis(rabbit_boot) of
-        undefined -> timer:sleep(100),
-                     wait_for_boot_to_start();
-        _         -> ok
+is_booting(Node) ->
+    case rpc:call(Node, erlang, whereis, [rabbit_boot]) of
+        {badrpc, _} = Err -> Err;
+        undefined         -> false;
+        P when is_pid(P)  -> true
     end.
 
-wait_for_boot_to_finish() ->
-    case whereis(rabbit_boot) of
-        undefined -> true = is_running(),
-                     ok;
-        _         -> timer:sleep(100),
-                     wait_for_boot_to_finish()
+wait_for_boot_to_start(Node) ->
+    case is_booting(Node) of
+        false ->
+            timer:sleep(100),
+            wait_for_boot_to_start(Node);
+        {badrpc, _} = Err ->
+            Err;
+        true  ->
+            ok
+    end.
+
+wait_for_boot_to_finish(Node) ->
+    case is_booting(Node) of
+        false ->
+            %% We don't want badrpc error to be interpreted as false,
+            %% so we don't call rabbit:is_running(Node)
+            case rpc:call(Node, rabbit, is_running, []) of
+                true              -> ok;
+                false             -> {error, rabbit_is_not_running};
+                {badrpc, _} = Err -> Err
+            end;
+        {badrpc, _} = Err ->
+            Err;
+        true  ->
+            timer:sleep(100),
+            wait_for_boot_to_finish(Node)
     end.
 
 status() ->
