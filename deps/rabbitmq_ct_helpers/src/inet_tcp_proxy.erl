@@ -20,7 +20,8 @@
 
 -export([start/3, reconnect/1, is_enabled/0, allow/1, block/1]).
 
--define(TABLE, ?MODULE).
+-define(NODES_TO_BLOCK, inet_tcp_proxy__nodes_to_block).
+-define(NODES_BLOCKED, inet_tcp_proxy__nodes_blocked).
 
 %% This can't start_link because there's no supervision hierarchy we
 %% can easily fit it into (we need to survive all application
@@ -44,16 +45,16 @@ reconnect(Nodes) ->
     ok.
 
 is_enabled() ->
-    lists:member(?TABLE, ets:all()).
+    lists:member(?NODES_TO_BLOCK, ets:all()).
 
 allow(Node) ->
     error_logger:info_msg("(~s) Allowing distribution between ~s and ~s~n",
       [?MODULE, node(), Node]),
-    ets:delete(?TABLE, Node).
+    true = ets:delete(?NODES_TO_BLOCK, Node).
 block(Node) ->
     error_logger:info_msg("(~s) BLOCKING distribution between ~s and ~s~n",
       [?MODULE, node(), Node]),
-    ets:insert(?TABLE, {Node, block}).
+    true = ets:insert(?NODES_TO_BLOCK, {Node, block}).
 
 %%----------------------------------------------------------------------------
 
@@ -74,7 +75,8 @@ error_handler(Thunk) ->
     end.
 
 go(Parent, Port, ProxyPort) ->
-    ets:new(?TABLE, [public, named_table]),
+    ets:new(?NODES_TO_BLOCK, [public, named_table]),
+    ets:new(?NODES_BLOCKED, [public, named_table]),
     {ok, Sock} = gen_tcp:listen(ProxyPort, [inet,
                                             {reuseaddr, true}]),
     Parent ! ready,
@@ -101,18 +103,20 @@ run_it(SockIn, Port) ->
     end.
 
 run_loop(Sockets, RemoteNode, Buf0) ->
-    Block = [{RemoteNode, block}] =:= ets:lookup(?TABLE, RemoteNode),
+    Block = [{RemoteNode, block}] =:= ets:lookup(?NODES_TO_BLOCK, RemoteNode),
+    WasBlocked = [{RemoteNode, blocked}] =:= ets:lookup(?NODES_BLOCKED,
+                                                        RemoteNode),
     receive
         {tcp, Sock, Data} ->
             Buf = [Data | Buf0],
-            case {Block, get(dist_was_blocked)} of
-                {true, false} ->
-                    put(dist_was_blocked, Block),
+            case {WasBlocked, Block} of
+                {false, true} ->
+                    true = ets:insert(?NODES_BLOCKED, {RemoteNode, blocked}),
                     rabbit_log:warning(
                       "(~s) Distribution BLOCKED between ~s and ~s~n",
                       [?MODULE, node(), RemoteNode]);
-                {false, S} when S =:= true orelse S =:= undefined ->
-                    put(dist_was_blocked, Block),
+                {true, false} ->
+                    true = ets:delete(?NODES_BLOCKED, RemoteNode),
                     rabbit_log:warning(
                       "(~s) Distribution allowed between ~s and ~s~n",
                       [?MODULE, node(), RemoteNode]);
