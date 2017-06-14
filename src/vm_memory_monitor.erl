@@ -495,6 +495,23 @@ read_proc_file(IoDevice, Acc) ->
         eof       -> Acc
     end.
 
+-spec get_memory_calculation_strategy() -> rss | erlang.
+get_memory_calculation_strategy() ->
+    case application:get_env(rabbit, vm_memory_calculation_strategy, rss) of
+        erlang ->
+            erlang;
+        rss ->
+            rss;
+        UnsupportedValue ->
+            rabbit_log:warning(
+              "Unsupported value '~p' for vm_memory_calculation_strategy. "
+              "Supported values: (rss|erlang). "
+              "Defaulting to 'rss'",
+              [UnsupportedValue]
+            ),
+            rss
+    end.
+
 
 %% Memory reported by erlang:memory(total) is not supposed to
 %% be equal to the total size of all pages mapped to the emulator,
@@ -502,8 +519,8 @@ read_proc_file(IoDevice, Acc) ->
 %% erlang:memory(total) under-reports memory usage by around 20%
 -spec get_used_memory() -> Bytes :: integer().
 get_used_memory() ->
-    case application:get_env(rabbit, vm_memory_use_process_rss, false) of
-        true ->
+    case get_memory_calculation_strategy() of
+        rss ->
             case get_system_process_resident_memory() of
                 {ok, MemInBytes} ->
                     MemInBytes;
@@ -513,7 +530,7 @@ get_used_memory() ->
                                      [Reason]),
                     erlang:memory(total)
             end;
-        false ->
+        erlang ->
             erlang:memory(total)
     end.
 
