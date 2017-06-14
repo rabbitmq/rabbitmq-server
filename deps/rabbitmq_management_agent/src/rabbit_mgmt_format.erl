@@ -35,6 +35,8 @@
 
 -export([clean_consumer_details/1, clean_channel_details/1]).
 
+-export([args_hash/1]).
+
 -import(rabbit_misc, [pget/2, pget/3, pset/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -571,4 +573,4 @@ parse_bool(undefined)   -> undefined;
 parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
 args_hash(Args) ->
-    list_to_binary(rabbit_misc:base64url(erlang:md5(term_to_binary(Args)))).
+    list_to_binary(rabbit_misc:base64url(<<(erlang:phash2(Args, 1 bsl 32)):32>>)).
