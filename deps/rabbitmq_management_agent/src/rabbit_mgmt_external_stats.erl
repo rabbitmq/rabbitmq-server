@@ -182,7 +182,10 @@ i(sockets_used,    _State) ->
 i(sockets_total,   _State) ->
     proplists:get_value(sockets_limit, file_handle_cache:info([sockets_limit]));
 i(os_pid,          _State) -> list_to_binary(os:getpid());
-i(mem_used,        _State) -> erlang:memory(total);
+
+i(mem_used,        _State) ->
+    {OsTotal, _} = vm_memory_monitor:get_memory_use(bytes),
+    OsTotal;
 i(mem_limit,       _State) -> vm_memory_monitor:get_memory_limit();
 i(mem_alarm,       _State) -> resource_alarm_set(memory);
 i(proc_used,       _State) -> erlang:system_info(process_count);
