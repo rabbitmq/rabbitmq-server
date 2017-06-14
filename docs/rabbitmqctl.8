@@ -815,8 +815,9 @@ virtual host with a routing key starting with
 .sp
 .Dl rabbitmqctl set_topic_permissions -p /myvhost tonyg amq.topic Qo ^tonyg-.* Qc Qo ^tonyg-.* Qc
 .Pp
-Note topic permissions support variable expansion for the following variables:
-username, vhost, and client_id (only when using MQTT). The previous example could be made more generic by using
+Topic permissions support variable expansion for the following variables:
+username, vhost, and client_id. Note that client_id is expanded only when using MQTT. 
+The previous example could be made more generic by using
 .Qq ^{username}-.* :
 .sp
 .Dl rabbitmqctl set_topic_permissions -p /myvhost tonyg amq.topic Qo ^{username}-.* Qc Qo ^{username}-.* Qc
