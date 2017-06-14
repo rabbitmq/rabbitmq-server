@@ -115,7 +115,7 @@ lookup(RoutingKey, Hash, [#binding{args = Args} | Rest]) ->
     end.
 
 args_hash(Args) ->
-    list_to_binary(rabbit_misc:base64url(erlang:md5(term_to_binary(Args)))).
+    rabbit_mgmt_format:args_hash(Args).
 
 unquote(Name) ->
     list_to_binary(rabbit_http_util:unquote(Name)).
