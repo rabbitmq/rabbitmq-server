@@ -26,13 +26,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   def scopes(), do: [:ctl, :diagnostics]
 
   def run([], %{node: node_name}) do
-    status = :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, [])
-    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :cluster_nodes, [:running]) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, []) do
       {:badrpc, _} = err ->
         err
-      nodes ->
-        alarms_by_node = Enum.map(nodes, &alarms_by_node/1)
-        status ++ [{:alarms, alarms_by_node}]
+      status ->
+        case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :cluster_nodes, [:running]) do
+          {:badrpc, _} = err ->
+            err
+          nodes ->
+            alarms_by_node = Enum.map(nodes, &alarms_by_node/1)
+            status ++ [{:alarms, alarms_by_node}]
+        end
     end
   end
 
