@@ -268,8 +268,6 @@
 
 -define(CHANNEL_OPERATION_TIMEOUT, rabbit_misc:get_channel_operation_timeout()).
 
--define(TIMEOUT_60s, 60000).
-
 %% Trying to send a term across a cluster larger than 2^31 bytes will
 %% cause the VM to exit with "Absurdly large distribution output data
 %% buffer". So we limit the max message size to 2^31 - 10^6 bytes (1MB

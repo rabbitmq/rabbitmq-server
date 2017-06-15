@@ -415,7 +415,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     rabbit_event:notify(channel_created, Infos),
     rabbit_event:if_enabled(State2, #ch.stats_timer,
                             fun() -> emit_stats(State2) end),
-    put(channel_operation_timeout, ?CHANNEL_OPERATION_TIMEOUT),
+    put_operation_timeout(),
     {ok, State2, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -797,8 +797,9 @@ check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost
                           RoutingKey,
                           Permission) ->
     Resource = Name#resource{kind = topic},
-    AmqpConnInfo = gen_server:call(ConnPid, {info, [amqp_params]}, ?TIMEOUT_60s),
-    VariableMap = build_topic_variable_map(AmqpConnInfo, VHost, Username),
+    Timeout = get_operation_timeout(),
+    AmqpParams = rabbit_amqp_connection:amqp_params(ConnPid, Timeout),
+    VariableMap = build_topic_variable_map(AmqpParams, VHost, Username),
     Context = #{routing_key   => RoutingKey,
                 variable_map  => VariableMap
     },
@@ -1884,8 +1885,8 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
                           delivering_queues = DQ }) ->
     QPids = sets:to_list(
               sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
-    {rabbit_amqqueue:notify_down_all(QPids, self(),
-                                     get(channel_operation_timeout)),
+    Timeout = get_operation_timeout(),
+    {rabbit_amqqueue:notify_down_all(QPids, self(), Timeout),
      State#ch{state = closing}}.
 
 foreach_per_queue(_F, []) ->
@@ -2144,3 +2145,9 @@ delete_stats({queue_exchange_stats, QX}) ->
     rabbit_core_metrics:channel_queue_exchange_down({self(), QX});
 delete_stats(_) ->
     ok.
+
+put_operation_timeout() ->
+    put(channel_operation_timeout, ?CHANNEL_OPERATION_TIMEOUT).
+
+get_operation_timeout() ->
+    get(channel_operation_timeout).
