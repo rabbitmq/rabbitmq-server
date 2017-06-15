@@ -121,7 +121,7 @@
 %%     defaults to 0 (turned off) (network only)</li>
 %% <li>connection_timeout :: non_neg_integer() | 'infinity'
 %%     - The connection timeout in milliseconds,
-%%     defaults to 'infinity' (network only)</li>
+%%     defaults to 30000 (network only)</li>
 %% <li>ssl_options :: term() - The second parameter to be used with the
 %%     ssl:connect/2 function, defaults to 'none' (network only)</li>
 %% <li>client_properties :: [{binary(), atom(), binary()}] - A list of extra
@@ -278,7 +278,7 @@ close(ConnectionPid, Timeout) ->
 %% @doc Closes the AMQP connection, allowing the caller to set the reply
 %% code and text.
 close(ConnectionPid, Code, Text) ->
-    close(ConnectionPid, Code, Text, infinity).
+    close(ConnectionPid, Code, Text, amqp_util:call_timeout()).
 
 %% @spec (ConnectionPid, Code, Text, Timeout) -> ok | closing
 %% where

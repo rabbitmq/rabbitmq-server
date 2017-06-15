@@ -43,16 +43,16 @@ start_link(Connection, ConnName, ChSupSup) ->
 
 open_channel(ChMgr, ProposedNumber, Consumer, InfraArgs) ->
     gen_server:call(ChMgr, {open_channel, ProposedNumber, Consumer, InfraArgs},
-                     infinity).
+                     amqp_util:call_timeout()).
 
 set_channel_max(ChMgr, ChannelMax) ->
     gen_server:cast(ChMgr, {set_channel_max, ChannelMax}).
 
 is_empty(ChMgr) ->
-    gen_server:call(ChMgr, is_empty, infinity).
+    gen_server:call(ChMgr, is_empty, amqp_util:call_timeout()).
 
 num_channels(ChMgr) ->
-    gen_server:call(ChMgr, num_channels, infinity).
+    gen_server:call(ChMgr, num_channels, amqp_util:call_timeout()).
 
 pass_frame(ChMgr, ChNumber, Frame) ->
     gen_server:cast(ChMgr, {pass_frame, ChNumber, Frame}).

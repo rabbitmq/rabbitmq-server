@@ -58,7 +58,7 @@ start_link(ConsumerModule, ExtraParams, Identity) ->
 %% @doc This function is used to perform arbitrary calls into the
 %% consumer module.
 call_consumer(Pid, Msg) ->
-    gen_server2:call(Pid, {consumer_call, Msg}, infinity).
+    gen_server2:call(Pid, {consumer_call, Msg}, amqp_util:call_timeout()).
 
 %% @spec (Consumer, Method, Args) -> ok
 %% where
@@ -69,10 +69,10 @@ call_consumer(Pid, Msg) ->
 %% @doc This function is used by amqp_channel to forward received
 %% methods and deliveries to the consumer module.
 call_consumer(Pid, Method, Args) ->
-    gen_server2:call(Pid, {consumer_call, Method, Args}, infinity).
+    gen_server2:call(Pid, {consumer_call, Method, Args}, amqp_util:call_timeout()).
 
 call_consumer(Pid, Method, Args, DeliveryCtx) ->
-    gen_server2:call(Pid, {consumer_call, Method, Args, DeliveryCtx}, infinity).
+    gen_server2:call(Pid, {consumer_call, Method, Args, DeliveryCtx}, amqp_util:call_timeout()).
 
 %%---------------------------------------------------------------------------
 %% Behaviour

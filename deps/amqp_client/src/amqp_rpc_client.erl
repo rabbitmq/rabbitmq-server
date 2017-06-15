@@ -70,7 +70,7 @@ start_link(Connection, Queue) ->
 %%      RpcClient = pid()
 %% @doc Stops an exisiting RPC client.
 stop(Pid) ->
-    gen_server:call(Pid, stop, infinity).
+    gen_server:call(Pid, stop, amqp_util:call_timeout()).
 
 %% @spec (RpcClient, Payload) -> ok
 %% where
@@ -79,7 +79,7 @@ stop(Pid) ->
 %% @doc Invokes an RPC. Note the caller of this function is responsible for
 %% encoding the request and decoding the response.
 call(RpcClient, Payload) ->
-    gen_server:call(RpcClient, {call, Payload}, infinity).
+    gen_server:call(RpcClient, {call, Payload}, amqp_util:call_timeout()).
 
 %%--------------------------------------------------------------------------
 %% Plumbing

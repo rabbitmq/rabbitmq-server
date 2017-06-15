@@ -33,7 +33,7 @@ start_link(AMQPParams) ->
     {ok, TypeSup}    = supervisor2:start_child(
                          Sup, {connection_type_sup,
                                {amqp_connection_type_sup, start_link, []},
-                               transient, infinity, supervisor,
+                               transient, ?SUPERVISOR_WAIT, supervisor,
                                [amqp_connection_type_sup]}),
     {ok, Connection} = supervisor2:start_child(
                          Sup, {connection, {amqp_gen_connection, start_link,
