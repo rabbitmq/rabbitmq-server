@@ -797,9 +797,8 @@ check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost
                           RoutingKey,
                           Permission) ->
     Resource = Name#resource{kind = topic},
-    VariableMap = build_topic_variable_map(
-        amqp_connection:info(ConnPid, [amqp_params]),
-        VHost, Username),
+    AmqpConnInfo = gen_server:call(ConnPid, {info, [amqp_params]}, ?TIMEOUT_60s),
+    VariableMap = build_topic_variable_map(AmqpConnInfo, VHost, Username),
     Context = #{routing_key   => RoutingKey,
                 variable_map  => VariableMap
     },
