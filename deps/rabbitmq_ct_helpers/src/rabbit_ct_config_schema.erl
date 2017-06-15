@@ -23,7 +23,7 @@
 init_schemas(App, Config) ->
     DepsDir = ?config(erlang_mk_depsdir, Config),
     % Note: the schema for the rabbit app is named "rabbitmq.schema"
-    RabbitSchema = find_app_schema(rabbitmq, DepsDir),
+    RabbitSchema = filename:join([DepsDir, "rabbit", "priv", "schema", "rabbitmq.schema"]),
     Schemas = case App of
         rabbit -> [RabbitSchema];
         _      -> [RabbitSchema, find_app_schema(App, DepsDir)]
