@@ -30,7 +30,7 @@
                               channel_max        = 0,
                               frame_max          = 0,
                               heartbeat          = 10,
-                              connection_timeout = 30000,
+                              connection_timeout = 60000,
                               ssl_options        = none,
                               auth_mechanisms    =
                                   [fun amqp_auth_mechanisms:plain/3,
