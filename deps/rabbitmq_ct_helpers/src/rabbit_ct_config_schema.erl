@@ -22,8 +22,7 @@
 
 init_schemas(App, Config) ->
     DepsDir = ?config(erlang_mk_depsdir, Config),
-    % Note: the schema for the rabbit app is named "rabbitmq.schema"
-    RabbitSchema = filename:join([DepsDir, "rabbit", "priv", "schema", "rabbitmq.schema"]),
+    RabbitSchema = find_app_schema(rabbit, DepsDir),
     Schemas = case App of
         rabbit -> [RabbitSchema];
         _      -> [RabbitSchema, find_app_schema(App, DepsDir)]
@@ -46,20 +45,21 @@ init_schemas(App, Config) ->
         ]).
 
 find_app_schema(App, DepsDir) ->
-    Schema = get_schema_for([DepsDir, App, "priv"], App),
-    does_schema_exist(filelib:is_regular(Schema), App, DepsDir, Schema, cont).
+    SchemaFile = get_schema_for([DepsDir, App], App),
+    does_schema_exist(filelib:is_regular(SchemaFile), App, DepsDir, SchemaFile, cont).
 
-does_schema_exist(true, _App, _DepsDir, Schema, _) ->
-    Schema;
-does_schema_exist(false, App, _DepsDir, _Schema, stop) ->
+does_schema_exist(true, _App, _DepsDir, SchemaFile, _) ->
+    SchemaFile;
+does_schema_exist(false, App, _DepsDir, _SchemaFile, stop) ->
     ct:fail("Could not find schema for app: ~p~n", [App]);
-does_schema_exist(false, App, DepsDir, _Schema, cont) ->
+does_schema_exist(false, App, DepsDir, _SchemaFile, cont) ->
     % If not in umbrella, priv will be at ../priv
-    Schema = get_schema_for([DepsDir, "..", "priv"], App),
-    does_schema_exist(filelib:is_regular(Schema), App, DepsDir, Schema, stop).
+    SchemaFile = get_schema_for([DepsDir, ".."], App),
+    does_schema_exist(filelib:is_regular(SchemaFile), App, DepsDir, SchemaFile, stop).
 
 get_schema_for(Prefix, App) ->
-    filename:join(Prefix ++ ["schema", atom_to_list(App) ++ ".schema"]).
+    SchemaFileName = atom_to_list(App) ++ ".schema",
+    filename:join(Prefix ++ ["priv", "schema", SchemaFileName]).
 
 copy_to(File, Dir) ->
     BaseName = filename:basename(File),
