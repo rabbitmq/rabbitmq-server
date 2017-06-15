@@ -81,10 +81,7 @@ process_request(?CONNECT,
                                            keep_alive = Keepalive} = Var},
                 PState0 = #proc_state{ ssl_login_name = SSLLoginName,
                                        send_fun       = SendFun,
-                                       adapter_info   = AdapterInfo = #amqp_adapter_info{additional_info = Extra}  }) ->
-
-
-
+                                       adapter_info   = AdapterInfo = #amqp_adapter_info{additional_info = Extra} }) ->
     ClientId = case ClientId0 of
                    []    -> rabbit_mqtt_util:gen_client_id();
                    [_|_] -> ClientId0
