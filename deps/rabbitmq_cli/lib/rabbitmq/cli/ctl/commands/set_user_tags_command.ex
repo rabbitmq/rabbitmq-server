@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
     )
   end
 
-  def usage, do: "set_user_tags <user> <tag> [...]"
+  def usage, do: "set_user_tags <username> <tag> [...]"
 
 
   def banner([user | tags], _) do
