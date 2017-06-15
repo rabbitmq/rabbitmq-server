@@ -1,5 +1,4 @@
 # RabbitMQ Common
 
-## Continuous Integration
-
-[![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-common.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-common)
+This library is shared between [RabbitMQ server](https://github.com/rabbitmq/rabbitmq-server), [RabbitMQ Erlang client](https://github.com/rabbitmq/rabbitmq-erlang-client)
+and other RabbitMQ ecosystem projects.
