@@ -36,6 +36,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             head_message_timestamp disk_reads disk_writes consumers
             consumer_utilisation memory slave_pids synchronised_slave_pids state)a
 
+  def info_keys(), do: @info_keys
+
   def scopes(), do: [:ctl, :diagnostics]
 
   def validate(args, _opts) do

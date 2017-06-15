@@ -24,6 +24,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   @info_keys ~w(name tracing)a
 
+  def info_keys(), do: @info_keys
+
   def scopes(), do: [:ctl, :diagnostics]
 
   def validate(args, _) do

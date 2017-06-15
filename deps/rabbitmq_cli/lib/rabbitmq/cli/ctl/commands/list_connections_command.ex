@@ -33,6 +33,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
                 channel_max client_properties recv_oct recv_cnt send_oct
                 send_cnt send_pend connected_at)a
 
+  def info_keys(), do: @info_keys
+
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
