@@ -140,7 +140,7 @@
 %% @spec (Channel, Method) -> Result
 %% @doc This is equivalent to amqp_channel:call(Channel, Method, none).
 call(Channel, Method) ->
-    gen_server:call(Channel, {call, Method, none, self()}, infinity).
+    gen_server:call(Channel, {call, Method, none, self()}, amqp_util:call_timeout()).
 
 %% @spec (Channel, Method, Content) -> Result
 %% where
@@ -163,7 +163,7 @@ call(Channel, Method) ->
 %% the broker. It does not necessarily imply that the broker has
 %% accepted responsibility for the message.
 call(Channel, Method, Content) ->
-    gen_server:call(Channel, {call, Method, Content, self()}, infinity).
+    gen_server:call(Channel, {call, Method, Content, self()}, amqp_util:call_timeout()).
 
 %% @spec (Channel, Method) -> ok
 %% @doc This is equivalent to amqp_channel:cast(Channel, Method, none).
@@ -208,7 +208,7 @@ close(Channel) ->
 %% @doc Closes the channel, allowing the caller to supply a reply code and
 %% text. If the channel is already closing, the atom 'closing' is returned.
 close(Channel, Code, Text) ->
-    gen_server:call(Channel, {close, Code, Text}, infinity).
+    gen_server:call(Channel, {close, Code, Text}, amqp_util:call_timeout()).
 
 %% @spec (Channel) -> integer()
 %% where
@@ -216,7 +216,7 @@ close(Channel, Code, Text) ->
 %% @doc When in confirm mode, returns the sequence number of the next
 %% message to be published.
 next_publish_seqno(Channel) ->
-    gen_server:call(Channel, next_publish_seqno, infinity).
+    gen_server:call(Channel, next_publish_seqno, amqp_util:call_timeout()).
 
 %% @spec (Channel) -> boolean() | 'timeout'
 %% where
@@ -225,7 +225,7 @@ next_publish_seqno(Channel) ->
 %% been either ack'd or nack'd by the broker.  Note, when called on a
 %% non-Confirm channel, waitForConfirms returns an error.
 wait_for_confirms(Channel) ->
-    wait_for_confirms(Channel, infinity).
+    wait_for_confirms(Channel, amqp_util:call_timeout()).
 
 %% @spec (Channel, Timeout) -> boolean() | 'timeout'
 %% where
@@ -236,7 +236,7 @@ wait_for_confirms(Channel) ->
 %% Note, when called on a non-Confirm channel, waitForConfirms throws
 %% an exception.
 wait_for_confirms(Channel, Timeout) ->
-    case gen_server:call(Channel, {wait_for_confirms, Timeout}, infinity) of
+    case gen_server:call(Channel, {wait_for_confirms, Timeout}, amqp_util:call_timeout()) of
         {error, Reason} -> throw(Reason);
         Other           -> Other
     end.
@@ -248,7 +248,7 @@ wait_for_confirms(Channel, Timeout) ->
 %% received, the calling process is immediately sent an
 %% exit(nack_received).
 wait_for_confirms_or_die(Channel) ->
-    wait_for_confirms_or_die(Channel, infinity).
+    wait_for_confirms_or_die(Channel, amqp_util:call_timeout()).
 
 %% @spec (Channel, Timeout) -> true
 %% where
@@ -328,7 +328,7 @@ unregister_flow_handler(Channel) ->
 %% where Consumer is the amqp_gen_consumer implementation registered with
 %% the channel.
 call_consumer(Channel, Msg) ->
-    gen_server:call(Channel, {call_consumer, Msg}, infinity).
+    gen_server:call(Channel, {call_consumer, Msg}, amqp_util:call_timeout()).
 
 %% @spec (Channel, BasicConsume, Subscriber) -> ok
 %% where
@@ -338,7 +338,7 @@ call_consumer(Channel, Msg) ->
 %% @doc Subscribe the given pid to a queue using the specified
 %% basic.consume method.
 subscribe(Channel, BasicConsume = #'basic.consume'{}, Subscriber) ->
-    gen_server:call(Channel, {subscribe, BasicConsume, Subscriber}, infinity).
+    gen_server:call(Channel, {subscribe, BasicConsume, Subscriber}, amqp_util:call_timeout()).
 
 %%---------------------------------------------------------------------------
 %% Internal interface
@@ -364,7 +364,7 @@ connection_closing(Pid, ChannelCloseType, Reason) ->
 
 %% @private
 open(Pid) ->
-    gen_server:call(Pid, open, infinity).
+    gen_server:call(Pid, open, amqp_util:call_timeout()).
 
 %%---------------------------------------------------------------------------
 %% gen_server callbacks
@@ -993,3 +993,4 @@ call_to_consumer(Method, Args, DeliveryCtx, #state{consumer = Consumer}) ->
 
 safe_cancel_timer(undefined) -> ok;
 safe_cancel_timer(TRef)      -> erlang:cancel_timer(TRef).
+

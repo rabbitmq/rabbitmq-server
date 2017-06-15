@@ -70,7 +70,7 @@ start_link(Connection, Queue, Fun) ->
 %%      RpcServer = pid()
 %% @doc Stops an exisiting RPC server.
 stop(Pid) ->
-    gen_server:call(Pid, stop, infinity).
+    gen_server:call(Pid, stop, amqp_util:call_timeout()).
 
 %%--------------------------------------------------------------------------
 %% gen_server callbacks

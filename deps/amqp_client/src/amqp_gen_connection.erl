@@ -55,12 +55,12 @@ start_link(TypeSup, AMQPParams) ->
     gen_server:start_link(?MODULE, {TypeSup, AMQPParams}, []).
 
 connect(Pid) ->
-    gen_server:call(Pid, connect, infinity).
+    gen_server:call(Pid, connect, amqp_util:call_timeout()).
 
 open_channel(Pid, ProposedNumber, Consumer) ->
     case gen_server:call(Pid,
                          {command, {open_channel, ProposedNumber, Consumer}},
-                         infinity) of
+                         amqp_util:call_timeout()) of
         {ok, ChannelPid} -> ok = amqp_channel:open(ChannelPid),
                             {ok, ChannelPid};
         Error            -> Error
@@ -79,19 +79,19 @@ channels_terminated(Pid) ->
     gen_server:cast(Pid, channels_terminated).
 
 close(Pid, Close, Timeout) ->
-    gen_server:call(Pid, {command, {close, Close, Timeout}}, infinity).
+    gen_server:call(Pid, {command, {close, Close, Timeout}}, amqp_util:call_timeout()).
 
 server_close(Pid, Close) ->
     gen_server:cast(Pid, {server_close, Close}).
 
 info(Pid, Items) ->
-    gen_server:call(Pid, {info, Items}, infinity).
+    gen_server:call(Pid, {info, Items}, amqp_util:call_timeout()).
 
 info_keys() ->
     ?INFO_KEYS.
 
 info_keys(Pid) ->
-    gen_server:call(Pid, info_keys, infinity).
+    gen_server:call(Pid, info_keys, amqp_util:call_timeout()).
 
 %%---------------------------------------------------------------------------
 %% Behaviour
