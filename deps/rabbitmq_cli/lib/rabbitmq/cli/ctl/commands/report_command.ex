@@ -30,21 +30,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
+  def formatter(), do: RabbitMQ.CLI.Formatters.Report
+
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([_|_] = args, _) when length(args) != 0, do: {:validation_failure, :too_many_args}
+  def validate([], %{formatter: formatter}) do
+    case formatter do
+      "report" -> :ok
+      _other   -> {:validation_failure, "Only report formatter is supported"}
+    end
+  end
   def validate([], _), do: :ok
 
-  defp merge_run(command, args, opts) do
+  defp run_command(command, args, opts) do
     {args, opts} = command.merge_defaults(args, opts)
-    Stream.concat(banner_list(command.banner(args, opts)), command.run(args, opts))
-  end
-
-  defp banner_list(banner) when is_list(banner) do
-    banner
-  end
-  defp banner_list(banner) when is_binary(banner) do
-    [banner]
+    banner = command.banner(args, opts)
+    command_result = command.run(args, opts) |> command.output(opts)
+    {command, banner, command_result}
   end
 
   def run([], %{node: node_name} = opts) do
@@ -53,23 +56,28 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
         err
       vhosts ->
         data =
-          [merge_run(StatusCommand, [], opts),
-           merge_run(ClusterStatusCommand, [], opts),
-           merge_run(EnvironmentCommand, [], opts),
-           merge_run(ListConnectionsCommand, [], opts),
-           merge_run(ListChannelsCommand, [], opts)]
+          [run_command(StatusCommand, [], opts),
+           run_command(ClusterStatusCommand, [], opts),
+           run_command(EnvironmentCommand, [], opts),
+           run_command(ListConnectionsCommand, info_keys(ListConnectionsCommand), opts),
+           run_command(ListChannelsCommand, info_keys(ListChannelsCommand), opts)]
 
         vhost_data =
             vhosts
             |> Enum.flat_map(fn v ->
               opts = Map.put(opts, :vhost, v)
-              [merge_run(ListQueuesCommand, [], opts),
-               merge_run(ListExchangesCommand, [], opts),
-               merge_run(ListBindingsCommand, [], opts),
-               merge_run(ListPermissionsCommand, [], opts)]
+              [run_command(ListQueuesCommand, info_keys(ListQueuesCommand), opts),
+               run_command(ListExchangesCommand, info_keys(ListExchangesCommand), opts),
+               run_command(ListBindingsCommand, info_keys(ListBindingsCommand), opts),
+               run_command(ListPermissionsCommand, [], opts)]
             end)
-        Stream.concat(data ++ vhost_data)
+        data ++ vhost_data
     end
+  end
+
+  defp info_keys(command) do
+    command.info_keys()
+    |> Enum.map(&Atom.to_string/1)
   end
 
   def usage, do: "report"
