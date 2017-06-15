@@ -89,5 +89,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
     %{vhost: "/", offline: false, online: false, local: false}
   end
 
-  def banner(_,_), do: "Listing queues ..."
+  def banner(_,%{vhost: vhost}), do: "Listing queues for vhost #{vhost} ..."
 end

@@ -59,5 +59,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
         info_keys)
   end
 
-  def banner(_,_), do: "Listing exchanges ..."
+  def banner(_,%{vhost: vhost}), do: "Listing exchanges for vhost #{vhost} ..."
 end
