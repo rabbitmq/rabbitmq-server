@@ -653,7 +653,7 @@ recover_message(false,     _, no_del,  RelSeq, {Segment, DirtyCount}) ->
      DirtyCount + 2}.
 
 queue_name_to_dir_name(Name = #resource { kind = queue }) ->
-    <<Num:128>> = erlang:md5(term_to_binary_compat:queue_name_to_binary(Name)),
+    <<Num:128>> = erlang:md5(term_to_binary_compat:term_to_binary_1(Name)),
     rabbit_misc:format("~.36B", [Num]).
 
 queues_dir() ->
