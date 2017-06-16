@@ -33,6 +33,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
         case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :cluster_nodes, [:running]) do
           {:badrpc, _} = err ->
             err
+          {:error, {corrupt_or_missing_cluster_files, _, _}} = err ->
+            {:error, "Could not read mnesia files containing cluster status"}
           nodes ->
             alarms_by_node = Enum.map(nodes, &alarms_by_node/1)
             status ++ [{:alarms, alarms_by_node}]
