@@ -76,7 +76,8 @@ defmodule SetPermissionsCommandTest do
       vhost_opts
     ) == :ok
 
-    assert List.first(list_permissions(context[:vhost]))[:configure] == "^#{context[:user]}-.*"
+    u = Enum.find(list_permissions(context[:vhost]), fn(x) -> x[:user] == context[:user] end)
+    assert u[:configure] == "^#{context[:user]}-.*"
   end
 
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
@@ -93,8 +94,6 @@ defmodule SetPermissionsCommandTest do
       [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
       context[:opts]
     ) == {:error, {:no_such_user, context[:user]}}
-
-    assert List.first(list_permissions(context[:vhost]))[:configure] == ".*"
   end
 
   @tag user: @user, vhost: "wintermute"
@@ -108,14 +107,15 @@ defmodule SetPermissionsCommandTest do
   end
 
   @tag user: @user, vhost: @root
-  test "run: Invalid regex patterns return error", context do
+  test "run: invalid regex patterns return error", context do
     assert @command.run(
       [context[:user], "^#{context[:user]}-.*", ".*", "*"],
       context[:opts]
     ) == {:error, {:invalid_regexp, '*', {'nothing to repeat', 0}}}
 
-    # asserts that the bad command didn't change anything
-    assert List.first(list_permissions(context[:vhost])) == [user: context[:user], configure: ".*", write: ".*", read: ".*"]
+    # asserts that the failed command didn't change anything
+    u = Enum.find(list_permissions(context[:vhost]), fn(x) -> x[:user] == context[:user] end)
+    assert u == [user: context[:user], configure: ".*", write: ".*", read: ".*"]
   end
 
   @tag user: @user, vhost: @vhost
