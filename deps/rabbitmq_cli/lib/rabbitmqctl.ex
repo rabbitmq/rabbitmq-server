@@ -258,10 +258,9 @@ defmodule RabbitMQCtl do
      diagnostics}
   end
   defp format_error({:error, {:badrpc_multi, :timeout, [node | _]} = result}, opts, _) do
-    diagnostics = get_node_diagnostics(node)
+    op = CommandModules.module_to_command(module)
     {:error, ExitCodes.exit_code_for(result),
-     "Error: unable to connect to node '#{node}': nodedown\n" <>
-     diagnostics}
+     "Error: operation #{op} on node #{node} timed out. Timeout: #{opts[:timeout]}"}
   end
   defp format_error({:error, {:badrpc, :nodedown} = result}, opts, _) do
     diagnostics = get_node_diagnostics(opts[:node])
