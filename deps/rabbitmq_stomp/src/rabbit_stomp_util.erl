@@ -375,7 +375,7 @@ subscription_queue_name(Destination, SubscriptionId, Frame) ->
             %% simply as a convenient means to bound the length.
             rabbit_guid:string(
                 erlang:md5(
-                    term_to_binary_compat:string_and_binary_tuple_2_to_binary(
+                    term_to_binary_compat:term_to_binary_1(
                         {Destination, SubscriptionId})),
               "stomp-subscription");
         Name ->
