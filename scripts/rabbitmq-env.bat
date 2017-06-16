@@ -175,6 +175,31 @@ if "!RABBITMQ_CONFIG_FILE!"=="" (
     )
 )
 
+if "!RABBITMQ_GENERATED_CONFIG_DIR!"=="" (
+    if "!GENERATED_CONFIG_DIR!"=="" (
+        set RABBITMQ_GENERATED_CONFIG_DIR=!RABBITMQ_BASE!\config
+    ) else (
+        set RABBITMQ_GENERATED_CONFIG_DIR=!GENERATED_CONFIG_DIR!
+    )
+)
+
+CALL :unquote RABBITMQ_ADVANCED_CONFIG_FILE %RABBITMQ_ADVANCED_CONFIG_FILE%
+if "!RABBITMQ_ADVANCED_CONFIG_FILE!"=="" (
+    if "!ADVANCED_CONFIG_FILE!"=="" (
+        set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_BASE!\advanced
+    ) else (
+        set RABBITMQ_ADVANCED_CONFIG_FILE=!ADVANCED_CONFIG_FILE!
+    )
+)
+
+if "!RABBITMQ_SCHEMA_DIR!" == "" (
+    if "!SCHEMA_DIR!"=="" (
+        set RABBITMQ_SCHEMA_DIR=!RABBITMQ_HOME!\priv\schema
+    ) else (
+        set RABBITMQ_SCHEMA_DIR=!SCHEMA_DIR!
+    )
+)
+
 REM [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 if "!RABBITMQ_LOG_BASE!"=="" (
     if "!LOG_BASE!"=="" (
@@ -407,7 +432,7 @@ exit /b
 
 :filter_path
 REM Ensure ERL_LIBS begins with valid path
-IF [%ERL_LIBS%] EQU [] (
+IF "%ERL_LIBS%"=="" (
     set ERL_LIBS=%~dps1%~n1%~x1
 ) else (
     set ERL_LIBS=%ERL_LIBS%;%~dps1%~n1%~x1
