@@ -13,9 +13,7 @@ otp_release:
   - "R16B03-1"
   - "17.5"
   - "18.3"
-  - "19.0"
-  - "19.1"
-  - "19.2"
+  - "19.3"
 
 # The checkout made by Travis is a "detached HEAD" and branches
 # information is missing. Our Erlang.mk's git_rmq fetch method relies on
@@ -29,12 +27,15 @@ before_script:
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
+<<<<<<< HEAD
   # Remove all kiex installations. This makes sure that the Erlang
   # Solutions one is picked: it's after the kiex installations in $PATH.
   - kiex list known
-  - kiex install 1.5.1
+  - test -x ~/.kiex/elixirs/elixir-1.4.4/bin/elixir || kiex install 1.4.4
+  - kiex default 1.4.4
 
 script: make tests
 
 cache:
-  apt: true
+  directories:
+    - ~/.kiex/elixirs
