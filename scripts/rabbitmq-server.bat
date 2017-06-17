@@ -79,8 +79,8 @@ if not exist "!RABBITMQ_GENERATED_CONFIG_DIR!" (
     mkdir "!RABBITMQ_GENERATED_CONFIG_DIR!"
 )
 
-if not exist "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema" (
-    copy "!RABBITMQ_HOME!\priv\schema\rabbitmq.schema" "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema"
+if not exist "!RABBITMQ_SCHEMA_DIR!\rabbit.schema" (
+    copy "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
 )
 
 set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
