@@ -11,13 +11,14 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(unit_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
 
@@ -34,12 +35,87 @@ groups() ->
         version_equivalence,
         version_minor_equivalence_properties,
         version_comparison,
-        pid_decompose_compose
+        pid_decompose_compose,
+        auth_backend_internal_expand_topic_permission,
+        rabbit_channel_build_topic_variable_map
       ]}
     ].
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
+
+rabbit_channel_build_topic_variable_map(_Config) ->
+    AmqpParams = #amqp_params_direct{
+        adapter_info = #amqp_adapter_info{
+            additional_info = [
+                {variable_map, #{<<"client_id">> => <<"client99">>}}]}
+    },
+    %% simple case
+    #{<<"client_id">> := <<"client99">>,
+      <<"username">>  := <<"guest">>,
+      <<"vhost">>     := <<"default">>} = rabbit_channel:build_topic_variable_map(
+        [{amqp_params, AmqpParams}], <<"default">>, <<"guest">>
+    ),
+    %% nothing to add
+    AmqpParams1 = #amqp_params_direct{adapter_info = #amqp_adapter_info{}},
+    #{<<"username">>  := <<"guest">>,
+      <<"vhost">>     := <<"default">>} = rabbit_channel:build_topic_variable_map(
+        [{amqp_params, AmqpParams1}], <<"default">>, <<"guest">>
+    ),
+    %% nothing to add with amqp_params_network
+    AmqpParams2 = #amqp_params_network{},
+    #{<<"username">>  := <<"guest">>,
+      <<"vhost">>     := <<"default">>} = rabbit_channel:build_topic_variable_map(
+        [{amqp_params, AmqpParams2}], <<"default">>, <<"guest">>
+    ),
+    %% trying to override channel variables, but those
+    %% take precedence
+    AmqpParams3 = #amqp_params_direct{
+        adapter_info = #amqp_adapter_info{
+            additional_info = [
+                {variable_map, #{<<"client_id">> => <<"client99">>,
+                                 <<"username">>  => <<"admin">>}}]}
+    },
+    #{<<"client_id">> := <<"client99">>,
+      <<"username">>  := <<"guest">>,
+      <<"vhost">>     := <<"default">>} = rabbit_channel:build_topic_variable_map(
+        [{amqp_params, AmqpParams3}], <<"default">>, <<"guest">>
+    ),
+    ok.
+
+auth_backend_internal_expand_topic_permission(_Config) ->
+    ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},
+    %% simple case
+    <<"services/default/accounts/guest/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            ExpandMap
+        ),
+    %% replace variable twice
+    <<"services/default/accounts/default/guest/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{vhost}/{username}/notifications">>,
+            ExpandMap
+        ),
+    %% nothing to replace
+    <<"services/accounts/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/accounts/notifications">>,
+            ExpandMap
+        ),
+    %% the expand map isn't defined
+    <<"services/{vhost}/accounts/{username}/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            undefined
+        ),
+    %% the expand map is empty
+    <<"services/{vhost}/accounts/{username}/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            #{}
+        ),
+    ok.
 
 pid_decompose_compose(_Config) ->
     Pid = self(),

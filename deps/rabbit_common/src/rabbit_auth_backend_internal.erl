@@ -41,7 +41,7 @@
          list_user_topic_permissions/1, list_vhost_topic_permissions/1, list_user_vhost_topic_permissions/2]).
 
 %% for testing
--export([hashing_module_for_user/1]).
+-export([hashing_module_for_user/1, expand_topic_permission/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -181,12 +181,26 @@ check_topic_access(#auth_user{username = Username},
                              <<"">> -> <<$^, $$>>;
                              RE     -> RE
                          end,
-            case re:run(maps:get(routing_key, Context), PermRegexp, [{capture, none}]) of
+            PermRegexpExpanded = expand_topic_permission(
+                PermRegexp,
+                maps:get(variable_map, Context, undefined)
+            ),
+            case re:run(maps:get(routing_key, Context), PermRegexpExpanded, [{capture, none}]) of
                 match    -> true;
                 nomatch  -> false
             end
     end.
 
+expand_topic_permission(Permission, ToExpand) when is_map(ToExpand) ->
+    Opening = <<"{">>,
+    Closing = <<"}">>,
+    ReplaceFun = fun(K, V, Acc) ->
+                    Placeholder = <<Opening/binary, K/binary, Closing/binary>>,
+                    binary:replace(Acc, Placeholder, V, [global])
+                 end,
+    maps:fold(ReplaceFun, Permission, ToExpand);
+expand_topic_permission(Permission, _ToExpand) ->
+    Permission.
 
 permission_index(configure) -> #permission.configure;
 permission_index(write)     -> #permission.write;

@@ -67,6 +67,8 @@
 %% Internal
 -export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
 -export([get_vhost/1, get_user/1]).
+%% For testing
+-export([build_topic_variable_map/3]).
 
 -record(ch, {
   %% starting | running | flow | closing
@@ -373,6 +375,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
              true   -> flow;
              false  -> noflow
            end,
+
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
@@ -412,7 +415,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     rabbit_event:notify(channel_created, Infos),
     rabbit_event:if_enabled(State2, #ch.stats_timer,
                             fun() -> emit_stats(State2) end),
-    put(channel_operation_timeout, ?CHANNEL_OPERATION_TIMEOUT),
+    put_operation_timeout(),
     {ok, State2, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -789,9 +792,17 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
-check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}, RoutingKey, Permission) ->
+check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
+                          #ch{user = User = #user{username = Username}, conn_pid = ConnPid},
+                          RoutingKey,
+                          Permission) ->
     Resource = Name#resource{kind = topic},
-    Context = #{routing_key => RoutingKey},
+    Timeout = get_operation_timeout(),
+    AmqpParams = rabbit_amqp_connection:amqp_params(ConnPid, Timeout),
+    VariableMap = build_topic_variable_map(AmqpParams, VHost, Username),
+    Context = #{routing_key   => RoutingKey,
+                variable_map  => VariableMap
+    },
     Cache = case get(topic_permission_cache) of
                 undefined -> [];
                 Other     -> Other
@@ -805,6 +816,19 @@ check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}
     end;
 check_topic_authorisation(_, _, _, _) ->
     ok.
+
+build_topic_variable_map(AmqpParams, VHost, Username) ->
+    VariableFromAmqpParams = extract_topic_variable_map_from_amqp_params(AmqpParams),
+    maps:merge(VariableFromAmqpParams, #{<<"vhost">> => VHost, <<"username">> => Username}).
+
+%% use tuple representation of amqp_params to avoid coupling.
+%% get variable map only from amqp_params_direct, not amqp_params_network.
+%% amqp_params_direct are usually used from plugins (e.g. MQTT, STOMP)
+extract_topic_variable_map_from_amqp_params([{amqp_params, {amqp_params_direct, _, _, _, _,
+                                             {amqp_adapter_info, _,_,_,_,_,_,AdditionalInfo}, _}}]) ->
+    proplists:get_value(variable_map, AdditionalInfo, #{});
+extract_topic_variable_map_from_amqp_params(_) ->
+    #{}.
 
 check_msg_size(Content) ->
     Size = rabbit_basic:maybe_gc_large_msg(Content),
@@ -1861,8 +1885,8 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
                           delivering_queues = DQ }) ->
     QPids = sets:to_list(
               sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
-    {rabbit_amqqueue:notify_down_all(QPids, self(),
-                                     get(channel_operation_timeout)),
+    Timeout = get_operation_timeout(),
+    {rabbit_amqqueue:notify_down_all(QPids, self(), Timeout),
      State#ch{state = closing}}.
 
 foreach_per_queue(_F, []) ->
@@ -2121,3 +2145,9 @@ delete_stats({queue_exchange_stats, QX}) ->
     rabbit_core_metrics:channel_queue_exchange_down({self(), QX});
 delete_stats(_) ->
     ok.
+
+put_operation_timeout() ->
+    put(channel_operation_timeout, ?CHANNEL_OPERATION_TIMEOUT).
+
+get_operation_timeout() ->
+    get(channel_operation_timeout).
