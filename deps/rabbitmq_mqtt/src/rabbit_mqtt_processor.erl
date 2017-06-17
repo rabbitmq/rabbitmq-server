@@ -79,12 +79,17 @@ process_request(?CONNECT,
                                            clean_sess = CleanSess,
                                            client_id  = ClientId0,
                                            keep_alive = Keepalive} = Var},
-                PState = #proc_state{ ssl_login_name = SSLLoginName,
-                                      send_fun = SendFun }) ->
+                PState0 = #proc_state{ ssl_login_name = SSLLoginName,
+                                       send_fun       = SendFun,
+                                       adapter_info   = AdapterInfo = #amqp_adapter_info{additional_info = Extra} }) ->
     ClientId = case ClientId0 of
                    []    -> rabbit_mqtt_util:gen_client_id();
                    [_|_] -> ClientId0
                end,
+    AdapterInfo1 = AdapterInfo#amqp_adapter_info{additional_info = [
+        {variable_map, #{<<"client_id">> => rabbit_data_coercion:to_binary(ClientId)}}
+                | Extra]},
+    PState = PState0#proc_state{adapter_info = AdapterInfo1},
     {Return, PState1} =
         case {lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)),
               ClientId0 =:= [] andalso CleanSess =:= false} of
@@ -819,24 +824,32 @@ check_subscribe([#mqtt_topic{name = TopicName} | Topics], Fn, PState) ->
 
 check_topic_access(TopicName, Access,
                    #proc_state{
-                        auth_state = #auth_state{user = User,
+                        auth_state = #auth_state{user = User = #user{username = Username},
                                                  vhost = VHost},
-                        exchange = Exchange}) ->
+                        exchange = Exchange,
+                        client_id = ClientId}) ->
   Resource = #resource{virtual_host = VHost,
                        kind = topic,
                        name = Exchange},
-  Context = #{routing_key => rabbit_mqtt_util:mqtt2amqp(TopicName)},
 
-    try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
-        R -> R
-    catch
-        _:{amqp_error, access_refused, Msg, _} ->
-            rabbit_log:error("operation resulted in an error (access_refused): ~p~n", [Msg]),
-            {error, access_refused};
-        _:Error ->
-            rabbit_log:error("~p~n", [Error]),
-            {error, access_refused}
-    end.
+  Context = #{routing_key  => rabbit_mqtt_util:mqtt2amqp(TopicName),
+              variable_map => #{
+                  <<"username">>  => Username,
+                  <<"vhost">>     => VHost,
+                  <<"client_id">> => rabbit_data_coercion:to_binary(ClientId)
+              }
+  },
+
+  try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
+    R -> R
+  catch
+    _:{amqp_error, access_refused, Msg, _} ->
+      rabbit_log:error("operation resulted in an error (access_refused): ~p~n", [Msg]),
+        {error, access_refused};
+    _:Error ->
+      rabbit_log:error("~p~n", [Error]),
+        {error, access_refused}
+  end.
 
 info(consumer_tags, #proc_state{consumer_tags = Val}) -> Val;
 info(unacked_pubs, #proc_state{unacked_pubs = Val}) -> Val;
