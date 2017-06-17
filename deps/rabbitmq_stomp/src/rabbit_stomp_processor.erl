@@ -720,15 +720,16 @@ do_subscribe(Destination, DestHdr, Frame,
 check_subscription_access(Destination = {topic, _Topic},
                           #proc_state{auth_login = _User,
                                       connection = Connection}) ->
-    [{amqp_params, AmqpParams}, {internal_user, InternalUser}] = amqp_connection:info(
-        Connection, [amqp_params, internal_user]
-    ),
+    [{amqp_params, AmqpParams}, {internal_user, InternalUser = #user{username = Username}}] =
+        amqp_connection:info(Connection, [amqp_params, internal_user]),
     #amqp_params_direct{virtual_host = VHost} = AmqpParams,
     {Exchange, RoutingKey} = rabbit_routing_util:parse_routing(Destination),
     Resource = #resource{virtual_host = VHost,
         kind = topic,
         name = rabbit_data_coercion:to_binary(Exchange)},
-    Context = #{routing_key => rabbit_data_coercion:to_binary(RoutingKey)},
+    Context = #{routing_key  => rabbit_data_coercion:to_binary(RoutingKey),
+                variable_map => #{<<"vhost">> => VHost, <<"username">> => Username}
+    },
     rabbit_access_control:check_topic_access(InternalUser, Resource, read, Context);
 check_subscription_access(_, _) ->
     authorized.

@@ -13,8 +13,9 @@ if __name__ == '__main__':
         'queue_properties',
         'redelivered',
         'reliability',
+        'topic_permissions',
         'transactions',
-        'x_queue_name',
+        'x_queue_name'
     ]
     test_runner.run_unittests(modules)
 

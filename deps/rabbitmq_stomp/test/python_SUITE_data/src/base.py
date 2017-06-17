@@ -94,9 +94,14 @@ class BaseTest(unittest.TestCase):
        return conn, listener
 
    def setUp(self):
+        # Note: useful for debugging
+        # import stomp.listener
         self.conn = self.create_connection()
         self.listener = WaitableListener()
-        self.conn.set_listener('', self.listener)
+        self.conn.set_listener('waitable', self.listener)
+        # Note: useful for debugging
+        # self.printing_listener = stomp.listener.PrintingListener()
+        # self.conn.set_listener('printing', self.printing_listener)
 
    def tearDown(self):
         if self.conn.is_connected():
