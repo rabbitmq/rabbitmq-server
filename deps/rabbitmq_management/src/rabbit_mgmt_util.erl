@@ -340,10 +340,10 @@ augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
         case {Pagination =/= undefined,
               column_strategy(Sort, BasicColumns),
               column_strategy(ColumnsAsStrings, BasicColumns)} of
-            {false, basic, basic} -> % no paging, no extended fields
+            {false, basic, basic} -> % no pagination, no extended fields
                 [SortFun];
             {false, _, _} ->
-                % no paging, extended columns means we need to augment all - SLOW
+                % no pagination, extended columns means we need to augment all - SLOW
                 [AugFun, SortFun];
             {true, basic, basic} ->
                 [SortFun, PageFun];
