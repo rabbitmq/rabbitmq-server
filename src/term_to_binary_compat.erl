@@ -18,15 +18,8 @@
 
 -include("rabbit.hrl").
 
--export([queue_name_to_binary/1]).
+-export([term_to_binary_1/1]).
 
-queue_name_to_binary(#resource{kind = queue} = {resource, VHost, queue, Name}) ->
-    VHostBSize = byte_size(VHost),
-    NameBSize = byte_size(Name),
-    <<131,                              %% Binary format "version"
-      104, 4,                           %% 4-element tuple
-      100, 0, 8, "resource",            %% `resource` atom
-      109, VHostBSize:32, VHost/binary, %% Vhost binary
-      100, 0, 5, "queue",               %% `queue` atom
-      109, NameBSize:32, Name/binary>>. %% Name binary
+term_to_binary_1(Term) ->
+    term_to_binary(Term, [{minor_version, 1}]).
 
