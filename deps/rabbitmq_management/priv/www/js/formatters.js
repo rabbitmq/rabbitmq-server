@@ -522,7 +522,7 @@ function fmt_object_state(obj) {
     }
     else if (obj.state == 'flow') {
         colour = 'yellow';
-        explanation = 'Publishing rate recently restricted by server.';
+        explanation = 'Publishing rate recently throttled by server.';
     }
     else if (obj.state == 'down') {
         colour = 'red';
