@@ -17,11 +17,16 @@
 -module(rabbit_mgmt_wm_queues).
 
 -export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2,
-         resource_exists/2, basic/1, augmented/2]).
+         resource_exists/2, basic/1]).
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+-define(BASIC_COLUMNS, ["vhost", "name", "durable", "auto_delete", "exclusive",
+                       "owner_pid", "arguments", "pid", "state"]).
+
+-define(DEFAULT_SORT, ["vhost", "name"]).
 
 %%--------------------------------------------------------------------
 
@@ -44,16 +49,15 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     try
-        rabbit_mgmt_util:unaugmented_reply_list_or_paginate(
-          basic_vhost_filtered(ReqData, Context),
-          fun is_sort_order_compatible_with_basic/1,
-          fun (Items) ->
-                  rabbit_mgmt_format:strip_pids(augment(Items, ReqData))
-          end,
-          ReqData, Context)
+        Basic = basic_vhost_filtered(ReqData, Context),
+        Data = rabbit_mgmt_util:augment_resources(Basic, ?DEFAULT_SORT,
+                                                  ?BASIC_COLUMNS, ReqData,
+                                                  Context, fun augment/2),
+        rabbit_mgmt_util:reply(Data, ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
-            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData,
+                                         Context)
     end.
 
 is_authorized(ReqData, Context) ->
@@ -67,20 +71,12 @@ basic(ReqData) ->
         [rabbit_mgmt_format:queue(Q#amqqueue{state = down}) ||
             Q <- down_queues(ReqData)].
 
-augmented(ReqData, Context) ->
-    augment(rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context), ReqData).
-
 %%--------------------------------------------------------------------
 %% Private helpers
 
-is_sort_order_compatible_with_basic(MentionedSortColumns) ->
-    SafeColumns = ["vhost", "name", "durable", "auto_delete", "exclusive",
-                   "owner_pid", "arguments", "pid", "state"],
-    SafeColumnsSet = sets:from_list(SafeColumns),
-    sets:is_subset(sets:from_list(MentionedSortColumns), SafeColumnsSet).
-
 augment(Basic, ReqData) ->
-    rabbit_mgmt_db:augment_queues(Basic, rabbit_mgmt_util:range_ceil(ReqData), basic).
+    rabbit_mgmt_db:augment_queues(Basic, rabbit_mgmt_util:range_ceil(ReqData),
+                                  basic).
 
 basic_vhost_filtered(ReqData, Context) ->
     rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context).

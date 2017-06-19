@@ -97,6 +97,7 @@ groups() ->
                                exchanges_pagination_test,
                                exchanges_pagination_permissions_test,
                                queue_pagination_test,
+                               queue_pagination_columns_test,
                                queues_pagination_permissions_test,
                                samples_range_test,
                                sorting_test,
@@ -1556,6 +1557,58 @@ queue_pagination_test(Config) ->
     http_delete(Config, "/queues/vh1/test1", ?NO_CONTENT),
     http_delete(Config, "/queues/%2f/test2_reg", ?NO_CONTENT),
     http_delete(Config, "/queues/vh1/reg_test3", ?NO_CONTENT),
+    http_delete(Config, "/vhosts/vh1", ?NO_CONTENT),
+    passed.
+
+queue_pagination_columns_test(Config) ->
+    QArgs = [],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/vhosts/vh1", none, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/permissions/vh1/guest", PermArgs, [?CREATED, ?NO_CONTENT]),
+
+    http_get(Config, "/queues/vh1?columns=name&page=1&page_size=2", ?OK),
+    http_put(Config, "/queues/%2f/queue_a", QArgs, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/queues/vh1/queue_b", QArgs, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/queues/%2f/queue_c", QArgs, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/queues/vh1/queue_d", QArgs, [?CREATED, ?NO_CONTENT]),
+    PageOfTwo = http_get(Config, "/queues?columns=name&page=1&page_size=2", ?OK),
+    ?assertEqual(4, proplists:get_value(total_count, PageOfTwo)),
+    ?assertEqual(4, proplists:get_value(filtered_count, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(item_count, PageOfTwo)),
+    ?assertEqual(1, proplists:get_value(page, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_size, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_count, PageOfTwo)),
+    assert_list([[{name, <<"queue_a">>}],
+        [{name, <<"queue_c">>}]
+    ], proplists:get_value(items, PageOfTwo)),
+
+    ColumnNameVhost = http_get(Config, "/queues/vh1?columns=name&page=1&page_size=2", ?OK),
+    ?assertEqual(2, proplists:get_value(total_count, ColumnNameVhost)),
+    ?assertEqual(2, proplists:get_value(filtered_count, ColumnNameVhost)),
+    ?assertEqual(2, proplists:get_value(item_count, ColumnNameVhost)),
+    ?assertEqual(1, proplists:get_value(page, ColumnNameVhost)),
+    ?assertEqual(2, proplists:get_value(page_size, ColumnNameVhost)),
+    ?assertEqual(1, proplists:get_value(page_count, ColumnNameVhost)),
+    assert_list([[{name, <<"queue_b">>}],
+        [{name, <<"queue_d">>}]
+    ], proplists:get_value(items, ColumnNameVhost)),
+
+    ColumnsNameVhost = http_get(Config, "/queues?columns=name,vhost&page=2&page_size=2", ?OK),
+    ?assertEqual(4, proplists:get_value(total_count, ColumnsNameVhost)),
+    ?assertEqual(4, proplists:get_value(filtered_count, ColumnsNameVhost)),
+    ?assertEqual(2, proplists:get_value(item_count, ColumnsNameVhost)),
+    ?assertEqual(2, proplists:get_value(page, ColumnsNameVhost)),
+    ?assertEqual(2, proplists:get_value(page_size, ColumnsNameVhost)),
+    ?assertEqual(2, proplists:get_value(page_count, ColumnsNameVhost)),
+    assert_list([[{name, <<"queue_b">>},{vhost, <<"vh1">>}],
+        [{name, <<"queue_d">>},{vhost, <<"vh1">>}]
+    ], proplists:get_value(items, ColumnsNameVhost)),
+
+
+    http_delete(Config, "/queues/%2f/queue_a", ?NO_CONTENT),
+    http_delete(Config, "/queues/vh1/queue_b", ?NO_CONTENT),
+    http_delete(Config, "/queues/%2f/queue_c", ?NO_CONTENT),
+    http_delete(Config, "/queues/vh1/queue_d", ?NO_CONTENT),
     http_delete(Config, "/vhosts/vh1", ?NO_CONTENT),
     passed.
 
