@@ -117,14 +117,14 @@ get_memory_limit() ->
 
 get_memory_use(bytes) ->
     MemoryLimit = get_memory_limit(),
-    {erlang:memory(total), case MemoryLimit > 0.0 of
-                               true  -> MemoryLimit;
-                               false -> infinity
-                           end};
+    {rabbit_vm:total_memory(), case MemoryLimit > 0.0 of
+                            true  -> MemoryLimit;
+                            false -> infinity
+                        end};
 get_memory_use(ratio) ->
     MemoryLimit = get_memory_limit(),
     case MemoryLimit > 0.0 of
-        true  -> erlang:memory(total) / MemoryLimit;
+        true  -> rabbit_vm:total_memory() / MemoryLimit;
         false -> infinity
     end.
 
@@ -268,7 +268,7 @@ parse_mem_limit(_) ->
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed      = Alarmed,
                                  alarm_funs   = {AlarmSet, AlarmClear} }) ->
-    MemUsed = erlang:memory(total),
+    MemUsed = rabbit_vm:total_memory(),
     NewAlarmed = MemUsed > MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} -> emit_update_info(set, MemUsed, MemLimit),
@@ -364,6 +364,7 @@ get_total_memory({unix, aix}) ->
 
 get_total_memory(_OsType) ->
     unknown.
+
 
 %% A line looks like "Foo bar: 123456."
 parse_line_mach(Line) ->
