@@ -53,8 +53,7 @@ to_json(ReqData, Context) ->
         Data = rabbit_mgmt_util:augment_resources(Basic, ?DEFAULT_SORT,
                                                   ?BASIC_COLUMNS, ReqData,
                                                   Context, fun augment/2),
-        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Data), ReqData,
-                               Context)
+        rabbit_mgmt_util:reply(Data, ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData,

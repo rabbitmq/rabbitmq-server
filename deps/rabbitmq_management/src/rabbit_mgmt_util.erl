@@ -216,6 +216,8 @@ responder_map(FunctionName) ->
       {<<"application/bert">>, FunctionName}
     ].
 
+reply({halt, _, _} = Reply, _ReqData, _Context) ->
+    Reply;
 reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
@@ -313,10 +315,7 @@ column_strategy(Cols, BasicColumns) ->
 % columns are [[binary()]] - this takes the first item
 columns_as_strings(all) -> all;
 columns_as_strings(Columns0) ->
-    Columns = lists:foldl(fun([C | _], Acc) ->
-                        [ rabbit_data_coercion:to_list(C) | Acc]
-                end, [], Columns0),
-    lists:reverse(Columns).
+    [rabbit_data_coercion:to_list(C) || [C | _] <- Columns0].
 
 augment_resources(Resources, DefaultSort, BasicColumns, ReqData, Context,
                   AugmentFun) ->
@@ -363,7 +362,7 @@ augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
                                              columns = Columns,
                                              data = {loaded, Resources}},
                                     Pipeline),
-    Reply.
+    rabbit_mgmt_format:strip_pids(Reply).
 
 run_augmentation(C, []) -> C;
 run_augmentation(C, [Next | Rem]) ->
@@ -371,8 +370,8 @@ run_augmentation(C, [Next | Rem]) ->
     run_augmentation(C2, Rem).
 
 sort(DefaultSort, Ctx = #aug_ctx{data = Data0,
-                    req_data = ReqData,
-                    sort = Sort}) ->
+                                 req_data = ReqData,
+                                 sort = Sort}) ->
     Data1 = get_data(Data0),
     Data = sort_list(Data1, DefaultSort, Sort,
                      get_sort_reverse(ReqData)),
@@ -405,7 +404,7 @@ get_data({_, Data}) ->
 sort_list(Facts, Sorts) -> sort_list_and_paginate(Facts, Sorts, undefined, false,
   undefined).
 
--spec sort_list([Fact], [SortColumn], [SortColumn], boolean()) -> [Fact] when
+-spec sort_list([Fact], [SortColumn], [SortColumn] | undefined, boolean()) -> [Fact] when
       Fact :: [{atom(), term()}],
       SortColumn :: string().
 sort_list(Facts, _, [], _) ->
