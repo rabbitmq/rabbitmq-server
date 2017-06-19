@@ -71,7 +71,7 @@ augment(Mode, ReqData) ->
 format(absolute, Result) ->
     Result;
 format(relative, Result) ->
-    {[{total, Total}], Rest} = lists:splitwith(fun({Key, _}) ->
+    {[{total, Total}], Rest} = lists:partition(fun({Key, _}) ->
                                                        Key == total
                                                end, Result),
     [{total, 100} | [{K, percentage(V, Total)} || {K, V} <- Rest]].
