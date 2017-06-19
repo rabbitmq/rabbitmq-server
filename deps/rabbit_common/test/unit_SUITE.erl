@@ -18,7 +18,6 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
 
@@ -36,52 +35,13 @@ groups() ->
         version_minor_equivalence_properties,
         version_comparison,
         pid_decompose_compose,
-        auth_backend_internal_expand_topic_permission,
-        rabbit_channel_build_topic_variable_map
+        auth_backend_internal_expand_topic_permission
       ]}
     ].
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
-rabbit_channel_build_topic_variable_map(_Config) ->
-    AmqpParams = #amqp_params_direct{
-        adapter_info = #amqp_adapter_info{
-            additional_info = [
-                {variable_map, #{<<"client_id">> => <<"client99">>}}]}
-    },
-    %% simple case
-    #{<<"client_id">> := <<"client99">>,
-      <<"username">>  := <<"guest">>,
-      <<"vhost">>     := <<"default">>} = rabbit_channel:build_topic_variable_map(
-        [{amqp_params, AmqpParams}], <<"default">>, <<"guest">>
-    ),
-    %% nothing to add
-    AmqpParams1 = #amqp_params_direct{adapter_info = #amqp_adapter_info{}},
-    #{<<"username">>  := <<"guest">>,
-      <<"vhost">>     := <<"default">>} = rabbit_channel:build_topic_variable_map(
-        [{amqp_params, AmqpParams1}], <<"default">>, <<"guest">>
-    ),
-    %% nothing to add with amqp_params_network
-    AmqpParams2 = #amqp_params_network{},
-    #{<<"username">>  := <<"guest">>,
-      <<"vhost">>     := <<"default">>} = rabbit_channel:build_topic_variable_map(
-        [{amqp_params, AmqpParams2}], <<"default">>, <<"guest">>
-    ),
-    %% trying to override channel variables, but those
-    %% take precedence
-    AmqpParams3 = #amqp_params_direct{
-        adapter_info = #amqp_adapter_info{
-            additional_info = [
-                {variable_map, #{<<"client_id">> => <<"client99">>,
-                                 <<"username">>  => <<"admin">>}}]}
-    },
-    #{<<"client_id">> := <<"client99">>,
-      <<"username">>  := <<"guest">>,
-      <<"vhost">>     := <<"default">>} = rabbit_channel:build_topic_variable_map(
-        [{amqp_params, AmqpParams3}], <<"default">>, <<"guest">>
-    ),
-    ok.
 
 auth_backend_internal_expand_topic_permission(_Config) ->
     ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},
