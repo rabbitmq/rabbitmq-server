@@ -56,7 +56,7 @@ prop_pre_3_6_11_works(_Config) ->
         begin
             Current = term_to_binary(Term),
             Compat = term_to_binary_compat:term_to_binary_1(Term),
-            Current =:= Compat
+            binary_to_term(Current) =:= binary_to_term(Compat)
         end).
 
 term_to_binary_latin_atom(Config) ->
