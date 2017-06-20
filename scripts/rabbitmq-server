@@ -115,8 +115,8 @@ if [ ! -d ${RABBITMQ_GENERATED_CONFIG_DIR} ]; then
     mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
 fi
 
-if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbitmq.schema" ]; then
-    cp "${RABBITMQ_HOME}/priv/schema/rabbitmq.schema" "${RABBITMQ_SCHEMA_DIR}"
+if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbit.schema" ]; then
+    cp "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
 fi
 
 set -e

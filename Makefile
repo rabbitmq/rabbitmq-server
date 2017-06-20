@@ -16,6 +16,7 @@ define PROJECT_ENV
 	    {ssl_options, []},
 	    {vm_memory_high_watermark, 0.4},
 	    {vm_memory_high_watermark_paging_ratio, 0.5},
+	    {vm_memory_calculation_strategy, rss},
 	    {memory_monitor_interval, 2500},
 	    {disk_free_limit, 50000000}, %% 50MB
 	    {msg_store_index_module, rabbit_msg_store_ets_index},
@@ -125,7 +126,7 @@ define PROJECT_ENV
 	  ]
 endef
 
-LOCAL_DEPS = sasl mnesia os_mon
+LOCAL_DEPS = sasl mnesia os_mon inets
 BUILD_DEPS = rabbitmq_cli
 DEPS = ranch lager rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper

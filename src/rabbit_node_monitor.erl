@@ -344,8 +344,8 @@ init([]) ->
     Nodes = possibly_partitioned_nodes(),
     startup_log(Nodes),
     Monitors = lists:foldl(fun(Node, Monitors0) ->
-				   pmon:monitor({rabbit, Node}, Monitors0)
-			   end, pmon:new(), Nodes),
+                                   pmon:monitor({rabbit, Node}, Monitors0)
+                           end, pmon:new(), Nodes),
     {ok, ensure_keepalive_timer(#state{monitors    = Monitors,
                                        subscribers = pmon:new(),
                                        partitions  = [],
@@ -420,12 +420,12 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                    fun () ->
                            case rpc:call(Node, rabbit, is_running, []) of
                                {badrpc, _} -> ok;
-                               _           ->  
-				   rabbit_log:warning("Received a 'DOWN' message" 
-						      " from ~p but still can" 
-						      " communicate with it ~n",
-						      [Node]),
-				   cast(Rep, {partial_partition,
+                               _           ->
+                                   rabbit_log:warning("Received a 'DOWN' message"
+                                                      " from ~p but still can"
+                                                      " communicate with it ~n",
+                                                      [Node]),
+                                   cast(Rep, {partial_partition,
                                                          Node, node(), RepGUID})
                            end
                    end);
@@ -499,18 +499,18 @@ handle_cast({node_up, Node, NodeType},
     rabbit_log:info("rabbit on node ~p up~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({add_node(Node, AllNodes),
-			  case NodeType of
-			      disc -> add_node(Node, DiscNodes);
-			      ram  -> DiscNodes
-			  end,
-			  add_node(Node, RunningNodes)}),
+                          case NodeType of
+                              disc -> add_node(Node, DiscNodes);
+                              ram  -> DiscNodes
+                          end,
+                          add_node(Node, RunningNodes)}),
     ok = handle_live_rabbit(Node),
     Monitors1 = case pmon:is_monitored({rabbit, Node}, Monitors) of
-		    true ->
-			Monitors;
-		    false ->
-			pmon:monitor({rabbit, Node}, Monitors)
-		end,
+                    true ->
+                        Monitors;
+                    false ->
+                        pmon:monitor({rabbit, Node}, Monitors)
+                end,
     {noreply, maybe_autoheal(State#state{monitors = Monitors1})};
 
 handle_cast({joined_cluster, Node, NodeType}, State) ->
@@ -584,7 +584,7 @@ handle_info({mnesia_system_event,
     State1 = case pmon:is_monitored({rabbit, Node}, Monitors) of
                  true  -> State;
                  false -> State#state{
-			    monitors = pmon:monitor({rabbit, Node}, Monitors)}
+                            monitors = pmon:monitor({rabbit, Node}, Monitors)}
              end,
     ok = handle_live_rabbit(Node),
     Partitions1 = lists:usort([Node | Partitions]),
@@ -893,4 +893,4 @@ startup_log([]) ->
     rabbit_log:info("Starting rabbit_node_monitor~n", []);
 startup_log(Nodes) ->
     rabbit_log:info("Starting rabbit_node_monitor, might be partitioned from ~p~n",
-		    [Nodes]).
+                    [Nodes]).
