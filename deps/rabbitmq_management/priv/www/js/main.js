@@ -656,11 +656,18 @@ function postprocess() {
 
 
 function url_pagination_template(template, defaultPage, defaultPageSize){
-   return  '/' + template + '?page=' + fmt_page_number_request(template, defaultPage) +
-                       '&page_size=' +  fmt_page_size_request(template, defaultPageSize) +
-                       '&name=' + fmt_filter_name_request(template, "") +
-                       '&use_regex=' + ((fmt_regex_request(template,"") == "checked" ? 'true' : 'false'));
-
+    var page_number_request = fmt_page_number_request(template, defaultPage);
+    var page_size = fmt_page_size_request(template, defaultPageSize);
+    var name_request = fmt_filter_name_request(template, "");
+    var use_regex = fmt_regex_request(template, "") == "checked";
+    if (use_regex) {
+        name_request = esc(name_request);
+    }
+    return  '/' + template +
+        '?page=' +  page_number_request +
+        '&page_size=' + page_size +
+        '&name=' + name_request +
+        '&use_regex=' + use_regex;
 }
 
 
