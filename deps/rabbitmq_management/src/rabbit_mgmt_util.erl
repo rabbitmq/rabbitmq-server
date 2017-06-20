@@ -27,10 +27,10 @@
 
 -export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
          parse_int/1]).
--export([with_decode/4, not_found/3, amqp_request/4]).
+-export([with_decode/4, not_found/3]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
--export([all_or_one_vhost/2, http_to_amqp/5, reply/3, responder_map/1,
+-export([all_or_one_vhost/2, reply/3, responder_map/1,
          filter_vhost/3]).
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
@@ -43,6 +43,8 @@
          range_ceil/1, floor/2, ceil/1, ceil/2]).
 -export([pagination_params/1, maybe_filter_by_keyword/4,
          get_value_param/2]).
+-export([not_authorised/3]).
+-export([direct_request/6]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -656,29 +658,70 @@ get_or_missing(K, L) ->
         V         -> V
     end.
 
-http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
+get_node(Props) ->
+    case maps:get(<<"node">>, Props, undefined) of
+        undefined -> node();
+        N         -> rabbit_nodes:make(
+                       binary_to_list(N))
+    end.
+
+direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
+               Context = #context{user = User}) ->
+    with_vhost_and_props(
+      fun(VHost, Props) ->
+              Method = props_to_method(MethodName, Props, Transformers, Extra),
+              Node = get_node(Props),
+              case rabbit_misc:rpc_call(Node, rabbit_channel, handle_method,
+                                        [Method, none, none,
+                                         VHost, User]) of
+                  {badrpc, nodedown} ->
+                      bad_request(
+                        list_to_binary(
+                          io_lib:format("Node ~s could not be contacted", [Node])),
+                        ReqData, Context);
+                  {badrpc, {'EXIT', #amqp_error{name = not_found, explanation = Explanation}}} ->
+                      not_found(Explanation, ReqData, Context);
+                  {badrpc, {'EXIT', #amqp_error{name = limit_reached, explanation = Explanation}}} ->
+                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      not_authorised(<<"Access refused.">>, ReqData, Context);
+                  {badrpc, {'EXIT', #amqp_error{name = access_refused, explanation = Explanation}}} ->
+                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      not_authorised(<<"Access refused.">>, ReqData, Context);
+                  {badrpc, {'EXIT', #amqp_error{name = not_allowed, explanation = Explanation}}} ->
+                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      not_authorised(<<"Access refused.">>, ReqData, Context);
+                  {badrpc, {'EXIT', #amqp_error{explanation = Explanation} = E}} ->
+                      rabbit_log:warning("AMQP ERROR is ~p~n", [E]),
+                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      bad_request(list_to_binary(Explanation), ReqData, Context);
+                  {badrpc, Reason} ->
+                      rabbit_log:warning(ErrorMsg, [Reason]),
+                      bad_request(
+                        list_to_binary(
+                          io_lib:format("Request to node ~s failed with ~p",
+                                        [Node, Reason])),
+                        ReqData, Context);
+                  _      -> {true, ReqData, Context}
+              end
+      end, ReqData, Context).
+
+with_vhost_and_props(Fun, ReqData, Context) ->
     case vhost(ReqData) of
         not_found ->
-            not_found(vhost_not_found, ReqData, Context);
+            not_found(rabbit_data_coercion:to_binary("vhost_not_found"),
+                      ReqData, Context);
         VHost ->
-            {ok, Body, ReqData1} = cowboy_req:body(ReqData),
+            {ok, Body, _ReqData} = cowboy_req:body(ReqData),
             case decode(Body) of
                 {ok, Props} ->
                     try
-                        Node = case maps:get(<<"node">>, Props, undefined) of
-                                   undefined -> node();
-                                   N         -> rabbit_nodes:make(
-                                                  binary_to_list(N))
-                               end,
-                        amqp_request(VHost, ReqData1, Context, Node,
-                                     props_to_method(
-                                       MethodName, Props, Transformers, Extra))
+                        Fun(VHost, Props)
                     catch {error, Error} ->
-                            bad_request(Error, ReqData1, Context)
+                            bad_request(Error, ReqData, Context)
                     end;
                 {error, Reason} ->
                     bad_request(rabbit_mgmt_format:escape_html_tags(Reason),
-                                ReqData1, Context)
+                                ReqData, Context)
             end
     end.
 
@@ -718,16 +761,6 @@ parse_int(S)                    -> try
                                            throw({error, {not_integer, S}})
                                    end.
 
-amqp_request(VHost, ReqData, Context, Method) ->
-    amqp_request(VHost, ReqData, Context, node(), Method).
-
-amqp_request(VHost, ReqData, Context, Node, Method) ->
-    with_channel(VHost, ReqData, Context, Node,
-                 fun (Ch) ->
-                         amqp_channel:call(Ch, Method),
-                         {true, ReqData, Context}
-                 end).
-
 with_channel(VHost, ReqData, Context, Fun) ->
     with_channel(VHost, ReqData, Context, node(), Fun).
 
@@ -764,7 +797,7 @@ with_channel(VHost, ReqData,
             catch amqp_channel:close(Ch),
             catch amqp_connection:close(Conn)
             end;
-        {error, {auth_failure, Msg}} ->
+        {error,  {auth_failure, Msg}} ->
             not_authorised(Msg, ReqData, Context);
         {error, not_allowed} ->
             not_authorised(<<"Access refused.">>, ReqData, Context);

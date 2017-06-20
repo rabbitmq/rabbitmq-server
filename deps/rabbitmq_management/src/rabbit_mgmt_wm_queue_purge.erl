@@ -43,10 +43,15 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 delete_resource(ReqData, Context) ->
-    rabbit_mgmt_util:amqp_request(
-      rabbit_mgmt_util:vhost(ReqData),
-      ReqData, Context,
-      #'queue.purge'{ queue = rabbit_mgmt_util:id(queue, ReqData) }).
+    Name = rabbit_mgmt_util:id(queue, ReqData),
+    rabbit_mgmt_util:direct_request(
+      'queue.purge',
+      fun rabbit_mgmt_format:format_accept_content/1,
+      [{queue, Name}], "Error purging queue: ~s", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
+
+bad_request(Msg, Reason, ReqData, Context) ->
+    rabbit_log:warning(Msg, [Reason]),
+    rabbit_mgmt_util:bad_request(list_to_binary(Reason), ReqData, Context).

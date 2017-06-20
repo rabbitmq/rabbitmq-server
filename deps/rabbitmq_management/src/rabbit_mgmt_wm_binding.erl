@@ -66,7 +66,23 @@ delete_resource(ReqData, Context) ->
                      exchange -> 'exchange.unbind';
                      queue    -> 'queue.unbind'
                  end,
-    sync_resource(MethodName, ReqData, Context).
+    with_binding(
+      ReqData, Context,
+      fun(#binding{ source = #resource{name = S},
+                    destination = #resource{name = D},
+                    key = Key,
+                    args = Args }) ->
+              rabbit_mgmt_util:direct_request(
+                MethodName,
+                fun rabbit_mgmt_format:format_accept_content/1,
+                [{queue, D},
+                 {exchange, S},
+                 {destination, D},
+                 {source, S},
+                 {routing_key, Key},
+                 {arguments, Args}],
+                "Unbinding error: ~s", ReqData, Context)
+      end).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
@@ -128,30 +144,6 @@ with_binding(ReqData, Context, Fun) ->
             Fun(Binding)
     end.
 
-method(MethodName, #binding{source = #resource{name = S},
-                            destination = #resource{name = D},
-                            key = K,
-                            args = A}) ->
-    case MethodName of
-        'exchange.unbind' ->
-            #'exchange.unbind'{
-                source = S,
-                destination = D,
-                routing_key = K,
-                arguments = A};
-        'queue.unbind' ->
-            #'queue.unbind'{
-                queue = D,
-                exchange = S,
-                routing_key = K,
-                arguments = A}
-    end.
-
-sync_resource(MethodName, ReqData, Context) ->
-    with_binding(
-      ReqData, Context,
-      fun(Binding) ->
-            rabbit_mgmt_util:amqp_request(
-                rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
-                method(MethodName, Binding))
-      end).
+bad_request(Msg, Reason, ReqData, Context) ->
+    rabbit_log:warning(Msg, [Reason]),
+    rabbit_mgmt_util:bad_request(list_to_binary(Reason), ReqData, Context).

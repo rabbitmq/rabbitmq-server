@@ -61,17 +61,22 @@ to_json(ReqData, Context) ->
     end.
 
 accept_content(ReqData, Context) ->
-    rabbit_mgmt_util:http_to_amqp(
-      'exchange.declare', ReqData, Context,
+    Name = rabbit_mgmt_util:id(exchange, ReqData),
+    rabbit_mgmt_util:direct_request(
+      'exchange.declare',
       fun rabbit_mgmt_format:format_accept_content/1,
-      [{exchange, rabbit_mgmt_util:id(exchange, ReqData)}]).
+      [{exchange, Name}], "Declare exchange error: ~s", ReqData, Context).
 
 delete_resource(ReqData, Context) ->
+    %% We need to retrieve manually if-unused, as the HTTP API uses '-'
+    %% while the record uses '_'
+    Name = id(ReqData),
     IfUnused = <<"true">> =:= element(1, cowboy_req:qs_val(<<"if-unused">>, ReqData)),
-    rabbit_mgmt_util:amqp_request(
-      rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
-      #'exchange.delete'{exchange  = id(ReqData),
-                         if_unused = IfUnused}).
+    rabbit_mgmt_util:direct_request(
+      'exchange.delete',
+      fun rabbit_mgmt_format:format_accept_content/1,
+      [{exchange, Name},
+       {if_unused, IfUnused}], "Delete exchange error: ~s", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
