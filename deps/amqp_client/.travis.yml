@@ -1,15 +1,19 @@
 # vim:sw=2:et:
 sudo: false
 
-language: erlang
+language: generic
 
-notifications:
-  email:
-    - alerts@rabbitmq.com
+addons:
+  apt:
+    packages:
+      - unixodbc
+      - unixodbc-dev
+      - libwxgtk2.8-dev
 
-otp_release:
-  - "18.3"
-  - "19.3"
+env:
+  - OTP_TAG_NAME=OTP-20.0
+  - OTP_TAG_NAME=OTP-19.3.6
+  - OTP_TAG_NAME=OTP-18.3.4.5
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
@@ -23,12 +27,25 @@ before_script:
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
-  - kiex selfupdate
-  - test -x ~/.kiex/elixirs/elixir-1.4.4/bin/elixir || kiex install 1.4.4
-  - kiex default 1.4.4
+  # Install kerl; build gmake 4.2.1 and OTP
+  - $TRAVIS_BUILD_DIR/.travis.sh $OTP_TAG_NAME
+  - export PATH="$HOME/bin:$PATH"
+  - source "$HOME/otp/$OTP_TAG_NAME/activate"
+  - kerl active
+  - test -s "$HOME/.kiex/scripts/kiex" && source "$HOME/.kiex/scripts/kiex"
+  - test -x "$HOME/.kiex/elixirs/elixir-1.4.4/bin/elixir" || kiex install 1.4.4
+  - kiex use 1.4.4 --default
+  - mix local.hex --force
+  - export PATH="$HOME/gmake/bin:$PATH"
+  - make --version
+  - $TRAVIS_BUILD_DIR/.travis.sh kiex_cleanup
 
-script: make tests
+script:
+  - make tests
 
 cache:
   directories:
-    - ~/.kiex/elixirs
+    - "$HOME/otp"
+    - "$HOME/.kiex"
+    - "$HOME/gmake"
+    - "$HOME/bin"
