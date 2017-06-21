@@ -16,7 +16,7 @@
 
 -module(rabbit_vm).
 
--export([memory/0, total_memory/0, binary/0, ets_tables_memory/1]).
+-export([memory/0, binary/0, ets_tables_memory/1]).
 
 -define(MAGIC_PLUGINS, ["cowboy", "sockjs", "rfc4627_jsonrpc"]).
 
@@ -51,7 +51,7 @@ memory() ->
 			   0
 		   end,
     MgmtDbETS           = ets_memory([rabbit_mgmt_storage]),
-    OsTotal             = total_memory(),
+    OsTotal             = vm_memory_monitor:get_process_memory(),
 
 
     [{total,     ErlangTotal},
@@ -105,98 +105,6 @@ memory() ->
 %% parts. Rather than display something nonsensical, just silence any
 %% claims about negative memory. See
 %% http://erlang.org/pipermail/erlang-questions/2012-September/069320.html
-
-%% Memory reported by erlang:memory(total) is not supposed to
-%% be equal to the total size of all pages mapped to the emulator,
-%% according to http://erlang.org/doc/man/erlang.html#memory-0
-%% erlang:memory(total) under-reports memory usage by around 20%
--spec total_memory() -> Bytes :: integer().
-total_memory() ->
-    case get_memory_calculation_strategy() of
-        rss ->
-            case get_system_process_resident_memory() of
-                {ok, MemInBytes} ->
-                    MemInBytes;
-                {error, Reason}  ->
-                    rabbit_log:debug("Unable to get system memory used. Reason: ~p."
-                                     " Falling back to erlang memory reporting",
-                                     [Reason]),
-                    erlang:memory(total)
-            end;
-        erlang ->
-            erlang:memory(total)
-    end.
-
--spec get_memory_calculation_strategy() -> rss | erlang.
-get_memory_calculation_strategy() ->
-    case application:get_env(rabbit, vm_memory_calculation_strategy, rss) of
-        erlang ->
-            erlang;
-        rss ->
-            rss;
-        UnsupportedValue ->
-            rabbit_log:warning(
-              "Unsupported value '~p' for vm_memory_calculation_strategy. "
-              "Supported values: (rss|erlang). "
-              "Defaulting to 'rss'",
-              [UnsupportedValue]
-            ),
-            rss
-    end.
-
--spec get_system_process_resident_memory() -> {ok, Bytes :: integer()} | {error, term()}.
-get_system_process_resident_memory() ->
-    try
-        get_system_process_resident_memory(os:type())
-    catch _:Error ->
-            {error, {"Failed to get process resident memory", Error}}
-    end.
-
-get_system_process_resident_memory({unix,darwin}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix, linux}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix,freebsd}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix,openbsd}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({win32,_OSname}) ->
-    OsPid = os:getpid(),
-    Cmd = " tasklist /fi \"pid eq " ++ OsPid ++ "\" /fo LIST 2>&1 ",
-    CmdOutput = os:cmd(Cmd),
-    %% Memory usage is displayed in kilobytes
-    %% with comma-separated thousands
-    case re:run(CmdOutput, "Mem Usage:\\s+([0-9,]+)\\s+K", [{capture, all_but_first, list}]) of
-        {match, [Match]} ->
-            NoCommas = [ N || N <- Match, N =/= $, ],
-            {ok, list_to_integer(NoCommas) * 1024};
-        _ ->
-            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
-    end;
-
-get_system_process_resident_memory({unix, sunos}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix, aix}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory(_OsType) ->
-    {error, not_implemented_for_os}.
-
-get_ps_memory() ->
-    OsPid = os:getpid(),
-    Cmd = "ps -p " ++ OsPid ++ " -o rss=",
-    CmdOutput = os:cmd(Cmd),
-    case re:run(CmdOutput, "[0-9]+", [{capture, first, list}]) of
-        {match, [Match]} ->
-            {ok, list_to_integer(Match) * 1024};
-        _ ->
-            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
-    end.
 
 binary() ->
     All = interesting_sups(),
