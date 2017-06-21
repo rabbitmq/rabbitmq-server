@@ -35,7 +35,8 @@
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
-         close_connection/2, force_connection_event_refresh/1, tcp_host/1]).
+         close_connection/2, force_connection_event_refresh/1, accept_ack/2,
+         tcp_host/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
@@ -86,6 +87,7 @@
           [rabbit_types:infos()].
 -spec close_connection(pid(), string()) -> 'ok'.
 -spec force_connection_event_refresh(reference()) -> 'ok'.
+-spec accept_ack(any(), rabbit_net:socket()) -> ok.
 
 -spec on_node_down(node()) -> 'ok'.
 -spec tcp_listener_addresses(listener_config()) -> [address()].
@@ -335,6 +337,22 @@ close_connection(Pid, Explanation) ->
 force_connection_event_refresh(Ref) ->
     [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
     ok.
+
+accept_ack(Ref, Sock) ->
+    ok = ranch:accept_ack(Ref),
+    case tune_buffer_size(Sock) of
+        ok         -> ok;
+        {error, _} -> rabbit_net:fast_close(Sock),
+                      exit(normal)
+    end,
+    ok = file_handle_cache:obtain().
+
+tune_buffer_size(Sock) ->
+    case rabbit_net:getopts(Sock, [sndbuf, recbuf, buffer]) of
+        {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
+                          rabbit_net:setopts(Sock, [{buffer, BufSz}]);
+        Error          -> Error
+    end.
 
 %%--------------------------------------------------------------------
 

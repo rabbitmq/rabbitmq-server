@@ -197,7 +197,7 @@ shutdown(Pid, Explanation) ->
 
 init(Parent, HelperSup, Ref, Sock) ->
     RealSocket = rabbit_net:unwrap_socket(Sock),
-    rabbit_net:accept_ack(Ref, RealSocket),
+    rabbit_networking:accept_ack(Ref, RealSocket),
     Deb = sys:debug_options([]),
     start_connection(Parent, HelperSup, Deb, Sock).
 
