@@ -23,6 +23,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
 
+-define(ITERATIONS_TO_RUN_UNTIL_CONFIDENT, 10000).
+
 all() ->
     [
         pre_3_6_11_works,
@@ -48,20 +50,22 @@ init_per_testcase(Testcase, Config) ->
 %% If this test fails - the erlang version is not supported in
 %% RabbitMQ-3.6.10 and earlier.
 pre_3_6_11_works(Config) ->
-    Fun = fun () -> prop_pre_3_6_11_works(Config) end,
-    rabbit_ct_proper_helpers:run_proper(Fun, [], 50000).
+    Property = fun () -> prop_pre_3_6_11_works(Config) end,
+    rabbit_ct_proper_helpers:run_proper(Property, [],
+                                        ?ITERATIONS_TO_RUN_UNTIL_CONFIDENT).
 
 prop_pre_3_6_11_works(_Config) ->
     ?FORALL(Term, any(),
         begin
             Current = term_to_binary(Term),
             Compat = term_to_binary_compat:term_to_binary_1(Term),
-            Current =:= Compat
+            binary_to_term(Current) =:= binary_to_term(Compat)
         end).
 
 term_to_binary_latin_atom(Config) ->
-    Fun = fun () -> prop_term_to_binary_latin_atom(Config) end,
-    rabbit_ct_proper_helpers:run_proper(Fun, [], 10000).
+    Property = fun () -> prop_term_to_binary_latin_atom(Config) end,
+    rabbit_ct_proper_helpers:run_proper(Property, [],
+                                        ?ITERATIONS_TO_RUN_UNTIL_CONFIDENT).
 
 prop_term_to_binary_latin_atom(_Config) ->
     ?FORALL(LatinString, list(integer(0, 255)),
@@ -69,12 +73,14 @@ prop_term_to_binary_latin_atom(_Config) ->
             Length = length(LatinString),
             Atom = list_to_atom(LatinString),
             Binary = list_to_binary(LatinString),
-            <<131,100, Length:16, Binary/binary>> =:= term_to_binary_compat:term_to_binary_1(Atom)
+            <<131,100, Length:16, Binary/binary>> =:=
+                term_to_binary_compat:term_to_binary_1(Atom)
         end).
 
 queue_name_to_binary(Config) ->
-    Fun = fun () -> prop_queue_name_to_binary(Config) end,
-    rabbit_ct_proper_helpers:run_proper(Fun, [], 10000).
+    Property = fun () -> prop_queue_name_to_binary(Config) end,
+    rabbit_ct_proper_helpers:run_proper(Property, [],
+                                        ?ITERATIONS_TO_RUN_UNTIL_CONFIDENT).
 
 
 prop_queue_name_to_binary(_Config) ->

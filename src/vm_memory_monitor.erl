@@ -35,7 +35,8 @@
 -export([get_total_memory/0, get_vm_limit/0,
          get_check_interval/0, set_check_interval/1,
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
-         get_memory_limit/0, get_memory_use/1]).
+         get_memory_limit/0, get_memory_use/1,
+         get_process_memory/0]).
 
 %% for tests
 -export([parse_line_linux/1]).
@@ -117,15 +118,107 @@ get_memory_limit() ->
 
 get_memory_use(bytes) ->
     MemoryLimit = get_memory_limit(),
-    {rabbit_vm:total_memory(), case MemoryLimit > 0.0 of
-                            true  -> MemoryLimit;
-                            false -> infinity
-                        end};
+    {get_process_memory(), case MemoryLimit > 0.0 of
+                               true  -> MemoryLimit;
+                               false -> infinity
+                           end};
 get_memory_use(ratio) ->
     MemoryLimit = get_memory_limit(),
     case MemoryLimit > 0.0 of
-        true  -> rabbit_vm:total_memory() / MemoryLimit;
+        true  -> get_process_memory() / MemoryLimit;
         false -> infinity
+    end.
+
+%% Memory reported by erlang:memory(total) is not supposed to
+%% be equal to the total size of all pages mapped to the emulator,
+%% according to http://erlang.org/doc/man/erlang.html#memory-0
+%% erlang:memory(total) under-reports memory usage by around 20%
+-spec get_process_memory() -> Bytes :: integer().
+get_process_memory() ->
+    case get_memory_calculation_strategy() of
+        rss ->
+            case get_system_process_resident_memory() of
+                {ok, MemInBytes} ->
+                    MemInBytes;
+                {error, Reason}  ->
+                    rabbit_log:debug("Unable to get system memory used. Reason: ~p."
+                                     " Falling back to erlang memory reporting",
+                                     [Reason]),
+                    erlang:memory(total)
+            end;
+        erlang ->
+            erlang:memory(total)
+    end.
+
+-spec get_memory_calculation_strategy() -> rss | erlang.
+get_memory_calculation_strategy() ->
+    case application:get_env(rabbit, vm_memory_calculation_strategy, rss) of
+        erlang ->
+            erlang;
+        rss ->
+            rss;
+        UnsupportedValue ->
+            rabbit_log:warning(
+              "Unsupported value '~p' for vm_memory_calculation_strategy. "
+              "Supported values: (rss|erlang). "
+              "Defaulting to 'rss'",
+              [UnsupportedValue]
+            ),
+            rss
+    end.
+
+-spec get_system_process_resident_memory() -> {ok, Bytes :: integer()} | {error, term()}.
+get_system_process_resident_memory() ->
+    try
+        get_system_process_resident_memory(os:type())
+    catch _:Error ->
+            {error, {"Failed to get process resident memory", Error}}
+    end.
+
+get_system_process_resident_memory({unix,darwin}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix, linux}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix,freebsd}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix,openbsd}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({win32,_OSname}) ->
+    OsPid = os:getpid(),
+    Cmd = " tasklist /fi \"pid eq " ++ OsPid ++ "\" /fo LIST 2>&1 ",
+    CmdOutput = os:cmd(Cmd),
+    %% Memory usage is displayed in kilobytes
+    %% with comma-separated thousands
+    case re:run(CmdOutput, "Mem Usage:\\s+([0-9,]+)\\s+K", [{capture, all_but_first, list}]) of
+        {match, [Match]} ->
+            NoCommas = [ N || N <- Match, N =/= $, ],
+            {ok, list_to_integer(NoCommas) * 1024};
+        _ ->
+            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
+    end;
+
+get_system_process_resident_memory({unix, sunos}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix, aix}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory(_OsType) ->
+    {error, not_implemented_for_os}.
+
+get_ps_memory() ->
+    OsPid = os:getpid(),
+    Cmd = "ps -p " ++ OsPid ++ " -o rss=",
+    CmdOutput = os:cmd(Cmd),
+    case re:run(CmdOutput, "[0-9]+", [{capture, first, list}]) of
+        {match, [Match]} ->
+            {ok, list_to_integer(Match) * 1024};
+        _ ->
+            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
     end.
 
 %%----------------------------------------------------------------------------
@@ -149,7 +242,7 @@ init([MemFraction, AlarmFuns]) ->
     {ok, set_mem_limits(State, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From,
-	    #state{memory_config_limit = MemLimit} = State) ->
+            #state{memory_config_limit = MemLimit} = State) ->
     {reply, MemLimit, State};
 
 handle_call({set_vm_memory_high_watermark, MemLimit}, _From, State) ->
@@ -268,7 +361,7 @@ parse_mem_limit(_) ->
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed      = Alarmed,
                                  alarm_funs   = {AlarmSet, AlarmClear} }) ->
-    MemUsed = rabbit_vm:total_memory(),
+    MemUsed = get_process_memory(),
     NewAlarmed = MemUsed > MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} -> emit_update_info(set, MemUsed, MemLimit),
@@ -364,7 +457,6 @@ get_total_memory({unix, aix}) ->
 
 get_total_memory(_OsType) ->
     unknown.
-
 
 %% A line looks like "Foo bar: 123456."
 parse_line_mach(Line) ->
