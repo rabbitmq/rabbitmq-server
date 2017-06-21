@@ -44,12 +44,12 @@ memory() ->
     MsgIndexETS         = ets_memory([msg_store_persistent, msg_store_transient]),
     MetricsETS          = ets_memory([rabbit_metrics]),
     MetricsProc  = try
-		       [{_, M}] = process_info(whereis(rabbit_metrics), [memory]),
-		       M
-		   catch
-		       error:badarg ->
-			   0
-		   end,
+                       [{_, M}] = process_info(whereis(rabbit_metrics), [memory]),
+                       M
+                   catch
+                       error:badarg ->
+                           0
+                   end,
     MgmtDbETS           = ets_memory([rabbit_mgmt_storage]),
     OsTotal             = vm_memory_monitor:get_process_memory(),
 

@@ -242,7 +242,7 @@ init([MemFraction, AlarmFuns]) ->
     {ok, set_mem_limits(State, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From,
-	    #state{memory_config_limit = MemLimit} = State) ->
+            #state{memory_config_limit = MemLimit} = State) ->
     {reply, MemLimit, State};
 
 handle_call({set_vm_memory_high_watermark, MemLimit}, _From, State) ->
@@ -457,7 +457,6 @@ get_total_memory({unix, aix}) ->
 
 get_total_memory(_OsType) ->
     unknown.
-
 
 %% A line looks like "Foo bar: 123456."
 parse_line_mach(Line) ->
