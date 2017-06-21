@@ -22,4 +22,3 @@
 
 term_to_binary_1(Term) ->
     term_to_binary(Term, [{minor_version, 1}]).
-
