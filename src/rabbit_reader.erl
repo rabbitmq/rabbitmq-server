@@ -231,7 +231,7 @@ shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
 init(Parent, HelperSup, Ref, Sock) ->
-    rabbit_net:accept_ack(Ref, Sock),
+    rabbit_networking:accept_ack(Ref, Sock),
     Deb = sys:debug_options([]),
     start_connection(Parent, HelperSup, Deb, Sock).
 
