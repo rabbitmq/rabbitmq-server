@@ -24,7 +24,7 @@
          recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
          setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
          peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
-         accept_ack/2, tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1]).
+         tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1]).
 
 %%---------------------------------------------------------------------------
 
@@ -79,7 +79,6 @@
           ok_val_or_error({host_or_ip(), ip_port(),
                            host_or_ip(), ip_port()}).
 -spec is_loopback(socket() | inet:ip_address()) -> boolean().
--spec accept_ack(any(), socket()) -> ok.
 -spec unwrap_socket(socket() | ranch_proxy:proxy_socket() | ranch_proxy_ssl:ssl_socket()) -> socket().
 
 %%---------------------------------------------------------------------------
@@ -289,22 +288,6 @@ is_loopback({0,0,0,0,0,65535,AB,CD}) -> is_loopback(ipv4(AB, CD));
 is_loopback(_)                       -> false.
 
 ipv4(AB, CD) -> {AB bsr 8, AB band 255, CD bsr 8, CD band 255}.
-
-accept_ack(Ref, Sock) ->
-    ok = ranch:accept_ack(Ref),
-    case tune_buffer_size(Sock) of
-        ok         -> ok;
-        {error, _} -> fast_close(Sock),
-                      exit(normal)
-    end,
-    ok = file_handle_cache:obtain().
-
-tune_buffer_size(Sock) ->
-    case getopts(Sock, [sndbuf, recbuf, buffer]) of
-        {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
-                          setopts(Sock, [{buffer, BufSz}]);
-        Error          -> Error
-    end.
 
 unwrap_socket(Sock) when ?IS_SSL(Sock);
                          is_port(Sock) ->
