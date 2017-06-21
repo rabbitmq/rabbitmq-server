@@ -67,7 +67,7 @@ info(Pid, InfoItems) ->
 
 init([SupHelperPid, Ref, Sock, Configuration]) ->
     process_flag(trap_exit, true),
-    rabbit_net:accept_ack(Ref, Sock),
+    rabbit_networking:accept_ack(Ref, Sock),
 
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
