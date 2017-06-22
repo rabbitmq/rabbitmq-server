@@ -400,7 +400,7 @@ non_empty_files(Files) ->
 
 test_logs_working(MainLogFile, SaslLogFile) ->
     ok = rabbit_log:error("Log a test message~n"),
-    ok = error_logger:error_report(crash_report, [fake_crash_report, ?MODULE]),
+    ok = error_logger:error_report(crash_report, [[?MODULE, 1], []]),
     %% give the error loggers some time to catch up
     timer:sleep(100),
     [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
