@@ -20,11 +20,9 @@ function main
     kiex_cleanup
 
     ensure_directories
-
     ensure_kerl
-
+    ensure_kiex
     ensure_make
-
     ensure_otp
 }
 
