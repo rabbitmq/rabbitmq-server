@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_wm_exchanges).
 
 -export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2,
-         resource_exists/2, basic/1]).
+         resource_exists/2, basic/1, augmented/2]).
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -68,6 +68,11 @@ is_authorized(ReqData, Context) ->
 augment(Basic, ReqData) ->
     rabbit_mgmt_db:augment_exchanges(Basic, rabbit_mgmt_util:range(ReqData),
                                      basic).
+
+augmented(ReqData, Context) ->
+    rabbit_mgmt_db:augment_exchanges(
+      rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
+      rabbit_mgmt_util:range(ReqData), basic).
 
 basic(ReqData) ->
     [rabbit_mgmt_format:exchange(X) || X <- exchanges0(ReqData)].

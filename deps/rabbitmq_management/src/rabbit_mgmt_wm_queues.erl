@@ -18,7 +18,8 @@
 
 -export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2,
          resource_exists/2, basic/1]).
--export([variances/2]).
+-export([variances/2,
+         augmented/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -70,6 +71,9 @@ basic(ReqData) ->
     [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
         [rabbit_mgmt_format:queue(Q#amqqueue{state = down}) ||
             Q <- down_queues(ReqData)].
+
+augmented(ReqData, Context) ->
+    augment(rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context), ReqData).
 
 %%--------------------------------------------------------------------
 %% Private helpers
