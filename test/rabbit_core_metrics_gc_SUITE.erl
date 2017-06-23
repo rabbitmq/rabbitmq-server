@@ -24,7 +24,8 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, non_parallel_tests},
+      {group, cluster_tests}
     ].
 
 groups() ->
@@ -37,7 +38,8 @@ groups() ->
         gen_server2_metrics,
         consumer_metrics
       ]
-     }
+     },
+     {cluster_tests, [], [cluster_queue_metrics]}
     ].
 
 %% -------------------------------------------------------------------
@@ -52,7 +54,15 @@ merge_app_env(Config) ->
                                               {collect_statistics, fine}
                                              ]}).
 
-init_per_suite(Config) ->
+init_per_group(cluster_tests, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, cluster_tests},
+        {rmq_nodes_count, 2}
+        ]),
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      [ fun merge_app_env/1 ] ++ rabbit_ct_broker_helpers:setup_steps());
+init_per_group(non_parallel_tests, Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodename_suffix, ?MODULE}
@@ -61,16 +71,10 @@ init_per_suite(Config) ->
       Config1,
       [ fun merge_app_env/1 ] ++ rabbit_ct_broker_helpers:setup_steps()).
 
-end_per_suite(Config) ->
+end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(
       Config,
       rabbit_ct_broker_helpers:teardown_steps()).
-
-init_per_group(_, Config) ->
-    Config.
-
-end_per_group(_, Config) ->
-    Config.
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
@@ -84,7 +88,7 @@ end_per_testcase(Testcase, Config) ->
       rabbit_ct_client_helpers:teardown_steps()).
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Single-node Testcases.
 %% -------------------------------------------------------------------
 
 queue_metrics(Config) ->
@@ -329,3 +333,34 @@ x(Name) ->
     #resource{ virtual_host = <<"/">>,
                kind = exchange,
                name = Name }.
+
+%% -------------------------------------------------------------------
+%% Cluster Testcases.
+%% -------------------------------------------------------------------
+
+cluster_queue_metrics(Config) ->
+    QueueName = <<"cluster_queue_metrics">>,
+
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+
+    amqp_channel:call(Ch, #'queue.declare'{queue = QueueName}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
+                          #amqp_msg{payload = <<"hello">>}),
+
+    % Create queue
+    % Publish message
+    % Apply policy
+    % Update policy to point to other node
+    % Synchronize
+    % Check ETS table for data
+    % ets:tab2list(queue_coarse_metrics).
+    NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 0),
+    NodeName = ?config(nodename, NodeConfig),
+    Params = [NodeName],
+    Definition = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, Params}],
+    set_policy(Config, 0, <<"ha-policy-1">>, <<".*">>, queues, Definition),
+
+    amqp_channel:call(Ch, #'queue.delete'{queue=QueueName}),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    Config.
