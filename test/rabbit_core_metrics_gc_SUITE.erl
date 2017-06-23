@@ -47,29 +47,21 @@ groups() ->
 %% -------------------------------------------------------------------
 
 merge_app_env(Config) ->
-    rabbit_ct_helpers:merge_app_env(Config,
-                                    {rabbit, [
-                                              {core_metrics_gc_interval, 6000000},
-                                              {collect_statistics_interval, 100},
-                                              {collect_statistics, fine}
-                                             ]}).
+    AppEnv = {rabbit, [{core_metrics_gc_interval, 6000000},
+                       {collect_statistics_interval, 100},
+                       {collect_statistics, fine}]},
+    rabbit_ct_helpers:merge_app_env(Config, AppEnv).
 
 init_per_group(cluster_tests, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, cluster_tests},
-        {rmq_nodes_count, 2}
-        ]),
-    rabbit_ct_helpers:run_setup_steps(
-      Config1,
-      [ fun merge_app_env/1 ] ++ rabbit_ct_broker_helpers:setup_steps());
+    rabbit_ct_helpers:log_environment(),
+    Conf = [{rmq_nodename_suffix, cluster_tests}, {rmq_nodes_count, 2}],
+    Config1 = rabbit_ct_helpers:set_config(Config, Conf),
+    rabbit_ct_helpers:run_setup_steps(Config1, setup_steps());
 init_per_group(non_parallel_tests, Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-                                                    {rmq_nodename_suffix, ?MODULE}
-                                                   ]),
-    rabbit_ct_helpers:run_setup_steps(
-      Config1,
-      [ fun merge_app_env/1 ] ++ rabbit_ct_broker_helpers:setup_steps()).
+    Conf = [{rmq_nodename_suffix, non_parallel_tests}],
+    Config1 = rabbit_ct_helpers:set_config(Config, Conf),
+    rabbit_ct_helpers:run_setup_steps(Config1, setup_steps()).
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(
@@ -86,6 +78,9 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_teardown_steps(
       Config,
       rabbit_ct_client_helpers:teardown_steps()).
+
+setup_steps() ->
+    [ fun merge_app_env/1 ] ++ rabbit_ct_broker_helpers:setup_steps().
 
 %% -------------------------------------------------------------------
 %% Single-node Testcases.
@@ -341,6 +336,9 @@ x(Name) ->
 cluster_queue_metrics(Config) ->
     VHost = <<"/">>,
     QueueName = <<"cluster_queue_metrics">>,
+    PolicyName = <<"ha-policy-1">>,
+    PolicyPattern = <<".*">>,
+    PolicyAppliesTo = <<"queues">>,
 
     Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
@@ -351,28 +349,41 @@ cluster_queue_metrics(Config) ->
 
     Node0Name = rabbit_data_coercion:to_binary(Node0),
     Definition0 = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, [Node0Name]}],
-    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ha-policy-1">>,
-                                        <<".*">>, <<"queues">>, Definition0),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0,
+                                             PolicyName, PolicyPattern,
+                                             PolicyAppliesTo, Definition0),
 
     % Update policy to point to other node
     Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
     Node1Name = rabbit_data_coercion:to_binary(Node1),
     Definition1 = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, [Node1Name]}],
-    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ha-policy-1">>,
-                                        <<".*">>, <<"queues">>, Definition1),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0,
+                                             PolicyName, PolicyPattern,
+                                             PolicyAppliesTo, Definition1),
 
     % Synchronize
     Name = rabbit_misc:r(VHost, queue, QueueName),
     [#amqqueue{pid = QPid}] = rabbit_ct_broker_helpers:rpc(Config, Node0,
                                                            ets, lookup, [rabbit_queue, Name]),
-    rabbit_ct_broker_helpers:rpc(Config, Node0, rabbit_amqqueue, sync_mirrors, [QPid]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, Node0, rabbit_amqqueue, sync_mirrors, [QPid]),
 
     % Check ETS table for data
     % rabbit_core_metrics:queue_stats
     % {Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions}
     % [{{resource,<<"/">>,queue,<<"cluster_queue_metrics">>}, 1,0,1,10524}]
-    EtsData = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, tab2list, [queue_coarse_metrics]),
-    [{Name, 1, 0, 1, _Reductions}] = EtsData,
+    EtsData0_0 = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, tab2list, [queue_coarse_metrics]),
+    [{Name, 1, 0, 1, _}] = EtsData0_0,
+
+    rabbit_ct_broker_helpers:rpc(Config, Node0, erlang, send, [rabbit_core_metrics_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, Node0, gen_server, call, [rabbit_core_metrics_gc, test]),
+
+    EtsData0_1 = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, tab2list, [queue_coarse_metrics]),
+    ct:pal("Node 0 ETS: ~p~n", [EtsData0_1]),
+    [{Name, 1, 0, 1, _}] = EtsData0_1,
+
+    EtsData1_0 = rabbit_ct_broker_helpers:rpc(Config, Node1, ets, tab2list, [queue_coarse_metrics]),
+    ct:pal("Node 1 ETS: ~p~n", [EtsData1_0]),
+    [{Name, 1, 0, 1, _}] = EtsData1_0,
 
     amqp_channel:call(Ch, #'queue.delete'{queue=QueueName}),
     rabbit_ct_client_helpers:close_channel(Ch),
