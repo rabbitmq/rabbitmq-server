@@ -133,7 +133,6 @@ if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitm
     mv %{_sysconfdir}/rabbitmq/rabbitmq.conf %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
 fi
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
-chgrp rabbitmq %{_sysconfdir}/rabbitmq
 
 
 %preun
@@ -190,7 +189,7 @@ fi
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq/mnesia
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
-%attr(2755, -, -) %dir %{_sysconfdir}/rabbitmq
+%attr(2750, -, rabbitmq) %dir %{_sysconfdir}/rabbitmq
  
 
 
