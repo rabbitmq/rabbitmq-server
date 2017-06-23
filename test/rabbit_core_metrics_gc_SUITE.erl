@@ -339,6 +339,7 @@ x(Name) ->
 %% -------------------------------------------------------------------
 
 cluster_queue_metrics(Config) ->
+    VHost = <<"/">>,
     QueueName = <<"cluster_queue_metrics">>,
 
     Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -348,16 +349,26 @@ cluster_queue_metrics(Config) ->
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
                           #amqp_msg{payload = <<"hello">>}),
 
-    % Create queue
-    % Publish message
-    % Apply policy
+    Node0Name = rabbit_data_coercion:to_binary(Node0),
+    Definition0 = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, [Node0Name]}],
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ha-policy-1">>,
+                                        <<".*">>, <<"queues">>, Definition0),
+
     % Update policy to point to other node
+    Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    Node1Name = rabbit_data_coercion:to_binary(Node1),
+    Definition1 = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, [Node1Name]}],
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ha-policy-1">>,
+                                        <<".*">>, <<"queues">>, Definition1),
+
     % Synchronize
+    Name = rabbit_misc:r(VHost, queue, QueueName),
+    [#amqqueue{pid = QPid}] = rabbit_ct_broker_helpers:rpc(Config, Node0,
+                                                           ets, lookup, [rabbit_queue, Name]),
+    rabbit_ct_broker_helpers:rpc(Config, Node0, rabbit_amqqueue, sync_mirrors, [QPid]),
+
     % Check ETS table for data
     % ets:tab2list(queue_coarse_metrics).
-    Node0Name = rabbit_data_coercion:to_binary(Node0),
-    Definition = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, [Node0Name]}],
-    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ha-policy-1">>, <<".*">>, <<"queues">>, Definition),
 
     amqp_channel:call(Ch, #'queue.delete'{queue=QueueName}),
     rabbit_ct_client_helpers:close_channel(Ch),
