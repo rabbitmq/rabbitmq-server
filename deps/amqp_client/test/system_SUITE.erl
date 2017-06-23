@@ -32,7 +32,7 @@
 
 %% The wait constant defines how long a consumer waits before it
 %% unsubscribes
--define(WAIT, 200).
+-define(WAIT, 500).
 
 %% How to long wait for a process to die after an expected failure
 -define(PROCESS_EXIT_TIMEOUT, 5000).
