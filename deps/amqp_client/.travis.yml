@@ -29,19 +29,20 @@ before_script:
     git fetch upstream master:master || :
   # Install kerl; build gmake 4.2.1 and OTP
   - $TRAVIS_BUILD_DIR/.travis.sh $OTP_TAG_NAME
-  - export PATH="$HOME/bin:$PATH"
+  - export PATH="$HOME/bin:$HOME/gmake/bin:$PATH"
   - source "$HOME/otp/$OTP_TAG_NAME/activate"
   - kerl active
   - test -s "$HOME/.kiex/scripts/kiex" && source "$HOME/.kiex/scripts/kiex"
   - test -x "$HOME/.kiex/elixirs/elixir-1.4.4/bin/elixir" || kiex install 1.4.4
   - kiex use 1.4.4 --default
   - mix local.hex --force
-  - export PATH="$HOME/gmake/bin:$PATH"
   - make --version
-  - $TRAVIS_BUILD_DIR/.travis.sh kiex_cleanup
 
 script:
   - make tests
+
+before_cache:
+  - $TRAVIS_BUILD_DIR/.travis.sh kiex_cleanup
 
 cache:
   directories:
