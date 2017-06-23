@@ -368,7 +368,11 @@ cluster_queue_metrics(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, Node0, rabbit_amqqueue, sync_mirrors, [QPid]),
 
     % Check ETS table for data
-    % ets:tab2list(queue_coarse_metrics).
+    % rabbit_core_metrics:queue_stats
+    % {Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions}
+    % [{{resource,<<"/">>,queue,<<"cluster_queue_metrics">>}, 1,0,1,10524}]
+    EtsData = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, tab2list, [queue_coarse_metrics]),
+    [{Name, 1, 0, 1, _Reductions}] = EtsData,
 
     amqp_channel:call(Ch, #'queue.delete'{queue=QueueName}),
     rabbit_ct_client_helpers:close_channel(Ch),
