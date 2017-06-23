@@ -1,32 +1,28 @@
 # vim:sw=2:et:
+sudo: false
 
-# Use a real VM so we can install all the packages we want.
-sudo: required
+language: generic
 
-language: erlang
-notifications:
-  email:
-    - alerts@rabbitmq.com
 addons:
   apt:
-    sources:
-      - sourceline: deb https://packages.erlang-solutions.com/ubuntu precise contrib
-        key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
-      # Use Elixir from Erlang Solutions. The provided Elixir is
-      # installed with kiex but is old. By using an prebuilt Debian
-      # package, we save the compilation time.
-      - elixir
-      - xsltproc
-otp_release:
-  - "18.3"
-  - "19.0"
-services:
-  - docker
+      - unixodbc
+      - unixodbc-dev
+      - libwxgtk2.8-dev
+
 env:
-  matrix:
-  - GROUP=1
-  - GROUP=2
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=0
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=1
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=2
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=3
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=4
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=5
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=6
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=7
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=8
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=9
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=10
+  - OTP_TAG_NAME=OTP-20.0 TEST_SUITE=11
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
@@ -40,13 +36,26 @@ before_script:
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
-  # Remove all kiex installations. This makes sure that the Erlang
-  # Solutions one is picked: it's after the kiex installations in $PATH.
-  - echo YES | kiex implode
+  # Install kerl; build gmake 4.2.1 and OTP
+  - $TRAVIS_BUILD_DIR/.travis.sh $OTP_TAG_NAME
+  - export PATH="$HOME/bin:$HOME/gmake/bin:$PATH"
+  - source "$HOME/otp/$OTP_TAG_NAME/activate"
+  - kerl active
+  - test -s "$HOME/.kiex/scripts/kiex" && source "$HOME/.kiex/scripts/kiex"
+  - test -x "$HOME/.kiex/elixirs/elixir-1.4.4/bin/elixir" || kiex install 1.4.4
+  - kiex use 1.4.4 --default
+  - mix local.hex --force
+  - make --version
 
 script:
-  - if test "${GROUP}" = '1'; then make tests; fi
-  - if test "${GROUP}" = '2'; then sh ./scripts/travis_test_ocf_ra.sh; fi
+  - $TRAVIS_BUILD_DIR/.travis.sh tests $TEST_SUITE
+
+before_cache:
+  - $TRAVIS_BUILD_DIR/.travis.sh kiex_cleanup
 
 cache:
-  apt: true
+  directories:
+    - "$HOME/otp"
+    - "$HOME/.kiex"
+    - "$HOME/gmake"
+    - "$HOME/bin"
