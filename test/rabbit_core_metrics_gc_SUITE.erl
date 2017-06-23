@@ -341,8 +341,8 @@ x(Name) ->
 cluster_queue_metrics(Config) ->
     QueueName = <<"cluster_queue_metrics">>,
 
-    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+    Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
 
     amqp_channel:call(Ch, #'queue.declare'{queue = QueueName}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
@@ -355,11 +355,9 @@ cluster_queue_metrics(Config) ->
     % Synchronize
     % Check ETS table for data
     % ets:tab2list(queue_coarse_metrics).
-    NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 0),
-    NodeName = ?config(nodename, NodeConfig),
-    Params = [NodeName],
-    Definition = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, Params}],
-    set_policy(Config, 0, <<"ha-policy-1">>, <<".*">>, queues, Definition),
+    Node0Name = rabbit_data_coercion:to_binary(Node0),
+    Definition = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, [Node0Name]}],
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ha-policy-1">>, <<".*">>, <<"queues">>, Definition),
 
     amqp_channel:call(Ch, #'queue.delete'{queue=QueueName}),
     rabbit_ct_client_helpers:close_channel(Ch),
