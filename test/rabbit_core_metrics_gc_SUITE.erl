@@ -343,15 +343,15 @@ cluster_queue_metrics(Config) ->
     Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
 
-    amqp_channel:call(Ch, #'queue.declare'{queue = QueueName}),
-    amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
-                          #amqp_msg{payload = <<"hello">>}),
-
     Node0Name = rabbit_data_coercion:to_binary(Node0),
     Definition0 = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, [Node0Name]}],
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0,
                                              PolicyName, PolicyPattern,
                                              PolicyAppliesTo, Definition0),
+
+    amqp_channel:call(Ch, #'queue.declare'{queue = QueueName}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QueueName},
+                          #amqp_msg{payload = <<"hello">>}),
 
     % Update policy to point to other node
     Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
@@ -367,15 +367,19 @@ cluster_queue_metrics(Config) ->
                                                            ets, lookup, [rabbit_queue, Name]),
     ok = rabbit_ct_broker_helpers:rpc(Config, Node0, rabbit_amqqueue, sync_mirrors, [QPid]),
 
+    timer:sleep(1000),
+
+    rabbit_ct_broker_helpers:rpc(Config, Node0, erlang, send, [rabbit_core_metrics_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, Node0, gen_server, call, [rabbit_core_metrics_gc, test]),
+    rabbit_ct_broker_helpers:rpc(Config, Node1, erlang, send, [rabbit_core_metrics_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, Node1, gen_server, call, [rabbit_core_metrics_gc, test]),
+
     % Check ETS table for data
     % rabbit_core_metrics:queue_stats
     % {Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions}
     % [{{resource,<<"/">>,queue,<<"cluster_queue_metrics">>}, 1,0,1,10524}]
     EtsData0_0 = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, tab2list, [queue_coarse_metrics]),
     [{Name, 1, 0, 1, _}] = EtsData0_0,
-
-    rabbit_ct_broker_helpers:rpc(Config, Node0, erlang, send, [rabbit_core_metrics_gc, start_gc]),
-    rabbit_ct_broker_helpers:rpc(Config, Node0, gen_server, call, [rabbit_core_metrics_gc, test]),
 
     EtsData0_1 = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, tab2list, [queue_coarse_metrics]),
     ct:pal("Node 0 ETS: ~p~n", [EtsData0_1]),
