@@ -34,48 +34,12 @@ groups() ->
         version_equivalence,
         version_minor_equivalence_properties,
         version_comparison,
-        pid_decompose_compose,
-        auth_backend_internal_expand_topic_permission
+        pid_decompose_compose
       ]}
     ].
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
-
-
-auth_backend_internal_expand_topic_permission(_Config) ->
-    ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},
-    %% simple case
-    <<"services/default/accounts/guest/notifications">> =
-        rabbit_auth_backend_internal:expand_topic_permission(
-            <<"services/{vhost}/accounts/{username}/notifications">>,
-            ExpandMap
-        ),
-    %% replace variable twice
-    <<"services/default/accounts/default/guest/notifications">> =
-        rabbit_auth_backend_internal:expand_topic_permission(
-            <<"services/{vhost}/accounts/{vhost}/{username}/notifications">>,
-            ExpandMap
-        ),
-    %% nothing to replace
-    <<"services/accounts/notifications">> =
-        rabbit_auth_backend_internal:expand_topic_permission(
-            <<"services/accounts/notifications">>,
-            ExpandMap
-        ),
-    %% the expand map isn't defined
-    <<"services/{vhost}/accounts/{username}/notifications">> =
-        rabbit_auth_backend_internal:expand_topic_permission(
-            <<"services/{vhost}/accounts/{username}/notifications">>,
-            undefined
-        ),
-    %% the expand map is empty
-    <<"services/{vhost}/accounts/{username}/notifications">> =
-        rabbit_auth_backend_internal:expand_topic_permission(
-            <<"services/{vhost}/accounts/{username}/notifications">>,
-            #{}
-        ),
-    ok.
 
 pid_decompose_compose(_Config) ->
     Pid = self(),
