@@ -132,7 +132,7 @@ maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos) ->
             catch
                 _:Reason ->
                     rabbit_log:error("Calling ~p:additional_authn_params/4 failed:~p~n", [Module, Reason]),
-                    [];
+                    []
             end;
         error ->
             [];
