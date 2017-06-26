@@ -88,7 +88,7 @@ closing(_ChannelCloseType, Reason, State) ->
 
 channels_terminated(State = #state{closing_reason = Reason,
                                    collector = Collector}) ->
-    rabbit_queue_collector:delete_all(Collector),
+    rabbit_queue_collector_common:delete_all(Collector),
     {stop, {shutdown, Reason}, State}.
 
 terminate(_Reason, #state{node = Node}) ->
