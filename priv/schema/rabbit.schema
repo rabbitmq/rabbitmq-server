@@ -207,6 +207,9 @@ end}.
 {mapping, "ssl_options.honor_cipher_order", "rabbit.ssl_options.honor_cipher_order",
     [{datatype, {enum, [true, false]}}]}.
 
+{mapping, "ssl_options.honor_ecc_order", "rabbit.ssl_options.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
 {mapping, "ssl_options.key.RSAPrivateKey", "rabbit.ssl_options.key",
     [{datatype, string}]}.
 

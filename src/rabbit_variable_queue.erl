@@ -35,6 +35,10 @@
 
 -export([move_messages_to_vhost_store/0]).
 
+-export([migrate_queue/3, migrate_message/3, get_per_vhost_store_client/2,
+         get_global_store_client/1, log_upgrade_verbose/1,
+         log_upgrade_verbose/2]).
+
 -include_lib("stdlib/include/qlc.hrl").
 
 -define(QUEUE_MIGRATION_BATCH_SIZE, 100).
@@ -358,8 +362,6 @@
 
 -rabbit_upgrade({multiple_routing_keys, local, []}).
 -rabbit_upgrade({move_messages_to_vhost_store, message_store, []}).
-
--compile(export_all).
 
 -type seq_id()  :: non_neg_integer().
 

@@ -189,14 +189,12 @@ get_system_process_resident_memory({unix,openbsd}) ->
 
 get_system_process_resident_memory({win32,_OSname}) ->
     OsPid = os:getpid(),
-    Cmd = " tasklist /fi \"pid eq " ++ OsPid ++ "\" /fo LIST 2>&1 ",
+    Cmd = "wmic process where processid=" ++ OsPid ++ " get WorkingSetSize /value 2>&1",
     CmdOutput = os:cmd(Cmd),
-    %% Memory usage is displayed in kilobytes
-    %% with comma-separated thousands
-    case re:run(CmdOutput, "Mem Usage:\\s+([0-9,]+)\\s+K", [{capture, all_but_first, list}]) of
+    %% Memory usage is displayed in bytes
+    case re:run(CmdOutput, "WorkingSetSize=([0-9]+)", [{capture, all_but_first, binary}]) of
         {match, [Match]} ->
-            NoCommas = [ N || N <- Match, N =/= $, ],
-            {ok, list_to_integer(NoCommas) * 1024};
+            {ok, binary_to_integer(Match)};
         _ ->
             {error, {unexpected_output_from_command, Cmd, CmdOutput}}
     end;
