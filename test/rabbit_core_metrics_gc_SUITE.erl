@@ -341,6 +341,13 @@ cluster_queue_metrics(Config) ->
     PolicyAppliesTo = <<"queues">>,
 
     Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+
+    rabbit_ct_broker_helpers:rpc(Config, Node0, erlang, send, [rabbit_core_metrics_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, Node0, gen_server, call, [rabbit_core_metrics_gc, test]),
+    rabbit_ct_broker_helpers:rpc(Config, Node1, erlang, send, [rabbit_core_metrics_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, Node1, gen_server, call, [rabbit_core_metrics_gc, test]),
+
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
 
     Node0Name = rabbit_data_coercion:to_binary(Node0),
@@ -354,7 +361,6 @@ cluster_queue_metrics(Config) ->
                           #amqp_msg{payload = <<"hello">>}),
 
     % Update policy to point to other node
-    Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
     Node1Name = rabbit_data_coercion:to_binary(Node1),
     Definition1 = [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, [Node1Name]}],
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0,
@@ -366,6 +372,13 @@ cluster_queue_metrics(Config) ->
     [#amqqueue{pid = QPid}] = rabbit_ct_broker_helpers:rpc(Config, Node0,
                                                            ets, lookup, [rabbit_queue, Name]),
     ok = rabbit_ct_broker_helpers:rpc(Config, Node0, rabbit_amqqueue, sync_mirrors, [QPid]),
+
+    timer:sleep(1000),
+
+    rabbit_ct_broker_helpers:rpc(Config, Node0, erlang, send, [rabbit_core_metrics_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, Node0, gen_server, call, [rabbit_core_metrics_gc, test]),
+    rabbit_ct_broker_helpers:rpc(Config, Node1, erlang, send, [rabbit_core_metrics_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, Node1, gen_server, call, [rabbit_core_metrics_gc, test]),
 
     timer:sleep(1000),
 
