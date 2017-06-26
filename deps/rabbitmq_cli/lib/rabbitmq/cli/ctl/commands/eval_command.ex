@@ -61,7 +61,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
     |> Enum.map(fn({key, val}) -> {String.to_atom("_#{key}"), val} end)
   end
   defp parse_expr(expr) do
-    expr_str = to_char_list(expr)
+    expr_str = to_charlist(expr)
     case :erl_scan.string(expr_str) do
       {:ok, scanned, _} ->
         case :erl_parse.parse_exprs(scanned) do

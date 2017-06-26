@@ -177,7 +177,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
       nil ->
         case Config.get_option(:mnesia_dir, opts) do
           nil -> {:error, :mnesia_dir_not_found};
-          val -> Application.put_env(:mnesia, :dir, to_char_list(val))
+          val -> Application.put_env(:mnesia, :dir, to_charlist(val))
         end
       _   -> :ok
     end

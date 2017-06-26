@@ -154,9 +154,8 @@ to display results. The default value is \"/\".\n"]
   defp input_types() do
     [CommandModules.module_map
      |> Map.values
-     |> Enum.filter_map(
-         &:erlang.function_exported(&1, :usage_additional, 0),
-         &(&1.usage_additional))
+     |> Enum.filter(&:erlang.function_exported(&1, :usage_additional, 0))
+     |> Enum.map(&(&1.usage_additional))
      |> Enum.join("\n\n")]
   end
 

@@ -41,7 +41,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
     rescue
       ex in SyntaxError ->
         {:validation_failure, "SyntaxError: " <> Exception.message(ex)}
-      _e ->
+      _ ->
         :ok
     end
   end

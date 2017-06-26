@@ -51,9 +51,9 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   end
 
   def info_for_keys([{_,_}|_] = item, info_keys) do
-    Enum.filter_map(item,
-      fn({k, _}) -> Enum.member?(info_keys, k) end,
-      fn({k, v}) -> {k, format_info_item(v)} end)
+    item
+    |> Enum.filter(fn({k, _}) -> Enum.member?(info_keys, k) end)
+    |> Enum.map(fn({k, v}) -> {k, format_info_item(v)} end)
   end
 
   defp format_info_item(resource(name: name)) do

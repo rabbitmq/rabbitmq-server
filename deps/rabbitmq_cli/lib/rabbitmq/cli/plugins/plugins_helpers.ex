@@ -22,13 +22,13 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   def list(opts) do
     {:ok, dir} = CliHelpers.plugins_dir(opts)
     add_all_to_path(dir)
-    :lists.usort(:rabbit_plugins.list(to_char_list(dir)))
+    :lists.usort(:rabbit_plugins.list(to_charlist(dir)))
   end
 
   def read_enabled(opts) do
     case enabled_plugins_file(opts) do
       {:ok, enabled} ->
-        :rabbit_plugins.read_enabled(to_char_list(enabled));
+        :rabbit_plugins.read_enabled(to_charlist(enabled));
       # Existence of enabled_plugins_file should be validated separately
       {:error, :no_plugins_file} ->
         # IO.puts(:stderr, "ENABLED_PLUGINS_FILE not defined")
@@ -119,7 +119,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
     case MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names)) do
       %MapSet{} ->
-        case :rabbit_file.write_term_file(to_char_list(plugins_file), [plugins]) do
+        case :rabbit_file.write_term_file(to_charlist(plugins_file), [plugins]) do
           :ok ->
             all_enabled = :rabbit_plugins.dependencies(false, plugins, all)
             {:ok, Enum.sort(all_enabled)};

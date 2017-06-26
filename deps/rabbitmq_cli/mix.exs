@@ -24,7 +24,7 @@ defmodule RabbitMQCtl.MixfileBase do
     [
       app: :rabbitmqctl,
       version: "0.0.1",
-      elixir: "~> 1.4.4",
+      elixir: "~> 1.4.4 or 1.5.0-rc.0",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       escript: [main_module: RabbitMQCtl,
@@ -108,7 +108,7 @@ defmodule RabbitMQCtl.MixfileBase do
       {:amqp, "~> 0.2.2", only: :test},
       {:temp, "~> 0.4", only: :test},
       {:json, "~> 1.0.0"},
-      {:csv, "~> 1.4.4"},
+      {:csv, "~> 2.0.0"},
       {:simetric, "~> 0.2.0"}
     ]
   end

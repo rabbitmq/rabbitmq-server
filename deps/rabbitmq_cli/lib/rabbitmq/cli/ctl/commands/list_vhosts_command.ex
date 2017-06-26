@@ -57,11 +57,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
     vhosts
     |> Enum.map(
       fn(vhost) ->
-        Enum.filter_map(
-          symbol_args,
-          fn(arg) -> vhost[arg] != nil end,
-          fn(arg) -> {arg, vhost[arg]} end
-        )
+        symbol_args
+        |> Enum.filter(fn(arg) -> vhost[arg] != nil end)
+        |> Enum.map(fn(arg) -> {arg, vhost[arg]} end)
       end
     )
   end
