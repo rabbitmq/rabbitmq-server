@@ -374,7 +374,9 @@ subscription_queue_name(Destination, SubscriptionId, Frame) ->
             %% AMQP queue names. It doesn't need to be secure; we use md5 here
             %% simply as a convenient means to bound the length.
             rabbit_guid:string(
-              erlang:md5(term_to_binary({Destination, SubscriptionId})),
+                erlang:md5(
+                    term_to_binary_compat:term_to_binary_1(
+                        {Destination, SubscriptionId})),
               "stomp-subscription");
         Name ->
             Name
