@@ -24,17 +24,18 @@
 -type tls_atom_version() :: sslv3 | tlsv1 | 'tlsv1.1' | 'tlsv1.2'.
 -endif.
 
+-include_lib("kernel/include/inet.hrl").
 -include_lib("ssl/src/ssl_api.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
          setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
          peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
-         accept_ack/2]).
+         tcp_host/1]).
 
 %%---------------------------------------------------------------------------
 
--export_type([socket/0]).
+-export_type([socket/0, ip_port/0, hostname/0]).
 
 -type stat_option() ::
         'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
@@ -44,6 +45,8 @@
 -type socket() :: port() | ssl:sslsocket().
 -type opts() :: [{atom(), any()} |
                  {raw, non_neg_integer(), non_neg_integer(), binary()}].
+-type hostname() :: inet:hostname().
+-type ip_port() :: inet:port_number().
 -type host_or_ip() :: binary() | inet:ip_address().
 -spec is_ssl(socket()) -> boolean().
 -spec ssl_info(socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
@@ -72,18 +75,17 @@
 -spec close(socket()) -> ok_or_any_error().
 -spec fast_close(socket()) -> ok_or_any_error().
 -spec sockname(socket()) ->
-          ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()}).
+          ok_val_or_error({inet:ip_address(), ip_port()}).
 -spec peername(socket()) ->
-          ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()}).
+          ok_val_or_error({inet:ip_address(), ip_port()}).
 -spec peercert(socket()) ->
           'nossl' | ok_val_or_error(rabbit_ssl:certificate()).
 -spec connection_string(socket(), 'inbound' | 'outbound') ->
           ok_val_or_error(string()).
 -spec socket_ends(socket(), 'inbound' | 'outbound') ->
-          ok_val_or_error({host_or_ip(), rabbit_networking:ip_port(),
-                           host_or_ip(), rabbit_networking:ip_port()}).
+          ok_val_or_error({host_or_ip(), ip_port(),
+                           host_or_ip(), ip_port()}).
 -spec is_loopback(socket() | inet:ip_address()) -> boolean().
--spec accept_ack(any(), socket()) -> ok.
 
 %%---------------------------------------------------------------------------
 
@@ -234,9 +236,28 @@ socket_ends(Sock, Direction) ->
 maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
 maybe_ntoab(Host)                     -> Host.
 
+tcp_host({0,0,0,0}) ->
+    hostname();
+
+tcp_host({0,0,0,0,0,0,0,0}) ->
+    hostname();
+
+tcp_host(IPAddress) ->
+    case inet:gethostbyaddr(IPAddress) of
+        {ok, #hostent{h_name = Name}} -> Name;
+        {error, _Reason} -> rabbit_misc:ntoa(IPAddress)
+    end.
+
+hostname() ->
+    {ok, Hostname} = inet:gethostname(),
+    case inet:gethostbyname(Hostname) of
+        {ok,    #hostent{h_name = Name}} -> Name;
+        {error, _Reason}                 -> Hostname
+    end.
+
 rdns(Addr) ->
     case application:get_env(rabbit, reverse_dns_lookups) of
-        {ok, true} -> list_to_binary(rabbit_networking:tcp_host(Addr));
+        {ok, true} -> list_to_binary(tcp_host(Addr));
         _          -> Addr
     end.
 
@@ -256,19 +277,3 @@ is_loopback({0,0,0,0,0,65535,AB,CD}) -> is_loopback(ipv4(AB, CD));
 is_loopback(_)                       -> false.
 
 ipv4(AB, CD) -> {AB bsr 8, AB band 255, CD bsr 8, CD band 255}.
-
-accept_ack(Ref, Sock) ->
-    ok = ranch:accept_ack(Ref),
-    case tune_buffer_size(Sock) of
-        ok         -> ok;
-        {error, _} -> rabbit_net:fast_close(Sock),
-                      exit(normal)
-    end,
-    ok = file_handle_cache:obtain().
-
-tune_buffer_size(Sock) ->
-    case getopts(Sock, [sndbuf, recbuf, buffer]) of
-        {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
-                          setopts(Sock, [{buffer, BufSz}]);
-        Error          -> Error
-    end.

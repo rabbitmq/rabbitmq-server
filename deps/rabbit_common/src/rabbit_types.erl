@@ -98,8 +98,8 @@
 -type(listener() ::
         #listener{node     :: node(),
                   protocol :: atom(),
-                  host     :: rabbit_networking:hostname(),
-                  port     :: rabbit_networking:ip_port()}).
+                  host     :: rabbit_net:hostname(),
+                  port     :: rabbit_net:ip_port()}).
 
 -type(binding_source() :: rabbit_exchange:name()).
 -type(binding_destination() :: rabbit_amqqueue:name() | rabbit_exchange:name()).
