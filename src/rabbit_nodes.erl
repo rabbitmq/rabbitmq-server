@@ -40,7 +40,6 @@
 -spec is_process_running(node(), atom()) -> boolean().
 -spec cluster_name() -> binary().
 -spec set_cluster_name(binary(), rabbit_types:username()) -> 'ok'.
--spec ensure_epmd() -> 'ok'.
 -spec all_running() -> [node()].
 
 %%----------------------------------------------------------------------------
@@ -214,19 +213,6 @@ set_cluster_name(Name, Username) ->
     rabbit_runtime_parameters:set_global(cluster_name, BinaryName, Username).
 
 ensure_epmd() ->
-    {ok, Prog} = init:get_argument(progname),
-    ID = rabbit_misc:random(1000000000),
-    Port = open_port(
-             {spawn_executable, os:find_executable(Prog)},
-             [{args, ["-sname", rabbit_misc:format("epmd-starter-~b", [ID]),
-                      "-noshell", "-eval", "halt()."]},
-              exit_status, stderr_to_stdout, use_stdio]),
-    port_shutdown_loop(Port).
-
-port_shutdown_loop(Port) ->
-    receive
-        {Port, {exit_status, _Rc}} -> ok;
-        {Port, _}                  -> port_shutdown_loop(Port)
-    end.
+    rabbit_nodes_common:ensure_epmd().
 
 all_running() -> rabbit_mnesia:cluster_nodes(running).
