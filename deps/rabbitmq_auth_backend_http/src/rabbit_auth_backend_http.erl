@@ -153,8 +153,11 @@ p(PathName) ->
 q(Args) ->
     string:join([escape(K, V) || {K, V} <- Args], "&").
 
+escape(K, Map) when is_map(Map) ->
+    string:join([escape(rabbit_data_coercion:to_list(K) ++ "." ++ rabbit_data_coercion:to_list(Key), Value)
+        || {Key, Value} <- maps:to_list(Map)], "&");
 escape(K, V) ->
-    atom_to_list(K) ++ "=" ++ rabbit_http_util:quote_plus(V).
+    rabbit_data_coercion:to_list(K) ++ "=" ++ rabbit_http_util:quote_plus(V).
 
 parse_resp(Resp) -> string:to_lower(string:strip(Resp)).
 
