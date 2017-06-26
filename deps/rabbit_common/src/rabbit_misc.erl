@@ -66,7 +66,7 @@
 -export([os_cmd/1]).
 -export([is_os_process_alive/1]).
 -export([gb_sets_difference/2]).
--export([version/0, otp_release/0, which_applications/0]).
+-export([version/0, otp_release/0, platform_and_version/0, which_applications/0]).
 -export([sequence_error/1]).
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
 -export([check_expiry/1]).
@@ -239,6 +239,7 @@
 -spec gb_sets_difference(?GB_SET_TYPE(), ?GB_SET_TYPE()) -> ?GB_SET_TYPE().
 -spec version() -> string().
 -spec otp_release() -> string().
+-spec platform_and_version() -> string().
 -spec which_applications() -> [{atom(), string(), string()}].
 -spec sequence_error([({'error', any()} | any())]) ->
           {'error', any()} | any().
@@ -1022,6 +1023,9 @@ otp_release() ->
             %% or we couldn't read the file (so this is best we can do)
             erlang:system_info(otp_release)
     end.
+
+platform_and_version() ->
+    string:join(["Erlang/OTP", otp_release()], " ").
 
 %% application:which_applications(infinity) is dangerous, since it can
 %% cause deadlocks on shutdown. So we have to use a timeout variant,
