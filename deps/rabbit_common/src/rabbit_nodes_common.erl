@@ -16,10 +16,11 @@
 
 -module(rabbit_nodes_common).
 
--export([make/1, parts/1]).
+-export([make/1, parts/1, ensure_epmd/0]).
 
 -spec make({string(), string()} | string()) -> node().
 -spec parts(node() | string()) -> {string(), string()}.
+-spec ensure_epmd() -> 'ok'.
 
 make({Prefix, Suffix}) -> list_to_atom(lists:append([Prefix, "@", Suffix]));
 make(NodeStr)          -> make(parts(NodeStr)).
@@ -31,4 +32,20 @@ parts(NodeStr) ->
         {Prefix, []}     -> {_, Suffix} = parts(node()),
                             {Prefix, Suffix};
         {Prefix, Suffix} -> {Prefix, tl(Suffix)}
+    end.
+
+ensure_epmd() ->
+    {ok, Prog} = init:get_argument(progname),
+    ID = rabbit_misc:random(1000000000),
+    Port = open_port(
+             {spawn_executable, os:find_executable(Prog)},
+             [{args, ["-sname", rabbit_misc:format("epmd-starter-~b", [ID]),
+                      "-noshell", "-eval", "halt()."]},
+              exit_status, stderr_to_stdout, use_stdio]),
+    port_shutdown_loop(Port).
+
+port_shutdown_loop(Port) ->
+    receive
+        {Port, {exit_status, _Rc}} -> ok;
+        {Port, _}                  -> port_shutdown_loop(Port)
     end.
