@@ -130,12 +130,9 @@ maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos) ->
             try
                 Module:additional_authn_params(Creds, VHost, Pid, Infos)
             catch
-                throw:Reason ->
+                _:Reason ->
                     rabbit_log:warning("Calling ~p failed:~p~n", [Module, Reason]),
                     [];
-                error:Reason ->
-                    rabbit_log:warning("Calling ~p failed:~p~n", [Module, Reason]),
-                    []
             end;
         error ->
             [];
