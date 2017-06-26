@@ -148,6 +148,11 @@ invoke_no_result([], _Name, _FunOrMFA) -> %% optimisation
 invoke_no_result([Pid], _Name, FunOrMFA) when node(Pid) =:= node() -> %% optimisation
     _ = safe_invoke(Pid, FunOrMFA), %% must not die
     ok;
+invoke_no_result([Pid], Name, FunOrMFA) ->
+    RemoteNode  = node(Pid),
+    gen_server2:abcast([RemoteNode], delegate(self(), Name, [RemoteNode]),
+                       {invoke, FunOrMFA, orddict:from_list([{RemoteNode, [Pid]}])}),
+    ok;
 invoke_no_result(Pids, Name, FunOrMFA) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
     case orddict:fetch_keys(Grouped) of
@@ -178,10 +183,30 @@ call(PidOrPids, Name, Msg) ->
     invoke(PidOrPids, Name, {gen_server2, call, [Msg, infinity]}).
 
 call(PidOrPids, Msg) ->
-    call(PidOrPids, ?DEFAULT_NAME, Msg).
+    %% Performance optimization, do not refactor to call delegate:call/3
+    invoke(PidOrPids, ?DEFAULT_NAME, {gen_server2, call, [Msg, infinity]}).
 
+cast(Pid, Msg) when is_pid(Pid) andalso node(Pid) =:= node() ->
+    %% Performance optimization, do not refactor to call invoke_no_result
+    %% There are several exported an externally unused functions - such as
+    %% invoke_no_result - that could be removed and use the code directly in
+    %% the caller functions - such as cast/2. This unfold of code might seem
+    %% a silly refactor, but it massively reduces the memory usage in HA
+    %% queues when ack/nack are sent to the node that hosts the slave queue.
+    %% For some reason, memory usage increase massively and binary references are
+    %% kept around with all the internal function calls here.
+    %% We'll do a deeper refactor in the master branch.
+    _ = safe_invoke(Pid, {gen_server2, cast, [Msg]}), %% we don't care about any error
+    ok;
+cast(Pid, Msg) when is_pid(Pid) ->
+    %% Performance optimization, do not refactor to call invoke_no_result
+    RemoteNode  = node(Pid),
+    gen_server2:abcast([RemoteNode], delegate(self(), ?DEFAULT_NAME, [RemoteNode]),
+                       {invoke, {gen_server2, cast, [Msg]},
+                        orddict:from_list([{RemoteNode, [Pid]}])}),
+    ok;
 cast(PidOrPids, Msg) ->
-    cast(PidOrPids, ?DEFAULT_NAME, Msg).
+    invoke_no_result(PidOrPids, ?DEFAULT_NAME, {gen_server2, cast, [Msg]}).
 
 cast(PidOrPids, Name, Msg) ->
     invoke_no_result(PidOrPids, Name, {gen_server2, cast, [Msg]}).
