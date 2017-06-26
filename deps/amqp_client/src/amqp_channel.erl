@@ -500,7 +500,7 @@ handle_info({channel_exit, _ChNumber, Reason}, State) ->
     handle_channel_exit(Reason, State);
 %% This comes from rabbit_channel in the direct case
 handle_info({channel_closing, ChPid}, State) ->
-    ok = rabbit_channel:ready_for_close(ChPid),
+    ok = rabbit_channel_common:ready_for_close(ChPid),
     {noreply, State};
 %% @private
 handle_info({bump_credit, Msg}, State) ->
@@ -864,9 +864,9 @@ do(Method, Content, Flow, #state{driver = network, writer = W}) ->
 do(Method, Content, Flow, #state{driver = direct, writer = W}) ->
     %% ditto catching because...
     catch case {Content, Flow} of
-              {none, _}      -> rabbit_channel:do(W, Method);
-              {_,    flow}   -> rabbit_channel:do_flow(W, Method, Content);
-              {_,    noflow} -> rabbit_channel:do(W, Method, Content)
+              {none, _}      -> rabbit_channel_common:do(W, Method);
+              {_,    flow}   -> rabbit_channel_common:do_flow(W, Method, Content);
+              {_,    noflow} -> rabbit_channel_common:do(W, Method, Content)
           end.
 
 
@@ -881,13 +881,13 @@ flush_writer(#state{driver = direct}) ->
 amqp_msg(none) ->
     none;
 amqp_msg(Content) ->
-    {Props, Payload} = rabbit_basic:from_content(Content),
+    {Props, Payload} = rabbit_basic_common:from_content(Content),
     #amqp_msg{props = Props, payload = Payload}.
 
 build_content(none) ->
     none;
 build_content(#amqp_msg{props = Props, payload = Payload}) ->
-    rabbit_basic:build_content(Props, Payload).
+    rabbit_basic_common:build_content(Props, Payload).
 
 check_block(_Method, _AmqpMsg, #state{closing = {just_channel, _}}) ->
     closing;
