@@ -134,6 +134,7 @@ if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitm
 fi
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 
+
 %preun
 if [ $1 = 0 ]; then
   #Complete uninstall
@@ -188,7 +189,9 @@ fi
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq/mnesia
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
-%dir %{_sysconfdir}/rabbitmq
+%attr(2750, -, rabbitmq) %dir %{_sysconfdir}/rabbitmq
+ 
+
 
 %if 0%{?rhel} < 7
 %{_initrddir}/rabbitmq-server
