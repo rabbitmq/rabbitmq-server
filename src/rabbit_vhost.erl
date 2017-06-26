@@ -20,7 +20,7 @@
 
 %%----------------------------------------------------------------------------
 
--export([add/1, delete/1, exists/1, list/0, with/2, assert/1]).
+-export([add/1, delete/1, exists/1, list/0, with/2, with_user_and_vhost/3, assert/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 
 -spec add(rabbit_types:vhost()) -> 'ok'.
@@ -28,6 +28,8 @@
 -spec exists(rabbit_types:vhost()) -> boolean().
 -spec list() -> [rabbit_types:vhost()].
 -spec with(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
+-spec with_user_and_vhost
+        (rabbit_types:username(), rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
 -spec assert(rabbit_types:vhost()) -> 'ok'.
 
 -spec info(rabbit_types:vhost()) -> rabbit_types:infos().
@@ -131,6 +133,9 @@ with(VHostPath, Thunk) ->
                     Thunk()
             end
     end.
+
+with_user_and_vhost(Username, VHostPath, Thunk) ->
+    rabbit_misc:with_user(Username, with(VHostPath, Thunk)).
 
 %% Like with/2 but outside an Mnesia tx
 assert(VHostPath) -> case exists(VHostPath) of
