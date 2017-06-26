@@ -37,7 +37,7 @@
 -export([confirm_to_sender/2]).
 -export([throw_on_error/2, with_exit_handler/2, is_abnormal_exit/1,
          filter_exit_map/2]).
--export([with_user/2, with_user_and_vhost/3]).
+-export([with_user/2]).
 -export([execute_mnesia_transaction/1]).
 -export([execute_mnesia_transaction/2]).
 -export([execute_mnesia_tx_with_tail/1]).
@@ -173,14 +173,12 @@
 -spec is_abnormal_exit(any()) -> boolean().
 -spec filter_exit_map(fun ((A) -> B), [A]) -> [B].
 -spec with_user(rabbit_types:username(), thunk(A)) -> A.
--spec with_user_and_vhost
-        (rabbit_types:username(), rabbit_types:vhost(), thunk(A)) -> A.
 -spec execute_mnesia_transaction(thunk(A)) -> A.
 -spec execute_mnesia_transaction(thunk(A), fun ((A, boolean()) -> B)) -> B.
 -spec execute_mnesia_tx_with_tail
         (thunk(fun ((boolean()) -> B))) -> B | (fun ((boolean()) -> B)).
 -spec ensure_ok(ok_or_error(), atom()) -> 'ok'.
--spec tcp_name(atom(), inet:ip_address(), rabbit_networking:ip_port()) ->
+-spec tcp_name(atom(), inet:ip_address(), rabbit_net:ip_port()) ->
           atom().
 -spec format_inet_error(atom()) -> string().
 -spec upmap(fun ((A) -> B), [A]) -> [B].
@@ -435,7 +433,7 @@ enable_cover(Dirs) ->
                 end, ok, Dirs).
 
 start_cover(NodesS) ->
-    {ok, _} = cover:start([rabbit_nodes:make(N) || N <- NodesS]),
+    {ok, _} = cover:start([rabbit_nodes_common:make(N) || N <- NodesS]),
     ok.
 
 report_cover() -> report_cover(["."]).
@@ -525,9 +523,6 @@ with_user(Username, Thunk) ->
                     Thunk()
             end
     end.
-
-with_user_and_vhost(Username, VHostPath, Thunk) ->
-    with_user(Username, rabbit_vhost:with(VHostPath, Thunk)).
 
 execute_mnesia_transaction(TxFun) ->
     %% Making this a sync_transaction allows us to use dirty_read
