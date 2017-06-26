@@ -283,7 +283,7 @@ server_properties(Protocol) ->
                      [{product,      Product},
                       {version,      Version},
                       {cluster_name, rabbit_nodes:cluster_name()},
-                      {platform,     "Erlang/OTP"},
+                      {platform,     rabbit_misc:platform_and_version()},
                       {copyright,    ?COPYRIGHT_MESSAGE},
                       {information,  ?INFORMATION_MESSAGE}]]],
 
