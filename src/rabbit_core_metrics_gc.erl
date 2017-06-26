@@ -25,6 +25,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
@@ -70,7 +72,10 @@ gc_channels() ->
     ok.
 
 gc_queues() ->
-    Queues = rabbit_amqqueue:list_names(),
+    % Queues will contain pids, we want to filter
+    Queues = lists:filter(fun(#amqqueue{pid = Pid}) ->
+                              node(Pid) =:= node()
+                          end, rabbit_amqqueue:list()),
     GbSet = gb_sets:from_list(Queues),
     gc_entity(queue_metrics, GbSet),
     gc_entity(queue_coarse_metrics, GbSet),

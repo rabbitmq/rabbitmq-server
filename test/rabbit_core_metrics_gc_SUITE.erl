@@ -392,7 +392,7 @@ cluster_queue_metrics(Config) ->
     % {Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions}
     % [{{resource,<<"/">>,queue,<<"cluster_queue_metrics">>}, 1,0,1,10524}]
     EtsData0_0 = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, tab2list, [queue_coarse_metrics]),
-    [{Name, 1, 0, 1, _}] = EtsData0_0,
+    [] = EtsData0_0,
 
     EtsData0_1 = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, tab2list, [queue_coarse_metrics]),
     ct:pal("Node 0 ETS: ~p~n", [EtsData0_1]),
