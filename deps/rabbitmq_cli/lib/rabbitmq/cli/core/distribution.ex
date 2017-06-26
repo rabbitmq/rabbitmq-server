@@ -46,7 +46,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
       {:error, {{:already_started, _}, _}} = started -> started;
       ## EPMD can be stopped. Retry with EPMD
       {:error, _} ->
-        :rabbit_nodes.ensure_epmd()
+        :rabbit_nodes_common.ensure_epmd()
         :net_kernel.start([node_name, node_name_type])
     end
   end
