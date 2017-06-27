@@ -183,19 +183,18 @@ call(PidOrPids, Name, Msg) ->
     invoke(PidOrPids, Name, {gen_server2, call, [Msg, infinity]}).
 
 call(PidOrPids, Msg) ->
-    %% Performance optimization, do not refactor to call delegate:call/3
+    %% Optimization, avoids calling delegate:call/3
     invoke(PidOrPids, ?DEFAULT_NAME, {gen_server2, call, [Msg, infinity]}).
 
 cast(Pid, Msg) when is_pid(Pid) andalso node(Pid) =:= node() ->
-    %% Performance optimization, do not refactor to call invoke_no_result
-    %% There are several exported an externally unused functions - such as
-    %% invoke_no_result - that could be removed and use the code directly in
-    %% the caller functions - such as cast/2. This unfold of code might seem
-    %% a silly refactor, but it massively reduces the memory usage in HA
-    %% queues when ack/nack are sent to the node that hosts the slave queue.
-    %% For some reason, memory usage increase massively and binary references are
-    %% kept around with all the internal function calls here.
-    %% We'll do a deeper refactor in the master branch.
+    %% Optimization, avoids calling invoke_no_result/3.
+    %%
+    %% This may seem like a cosmetic change at first but it actually massively reduces the memory usage in mirrored
+    %% queues when ack/nack are sent to the node that hosts a mirror.
+    %% This way binary references are not kept around unnecessarily.
+    %%
+    %% See https://github.com/rabbitmq/rabbitmq-common/issues/208#issuecomment-311308583 for a before/after
+    %% comparison.
     _ = safe_invoke(Pid, {gen_server2, cast, [Msg]}), %% we don't care about any error
     ok;
 cast(Pid, Msg) when is_pid(Pid) ->
