@@ -30,5 +30,6 @@ docs/*.html
 *.ti
 *.lz4*
 callgrind.out*
+callgraph.dot*
 
 PACKAGES/*
