@@ -18,8 +18,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts) do
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+
+  def switches(), do: [global: :boolean]
+
+  def merge_defaults(args, %{global: true} = opts) do
     {args, opts}
+  end
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
   def validate([_|_], _) do
@@ -27,21 +34,25 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
   end
   def validate(_, _), do: :ok
 
+  def run([], %{node: node_name, global: true}) do
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :list, [])
+    |> Enum.map(fn({vhost, val}) ->
+      {:ok, val_encoded} = JSON.encode(Map.new(val))
+      [vhost: vhost, limits: val_encoded]
+    end)
+  end
   def run([], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name,
-                          :rabbit_vhost_limit, :list, [vhost])
-  end
-  def run([], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
-                          :rabbit_vhost_limit, :list, [])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :list, [vhost])
+    |> Map.new()
+    |> JSON.encode()
   end
 
-  def usage, do: "list_vhost_limits [-p <vhost>]"
+  def usage, do: "list_vhost_limits [-p <vhost>] [--global]"
 
+  def banner([], %{global: true}) do
+    "Listing limits for all vhosts ..."
+  end
   def banner([], %{vhost: vhost}) do
     "Listing limits for vhost \"#{vhost}\" ..."
-  end
-  def banner([], %{}) do
-    "Listing limits for all vhosts ..."
   end
 end
