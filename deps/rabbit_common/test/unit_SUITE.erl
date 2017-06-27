@@ -34,12 +34,23 @@ groups() ->
         version_equivalence,
         version_minor_equivalence_properties,
         version_comparison,
-        pid_decompose_compose
+        pid_decompose_compose,
+        platform_and_version
       ]}
     ].
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
+
+platform_and_version(_Config) ->
+    MajorVersion = erlang:system_info(otp_release),
+    Result = rabbit_misc:platform_and_version(),
+    RegExp = "^Erlang/OTP\s" ++ MajorVersion,
+    case re:run(Result, RegExp) of
+        nomatch -> ct:fail("~p does not match ~p", [Result, RegExp]);
+        {error, ErrType} -> ct:fail("~p", [ErrType]);
+        _ -> ok
+    end.
 
 pid_decompose_compose(_Config) ->
     Pid = self(),
