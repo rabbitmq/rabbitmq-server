@@ -335,9 +335,12 @@ autoheal_unexpected_finish(Config) ->
 
 partial_false_positive(Config) ->
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    suspend_node_monitor(Config, C),
     block([{A, B}]),
     timer:sleep(1000),
     block([{A, C}]),
+    timer:sleep(?DELAY),
+    resume_node_monitor(Config, C),
     timer:sleep(?DELAY),
     unblock([{A, B}, {A, C}]),
     timer:sleep(?DELAY),
@@ -345,6 +348,13 @@ partial_false_positive(Config) ->
     %% not have timed out A yet, but already it can't talk to it. We
     %% need to not consider this a partial partition; B and C should
     %% still talk to each other.
+    %%
+    %% Because there is a chance that C can still talk to A when B
+    %% requests to check for a partial partition, we suspend C's
+    %% rabbit_node_monitor at the beginning and resume it after the
+    %% link between A and C is blocked. This way, when B asks C about
+    %% A, we make sure that the A<->C link is blocked before C's
+    %% rabbit_node_monitor processes B's request.
     [B, C] = partitions(A),
     [A] = partitions(B),
     [A] = partitions(C),
@@ -369,7 +379,19 @@ partial_to_full(Config) ->
 partial_pause_minority(Config) ->
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     set_mode(Config, pause_minority),
+    %% We suspend rabbit_node_monitor on C while we block the link
+    %% between A and B. This should make sure C's rabbit_node_monitor
+    %% processes both partial partition checks from A and B at about
+    %% the same time, and thus increase the chance both A and B decides
+    %% there is a partial partition.
+    %%
+    %% Without this, one node may see the partial partition and stop,
+    %% before the other node sees it. In this case, the other node
+    %% doesn't stop and this testcase fails.
+    suspend_node_monitor(Config, C),
     block([{A, B}]),
+    timer:sleep(?DELAY),
+    resume_node_monitor(Config, C),
     [await_running(N, false) || N <- [A, B]],
     await_running(C, true),
     unblock([{A, B}]),
@@ -393,6 +415,22 @@ set_mode(Config, Mode) ->
 
 set_mode(Config, Nodes, Mode) ->
     rabbit_ct_broker_helpers:set_partition_handling_mode(Config, Nodes, Mode).
+
+suspend_node_monitor(Config, Node) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, Node, ?MODULE, suspend_or_resume_node_monitor, [suspend]).
+
+resume_node_monitor(Config, Node) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, Node, ?MODULE, suspend_or_resume_node_monitor, [resume]).
+
+suspend_or_resume_node_monitor(SuspendOrResume) ->
+    Action = case SuspendOrResume of
+                 suspend -> "Suspending";
+                 resume  -> "Resuming"
+             end,
+    rabbit_log:info("(~s) ~s node monitor~n", [?MODULE, Action]),
+    ok = sys:SuspendOrResume(rabbit_node_monitor).
 
 block_unblock(Pairs) ->
     block(Pairs),

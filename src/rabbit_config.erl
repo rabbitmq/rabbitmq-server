@@ -99,7 +99,6 @@ generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
 
 generate_config_file(ConfFiles, ConfDir, ScriptDir, SchemaDir, Advanced) ->
     prepare_plugin_schemas(SchemaDir),
-    % SchemaFile = filename:join([ScriptDir, "rabbitmq.schema"]),
     Cuttlefish = filename:join([ScriptDir, "cuttlefish"]),
     GeneratedDir = filename:join([ConfDir, "generated"]),
 

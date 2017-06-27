@@ -32,6 +32,7 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           arguments_parser,
+          auth_backend_internal_expand_topic_permission,
           {basic_header_handling, [parallel], [
               write_table_with_invalid_existing_type,
               invalid_existing_headers,
@@ -332,7 +333,7 @@ do_decrypt_start_app(Config, Passphrase) ->
     %%
     %% We expect a failure *after* the decrypting has been done.
     try
-        rabbit:start_apps([rabbit_shovel_test])
+        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch _:_ ->
         ok
     end,
@@ -359,7 +360,7 @@ decrypt_start_app_undefined(Config) ->
     %%
     %% We expect a failure during decryption because the passphrase is missing.
     try
-        rabbit:start_apps([rabbit_shovel_test])
+        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch
         exit:{bad_configuration, config_entry_decoder} -> ok;
         _:_ -> exit(unexpected_exception)
@@ -379,7 +380,7 @@ decrypt_start_app_wrong_passphrase(Config) ->
     %%
     %% We expect a failure during decryption because the passphrase is wrong.
     try
-        rabbit:start_apps([rabbit_shovel_test])
+        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch
         exit:{decryption_error,_,_} -> ok;
         _:_ -> exit(unexpected_exception)
@@ -1001,4 +1002,38 @@ listing_plugins_from_multiple_directories(Config) ->
             ct:pal("Got ~p~nExpected: ~p", [Got, Expected]),
             exit({wrong_plugins_list, Got})
     end,
+    ok.
+
+auth_backend_internal_expand_topic_permission(_Config) ->
+    ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},
+    %% simple case
+    <<"services/default/accounts/guest/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            ExpandMap
+        ),
+    %% replace variable twice
+    <<"services/default/accounts/default/guest/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{vhost}/{username}/notifications">>,
+            ExpandMap
+        ),
+    %% nothing to replace
+    <<"services/accounts/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/accounts/notifications">>,
+            ExpandMap
+        ),
+    %% the expand map isn't defined
+    <<"services/{vhost}/accounts/{username}/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            undefined
+        ),
+    %% the expand map is empty
+    <<"services/{vhost}/accounts/{username}/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            #{}
+        ),
     ok.

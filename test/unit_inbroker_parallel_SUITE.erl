@@ -146,7 +146,7 @@ on_disk_stop(Pid) ->
     end.
 
 queue_name(Config, Name) ->
-    Name1 = rabbit_ct_helpers:config_to_testcase_name(Config, Name),
+    Name1 = iolist_to_binary(rabbit_ct_helpers:config_to_testcase_name(Config, Name)),
     queue_name(Name1).
 
 queue_name(Name) ->
@@ -336,26 +336,6 @@ override_group_leader() ->
     %% the error_logger local to RabbitMQ.
     {group_leader, Leader} = erlang:process_info(whereis(rabbit), group_leader),
     erlang:group_leader(Leader, self()).
-
-empty_files(Files) ->
-    [case file:read_file_info(File) of
-         {ok, FInfo} -> FInfo#file_info.size == 0;
-         Error       -> Error
-     end || File <- Files].
-
-non_empty_files(Files) ->
-    [case EmptyFile of
-         {error, Reason} -> {error, Reason};
-         _               -> not(EmptyFile)
-     end || EmptyFile <- empty_files(Files)].
-
-test_logs_working(MainLogFile, SaslLogFile) ->
-    ok = rabbit_log:error("Log a test message~n"),
-    ok = error_logger:error_report(crash_report, [fake_crash_report, ?MODULE]),
-    %% give the error loggers some time to catch up
-    timer:sleep(100),
-    [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
-    ok.
 
 set_permissions(Path, Mode) ->
     case file:read_file_info(Path) of

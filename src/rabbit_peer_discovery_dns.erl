@@ -20,7 +20,7 @@
 -include("rabbit.hrl").
 
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0]).
+         post_registration/0, lock/1, unlock/1]).
 %% for tests
 -export([discover_nodes/2, discover_hostnames/2]).
 
@@ -31,14 +31,14 @@
 -spec list_nodes() -> {ok, Nodes :: list()} | {error, Reason :: string()}.
 
 list_nodes() ->
-    case application:get_env(rabbit, autocluster) of
+    case application:get_env(rabbit, cluster_formation) of
       undefined         ->
         {[], disc};
-      {ok, Autocluster} ->
-        case proplists:get_value(peer_discovery_dns, Autocluster) of
+      {ok, ClusterFormation} ->
+        case proplists:get_value(peer_discovery_dns, ClusterFormation) of
             undefined ->
               rabbit_log:warning("Peer discovery backend is set to ~s "
-                                 "but final config does not contain rabbit.autocluster.peer_discovery_dns. "
+                                 "but final config does not contain rabbit.cluster_formation.peer_discovery_dns. "
                                  "Cannot discover any nodes because seed hostname is not configured!",
                                  [?MODULE]),
               {[], disc};
@@ -71,6 +71,15 @@ unregister() ->
 post_registration() ->
     ok.
 
+-spec lock(Node :: atom()) -> not_supported.
+
+lock(_Node) ->
+    not_supported.
+
+-spec unlock(Data :: term()) -> ok.
+
+unlock(_Data) ->
+    ok.
 
 %%
 %% Implementation
