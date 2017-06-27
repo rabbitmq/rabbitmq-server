@@ -25,6 +25,7 @@
 .\" ------------------------------------------------------------------
 .Nm
 .Op Fl q
+.Op Fl l
 .Op Fl n Ar node
 .Op Fl t Ar timeout
 .Ar command
@@ -69,16 +70,25 @@ sign.
 See
 .Xr rabbitmq-server 8
 for details of configuring the RabbitMQ broker.
-.It Fl q
+.It Fl q | -quiet
 Quiet output mode is selected.
 Informational messages are suppressed when quiet mode is in effect.
-.It Fl t Ar timeout
+.It Fl -dry-run
+Do not run the command. Only print information message.
+.It Fl t | -timeout Ar timeout
 Operation timeout in seconds.
 Only applicable to
 .Qq list
 commands.
 Default is
 .Qq infinity .
+.It Fl l | -longnames
+Use longnames for erlang distribution. If RabbitMQ broker uses long
+node names for erlang distribution, the option must be specified.
+.It Fl -erlang-cookie Ar cookie
+Erlang distribution cookie.
+If RabbitMQ node is using a custom erlang cookie value, the cookie value
+must be set vith this parameter.
 .El
 .\" ------------------------------------------------------------------
 .Sh COMMANDS
