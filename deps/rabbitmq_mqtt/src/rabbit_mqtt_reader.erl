@@ -64,7 +64,7 @@ info(Pid, InfoItems) ->
 init([KeepaliveSup, Ref, Sock]) ->
     process_flag(trap_exit, true),
     RealSocket = rabbit_net:unwrap_socket(Sock),
-    rabbit_net:accept_ack(Ref, RealSocket),
+    rabbit_networking:accept_ack(Ref, RealSocket),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             log(debug, "MQTT accepting TCP connection ~p (~s)~n", [self(), ConnStr]),
