@@ -198,7 +198,7 @@ cast(Pid, Msg) when is_pid(Pid) andalso node(Pid) =:= node() ->
     _ = safe_invoke(Pid, {gen_server2, cast, [Msg]}), %% we don't care about any error
     ok;
 cast(Pid, Msg) when is_pid(Pid) ->
-    %% Optimization, avoid calling invoke_no_result/3
+    %% Optimization, avoids calling invoke_no_result/3
     RemoteNode  = node(Pid),
     gen_server2:abcast([RemoteNode], delegate(self(), ?DEFAULT_NAME, [RemoteNode]),
                        {invoke, {gen_server2, cast, [Msg]},
