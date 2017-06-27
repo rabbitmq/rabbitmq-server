@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(unit_SUITE).
@@ -34,12 +34,23 @@ groups() ->
         version_equivalence,
         version_minor_equivalence_properties,
         version_comparison,
-        pid_decompose_compose
+        pid_decompose_compose,
+        platform_and_version
       ]}
     ].
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
+
+platform_and_version(_Config) ->
+    MajorVersion = erlang:system_info(otp_release),
+    Result = rabbit_misc:platform_and_version(),
+    RegExp = "^Erlang/OTP\s" ++ MajorVersion,
+    case re:run(Result, RegExp) of
+        nomatch -> ct:fail("~p does not match ~p", [Result, RegExp]);
+        {error, ErrType} -> ct:fail("~p", [ErrType]);
+        _ -> ok
+    end.
 
 pid_decompose_compose(_Config) ->
     Pid = self(),

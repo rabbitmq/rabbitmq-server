@@ -1,3 +1,6 @@
+%% This module is based on the autocluster_backend module
+%% from rabbitmq-autocluster by Gavin Roy.
+%%
 %% Copyright (c) 2014-2015 AWeber Communications
 %% All rights reserved.
 %%
@@ -9,7 +12,7 @@
 %%  * Redistributions in binary form must reproduce the above copyright notice,
 %%    this list of conditions and the following disclaimer in the documentation
 %%    and/or other materials provided with the distribution.
-%%  * Neither the name of the rabbitmq-autocluster-consul plugin nor the names of its
+%%  * Neither the name of the project nor the names of its
 %%    contributors may be used to endorse or promote products derived from this
 %%    software without specific prior written permission.
 %%
@@ -45,3 +48,7 @@
 -callback unregister() -> ok | {error, Reason :: string()}.
 
 -callback post_registration()   -> ok | {error, Reason :: string()}.
+
+-callback lock(Node :: atom())   -> {ok, Data :: term()} | not_supported | {error, Reason :: string()}.
+
+-callback unlock(Data :: term()) -> ok | {error, Reason :: string()}.

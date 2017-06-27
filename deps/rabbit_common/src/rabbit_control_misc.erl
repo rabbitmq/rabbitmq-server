@@ -123,14 +123,15 @@ collect_monitors([]) ->
     ok;
 collect_monitors([Monitor|Rest]) ->
     receive
-        {'DOWN', Monitor, _Pid, normal} ->
+        {'DOWN', Monitor, process, _Pid, normal} ->
             collect_monitors(Rest);
-        {'DOWN', Monitor, _Pid, noproc} ->
+        {'DOWN', Monitor, process, _Pid, noproc} ->
             %% There is a link and a monitor to a process. Matching
             %% this clause means that process has gracefully
             %% terminated even before we've started monitoring.
             collect_monitors(Rest);
-        {'DOWN', _, Pid, Reason} ->
+        {'DOWN', _, process, Pid, Reason} when Reason =/= normal,
+                                               Reason =/= noproc ->
             exit({emitter_exit, Pid, Reason})
     end.
 

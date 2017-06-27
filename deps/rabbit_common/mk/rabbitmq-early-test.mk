@@ -1,4 +1,21 @@
 # --------------------------------------------------------------------
+# xref
+# --------------------------------------------------------------------
+
+ifneq ($(PROJECT),rabbit_common)
+XREFR_ARGS := --config $(DEPS_DIR)/rabbit_common/xref.config
+endif
+
+# --------------------------------------------------------------------
+# %-on-concourse dependencies.
+# --------------------------------------------------------------------
+
+ifneq ($(words $(filter %-on-concourse,$(MAKECMDGOALS))),0)
+TEST_DEPS += ci $(RMQ_CI_CT_HOOKS)
+dep_ci = git git@github.com:rabbitmq/rabbitmq-ci master
+endif
+
+# --------------------------------------------------------------------
 # Common Test flags.
 # --------------------------------------------------------------------
 
