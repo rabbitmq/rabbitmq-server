@@ -83,6 +83,20 @@ Default is
 .\" ------------------------------------------------------------------
 .Sh COMMANDS
 .\" ------------------------------------------------------------------
+.Bl -tag -width Ds
+.It
+.Cm help
+.Op Fl l | -list-commands
+.Op Ar command_name
+.Pp
+Prints usage for all available commands.
+.Bl -tag -width Ds
+.It Fl l | -list-commands
+List command usages only, without parameter explanation.
+.It Ar command_name
+Prints usage for the specified command.
+.El
+.El
 .Ss Application Management
 .Bl -tag -width Ds
 .\" ------------------------------------
@@ -228,16 +242,22 @@ application:
 .sp
 .Dl rabbitmqctl stop_app
 .\" ------------------------------------
-.It Cm wait Ar pid_file
+.It Cm wait Ar pid_file | Fl -pid Ar pid
 Waits for the RabbitMQ application to start.
 .Pp
 This command will wait for the RabbitMQ application to start at the
 node.
-It will wait for the pid file to be created, then for a process with
-a pid specified in the pid file to start, and then for the RabbitMQ
-application to start in that process.
+It will wait for the pid file to be created if pidfile is specified,
+then for a process with a pid specified in the pid file or the
+.Fl -pid
+argument, and then for the RabbitMQ application to start in that process.
 It will fail if the process terminates without starting the RabbitMQ
 application.
+.Pp
+If the specified pidfile is not created or erlang node is not started within
+.Fl -timeout
+the command will fail.
+Default timeout is 10 seconds.
 .Pp
 A suitable pid file is created by the
 .Xr rabbitmq-server 8
@@ -808,15 +828,15 @@ user named
 .Qq tonyg
 publish and consume messages going through the
 .Qq amp.topic
-exchange of the 
-.Qq /myvhost 
+exchange of the
+.Qq /myvhost
 virtual host with a routing key starting with
-.Qq tonyg- : 
+.Qq tonyg- :
 .sp
 .Dl rabbitmqctl set_topic_permissions -p /myvhost tonyg amq.topic Qo ^tonyg-.* Qc Qo ^tonyg-.* Qc
 .Pp
 Topic permissions support variable expansion for the following variables:
-username, vhost, and client_id. Note that client_id is expanded only when using MQTT. 
+username, vhost, and client_id. Note that client_id is expanded only when using MQTT.
 The previous example could be made more generic by using
 .Qq ^{username}-.* :
 .sp
@@ -831,7 +851,7 @@ defaulting to
 .It Ar username
 The name of the user to clear topic permissions to the specified virtual host.
 .It Ar exchange
-The name of the topic exchange to clear topic permissions, defaulting to all the 
+The name of the topic exchange to clear topic permissions, defaulting to all the
 topic exchanges the given user has topic permissions for.
 .El
 .Pp
@@ -877,7 +897,6 @@ virtual hosts to which the user named
 has been granted access, and the topic permissions the user has in these virtual hosts:
 .sp
 .Dl rabbitmqctl list_topic_user_permissions tonyg
-
 .El
 .Ss Parameter Management
 Certain features of RabbitMQ (such as the federation plugin) are
@@ -1130,6 +1149,15 @@ For example, this command clears vhost limits in vhost
 .Qq qa_env :
 .sp
 .Dl rabbitmqctl clear_vhost_limits -p qa_env
+.\" ------------------------------------
+.It Cm list_vhost_limits Op Fl p Ar vhostpath Op Fl -global
+Displays configured virtual host limits.
+.Bl -tag -width Ds
+.It Fl -global
+Show limits for all vhosts. Suppresses the
+.Fl p
+parameter.
+.El
 .El
 .Ss Server Status
 The server status queries interrogate the server and return a list of
@@ -1670,6 +1698,38 @@ passing the explanation
 to the connected client:
 .sp
 .Dl rabbitmqctl close_connection Qo <rabbit@tanto.4262.0> Qc Qq go away
+.\" ------------------------------------
+.It Cm close_all_connections Ar explanation Op Fl p Ar vhost Op Fl -global Op Fl -per-connection-delay Ar delay Op Fl -limit Ar limit
+.Bl -tag -width Ds
+.It Ar explanation
+Explanation string.
+.It Fl -global
+If connections should be close for all vhosts. Overrides Fl p
+.It Fl p Ar vhost
+The name of the virtual host for which connections should be closed.
+Is ignored when Fl -global is specified.
+.It Fl -per-connection-delay Ar delay
+Time in milliseconds to wait after each connection closing.
+.It Fl -limit Ar limit
+Number of connection to close. Only works per vhost.
+Is ignored when Fl -global is specified.
+.El
+.Pp
+Instructs the broker to close all connection for the specified vhost or entire RabbitMQ node.
+.Pp
+For example, this command instructs the RabbitMQ broker to close 10 connections on
+.Qq qa_env
+vhost, passing the explanation
+.Qq Please close
+:
+.sp
+.Dl rabbitmqctl close_all_connections -p qa_env --limit 10 'Please close'
+.sp
+.Pp
+This command instructs broker to close all connections to the node:
+.sp
+.Dl rabbitmqctl close_all_connections --global
+.sp
 .\" ------------------------------------
 .It Cm trace_on Op Fl p Ar vhost
 .Bl -tag -width Ds
