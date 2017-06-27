@@ -56,6 +56,7 @@ teardown_steps() ->
     ].
 
 start_channels_managers(Config) ->
+    ok = application:set_env(amqp_client, gen_server_call_timeout, infinity),
     NodeConfigs = rabbit_ct_broker_helpers:get_node_configs(Config),
     NodeConfigs1 = [start_channels_manager(NC) || NC <- NodeConfigs],
     rabbit_ct_helpers:set_config(Config, {rmq_nodes, NodeConfigs1}).
