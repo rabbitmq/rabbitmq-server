@@ -21,6 +21,9 @@
 %% Internal
 -export([list_local/0]).
 
+%% For testing only
+-export([extract_extra_auth_props/4]).
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -65,21 +68,22 @@ list() ->
 
 %%----------------------------------------------------------------------------
 
-auth_fun({none, _}, _VHost) ->
+auth_fun({none, _}, _VHost, _ExtraAuthProps) ->
     fun () -> {ok, rabbit_auth_backend_dummy:user()} end;
 
-auth_fun({Username, none}, _VHost) ->
+auth_fun({Username, none}, _VHost, _ExtraAuthProps) ->
     fun () -> rabbit_access_control:check_user_login(Username, []) end;
 
-auth_fun({Username, Password}, VHost) ->
+auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
     fun () ->
         rabbit_access_control:check_user_login(
             Username,
-            [{password, Password}, {vhost, VHost}])
+            [{password, Password}, {vhost, VHost}] ++ ExtraAuthProps)
     end.
 
 connect(Creds, VHost, Protocol, Pid, Infos) ->
-    AuthFun = auth_fun(Creds, VHost),
+    ExtraAuthProps = extract_extra_auth_props(Creds, VHost, Pid, Infos),
+    AuthFun = auth_fun(Creds, VHost, ExtraAuthProps),
     case rabbit:is_running() of
         true  ->
             case is_over_connection_limit(VHost, Creds, Pid) of
@@ -100,6 +104,42 @@ connect(Creds, VHost, Protocol, Pid, Infos) ->
             end;
         false -> {error, broker_not_found_on_node}
     end.
+
+extract_extra_auth_props(Creds, VHost, Pid, Infos) ->
+    case extract_protocol(Infos) of
+        undefined ->
+            [];
+        Protocol ->
+            maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos)
+    end.
+
+extract_protocol(Infos) ->
+    case proplists:get_value(protocol, Infos, undefined) of
+        {Protocol, _Version} ->
+            Protocol;
+        _ ->
+            undefined
+    end.
+
+maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos) ->
+    Module = rabbit_data_coercion:to_atom(string:to_lower(
+        "rabbit_" ++ rabbit_data_coercion:to_list(Protocol) ++ "_connection_info")
+    ),
+    case code:get_object_code(Module) of
+        {_Module, _Binary, _Filename} ->
+            try
+                Module:additional_authn_params(Creds, VHost, Pid, Infos)
+            catch
+                _:Reason ->
+                    rabbit_log:error("Calling ~p:additional_authn_params/4 failed:~p~n", [Module, Reason]),
+                    []
+            end;
+        error ->
+            [];
+        _ ->
+            []
+    end.
+
 
 is_over_connection_limit(VHost, {Username, _Password}, Pid) ->
     PrintedUsername = case Username of

@@ -50,6 +50,7 @@ groups() ->
           pmerge,
           plmerge,
           priority_queue,
+          rabbit_direct_extract_extra_auth_props,
           {resource_monitor, [parallel], [
               parse_information_unit
             ]},
@@ -465,7 +466,25 @@ rabbitmqctl_encode_encrypt_decrypt(Secret) ->
     )
     .
 
-
+rabbit_direct_extract_extra_auth_props(_Config) ->
+    % no protocol to extract
+    [] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
+        [{name,<<"127.0.0.1:52366 -> 127.0.0.1:1883">>}]),
+    % protocol to extract, but no module to call
+    [] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
+        [{protocol, {'PROTOCOL_WITHOUT_MODULE', "1.0"}}]),
+    % see rabbit_dummy_protocol_connection_info module
+    % protocol to extract, module that returns a client ID
+    [{client_id, <<"DummyClientId">>}] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
+        [{protocol, {'DUMMY_PROTOCOL', "1.0"}}]),
+    % protocol to extract, but error thrown in module
+    [] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, -1,
+        [{protocol, {'DUMMY_PROTOCOL', "1.0"}}]),
+    ok.
 
 %% -------------------------------------------------------------------
 %% pg_local.
