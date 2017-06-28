@@ -2251,6 +2251,31 @@ rabbitmqctl encode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 \
         </varlistentry>
 
         <varlistentry>
+          <!-- one-line formatting matters for rabbit_ctl_usage.erl code generation -->
+          <term><cmdsynopsis><command>decode</command> <arg choice="opt"><replaceable>value</replaceable></arg> <arg choice="opt"><replaceable>passphrase</replaceable></arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>
+                  <cmdsynopsis>
+                    <arg choice="opt"><replaceable>value</replaceable></arg>
+                    <arg choice="opt"><replaceable>passphrase</replaceable></arg>
+                  </cmdsynopsis>
+                </term>
+                <listitem>
+                  <para>
+                    Value to decrypt (as produced by the encode command) and passphrase.
+                  </para>
+                  <para role="example-prefix">For example:</para>
+                  <screen role="example">rabbitmqctl decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>list_hashes</command></cmdsynopsis></term>
           <listitem>
             <para>
