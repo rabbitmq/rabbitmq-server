@@ -21,7 +21,7 @@
 %%----------------------------------------------------------------------------
 
 -export([recover/0, recover/1]).
--export([add/2, delete/2, exists/1, list/0, with/2, assert/1, update/2,
+-export([add/2, delete/2, exists/1, list/0, with/2, with_user_and_vhost/3, assert/1, update/2,
          set_limits/2, limits_of/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
@@ -33,6 +33,8 @@
 -spec exists(rabbit_types:vhost()) -> boolean().
 -spec list() -> [rabbit_types:vhost()].
 -spec with(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
+-spec with_user_and_vhost
+        (rabbit_types:username(), rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
 -spec assert(rabbit_types:vhost()) -> 'ok'.
 
 -spec info(rabbit_types:vhost()) -> rabbit_types:infos().
@@ -152,7 +154,8 @@ internal_delete(VHostPath, ActingUser) ->
      || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHostPath)],
     TopicPermissions = rabbit_auth_backend_internal:list_vhost_topic_permissions(VHostPath),
     [ok = rabbit_auth_backend_internal:clear_topic_permissions(
-        proplists:get_value(user, TopicPermission), VHostPath) || TopicPermission <- TopicPermissions],
+        proplists:get_value(user, TopicPermission), VHostPath, ActingUser)
+     || TopicPermission <- TopicPermissions],
     Fs1 = [rabbit_runtime_parameters:clear(VHostPath,
                                            proplists:get_value(component, Info),
                                            proplists:get_value(name, Info),
@@ -178,6 +181,9 @@ with(VHostPath, Thunk) ->
                     Thunk()
             end
     end.
+
+with_user_and_vhost(Username, VHostPath, Thunk) ->
+    rabbit_misc:with_user(Username, with(VHostPath, Thunk)).
 
 %% Like with/2 but outside an Mnesia tx
 assert(VHostPath) -> case exists(VHostPath) of

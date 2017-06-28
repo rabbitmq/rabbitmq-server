@@ -220,6 +220,11 @@
                                    [rabbit_core_metrics_gc]}},
                     {enables,     networking}]}).
 
+-rabbit_boot_step({rabbit_looking_glass,
+                   [{description, "Looking Glass tracer and profiler"},
+                    {mfa,         {rabbit_looking_glass, boot, []}},
+                    {requires,    networking}]}).
+
 %%---------------------------------------------------------------------------
 
 -include("rabbit_framing.hrl").

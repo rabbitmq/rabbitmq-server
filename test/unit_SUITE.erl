@@ -32,6 +32,7 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           arguments_parser,
+          auth_backend_internal_expand_topic_permission,
           {basic_header_handling, [parallel], [
               write_table_with_invalid_existing_type,
               invalid_existing_headers,
@@ -49,6 +50,7 @@ groups() ->
           pmerge,
           plmerge,
           priority_queue,
+          rabbit_direct_extract_extra_auth_props,
           {resource_monitor, [parallel], [
               parse_information_unit
             ]},
@@ -464,7 +466,25 @@ rabbitmqctl_encode_encrypt_decrypt(Secret) ->
     )
     .
 
-
+rabbit_direct_extract_extra_auth_props(_Config) ->
+    % no protocol to extract
+    [] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
+        [{name,<<"127.0.0.1:52366 -> 127.0.0.1:1883">>}]),
+    % protocol to extract, but no module to call
+    [] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
+        [{protocol, {'PROTOCOL_WITHOUT_MODULE', "1.0"}}]),
+    % see rabbit_dummy_protocol_connection_info module
+    % protocol to extract, module that returns a client ID
+    [{client_id, <<"DummyClientId">>}] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
+        [{protocol, {'DUMMY_PROTOCOL', "1.0"}}]),
+    % protocol to extract, but error thrown in module
+    [] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, -1,
+        [{protocol, {'DUMMY_PROTOCOL', "1.0"}}]),
+    ok.
 
 %% -------------------------------------------------------------------
 %% pg_local.
@@ -1001,4 +1021,38 @@ listing_plugins_from_multiple_directories(Config) ->
             ct:pal("Got ~p~nExpected: ~p", [Got, Expected]),
             exit({wrong_plugins_list, Got})
     end,
+    ok.
+
+auth_backend_internal_expand_topic_permission(_Config) ->
+    ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},
+    %% simple case
+    <<"services/default/accounts/guest/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            ExpandMap
+        ),
+    %% replace variable twice
+    <<"services/default/accounts/default/guest/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{vhost}/{username}/notifications">>,
+            ExpandMap
+        ),
+    %% nothing to replace
+    <<"services/accounts/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/accounts/notifications">>,
+            ExpandMap
+        ),
+    %% the expand map isn't defined
+    <<"services/{vhost}/accounts/{username}/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            undefined
+        ),
+    %% the expand map is empty
+    <<"services/{vhost}/accounts/{username}/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            #{}
+        ),
     ok.

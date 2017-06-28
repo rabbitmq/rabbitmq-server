@@ -27,7 +27,7 @@
 
 all() ->
     [
-        pre_3_6_11_works,
+        ensure_term_to_binary_defaults_to_version_1,
         term_to_binary_latin_atom,
         queue_name_to_binary
     ].
@@ -47,19 +47,32 @@ end_per_suite(Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-%% If this test fails - the erlang version is not supported in
-%% RabbitMQ-3.6.10 and earlier.
-pre_3_6_11_works(Config) ->
-    Property = fun () -> prop_pre_3_6_11_works(Config) end,
-    rabbit_ct_proper_helpers:run_proper(Property, [],
-                                        ?ITERATIONS_TO_RUN_UNTIL_CONFIDENT).
+%% R16B03 defaults term_to_binary version to 0, this test would always fail
+ensure_term_to_binary_defaults_to_version_1(Config) ->
+    CurrentERTS = erlang:system_info(version),
+    MinimumTestedERTS = "6.0",
+    case rabbit_misc:version_compare(CurrentERTS, MinimumTestedERTS, gte) of
+        true ->
+            Property = fun () ->
+                        prop_ensure_term_to_binary_defaults_to_version_1(Config)
+                       end,
+            rabbit_ct_proper_helpers:run_proper(
+                Property, [],
+                ?ITERATIONS_TO_RUN_UNTIL_CONFIDENT);
+        false ->
+            ct:pal(
+              ?LOW_IMPORTANCE,
+              "This test require ERTS ~p or above, running on ~p~n"
+              "Skipping test...",
+              [MinimumTestedERTS, CurrentERTS])
+    end.
 
-prop_pre_3_6_11_works(_Config) ->
+prop_ensure_term_to_binary_defaults_to_version_1(_Config) ->
     ?FORALL(Term, any(),
         begin
             Current = term_to_binary(Term),
             Compat = term_to_binary_compat:term_to_binary_1(Term),
-            binary_to_term(Current) =:= binary_to_term(Compat)
+            Current =:= Compat
         end).
 
 term_to_binary_latin_atom(Config) ->
