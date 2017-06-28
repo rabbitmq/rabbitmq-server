@@ -70,21 +70,23 @@ sign.
 See
 .Xr rabbitmq-server 8
 for details of configuring the RabbitMQ broker.
-.It Fl q | -quiet
+.It Fl q , -quiet
 Quiet output mode is selected.
 Informational messages are suppressed when quiet mode is in effect.
 .It Fl -dry-run
-Do not run the command. Only print information message.
-.It Fl t | -timeout Ar timeout
+Do not run the command.
+Only print information message.
+.It Fl t Ar timeout , Fl -timeout Ar timeout
 Operation timeout in seconds.
 Only applicable to
 .Qq list
 commands.
 Default is
-.Qq infinity .
-.It Fl l | -longnames
-Use longnames for erlang distribution. If RabbitMQ broker uses long
-node names for erlang distribution, the option must be specified.
+.Cm infinity .
+.It Fl l , Fl -longnames
+Use longnames for erlang distribution.
+If RabbitMQ broker uses long node names for erlang distribution, the
+option must be specified.
 .It Fl -erlang-cookie Ar cookie
 Erlang distribution cookie.
 If RabbitMQ node is using a custom erlang cookie value, the cookie value
@@ -94,14 +96,10 @@ must be set vith this parameter.
 .Sh COMMANDS
 .\" ------------------------------------------------------------------
 .Bl -tag -width Ds
-.It
-.Cm help
-.Op Fl l | -list-commands
-.Op Ar command_name
-.Pp
+.It Cm help Oo Fl l Oc Op Ar command_name
 Prints usage for all available commands.
 .Bl -tag -width Ds
-.It Fl l | -list-commands
+.It Fl l , Fl -list-commands
 List command usages only, without parameter explanation.
 .It Ar command_name
 Prints usage for the specified command.
@@ -252,13 +250,15 @@ application:
 .sp
 .Dl rabbitmqctl stop_app
 .\" ------------------------------------
-.It Cm wait Ar pid_file | Fl -pid Ar pid
+.It Cm wait Ar pid_file , Cm wait Fl -pid Ar pid
 Waits for the RabbitMQ application to start.
 .Pp
 This command will wait for the RabbitMQ application to start at the
 node.
-It will wait for the pid file to be created if pidfile is specified,
-then for a process with a pid specified in the pid file or the
+It will wait for the pid file to be created if
+.Ar pidfile
+is specified, then for a process with a pid specified in the pid file or
+the
 .Fl -pid
 argument, and then for the RabbitMQ application to start in that process.
 It will fail if the process terminates without starting the RabbitMQ
@@ -1111,7 +1111,7 @@ Arguments are identical to those of
 It is possible to enforce certain limits on virtual hosts.
 .Bl -tag -width Ds
 .\" ------------------------------------
-.It Cm set_vhost_limits Oo Fl p Ar vhostpath Oc Ar definition
+.It Cm set_vhost_limits Oo Fl p Ar vhost Oc Ar definition
 Sets virtual host limits.
 .Bl -tag -width Ds
 .It Ar definition
@@ -1152,7 +1152,7 @@ This command disables client connections in vhost
 .sp
 .Dl rabbitmqctl set_vhost_limits -p qa_env '{"max-connections": 0}'
 .\" ------------------------------------
-.It Cm clear_vhost_limits Op Fl p Ar vhostpath
+.It Cm clear_vhost_limits Op Fl p Ar vhost
 Clears virtual host limits.
 .Pp
 For example, this command clears vhost limits in vhost
@@ -1160,11 +1160,12 @@ For example, this command clears vhost limits in vhost
 .sp
 .Dl rabbitmqctl clear_vhost_limits -p qa_env
 .\" ------------------------------------
-.It Cm list_vhost_limits Op Fl p Ar vhostpath Op Fl -global
+.It Cm list_vhost_limits Oo Fl p Ar vhost Oc Op Fl -global
 Displays configured virtual host limits.
 .Bl -tag -width Ds
 .It Fl -global
-Show limits for all vhosts. Suppresses the
+Show limits for all vhosts.
+Suppresses the
 .Fl p
 parameter.
 .El
@@ -1463,7 +1464,7 @@ Readable name for the connection.
 Server port.
 .It Cm host
 Server hostname obtained via reverse DNS, or its IP address if reverse
-DNS failed or was not enabled.
+DNS failed or was disabled.
 .It Cm peer_port
 Peer port.
 .It Cm peer_host
@@ -1709,32 +1710,37 @@ to the connected client:
 .sp
 .Dl rabbitmqctl close_connection Qo <rabbit@tanto.4262.0> Qc Qq go away
 .\" ------------------------------------
-.It Cm close_all_connections Ar explanation Op Fl p Ar vhost Op Fl -global Op Fl -per-connection-delay Ar delay Op Fl -limit Ar limit
+.It Cm close_all_connections Oo Fl p Ar vhost Oc Oo Fl -global Oc Oo Fl -per-connection-delay Ar delay Oc Oo Fl -limit Ar limit Oc Ar explanation
 .Bl -tag -width Ds
-.It Ar explanation
-Explanation string.
-.It Fl -global
-If connections should be close for all vhosts. Overrides Fl p
 .It Fl p Ar vhost
 The name of the virtual host for which connections should be closed.
-Is ignored when Fl -global is specified.
+Ignored when
+.Fl -global
+is specified.
+.It Fl -global
+If connections should be close for all vhosts.
+Overrides
+.Fl p
 .It Fl -per-connection-delay Ar delay
 Time in milliseconds to wait after each connection closing.
 .It Fl -limit Ar limit
-Number of connection to close. Only works per vhost.
-Is ignored when Fl -global is specified.
+Number of connection to close.
+Only works per vhost.
+Ignored when
+.Fl -global
+is specified.
+.It Ar explanation
+Explanation string.
 .El
 .Pp
-Instructs the broker to close all connection for the specified vhost or entire RabbitMQ node.
+Instructs the broker to close all connections for the specified vhost or entire RabbitMQ node.
 .Pp
 For example, this command instructs the RabbitMQ broker to close 10 connections on
 .Qq qa_env
 vhost, passing the explanation
-.Qq Please close
-:
+.Qq Please close :
 .sp
 .Dl rabbitmqctl close_all_connections -p qa_env --limit 10 'Please close'
-.sp
 .Pp
 This command instructs broker to close all connections to the node:
 .sp
@@ -1848,14 +1854,16 @@ For example:
 RabbitMQ plugins can extend rabbitmqctl tool to add new commands when enabled.
 Currently available commands can be found in
 .Cm rabbitmqctl help
-output. Following commands are added by RabbitMQ plugins, available in default
+output.
+Following commands are added by RabbitMQ plugins, available in default
 distribution:
 .Ss Shovel plugin
 .Bl -tag -width Ds
 .It Cm shovel_status
 Prints a list of configured shovels
-.It Cm delete_shovel Ar name Op Fl p Ar vhost
-Instructs the RabbitMQ node to delete the configured shovel by name.
+.It Cm delete_shovel Oo Fl p Ar vhost Oc Ar name
+Instructs the RabbitMQ node to delete the configured shovel by
+.Ar name .
 .El
 .Ss Federation plugin
 .Bl -tag -width Ds
@@ -1863,18 +1871,18 @@ Instructs the RabbitMQ node to delete the configured shovel by name.
 Prints a list of federation links.
 .Bl -tag -width Ds
 .It Fl -only-down
-Only list federation links, which are not running.
+Only list federation links which are not running.
 .El
 .It Cm restart_federation_link Ar link_id
 Instructs the RabbitMQ node to restart the federation link with specified
-.Ar link_id
+.Ar link_id .
 .El
 .Ss AMQP-1.0 plugin
 .Bl -tag -width Ds
 .It Cm list_amqp10_connections Op Ar amqp10_connectioninfoitem ...
 Similar to the
 .Cm list_connections
-command, but rerutns fields, which make sense for AMQP-1.0 connections.
+command, but returns fields which make sense for AMQP-1.0 connections.
 .Ar amqp10_connectioninfoitem
 parameter is used to indicate which connection information items to
 include in the results.
@@ -1889,7 +1897,7 @@ SASL authentication mechanism used, such as
 .Qq PLAIN .
 .It Cm host
 Server hostname obtained via reverse DNS, or its IP address if reverse
-DNS failed or was not enabled.
+DNS failed or was disabled.
 .It Cm frame_max
 Maximum frame size (bytes).
 .It Cm timeout
@@ -1950,10 +1958,10 @@ The node name of the RabbitMQ node to which connection is established.
 .El
 .Ss MQTT plugin
 .Bl -tag -width Ds
-.It Cm list_mqtt_connections mqtt_connectioninfoitem
+.It Cm list_mqtt_connections Op Ar mqtt_connectioninfoitem
 Similar to the
 .Cm list_connections
-command, but rerutns fields, which make sense for MQTT connections.
+command, but returns fields which make sense for MQTT connections.
 .Ar mqtt_connectioninfoitem
 parameter is used to indicate which connection information items to
 include in the results.
@@ -1963,7 +1971,7 @@ can take any value from the list that follows:
 .Bl -tag -width Ds
 .It Cm host
 Server hostname obtained via reverse DNS, or its IP address if reverse
-DNS failed or was not enabled.
+DNS failed or was disabled.
 .It Cm port
 Server port.
 .It Cm peer_host
@@ -2042,10 +2050,10 @@ Virtual host name with non-ASCII characters escaped as in C.
 .El
 .Ss STOMP plugin
 .Bl -tag -width Ds
-.It Cm list_stomp_connections stomp_connectioninfoitem
+.It Cm list_stomp_connections Op Ar stomp_connectioninfoitem
 Similar to the
 .Cm list_connections
-command, but rerutns fields, which make sense for MQTT connections.
+command, but returns fields which make sense for STOMP connections.
 .Ar stomp_connectioninfoitem
 parameter is used to indicate which connection information items to
 include in the results.
@@ -2078,7 +2086,8 @@ Indicates if the connection was established using implicit connect (without CONN
 .It Cm auth_login
 Effective username for the connection.
 .It Cm auth_mechanism
-STOMP authorization mechanism. Can be one of:
+STOMP authorization mechanism.
+Can be one of:
 .Bl -bullet -compact
 .It
 config
