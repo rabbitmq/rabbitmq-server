@@ -2167,9 +2167,9 @@
               <varlistentry>
                 <term>fraction</term>
                 <listitem><para>
-                    Limit relative to the total amount available RAM 
-                    as a non-negative floating point number. 
-                    Values lower than 1.0 can be dangerous and 
+                    Limit relative to the total amount available RAM
+                    as a non-negative floating point number.
+                    Values lower than 1.0 can be dangerous and
                     should be used carefully.
                 </para></listitem>
               </varlistentry>
@@ -2247,6 +2247,61 @@ rabbitmqctl encode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 \
                 </listitem>
               </varlistentry>
             </variablelist>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <!-- one-line formatting matters for rabbit_ctl_usage.erl code generation -->
+          <term><cmdsynopsis><command>decode</command> <arg choice="opt"><replaceable>value</replaceable></arg> <arg choice="opt"><replaceable>passphrase</replaceable></arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>
+                  <cmdsynopsis>
+                    <arg choice="opt"><replaceable>value</replaceable></arg>
+                    <arg choice="opt"><replaceable>passphrase</replaceable></arg>
+                  </cmdsynopsis>
+                </term>
+                <listitem>
+                  <para>
+                    Value to decrypt (as produced by the encode command) and passphrase.
+                  </para>
+                  <para role="example-prefix">For example:</para>
+                  <screen role="example">rabbitmqctl decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>list_hashes</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Lists hash functions supported by encoding commands.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_hashes</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to list all
+              hash functions supported by encoding commands.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>list_ciphers</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Lists cipher suites supported by encoding commands.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_ciphers</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to list all
+              cipher suites supported by encoding commands.
+            </para>
           </listitem>
         </varlistentry>
       </variablelist>
