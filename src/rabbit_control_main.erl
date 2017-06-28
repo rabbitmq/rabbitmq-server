@@ -98,7 +98,10 @@
          set_vm_memory_high_watermark,
          set_disk_free_limit,
          help,
-         {encode, [?DECODE_DEF, ?CIPHER_DEF, ?HASH_DEF, ?ITERATIONS_DEF, ?LIST_CIPHERS_DEF, ?LIST_HASHES_DEF]}
+         {encode, [?DECODE_DEF, ?CIPHER_DEF, ?HASH_DEF, ?ITERATIONS_DEF, ?LIST_CIPHERS_DEF, ?LIST_HASHES_DEF]},
+         {decode, [?CIPHER_DEF, ?HASH_DEF, ?ITERATIONS_DEF]},
+         list_ciphers,
+         list_hashes
         ]).
 
 -define(GLOBAL_QUERIES,
@@ -620,15 +623,38 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 action(help, _Node, _Args, _Opts, _Inform) ->
     io:format("~s", [rabbit_ctl_usage:usage()]);
 
-action(encode, _Node, Args, Opts, _Inform) ->
+action(encode, Node, Args, Opts, Inform) ->
     ListCiphers = lists:member({?LIST_CIPHERS_OPT, true}, Opts),
     ListHashes = lists:member({?LIST_HASHES_OPT, true}, Opts),
     Decode = lists:member({?DECODE_OPT, true}, Opts),
+    case {ListCiphers, ListHashes, Decode} of
+        {true, _, _} ->
+            action(list_ciphers, Node, Args, Opts, Inform);
+        {_, true, _} ->
+            action(list_hashes, Node, Args, Opts, Inform);
+        {_, _, true} ->
+            action(decode, Node, Args, Opts, Inform);
+        {_, _, _}    ->
+            Cipher = list_to_atom(proplists:get_value(?CIPHER_OPT, Opts)),
+            Hash = list_to_atom(proplists:get_value(?HASH_OPT, Opts)),
+            Iterations = list_to_integer(proplists:get_value(?ITERATIONS_OPT, Opts)),
+            {_, Msg} = rabbit_control_pbe:encode(Cipher, Hash, Iterations, Args),
+            io:format(Msg ++ "~n")
+    end;
+
+action(decode, _Node, Args, Opts, _Inform) ->
     Cipher = list_to_atom(proplists:get_value(?CIPHER_OPT, Opts)),
     Hash = list_to_atom(proplists:get_value(?HASH_OPT, Opts)),
     Iterations = list_to_integer(proplists:get_value(?ITERATIONS_OPT, Opts)),
+    {_, Msg} = rabbit_control_pbe:decode(Cipher, Hash, Iterations, Args),
+    io:format(Msg ++ "~n");
 
-    {_, Msg} = rabbit_control_pbe:encode(ListCiphers, ListHashes, Decode, Cipher, Hash, Iterations, Args),
+action(list_hashes, _Node, _Args, _Opts, _Inform) ->
+    {_, Msg} = rabbit_control_pbe:list_hashes(),
+    io:format(Msg ++ "~n");
+
+action(list_ciphers, _Node, _Args, _Opts, _Inform) ->
+    {_, Msg} = rabbit_control_pbe:list_ciphers(),
     io:format(Msg ++ "~n");
 
 action(Command, Node, Args, Opts, Inform) ->
