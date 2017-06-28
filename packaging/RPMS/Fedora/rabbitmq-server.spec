@@ -15,7 +15,7 @@ URL: http://www.rabbitmq.com/
 BuildArch: noarch
 BuildRequires: erlang >= %{erlang_minver}, python-simplejson, xmlto, libxslt, gzip, sed, zip, rsync
 
-%if 0%{?fedora} || 0%{?rhel} >= 7
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
 BuildRequires:  systemd
 %endif
 
@@ -23,7 +23,7 @@ Requires: erlang >= %{erlang_minver}, logrotate, socat
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 
-%if 0%{?fedora} || 0%{?rhel} >= 7
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
 Requires(pre): systemd
 Requires(post): systemd
 Requires(preun): systemd
@@ -64,7 +64,7 @@ mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 
 #Copy all necessary lib files etc.
 
-%if 0%{?fedora} || 0%{?rhel} >= 7
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
 install -p -D -m 0644 %{S:3} %{buildroot}%{_unitdir}/%{name}.service
 %else
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
@@ -91,7 +91,7 @@ for script in rabbitmq-server rabbitmq-plugins rabbitmq-diagnostics; do \
 	 %{buildroot}%{_sbindir}/$script; \
 done
 
-%if 0%{?fedora} > 14 || 0%{?rhel} >= 7
+%if 0%{?fedora} > 14 || 0%{?rhel} >= 7 || 0%{?suse_version}
 install -D -p -m 0644 %{SOURCE4} %{buildroot}%{_prefix}/lib/tmpfiles.d/%{name}.conf
 %endif
 
@@ -100,6 +100,7 @@ rm %{_maindir}/LICENSE* %{_maindir}/INSTALL
 #Build the list of files
 echo '%defattr(-,root,root, -)' >%{_builddir}/%{name}.files
 find %{buildroot} -path %{buildroot}%{_sysconfdir} -prune -o '!' -type d -printf "/%%P\n" >>%{_builddir}/%{name}.files
+find %{buildroot} -path "*%{_initrddir}*" -type f -printf "/%%P\n" >>%{_builddir}/%{name}.files
 
 %pre
 
@@ -122,7 +123,7 @@ fi
 
 %post
 
-%if 0%{?fedora} || 0%{?rhel} >= 7
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
 # %%systemd_post %%{name}.service
 # manual expansion of systemd_post as this doesn't appear to
 # expand correctly on debian machines
@@ -130,7 +131,7 @@ if [ $1 -eq 1 ] ; then
     # Initial installation
     systemctl preset %{name}.service >/dev/null 2>&1 || :
 fi
-/bin/systemctl daemon-reload
+systemctl daemon-reload
 %else
 /sbin/chkconfig --add %{name}
 %endif
@@ -153,7 +154,7 @@ fi
 %preun
 if [ $1 = 0 ]; then
   #Complete uninstall
-%if 0%{?fedora} || 0%{?rhel} >= 7
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
   systemctl stop rabbitmq-server
 %else
   /sbin/service rabbitmq-server stop
@@ -171,7 +172,7 @@ for ext in rel script boot ; do
 done
 
 %postun
-%if 0%{?fedora} || 0%{?rhel} >= 7
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
 # %%systemd_postun_with_restart %%{name}.service
 # manual expansion of systemd_postun_with_restart as this doesn't appear to
 # expand correctly on debian machines
@@ -185,18 +186,18 @@ if [ $1 -gt 1 ]; then
 fi
 %endif
 
-%if 0%{?fedora} > 17 || 0%{?rhel} >= 7
+%if 0%{?fedora} > 17 || 0%{?rhel} >= 7 || 0%{?suse_version}
 # For prior versions older than this, do a conversion
 # from sysv to systemd
 %triggerun -- %{name} < 3.6.5
 # Save the current service runlevel info
 # User must manually run systemd-sysv-convert --apply opensips
 # to migrate them to systemd targets
-/usr/bin/systemd-sysv-convert --save %{name} >/dev/null 2>&1 ||:
+systemd-sysv-convert --save %{name} >/dev/null 2>&1 ||:
 
 # Run these because the SysV package being removed won't do them
 /sbin/chkconfig --del %{name} >/dev/null 2>&1 || :
-/bin/systemctl try-restart %{name}.service >/dev/null 2>&1 || :
+systemctl try-restart %{name}.service >/dev/null 2>&1 || :
 %endif
 
 %files -f ../%{name}.files
@@ -206,11 +207,6 @@ fi
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
 %attr(2750, -, rabbitmq) %dir %{_sysconfdir}/rabbitmq
  
-
-
-%if 0%{?rhel} < 7
-%{_initrddir}/rabbitmq-server
-%endif
 
 %{_sysconfdir}/profile.d/rabbitmqctl-autocomplete.sh
 %{_datarootdir}/zsh/vendor-functions/_enable_rabbitmqctl_completion
