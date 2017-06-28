@@ -72,6 +72,7 @@ run_setup_steps(Config, ExtraSteps) ->
       fun ensure_erl_call_cmd/1,
       fun ensure_rabbitmqctl_cmd/1,
       fun ensure_rabbitmqctl_app/1,
+      fun ensure_rabbitmq_plugins_cmd/1,
       fun ensure_ssl_certs/1,
       fun start_long_running_testsuite_monitor/1
     ],
@@ -299,6 +300,38 @@ ensure_rabbitmqctl_app(Config) ->
         false ->
             {skip, "Access to rabbitmq_cli ebin dir. required, " ++
              "please build rabbitmq_cli and set MIX_ENV"}
+    end.
+
+ensure_rabbitmq_plugins_cmd(Config) ->
+    Rabbitmqplugins = case get_config(Config, rabbitmq_plugins_cmd) of
+        undefined ->
+            case os:getenv("RABBITMQ_PLUGINS") of
+                false ->
+                    SrcDir = ?config(rabbit_srcdir, Config),
+                    R = filename:join(SrcDir, "scripts/rabbitmq-plugins"),
+                    case filelib:is_file(R) of
+                        true  -> R;
+                        false -> false
+                    end;
+                R ->
+                    R
+            end;
+        R ->
+            R
+    end,
+    Error = {skip, "rabbitmq_plugins required, " ++
+             "please set RABBITMQ_PLUGINS or 'rabbitmq_plugins_cmd' in ct config"},
+    case Rabbitmqplugins of
+        false ->
+            Error;
+        _ ->
+            Cmd = [Rabbitmqplugins],
+            case exec(Cmd, [drop_stdout]) of
+                {error, 64, _} ->
+                    set_config(Config, {rabbitmq_plugins_cmd, Rabbitmqplugins});
+                _ ->
+                    Error
+            end
     end.
 
 ensure_ssl_certs(Config) ->
