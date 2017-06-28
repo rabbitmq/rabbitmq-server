@@ -1166,21 +1166,25 @@ clear_global_parameter(Config, Node, Name) ->
 %% -------------------------------------------------------------------
 
 enable_plugin(Config, Node, Plugin) ->
-    plugin_action(Config, Node, enable, [Plugin], []).
+    plugin_action(Config, Node, [enable, Plugin]).
 
 disable_plugin(Config, Node, Plugin) ->
-    plugin_action(Config, Node, disable, [Plugin], []).
+    plugin_action(Config, Node, [disable, Plugin]).
 
-plugin_action(Config, Node, Command, Args, Opts) ->
-    PluginsFile = rabbit_ct_broker_helpers:get_node_config(Config, Node,
-      enabled_plugins_file),
-    PluginsDir = rabbit_ct_broker_helpers:get_node_config(Config, Node,
-      plugins_dir),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, Node,
-      nodename),
-    rabbit_ct_broker_helpers:rpc(Config, Node,
-      rabbit_plugins_main, action,
-      [Command, Nodename, Args, Opts, PluginsFile, PluginsDir]).
+plugin_action(Config, Node, Args) ->
+    Rabbitmqplugins = ?config(rabbitmq_plugins_cmd, Config),
+    NodeConfig = get_node_config(Config, Node),
+    Nodename = ?config(nodename, NodeConfig),
+    Env = [
+      {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
+      {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
+      {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
+      {"RABBITMQ_ENABLED_PLUGINS_FILE",
+        ?config(enabled_plugins_file, NodeConfig)}
+    ],
+    Cmd = [Rabbitmqplugins, "-n", Nodename | Args],
+    {ok, _} = rabbit_ct_helpers:exec(Cmd, [{env, Env}]),
+    ok.
 
 %% -------------------------------------------------------------------
 
