@@ -95,7 +95,7 @@
 
 %%---------------------------------------------------------------------------
 
--import(rabbit_misc, [pget/2, pset/3]).
+-import(rabbit_misc, [pget/2]).
 
 -define(TABLE, rabbit_runtime_parameters).
 

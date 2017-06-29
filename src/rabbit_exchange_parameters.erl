@@ -23,8 +23,6 @@
 -export([register/0]).
 -export([validate/5, notify/5, notify_clear/4]).
 
--import(rabbit_misc, [pget/2]).
-
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange parameters"},
                     {mfa, {rabbit_exchange_parameters, register, []}},
