@@ -229,13 +229,13 @@ clear_global(Key, ActingUser) ->
     end.
 
 clear_component(Component) ->
-    case rabbit_runtime_parameters:list_component(Component) of
+    case list_component(Component) of
         [] ->
             ok;
         Xs ->
-            [rabbit_runtime_parameters:clear(pget(vhost, X),
-                                             pget(component, X),
-                                             pget(name, X))|| X <- Xs],
+            [clear(pget(vhost, X),
+                   pget(component, X),
+                   pget(name, X)) || X <- Xs],
             ok
     end.
 
