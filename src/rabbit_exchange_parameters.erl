@@ -34,7 +34,8 @@ register() ->
                              ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, ?MODULE),
     %% ensure there are no leftovers from before node restart/crash
     rabbit_runtime_parameters:clear_component(
-      ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT),
+      ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
+      ?INTERNAL_USER),
     ok.
 
 validate(_VHost, ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, _Name, _Term, _User) ->
