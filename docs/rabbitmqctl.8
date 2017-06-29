@@ -1847,6 +1847,32 @@ For example:
 .sp
 .Dl rabbitmqctl encode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 '<<"guest">>' mypassphrase
 .El
+.\" ------------------------------------
+.It Cm decode Ar value Ar passphrase
+.Bl -tag -width Ds
+.It Ar value Ar passphrase
+Value to decrypt (as produced by the encode command) and passphrase.
+.Pp
+For example:
+.sp
+.Dl rabbitmqctl decode '{encrypted, <<"...">>}' mypassphrase
+.El
+.\" ------------------------------------
+.It Cm list_hashes
+Lists hash functions supported by encoding commands.
+.Pp
+For example, this command instructs the RabbitMQ broker to list all hash
+functions supported by encoding commands:
+.sp
+.Dl rabbitmqctl list_hashes
+.\" ------------------------------------
+.It Cm list_ciphers
+Lists cipher suites supported by encoding commands.
+.Pp
+For example, this command instructs the RabbitMQ broker to list all
+cipher suites supported by encoding commands:
+.sp
+.Dl rabbitmqctl list_ciphers
 .El
 .\" ------------------------------------------------------------------
 .Sh PLUGIN COMMANDS
