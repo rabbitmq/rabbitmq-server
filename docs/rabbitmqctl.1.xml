@@ -2189,7 +2189,7 @@
                   Flag to decrypt the input value.
                   </para>
                   <para role="example-prefix">For example:</para>
-                  <screen role="example">rabbitmqctl encode --decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                  <screen role="example">rabbitmqctl encode --decode '{encrypted, &lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
                 </listitem>
               </varlistentry>
               <varlistentry>
@@ -2205,7 +2205,7 @@
                   </para>
                   <para role="example-prefix">For example:</para>
                   <screen role="example">rabbitmqctl encode '&lt;&lt;"guest"&gt;&gt;' mypassphrase</screen>
-                  <screen role="example">rabbitmqctl encode --decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                  <screen role="example">rabbitmqctl encode --decode '{encrypted, &lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
                 </listitem>
               </varlistentry>
               <varlistentry>
@@ -2268,7 +2268,7 @@ rabbitmqctl encode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 \
                     Value to decrypt (as produced by the encode command) and passphrase.
                   </para>
                   <para role="example-prefix">For example:</para>
-                  <screen role="example">rabbitmqctl decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                  <screen role="example">rabbitmqctl decode '{encrypted, &lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
                 </listitem>
               </varlistentry>
             </variablelist>
