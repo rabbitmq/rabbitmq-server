@@ -22,25 +22,22 @@ defmodule ListVhostLimitsCommandTest do
 
   @vhost "test_vhost"
   @vhost1 "test_vhost1"
-  @definition "{\"max-connections\":100}"
-  @definition1 "{\"max-queues\":1000}"
+  @connection_limit_defn "{\"max-connections\":100}"
+  @queue_limit_defn "{\"max-queues\":1000}"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-
 
     add_vhost @vhost
 
     on_exit([], fn ->
       delete_vhost @vhost
-
     end)
 
     :ok
   end
 
   setup context do
-
     vhost = context[:vhost] || @vhost
 
     clear_vhost_limits(vhost)
@@ -52,7 +49,8 @@ defmodule ListVhostLimitsCommandTest do
     {
       :ok,
       opts: %{
-        node: get_rabbit_hostname()
+        node: get_rabbit_hostname(),
+        global: true
       },
       vhost: vhost
     }
@@ -83,20 +81,20 @@ defmodule ListVhostLimitsCommandTest do
     on_exit(fn() ->
       delete_vhost(@vhost1)
     end)
-    set_vhost_limits(@vhost, @definition)
-    set_vhost_limits(@vhost1, @definition1)
+    set_vhost_limits(@vhost, @connection_limit_defn)
+    set_vhost_limits(@vhost1, @queue_limit_defn)
 
-    {:ok, defs} = JSON.decode(@definition)
-    {:ok, defs1} = JSON.decode(@definition1)
     assert Enum.sort(@command.run([], context[:opts])) ==
-           Enum.sort([{@vhost, Map.to_list(defs)}, {@vhost1, Map.to_list(defs1)}])
+           Enum.sort([[vhost: @vhost,  limits: @connection_limit_defn],
+                      [vhost: @vhost1, limits: @queue_limit_defn]])
   end
 
   test "run: list limits for a single vhost", context do
     vhost_opts = Map.put(context[:opts], :vhost, @vhost)
-    set_vhost_limits(@vhost, @definition)
-    {:ok, defs} = JSON.decode(@definition)
-    assert @command.run([], vhost_opts) == Map.to_list(defs)
+    set_vhost_limits(@vhost, @connection_limit_defn)
+
+    assert @command.run([], vhost_opts) ==
+           [[vhost: @vhost, limits: @connection_limit_defn]]
   end
 
   test "run: an unreachable node throws a badrpc" do
@@ -109,18 +107,18 @@ defmodule ListVhostLimitsCommandTest do
 
   @tag vhost: "bad-vhost"
   test "run: providing a non-existent vhost reports an error", context do
-    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
+    s = "non-existent-vhost-a9sd89"
 
-    assert @command.run([],vhost_opts) == {:error, {:no_such_vhost, context[:vhost]}}
+    assert @command.run([], %{node: get_rabbit_hostname(),
+                              vhost: s}) == {:error, {:no_such_vhost, s}}
   end
 
   test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert @command.banner([], vhost_opts)
+    assert @command.banner([], %{vhost: context[:vhost]})
       == "Listing limits for vhost \"#{context[:vhost]}\" ..."
-    assert @command.banner([], context[:opts])
+    assert @command.banner([], %{global: true})
       == "Listing limits for all vhosts ..."
   end
-
 end

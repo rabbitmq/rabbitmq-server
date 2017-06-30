@@ -35,16 +35,26 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
   def validate(_, _), do: :ok
 
   def run([], %{node: node_name, global: true}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :list, [])
-    |> Enum.map(fn({vhost, val}) ->
-      {:ok, val_encoded} = JSON.encode(Map.new(val))
-      [vhost: vhost, limits: val_encoded]
-    end)
+    case :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :list, []) do
+      []              -> []
+      {:error, err}   -> {:error, err}
+      {:badrpc, node} -> {:badrpc, node}
+      val             ->
+        Enum.map(val, fn({vhost, val}) ->
+          {:ok, val_encoded} = JSON.encode(Map.new(val))
+          [vhost: vhost, limits: val_encoded]
+        end)
+    end
   end
+
   def run([], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :list, [vhost])
-    |> Map.new()
-    |> JSON.encode()
+    case :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :list, [vhost]) do
+      []              -> []
+      {:error, err}   -> {:error, err}
+      {:badrpc, node} -> {:badrpc, node}
+      val when is_list(val) or is_map(val)  ->
+        JSON.encode(Map.new(val))
+    end
   end
 
   def usage, do: "list_vhost_limits [-p <vhost>] [--global]"
