@@ -437,7 +437,11 @@ topic_authorisation_consumption1(Config) ->
            {impl,"cn=Bob,ou=People,dc=rabbitmq,dc=com",<<"password">>}
     },
     Resource = #resource{virtual_host = <<"/">>, name = <<"amq.topic">>, kind = topic},
-    Context = #{routing_key => <<"a.b">>},
+    Context = #{routing_key  => <<"a.b">>,
+                variable_map => #{
+                    <<"username">> => <<"guest">>,
+                    <<"vhost">>    => <<"other-vhost">>
+                }},
     %% default is to let pass
     true = rabbit_auth_backend_ldap:check_topic_access(Alice, Resource, read, Context),
 
