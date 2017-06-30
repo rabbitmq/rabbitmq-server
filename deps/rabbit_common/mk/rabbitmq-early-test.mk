@@ -3,7 +3,9 @@
 # --------------------------------------------------------------------
 
 ifneq ($(PROJECT),rabbit_common)
-XREFR_ARGS := --config $(DEPS_DIR)/rabbit_common/xref.config
+XREFR := $(DEPS_DIR)/rabbit_common/mk/xrefr
+else
+XREFR := mk/xrefr
 endif
 
 # --------------------------------------------------------------------
