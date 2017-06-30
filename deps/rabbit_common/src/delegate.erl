@@ -31,8 +31,8 @@
 %% here rather than just a message-reflector. That's also why we pick
 %% the delegate process to use based on a hash of the source pid.
 %%
-%% When a function is invoked using delegate:invoke/2, delegate:call/2
-%% or delegate:cast/2 on a group of pids, the pids are first split
+%% When a function is invoked using delegate:invoke/2,
+%% or delegate:invoke_no_result/2 on a group of pids, the pids are first split
 %% into local and remote ones. Remote processes are then grouped by
 %% node. The function is then invoked locally and on every node (using
 %% gen_server2:multi/4) as many times as there are processes on that
@@ -47,9 +47,8 @@
 
 -behaviour(gen_server2).
 
--export([start_link/1, start_link/2,invoke_no_result/2, invoke_no_result/3,
-         invoke/2, invoke/3, monitor/2, monitor/3, demonitor/1,
-         call/2, cast/2, call/3, cast/3]).
+-export([start_link/1, start_link/2, invoke_no_result/2,
+         invoke/2, invoke/3, monitor/2, monitor/3, demonitor/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -68,14 +67,9 @@
 -spec invoke
         ( pid(),  fun_or_mfa(A)) -> A;
         ([pid()], fun_or_mfa(A)) -> {[{pid(), A}], [{pid(), term()}]}.
--spec invoke_no_result(pid() | [pid()], fun_or_mfa(any())) -> 'ok'.
+-spec invoke_no_result(pid(), fun_or_mfa(any())) -> 'ok'.
 -spec monitor('process', pid()) -> monitor_ref().
 -spec demonitor(monitor_ref()) -> 'true'.
-
--spec call
-        ( pid(),  any()) -> any();
-        ([pid()], any()) -> {[{pid(), any()}], [{pid(), term()}]}.
--spec cast(pid() | [pid()], any()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 
@@ -134,36 +128,6 @@ invoke(Pids, Name, FunOrMFA) when is_list(Pids) ->
           ({error, Pid, Error},  {Good, Bad}) -> {Good, [{Pid, Error} | Bad]}
       end, {[], BadPids}, ResultsNoNode).
 
-invoke_no_result(Pid, FunOrMFA) ->
-    invoke_no_result(Pid, ?DEFAULT_NAME, FunOrMFA).
-
-invoke_no_result(Pid, _Name, FunOrMFA) when is_pid(Pid) andalso node(Pid) =:= node() ->
-    _ = safe_invoke(Pid, FunOrMFA), %% we don't care about any error
-    ok;
-invoke_no_result(Pid, Name, FunOrMFA) when is_pid(Pid) ->
-    invoke_no_result([Pid], Name, FunOrMFA);
-
-invoke_no_result([], _Name, _FunOrMFA) -> %% optimisation
-    ok;
-invoke_no_result([Pid], _Name, FunOrMFA) when node(Pid) =:= node() -> %% optimisation
-    _ = safe_invoke(Pid, FunOrMFA), %% must not die
-    ok;
-invoke_no_result([Pid], Name, FunOrMFA) ->
-    RemoteNode  = node(Pid),
-    gen_server2:abcast([RemoteNode], delegate(self(), Name, [RemoteNode]),
-                       {invoke, FunOrMFA, orddict:from_list([{RemoteNode, [Pid]}])}),
-    ok;
-invoke_no_result(Pids, Name, FunOrMFA) when is_list(Pids) ->
-    {LocalPids, Grouped} = group_pids_by_node(Pids),
-    case orddict:fetch_keys(Grouped) of
-        []          -> ok;
-        RemoteNodes -> gen_server2:abcast(
-                         RemoteNodes, delegate(self(), Name, RemoteNodes),
-                         {invoke, FunOrMFA, Grouped})
-    end,
-    _ = safe_invoke(LocalPids, FunOrMFA), %% must not die
-    ok.
-
 monitor(process, Pid) ->
     ?MODULE:monitor(process, Pid, ?DEFAULT_NAME).
 
@@ -179,14 +143,7 @@ demonitor(Ref) when is_reference(Ref) ->
 demonitor({Name, Pid}) ->
     gen_server2:cast(Name, {demonitor, self(), Pid}).
 
-call(PidOrPids, Name, Msg) ->
-    invoke(PidOrPids, Name, {gen_server2, call, [Msg, infinity]}).
-
-call(PidOrPids, Msg) ->
-    %% Optimization, avoids calling delegate:call/3
-    invoke(PidOrPids, ?DEFAULT_NAME, {gen_server2, call, [Msg, infinity]}).
-
-cast(Pid, Msg) when is_pid(Pid) andalso node(Pid) =:= node() ->
+invoke_no_result(Pid, FunOrMFA) when is_pid(Pid) andalso node(Pid) =:= node() ->
     %% Optimization, avoids calling invoke_no_result/3.
     %%
     %% This may seem like a cosmetic change at first but it actually massively reduces the memory usage in mirrored
@@ -195,20 +152,36 @@ cast(Pid, Msg) when is_pid(Pid) andalso node(Pid) =:= node() ->
     %%
     %% See https://github.com/rabbitmq/rabbitmq-common/issues/208#issuecomment-311308583 for a before/after
     %% comparison.
-    _ = safe_invoke(Pid, {gen_server2, cast, [Msg]}), %% we don't care about any error
+    _ = safe_invoke(Pid, FunOrMFA), %% we don't care about any error
     ok;
-cast(Pid, Msg) when is_pid(Pid) ->
+invoke_no_result(Pid, FunOrMFA) when is_pid(Pid) ->
     %% Optimization, avoids calling invoke_no_result/3
     RemoteNode  = node(Pid),
     gen_server2:abcast([RemoteNode], delegate(self(), ?DEFAULT_NAME, [RemoteNode]),
-                       {invoke, {gen_server2, cast, [Msg]},
+                       {invoke, FunOrMFA,
                         orddict:from_list([{RemoteNode, [Pid]}])}),
     ok;
-cast(PidOrPids, Msg) ->
-    invoke_no_result(PidOrPids, ?DEFAULT_NAME, {gen_server2, cast, [Msg]}).
-
-cast(PidOrPids, Name, Msg) ->
-    invoke_no_result(PidOrPids, Name, {gen_server2, cast, [Msg]}).
+invoke_no_result([], _FunOrMFA) -> %% optimisation
+    ok;
+invoke_no_result([Pid], FunOrMFA) when node(Pid) =:= node() -> %% optimisation
+    _ = safe_invoke(Pid, FunOrMFA), %% must not die
+    ok;
+invoke_no_result([Pid], FunOrMFA) ->
+    RemoteNode  = node(Pid),
+    gen_server2:abcast([RemoteNode], delegate(self(), ?DEFAULT_NAME, [RemoteNode]),
+                       {invoke, FunOrMFA,
+                        orddict:from_list([{RemoteNode, [Pid]}])}),
+    ok;
+invoke_no_result(Pids, FunOrMFA) when is_list(Pids) ->
+    {LocalPids, Grouped} = group_pids_by_node(Pids),
+    case orddict:fetch_keys(Grouped) of
+        []          -> ok;
+        RemoteNodes -> gen_server2:abcast(
+                         RemoteNodes, delegate(self(), ?DEFAULT_NAME, RemoteNodes),
+                         {invoke, FunOrMFA, Grouped})
+    end,
+    _ = safe_invoke(LocalPids, FunOrMFA), %% must not die
+    ok.
 
 %%----------------------------------------------------------------------------
 
