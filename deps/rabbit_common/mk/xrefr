@@ -4,8 +4,9 @@
 %% The code is copied from xref_runner.
 %% https://github.com/inaka/xref_runner
 %%
-%% The only change is the possibility to exclude entire modules because
-%% we don't want to analyse the *_compat modules.
+%% The only change is the support of our erlang_version_support
+%% attribute: we don't want any warnings about functions which will be
+%% dropped at load time.
 %%
 %% It's also a plain text escript instead of a compiled one because we
 %% want to support Erlang R16B03 and the version of xref_runner uses
@@ -16,9 +17,6 @@
 -mode(compile).
 
 -define(DIRS, ["ebin", "test"]).
--define(EXCLUDED_MODULES, [rand_compat,
-                           ssl_compat,
-                           time_compat]).
 
 -define(CHECKS, [undefined_function_calls,
                  undefined_functions,
@@ -46,9 +44,6 @@ check(Check) ->
                   {ok, _} = xref:add_directory(Xref, Dir)
           end, Dirs),
 
-        ExcludedModules = ?EXCLUDED_MODULES,
-        xref:remove_module(Xref, ExcludedModules),
-
         {ok, Results} = xref:analyze(Xref, Check),
 
         FilteredResults = filter_xref_results(Check, Results),
@@ -66,12 +61,28 @@ filter_xref_results(Check, Results) ->
   SourceModules =
     lists:usort([source_module(Result) || Result <- Results]),
 
-  Ignores =
-    lists:flatmap(
-      fun(Module) -> get_ignorelist(Module, Check) end, SourceModules),
+  Ignores = lists:flatmap(
+              fun(Module) -> get_ignorelist(Module, Check) end, SourceModules),
+
+  UnusedFunctions = lists:flatmap(
+                      fun(Mod) -> get_unused_compat_functions(Mod) end,
+                      SourceModules),
+
+  ToIgnore = case get(results_to_ignore) of
+                 undefined -> [];
+                 RTI       -> RTI
+             end,
+  NewToIgnore = [parse_xref_target(Result)
+                 || Result <- Results,
+                    lists:member(parse_xref_source(Result), UnusedFunctions)],
+  AllToIgnore = ToIgnore ++ NewToIgnore ++ [mfa(M, {F, A})
+                                            || {_, {M, F, A}} <- Ignores],
+  put(results_to_ignore, AllToIgnore),
 
   [Result || Result <- Results,
-             not lists:member(parse_xref_result(Result), Ignores)].
+             not lists:member(parse_xref_result(Result), Ignores) andalso
+             not lists:member(parse_xref_result(Result), AllToIgnore) andalso
+             not lists:member(parse_xref_source(Result), UnusedFunctions)].
 
 source_module({Mt, _Ft, _At}) -> Mt;
 source_module({{Ms, _Fs, _As}, _Target}) -> Ms.
@@ -105,11 +116,49 @@ get_behaviour_callbacks(exports_not_used, Mod, Attributes) ->
 get_behaviour_callbacks(_Check, _Mod, _Attributes) ->
   [].
 
+get_unused_compat_functions(Module) ->
+    OTPVersion = code_version:get_otp_version(),
+    Attributes = try
+                     Module:module_info(attributes)
+                 catch
+                     _Class:_Error -> []
+                 end,
+    CompatTuples = [Tuple
+                    || {erlang_version_support, Tuples} <- Attributes,
+                       Tuple <- Tuples],
+    get_unused_compat_functions(Module, OTPVersion, CompatTuples, []).
+
+get_unused_compat_functions(_, _, [], Result) ->
+    Result;
+get_unused_compat_functions(Module,
+                            OTPVersion,
+                            [{MinOTPVersion, Choices} | Rest],
+                            Result) ->
+    Functions = lists:map(
+                  fun({_, Arity, Pre, Post}) ->
+                          if
+                              OTPVersion >= MinOTPVersion ->
+                                  %% We ignore the "pre" function.
+                                  mfa(Module, {Pre, Arity});
+                              true ->
+                                  %% We ignore the "post" function.
+                                  mfa(Module, {Post, Arity})
+                          end
+                  end, Choices),
+    get_unused_compat_functions(Module, OTPVersion, Rest,
+                                Result ++ Functions).
+
 mfa(M, {F, A}) -> {M, {M, F, A}};
 mfa(M, MFA) -> {M, MFA}.
 
 parse_xref_result({{SM, _, _}, MFAt}) -> {SM, MFAt};
 parse_xref_result({TM, _, _} = MFAt) -> {TM, MFAt}.
+
+parse_xref_source({{SM, _, _} = MFAt, _}) -> {SM, MFAt};
+parse_xref_source({TM, _, _} = MFAt) -> {TM, MFAt}.
+
+parse_xref_target({_, {TM, _, _} = MFAt}) -> {TM, MFAt};
+parse_xref_target({TM, _, _} = MFAt) -> {TM, MFAt}.
 
 %% -------------------------------------------------------------------
 %% Preparing results.
