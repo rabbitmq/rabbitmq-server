@@ -15,6 +15,9 @@
 %%
 
 -module(rabbit_misc).
+
+-ignore_xref([{maps, get, 2}]).
+
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 -include("rabbit_misc.hrl").
