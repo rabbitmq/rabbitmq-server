@@ -281,7 +281,7 @@ defmodule RabbitMQCtl do
   defp format_error({:error, {:no_such_vhost, vhost} = result}, _opts, _) do
     {:error, ExitCodes.exit_code_for(result),
      "Virtual host '#{vhost}' does not exist"}
-  end    
+  end
   defp format_error({:error, {:timeout, to} = result}, opts, module) do
     op = CommandModules.module_to_command(module)
     {:error, ExitCodes.exit_code_for(result),
