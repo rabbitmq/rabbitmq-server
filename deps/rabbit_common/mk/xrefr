@@ -41,7 +41,10 @@ check(Check) ->
 
         lists:foreach(
           fun(Dir) ->
-                  {ok, _} = xref:add_directory(Xref, Dir)
+                  case filelib:is_dir(Dir) of
+                      true  -> {ok, _} = xref:add_directory(Xref, Dir);
+                      false -> ok
+                  end
           end, Dirs),
 
         {ok, Results} = xref:analyze(Xref, Check),
