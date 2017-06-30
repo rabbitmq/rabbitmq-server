@@ -15,7 +15,7 @@
 %%
 -module(code_version).
 
--export([update/1]).
+-export([update/1, get_otp_version/0]).
 
 %%----------------------------------------------------------------------------
 %% API
