@@ -15,7 +15,7 @@
 
 alias RabbitMQ.CLI.Core.Distribution, as: Distribution
 
-defmodule DostributionTest do
+defmodule DistributionTest do
   use ExUnit.Case, async: false
 
   setup_all do
