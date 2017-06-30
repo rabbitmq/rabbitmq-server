@@ -41,9 +41,9 @@ Dependencies are being resolved by `erlang.mk`
 ### Building Standalone Executables
 
 This repo produces a `rabbitmqctl` executable which can be used as different tools
-by copying or symlinking it with different names.
-
-Currently `rabbitmq-plugins` and `rabbitmq-diagnostics` tools are supported.
+(`rabbitmq-plugins`, `rabbitmq-diagnostics`) by copying or symlinking it with different names.
+Depending on the name, a different set of commands will be loaded and available, including
+for `--help`.
 
 To generate the executable, run
 
