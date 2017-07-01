@@ -126,7 +126,7 @@ check_topic_access(User = #auth_user{username = Username,
                    #resource{virtual_host = VHost, kind = topic = Resource, name = Name},
                    Permission,
                    Context) ->
-    OptionsArgs = topic_context_as_options(Context),
+    OptionsArgs = topic_context_as_options(Context, undefined),
     Args = [{username,   Username},
             {user_dn,    UserDN},
             {vhost,      VHost},
@@ -141,15 +141,31 @@ check_topic_access(User = #auth_user{username = Username,
 
 %%--------------------------------------------------------------------
 
-topic_context_as_options(Context) when is_map(Context) ->
+topic_context_as_options(Context, Namespace) when is_map(Context) ->
     % filter keys that would erase fixed variables
-    [{rabbit_data_coercion:to_atom(Key), maps:get(Key, Context)}
-        || Key <- maps:keys(Context),
-        lists:member(
-            rabbit_data_coercion:to_atom(Key),
-            ?RESOURCE_ACCESS_QUERY_VARIABLES) =:= false];
-topic_context_as_options(_) ->
+    lists:flatten([begin
+         Value = maps:get(Key, Context),
+         case Value of
+             MapOfValues when is_map(MapOfValues) ->
+                 topic_context_as_options(MapOfValues, Key);
+             SimpleValue ->
+                 case Namespace of
+                     undefined ->
+                         {rabbit_data_coercion:to_atom(Key), SimpleValue};
+                     Namespace ->
+                         {create_option_name_with_namespace(Namespace, Key), Value}
+                 end
+         end
+     end || Key <- maps:keys(Context), lists:member(
+                    rabbit_data_coercion:to_atom(Key),
+                    ?RESOURCE_ACCESS_QUERY_VARIABLES) =:= false]);
+topic_context_as_options(_, _) ->
     [].
+
+create_option_name_with_namespace(Namespace, Key) ->
+    rabbit_data_coercion:to_atom(
+        rabbit_data_coercion:to_list(Namespace) ++ "." ++ rabbit_data_coercion:to_list(Key)
+    ).
 
 evaluate(Query, Args, User, LDAP) ->
     ?L1("evaluating query: ~p", [Query]),
