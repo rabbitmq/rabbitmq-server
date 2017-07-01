@@ -496,15 +496,24 @@ stop(VHost) ->
 
 start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
     rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
-    {ok, _} = rabbit_vhost_msg_store:start(VHost,
-                                           ?TRANSIENT_MSG_STORE,
-                                           undefined,
-                                           ?EMPTY_START_FUN_STATE),
-    {ok, _} = rabbit_vhost_msg_store:start(VHost,
-                                           ?PERSISTENT_MSG_STORE,
-                                           Refs,
-                                           StartFunState),
-    rabbit_log:info("Message stores for vhost '~s' are started~n", [VHost]).
+    safely_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE),
+    safely_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState),
+    ok.
+
+safely_start_msg_store(VHost, Type, Refs, StartFunState) ->
+    case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
+        {ok, _} ->
+            rabbit_log:info("Started message store of type ~s for vhost '~s'~n", [abbreviated_type(Type), VHost]);
+        {error, {no_such_vhost, VHost}} ->
+            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': the vhost no longer exists!~n",
+                             [Type, VHost]);
+        {error, Error} ->
+            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': ~p~n",
+                             [Type, VHost, Error])
+    end.
+
+abbreviated_type(?TRANSIENT_MSG_STORE)  -> transient;
+abbreviated_type(?PERSISTENT_MSG_STORE) -> persistent.
 
 stop_msg_store(VHost) ->
     rabbit_vhost_msg_store:stop(VHost, ?TRANSIENT_MSG_STORE),

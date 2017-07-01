@@ -14,6 +14,12 @@
 %% Copyright (c) 2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
+%% This module is a wrapper around vhost supervisor to
+%% provide exactly once restart semantics.
+%%
+%% rabbit_vhost_sup supervisor children are added dynamically,
+%% and the one_for_all strategy would be questionable here
+
 -module(rabbit_vhost_sup_wrapper).
 
 -include("rabbit.hrl").
@@ -26,15 +32,9 @@
 start_link(VHost) ->
     supervisor2:start_link(?MODULE, [VHost]).
 
-%% This module is a wrapper around vhost supervisor to
-%% provide exactly once restart.
-
-%% rabbit_vhost_sup supervisor children are added dynamically,
-%% so one_for_all strategy cannot be used.
-
 init([VHost]) ->
-    %% Two restarts in 1 hour. One per message store.
-    {ok, {{one_for_all, 2, 3600000},
+    %% 2 restarts in 5 minutes. One per message store.
+    {ok, {{one_for_all, 2, 5000},
           [{rabbit_vhost_sup,
             {rabbit_vhost_sup_wrapper, start_vhost_sup, [VHost]},
              permanent, infinity, supervisor,
