@@ -18,7 +18,16 @@
 
 -include("rabbit_mqtt.hrl").
 
--compile(export_all).
+-export([subcription_queue_name/1,
+         mqtt2amqp/1,
+         amqp2mqtt/1,
+         gen_client_id/0,
+         env/1,
+         table_lookup/2,
+         path_for/2,
+         path_for/3,
+         vhost_name_to_table_name/1
+        ]).
 
 subcription_queue_name(ClientId) ->
     Base = "mqtt-subscription-" ++ ClientId ++ "qos",
