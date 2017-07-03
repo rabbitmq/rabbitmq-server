@@ -20,6 +20,7 @@
 -include("rabbit_mgmt_metrics.hrl").
 
 -behaviour(gen_server).
+-compile({no_auto_import, [ceil/1]}).
 
 -spec start_link(atom()) -> rabbit_types:ok_pid_or_error().
 
