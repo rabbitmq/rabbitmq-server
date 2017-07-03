@@ -97,8 +97,11 @@ node(Config) ->
     [_] = read_table_rpc(Config, node_persister_metrics),
     [_] = read_table_rpc(Config, node_coarse_metrics),
     [_] = read_table_rpc(Config, node_metrics),
-    timer:sleep(100),
-    [_, _, _] = read_table_rpc(Config, node_node_metrics). % 3 nodes as ct-helpers adds one
+    true = wait_until(
+             fun() ->
+                     % 3 nodes as ct-helpers adds one
+                     length(read_table_rpc(Config, node_node_metrics)) =:= 3
+             end, 10).
 
 
 storage_reset(Config) ->
