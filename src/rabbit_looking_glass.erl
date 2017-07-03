@@ -16,6 +16,8 @@
 
 -module(rabbit_looking_glass).
 
+-ignore_xref([{lg, trace, 4}]).
+
 -export([boot/0]).
 -export([connections/0]).
 
