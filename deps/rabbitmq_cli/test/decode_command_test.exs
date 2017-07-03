@@ -13,12 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-defmodule EncodeCommandTest do
+defmodule DecodeCommandTest do
   use ExUnit.Case, async: false
+  @command RabbitMQ.CLI.Ctl.Commands.DecodeCommand
 
-  @command RabbitMQ.CLI.Ctl.Commands.EncodeCommand
-
-  test "validate: not providing exactly 2 arguments for encoding is reported as invalid", _context do
+  test "validate: not providing exactly 2 arguments for decoding is reported as invalid", _context do
     assert match?(
       {:validation_failure, {:bad_argument, _}},
       @command.validate([], %{})
@@ -88,18 +87,27 @@ defmodule EncodeCommandTest do
     cipher = :rabbit_pbe.default_cipher()
     hash = :rabbit_pbe.default_hash()
     iterations = :rabbit_pbe.default_iterations()
+    encrypted = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, secret)
+    output = {:encrypted, encrypted}
     opts = %{cipher:       cipher,
              hash:         hash,
              iterations:   iterations
     }
-    {:ok, output} = @command.run([secret_as_erlang_term, passphrase], opts)
-    {:encrypted, encrypted} = output
     # decode plain value
-    assert secret === :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, encrypted)
+    assert {:ok, secret} === @command.run([format_as_erlang_term(encrypted), passphrase], Map.merge(opts, %{}))
     # decode {encrypted, ...} tuple form
-    assert secret === :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, encrypted)
+    assert {:ok, secret} === @command.run([format_as_erlang_term(output), passphrase], Map.merge(opts, %{}))
+
+    # wrong passphrase
+    assert match?(
+        {:error, _},
+        @command.run([format_as_erlang_term(encrypted), "wrong passphrase"], Map.merge(opts, %{}))
+    )
+    assert match?(
+        {:error, _},
+        @command.run([format_as_erlang_term(output), "wrong passphrase"], Map.merge(opts, %{}))
+    )
   end
 
   defp format_as_erlang_term(value), do: to_string(:lists.flatten(:io_lib.format("~p", [value])))
-
 end

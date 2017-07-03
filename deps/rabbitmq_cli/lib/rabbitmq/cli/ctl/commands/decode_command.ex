@@ -15,7 +15,7 @@
 
 alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
-defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
+defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -38,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     case {supports_cipher(opts.cipher), supports_hash(opts.hash), opts.iterations > 0} do
       {false, _, _}      -> {:validation_failure, {:bad_argument, "The requested cipher is not supported."}}
       {_, false, _}      -> {:validation_failure, {:bad_argument, "The requested hash is not supported"}}
-      {_, _, false}      -> {:validation_failure, {:bad_argument, "The requested number of iterations is incorrect"}}
+      {_, _, false}      -> {:validation_failure, {:bad_argument, "The requested number of iterations is incorrect (must be a positive integer)"}}
       {true, true, true} -> :ok
     end
   end
@@ -49,24 +49,28 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
         hash: :atom,
         iterations: :integer
       ]
-    end
+  end
 
-  def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
+  def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do
     try do
       term_value = Helpers.evaluate_input_as_term(value)
-      result = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
-      {:ok, {:encrypted, result}}
+      term_to_decrypt = case term_value do
+        {:encrypted, encrypted_term} -> encrypted_term
+        _                            -> term_value
+      end
+      result = :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, term_to_decrypt)
+      {:ok, result}
     catch _, _ ->
-      {:error, "Error during cipher operation."}
+      {:error, "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
     end
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
-  def usage, do: "encode value passphrase [--cipher cipher] [--hash hash] [--iterations iterations]"
+  def usage, do: "decode value passphrase [--cipher cipher] [--hash hash] [--iterations iterations]"
 
   def banner([_, _], _) do
-    "Encrypting value ..."
+    "Decrypting value ..."
   end
 
   defp supports_cipher(cipher), do: Enum.member?(:rabbit_pbe.supported_ciphers(), cipher)

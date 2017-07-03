@@ -259,4 +259,10 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
+  def evaluate_input_as_term(input) do
+      {:ok,tokens,_end_line} = :erl_scan.string(to_charlist(input <> "."))
+      {:ok,abs_form} = :erl_parse.parse_exprs(tokens)
+      {:value,term_value,_bs} = :erl_eval.exprs(abs_form, :erl_eval.new_bindings())
+      term_value
+  end
 end
