@@ -38,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
     case {supports_cipher(opts.cipher), supports_hash(opts.hash), opts.iterations > 0} do
       {false, _, _}      -> {:validation_failure, {:bad_argument, "The requested cipher is not supported."}}
       {_, false, _}      -> {:validation_failure, {:bad_argument, "The requested hash is not supported"}}
-      {_, _, false}      -> {:validation_failure, {:bad_argument, "The requested number of iterations is incorrect"}}
+      {_, _, false}      -> {:validation_failure, {:bad_argument, "The requested number of iterations is incorrect (must be a positive integer)"}}
       {true, true, true} -> :ok
     end
   end
@@ -61,7 +61,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
       result = :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, term_to_decrypt)
       {:ok, result}
     catch _, _ ->
-      {:error, "Error during cipher operation. Are you sure the passphrase is correct?"}
+      {:error, "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
     end
   end
 
