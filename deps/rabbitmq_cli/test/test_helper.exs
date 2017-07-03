@@ -48,6 +48,10 @@ defmodule TestHelper do
   end
 
   def delete_vhost(name) do
+    # some quick tests create and delete a vhost immediately, resulting
+    # in a high enough restart intensity in rabbit_vhost_sup_wrapper to
+    # make the rabbit app terminate. See https://github.com/rabbitmq/rabbitmq-server/issues/1280.
+    :timer.sleep(250)
     :rpc.call(get_rabbit_hostname(), :rabbit_vhost, :delete, [name, "acting-user"])
   end
 
