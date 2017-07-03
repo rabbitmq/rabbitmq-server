@@ -13,27 +13,21 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Ctl.Commands.ListHashesCommand do
-  @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
+defmodule ListCiphersCommandTest do
+  use ExUnit.Case, async: false
+  @command RabbitMQ.CLI.Ctl.Commands.ListCiphersCommand
 
-  def merge_defaults(args, opts) do
-    {args, opts}
-  end
-  def validate(args, _) when length(args) > 0 do
-      {:validation_failure,
-       {:bad_argument, :too_many_args}}
-  end
-  def validate(_, _), do: :ok
-
-  def run(_, _) do
-    {:ok, :rabbit_pbe.supported_hashes()}
+  test "validate: providing arguments when listing ciphers is reported as invalid", _context do
+    assert match?(
+      {:validation_failure, {:bad_argument, :too_many_args}},
+      @command.validate(["value"], %{})
+    )
   end
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
-
-  def usage, do: "list_hashes"
-
-  def banner(_, _), do: "Listing supported hash algorithms ..."
-
+  test "run: list ciphers", _context do
+    assert match?(
+      {:ok, _},
+      @command.run([], %{})
+    )
+  end
 end
