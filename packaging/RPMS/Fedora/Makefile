@@ -31,7 +31,7 @@ RPM_OS ?= fedora
 ifeq "$(RPM_OS)" "suse"
 FUNCTION_LIBRARY=
 REQUIRES=/sbin/chkconfig /sbin/service
-OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .suse'
+OS_DEFINES=--define '_unitdir /usr/lib/systemd/system' --define 'dist .suse' --define 'suse_version 1315'
 SPEC_DEFINES=--define 'group_tag Productivity/Networking/Other'
 START_PROG=startproc
 else
