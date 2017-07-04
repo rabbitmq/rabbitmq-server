@@ -54,9 +54,13 @@ terminate(_Reason, #state{timer = TRef}) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+start_timer(Interval, #state{timer = TRef0} = St) ->
+    timer:cancel(TRef0),
+    TRef1 = erlang:send_after(Interval, self(), start_gc),
+    St#state{timer = TRef1}.
+
 start_timer(#state{interval = Interval} = St) ->
-    TRef = erlang:send_after(Interval, self(), start_gc),
-    St#state{timer = TRef}.
+    start_timer(Interval, St).
 
 gc_connections() ->
     gc_process(connection_created),
