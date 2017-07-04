@@ -34,7 +34,7 @@ start_link(VHost) ->
 
 init([VHost]) ->
     %% 2 restarts in 5 minutes. One per message store.
-    {ok, {{one_for_all, 2, 5000},
+    {ok, {{one_for_all, 2, 300},
           [{rabbit_vhost_sup,
             {rabbit_vhost_sup_wrapper, start_vhost_sup, [VHost]},
              permanent, infinity, supervisor,
