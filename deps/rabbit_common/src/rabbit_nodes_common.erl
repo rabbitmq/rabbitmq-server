@@ -106,12 +106,12 @@ verbose_erlang_distribution(false) ->
     error_logger:delete_report_handler(?ERROR_LOGGER_HANDLER).
 
 current_node_details() ->
-    [{"~ncurrent node details:~n- node name: ~w", [node()]},
+    [{"~nCurrent node details:~n * node name: ~w", [node()]},
      case init:get_argument(home) of
-         {ok, [[Home]]} -> {"- home dir: ~s", [Home]};
-         Other          -> {"- no home dir: ~p", [Other]}
+         {ok, [[Home]]} -> {" * effective user's home directory: ~s", [Home]};
+         Other          -> {" * effective user has no home directory: ~p", [Other]}
      end,
-     {"- cookie hash: ~s", [cookie_hash()]}].
+     {" * Erlang cookie hash: ~s", [cookie_hash()]}].
 
 diagnostics_node(Node) ->
     {Name, Host} = parts(Node),
@@ -134,7 +134,7 @@ dist_working_diagnostics(Node) ->
         true  -> [{"  * node ~s up, 'rabbit' application running", [Node]}];
         false -> [{"  * node ~s up, 'rabbit' application not running~n"
                    "  * running applications on ~s: ~p~n"
-                   "  * suggestion: start_app on ~s",
+                   "  * suggestion: use rabbitmqctl start_app on ~s",
                    [Node, Node, remote_apps(Node), Node]}]
     end.
 
@@ -164,13 +164,13 @@ dist_broken_diagnostics(Name, Host, NamePorts) ->
             [{"  * epmd reports: node '~s' not running at all", [Name]},
              OthersDiag, {"  * suggestion: start the node", []}];
         [{Name, Port}] ->
-            [{"  * epmd reports node '~s' running on port ~b", [Name, Port]} |
+            [{"  * epmd reports node '~s' uses port ~b for inter-node and CLI tool traffic ", [Name, Port]} |
              case diagnose_connect(Host, Port) of
                  ok ->
                      connection_succeeded_diagnostics();
                  {error, Reason} ->
-                     [{"  * can't establish TCP connection, reason: ~s~n"
-                       "  * suggestion: blocked by firewall?",
+                     [{"  * can't establish TCP connection to the target node, reason: ~s~n"
+                       "  * suggestion: check if host '~s' resolves, is reachable and ports ~s, 4369 are not blocked by firewall",
                        [rabbit_misc:format_inet_error(Reason)]}]
              end]
     end.
@@ -178,14 +178,14 @@ dist_broken_diagnostics(Name, Host, NamePorts) ->
 connection_succeeded_diagnostics() ->
     case gen_event:call(error_logger, ?ERROR_LOGGER_HANDLER, get_connection_report) of
         [] ->
-            [{"  * TCP connection succeeded but Erlang distribution "
-              "failed~n"
-              "  * suggestion: hostname mismatch?~n"
-              "  * suggestion: is the cookie set correctly?~n"
-              "  * suggestion: is the Erlang distribution using TLS?", []}];
+            [{"  * TCP connection succeeded but Erlang distribution failed ~n"
+              "  * suggestion: check if the Erlang cookie identical for all server nodes and CLI tools~n"
+              "  * suggestion: check if all server nodes and CLI tools use consistent hostnames when addressing each other~n"
+              "  * suggestion: check if inter-node connections may be configured to use TLS. If so, all nodes and CLI tools must do that~n"
+             "   * suggestion: see the CLI, clustering and networking guides on http://rabbitmq.com/documentation.html to learn more~n", []}];
         Report ->
             [{"  * TCP connection succeeded but Erlang distribution "
-              "failed~n", []}]
+              "failed ~n", []}]
                 ++ Report
     end.
 
