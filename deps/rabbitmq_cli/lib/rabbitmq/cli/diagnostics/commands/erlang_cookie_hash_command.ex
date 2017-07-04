@@ -27,7 +27,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
   def usage, do: "erlang_cookie_hash"
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :cookie_hash, [], timeout)
+    :rabbit_misc.rpc_call(node_name, :rabbit_nodes_common, :cookie_hash, [], timeout)
   end
 
   def output(result, _options) when is_list(result) do
