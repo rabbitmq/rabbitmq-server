@@ -251,32 +251,30 @@ defmodule RabbitMQCtl do
     exit({:shutdown, code})
   end
 
-  defp format_error({:error, {:badrpc_multi, :nodedown, [node | _]} = result}, _opts, _) do
+  defp format_error({:error, {:badrpc_multi, :nodedown, [node | _]} = result}, opts, _) do
     diagnostics = get_node_diagnostics(node)
     {:error, ExitCodes.exit_code_for(result),
-     "Error: unable to connect to node '#{node}': nodedown\n" <>
-     diagnostics}
+     badrpc_error_message_header(node, opts) <> diagnostics}
   end
   defp format_error({:error, {:badrpc_multi, :timeout, [node | _]} = result}, opts, module) do
     op = CommandModules.module_to_command(module)
     {:error, ExitCodes.exit_code_for(result),
-     "Error: operation #{op} on node #{node} timed out. Timeout: #{opts[:timeout]}"}
+     "Error: operation #{op} on node #{node} timed out. Timeout value used: #{opts[:timeout]}"}
   end
   defp format_error({:error, {:badrpc, :nodedown} = result}, opts, _) do
     diagnostics = get_node_diagnostics(opts[:node])
     {:error, ExitCodes.exit_code_for(result),
-     "Error: unable to connect to node '#{opts[:node]}': nodedown\n" <>
-     diagnostics}
+     badrpc_error_message_header(opts[:node], opts) <> diagnostics}
   end
   defp format_error({:error, {:badrpc, :timeout} = result}, opts, module) do
     op = CommandModules.module_to_command(module)
     {:error, ExitCodes.exit_code_for(result),
-     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{opts[:timeout]}"}
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{opts[:timeout]}"}
   end
   defp format_error({:error, {:badrpc, {:timeout, to}} = result}, opts, module) do
     op = CommandModules.module_to_command(module)
     {:error, ExitCodes.exit_code_for(result),
-     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{to}"}
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{to}"}
   end
   defp format_error({:error, {:no_such_vhost, vhost} = result}, _opts, _) do
     {:error, ExitCodes.exit_code_for(result),
@@ -285,12 +283,12 @@ defmodule RabbitMQCtl do
   defp format_error({:error, {:timeout, to} = result}, opts, module) do
     op = CommandModules.module_to_command(module)
     {:error, ExitCodes.exit_code_for(result),
-     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{to}"}
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{to}"}
   end
   defp format_error({:error, :timeout = result}, opts, module) do
     op = CommandModules.module_to_command(module)
     {:error, ExitCodes.exit_code_for(result),
-     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{opts[:timeout]}"}
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{opts[:timeout]}"}
   end
   defp format_error({:error, err} = result, _, _) do
     string_err = Helpers.string_or_inspect(err)
@@ -298,10 +296,27 @@ defmodule RabbitMQCtl do
   end
 
   defp get_node_diagnostics(nil) do
-    "Node is not defined"
+    "Target node is not defined"
   end
   defp get_node_diagnostics(node_name) do
-    to_string(:rabbit_nodes.diagnostics([node_name]))
+    to_string(:rabbit_nodes_common.diagnostics([node_name]))
+  end
+
+  defp badrpc_error_message_header(node, _opts) do
+    """
+    Error: unable to perform an operation on node '#{node}'. Please see diagnostics information and suggestions below.
+
+    Most common reasons for this are:
+
+     * Target node is unreachable (e.g. due to hostname resolution, TCP connection or firewall issues)
+     * CLI-to-node authentication failure (e.g. due to CLI tool's Erlang cookie not matching that of the server's)
+     * Target node not running
+
+    In addition to the diagnostics info below:
+
+     * See the CLI, clustering and networking guides on http://rabbitmq.com/documentation.html to learn more
+     * Consult server logs on node #{node}
+    """
   end
 
   @spec with_distribution(options(), (() -> command_result())) :: command_result()

@@ -34,14 +34,14 @@ defmodule RabbitMQCtlTest do
     command = ["status", "-n", "sandwich@pastrami"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_unavailable())
-    end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
+    end) =~ ~r/unable to perform an operation on node 'sandwich@pastrami'/
   end
 
   test "print timeout message when an RPC call times out" do
     command = ["list_users", "-t", "0"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_tempfail())
-    end) =~ ~r/Error: operation list_users on node #{get_rabbit_hostname()} timed out. Timeout: 0/
+    end) =~ ~r/Error: operation list_users on node #{get_rabbit_hostname()} timed out. Timeout value used: 0/
   end
 
   test "print an authentication error message when auth is refused" do
@@ -185,33 +185,32 @@ defmodule RabbitMQCtlTest do
   test "badrpc nodedown error" do
     exit_code = exit_unavailable()
     node = :example@node
-    {:error, ^exit_code,
-     "Error: unable to connect to node 'example@node': nodedown" <> diag} =
+    {:error, ^exit_code, message} =
         RabbitMQCtl.handle_command_output(
           {:error, {:badrpc, :nodedown}},
           :no_command, %{node: node}, [],
           fn(output, _, _) -> output end)
 
-    assert diag =~ ~r/DIAGNOSTICS/
-    assert diag =~ ~r/attempted to contact/
+    assert message =~ ~r/Error: unable to perform an operation on node/
+    assert message =~ ~r/DIAGNOSTICS/
+    assert message =~ ~r/attempted to contact/
 
     localnode = :non_existent_node@localhost
-    {:error, ^exit_code,
-     "Error: unable to connect to node 'non_existent_node@localhost': nodedown" <> diag} =
+    {:error, ^exit_code, message} =
         RabbitMQCtl.handle_command_output(
           {:error, {:badrpc, :nodedown}},
           :no_command, %{node: localnode}, [],
           fn(output, _, _) -> output end)
-    assert diag =~ ~r/DIAGNOSTICS/
-    assert diag =~ ~r/attempted to contact/
-    assert diag =~ ~r/suggestion: start the node/
+    assert message =~ ~r/DIAGNOSTICS/
+    assert message =~ ~r/attempted to contact/
+    assert message =~ ~r/suggestion: start the node/
   end
 
   test "badrpc timeout error" do
     exit_code = exit_tempfail()
     timeout = 1000
     nodename = :node@host
-    err_msg = "Error: operation example on node node@host timed out. Timeout: #{timeout}"
+    err_msg = "Error: operation example on node node@host timed out. Timeout value used: #{timeout}"
     {:error, ^exit_code, ^err_msg} =
       RabbitMQCtl.handle_command_output(
           {:error, {:badrpc, :timeout}},
@@ -249,4 +248,3 @@ defmodule RabbitMQCtlTest do
   end
 
 end
-
