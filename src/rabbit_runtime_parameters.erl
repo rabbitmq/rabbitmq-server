@@ -53,7 +53,7 @@
 
 -export([parse_set/5, set/5, set_any/5, clear/4, clear_any/4, list/0, list/1,
          list_component/1, list/2, list_formatted/1, list_formatted/3,
-         lookup/3, value/3, value/4, info_keys/0, clear_component/1]).
+         lookup/3, value/3, value/4, info_keys/0, clear_component/2]).
 
 -export([parse_set_global/3, set_global/3, value_global/1, value_global/2,
          list_global/0, list_global_formatted/0, list_global_formatted/2,
@@ -95,7 +95,7 @@
 
 %%---------------------------------------------------------------------------
 
--import(rabbit_misc, [pget/2, pset/3]).
+-import(rabbit_misc, [pget/2]).
 
 -define(TABLE, rabbit_runtime_parameters).
 
@@ -228,14 +228,15 @@ clear_global(Key, ActingUser) ->
             end
     end.
 
-clear_component(Component) ->
-    case rabbit_runtime_parameters:list_component(Component) of
+clear_component(Component, ActingUser) ->
+    case list_component(Component) of
         [] ->
             ok;
         Xs ->
-            [rabbit_runtime_parameters:clear(pget(vhost, X),
-                                             pget(component, X),
-                                             pget(name, X))|| X <- Xs],
+            [clear(pget(vhost, X),
+                   pget(component, X),
+                   pget(name, X),
+                   ActingUser) || X <- Xs],
             ok
     end.
 

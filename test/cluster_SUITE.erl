@@ -123,11 +123,6 @@ delegates_async1(_Config, SecondaryNode) ->
     ok = delegate:invoke_no_result(spawn(SecondaryNode, Responder), Sender),
     await_response(2),
 
-    LocalPids = spawn_responders(node(), Responder, 10),
-    RemotePids = spawn_responders(SecondaryNode, Responder, 10),
-    ok = delegate:invoke_no_result(LocalPids ++ RemotePids, Sender),
-    await_response(20),
-
     passed.
 
 delegates_sync(Config) ->

@@ -1811,34 +1811,14 @@ floating point number.
 Values lower than 1.0 can be dangerous and should be used carefully.
 .El
 .\" ------------------------------------
-.It Cm encode Oo Fl -decode Oc Oo Ar value Oc Oo Ar passphrase Oc Oo Fl -list-ciphers Oc Oo Fl -list-hashes Oc Oo Fl -cipher Ar cipher Oc Oo Fl -hash Ar hash Oc Op Fl -iterations Ar iterations
+.It Cm encode Ar value Ar passphrase Oo Fl -cipher Ar cipher Oc Oo Fl -hash Ar hash Oc Op Fl -iterations Ar iterations
 .Bl -tag -width Ds
-.It Fl -decode
-Flag to decrypt the input value.
-.Pp
-For example:
-.sp
-.Dl rabbitmqctl encode --decode '{encrypted,<<"...">>}' mypassphrase
 .It Ar value Ar passphrase
-Value to encrypt/decrypt and passphrase.
+Value to encrypt and passphrase.
 .Pp
 For example:
 .sp
 .Dl rabbitmqctl encode '<<"guest">>' mypassphrase
-.sp
-.Dl rabbitmqctl encode --decode '{encrypted,<<"...">>}' mypassphrase
-.It Fl -list-ciphers
-Flag to list the supported ciphers.
-.Pp
-For example:
-.sp
-.Dl rabbitmqctl encode --list-ciphers
-.It Fl -list-hashes
-Flag to list the supported hash algorithms.
-.Pp
-For example:
-.sp
-.Dl rabbitmqctl encode --list-hashes
 .It Fl -cipher Ar cipher Fl -hash Ar hash Fl -iterations Ar iterations
 Options to specify the encryption settings.
 They can be used independently.
@@ -1847,6 +1827,39 @@ For example:
 .sp
 .Dl rabbitmqctl encode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 '<<"guest">>' mypassphrase
 .El
+.\" ------------------------------------
+.It Cm decode Ar value Ar passphrase Oo Fl -cipher Ar cipher Oc Oo Fl -hash Ar hash Oc Op Fl -iterations Ar iterations
+.Bl -tag -width Ds
+.It Ar value Ar passphrase
+Value to decrypt (as produced by the encode command) and passphrase.
+.Pp
+For example:
+.sp
+.Dl rabbitmqctl decode '{encrypted, <<"...">>}' mypassphrase
+.It Fl -cipher Ar cipher Fl -hash Ar hash Fl -iterations Ar iterations
+Options to specify the decryption settings.
+They can be used independently.
+.Pp
+For example:
+.sp
+.Dl rabbitmqctl decode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 '{encrypted,<<"...">>} mypassphrase
+.El
+.\" ------------------------------------
+.It Cm list_hashes
+Lists hash functions supported by encoding commands.
+.Pp
+For example, this command instructs the RabbitMQ broker to list all hash
+functions supported by encoding commands:
+.sp
+.Dl rabbitmqctl list_hashes
+.\" ------------------------------------
+.It Cm list_ciphers
+Lists cipher suites supported by encoding commands.
+.Pp
+For example, this command instructs the RabbitMQ broker to list all
+cipher suites supported by encoding commands:
+.sp
+.Dl rabbitmqctl list_ciphers
 .El
 .\" ------------------------------------------------------------------
 .Sh PLUGIN COMMANDS
