@@ -144,7 +144,7 @@ add_binding(transaction, _X,
                                #bucket { source_number = {S, N},
                                          destination   = D,
                                          binding       = B },
-                               write) || N <- find_numbers(S, BucketCount, [])],
+                               write) || N <- find_numbers(S, D, BucketCount, [])],
             ok;
         _ ->
             ok
@@ -176,14 +176,12 @@ init() ->
     mnesia:wait_for_tables([?TABLE], 30000),
     ok.
 
-find_numbers(_Source, 0, Acc) ->
+find_numbers(_Source, _Destination, 0, Acc) ->
     Acc;
-find_numbers(Source, N, Acc) ->
-    Number = rand_compat:uniform(?PHASH2_RANGE) - 1,
-    case mnesia:read(?TABLE, {Source, Number}, write) of
-        []  -> find_numbers(Source, N-1, [Number | Acc]);
-        [_] -> find_numbers(Source, N, Acc)
-    end.
+find_numbers(Source, Destination, N, Acc) ->
+    Term = {Source, Destination, N},
+    Number = erlang:phash2(Term, ?PHASH2_RANGE),
+    find_numbers(Source, Destination, N-1, [Number | Acc]).
 
 hash(undefined, #basic_message { routing_keys = Routes }) ->
     Routes;
