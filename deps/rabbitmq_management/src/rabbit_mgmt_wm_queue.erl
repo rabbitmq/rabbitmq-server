@@ -53,9 +53,11 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     try
         [Q] = rabbit_mgmt_db:augment_queues(
-                        [queue(ReqData)], rabbit_mgmt_util:range_ceil(ReqData), full),
-        Payload = rabbit_mgmt_format:clean_consumer_details(rabbit_mgmt_format:strip_pids(Q)),
-        rabbit_mgmt_util:reply(Payload, ReqData, Context)
+                        [queue(ReqData)], rabbit_mgmt_util:range_ceil(ReqData),
+                        full),
+        Payload = rabbit_mgmt_format:clean_consumer_details(
+                    rabbit_mgmt_format:strip_pids(Q)),
+        rabbit_mgmt_util:reply(ensure_defaults(Payload), ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
@@ -79,6 +81,21 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
 %%--------------------------------------------------------------------
+
+%% this is here to ensure certain data points are always there. When a queue
+%% is moved there can be transient periods where certain advanced metrics aren't
+%% yet available on the new node.
+ensure_defaults(Payload0) ->
+    case lists:keyfind(garbage_collection, 1, Payload0) of
+        {_K, _V} -> Payload0;
+        false ->
+            [{garbage_collection,
+              [{max_heap_size,-1},
+               {min_bin_vheap_size,-1},
+               {min_heap_size,-1},
+               {fullsweep_after,-1},
+               {minor_gcs,-1}]} | Payload0]
+    end.
 
 queue(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
