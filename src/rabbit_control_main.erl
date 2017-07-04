@@ -123,7 +123,8 @@
         [stop, shutdown, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
-         environment, eval, force_boot, help, hipe_compile, encode]).
+         environment, eval, force_boot, help, hipe_compile, encode, decode,
+         list_ciphers, list_hashes]).
 
 %% [Command | {Command, DefaultTimeoutInMilliSeconds}]
 -define(COMMANDS_WITH_TIMEOUT,
