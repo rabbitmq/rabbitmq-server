@@ -51,7 +51,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
       ]
     end
 
-  def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
+  def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do
     try do
       term_value = Helpers.evaluate_input_as_term(value)
       result = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
