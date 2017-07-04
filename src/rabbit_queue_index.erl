@@ -565,7 +565,7 @@ queue_name_to_dir_name(#resource { kind = queue,
     rabbit_misc:format("~.36B", [Num]).
 
 queue_name_to_dir_name_legacy(Name = #resource { kind = queue }) ->
-    <<Num:128>> = erlang:md5(term_to_binary_compat:queue_name_to_binary(Name)),
+    <<Num:128>> = erlang:md5(term_to_binary_compat:term_to_binary_1(Name)),
     rabbit_misc:format("~.36B", [Num]).
 
 queues_base_dir() ->
