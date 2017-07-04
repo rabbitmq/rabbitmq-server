@@ -504,12 +504,14 @@ safely_start_msg_store(VHost, Type, Refs, StartFunState) ->
     case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
         {ok, _} ->
             rabbit_log:info("Started message store of type ~s for vhost '~s'~n", [abbreviated_type(Type), VHost]);
-        {error, {no_such_vhost, VHost}} ->
+        {error, {no_such_vhost, VHost}} = Err ->
             rabbit_log:error("Failed to start message store of type ~s for vhost '~s': the vhost no longer exists!~n",
-                             [Type, VHost]);
+                             [Type, VHost]),
+            exit(Err);
         {error, Error} ->
             rabbit_log:error("Failed to start message store of type ~s for vhost '~s': ~p~n",
-                             [Type, VHost, Error])
+                             [Type, VHost, Error]),
+            exit({error, Error})
     end.
 
 abbreviated_type(?TRANSIENT_MSG_STORE)  -> transient;
