@@ -402,6 +402,7 @@ change_cluster_node_type(Config) ->
     assert_cluster_status({[Rabbit, Hare], [Hare], [Hare]},
                           [Rabbit, Hare]),
     change_cluster_node_type(Rabbit, disc),
+
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
                           [Rabbit, Hare]),
     change_cluster_node_type(Rabbit, ram),
