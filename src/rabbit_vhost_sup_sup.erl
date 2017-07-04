@@ -175,7 +175,5 @@ vhost_restart_strategy() ->
         continue  -> transient;
         stop_node -> permanent;
         transient -> transient;
-        permanent -> permanent;
-        %% old name of continue
-        ignore    -> transient
+        permanent -> permanent
     end.
