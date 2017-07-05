@@ -27,8 +27,8 @@
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
 -export([delete_storage/1]).
 
--spec add(rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
--spec delete(rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
+-spec add(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+-spec delete(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 -spec update(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
 -spec exists(rabbit_types:vhost()) -> boolean().
 -spec list() -> [rabbit_types:vhost()].
@@ -104,10 +104,20 @@ add(VHostPath, ActingUser) ->
                            {<<"amq.rabbitmq.trace">>, topic,   true}]],
                   ok
           end),
-    ok = rabbit_vhost_sup_sup:start_on_all_nodes(VHostPath),
-    rabbit_event:notify(vhost_created, info(VHostPath)
-                        ++ [{user_who_performed_action, ActingUser}]),
-    R.
+    case rabbit_vhost_sup_sup:start_on_all_nodes(VHostPath) of
+        ok ->
+            rabbit_event:notify(vhost_created, info(VHostPath)
+                                ++ [{user_who_performed_action, ActingUser}]),
+            R;
+        {error, {no_such_vhost, VHostPath}} ->
+            Msg = rabbit_misc:format("failed to set up vhost '~s': it was concurrently deleted!",
+                                     [VHostPath]),
+            {error, Msg};
+        {error, Reason} ->
+            Msg = rabbit_misc:format("failed to set up vhost '~s': ~p",
+                                     [VHostPath, Reason]),
+            {error, Msg}
+    end.
 
 delete(VHostPath, ActingUser) ->
     %% FIXME: We are forced to delete the queues and exchanges outside
