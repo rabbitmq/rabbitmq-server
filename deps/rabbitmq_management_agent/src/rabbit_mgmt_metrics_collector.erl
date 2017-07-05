@@ -511,7 +511,7 @@ insert_entry(Table, Id, TS, Entry, Size, Interval0, Incremental) ->
                 % add some margin to Size and max_n to reduce chances of off-by-one errors
                 exometer_slide:new(TS - IntervalMs, (Size + Interval0) * 1000,
                                    [{interval, IntervalMs},
-                                    {max_n, erlang:ceil(Size / Interval0) + 1},
+                                    {max_n, ceil(Size / Interval0) + 1},
                                     {incremental, Incremental}])
         end,
     insert_with_index(Table, Key, {Key, exometer_slide:add_element(TS, Entry,
@@ -634,14 +634,14 @@ load_config() ->
     Policies = rabbit_mgmt_agent_config:get_env(sample_retention_policies, []),
     {RatesMode, Policies}.
 
-% ceil(X) when X < 0 ->
-%     trunc(X);
-% ceil(X) ->
-%     T = trunc(X),
-%     case X - T == 0 of
-%         true -> T;
-%         false -> T + 1
-%     end.
+ceil(X) when X < 0 ->
+    trunc(X);
+ceil(X) ->
+    T = trunc(X),
+    case X - T == 0 of
+        true -> T;
+        false -> T + 1
+    end.
 
 pget(Key, List) -> pget(Key, List, unknown).
 
