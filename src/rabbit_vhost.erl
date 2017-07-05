@@ -133,12 +133,12 @@ delete(VHostPath, ActingUser) ->
         #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
     Funs = rabbit_misc:execute_mnesia_transaction(
           with(VHostPath, fun () -> internal_delete(VHostPath, ActingUser) end)),
+    ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath},
+                                             {user_who_performed_action, ActingUser}]),
     [case Fun() of
          ok                                  -> ok;
          {error, {no_such_vhost, VHostPath}} -> ok
      end || Fun <- Funs],
-    ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath},
-                                             {user_who_performed_action, ActingUser}]),
     %% After vhost was deleted from mnesia DB, we try to stop vhost supervisors
     %% on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHostPath),
