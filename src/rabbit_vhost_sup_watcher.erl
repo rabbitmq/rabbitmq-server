@@ -50,7 +50,7 @@ handle_info(check_vhost, VHost) ->
         true  -> {noreply, VHost};
         false ->
             rabbit_log:error("Virtual host '~s' is gone. "
-                             "Stopping message store supervisor.",
+                             "Stopping its top level supervisor.",
                              [VHost]),
             %% Stop vhost's top supervisor in a one-off process to avoid a deadlock:
             %% us (a child process) waiting for supervisor shutdown and our supervisor(s)
