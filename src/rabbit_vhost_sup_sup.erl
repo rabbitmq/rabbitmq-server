@@ -82,7 +82,10 @@ start_vhost(VHost) ->
                     case supervisor2:start_child(?MODULE, [VHost]) of
                         {ok, _}                       -> ok;
                         {error, {already_started, _}} -> ok;
-                        Error                         -> throw(Error)
+                        Error                         ->
+                            rabbit_log:error("Could not start process tree "
+                                             "for vhost '~s': the vhost no longer exists!", [VHost]),
+                            throw(Error)
                     end,
                     {ok, _} = vhost_sup_pid(VHost);
                 {ok, Pid} when is_pid(Pid) ->
