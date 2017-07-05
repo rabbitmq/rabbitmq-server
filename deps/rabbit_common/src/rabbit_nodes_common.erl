@@ -171,7 +171,7 @@ dist_broken_diagnostics(Name, Host, NamePorts) ->
                  {error, Reason} ->
                      [{"  * can't establish TCP connection to the target node, reason: ~s~n"
                        "  * suggestion: check if host '~s' resolves, is reachable and ports ~s, 4369 are not blocked by firewall",
-                       [rabbit_misc:format_inet_error(Reason)]}]
+                       [rabbit_misc:format_inet_error(Reason), Host, Port]}]
              end]
     end.
 
