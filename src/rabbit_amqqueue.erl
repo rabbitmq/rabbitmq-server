@@ -235,12 +235,11 @@ recover(VHost) ->
     {ok, OrderedRecoveryTerms} =
         BQ:start(VHost, [QName || #amqqueue{name = QName} <- Queues]),
     case rabbit_amqqueue_sup_sup:start_for_vhost(VHost) of
-        {ok, _} ->
+        {ok, _}         ->
             recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms));
-        %% a failure
-        _       ->
-            rabbit_log:error("Failed to start queue supervisors for vhost '~s', skipping queue recovery", [VHost]),
-            []
+        {error, Reason} ->
+            rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
+            throw({error, Reason})
     end.
 
 stop(VHost) ->
