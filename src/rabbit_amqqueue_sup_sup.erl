@@ -77,7 +77,7 @@ start_for_vhost(VHost) ->
         {error, {no_such_vhost, VHost}} ->
             rabbit_log:error("Failed to start a queue process supervisor for vhost ~s: vhost no longer exists!",
                              [VHost]),
-            ok
+            {error, {no_such_vhost, VHost}}
     end.
 
 -spec stop_for_vhost(rabbit_types:vhost()) -> ok.
