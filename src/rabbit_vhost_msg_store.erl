@@ -30,8 +30,8 @@ start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
                                     {Type, {rabbit_msg_store, start_link,
                                             [Type, VHostDir, ClientRefs, StartupFunState]},
                                      transient, ?WORKER_WAIT, worker, [rabbit_msg_store]});
-        %% we can get here if a vhost is created and immediately
-        %% deleted, e.g. some integration tests do it
+        %% we can get here if a vhost is added and removed concurrently
+        %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} = E ->
             rabbit_log:error("Failed to start a message store for vhost ~s: vhost no longer exists!",
                              [VHost]),
