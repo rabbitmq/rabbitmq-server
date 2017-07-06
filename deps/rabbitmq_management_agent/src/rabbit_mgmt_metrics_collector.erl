@@ -154,7 +154,6 @@ handle_deleted_queues(queue_coarse_metrics, Remainders,
                             [insert_entry(queue_msg_stats, Queue, TS,
                                           QNegStats, Size, Interval, false)
                              || {Size, Interval} <- BPolicies],
-                            % these need to be delayed by an interval
                             ets:delete(queue_stats, Queue),
                             ets:delete(queue_process_stats, Queue)
                   end,
