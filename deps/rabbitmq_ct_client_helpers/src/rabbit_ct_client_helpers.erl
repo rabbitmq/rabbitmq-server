@@ -273,7 +273,7 @@ consume(Ch, QName, Count) ->
          receive {#'basic.deliver'{consumer_tag = CTag},
                   #amqp_msg{payload = Exp}} ->
                  ok
-         after 500 ->
+         after 5000 ->
                  exit(timeout)
          end
      end|| I <- lists:seq(1, Count)],
