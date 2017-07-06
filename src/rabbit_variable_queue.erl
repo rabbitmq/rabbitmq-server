@@ -496,11 +496,11 @@ stop(VHost) ->
 
 start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
     rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
-    safely_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE),
-    safely_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState),
+    do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE),
+    do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState),
     ok.
 
-safely_start_msg_store(VHost, Type, Refs, StartFunState) ->
+do_start_msg_store(VHost, Type, Refs, StartFunState) ->
     case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
         {ok, _} ->
             rabbit_log:info("Started message store of type ~s for vhost '~s'~n", [abbreviated_type(Type), VHost]);
