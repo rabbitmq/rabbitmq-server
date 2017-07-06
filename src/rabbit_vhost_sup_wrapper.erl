@@ -16,9 +16,6 @@
 
 %% This module is a wrapper around vhost supervisor to
 %% provide exactly once restart semantics.
-%%
-%% rabbit_vhost_sup supervisor children are added dynamically,
-%% and the one_for_all strategy would be questionable here
 
 -module(rabbit_vhost_sup_wrapper).
 
