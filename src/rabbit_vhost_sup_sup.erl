@@ -84,7 +84,7 @@ start_vhost(VHost) ->
                         {error, {already_started, _}} -> ok;
                         Error                         ->
                             rabbit_log:error("Could not start process tree "
-                                             "for vhost '~s': the vhost no longer exists!", [VHost]),
+                                             "for vhost '~s': ~p", [VHost, Error]),
                             throw(Error)
                     end,
                     {ok, _} = vhost_sup_pid(VHost);
