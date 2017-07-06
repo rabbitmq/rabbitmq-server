@@ -122,9 +122,8 @@ define PROJECT_ENV
 	    {disk_monitor_failure_retries, 10},
 	    {disk_monitor_failure_retry_interval, 120000},
 	    %% either "stop_node" or "continue".
-	    %% by default we choose to not restart the entire node if one
-	    %% vhost had to shut down e.g. because of a message store exception
-	    %% see server#1158 and server#1280
+	    %% by default we choose to not terminate the entire node if one
+	    %% vhost had to shut down, see server#1158 and server#1280
 	    {vhost_restart_strategy, continue}
 	  ]
 endef
