@@ -272,8 +272,18 @@ dispatcher_add(function(sammy) {
                       'vhosts': '/vhosts'}, 'limits');
 
     sammy.put('#/limits', function() {
-        this.params.value = parseInt(this.params.value) || this.params.value;
-        if (sync_put(this, '/vhost-limits/:vhost/:name')) update();
+        var valAsInt = parseInt(this.params.value);
+        if (isNaN(valAsInt)) {
+            var e = 'Validation failed\n\n' +
+                this.params.name + ' should be a number, actually was "' +
+                this.params.value + '"';
+            show_popup('warn', fmt_escape_html(e));
+        } else {
+            this.params.value = valAsInt;
+            if (sync_put(this, '/vhost-limits/:vhost/:name')) {
+                update();
+            }
+        }
     });
     sammy.del('#/limits', function() {
         if (sync_delete(this, '/vhost-limits/:vhost/:name')) update();
