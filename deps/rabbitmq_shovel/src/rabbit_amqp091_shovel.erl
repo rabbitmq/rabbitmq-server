@@ -316,15 +316,15 @@ make_conn_and_chan(URIs, ShovelName) ->
     URI = lists:nth(rand:uniform(length(URIs)), URIs),
     {ok, AmqpParam} = amqp_uri:parse(URI),
     ConnName = get_connection_name(ShovelName),
-    {ok, Conn} = amqp_connection:start(AmqpParam, ConnName),
     case amqp_connection:start(AmqpParam, ConnName) of
         {ok, Conn} ->
             link(Conn),
             {ok, Chan} = amqp_connection:open_channel(Conn),
             {Conn, Chan, list_to_binary(amqp_uri:remove_credentials(URI))};
-        {error, Reason}=Err ->
-            error_logger:error_msg("Error opening AMQP connection: ~p~n", [Reason]),
-            Err
+        {error, Reason} ->
+            ErrMsg = rabbit_misc:format("Error opening AMQP connection (URI '~s'): ~s", [URI, Reason]),
+            error_logger:error_msg(ErrMsg),
+            exit(ErrMsg)
     end.
 
 
