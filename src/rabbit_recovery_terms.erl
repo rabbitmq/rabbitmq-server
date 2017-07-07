@@ -56,8 +56,8 @@ start(VHost) ->
                          {?MODULE, start_link, [VHost]},
                          transient, ?WORKER_WAIT, worker,
                          [?MODULE]});
-        %% we can get here if a vhost is created and immediately
-        %% deleted, e.g. some integration tests do it
+        %% we can get here if a vhost is added and removed concurrently
+        %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
             rabbit_log:error("Failed to start a recovery terms manager for vhost ~s: vhost no longer exists!",
                              [VHost])

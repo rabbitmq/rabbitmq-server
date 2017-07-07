@@ -63,7 +63,7 @@ find_for_vhost(VHost, Node) ->
         Result -> {error, {queue_supervisor_not_found, Result}}
     end.
 
--spec start_for_vhost(rabbit_types:vhost()) -> {ok, pid()} | ok | {error, term()}.
+-spec start_for_vhost(rabbit_types:vhost()) -> {ok, pid()} | {error, term()}.
 start_for_vhost(VHost) ->
     case rabbit_vhost_sup_sup:vhost_sup(VHost) of
         {ok, VHostSup} ->
@@ -72,8 +72,8 @@ start_for_vhost(VHost) ->
               {rabbit_amqqueue_sup_sup,
                {rabbit_amqqueue_sup_sup, start_link, []},
                transient, infinity, supervisor, [rabbit_amqqueue_sup_sup]});
-        %% we can get here if a vhost is created and immediately
-        %% deleted, e.g. some integration tests do it
+        %% we can get here if a vhost is added and removed concurrently
+        %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
             rabbit_log:error("Failed to start a queue process supervisor for vhost ~s: vhost no longer exists!",
                              [VHost]),
