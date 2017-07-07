@@ -25,7 +25,7 @@
 -export([start_link/0, start/0]).
 -export([vhost_sup/1, vhost_sup/2, save_vhost_sup/3]).
 -export([delete_on_all_nodes/1]).
--export([start_vhost/1, start_vhost/2, start_on_all_nodes/1]).
+-export([start_vhost/1, start_vhost/2, start_on_all_nodes/1, vhost_restart_strategy/0]).
 
 %% Internal
 -export([stop_and_delete_vhost/1]).
@@ -33,8 +33,10 @@
 -record(vhost_sup, {vhost, vhost_sup_pid, wrapper_pid}).
 
 start() ->
-    case supervisor:start_child(rabbit_sup, {?MODULE, {?MODULE, start_link, []},
-                                permanent, infinity, supervisor, [?MODULE]}) of
+    case supervisor:start_child(rabbit_sup, {?MODULE,
+                                             {?MODULE, start_link, []},
+                                             permanent, infinity, supervisor,
+                                             [?MODULE]}) of
         {ok, _}      -> ok;
         {error, Err} -> {error, Err}
     end.
@@ -43,17 +45,14 @@ start_link() ->
     supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-    VhostRestart = case application:get_env(rabbit, vhost_restart_strategy, stop_node) of
-        ignore    -> transient;
-        stop_node -> permanent;
-        transient -> transient;
-        permanent -> permanent
-    end,
-
+    %% This assumes that a single vhost termination should not shut down nodes
+    %% unless the operator opts in.
+    RestartStrategy = vhost_restart_strategy(),
     ets:new(?MODULE, [named_table, public, {keypos, #vhost_sup.vhost}]),
+
     {ok, {{simple_one_for_one, 0, 5},
           [{rabbit_vhost, {rabbit_vhost_sup_wrapper, start_link, []},
-            VhostRestart, infinity, supervisor,
+            RestartStrategy, ?SUPERVISOR_WAIT, supervisor,
             [rabbit_vhost_sup_wrapper, rabbit_vhost_sup]}]}}.
 
 start_on_all_nodes(VHost) ->
@@ -83,7 +82,10 @@ start_vhost(VHost) ->
                     case supervisor2:start_child(?MODULE, [VHost]) of
                         {ok, _}                       -> ok;
                         {error, {already_started, _}} -> ok;
-                        Error                         -> throw(Error)
+                        Error                         ->
+                            rabbit_log:error("Could not start process tree "
+                                             "for vhost '~s': ~p", [VHost, Error]),
+                            throw(Error)
                     end,
                     {ok, _} = vhost_sup_pid(VHost);
                 {ok, Pid} when is_pid(Pid) ->
@@ -100,7 +102,7 @@ stop_and_delete_vhost(VHost) ->
                 false -> ok;
                 true  ->
                     rabbit_log:info("Stopping vhost supervisor ~p"
-                                    " for vhost ~p~n",
+                                    " for vhost '~s'~n",
                                     [VHostSupPid, VHost]),
                     case supervisor2:terminate_child(?MODULE, WrapperPid) of
                         ok ->
@@ -169,3 +171,12 @@ vhost_sup_pid(VHost) ->
             end
     end.
 
+vhost_restart_strategy() ->
+    %% This assumes that a single vhost termination should not shut down nodes
+    %% unless the operator opts in.
+    case application:get_env(rabbit, vhost_restart_strategy, continue) of
+        continue  -> transient;
+        stop_node -> permanent;
+        transient -> transient;
+        permanent -> permanent
+    end.

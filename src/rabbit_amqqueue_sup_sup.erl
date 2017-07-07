@@ -65,15 +65,30 @@ find_for_vhost(VHost, Node) ->
 
 -spec start_for_vhost(rabbit_types:vhost()) -> {ok, pid()} | {error, term()}.
 start_for_vhost(VHost) ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
-    supervisor2:start_child(
-        VHostSup,
-        {rabbit_amqqueue_sup_sup,
-         {rabbit_amqqueue_sup_sup, start_link, []},
-         transient, infinity, supervisor, [rabbit_amqqueue_sup_sup]}).
+    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+        {ok, VHostSup} ->
+            supervisor2:start_child(
+              VHostSup,
+              {rabbit_amqqueue_sup_sup,
+               {rabbit_amqqueue_sup_sup, start_link, []},
+               transient, infinity, supervisor, [rabbit_amqqueue_sup_sup]});
+        %% we can get here if a vhost is added and removed concurrently
+        %% e.g. some integration tests do it
+        {error, {no_such_vhost, VHost}} ->
+            rabbit_log:error("Failed to start a queue process supervisor for vhost ~s: vhost no longer exists!",
+                             [VHost]),
+            {error, {no_such_vhost, VHost}}
+    end.
 
 -spec stop_for_vhost(rabbit_types:vhost()) -> ok.
 stop_for_vhost(VHost) ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
-    ok = supervisor2:terminate_child(VHostSup, rabbit_amqqueue_sup_sup),
-    ok = supervisor2:delete_child(VHostSup, rabbit_amqqueue_sup_sup).
+    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+        {ok, VHostSup} ->
+            ok = supervisor2:terminate_child(VHostSup, rabbit_amqqueue_sup_sup),
+            ok = supervisor2:delete_child(VHostSup, rabbit_amqqueue_sup_sup);
+        %% see start/1
+        {error, {no_such_vhost, VHost}} ->
+            rabbit_log:error("Failed to stop a queue process supervisor for vhost ~s: vhost no longer exists!",
+                             [VHost]),
+            ok
+    end.
