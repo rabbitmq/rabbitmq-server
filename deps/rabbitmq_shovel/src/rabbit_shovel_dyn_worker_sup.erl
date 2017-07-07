@@ -22,6 +22,7 @@
 -import(rabbit_misc, [pget/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_shovel.hrl").
 -define(SUPERVISOR, ?MODULE).
 
 start_link(Name, Config) ->
@@ -33,7 +34,7 @@ init([Name, Config]) ->
     {ok, {{one_for_one, 1, ?MAX_WAIT},
           [{Name,
             {rabbit_shovel_worker, start_link, [dynamic, Name, Config]},
-            case pget(<<"reconnect-delay">>, Config, 1) of
+            case pget(<<"reconnect-delay">>, Config, ?DEFAULT_RECONNECT_DELAY) of
                 N when is_integer(N) andalso N > 0 -> {transient, N};
                 _                                  -> temporary
             end,
