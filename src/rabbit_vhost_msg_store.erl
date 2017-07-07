@@ -23,17 +23,33 @@
 
 start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
                                                      ClientRefs == undefined  ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
-    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
-    supervisor2:start_child(VHostSup,
-        {Type, {rabbit_msg_store, start_link,
-                [Type, VHostDir, ClientRefs, StartupFunState]},
-         transient, ?WORKER_WAIT, worker, [rabbit_msg_store]}).
+    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+        {ok, VHostSup} ->
+            VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+            supervisor2:start_child(VHostSup,
+                                    {Type, {rabbit_msg_store, start_link,
+                                            [Type, VHostDir, ClientRefs, StartupFunState]},
+                                     transient, ?WORKER_WAIT, worker, [rabbit_msg_store]});
+        %% we can get here if a vhost is added and removed concurrently
+        %% e.g. some integration tests do it
+        {error, {no_such_vhost, VHost}} = E ->
+            rabbit_log:error("Failed to start a message store for vhost ~s: vhost no longer exists!",
+                             [VHost]),
+            E
+    end.
 
 stop(VHost, Type) ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
-    ok = supervisor2:terminate_child(VHostSup, Type),
-    ok = supervisor2:delete_child(VHostSup, Type).
+    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+        {ok, VHostSup} ->
+            ok = supervisor2:terminate_child(VHostSup, Type),
+            ok = supervisor2:delete_child(VHostSup, Type);
+        %% see start/4
+        {error, {no_such_vhost, VHost}} ->
+            rabbit_log:error("Failed to stop a message store for vhost ~s: vhost no longer exists!",
+                             [VHost]),
+
+            ok
+    end.
 
 client_init(VHost, Type, Ref, MsgOnDiskFun, CloseFDsFun) ->
     with_vhost_store(VHost, Type, fun(StorePid) ->
