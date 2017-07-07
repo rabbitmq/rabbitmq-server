@@ -67,7 +67,7 @@ accept_content(ReqData, Context) ->
       'queue.declare',
       fun rabbit_mgmt_format:format_accept_content/1,
       [{queue, Name}], "Declare queue error: ~s", ReqData, Context).
-            
+
 delete_resource(ReqData, Context) ->
     %% We need to retrieve manually if-unused and if-empty, as the HTTP API uses '-'
     %% while the record uses '_'
