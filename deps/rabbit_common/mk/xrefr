@@ -24,11 +24,33 @@
 
 main(_) ->
     Checks = ?CHECKS,
+    ElixirDeps = get_elixir_deps_paths(),
+    [true = code:add_path(P) || P <- ElixirDeps],
     XrefWarnings = lists:append([check(Check) || Check <- Checks]),
     warnings_prn(XrefWarnings),
     case XrefWarnings of
         [] -> ok;
         _  -> halt(1)
+    end.
+
+get_elixir_deps_paths() ->
+    case os:getenv("ERLANG_MK_RECURSIVE_DEPS_LIST") of
+        false ->
+            [];
+        Filename ->
+            {ok, Fd} = file:open(Filename, [read]),
+            get_elixir_deps_paths1(Fd, [])
+    end.
+
+get_elixir_deps_paths1(Fd, Paths) ->
+    case file:read_line(Fd) of
+        {ok, Line} ->
+            RootPath = Line -- [$\r, $\n],
+            Glob = filename:join([RootPath, "_build", "dev", "lib", "*", "ebin"]),
+            NewPaths = filelib:wildcard(Glob),
+            get_elixir_deps_paths1(Fd, Paths ++ NewPaths);
+        eof ->
+            Paths
     end.
 
 check(Check) ->
