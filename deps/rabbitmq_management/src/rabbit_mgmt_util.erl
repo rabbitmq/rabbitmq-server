@@ -848,7 +848,7 @@ with_channel(VHost, ReqData,
             catch amqp_channel:close(Ch),
             catch amqp_connection:close(Conn)
             end;
-        {error,  {auth_failure, Msg}} ->
+        {error, {auth_failure, Msg}} ->
             not_authorised(Msg, ReqData, Context);
         {error, not_allowed} ->
             not_authorised(<<"Access refused.">>, ReqData, Context);
