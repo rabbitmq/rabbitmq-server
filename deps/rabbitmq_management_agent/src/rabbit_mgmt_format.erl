@@ -87,8 +87,10 @@ format_arguments({arguments, Value}) ->
 format_arguments(Stat) ->
     Stat.
 
+format_args({arguments, []}) ->
+    format_arguments({arguments, #{}});
 format_args({arguments, Value}) ->
-    {arguments, rabbit_mgmt_util:args(Value)};
+    {arguments, to_amqp_table(Value)};
 format_args(Stat) ->
     Stat.
 
