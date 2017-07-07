@@ -322,10 +322,28 @@ make_conn_and_chan(URIs, ShovelName) ->
             {ok, Chan} = amqp_connection:open_channel(Conn),
             {Conn, Chan, list_to_binary(amqp_uri:remove_credentials(URI))};
         {error, Reason} ->
-            ErrMsg = rabbit_misc:format("Error opening AMQP connection (URI '~s'): ~s", [URI, Reason]),
+            ErrMsg = rabbit_misc:format("Shovel failed to connect (URI: '~s'): ~s",
+                                        [amqp_uri:remove_credentials(URI),
+                                         human_readable_connection_error(Reason)]),
             rabbit_log:error(ErrMsg),
             exit(ErrMsg)
     end.
+
+human_readable_connection_error({auth_failure, Msg}) ->
+    Msg;
+human_readable_connection_error(not_allowed) ->
+    "access to target virtual host was refused";
+human_readable_connection_error(unknown_host) ->
+    "unknown host (failed to resolve hostname)";
+human_readable_connection_error(econnrefused) ->
+    "connection to target host was refused (ECONNREFUSED)";
+human_readable_connection_error(eacces) ->
+    "connection to target host failed with EACCES. "
+    "This may be due to insufficient RabbitMQ process permissions or "
+    "a reserved IP address used as destination";
+human_readable_connection_error(Other) ->
+    rabbit_misc:format("~p", [Other]).
+
 
 
 get_connection_name(ShovelName) when is_atom(ShovelName) ->
