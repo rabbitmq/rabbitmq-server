@@ -36,14 +36,16 @@
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
          args/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
-         sort_list/2, destination_type/1, reply_list_or_paginate/3,
-         unaugmented_reply_list_or_paginate/5]).
+         sort_list/2, destination_type/1, reply_list_or_paginate/3
+         ]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
          range_ceil/1, floor/2, ceil/1, ceil/2]).
--export([pagination_params/1, maybe_filter_by_keyword/4,
-         get_value_param/2]).
--export([not_authorised/3]).
+-export([pagination_params/1,
+         maybe_filter_by_keyword/4,
+         get_value_param/2,
+         augment_resources/6
+        ]).
 -export([direct_request/6]).
 
 -import(rabbit_misc, [pget/2]).
@@ -55,10 +57,17 @@
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 -define(DEFAULT_PAGE_SIZE, 100).
 -define(MAX_PAGE_SIZE, 500).
+
+-define(MAX_RANGE, 500).
+
 -record(pagination, {page = undefined, page_size = undefined,
                      name = undefined, use_regex = undefined}).
 
--define(MAX_RANGE, 500).
+-record(aug_ctx, {req_data :: cowboy_req:req(),
+                  pagination :: #pagination{},
+                  sort = [] :: [atom()],
+                  columns = [] :: [atom()],
+                  data :: term()}).
 
 %%--------------------------------------------------------------------
 
@@ -220,10 +229,12 @@ destination_type(ReqData) ->
 %% under the hood.
 responder_map(FunctionName) ->
     [
-      {<<"application/json">>, FunctionName}
-    , {<<"application/bert">>, FunctionName}
+      {<<"application/json">>, FunctionName},
+      {<<"application/bert">>, FunctionName}
     ].
 
+reply({halt, _, _} = Reply, _ReqData, _Context) ->
+    Reply;
 reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
@@ -281,71 +292,6 @@ is_pagination_requested(undefined) ->
 is_pagination_requested(#pagination{}) ->
     true.
 
--spec maybe_augment_facts(boolean(), AugmentFn, [Fact]) -> [AugmentedFact] when
-      Fact :: [{atom(), term()}],
-      AugmentedFact :: [{atom(), term()}],
-      AugmentFn :: fun ((Fact) -> AugmentedFact).
-maybe_augment_facts(false, _, Facts) ->
-    Facts;
-maybe_augment_facts(true, Fn, Facts) ->
-    Fn(Facts).
-
--spec maybe_augment_paged_facts(boolean(), AugmentFn, [ItemsTuple|OtherTuple]) -> [AugmentedItemsTuple|OtherTuple] when
-      Fact :: [{atom(), term()}],
-      ItemsTuple :: {items, [Fact]},
-      AugmentedFact :: [{atom(), term()}],
-      AugmentedItemsTuple :: {items, [AugmentedFact]},
-      OtherTuple :: {atom(), term()},
-      AugmentFn :: fun ((Fact) -> AugmentedFact).
-maybe_augment_paged_facts(ShouldAugment, AugmentFn, PagingResult) ->
-    maybe_augment_facts(
-      ShouldAugment,
-      fun (PagingResultForwarded) ->
-              lists:map(fun ({items, Facts}) ->
-                                {items, AugmentFn(Facts)};
-                            (Other) ->
-                                Other
-                        end, PagingResultForwarded)
-      end,
-     PagingResult).
-
-%% Augmenting items with calculated stats (with the help of exometer)
-%% is quite expensive, so when request is paged and sort order doesn't
-%% reference augmented columns, we can postpone augmentation until the
-%% list is reduced by paging.
--spec unaugmented_reply_list_or_paginate(
-        [BasicFact],
-        CanAugmentAfterPaginationPredicate,
-        AugmentFn,
-        cowboy_req:req(),
-        #context{}) -> {binary(), cowboy_req:req(), #context{}} when
-      BasicFact :: {atom(), term()},
-      AugmentedFact :: {atom(), term()},
-      SortColumn :: string(),
-      CanAugmentAfterPaginationPredicate :: fun (([SortColumn]) -> boolean()),
-      AugmentFn :: fun ((BasicFact) -> AugmentedFact).
-unaugmented_reply_list_or_paginate(BasicFacts,
-                                   CanAugmentAfterPaginationPredicate,
-                                   AugmentFn,
-                                   ReqData,
-                                   Context) ->
-    with_valid_pagination(
-      ReqData, Context,
-      fun(Pagination) ->
-              DefaultSorts = ["vhost", "name"],
-              SortParam = get_value_param(<<"sort">>, ReqData),
-              MentionedSortColumns = lists:usort(merge_sorts(DefaultSorts, SortParam)),
-              AugmentAfterPagination = is_pagination_requested(Pagination) andalso CanAugmentAfterPaginationPredicate(MentionedSortColumns),
-              FactsForPagination = maybe_augment_facts(not AugmentAfterPagination, AugmentFn, BasicFacts),
-              SortedFacts = sort_list(
-                              extract_columns_list(FactsForPagination, ReqData),
-                              DefaultSorts,
-                              SortParam,
-                              get_sort_reverse(ReqData)),
-              PagedFacts = filter_and_paginate(SortedFacts, Pagination),
-              FinalFacts = maybe_augment_paged_facts(AugmentAfterPagination, AugmentFn, PagedFacts),
-              reply(FinalFacts, ReqData, Context)
-      end).
 
 with_valid_pagination(ReqData, Context, Fun) ->
     try
@@ -373,6 +319,101 @@ merge_sorts(DefaultSorts, Extra) ->
         Extra     -> [Extra | DefaultSorts]
     end.
 
+%% Resource augmentation. Works out the most optimal configuration of the operations:
+%% sort, page, augment and executes it returning the result.
+
+column_strategy(all, _) -> extended;
+column_strategy(Cols, BasicColumns) ->
+    case Cols -- BasicColumns of
+        [] -> basic;
+        _ -> extended
+    end.
+
+% columns are [[binary()]] - this takes the first item
+columns_as_strings(all) -> all;
+columns_as_strings(Columns0) ->
+    [rabbit_data_coercion:to_list(C) || [C | _] <- Columns0].
+
+augment_resources(Resources, DefaultSort, BasicColumns, ReqData, Context,
+                  AugmentFun) ->
+    with_valid_pagination(ReqData, Context,
+                          fun (Pagination) ->
+                                  augment_resources0(Resources, DefaultSort,
+                                                     BasicColumns, Pagination,
+                                                     ReqData, AugmentFun)
+                          end).
+
+augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
+                   AugmentFun) ->
+    SortFun = fun (AugCtx) -> sort(DefaultSort, AugCtx) end,
+    AugFun = fun (AugCtx) -> augment(AugmentFun, AugCtx) end,
+    PageFun = fun page/1,
+    Pagination = pagination_params(ReqData),
+    Sort = def(get_value_param(<<"sort">>, ReqData), DefaultSort),
+    Columns = def(columns(ReqData), all),
+    ColumnsAsStrings = columns_as_strings(Columns),
+    Pipeline =
+        case {Pagination =/= undefined,
+              column_strategy(Sort, BasicColumns),
+              column_strategy(ColumnsAsStrings, BasicColumns)} of
+            {false, basic, basic} -> % no pagination, no extended fields
+                [SortFun];
+            {false, _, _} ->
+                % no pagination, extended columns means we need to augment all - SLOW
+                [AugFun, SortFun];
+            {true, basic, basic} ->
+                [SortFun, PageFun];
+            {true, extended, _} ->
+                % pagination with extended sort columns - SLOW
+                [AugFun, SortFun, PageFun];
+            {true, basic, extended} ->
+                % pagination with extended columns and sorting on basic
+                % here we can reduce the augementation set before
+                % augmenting
+                [SortFun, PageFun, AugFun]
+        end,
+    #aug_ctx{data = {_, Reply}} = run_augmentation(
+                                    #aug_ctx{req_data = ReqData,
+                                             pagination = Pagination,
+                                             sort = Sort,
+                                             columns = Columns,
+                                             data = {loaded, Resources}},
+                                    Pipeline),
+    rabbit_mgmt_format:strip_pids(Reply).
+
+run_augmentation(C, []) -> C;
+run_augmentation(C, [Next | Rem]) ->
+    C2 = Next(C),
+    run_augmentation(C2, Rem).
+
+sort(DefaultSort, Ctx = #aug_ctx{data = Data0,
+                                 req_data = ReqData,
+                                 sort = Sort}) ->
+    Data1 = get_data(Data0),
+    Data = sort_list(Data1, DefaultSort, Sort,
+                     get_sort_reverse(ReqData)),
+    Ctx#aug_ctx{data = update_data(Data0, {sorted, Data})}.
+
+page(Ctx = #aug_ctx{data = Data0,
+                    pagination = Pagination}) ->
+    Data = filter_and_paginate(get_data(Data0), Pagination),
+    Ctx#aug_ctx{data = update_data(Data0, {paged, Data})}.
+
+update_data({paged, Old}, New) ->
+    {paged, rabbit_misc:pset(items, get_data(New), Old)};
+update_data(_, New) ->
+    New.
+
+augment(AugmentFun, Ctx = #aug_ctx{data = Data0, req_data = ReqData}) ->
+    Data1 = get_data(Data0),
+    Data = AugmentFun(Data1, ReqData),
+    Ctx#aug_ctx{data = update_data(Data0, {augmented, Data})}.
+
+get_data({paged, Data}) ->
+    rabbit_misc:pget(items, Data);
+get_data({_, Data}) ->
+    Data.
+
 %% XXX sort_list_and_paginate/2 is a more proper name for this function, keeping it
 %% with this name for backwards compatibility
 -spec sort_list([Fact], [string()]) -> [Fact] when
@@ -380,7 +421,7 @@ merge_sorts(DefaultSorts, Extra) ->
 sort_list(Facts, Sorts) -> sort_list_and_paginate(Facts, Sorts, undefined, false,
   undefined).
 
--spec sort_list([Fact], [SortColumn], [SortColumn], boolean()) -> [Fact] when
+-spec sort_list([Fact], [SortColumn], [SortColumn] | undefined, boolean()) -> [Fact] when
       Fact :: [{atom(), term()}],
       SortColumn :: string().
 sort_list(Facts, _, [], _) ->
@@ -539,9 +580,19 @@ pget_bin(Key, List, Default) when is_list(List) ->
         {[{_K, V}], _} -> V;
         {[],        _} -> Default
     end.
+maybe_pagination(Item, false, ReqData) ->
+    extract_column_items(Item, columns(ReqData));
+maybe_pagination([{items, Item} | T], true, ReqData) ->
+    [{items, extract_column_items(Item, columns(ReqData))} |
+     maybe_pagination(T, true, ReqData)];
+maybe_pagination([H | T], true, ReqData) ->
+    [H | maybe_pagination(T,true, ReqData)];
+maybe_pagination(Item, true, ReqData) ->
+    [maybe_pagination(X, true, ReqData) || X <- Item].
 
 extract_columns(Item, ReqData) ->
-    extract_column_items(Item, columns(ReqData)).
+    maybe_pagination(Item, is_pagination_requested(pagination_params(ReqData)),
+		     ReqData).
 
 extract_columns_list(Items, ReqData) ->
     Cols = columns(ReqData),
@@ -815,7 +866,7 @@ bad_request_exception(Code, Reason, ReqData, Context) ->
                 ReqData, Context).
 
 all_or_one_vhost(ReqData, Fun) ->
-    case rabbit_mgmt_util:vhost(ReqData) of
+    case vhost(ReqData) of
         none      -> lists:append([Fun(V) || V <- rabbit_vhost:list()]);
         not_found -> vhost_not_found;
         VHost     -> Fun(VHost)
@@ -976,3 +1027,5 @@ int(Name, ReqData) ->
                      end
     end.
 
+def(undefined, Def) -> Def;
+def(V, _) -> V.

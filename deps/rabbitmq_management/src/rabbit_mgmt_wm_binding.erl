@@ -143,7 +143,3 @@ with_binding(ReqData, Context, Fun) ->
         Binding ->
             Fun(Binding)
     end.
-
-bad_request(Msg, Reason, ReqData, Context) ->
-    rabbit_log:warning(Msg, [Reason]),
-    rabbit_mgmt_util:bad_request(list_to_binary(Reason), ReqData, Context).

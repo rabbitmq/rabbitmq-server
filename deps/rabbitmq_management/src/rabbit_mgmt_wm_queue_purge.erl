@@ -51,7 +51,3 @@ delete_resource(ReqData, Context) ->
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
-
-bad_request(Msg, Reason, ReqData, Context) ->
-    rabbit_log:warning(Msg, [Reason]),
-    rabbit_mgmt_util:bad_request(list_to_binary(Reason), ReqData, Context).

@@ -23,6 +23,10 @@
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-define(BASIC_COLUMNS, ["name", "tracing", "pid"]).
+
+-define(DEFAULT_SORT, ["name"]).
+
 %%--------------------------------------------------------------------
 
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
@@ -36,10 +40,14 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-to_json(ReqData, Context) ->
+to_json(ReqData, Context = #context{user = User}) ->
     try
-        rabbit_mgmt_util:reply_list_or_paginate(
-          augmented(ReqData, Context),ReqData, Context)
+        Basic = [rabbit_vhost:info(V)
+                 || V <- rabbit_mgmt_util:list_visible_vhosts(User)],
+        Data = rabbit_mgmt_util:augment_resources(Basic, ?DEFAULT_SORT,
+                                                  ?BASIC_COLUMNS, ReqData,
+                                                  Context, fun augment/2),
+        rabbit_mgmt_util:reply(Data, ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
@@ -49,6 +57,9 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
+
+augment(Basic, ReqData) ->
+    rabbit_mgmt_db:augment_vhosts(Basic, rabbit_mgmt_util:range(ReqData)).
 
 augmented(ReqData, #context{user = User}) ->
     rabbit_mgmt_db:augment_vhosts(
