@@ -323,7 +323,7 @@ make_conn_and_chan(URIs, ShovelName) ->
             {Conn, Chan, list_to_binary(amqp_uri:remove_credentials(URI))};
         {error, Reason} ->
             ErrMsg = rabbit_misc:format("Error opening AMQP connection (URI '~s'): ~s", [URI, Reason]),
-            error_logger:error_msg(ErrMsg),
+            rabbit_log:error(ErrMsg),
             exit(ErrMsg)
     end.
 
