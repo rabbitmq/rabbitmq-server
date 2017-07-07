@@ -26,6 +26,7 @@
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
 -export([delete_storage/1]).
+-export([vhost_down/1]).
 
 -spec add(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 -spec delete(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
@@ -143,6 +144,12 @@ delete(VHostPath, ActingUser) ->
     %% on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHostPath),
     ok.
+
+vhost_down(VHostPath) ->
+    ok = rabbit_event:notify(vhost_down,
+                             [{name, VHostPath},
+                              {node, node()},
+                              {user_who_performed_action, ?INTERNAL_USER}]).
 
 delete_storage(VHost) ->
     VhostDir = msg_store_dir_path(VHost),

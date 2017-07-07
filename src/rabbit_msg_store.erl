@@ -1010,7 +1010,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
             ok;
         {error, RTErr} ->
             rabbit_log:error("Unable to save message store recovery terms"
-                             "for directory ~p~nError: ~p~n",
+                             " for directory ~p~nError: ~p~n",
                              [Dir, RTErr])
     end,
     State3 #msstate { index_state         = undefined,
