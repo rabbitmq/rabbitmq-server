@@ -411,14 +411,7 @@ cmd(Command) ->
 %% Original code was part of OTP and released under "Erlang Public License".
 
 get_total_memory({unix,darwin}) ->
-    File = cmd("/usr/bin/vm_stat"),
-    Lines = string:tokens(File, "\n"),
-    Dict = dict:from_list(lists:map(fun parse_line_mach/1, Lines)),
-    [PageSize, Inactive, Active, Free, Wired] =
-        [dict:fetch(Key, Dict) ||
-            Key <- [page_size, 'Pages inactive', 'Pages active', 'Pages free',
-                    'Pages wired down']],
-    PageSize * (Inactive + Active + Free + Wired);
+    sysctl("hw.memsize");
 
 get_total_memory({unix,freebsd}) ->
     PageSize  = sysctl("vm.stats.vm.v_page_size"),
@@ -455,19 +448,6 @@ get_total_memory({unix, aix}) ->
 
 get_total_memory(_OsType) ->
     unknown.
-
-%% A line looks like "Foo bar: 123456."
-parse_line_mach(Line) ->
-    [Name, RHS | _Rest] = string:tokens(Line, ":"),
-    case Name of
-        "Mach Virtual Memory Statistics" ->
-            ["(page", "size", "of", PageSize, "bytes)"] =
-                string:tokens(RHS, " "),
-            {page_size, list_to_integer(PageSize)};
-        _ ->
-            [Value | _Rest1] = string:tokens(RHS, " ."),
-            {list_to_atom(Name), list_to_integer(Value)}
-    end.
 
 %% A line looks like "MemTotal:         502968 kB"
 %% or (with broken OS/modules) "Readahead      123456 kB"
@@ -520,7 +500,7 @@ parse_line_aix(Line) ->
      end}.
 
 sysctl(Def) ->
-    list_to_integer(cmd("/sbin/sysctl -n " ++ Def) -- "\n").
+    list_to_integer(cmd("/usr/bin/env sysctl -n " ++ Def) -- "\n").
 
 %% file:read_file does not work on files in /proc as it seems to get
 %% the size of the file first and then read that many bytes. But files
