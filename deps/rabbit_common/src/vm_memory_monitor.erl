@@ -449,19 +449,6 @@ get_total_memory({unix, aix}) ->
 get_total_memory(_OsType) ->
     unknown.
 
-%% A line looks like "Foo bar: 123456."
-parse_line_mach(Line) ->
-    [Name, RHS | _Rest] = string:tokens(Line, ":"),
-    case Name of
-        "Mach Virtual Memory Statistics" ->
-            ["(page", "size", "of", PageSize, "bytes)"] =
-                string:tokens(RHS, " "),
-            {page_size, list_to_integer(PageSize)};
-        _ ->
-            [Value | _Rest1] = string:tokens(RHS, " ."),
-            {list_to_atom(Name), list_to_integer(Value)}
-    end.
-
 %% A line looks like "MemTotal:         502968 kB"
 %% or (with broken OS/modules) "Readahead      123456 kB"
 parse_line_linux(Line) ->
