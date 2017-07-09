@@ -28,7 +28,7 @@
 -export([print/2, print/1]).
 
 -export([format_queue_stats/1, format_channel_stats/1,
-         format_arguments/1, format_connection_created/1,
+         format_connection_created/1,
          format_accept_content/1, format_args/1]).
 
 -export([strip_queue_pids/1]).
@@ -80,11 +80,6 @@ format_queue_stats(Stat) ->
 format_channel_stats({idle_since, Value}) ->
     {idle_since, now_to_str(Value)};
 format_channel_stats(Stat) ->
-    Stat.
-
-format_arguments({arguments, Value}) ->
-    {arguments, amqp_table(Value)};
-format_arguments(Stat) ->
     Stat.
 
 %% Conerts an HTTP API request payload value
