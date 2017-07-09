@@ -691,6 +691,8 @@ queue_fold(Fun, Init, Q) ->
     end.
 
 %% Sorts a list of AMQP table fields as per the AMQP spec
+sort_field_table([]) ->
+    [];
 sort_field_table(Arguments) ->
     lists:keysort(1, Arguments).
 
