@@ -87,8 +87,10 @@ format_arguments({arguments, Value}) ->
 format_arguments(Stat) ->
     Stat.
 
+%% Conerts an HTTP API request payload value
+%% to AMQP 0-9-1 arguments table
 format_args({arguments, []}) ->
-    format_arguments({arguments, #{}});
+    {arguments, []};
 format_args({arguments, Value}) ->
     {arguments, to_amqp_table(Value)};
 format_args(Stat) ->
@@ -169,6 +171,8 @@ properties(Table)   -> maps:from_list([{Name, tuple(Value)} ||
 
 amqp_table(unknown)   -> unknown;
 amqp_table(undefined) -> amqp_table([]);
+amqp_table([])        -> #{};
+amqp_table(#{})       -> #{};
 amqp_table(Table)     -> maps:from_list([{Name, amqp_value(Type, Value)} ||
                                             {Name, Type, Value} <- Table]).
 
