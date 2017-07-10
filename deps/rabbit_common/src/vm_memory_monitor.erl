@@ -43,6 +43,15 @@
 
 -define(SERVER, ?MODULE).
 
+-record(state, {total_memory,
+                memory_limit,
+                memory_config_limit,
+                timeout,
+                timer,
+                alarmed,
+                alarm_funs
+               }).
+
 -include("rabbit_memory.hrl").
 
 %%----------------------------------------------------------------------------
