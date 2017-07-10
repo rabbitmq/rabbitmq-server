@@ -387,29 +387,23 @@ decrypt_start_app_wrong_passphrase(Config) ->
 
 rabbitmqctl_encode(_Config) ->
     % list ciphers and hashes
-    {ok, _} = rabbit_control_pbe:encode(true, false, undefined, undefined, undefined, undefined, undefined),
-    {ok, _} = rabbit_control_pbe:encode(false, true, undefined, undefined, undefined, undefined, undefined),
+    {ok, _} = rabbit_control_pbe:list_ciphers(),
+    {ok, _} = rabbit_control_pbe:list_hashes(),
     % incorrect ciphers, hashes and iteration number
-    {error, _} = rabbit_control_pbe:encode(false, false, undefined, funny_cipher, undefined, undefined, undefined),
-    {error, _} = rabbit_control_pbe:encode(false, false, undefined, undefined, funny_hash, undefined, undefined),
-    {error, _} = rabbit_control_pbe:encode(false, false, undefined, undefined, undefined, -1, undefined),
-    {error, _} = rabbit_control_pbe:encode(false, false, undefined, undefined, undefined, 0, undefined),
+    {error, _} = rabbit_control_pbe:encode(funny_cipher, undefined, undefined, undefined),
+    {error, _} = rabbit_control_pbe:encode(undefined, funny_hash, undefined, undefined),
+    {error, _} = rabbit_control_pbe:encode(undefined, undefined, -1, undefined),
+    {error, _} = rabbit_control_pbe:encode(undefined, undefined, 0, undefined),
     % incorrect number of arguments
     {error, _} = rabbit_control_pbe:encode(
-        false, false,
-        false, % encrypt
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
         []
     ),
     {error, _} = rabbit_control_pbe:encode(
-        false, false,
-        false, % encrypt
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
         [undefined]
     ),
     {error, _} = rabbit_control_pbe:encode(
-        false, false,
-        false, % encrypt
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
         [undefined, undefined, undefined]
     ),
@@ -427,38 +421,28 @@ rabbitmqctl_encode(_Config) ->
 rabbitmqctl_encode_encrypt_decrypt(Secret) ->
     PassPhrase = "passphrase",
     {ok, Output} = rabbit_control_pbe:encode(
-        false, false,
-        false, % encrypt
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
         [Secret, PassPhrase]
     ),
     {encrypted, Encrypted} = rabbit_control_pbe:evaluate_input_as_term(lists:flatten(Output)),
 
-    {ok, Result} = rabbit_control_pbe:encode(
-        false, false,
-        true, % decrypt
+    {ok, Result} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
         [lists:flatten(io_lib:format("~p", [Encrypted])), PassPhrase]
     ),
     Secret = lists:flatten(Result),
     % decrypt with {encrypted, ...} form as input
-    {ok, Result} = rabbit_control_pbe:encode(
-        false, false,
-        true, % decrypt
+    {ok, Result} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
         [lists:flatten(io_lib:format("~p", [{encrypted, Encrypted}])), PassPhrase]
     ),
 
     % wrong passphrase
-    {error, _} = rabbit_control_pbe:encode(
-        false, false,
-        true, % decrypt
+    {error, _} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
         [lists:flatten(io_lib:format("~p", [Encrypted])), PassPhrase ++ " "]
     ),
-    {error, _} = rabbit_control_pbe:encode(
-        false, false,
-        true, % decrypt
+    {error, _} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
         [lists:flatten(io_lib:format("~p", [{encrypted, Encrypted}])), PassPhrase ++ " "]
     )

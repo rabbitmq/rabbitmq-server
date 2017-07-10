@@ -2189,7 +2189,7 @@
                   Flag to decrypt the input value.
                   </para>
                   <para role="example-prefix">For example:</para>
-                  <screen role="example">rabbitmqctl encode --decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                  <screen role="example">rabbitmqctl encode --decode '{encrypted, &lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
                 </listitem>
               </varlistentry>
               <varlistentry>
@@ -2205,7 +2205,7 @@
                   </para>
                   <para role="example-prefix">For example:</para>
                   <screen role="example">rabbitmqctl encode '&lt;&lt;"guest"&gt;&gt;' mypassphrase</screen>
-                  <screen role="example">rabbitmqctl encode --decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                  <screen role="example">rabbitmqctl encode --decode '{encrypted, &lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
                 </listitem>
               </varlistentry>
               <varlistentry>
@@ -2252,7 +2252,7 @@ rabbitmqctl encode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 \
 
         <varlistentry>
           <!-- one-line formatting matters for rabbit_ctl_usage.erl code generation -->
-          <term><cmdsynopsis><command>decode</command> <arg choice="opt"><replaceable>value</replaceable></arg> <arg choice="opt"><replaceable>passphrase</replaceable></arg></cmdsynopsis>
+          <term><cmdsynopsis><command>decode</command> <arg choice="opt"><replaceable>value</replaceable></arg> <arg choice="opt"><replaceable>passphrase</replaceable></arg><arg choice="opt">--cipher <replaceable>cipher</replaceable></arg> <arg choice="opt">--hash <replaceable>hash</replaceable></arg> <arg choice="opt">--iterations <replaceable>iterations</replaceable></arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
@@ -2268,7 +2268,25 @@ rabbitmqctl encode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 \
                     Value to decrypt (as produced by the encode command) and passphrase.
                   </para>
                   <para role="example-prefix">For example:</para>
-                  <screen role="example">rabbitmqctl decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                  <screen role="example">rabbitmqctl decode '{encrypted, &lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                </listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>
+                  <cmdsynopsis>
+                    <arg choice="opt">--cipher <replaceable>cipher</replaceable></arg>
+                    <arg choice="opt">--hash <replaceable>hash</replaceable></arg>
+                    <arg choice="opt">--iterations <replaceable>iterations</replaceable></arg>
+                  </cmdsynopsis>
+                </term>
+                <listitem>
+                  <para>
+                    Options to specify the decryption settings. They can be used independently.
+                  </para>
+                  <para role="example-prefix">For example:</para>
+                  <screen role="example">
+rabbitmqctl decode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 \
+'{encrypted,&lt;&lt;"cU4kaour6KG8n/rC4IZT4MfKsS/th9gdAMWjcY9ygUPIwiW4BJmVyg=="&gt;&gt;}' mypassphrase</screen>
                 </listitem>
               </varlistentry>
             </variablelist>
