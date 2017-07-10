@@ -70,7 +70,7 @@ gc_channels() ->
     ok.
 
 gc_queues() ->
-    Queues = rabbit_amqqueue:list_names(),
+    Queues = rabbit_amqqueue:list_local_names(),
     GbSet = gb_sets:from_list(Queues),
     gc_entity(queue_metrics, GbSet),
     gc_entity(queue_coarse_metrics, GbSet),
