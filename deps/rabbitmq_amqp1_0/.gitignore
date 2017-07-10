@@ -21,6 +21,14 @@ build/
 [Oo]bj/
 *.lock.json
 
+[Dd]ebug/
+[Rr]elease/
+x64/
+build/
+[Bb]in/
+[Oo]bj/
+*.lock.json
+
 # Generated source files.
 /include/rabbit_amqp1_0_framing.hrl
 /src/rabbit_amqp1_0_framing0.erl
