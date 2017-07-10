@@ -141,19 +141,28 @@ take_smaller(Policies) ->
 insert_old_aggr_stats(NextStats, Id, Stat) ->
     dict:store(Id, Stat, NextStats).
 
-handle_deleted_queues(queue_coarse_metrics, Remainders, GPolicies) ->
+handle_deleted_queues(queue_coarse_metrics, Remainders,
+                      #state{policies = {BPolicies, _, GPolicies}}) ->
     TS = exometer_slide:timestamp(),
     lists:foreach(fun ({Queue, {R, U, M}}) ->
                             NegStats = ?vhost_msg_stats(-R, -U, -M),
                             [insert_entry(vhost_msg_stats, vhost(Queue), TS,
                                           NegStats, Size, Interval, true)
-                             || {Size, Interval} <- GPolicies]
+                             || {Size, Interval} <- GPolicies],
+                            % zero out msg stats to avoid duplicating msg
+                            % stats when a master queue is migrated
+                            QNegStats = ?queue_msg_stats(0, 0, 0),
+                            [insert_entry(queue_msg_stats, Queue, TS,
+                                          QNegStats, Size, Interval, false)
+                             || {Size, Interval} <- BPolicies],
+                            ets:delete(queue_stats, Queue),
+                            ets:delete(queue_process_stats, Queue)
                   end,
                   dict:to_list(Remainders));
 handle_deleted_queues(_T, _R, _P) -> ok.
 
 aggregate_metrics(Timestamp, #state{table = Table,
-                                    policies = {_, _, GPolicies}} = State0) ->
+                                    policies = {_, _, _GPolicies}} = State0) ->
     Table = State0#state.table,
     {Next, Ops, #state{old_aggr_stats = Remainders}} =
         ets:foldl(fun(R, {NextStats, O, State}) ->
@@ -164,7 +173,7 @@ aggregate_metrics(Timestamp, #state{table = Table,
                       Acc
               end, no_acc, Ops),
 
-    handle_deleted_queues(Table, Remainders, GPolicies),
+    handle_deleted_queues(Table, Remainders, State0),
     State0#state{old_aggr_stats = Next}.
 
 exec_table_ops(Table, Timestamp, TableOps) ->
