@@ -726,15 +726,12 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                                         [Method, none, none,
                                          VHost, User]) of
                   {badrpc, nodedown} ->
-                      bad_request(
-                        list_to_binary(
-                          io_lib:format("Node ~s could not be contacted", [Node])),
-                        ReqData, Context);
+                      Msg = io_lib:format("Node ~p could not be contacted", [Node]),
+                      rabbit_log:warning(ErrorMsg, [Msg]),
+                      bad_request(list_to_binary(Msg), ReqData, Context);
                   {badrpc, {'EXIT', #amqp_error{name = not_found, explanation = Explanation}}} ->
-                      not_found(Explanation, ReqData, Context);
-                  {badrpc, {'EXIT', #amqp_error{name = limit_reached, explanation = Explanation}}} ->
                       rabbit_log:warning(ErrorMsg, [Explanation]),
-                      not_authorised(<<"Access refused.">>, ReqData, Context);
+                      not_found(Explanation, ReqData, Context);
                   {badrpc, {'EXIT', #amqp_error{name = access_refused, explanation = Explanation}}} ->
                       rabbit_log:warning(ErrorMsg, [Explanation]),
                       not_authorised(<<"Access refused.">>, ReqData, Context);
@@ -742,7 +739,6 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                       rabbit_log:warning(ErrorMsg, [Explanation]),
                       not_authorised(<<"Access refused.">>, ReqData, Context);
                   {badrpc, {'EXIT', #amqp_error{explanation = Explanation} = E}} ->
-                      rabbit_log:warning("AMQP ERROR is ~p~n", [E]),
                       rabbit_log:warning(ErrorMsg, [Explanation]),
                       bad_request(list_to_binary(Explanation), ReqData, Context);
                   {badrpc, Reason} ->
