@@ -738,7 +738,7 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                   {badrpc, {'EXIT', #amqp_error{name = not_allowed, explanation = Explanation}}} ->
                       rabbit_log:warning(ErrorMsg, [Explanation]),
                       not_authorised(<<"Access refused.">>, ReqData, Context);
-                  {badrpc, {'EXIT', #amqp_error{explanation = Explanation} = E}} ->
+                  {badrpc, {'EXIT', #amqp_error{explanation = Explanation}}} ->
                       rabbit_log:warning(ErrorMsg, [Explanation]),
                       bad_request(list_to_binary(Explanation), ReqData, Context);
                   {badrpc, Reason} ->
