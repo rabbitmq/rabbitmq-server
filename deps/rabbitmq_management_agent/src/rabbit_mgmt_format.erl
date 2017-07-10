@@ -334,7 +334,9 @@ tokenise(Str) ->
 
 to_amqp_table(M) when is_map(M) ->
     lists:reverse(maps:fold(fun(K, V, Acc) -> [to_amqp_table_row(K, V)|Acc] end,
-                            [], M)).
+                            [], M));
+to_amqp_table(L) when is_list(L) ->
+    L.
 
 to_amqp_table_row(K, V) ->
     {T, V2} = type_val(V),
