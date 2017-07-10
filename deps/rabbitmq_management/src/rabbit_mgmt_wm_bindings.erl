@@ -77,9 +77,21 @@ accept_content(ReqData0, {_Mode, Context}) ->
     DestType = rabbit_mgmt_util:id(dtype, ReqData),
     VHost = rabbit_mgmt_util:vhost(ReqData),
     {ok, Props} = rabbit_mgmt_util:decode(Body),
-    {Method, Key, Args} = method_key_args(DestType, Source, Dest, Props),
-    Response = rabbit_mgmt_util:amqp_request(VHost, ReqData, Context, Method),
-    case Response of
+    MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
+                     exchange -> 'exchange.bind';
+                     queue    -> 'queue.bind'
+                 end,
+    {Key, Args} = key_args(DestType, Props),
+    case rabbit_mgmt_util:direct_request(
+           MethodName,
+           fun rabbit_mgmt_format:format_accept_content/1,
+           [{queue, Dest},
+            {exchange, Source},
+            {destination, Dest},
+            {source, Source},
+            {routing_key, Key},
+            {arguments, Args}],
+           "Binding error: ~s", ReqData, Context) of
         {halt, _, _} = Res ->
             Res;
         {true, ReqData, Context2} ->
@@ -106,19 +118,18 @@ basic(ReqData) ->
 augmented(ReqData, Context) ->
     rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context).
 
-method_key_args(<<"q">>, Source, Dest, Props) ->
-    M = #'queue.bind'{routing_key = K, arguments = A} =
+key_args(<<"q">>, Props) ->
+    #'queue.bind'{routing_key = K, arguments = A} =
         rabbit_mgmt_util:props_to_method(
-          'queue.bind', Props,
-          [], [{exchange, Source}, {queue,       Dest}]),
-    {M, K, A};
+          'queue.bind', Props, [], []),
+    {K, A};
 
-method_key_args(<<"e">>, Source, Dest, Props) ->
-    M = #'exchange.bind'{routing_key = K, arguments = A} =
+key_args(<<"e">>, Props) ->
+    #'exchange.bind'{routing_key = K, arguments = A} =
         rabbit_mgmt_util:props_to_method(
           'exchange.bind', Props,
-          [], [{source,   Source}, {destination, Dest}]),
-    {M, K, A}.
+          [], []),
+    {K, A}.
 
 %%--------------------------------------------------------------------
 

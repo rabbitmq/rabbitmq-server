@@ -73,7 +73,11 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
     VHost = id(ReqData),
-    rabbit_vhost:delete(VHost, Username),
+    try
+        rabbit_vhost:delete(VHost, Username)
+    catch _:{error, {no_such_vhost, _}} ->
+        ok
+    end,
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->

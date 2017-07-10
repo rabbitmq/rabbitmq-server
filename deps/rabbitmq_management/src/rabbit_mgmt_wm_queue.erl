@@ -64,18 +64,24 @@ to_json(ReqData, Context) ->
     end.
 
 accept_content(ReqData, Context) ->
-    rabbit_mgmt_util:http_to_amqp(
-      'queue.declare', ReqData, Context,
+    Name = rabbit_mgmt_util:id(queue, ReqData),
+    rabbit_mgmt_util:direct_request(
+      'queue.declare',
       fun rabbit_mgmt_format:format_accept_content/1,
-      [{queue, rabbit_mgmt_util:id(queue, ReqData)}]).
+      [{queue, Name}], "Declare queue error: ~s", ReqData, Context).
 
 delete_resource(ReqData, Context) ->
-    rabbit_mgmt_util:amqp_request(
-      rabbit_mgmt_util:vhost(ReqData),
-      ReqData, Context,
-      #'queue.delete'{ queue     = rabbit_mgmt_util:id(queue, ReqData),
-                       if_empty  = qs_true("if-empty", ReqData),
-                       if_unused = qs_true("if-unused", ReqData) }).
+    %% We need to retrieve manually if-unused and if-empty, as the HTTP API uses '-'
+    %% while the record uses '_'
+    IfUnused = <<"true">> =:= element(1, cowboy_req:qs_val(<<"if-unused">>, ReqData)),
+    IfEmpty = <<"true">> =:= element(1, cowboy_req:qs_val(<<"if-empty">>, ReqData)),
+    Name = rabbit_mgmt_util:id(queue, ReqData),
+    rabbit_mgmt_util:direct_request(
+      'queue.delete',
+      fun rabbit_mgmt_format:format_accept_content/1,
+      [{queue, Name},
+       {if_unused, IfUnused},
+       {if_empty, IfEmpty}], "Delete queue error: ~s", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
@@ -110,6 +116,3 @@ queue(VHost, QName) ->
         {ok, Q}            -> rabbit_mgmt_format:queue(Q);
         {error, not_found} -> not_found
     end.
-
-qs_true(Key, ReqData) ->
-    <<"true">> =:= element(1, cowboy_req:qs_val(list_to_binary(Key), ReqData)).
