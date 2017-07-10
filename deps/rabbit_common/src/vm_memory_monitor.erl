@@ -351,7 +351,7 @@ parse_mem_limit(MemLimit) when is_float(MemLimit), MemLimit =< ?MAX_VM_MEMORY_HI
     MemLimit;
 parse_mem_limit(MemLimit) when is_float(MemLimit), MemLimit > ?MAX_VM_MEMORY_HIGH_WATERMARK ->
     rabbit_log:warning(
-      "Memory high watermark of ~p is above the allowed maximum, defaulting to ~p~n",
+      "Memory high watermark of ~p is above the allowed maximum, falling back to ~p~n",
       [MemLimit, ?MAX_VM_MEMORY_HIGH_WATERMARK]
     ),
     ?MAX_VM_MEMORY_HIGH_WATERMARK;
