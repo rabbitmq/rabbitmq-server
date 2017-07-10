@@ -752,6 +752,11 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
               end
       end, ReqData, Context).
 
+props_as_map(Val) when is_map(Val)  -> Val;
+props_as_map(null)                  -> #{};
+props_as_map(undefined)             -> #{};
+props_as_map(Val) when is_list(Val) -> maps:from_list(Val).
+
 with_vhost_and_props(Fun, ReqData, Context) ->
     case vhost(ReqData) of
         not_found ->
@@ -762,7 +767,7 @@ with_vhost_and_props(Fun, ReqData, Context) ->
             case decode(Body) of
                 {ok, Props} ->
                     try
-                        Fun(VHost, Props)
+                        Fun(VHost, props_as_map(Props))
                     catch {error, Error} ->
                             bad_request(Error, ReqData1, Context)
                     end;
@@ -772,6 +777,9 @@ with_vhost_and_props(Fun, ReqData, Context) ->
             end
     end.
 
+props_to_method(MethodName, Props, Transformers, Extra) when Props =:= null orelse
+                                                             Props =:= undefined ->
+    props_to_method(MethodName, #{}, Transformers, Extra);
 props_to_method(MethodName, Props, Transformers, Extra) ->
     Props1 = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- maps:to_list(Props)],
     props_to_method(
