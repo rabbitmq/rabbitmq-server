@@ -758,17 +758,17 @@ with_vhost_and_props(Fun, ReqData, Context) ->
             not_found(rabbit_data_coercion:to_binary("vhost_not_found"),
                       ReqData, Context);
         VHost ->
-            {ok, Body, _ReqData} = cowboy_req:body(ReqData),
+            {ok, Body, ReqData1} = cowboy_req:body(ReqData),
             case decode(Body) of
                 {ok, Props} ->
                     try
                         Fun(VHost, Props)
                     catch {error, Error} ->
-                            bad_request(Error, ReqData, Context)
+                            bad_request(Error, ReqData1, Context)
                     end;
                 {error, Reason} ->
                     bad_request(rabbit_mgmt_format:escape_html_tags(Reason),
-                                ReqData, Context)
+                                ReqData1, Context)
             end
     end.
 
