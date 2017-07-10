@@ -91,14 +91,18 @@ force_stats() ->
     rabbit_mgmt_external_stats ! emit_update.
 
 node(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     % force multipe stats refreshes
     [ rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, force_stats, [])
       || _ <- lists:seq(0, 10)],
     [_] = read_table_rpc(Config, node_persister_metrics),
     [_] = read_table_rpc(Config, node_coarse_metrics),
     [_] = read_table_rpc(Config, node_metrics),
-    timer:sleep(100),
-    [_, _, _] = read_table_rpc(Config, node_node_metrics). % 3 nodes as ct-helpers adds one
+    true = wait_until(
+             fun() ->
+                     Tab = read_table_rpc(Config, node_node_metrics),
+                     lists:keymember({A, B}, 1, Tab)
+             end, 10).
 
 
 storage_reset(Config) ->
