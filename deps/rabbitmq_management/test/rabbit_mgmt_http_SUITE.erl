@@ -509,8 +509,16 @@ connections_test(Config) ->
     http_delete(Config, Path, ?NO_CONTENT),
     %% TODO rabbit_reader:shutdown/2 returns before the connection is
     %% closed. It may not be worth fixing.
-    timer:sleep(200),
-    http_get(Config, Path, ?NOT_FOUND),
+    Fun = fun() ->
+                  try
+                      http_get(Config, Path, ?NOT_FOUND),
+                      true
+                  catch
+                      _:_ ->
+                          false
+                  end
+          end,
+    wait_until(Fun, 60),
     close_connection(Conn),
     passed.
 
