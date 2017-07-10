@@ -28,7 +28,7 @@
 -export([print/2, print/1]).
 
 -export([format_queue_stats/1, format_channel_stats/1,
-         format_arguments/1, format_connection_created/1,
+         format_connection_created/1,
          format_accept_content/1, format_args/1]).
 
 -export([strip_queue_pids/1]).
@@ -82,13 +82,12 @@ format_channel_stats({idle_since, Value}) ->
 format_channel_stats(Stat) ->
     Stat.
 
-format_arguments({arguments, Value}) ->
-    {arguments, amqp_table(Value)};
-format_arguments(Stat) ->
-    Stat.
-
+%% Conerts an HTTP API request payload value
+%% to AMQP 0-9-1 arguments table
+format_args({arguments, []}) ->
+    {arguments, []};
 format_args({arguments, Value}) ->
-    {arguments, rabbit_mgmt_util:args(Value)};
+    {arguments, to_amqp_table(Value)};
 format_args(Stat) ->
     Stat.
 
@@ -167,6 +166,8 @@ properties(Table)   -> maps:from_list([{Name, tuple(Value)} ||
 
 amqp_table(unknown)   -> unknown;
 amqp_table(undefined) -> amqp_table([]);
+amqp_table([])        -> #{};
+amqp_table(#{})       -> #{};
 amqp_table(Table)     -> maps:from_list([{Name, amqp_value(Type, Value)} ||
                                             {Name, Type, Value} <- Table]).
 
