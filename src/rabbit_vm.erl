@@ -54,14 +54,13 @@ memory() ->
     OsTotal             = vm_memory_monitor:get_process_memory(),
 
 
-    [{total,     ErlangTotal},
-     {processes, Processes},
+    [{processes, Processes},
      {ets,       ETS},
      {atom,      Atom},
      {binary,    Bin},
      {code,      Code},
      {system,    System}] =
-        erlang:memory([total, processes, ets, atom, binary, code, system]),
+        erlang:memory([processes, ets, atom, binary, code, system]),
 
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
@@ -97,7 +96,7 @@ memory() ->
      %% System
      {code,                Code},
      {atom,                Atom},
-     {other_system,        System - ETS - Bin - Code - Atom + (OsTotal - ErlangTotal)},
+     {other_system,        System - ETS - Bin - Code - Atom},
 
      {total,               OsTotal}
     ].
