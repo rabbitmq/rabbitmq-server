@@ -57,6 +57,7 @@ groups() ->
             ]},
           runtime_parameters,
           set_disk_free_limit_command,
+          set_vm_memory_high_watermark_command,
           topic_matching,
           user_management
         ]}
@@ -1505,21 +1506,40 @@ set_disk_free_limit_command1(_Config) ->
     %% Use an integer
     ok = control_action(set_disk_free_limit,
       ["mem_relative", "1"]),
-    check_limit(1),
+    disk_free_limit_to_total_memory_ratio_is(1),
 
     %% Use a float
     ok = control_action(set_disk_free_limit,
       ["mem_relative", "1.5"]),
-    check_limit(1.5),
+    disk_free_limit_to_total_memory_ratio_is(1.5),
 
     ok = control_action(set_disk_free_limit, ["50MB"]),
     passed.
 
-check_limit(Limit) ->
-    ExpectedLimit = Limit * vm_memory_monitor:get_total_memory(),
+disk_free_limit_to_total_memory_ratio_is(MemRatio) ->
+    ExpectedLimit = MemRatio * vm_memory_monitor:get_total_memory(),
     % Total memory is unstable, so checking order
     true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() < 1.2,
     true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() > 0.98.
+
+set_vm_memory_high_watermark_command(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, set_vm_memory_high_watermark_command1, [Config]).
+
+set_vm_memory_high_watermark_command1(_Config) ->
+    MemLimitRatio = "1.0",
+    MemTotal = vm_memory_monitor:get_total_memory(),
+
+    ok = control_action(set_vm_memory_high_watermark, [MemLimitRatio]),
+    MemLimit = vm_memory_monitor:get_memory_limit(),
+    case MemLimit of
+        MemTotal -> ok;
+        _        -> MemTotalToMemLimitRatio = MemLimit * 100.0 / MemTotal / 100,
+                    ct:fail(
+                        "Expected memory high watermark to be ~p (~s), but it was ~p (~.1f)",
+                        [MemTotal, MemLimitRatio, MemLimit, MemTotalToMemLimitRatio]
+                    )
+    end.
 
 %% ---------------------------------------------------------------------------
 %% rabbitmqctl helpers.
