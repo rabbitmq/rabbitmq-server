@@ -65,7 +65,6 @@ defmodule ErlangVersionCommandTest do
   end
 
   test "run with --details: returns Erlang/OTP version on the target node", context do
-    IO.inspect Map.merge(%{details: true}, context[:opts])
     res = @command.run([], Map.merge(%{details: true}, context[:opts]))
     # assert that we have a list of characters
     assert length(res) > 0 and :io_lib.char_list(res)
