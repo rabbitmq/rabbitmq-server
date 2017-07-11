@@ -1499,21 +1499,18 @@ set_disk_free_limit_command(Config) ->
       ?MODULE, set_disk_free_limit_command1, [Config]).
 
 set_disk_free_limit_command1(_Config) ->
-    ok = control_action(set_disk_free_limit,
-      ["2000kiB"]),
+    rabbit_disk_monitor:set_disk_free_limit("2000kiB"),
     2048000 = rabbit_disk_monitor:get_disk_free_limit(),
 
     %% Use an integer
-    ok = control_action(set_disk_free_limit,
-      ["mem_relative", "1"]),
+    rabbit_disk_monitor:set_disk_free_limit({mem_relative, 1}),
     disk_free_limit_to_total_memory_ratio_is(1),
 
     %% Use a float
-    ok = control_action(set_disk_free_limit,
-      ["mem_relative", "1.5"]),
+    rabbit_disk_monitor:set_disk_free_limit({mem_relative, 1.5}),
     disk_free_limit_to_total_memory_ratio_is(1.5),
 
-    ok = control_action(set_disk_free_limit, ["50MB"]),
+    rabbit_disk_monitor:set_disk_free_limit("50MB"),
     passed.
 
 disk_free_limit_to_total_memory_ratio_is(MemRatio) ->
@@ -1527,10 +1524,10 @@ set_vm_memory_high_watermark_command(Config) ->
       ?MODULE, set_vm_memory_high_watermark_command1, [Config]).
 
 set_vm_memory_high_watermark_command1(_Config) ->
-    MemLimitRatio = "1.0",
+    MemLimitRatio = 1.0,
     MemTotal = vm_memory_monitor:get_total_memory(),
 
-    ok = control_action(set_vm_memory_high_watermark, [MemLimitRatio]),
+    vm_memory_monitor:set_vm_memory_high_watermark(MemLimitRatio),
     MemLimit = vm_memory_monitor:get_memory_limit(),
     case MemLimit of
         MemTotal -> ok;
