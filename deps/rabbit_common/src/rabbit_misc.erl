@@ -69,7 +69,7 @@
 -export([os_cmd/1]).
 -export([is_os_process_alive/1]).
 -export([gb_sets_difference/2]).
--export([version/0, otp_release/0, platform_and_version/0, which_applications/0]).
+-export([version/0, otp_release/0, platform_and_version/0, otp_system_version/0, which_applications/0]).
 -export([sequence_error/1]).
 -export([check_expiry/1]).
 -export([base64url/1]).
@@ -1031,6 +1031,9 @@ otp_release() ->
 
 platform_and_version() ->
     string:join(["Erlang/OTP", otp_release()], " ").
+
+otp_system_version() ->
+    list_to_binary(string:strip(erlang:system_info(system_version), both, $\n)).
 
 %% application:which_applications(infinity) is dangerous, since it can
 %% cause deadlocks on shutdown. So we have to use a timeout variant,
