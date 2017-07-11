@@ -46,6 +46,8 @@ groups() ->
               password_hashing,
               change_password
             ]},
+          set_disk_free_limit_command,
+          set_vm_memory_high_watermark_command,
           topic_matching
         ]}
     ].
@@ -971,6 +973,50 @@ configurable_server_properties1(_Config) ->
 
     application:set_env(rabbit, server_properties, ServerProperties),
     passed.
+
+set_disk_free_limit_command(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, set_disk_free_limit_command1, [Config]).
+
+set_disk_free_limit_command1(_Config) ->
+    rabbit_disk_monitor:set_disk_free_limit("2000kiB"),
+    2048000 = rabbit_disk_monitor:get_disk_free_limit(),
+
+    %% Use an integer
+    rabbit_disk_monitor:set_disk_free_limit({mem_relative, 1}),
+    disk_free_limit_to_total_memory_ratio_is(1),
+
+    %% Use a float
+    rabbit_disk_monitor:set_disk_free_limit({mem_relative, 1.5}),
+    disk_free_limit_to_total_memory_ratio_is(1.5),
+
+    rabbit_disk_monitor:set_disk_free_limit("50MB"),
+    passed.
+
+disk_free_limit_to_total_memory_ratio_is(MemRatio) ->
+    ExpectedLimit = MemRatio * vm_memory_monitor:get_total_memory(),
+    % Total memory is unstable, so checking order
+    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() < 1.2,
+    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() > 0.98.
+
+set_vm_memory_high_watermark_command(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, set_vm_memory_high_watermark_command1, [Config]).
+
+set_vm_memory_high_watermark_command1(_Config) ->
+    MemLimitRatio = 1.0,
+    MemTotal = vm_memory_monitor:get_total_memory(),
+
+    vm_memory_monitor:set_vm_memory_high_watermark(MemLimitRatio),
+    MemLimit = vm_memory_monitor:get_memory_limit(),
+    case MemLimit of
+        MemTotal -> ok;
+        _        -> MemTotalToMemLimitRatio = MemLimit * 100.0 / MemTotal / 100,
+                    ct:fail(
+                        "Expected memory high watermark to be ~p (~s), but it was ~p (~.1f)",
+                        [MemTotal, MemLimitRatio, MemLimit, MemTotalToMemLimitRatio]
+                    )
+    end.
 
 %% ---------------------------------------------------------------------------
 %% rabbitmqctl helpers.
