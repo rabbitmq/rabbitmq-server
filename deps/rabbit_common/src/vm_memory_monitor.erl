@@ -145,7 +145,7 @@ get_process_memory() ->
 
 -spec get_memory_calculation_strategy() -> rss | erlang.
 get_memory_calculation_strategy() ->
-    case application:get_env(rabbit, vm_memory_calculation_strategy, rss) of
+    case rabbit_misc:get_env(rabbit, vm_memory_calculation_strategy, rss) of
         erlang ->
             erlang;
         rss ->
