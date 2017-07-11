@@ -241,6 +241,7 @@
 -spec gb_sets_difference(gb_sets:set(), gb_sets:set()) -> gb_sets:set().
 -spec version() -> string().
 -spec otp_release() -> string().
+-spec otp_system_version() -> string().
 -spec platform_and_version() -> string().
 -spec which_applications() -> [{atom(), string(), string()}].
 -spec sequence_error([({'error', any()} | any())]) ->
@@ -1033,7 +1034,7 @@ platform_and_version() ->
     string:join(["Erlang/OTP", otp_release()], " ").
 
 otp_system_version() ->
-    list_to_binary(string:strip(erlang:system_info(system_version), both, $\n)).
+    string:strip(erlang:system_info(system_version), both, $\n).
 
 %% application:which_applications(infinity) is dangerous, since it can
 %% cause deadlocks on shutdown. So we have to use a timeout variant,
