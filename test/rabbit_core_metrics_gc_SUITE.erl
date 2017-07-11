@@ -370,12 +370,13 @@ cluster_queue_metrics(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, Node0, rabbit_amqqueue,
                                       sync_mirrors, [QPid]),
 
-    timer:sleep(1500),
-
     % Check ETS table for data
-    % rabbit_core_metrics:queue_stats
-    [] = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, tab2list,
-                                      [queue_coarse_metrics]),
+    wait_for(fun () ->
+                     [] =:= rabbit_ct_broker_helpers:rpc(
+                              Config, Node0, ets, tab2list,
+                              [queue_coarse_metrics])
+             end, 60),
+
 
     [{Name, 1, 0, 1, _}] = rabbit_ct_broker_helpers:rpc(Config, Node1, ets,
                                                         tab2list,
@@ -384,3 +385,12 @@ cluster_queue_metrics(Config) ->
     amqp_channel:call(Ch, #'queue.delete'{queue=QueueName}),
     rabbit_ct_client_helpers:close_channel(Ch),
     Config.
+
+wait_for(_Fun, 0) -> false;
+wait_for(Fun, Seconds) ->
+    case Fun() of
+        true -> ok;
+        false ->
+            timer:sleep(1000),
+            wait_for(Fun, Seconds - 1)
+    end.
