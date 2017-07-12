@@ -14,28 +14,38 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def merge_defaults(args, opts), do: {args, opts}
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{details: false}, opts)}
+  end
 
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
   def validate(_, _), do: :ok
 
-  def usage, do: "erlang_cookie_hash"
+  def switches(), do: [details: :boolean]
 
-  def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_nodes_common, :cookie_hash, [], timeout)
+  def usage, do: "erlang_version"
+
+  def run([], %{node: node_name, timeout: timeout, details: details}) do
+    case details do
+      true ->
+        :rabbit_misc.rpc_call(node_name, :rabbit_misc, :otp_system_version, [], timeout)
+      false ->
+        :rabbit_misc.rpc_call(node_name, :rabbit_misc, :platform_and_version, [], timeout)
+    end
   end
 
   def output(result, _options) when is_list(result) do
     {:ok, result}
   end
+  use RabbitMQ.CLI.DefaultOutput
 
   def banner([], %{node: node_name}) do
-    "Asking node #{node_name} its Erlang cookie hash..."
+    "Asking node #{node_name} for its Erlang/OTP version..."
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String

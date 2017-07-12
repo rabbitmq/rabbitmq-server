@@ -14,11 +14,11 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ErlangCookieHashCommandTest do
+defmodule ErlangVersionCommandTest do
   use ExUnit.Case
   import TestHelper
 
-  @command RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand
+  @command RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -29,12 +29,13 @@ defmodule ErlangCookieHashCommandTest do
   setup context do
     {:ok, opts: %{
         node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
+        timeout: context[:test_timeout] || 30000,
+        details: false
       }}
   end
 
-  test "merge_defaults: nothing to do" do
-    assert @command.merge_defaults([], %{}) == {[], %{}}
+  test "merge_defaults: defaults to abbreviated output" do
+    assert @command.merge_defaults([], %{}) == {[], %{details: false}}
   end
 
   test "validate: treats positional arguments as a failure" do
@@ -45,18 +46,27 @@ defmodule ErlangCookieHashCommandTest do
     assert @command.validate([], %{}) == :ok
   end
 
+  test "validate: treats empty positional arguments and --details as a success" do
+    assert @command.validate([], %{details: true}) == :ok
+  end
+
   @tag test_timeout: 0
   test "run: targeting an unreachable node throws a badrpc", context do
     target = :jake@thedog
 
-    opts = %{node: target}
+    opts = %{node: target, details: false}
     assert @command.run([], Map.merge(context[:opts], opts)) == {:badrpc, :nodedown}
   end
 
-  test "run: returns the erlang cookie hash", context do
+  test "run: returns Erlang/OTP version on the target node", context do
     res = @command.run([], context[:opts])
-    # assert that we have a list of characters, a base64 encoded to string
+    # assert that we have a list of characters
     assert length(res) > 0 and :io_lib.char_list(res)
   end
 
+  test "run with --details: returns Erlang/OTP version on the target node", context do
+    res = @command.run([], Map.merge(%{details: true}, context[:opts]))
+    # assert that we have a list of characters
+    assert length(res) > 0 and :io_lib.char_list(res)
+  end
 end

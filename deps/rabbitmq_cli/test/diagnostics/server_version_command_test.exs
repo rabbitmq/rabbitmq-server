@@ -14,11 +14,11 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ErlangCookieHashCommandTest do
+defmodule ServerVersionCommandTest do
   use ExUnit.Case
   import TestHelper
 
-  @command RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand
+  @command RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -53,10 +53,9 @@ defmodule ErlangCookieHashCommandTest do
     assert @command.run([], Map.merge(context[:opts], opts)) == {:badrpc, :nodedown}
   end
 
-  test "run: returns the erlang cookie hash", context do
+  test "run: returns RabbitMQ version on the target node", context do
     res = @command.run([], context[:opts])
-    # assert that we have a list of characters, a base64 encoded to string
+    # assert that we have a list of characters
     assert length(res) > 0 and :io_lib.char_list(res)
   end
-
 end

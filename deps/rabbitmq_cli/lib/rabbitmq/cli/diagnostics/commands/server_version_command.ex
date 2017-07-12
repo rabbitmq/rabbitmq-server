@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def merge_defaults(args, opts), do: {args, opts}
@@ -24,18 +24,19 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
   end
   def validate(_, _), do: :ok
 
-  def usage, do: "erlang_cookie_hash"
+  def usage, do: "server_version"
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_nodes_common, :cookie_hash, [], timeout)
+    :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout)
   end
 
   def output(result, _options) when is_list(result) do
     {:ok, result}
   end
+  use RabbitMQ.CLI.DefaultOutput
 
   def banner([], %{node: node_name}) do
-    "Asking node #{node_name} its Erlang cookie hash..."
+    "Asking node #{node_name} for its RabbitMQ version..."
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
