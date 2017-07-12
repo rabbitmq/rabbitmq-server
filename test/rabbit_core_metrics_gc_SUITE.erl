@@ -377,10 +377,15 @@ cluster_queue_metrics(Config) ->
                               [queue_coarse_metrics])
              end, 60),
 
-
-    [{Name, 1, 0, 1, _}] = rabbit_ct_broker_helpers:rpc(Config, Node1, ets,
-                                                        tab2list,
-                                                        [queue_coarse_metrics]),
+    wait_for(fun () ->
+                     Ret = rabbit_ct_broker_helpers:rpc(
+                             Config, Node1, ets, tab2list,
+                             [queue_coarse_metrics]),
+                     case Ret of
+                         [{Name, 1, 0, 1, _}] -> true;
+                         _                    -> false
+                     end
+             end, 60),
 
     amqp_channel:call(Ch, #'queue.delete'{queue=QueueName}),
     rabbit_ct_client_helpers:close_channel(Ch),
