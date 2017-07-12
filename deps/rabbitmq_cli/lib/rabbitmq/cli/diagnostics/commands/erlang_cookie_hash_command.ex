@@ -33,7 +33,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
   def output(result, _options) when is_list(result) do
     {:ok, result}
   end
-  use RabbitMQ.CLI.DefaultOutput
 
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} its Erlang cookie hash..."
