@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
     receive_list_items(node, [{mod, fun, args}], timeout, info_keys, chunks)
   end
 
-  def receive_list_items(_, _ ,_, _, 0) do
+  def receive_list_items(_node, _mfas, _timeout, _info_keys, 0) do
     nil
   end
 
