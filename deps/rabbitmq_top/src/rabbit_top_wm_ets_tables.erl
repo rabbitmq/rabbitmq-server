@@ -48,7 +48,12 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 ets_tables(Node, Sort, Order, RowCount) ->
-    [fmt(P) || P <- rabbit_top_worker:ets_tables(Node, Sort, Order, RowCount)].
+    try
+        [fmt(P) || P <- rabbit_top_worker:ets_tables(Node, Sort, Order, RowCount)]
+    catch
+        exit:{noproc, _} ->
+            []
+    end.
 
 fmt(Info) ->
     {owner, Pid} = lists:keyfind(owner, 1, Info),
