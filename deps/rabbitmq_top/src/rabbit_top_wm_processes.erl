@@ -47,7 +47,12 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 procs(Node, Sort, Order, RowCount) ->
-    [fmt(P) || P <- rabbit_top_worker:procs(Node, Sort, Order, RowCount)].
+    try
+        [fmt(P) || P <- rabbit_top_worker:procs(Node, Sort, Order, RowCount)]
+    catch
+        exit:{noproc, _} ->
+            []
+    end.
 
 fmt(Info) ->
     {pid, Pid} = lists:keyfind(pid, 1, Info),

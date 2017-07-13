@@ -38,7 +38,7 @@ $('select#top-node').live('change', function() {
 });
 
 $('select#top-node-ets').live('change', function() {
-    var url='#/top/' + $(this).val() + "/" + $('select#row-count-ets').val();
+    var url='#/top/ets/' + $(this).val() + "/" + $('select#row-count-ets').val();
     go_to(url);
 });
 
