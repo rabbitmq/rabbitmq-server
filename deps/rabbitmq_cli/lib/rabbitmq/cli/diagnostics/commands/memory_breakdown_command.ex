@@ -59,11 +59,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
 
     @behaviour RabbitMQ.CLI.FormatterBehaviour
 
-    def format_output(output, options) do
+    def format_output(output, %{unit: unit}) do
       Enum.reduce(output, "", fn({key, %{bytes: bytes, percentage: percentage}}, acc) ->
         # TODO: should output functions take options with
         #       merged defaults?
-        u = String.downcase(Map.get(options, :unit, "gb"))
+        u = String.downcase(unit)
         acc <> "#{key}: #{IU.convert(bytes, u)} #{u} (#{percentage}%)\n"
       end)
     end
