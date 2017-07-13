@@ -985,16 +985,24 @@ is_duplicate(_Msg, State) -> {false, State}.
 
 set_queue_mode(Mode, State = #vqstate { mode = Mode }) ->
     State;
-set_queue_mode(lazy, State = #vqstate {
-                                target_ram_count = TargetRamCount }) ->
-    %% To become a lazy queue we need to page everything to disk first.
-    State1 = convert_to_lazy(State),
-    %% restore the original target_ram_count
-    a(State1 #vqstate { mode = lazy, target_ram_count = TargetRamCount });
-set_queue_mode(default, State) ->
+set_queue_mode(lazy, State0) ->
+    %% Note: rabbitmq/rabbitmq-server#1284
+    %% We must override the value set by queue_index_embed_msgs_below since
+    %% restoring a queue with embedded small messages will restore those
+    %% messages as betas in RAM, which we do not want with a lazy queue.
+    %% We also explicitly set target_ram_count to 0 to reinforce this.
+    State1 = State0#vqstate { qi_embed_msgs_below = 0,
+                              target_ram_count = 0 },
+    State2 = convert_to_lazy(State1),
+    a(State2#vqstate { mode = lazy });
+set_queue_mode(default, State0) ->
     %% becoming a default queue means loading messages from disk like
     %% when a queue is recovered.
-    a(maybe_deltas_to_betas(State #vqstate { mode = default }));
+    {ok, IndexMaxSize} = application:get_env(
+                           rabbit, queue_index_embed_msgs_below),
+    State1 = State0#vqstate { qi_embed_msgs_below = IndexMaxSize,
+                              target_ram_count = infinity },
+    a(maybe_deltas_to_betas(State1#vqstate { mode = default }));
 set_queue_mode(_, State) ->
     State.
 
