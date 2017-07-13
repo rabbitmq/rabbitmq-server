@@ -28,9 +28,6 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
 
     on_exit([], fn ->
       reset_vm_memory_high_watermark()
-
-
-
     end)
 
     {:ok, opts: %{node: get_rabbit_hostname()}}
