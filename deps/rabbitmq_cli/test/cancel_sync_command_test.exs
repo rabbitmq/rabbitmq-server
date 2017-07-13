@@ -29,8 +29,6 @@ defmodule CancelSyncQueueCommandTest do
 
     on_exit([], fn ->
       start_rabbitmq_app()
-
-
     end)
 
     :ok
