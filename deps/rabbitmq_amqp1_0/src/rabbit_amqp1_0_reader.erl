@@ -265,6 +265,12 @@ maybe_close(State = #v1{connection_state = closing,
                         sock = Sock}) ->
     NewState = close_connection(State),
     ok = send_on_channel0(Sock, #'v1_0.close'{}),
+    % Perform an rpc call to each session process to allow it time to
+    % process it's internal message buffer before the supervision tree
+    % shuts everything down and in flight messages such as dispositions
+    % could be lost
+    [ _ = rabbit_amqp1_0_session:get_info(SessionPid)
+      || {{channel, _}, {ch_fr_pid, SessionPid}} <- get()],
     NewState;
 maybe_close(State) ->
     State.
