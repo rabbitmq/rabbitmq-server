@@ -24,6 +24,10 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
     receive_list_items(node, [{mod, fun, args}], timeout, info_keys, chunks)
   end
 
+  def receive_list_items(_node, _mfas, _timeout, _info_keys, 0) do
+    nil
+  end
+
   def receive_list_items(node, mfas, timeout, info_keys, chunks_init) do
     pid = Kernel.self
     ref = Kernel.make_ref
