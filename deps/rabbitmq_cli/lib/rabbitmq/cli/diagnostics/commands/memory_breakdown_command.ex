@@ -15,6 +15,8 @@
 
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
+  alias RabbitMQ.CLI.InformationUnit, as: IU
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def merge_defaults(args, opts) do
@@ -26,17 +28,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
-  def validate(_, %{unit: unit}) when unit == "gigabytes" or
-                                      unit == "gb" or
-                                      unit == "GB" or
-                                      unit == "megabytes" or
-                                      unit == "mb" or
-                                      unit == "MB" or
-                                      unit == "bytes" do
-    :ok
-  end
   def validate(_, %{unit: unit}) do
-    {:validation_failure, "unit '#{unit}' is not supported. Please use one of: bytes, mb, gb"}
+    case IU.known_unit?(unit) do
+      true ->
+        :ok
+      false ->
+        {:validation_failure, "unit '#{unit}' is not supported. Please use one of: bytes, mb, gb"}
+    end
   end
 
   def usage, do: "memory_breakdown [--unit <unit>]"
@@ -61,8 +59,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
 
     def format_output(output, %{unit: unit}) do
       Enum.reduce(output, "", fn({key, %{bytes: bytes, percentage: percentage}}, acc) ->
-        # TODO: should output functions take options with
-        #       merged defaults?
         u = String.downcase(unit)
         acc <> "#{key}: #{IU.convert(bytes, u)} #{u} (#{percentage}%)\n"
       end)

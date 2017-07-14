@@ -14,11 +14,18 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.InformationUnit do
+  require MapSet
+
   @kilobyte_bytes 1000
   @megabyte_bytes @kilobyte_bytes * 1000
   @gigabyte_bytes @megabyte_bytes * 1000
   @terabyte_bytes @gigabyte_bytes * 1000
 
+  @known_units    MapSet.new(["bytes",
+                              "kb", "kilobytes",
+                              "mb", "megabytes",
+                              "gb", "gigabytes",
+                              "tb", "terabytes"])
 
   def convert(bytes, "bytes") do
     bytes
@@ -27,6 +34,12 @@ defmodule RabbitMQ.CLI.InformationUnit do
   def convert(bytes, unit) do
     do_convert(bytes, String.downcase(unit))
   end
+
+  def known_unit?(val) do
+    MapSet.member?(@known_units, String.downcase(val))
+  end
+
+
 
   defp do_convert(bytes, "kb") do
     Float.round(bytes / @kilobyte_bytes, 4)
