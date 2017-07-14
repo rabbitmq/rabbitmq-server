@@ -66,8 +66,9 @@ defmodule RabbitMQCtl do
                          unparsed_command, parsed_options);
       _ ->
         options = parsed_options |> merge_all_defaults |> normalize_options
+        {arguments, options} = command.merge_defaults(arguments, options)
         with_distribution(options, fn() ->
-          execute_command(options, command, arguments)
+          validate_and_run_command(options, command, arguments)
           |> handle_command_output(command, options, unparsed_command, output_fun)
         end)
     end
@@ -153,8 +154,7 @@ defmodule RabbitMQCtl do
     opts
   end
 
-  defp execute_command(options, command, arguments) do
-    {arguments, options} = command.merge_defaults(arguments, options)
+  defp validate_and_run_command(options, command, arguments) do
     case command.validate(arguments, options) do
       :ok ->
         maybe_print_banner(command, arguments, options)
