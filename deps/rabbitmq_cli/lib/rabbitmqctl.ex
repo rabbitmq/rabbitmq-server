@@ -209,8 +209,15 @@ defmodule RabbitMQCtl do
     end
   end
 
-  ## Suppress banner if --quiet option is provided
+  # Suppress banner if --quiet option is provided
   defp maybe_print_banner(_, _, %{quiet: true}) do
+    nil
+  end
+  # Suppress banner if a machine-readable formatter is used
+  defp maybe_print_banner(_, _, %{formatter: "csv"}) do
+    nil
+  end
+  defp maybe_print_banner(_, _, %{formatter: "json"}) do
     nil
   end
   defp maybe_print_banner(command, args, opts) do
