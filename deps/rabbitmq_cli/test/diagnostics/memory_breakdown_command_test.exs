@@ -53,11 +53,11 @@ defmodule MemoryBreakdownCommandTest do
   end
 
   test "validate: specifying gigabytes as a --unit succeeds", context do
-    assert @command.validate([], Map.merge(context[:opts], %{unit: "mb"})) == :ok
+    assert @command.validate([], Map.merge(context[:opts], %{unit: "gb"})) == :ok
   end
 
   test "validate: specifying bytes as a --unit succeeds", context do
-    assert @command.validate([], Map.merge(context[:opts], %{unit: "mb"})) == :ok
+    assert @command.validate([], Map.merge(context[:opts], %{unit: "bytes"})) == :ok
   end
 
   test "validate: specifying megabytes as a --unit succeeds", context do
