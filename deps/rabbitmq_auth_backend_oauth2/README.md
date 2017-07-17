@@ -2,6 +2,8 @@
 
 Allows to use access tokens provided by CF UAA to authorize in RabbitMQ.
 
+This plugin is **experimental** and should not be used until this notice is removed.
+
 ### Usage
 
 First, enable the plugin. Then, configure access to UAA:
