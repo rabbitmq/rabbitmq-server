@@ -16,7 +16,8 @@
 
 -module(rabbit_amqp1_0_session).
 
--export([process_frame/2]).
+-export([process_frame/2,
+         get_info/1]).
 
 -export([init/1, begin_/2, maybe_init_publish_id/2, record_delivery/3,
          incr_incoming_id/1, next_delivery_id/1, transfers_left/1,
@@ -32,6 +33,7 @@
 
 -define(MAX_SESSION_WINDOW_SIZE, 65535).
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
+-define(CALL_TIMEOUT, 30000). % 30s - matches CLOSE_TIMEOUT
 
 -record(session, {channel_num, %% we just use the incoming (AMQP 1.0) channel number
                   remote_incoming_window, % keep track of the window until we're told
@@ -57,6 +59,9 @@
 %% confirms from the broker back to the sending client. NB we have
 %% only one possible outcome, so there's no need to record it here.
 -record(incoming_delivery, {delivery_id}).
+
+get_info(Pid) ->
+    gen_server2:call(Pid, info, ?CALL_TIMEOUT).
 
 process_frame(Pid, Frame) ->
     credit_flow:send(Pid),
