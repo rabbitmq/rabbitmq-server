@@ -144,8 +144,6 @@ put_user(User, Version) ->
                     %% this user won't be able to sign in using
                     %% a username/password pair but can be used for x509 certificate authentication,
                     %% with authn backends such as HTTP or LDAP and so on.
-                    io:format("PassedCredentialValidation: ~p, Username: ~p, Tags: ~p",
-                              [PassedCredentialValidation, Username, Tags]),
                     create_user_with_password(PassedCredentialValidation, Username, <<"">>, Tags)
             end
     end.
