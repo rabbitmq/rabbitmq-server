@@ -240,7 +240,13 @@ memory_test(Config) ->
     Breakdown = maps:get(memory, Result1),
     assert_keys(Keys, Breakdown),
     assert_item(#{total => 100}, Breakdown),
-    assert_percentage(Breakdown),
+    %% FIXME: Since commit 0872a15a050176ab7598bc3d1b21a2d5c5af3052
+    %% in rabbitmq-server, `total` has no relationship with the other
+    %% counters: total is the resident memory footprint of the OS
+    %% process (so pages in physical memory), but the other counters are
+    %% based on what was actually allocated. Those counters should be
+    %% compared to the total reported by erlang:memory() instead.
+    %assert_percentage(Breakdown),
     http_get(Config, "/nodes/nonode/memory/relative", ?NOT_FOUND),
     passed.
 
