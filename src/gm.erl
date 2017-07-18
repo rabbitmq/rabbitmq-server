@@ -552,8 +552,7 @@ init([GroupName, Module, Args, TxnFun]) ->
                   broadcast_buffer_sz = 0,
                   broadcast_timer     = undefined,
                   txn_executor        = TxnFun,
-                  shutting_down       = false }, hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+                  shutting_down       = false }}.
 
 
 handle_call({confirmed_broadcast, _Msg}, _From,
@@ -888,7 +887,7 @@ noreply(State) ->
 reply(Reply, State) ->
     {reply, Reply, ensure_broadcast_timer(State), flush_timeout(State)}.
 
-flush_timeout(#state{broadcast_buffer = []}) -> hibernate;
+flush_timeout(#state{broadcast_buffer = []}) -> infinity;
 flush_timeout(_)                             -> 0.
 
 ensure_broadcast_timer(State = #state { broadcast_buffer = [],
