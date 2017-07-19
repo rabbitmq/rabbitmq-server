@@ -75,11 +75,7 @@ endif
 # Prepare the source directory: we extract the source archive and copy
 # the debian/ subdirectory.
 	xzcat "$(DEBIAN_ORIG_TARBALL)" | tar -xf -
-	rsync -a \
-		--exclude '.sw?' --exclude '.*.sw?' \
-		--exclude '.git*' \
-		--delete --delete-excluded \
-		debian/ "$(UNPACKED_DIR)/debian/"
+	cp -a debian "$(UNPACKED_DIR)/debian"
 # Possibly update debian/changelog (in the created source directory):
 #   - if it contains an entry for the specified version, do nothing;
 #   - otherwise, prepend a generated entry using "1" as the package
