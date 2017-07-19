@@ -214,7 +214,7 @@ format(#amqp_error{name = Name, explanation = Explanation}) ->
     rabbit_data_coercion:to_binary(rabbit_misc:format("~s: ~s", [Name, Explanation]));
 format({no_such_vhost, undefined}) ->
     rabbit_data_coercion:to_binary(
-      "Virtual host is not specified in definitions file nor via management interface.");
+      "Virtual host does not exist and is not specified in definitions file.");
 format({no_such_vhost, VHost}) ->
     rabbit_data_coercion:to_binary(
       rabbit_misc:format("Please create virtual host \"~s\" prior to importing definitions.",
