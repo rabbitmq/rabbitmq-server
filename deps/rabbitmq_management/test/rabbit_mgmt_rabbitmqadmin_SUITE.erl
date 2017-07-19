@@ -116,10 +116,10 @@ host(Config) ->
                                  "show", "overview"]).
 
 base_uri(Config) ->
-    {ok, _} = run(Config, ["--base-uri", "http://localhost:15672",  "list", "exchanges"]),
-    {ok, _} = run(Config, ["--base-uri", "http://localhost:15672/", "list", "exchanges"]),
-    {ok, _} = run(Config, ["--base-uri", "http://localhost:15672",  "--vhost", "/", "list", "exchanges"]),
-    {ok, _} = run(Config, ["--base-uri", "http://localhost:15672/", "--vhost", "/", "list", "exchanges"]),
+    {ok, _} = run(Config, ["--base-uri", "http://localhost",  "list", "exchanges"]),
+    {ok, _} = run(Config, ["--base-uri", "http://localhost/", "list", "exchanges"]),
+    {ok, _} = run(Config, ["--base-uri", "http://localhost",  "--vhost", "/", "list", "exchanges"]),
+    {ok, _} = run(Config, ["--base-uri", "http://localhost/", "--vhost", "/", "list", "exchanges"]),
     {error, _, _} = run(Config, ["--base-uri", "http://some-host-that-does-not-exist:15672/",
                                  "list", "exchanges"]),
     {error, _, _} = run(Config, ["--base-uri", "http://localhost:15672/", "--vhost", "some-vhost-that-does-not-exist",
