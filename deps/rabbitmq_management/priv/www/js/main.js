@@ -519,26 +519,34 @@ function show_popup(type, text, mode) {
     });
 }
 
-
-
-
 function submit_import(form) {
     if (form.file.value) {
         var confirm_upload = confirm('Are you sure you want to import a definitions file? Some entities (vhosts, users, queues, etc) may be overwritten!');
         if (confirm_upload === true) {
-            var idx = $("select[name='vhost-upload'] option:selected").index();
-            var vhost = ((idx <= 0) ? "" : "/" + esc($("select[name='vhost-upload'] option:selected").val()));
-            form.action ="api/definitions" + vhost + '?auth=' + get_cookie_value('auth');
-            form.submit();
-            window.location.replace("../../#/import-succeeded");
-        } else {
-            return false;
-        }
-    } else {
-        return false;
-    }
-};
+            var file = form.file.files[0]; // FUTURE: limit upload file size (?)
+            var vhost_upload = $("select[name='vhost-upload'] option:selected");
+            var vhost_selected = vhost_upload.index() > 0;
 
+            var vhost_name = null;
+            if (vhost_selected) {
+                vhost_name = vhost_upload.val();
+            }
+
+            var vhost_part = '';
+            if (vhost_name) {
+                vhost_part = '/' + esc(vhost_name);
+            }
+
+            var form_action = "/definitions" + vhost_part + '?auth=' + get_cookie_value('auth');
+            var fd = new FormData();
+            fd.append('file', file);
+            with_req('POST', form_action, fd, function(resp) {
+                show_popup('info', 'Your definitions were imported successfully.');
+            });
+        }
+    }
+    return false;
+};
 
 function postprocess() {
     $('form.confirm-queue').submit(function() {
@@ -1077,7 +1085,7 @@ function has_auth_cookie_value() {
 
 function auth_header() {
     if(has_auth_cookie_value()) {
-        return "Basic " + decodeURIComponent(get_cookie_value('auth'));    
+        return "Basic " + decodeURIComponent(get_cookie_value('auth'));
     } else {
         return null;
     }

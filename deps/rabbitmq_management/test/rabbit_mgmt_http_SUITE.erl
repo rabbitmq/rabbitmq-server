@@ -1048,9 +1048,15 @@ defs_v(Config, Key, URI, CreateMethod, Args) ->
     http_put(Config, "/vhosts/test", none, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/permissions/test/guest", PermArgs, {group, '2xx'}),
-    defs(Config, Key, Rep1(URI, "test"), CreateMethod, ReplaceVHostInArgs(Args, <<"test">>),
-         fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}),
-                      http_delete(Config, "/vhosts/test", {group, '2xx'}) end).
+    DeleteFun0 = fun(URI2) ->
+                     http_delete(Config, URI2, {group, '2xx'})
+                 end,
+    DeleteFun1 = fun(_) ->
+                    http_delete(Config, "/vhosts/test", {group, '2xx'})
+                 end,
+    defs(Config, Key, Rep1(URI, "test"),
+         CreateMethod, ReplaceVHostInArgs(Args, <<"test">>),
+         DeleteFun0, DeleteFun1).
 
 create(Config, CreateMethod, URI, Args) ->
     case CreateMethod of
@@ -1064,6 +1070,9 @@ create(Config, CreateMethod, URI, Args) ->
     end.
 
 defs(Config, Key, URI, CreateMethod, Args, DeleteFun) ->
+    defs(Config, Key, URI, CreateMethod, Args, DeleteFun, DeleteFun).
+
+defs(Config, Key, URI, CreateMethod, Args, DeleteFun0, DeleteFun1) ->
     %% Create the item
     URI2 = create(Config, CreateMethod, URI, Args),
     %% Make sure it ends up in definitions
@@ -1071,14 +1080,14 @@ defs(Config, Key, URI, CreateMethod, Args, DeleteFun) ->
     true = lists:any(fun(I) -> test_item(Args, I) end, maps:get(Key, Definitions)),
 
     %% Delete it
-    DeleteFun(URI2),
+    DeleteFun0(URI2),
 
     %% Post the definitions back, it should get recreated in correct form
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
     assert_item(Args, http_get(Config, URI2, ?OK)),
 
     %% And delete it again
-    DeleteFun(URI2),
+    DeleteFun1(URI2),
 
     passed.
 
@@ -2037,6 +2046,7 @@ publish_fail_test(Config) ->
      || BadProp <- [{priority,   <<"really high">>},
                     {timestamp,  <<"recently">>},
                     {expiration, 1234}]],
+    http_delete(Config, "/queues/%2f/publish_fail_test", {group, '2xx'}),
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
 
@@ -2332,11 +2342,10 @@ vhost_limits_list_test(Config) ->
 
     [] = http_get(Config, "/vhost-limits/limit_test_vhost_2", ?OK),
 
-
-    Limits1 =  [#{vhost => <<"limit_test_vhost_1">>,
-                  value => #{'max-connections' => 100, 'max-queues' => 100}}],
-    Limits2 =  [#{vhost => <<"limit_test_vhost_2">>,
-                  value => #{'max-connections' => 200}}],
+    Limits1 = [#{vhost => <<"limit_test_vhost_1">>,
+                 value => #{'max-connections' => 100, 'max-queues' => 100}}],
+    Limits2 = [#{vhost => <<"limit_test_vhost_2">>,
+                 value => #{'max-connections' => 200}}],
 
     Expected = Limits1 ++ Limits2,
 

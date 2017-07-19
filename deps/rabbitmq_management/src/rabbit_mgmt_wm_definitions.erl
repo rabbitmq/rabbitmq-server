@@ -178,6 +178,7 @@ apply_defs(Body, Username, SuccessFun, ErrorFun) ->
                                   Username)
                         end),
                 for_all(vhosts,             Username, All, fun add_vhost/2),
+                validate_limits(All),
                 for_all(permissions,        Username, All, fun add_permission/2),
                 for_all(topic_permissions,  Username, All, fun add_topic_permission/2),
                 for_all(parameters,         Username, All, fun add_parameter/2),
@@ -198,6 +199,7 @@ apply_defs(Body, Username, SuccessFun, ErrorFun, VHost) ->
             ErrorFun(E);
         {ok, _, All} ->
             try
+                validate_limits(All, VHost),
                 for_all(policies,    Username, All, VHost, fun add_policy/3),
                 for_all(queues,      Username, All, VHost, fun add_queue/3),
                 for_all(exchanges,   Username, All, VHost, fun add_exchange/3),
@@ -210,6 +212,15 @@ apply_defs(Body, Username, SuccessFun, ErrorFun, VHost) ->
 
 format(#amqp_error{name = Name, explanation = Explanation}) ->
     rabbit_data_coercion:to_binary(rabbit_misc:format("~s: ~s", [Name, Explanation]));
+format({no_such_vhost, undefined}) ->
+    rabbit_data_coercion:to_binary(
+      "Virtual host does not exist and is not specified in definitions file.");
+format({no_such_vhost, VHost}) ->
+    rabbit_data_coercion:to_binary(
+      rabbit_misc:format("Please create virtual host \"~s\" prior to importing definitions.",
+                         [VHost]));
+format({vhost_limit_exceeded, ErrMsg}) ->
+    rabbit_data_coercion:to_binary(ErrMsg);
 format(E) ->
     rabbit_data_coercion:to_binary(rabbit_misc:format("~p", [E])).
 
@@ -426,3 +437,69 @@ rv(VHost, Type, Props) -> rv(VHost, Type, name, Props).
 
 rv(VHost, Type, Name, Props) ->
     rabbit_misc:r(VHost, Type, maps:get(Name, Props, undefined)).
+
+%%--------------------------------------------------------------------
+
+validate_limits(All) ->
+    case maps:get(queues, All, undefined) of
+        undefined -> ok;
+        Queues0 ->
+            {ok, VHostMap} = filter_out_existing_queues(Queues0),
+            maps:fold(fun validate_vhost_limit/3, ok, VHostMap)
+    end.
+
+validate_limits(All, VHost) ->
+    case maps:get(queues, All, undefined) of
+        undefined -> ok;
+        Queues0 ->
+            Queues1 = filter_out_existing_queues(VHost, Queues0),
+            AddCount = length(Queues1),
+            validate_vhost_limit(VHost, AddCount, ok)
+    end.
+
+filter_out_existing_queues(Queues) ->
+    build_filtered_map(Queues, maps:new()).
+
+filter_out_existing_queues(VHost, Queues) ->
+    Pred = fun(Queue) ->
+               Rec = rv(VHost, queue, <<"name">>, Queue),
+               case rabbit_amqqueue:lookup(Rec) of
+                   {ok, _} -> false;
+                   {error, not_found} -> true
+               end
+           end,
+    lists:filter(Pred, Queues).
+
+build_queue_data(Queue) ->
+    VHost = maps:get(<<"vhost">>, Queue, undefined),
+    Rec = rv(VHost, queue, <<"name">>, Queue),
+    {Rec, VHost}.
+
+build_filtered_map([], AccMap) ->
+    {ok, AccMap};
+build_filtered_map([Queue|Rest], AccMap0) ->
+    {Rec, VHost} = build_queue_data(Queue),
+    case rabbit_amqqueue:lookup(Rec) of
+        {error, not_found} ->
+            AccMap1 = maps:update_with(VHost, fun(V) -> V + 1 end, 1, AccMap0),
+            build_filtered_map(Rest, AccMap1);
+        {ok, _} ->
+            build_filtered_map(Rest, AccMap0)
+    end.
+
+validate_vhost_limit(VHost, AddCount, ok) ->
+    WouldExceed = rabbit_vhost_limit:would_exceed_queue_limit(AddCount, VHost),
+    validate_vhost_queue_limit(VHost, AddCount, WouldExceed).
+
+validate_vhost_queue_limit(_VHost, 0, _) ->
+    % Note: not adding any new queues so the upload
+    % must be update-only
+    ok;
+validate_vhost_queue_limit(_VHost, _AddCount, false) ->
+    % Note: would not exceed queue limit
+    ok;
+validate_vhost_queue_limit(VHost, AddCount, {true, Limit, QueueCount}) ->
+    ErrFmt = "Adding ~B queue(s) to virtual host \"~s\" would exceed the limit of ~B queue(s).~n~nThis virtual host currently has ~B queue(s) defined.~n~nImport aborted!",
+    ErrInfo = [AddCount, VHost, Limit, QueueCount],
+    ErrMsg = rabbit_misc:format(ErrFmt, ErrInfo),
+    exit({vhost_limit_exceeded, ErrMsg}).
