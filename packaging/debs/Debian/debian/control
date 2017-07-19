@@ -7,11 +7,11 @@ Uploaders: Michael Klishin <michael@rabbitmq.com>,
  Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>
 Build-Depends: debhelper (>= 9),
  dh-systemd (>= 1.5),
- erlang-dev,
  python-simplejson,
  xmlto,
  xsltproc,
  erlang-nox (>= 1:18.3-1) | esl-erlang (>= 1:18.3),
+ erlang-src (>= 1:18.3-1) | esl-erlang (>= 1:18.3),
  zip,
  rsync
 Standards-Version: 3.9.4

@@ -75,11 +75,21 @@ endif
 # Prepare the source directory: we extract the source archive and copy
 # the debian/ subdirectory.
 	xzcat "$(DEBIAN_ORIG_TARBALL)" | tar -xf -
-	rsync -a \
-		--exclude '.sw?' --exclude '.*.sw?' \
-		--exclude '.git*' \
-		--delete --delete-excluded \
-		debian/ "$(UNPACKED_DIR)/debian/"
+	cp -a debian "$(UNPACKED_DIR)/debian"
+ifeq ($(INSTALL_BUILD_DEPS),yes)
+# Install build dependencies. To help us, we use mk-build-deps(1) from
+# the devscripts package.
+#
+# We ignore errors from the first `dpkg -i` because the command will
+# fail: dependencies are missing and dpkg(8) doesn't install them.
+# That's why we have `apt-get install -f` following. To double-check
+# everything went fine, we have the second `dpkg -i`.
+	apt-get install -y --no-install-recommends devscripts equivs
+	mk-build-deps debian/control
+	-dpkg -i ./rabbitmq-server-build-deps_*_all.deb
+	apt-get install -y -f -V --no-install-recommends
+	dpkg -i ./rabbitmq-server-build-deps_*_all.deb
+endif
 # Possibly update debian/changelog (in the created source directory):
 #   - if it contains an entry for the specified version, do nothing;
 #   - otherwise, prepend a generated entry using "1" as the package
