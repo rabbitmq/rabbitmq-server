@@ -30,7 +30,7 @@ dispatcher() -> [{"/federation-links", ?MODULE, [all]},
                  {"/federation-links/:vhost", ?MODULE, [all]},
                  {"/federation-links/state/down/", ?MODULE, [down]},
                  {"/federation-links/:vhost/state/down", ?MODULE, [down]},
-                 {"/federation-links/vhost/:vhost/:id/restart", ?MODULE, []}].
+                 {"/federation-links/vhost/:vhost/:id/:node/restart", ?MODULE, []}].
 
 web_ui()     -> [{javascript, <<"federation.js">>}].
 
@@ -57,10 +57,8 @@ resource_exists(ReqData, Context) ->
                           %% Listing links
                           none -> true;
                           %% Restarting a link
-                          Id -> case rabbit_federation_status:lookup(Id) of
-                                    not_found -> false;
-                                    _ -> true
-                                end
+                          Id ->
+                              lookup(Id, ReqData)
                       end
      end, ReqData, Context}.
 
@@ -81,15 +79,7 @@ is_authorized(ReqData, Context) ->
 delete_resource(ReqData, Context) ->
     Reply = case rabbit_mgmt_util:id(id, ReqData) of
                 none -> false;
-                Id ->
-                    case rabbit_federation_status:lookup(Id) of
-                        not_found -> false;
-                        Obj ->
-                            Upstream = proplists:get_value(upstream, Obj),
-                            Supervisor = proplists:get_value(supervisor, Obj),
-                            rabbit_federation_link_sup:restart(Supervisor, Upstream),
-                            true
-                    end
+                Id -> restart(Id, ReqData)
             end,
     {Reply, ReqData, Context}.
 
@@ -141,3 +131,25 @@ format_item(I) ->
 
 print(Fmt, Val) ->
     list_to_binary(io_lib:format(Fmt, Val)).
+
+lookup(Id, ReqData) ->
+    Node = get_node(ReqData),
+    case rpc:call(Node, rabbit_federation_status, lookup, [Id], infinity) of
+        {badrpc, _}  -> false;
+        not_found -> false;
+        _ -> true
+    end.
+
+restart(Id, ReqData) ->
+    Node = get_node(ReqData),
+    case rpc:call(Node, rabbit_federation_status, lookup, [Id], infinity) of
+        not_found -> false;
+        Obj ->
+            Upstream = proplists:get_value(upstream, Obj),
+            Supervisor = proplists:get_value(supervisor, Obj),
+            rpc:call(Node, rabbit_federation_link_sup, restart, [Supervisor, Upstream], infinity),
+            true
+    end.
+
+get_node(ReqData) ->
+    list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))).
