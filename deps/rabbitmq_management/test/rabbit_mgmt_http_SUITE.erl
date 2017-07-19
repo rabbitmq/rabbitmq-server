@@ -58,7 +58,7 @@ groups() ->
                                vhosts_trace_test,
                                users_test,
                                users_legacy_administrator_test,
-                               adding_a_user_without_password_or_hash_fails_test,
+                               adding_a_user_without_password_or_hash_test,
                                adding_a_user_with_both_password_and_hash_fails_test,
                                updating_a_user_without_password_or_hash_clears_password_test,
                                user_credential_validation_accept_everything_succeeds_test,
@@ -240,7 +240,13 @@ memory_test(Config) ->
     Breakdown = maps:get(memory, Result1),
     assert_keys(Keys, Breakdown),
     assert_item(#{total => 100}, Breakdown),
-    assert_percentage(Breakdown),
+    %% FIXME: Since commit 0872a15a050176ab7598bc3d1b21a2d5c5af3052
+    %% in rabbitmq-server, `total` has no relationship with the other
+    %% counters: total is the resident memory footprint of the OS
+    %% process (so pages in physical memory), but the other counters are
+    %% based on what was actually allocated. Those counters should be
+    %% compared to the total reported by erlang:memory() instead.
+    %assert_percentage(Breakdown),
     http_get(Config, "/nodes/nonode/memory/relative", ?NOT_FOUND),
     passed.
 
@@ -394,9 +400,12 @@ users_legacy_administrator_test(Config) ->
     http_delete(Config, "/users/myuser2", {group, '2xx'}),
     passed.
 
-adding_a_user_without_password_or_hash_fails_test(Config) ->
-    http_put(Config, "/users/myuser", [{flim, <<"flam">>}],       ?BAD_REQUEST),
-    http_put(Config, "/users/myuser", [{tags, <<"management">>}], ?BAD_REQUEST).
+%% creating a passwordless user makes sense when x509x certificates or another
+%% "external" authentication mechanism or backend is used.
+%% See rabbitmq/rabbitmq-management#383.
+adding_a_user_without_password_or_hash_test(Config) ->
+    http_put(Config, "/users/myuser", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/users/myuser", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]).
 
 adding_a_user_with_both_password_and_hash_fails_test(Config) ->
     http_put(Config, "/users/myuser", [{password,      <<"password">>},
@@ -1437,11 +1446,11 @@ exclusive_queue_test(Config) ->
     Path = "/queues/%2f/" ++ rabbit_http_util:quote_plus(QName),
     Queue = http_get(Config, Path),
     assert_item(#{name        => QName,
-		          vhost       => <<"/">>,
-		          durable     => false,
-		          auto_delete => false,
-		          exclusive   => true,
-		          arguments   => #{}}, Queue),
+                  vhost       => <<"/">>,
+                  durable     => false,
+                  auto_delete => false,
+                  exclusive   => true,
+                  arguments   => #{}}, Queue),
     amqp_channel:close(Ch),
     close_connection(Conn),
     passed.
@@ -1501,8 +1510,8 @@ exchanges_pagination_test(Config) ->
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
     ?assertEqual(10, maps:get(page_count, PageOfTwo)),
     assert_list([#{name => <<"">>, vhost => <<"/">>},
-		 #{name => <<"amq.direct">>, vhost => <<"/">>}
-		], maps:get(items, PageOfTwo)),
+                 #{name => <<"amq.direct">>, vhost => <<"/">>}
+                ], maps:get(items, PageOfTwo)),
 
     ByName = http_get(Config, "/exchanges?page=1&page_size=2&name=reg", ?OK),
     ?assertEqual(19, maps:get(total_count, ByName)),
@@ -1512,8 +1521,8 @@ exchanges_pagination_test(Config) ->
     ?assertEqual(2, maps:get(page_size, ByName)),
     ?assertEqual(1, maps:get(page_count, ByName)),
     assert_list([#{name => <<"test2_reg">>, vhost => <<"/">>},
-		 #{name => <<"reg_test3">>, vhost => <<"vh1">>}
-		], maps:get(items, ByName)),
+                 #{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                ], maps:get(items, ByName)),
 
 
     RegExByName = http_get(Config,
@@ -1526,7 +1535,7 @@ exchanges_pagination_test(Config) ->
     ?assertEqual(2, maps:get(page_size, RegExByName)),
     ?assertEqual(1, maps:get(page_count, RegExByName)),
     assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>}
-		], maps:get(items, RegExByName)),
+                ], maps:get(items, RegExByName)),
 
 
     http_get(Config, "/exchanges?page=1000", ?BAD_REQUEST),
@@ -1546,8 +1555,8 @@ exchanges_pagination_permissions_test(Config) ->
     http_put(Config, "/users/admin",   [{password, <<"admin">>},
                                         {tags, <<"administrator">>}], {group, '2xx'}),
     Perms = [{configure, <<".*">>},
-	     {write,     <<".*">>},
-	     {read,      <<".*">>}],
+             {write,     <<".*">>},
+             {read,      <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh1/admin",   Perms, {group, '2xx'}),
     QArgs = #{},
@@ -1560,7 +1569,7 @@ exchanges_pagination_permissions_test(Config) ->
     ?assertEqual(100, maps:get(page_size, FirstPage)),
     ?assertEqual(1, maps:get(page_count, FirstPage)),
     assert_list([#{name => <<"test1">>, vhost => <<"vh1">>}
-		], maps:get(items, FirstPage)),
+                ], maps:get(items, FirstPage)),
     http_delete(Config, "/exchanges/%2f/test0", {group, '2xx'}),
     http_delete(Config, "/exchanges/vh1/test1","admin","admin", {group, '2xx'}),
     http_delete(Config, "/users/admin", {group, '2xx'}),
@@ -1588,8 +1597,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
     ?assertEqual(2, maps:get(page_count, PageOfTwo)),
     assert_list([#{name => <<"test0">>, vhost => <<"/">>},
-		 #{name => <<"test2_reg">>, vhost => <<"/">>}
-		], maps:get(items, PageOfTwo)),
+                 #{name => <<"test2_reg">>, vhost => <<"/">>}
+                ], maps:get(items, PageOfTwo)),
 
     SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
     ?assertEqual(4, maps:get(total_count, SortedByName)),
@@ -1599,8 +1608,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, maps:get(page_size, SortedByName)),
     ?assertEqual(2, maps:get(page_count, SortedByName)),
     assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>},
-		 #{name => <<"test0">>, vhost => <<"/">>}
-		], maps:get(items, SortedByName)),
+                 #{name => <<"test0">>, vhost => <<"/">>}
+                ], maps:get(items, SortedByName)),
 
 
     FirstPage = http_get(Config, "/queues?page=1", ?OK),
@@ -1611,10 +1620,10 @@ queue_pagination_test(Config) ->
     ?assertEqual(100, maps:get(page_size, FirstPage)),
     ?assertEqual(1, maps:get(page_count, FirstPage)),
     assert_list([#{name => <<"test0">>, vhost => <<"/">>},
-		 #{name => <<"test1">>, vhost => <<"vh1">>},
-		 #{name => <<"test2_reg">>, vhost => <<"/">>},
-		 #{name => <<"reg_test3">>, vhost =><<"vh1">>}
-		], maps:get(items, FirstPage)),
+                 #{name => <<"test1">>, vhost => <<"vh1">>},
+                 #{name => <<"test2_reg">>, vhost => <<"/">>},
+                 #{name => <<"reg_test3">>, vhost =><<"vh1">>}
+                ], maps:get(items, FirstPage)),
 
 
     ReverseSortedByName = http_get(Config,
@@ -1627,8 +1636,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, maps:get(page_size, ReverseSortedByName)),
     ?assertEqual(2, maps:get(page_count, ReverseSortedByName)),
     assert_list([#{name => <<"test0">>, vhost => <<"/">>},
-		 #{name => <<"reg_test3">>, vhost => <<"vh1">>}
-		], maps:get(items, ReverseSortedByName)),
+                 #{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                ], maps:get(items, ReverseSortedByName)),
 
 
     ByName = http_get(Config, "/queues?page=1&page_size=2&name=reg", ?OK),
@@ -1639,8 +1648,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, maps:get(page_size, ByName)),
     ?assertEqual(1, maps:get(page_count, ByName)),
     assert_list([#{name => <<"test2_reg">>, vhost => <<"/">>},
-		 #{name => <<"reg_test3">>, vhost => <<"vh1">>}
-		], maps:get(items, ByName)),
+                 #{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                ], maps:get(items, ByName)),
 
     RegExByName = http_get(Config,
                            "/queues?page=1&page_size=2&name=^(?=^reg)&use_regex=true",
@@ -1652,7 +1661,7 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, maps:get(page_size, RegExByName)),
     ?assertEqual(1, maps:get(page_count, RegExByName)),
     assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>}
-		], maps:get(items, RegExByName)),
+                ], maps:get(items, RegExByName)),
 
 
     http_get(Config, "/queues?page=1000", ?BAD_REQUEST),
@@ -1727,8 +1736,8 @@ queues_pagination_permissions_test(Config) ->
     http_put(Config, "/users/admin",   [{password, <<"admin">>},
                                         {tags, <<"administrator">>}], {group, '2xx'}),
     Perms = [{configure, <<".*">>},
-	     {write,     <<".*">>},
-	     {read,      <<".*">>}],
+             {write,     <<".*">>},
+             {read,      <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh1/admin",   Perms, {group, '2xx'}),
     QArgs = #{},
@@ -1741,7 +1750,7 @@ queues_pagination_permissions_test(Config) ->
     ?assertEqual(100, maps:get(page_size, FirstPage)),
     ?assertEqual(1, maps:get(page_count, FirstPage)),
     assert_list([#{name => <<"test1">>, vhost => <<"vh1">>}
-		], maps:get(items, FirstPage)),
+                ], maps:get(items, FirstPage)),
     http_delete(Config, "/queues/%2f/test0", {group, '2xx'}),
     http_delete(Config, "/queues/vh1/test1","admin","admin", {group, '2xx'}),
     http_delete(Config, "/users/admin", {group, '2xx'}),
@@ -1877,9 +1886,9 @@ format_output_test(Config) ->
     http_put(Config, "/permissions/vh1/guest", PermArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2f/test0", QArgs, {group, '2xx'}),
     assert_list([#{name => <<"test0">>,
-		  consumer_utilisation => null,
-		  exclusive_consumer_tag => null,
-		  recoverable_slaves => null}], http_get(Config, "/queues", ?OK)),
+                   consumer_utilisation => null,
+                   exclusive_consumer_tag => null,
+                   recoverable_slaves => null}], http_get(Config, "/queues", ?OK)),
     http_delete(Config, "/queues/%2f/test0", {group, '2xx'}),
     http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
     passed.
@@ -1937,16 +1946,16 @@ get_test(Config) ->
     Publish(<<"4aaa">>),
     Publish(<<"5aaa">>),
     [M4, M5] = http_post(Config, "/queues/%2f/myqueue/get",
-			 [{ackmode,  reject_requeue_true},
-			  {count,    5},
-			  {encoding, auto}], ?OK),
+                         [{ackmode,  reject_requeue_true},
+                          {count,    5},
+                          {encoding, auto}], ?OK),
 
     <<"4aaa">> = maps:get(payload, M4),
     <<"5aaa">> = maps:get(payload, M5),
     2 = length(http_post(Config, "/queues/%2f/myqueue/get",
-			 [{ackmode,  ack_requeue_false},
-			  {count,    5},
-			  {encoding, auto}], ?OK)),
+                         [{ackmode,  ack_requeue_false},
+                          {count,    5},
+                          {encoding, auto}], ?OK)),
 
     [] = http_post(Config, "/queues/%2f/myqueue/get", [{ackmode,  ack_requeue_false},
                                                        {count,    5},
@@ -1992,19 +2001,19 @@ publish_accept_json_test(Config) ->
     Msg = msg(<<"publish_accept_json_test">>, Headers, <<"Hello world">>),
     http_put(Config, "/queues/%2f/publish_accept_json_test", #{}, {group, '2xx'}),
     ?assertEqual(#{routed => true},
-		 http_post_accept_json(Config, "/exchanges/%2f/amq.default/publish",
-				       Msg, ?OK)),
+                 http_post_accept_json(Config, "/exchanges/%2f/amq.default/publish",
+                                       Msg, ?OK)),
 
     [Msg2] = http_post_accept_json(Config, "/queues/%2f/publish_accept_json_test/get",
-				   [{ackmode, ack_requeue_false},
-				    {count, 1},
-				    {encoding, auto}], ?OK),
+                                   [{ackmode, ack_requeue_false},
+                                    {count, 1},
+                                    {encoding, auto}], ?OK),
     assert_item(Msg, Msg2),
     http_post_accept_json(Config, "/exchanges/%2f/amq.default/publish", Msg2, ?OK),
     [Msg3] = http_post_accept_json(Config, "/queues/%2f/publish_accept_json_test/get",
-				   [{ackmode, ack_requeue_false},
-				    {count, 1},
-				    {encoding, auto}], ?OK),
+                                   [{ackmode, ack_requeue_false},
+                                    {count, 1},
+                                    {encoding, auto}], ?OK),
     assert_item(Msg, Msg3),
     http_delete(Config, "/queues/%2f/publish_accept_json_test", {group, '2xx'}),
     passed.

@@ -27,6 +27,7 @@ groups() ->
     Tests = [
              help,
              host,
+             base_uri,
              config,
              user,
              fmt_long,
@@ -113,6 +114,17 @@ host(Config) ->
     {ok, _} = run(Config, ["--host", "localhost", "show", "overview"]),
     {error, _, _} = run(Config, ["--host", "some-host-that-does-not-exist",
                                  "show", "overview"]).
+
+base_uri(Config) ->
+    {ok, _} = run(Config, ["--base-uri", "http://localhost",  "list", "exchanges"]),
+    {ok, _} = run(Config, ["--base-uri", "http://localhost/", "list", "exchanges"]),
+    {ok, _} = run(Config, ["--base-uri", "http://localhost",  "--vhost", "/", "list", "exchanges"]),
+    {ok, _} = run(Config, ["--base-uri", "http://localhost/", "--vhost", "/", "list", "exchanges"]),
+    {error, _, _} = run(Config, ["--base-uri", "http://some-host-that-does-not-exist:15672/",
+                                 "list", "exchanges"]),
+    {error, _, _} = run(Config, ["--base-uri", "http://localhost:15672/", "--vhost", "some-vhost-that-does-not-exist",
+                                 "list", "exchanges"]).
+
 
 config(Config) ->
     PrivDir = ?config(priv_dir, Config),

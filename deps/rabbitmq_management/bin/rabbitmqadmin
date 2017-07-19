@@ -14,6 +14,11 @@
 #
 #   The Initial Developer of the Original Code is GoPivotal, Inc.
 #   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+try:
+    from signal import signal, SIGPIPE, SIG_DFL
+    signal(SIGPIPE, SIG_DFL)
+except ImportError:
+    pass
 
 import sys
 if sys.version_info[0] < 2 or (sys.version_info[0] == 2 and sys.version_info[1] < 6):
@@ -307,7 +312,7 @@ def make_parser():
         help="connect to port PORT",
         metavar="PORT")
     add("--path-prefix", dest="path_prefix",
-        help="use specific URI path prefix for the RabbitMQ HTTP API (default: blank string)")
+        help="use specific URI path prefix for the RabbitMQ HTTP API. /api and operation path will be appended to it. (default: blank string)")
     add("-V", "--vhost", dest="vhost",
         help="connect to vhost VHOST [default: all vhosts for list, '/' for declare]",
         metavar="VHOST")
@@ -317,6 +322,9 @@ def make_parser():
     add("-p", "--password", dest="password",
         help="connect using password PASSWORD",
         metavar="PASSWORD")
+    add("-U", "--base-uri", dest="base_uri",
+        help="connect using a base HTTP API URI. /api and operation path will be appended to it. Path will be ignored. --vhost has to be provided separately.",
+        metavar="URI")
     add("-q", "--quiet", action="store_false", dest="verbose",
         help="suppress status messages")
     add("-s", "--ssl", action="store_true", dest="ssl",
@@ -392,6 +400,16 @@ def make_configuration():
                     setattr(options, key, val == "True")
                 else:
                     setattr(options, key, val)
+
+    # if --base-uri is passed, set connection parameters from it
+    if options.base_uri is not None:
+        u = urlparse.urlparse(options.base_uri)
+        for key in ["hostname", "port", "username", "password"]:
+            if getattr(u, key) is not None:
+                setattr(options, key, getattr(u, key))
+
+        if u.path is not None and (u.path != "") and (u.path != "/"):
+            print("WARN: path in --base-uri is ignored. Please specify --vhost and/or --path-prefix separately.\n")
 
     return (options, args)
 

@@ -106,4 +106,4 @@ fmt_context(Node, C) ->
 erlang_version() -> list_to_binary(rabbit_misc:otp_release()).
 
 erlang_full_version() ->
-    list_to_binary(string:strip(erlang:system_info(system_version), both, $\n)).
+    list_to_binary(rabbit_misc:otp_system_version()).
