@@ -10,8 +10,8 @@ Build-Depends: debhelper (>= 9),
  python-simplejson,
  xmlto,
  xsltproc,
- erlang-nox (>= 1:16.b.3) | esl-erlang (>= 1:16.b.3-2),
- erlang-dev (>= 1:16.b.3) | esl-erlang (>= 1:16.b.3-2),
+ erlang-nox (>= 1:16.b.3-3) | esl-erlang (>= 1:16.b.3-2),
+ erlang-dev (>= 1:16.b.3-3) | esl-erlang (>= 1:16.b.3-2),
  zip,
  rsync
 Standards-Version: 3.9.4
