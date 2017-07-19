@@ -30,7 +30,7 @@ dispatcher_add(function(sammy) {
             return false;
     });
     sammy.del("#/restart-link", function(){
-        if(sync_delete(this, '/federation-links/vhost/:vhost/:id/restart')){
+        if(sync_delete(this, '/federation-links/vhost/:vhost/:id/:node/restart')){
             update();
         }
     });
