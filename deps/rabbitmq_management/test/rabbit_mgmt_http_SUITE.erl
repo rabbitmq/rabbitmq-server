@@ -58,7 +58,7 @@ groups() ->
                                vhosts_trace_test,
                                users_test,
                                users_legacy_administrator_test,
-                               adding_a_user_without_password_or_hash_fails_test,
+                               adding_a_user_without_password_or_hash_test,
                                adding_a_user_with_both_password_and_hash_fails_test,
                                updating_a_user_without_password_or_hash_clears_password_test,
                                user_credential_validation_accept_everything_succeeds_test,
@@ -400,9 +400,12 @@ users_legacy_administrator_test(Config) ->
     http_delete(Config, "/users/myuser2", {group, '2xx'}),
     passed.
 
-adding_a_user_without_password_or_hash_fails_test(Config) ->
-    http_put(Config, "/users/myuser", [{flim, <<"flam">>}],       ?BAD_REQUEST),
-    http_put(Config, "/users/myuser", [{tags, <<"management">>}], ?BAD_REQUEST).
+%% creating a passwordless user makes sense when x509x certificates or another
+%% "external" authentication mechanism or backend is used.
+%% See rabbitmq/rabbitmq-management#383.
+adding_a_user_without_password_or_hash_test(Config) ->
+    http_put(Config, "/users/myuser", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/users/myuser", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]).
 
 adding_a_user_with_both_password_and_hash_fails_test(Config) ->
     http_put(Config, "/users/myuser", [{password,      <<"password">>},
