@@ -51,16 +51,22 @@ memory() ->
                            0
                    end,
     MgmtDbETS           = ets_memory([rabbit_mgmt_storage]),
-    OsTotal             = vm_memory_monitor:get_process_memory(),
+    VMTotal             = vm_memory_monitor:get_process_memory(),
 
 
-    [{processes, Processes},
+    [{total,     ErlangTotal},
+     {processes, Processes},
      {ets,       ETS},
      {atom,      Atom},
      {binary,    Bin},
      {code,      Code},
      {system,    System}] =
-        erlang:memory([processes, ets, atom, binary, code, system]),
+        erlang:memory([total, processes, ets, atom, binary, code, system]),
+
+    Unaccounted = case VMTotal - ErlangTotal of
+        GTZ when GTZ > 0 -> GTZ;
+        _LTZ             -> 0
+    end,
 
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
@@ -96,9 +102,9 @@ memory() ->
      %% System
      {code,                Code},
      {atom,                Atom},
-     {other_system,        System - ETS - Bin - Code - Atom},
+     {other_system,        System - ETS - Bin - Code - Atom + Unaccounted},
 
-     {total,               OsTotal}
+     {total,               VMTotal}
     ].
 %% [1] - erlang:memory(processes) can be less than the sum of its
 %% parts. Rather than display something nonsensical, just silence any
