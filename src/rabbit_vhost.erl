@@ -55,8 +55,9 @@ recover() ->
     %% rabbit_vhost_sup_sup will start the actual recovery.
     %% So recovery will be run every time a vhost supervisor is restarted.
     ok = rabbit_vhost_sup_sup:start(),
-    [{ok, _} = rabbit_vhost_sup_sup:vhost_sup(VHost)
-     || VHost <- rabbit_vhost:list()],
+
+    [ ok = rabbit_vhost_sup_sup:init_vhost(VHost)
+      || VHost <- rabbit_vhost:list()],
     ok.
 
 recover(VHost) ->
