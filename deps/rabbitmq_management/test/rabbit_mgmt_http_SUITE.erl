@@ -58,6 +58,10 @@ groups() ->
                                vhosts_trace_test,
                                users_test,
                                users_legacy_administrator_test,
+                               adding_a_user_with_password_test,
+                               adding_a_user_with_password_hash_test,
+                               adding_a_user_with_permissions_in_single_operation_test,
+                               adding_a_user_without_tags_fails_test,
                                adding_a_user_without_password_or_hash_test,
                                adding_a_user_with_both_password_and_hash_fails_test,
                                updating_a_user_without_password_or_hash_clears_password_test,
@@ -377,12 +381,83 @@ users_legacy_administrator_test(Config) ->
     http_delete(Config, "/users/myuser2", ?NO_CONTENT),
     passed.
 
+adding_a_user_with_password_test(Config) ->
+    http_put(Config, "/users/user10", [{tags, <<"management">>},
+                                       {password,      <<"password">>}],
+             [?CREATED, ?NO_CONTENT]),
+    http_delete(Config, "/users/user10", ?NO_CONTENT).
+adding_a_user_with_password_hash_test(Config) ->
+    http_put(Config, "/users/user11", [{tags, <<"management">>},
+                                       %% SHA-256 of "secret"
+                                       {password_hash, <<"2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b">>}],
+             [?CREATED, ?NO_CONTENT]),
+    http_delete(Config, "/users/user11", ?NO_CONTENT).
+
+adding_a_user_with_permissions_in_single_operation_test(Config) ->
+    QArgs = [],
+    PermArgs = [{configure, <<".*">>},
+                {write, <<".*">>},
+                {read, <<".*">>}],
+    http_delete(Config, "/vhosts/vhost42", [?NO_CONTENT, ?NOT_FOUND]),
+    http_delete(Config, "/vhosts/vhost43", [?NO_CONTENT, ?NOT_FOUND]),
+    http_delete(Config, "/users/user-preconfigured-perms",   [?NO_CONTENT, ?NOT_FOUND]),
+
+    http_put(Config, "/vhosts/vhost42", none, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/vhosts/vhost43", none, [?CREATED, ?NO_CONTENT]),
+
+    http_put(Config, "/users/user-preconfigured-perms", [{password, <<"user-preconfigured-perms">>},
+                                       {tags, <<"management">>},
+                                       {permissions, [
+                                                      {<<"vhost42">>, PermArgs},
+                                                      {<<"vhost43">>, PermArgs}
+                                                     ]}],
+             [?CREATED, ?NO_CONTENT]),
+    assert_list([[{tracing,false}, {name, <<"vhost42">>}],
+                 [{tracing,false}, {name, <<"vhost43">>}]],
+                http_get(Config, "/vhosts", "user-preconfigured-perms", "user-preconfigured-perms", ?OK)),
+    http_put(Config, "/queues/vhost42/myqueue", QArgs,
+             "user-preconfigured-perms", "user-preconfigured-perms", [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/queues/vhost43/myqueue", QArgs,
+             "user-preconfigured-perms", "user-preconfigured-perms", [?CREATED, ?NO_CONTENT]),
+    Test1 =
+        fun(Path) ->
+                http_get(Config, Path, "user-preconfigured-perms", "user-preconfigured-perms", ?OK)
+        end,
+    Test2 =
+        fun(Path1, Path2) ->
+                http_get(Config, Path1 ++ "/vhost42/" ++ Path2, "user-preconfigured-perms", "user-preconfigured-perms",
+                         ?OK),
+                http_get(Config, Path1 ++ "/vhost43/" ++ Path2, "user-preconfigured-perms", "user-preconfigured-perms",
+                         ?OK)
+        end,
+    Test1("/exchanges"),
+    Test2("/exchanges", ""),
+    Test2("/exchanges", "amq.direct"),
+    Test1("/queues"),
+    Test2("/queues", ""),
+    Test2("/queues", "myqueue"),
+    Test1("/bindings"),
+    Test2("/bindings", ""),
+    Test2("/queues", "myqueue/bindings"),
+    Test2("/exchanges", "amq.default/bindings/source"),
+    Test2("/exchanges", "amq.default/bindings/destination"),
+    Test2("/bindings", "e/amq.default/q/myqueue"),
+    Test2("/bindings", "e/amq.default/q/myqueue/myqueue"),
+    http_delete(Config, "/vhosts/vhost42", ?NO_CONTENT),
+    http_delete(Config, "/vhosts/vhost43", ?NO_CONTENT),
+    http_delete(Config, "/users/user-preconfigured-perms", ?NO_CONTENT),
+    passed.
+
+adding_a_user_without_tags_fails_test(Config) ->
+    http_put(Config, "/users/no-tags", [{password, <<"password">>}], ?BAD_REQUEST).
+
 %% creating a passwordless user makes sense when x509x certificates or another
 %% "external" authentication mechanism or backend is used.
 %% See rabbitmq/rabbitmq-management#383.
 adding_a_user_without_password_or_hash_test(Config) ->
-    http_put(Config, "/users/myuser", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
-    http_put(Config, "/users/myuser", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]).
+    http_put(Config, "/users/no-pwd", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/users/no-pwd", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    http_delete(Config, "/users/no-pwd", ?NO_CONTENT).
 
 adding_a_user_with_both_password_and_hash_fails_test(Config) ->
     http_put(Config, "/users/myuser", [{password,      <<"password">>},
@@ -402,7 +477,8 @@ updating_a_user_without_password_or_hash_clears_password_test(Config) ->
                                        {password_hash, <<>>},
                                        {hashing_algorithm,
                                         <<"rabbit_password_hashing_sha256">>}],
-                http_get(Config, "/users/myuser")).
+                http_get(Config, "/users/myuser")),
+    http_delete(Config, "/users/myuser", ?NO_CONTENT).
 
 -define(NON_GUEST_USERNAME, <<"abc">>).
 

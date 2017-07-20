@@ -22,7 +22,7 @@
          delete_resource/2, user/1, put_user/1, put_user/2]).
 -export([variances/2]).
 
--import(rabbit_misc, [pget/2]).
+-import(rabbit_misc, [pget/2, pget/3]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -110,6 +110,9 @@ put_user(User, Version) ->
                           _                  -> true
                       end,
 
+    %% pre-configured, only applies to newly created users
+    Permissions     = pget(permissions, User, undefined),
+
     PassedCredentialValidation =
         case {HasPassword, HasPasswordHash} of
             {true, false} ->
@@ -135,16 +138,16 @@ put_user(User, Version) ->
         false ->
             case {HasPassword, HasPasswordHash} of
                 {true, false}  ->
-                    create_user_with_password(PassedCredentialValidation, Username, Password, Tags);
+                    create_user_with_password(PassedCredentialValidation, Username, Password, Tags, Permissions);
                 {false, true}  ->
-                    create_user_with_password_hash(Username, PasswordHash, Tags, User, Version);
+                    create_user_with_password_hash(Username, PasswordHash, Tags, User, Version, Permissions);
                 {true, true}   ->
                     throw({error, both_password_and_password_hash_are_provided});
                 {false, false} ->
                     %% this user won't be able to sign in using
                     %% a username/password pair but can be used for x509 certificate authentication,
                     %% with authn backends such as HTTP or LDAP and so on.
-                    create_user_with_password(PassedCredentialValidation, Username, <<"">>, Tags)
+                    create_user_with_password(PassedCredentialValidation, Username, <<"">>, Tags, Permissions)
             end
     end.
 
@@ -166,15 +169,19 @@ update_user_password_hash(Username, PasswordHash, Tags, User, Version) ->
       Username, Hash, HashingAlgorithm),
     rabbit_auth_backend_internal:set_tags(Username, Tags).
 
-create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags) ->
+create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, undefined) ->
     rabbit_auth_backend_internal:add_user(Username, Password),
     rabbit_auth_backend_internal:set_tags(Username, Tags);
-create_user_with_password(_PassedCredentialValidation = false, _Username, _Password, _Tags) ->
+create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, PreconfiguredPermissions) ->
+    rabbit_auth_backend_internal:add_user(Username, Password),
+    rabbit_auth_backend_internal:set_tags(Username, Tags),
+    preconfigure_permissions(Username, PreconfiguredPermissions);
+create_user_with_password(_PassedCredentialValidation = false, _Username, _Password, _Tags, _) ->
     %% we don't log here because
     %% rabbit_auth_backend_internal will do it
     throw({error, credential_validation_failed}).
 
-create_user_with_password_hash(Username, PasswordHash, Tags, User, Version) ->
+create_user_with_password_hash(Username, PasswordHash, Tags, User, Version, PreconfiguredPermissions) ->
     %% when a hash this provided, credential validation
     %% is not applied
     HashingAlgorithm = hashing_algorithm(User, Version),
@@ -187,7 +194,27 @@ create_user_with_password_hash(Username, PasswordHash, Tags, User, Version) ->
 
     rabbit_auth_backend_internal:change_password_hash(
       Username, Hash, HashingAlgorithm),
-    rabbit_auth_backend_internal:set_tags(Username, Tags).
+    rabbit_auth_backend_internal:set_tags(Username, Tags),
+    preconfigure_permissions(Username, PreconfiguredPermissions).
+
+preconfigure_permissions(_Username, undefined) ->
+    ok;
+preconfigure_permissions(_Username, []) ->
+    ok;
+preconfigure_permissions(Username, {struct, Structs}) ->
+    %% {struct,[{<<"vhost42">>,
+    %%          {struct,[{<<"configure">>,<<".*">>},
+    %%                   {<<"write">>,<<".*">>},
+    %%                   {<<"read">>,<<".*">>}]}},
+    %%          {<<"vhost43">>,
+    %%          {struct,[{<<"configure">>,<<".*">>},
+    %%                   {<<"write">>,<<".*">>},
+    %%                   {<<"read">>,<<".*">>}]}}]}
+    [rabbit_auth_backend_internal:set_permissions(Username, VHost,
+                                                  pget(<<"configure">>, M),
+                                                  pget(<<"write">>,     M),
+                                                  pget(<<"read">>,      M)) || {VHost, {struct, M}} <- Structs],
+    ok.
 
 hashing_algorithm(User, Version) ->
     case pget(hashing_algorithm, User) of
