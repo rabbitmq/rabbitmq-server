@@ -87,9 +87,10 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   defp make_module_map(modules, scope) do
+    commands_ns = Regex.recompile!(@commands_ns)
     modules
     |> Enum.filter(fn(mod) ->
-                     to_string(mod) =~ @commands_ns
+                     to_string(mod) =~ commands_ns
                      and
                      module_exists?(mod)
                      and
@@ -167,7 +168,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
       true  ->
         cmd.scopes()
       false ->
-        @commands_ns
+        Regex.recompile!(@commands_ns)
         |> Regex.run(to_string(cmd), capture: :all_but_first)
         |> List.first
         |> to_snake_case
