@@ -58,6 +58,9 @@ groups() ->
                                vhosts_trace_test,
                                users_test,
                                users_legacy_administrator_test,
+                               adding_a_user_with_password_test,
+                               adding_a_user_with_password_hash_test,
+                               adding_a_user_without_tags_fails_test,
                                adding_a_user_without_password_or_hash_test,
                                adding_a_user_with_both_password_and_hash_fails_test,
                                updating_a_user_without_password_or_hash_clears_password_test,
@@ -382,6 +385,18 @@ users_legacy_administrator_test(Config) ->
     http_delete(Config, "/users/myuser1", ?NO_CONTENT),
     http_delete(Config, "/users/myuser2", ?NO_CONTENT),
     passed.
+
+adding_a_user_with_password_test(Config) ->
+    http_put(Config, "/users/user10", [{tags, <<"management">>},
+                                       {password,      <<"password">>}],
+             [?CREATED, ?NO_CONTENT]).
+adding_a_user_with_password_hash_test(Config) ->
+    http_put(Config, "/users/user11", [{tags, <<"management">>},
+                                       %% SHA-256 of "secret"
+                                       {password_hash, <<"2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b">>}],
+             [?CREATED, ?NO_CONTENT]).
+adding_a_user_without_tags_fails_test(Config) ->
+    http_put(Config, "/users/no-tags", [{password, <<"password">>}], ?BAD_REQUEST).
 
 %% creating a passwordless user makes sense when x509x certificates or another
 %% "external" authentication mechanism or backend is used.
