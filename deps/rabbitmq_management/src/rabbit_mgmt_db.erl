@@ -394,11 +394,35 @@ detail_queue_stats(Ranges, Objs, Interval) ->
    Merged = merge_channel_details(QueueStats, ChDets),
    Merged.
 
+node_node_stats(Lookup, Node, Ranges, Interval) ->
+    LocalNodeNodeMetrics = ets:tab2list(node_node_metrics),
+    RemoteNodeNodeMetrics = dict:fetch(node_node_metrics, Lookup),
+    NodeNodeMetrics = LocalNodeNodeMetrics ++ RemoteNodeNodeMetrics,
+    node_node_stats(Lookup, Node, Ranges, Interval, NodeNodeMetrics).
+
+node_node_stats(Lookup, Node, Ranges, Interval, NodeNodeMetrics) ->
+    Table = node_node_coarse_stats,
+    Type = coarse_node_node_stats,
+    NodeNodeMetricsD = dict:from_list(NodeNodeMetrics),
+    [begin
+        {Stats, DetailId} = get_detail_stats(Key, Lookup, Table, Type,
+                                             first(Node), Ranges, Interval),
+        NodeMetrics = maybe_fetch_value(Key, NodeNodeMetricsD),
+        lists:flatten([{stats, Stats}, DetailId, NodeMetrics])
+     end || {{T, Key}, _} <- dict:to_list(Lookup), T =:= Table].
+
 detail_stats(Lookup, Table, Type, Id, Ranges, Interval) ->
     [begin
-     S = format_range(Lookup, {Table, Key}, pick_range(Type, Ranges), Interval),
-     [{stats, S} | format_detail_id(revert(Id, Key))] %TODO: not actually delegated
+        {Stats, DetailId} = get_detail_stats(Key, Lookup, Table, Type,
+                                             Id, Ranges, Interval),
+        [{stats, Stats}|DetailId] %TODO: not actually delegated
      end || {{T, Key}, _} <- dict:to_list(Lookup), T =:= Table].
+
+get_detail_stats(Key, Lookup, Table, Type, Id, Ranges, Interval) ->
+    Range = pick_range(Type, Ranges),
+    Stats = format_range(Lookup, {Table, Key}, Range, Interval),
+    DetailId = format_detail_id(revert(Id, Key)),
+    {Stats, DetailId}.
 
 queue_stats(QueueData, Ranges, Interval) ->
    message_stats(format_range(QueueData, queue_stats_publish,
@@ -576,10 +600,8 @@ node_stats(Ranges, Objs, Interval) ->
                           pick_range(coarse_node_stats, Ranges), Interval) ++
              format_range(NData, node_persister_stats,
                           pick_range(coarse_node_stats, Ranges), Interval),
-     StatsD = [{cluster_links,
-                detail_stats(NData, node_node_coarse_stats,
-                                        coarse_node_node_stats, first(Id),
-                                        Ranges, Interval)}],
+     NodeNodeStats = node_node_stats(NData, Id, Ranges, Interval),
+     StatsD = [{cluster_links, NodeNodeStats}],
      MgmtStats = dict:fetch(mgmt_stats, NData),
      Details = augment_details(Obj, []), % augmentation needs to be node local
      combine(Props, Obj) ++ Details ++ Stats ++ StatsD ++ MgmtStats
@@ -692,6 +714,20 @@ submit_cached(Key, Fun, Arg, Timeout) ->
                                            [Arg], Timeout),
     Res.
 
+%% Note: Assumes Key is a two-tuple.
+%% If not found at first, Key is reversed and tried again.
+%% Seems to be necessary based on node_node_metrics table keys
+%% and Key values in Lookup
+maybe_fetch_value(Key, Dict) ->
+    maybe_fetch_value(dict:is_key(Key, Dict), go, Key, Dict).
+
+maybe_fetch_value(true, _Cont, Key, Dict) ->
+    dict:fetch(Key, Dict);
+maybe_fetch_value(false, stop, _Key, _Dict) ->
+    [];
+maybe_fetch_value(false, go, Key, Dict) ->
+    Key2 = reverse_key(Key),
+    maybe_fetch_value(dict:is_key(Key2, Dict), stop, Key2, Dict).
 
 message_stats([]) ->
     [];
@@ -706,6 +742,9 @@ first(Id)  ->
 
 second(Id) ->
     {'_', Id}.
+
+reverse_key({K1, K2}) ->
+    {K2, K1}.
 
 augment_details(Obj, Acc) ->
     rabbit_mgmt_data:augment_details(Obj, Acc).
