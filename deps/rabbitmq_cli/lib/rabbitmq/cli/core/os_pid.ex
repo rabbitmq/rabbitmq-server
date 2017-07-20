@@ -35,7 +35,8 @@ defmodule RabbitMQ.CLI.Core.OsPid do
   def read_pid_from_file(pidfile_path, should_wait) do
     case {:file.read_file(pidfile_path), should_wait} do
       {{:ok, contents}, _} ->
-        case Regex.named_captures(@pid_regex, contents)["pid"] do
+        pid_regex = Regex.recompile!(@pid_regex)
+        case Regex.named_captures(pid_regex, contents)["pid"] do
           # e.g. the file is empty
           nil        -> {:error, :could_not_read_pid_from_file, {:contents, contents}};
           pid_string ->
