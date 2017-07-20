@@ -114,7 +114,7 @@ vhost_data(Ranges, Id) ->
 node_data(Ranges, Id) ->
     dict:from_list(
       [{mgmt_stats, mgmt_qeue_length_stats()}] ++
-      [{node_node_metrics, node_node_metrics(Id)}] ++
+      [{node_node_metrics, node_node_metrics()}] ++
       node_raw_detail_stats_data(Ranges, Id) ++
       [raw_message_data(node_coarse_stats,
                         pick_range(coarse_node_stats, Ranges), Id),
@@ -399,11 +399,8 @@ mgmt_qeue_length_stats() ->
     ?GC_EVENTS),
     [{metrics_gc_queue_length, GCsQueueLengths}].
 
-node_node_metrics(Node) ->
-    case ets:match(node_node_metrics, {{Node, '_'}, '$0'}) of
-        [] -> [];
-        [Metrics] -> Metrics
-    end.
+node_node_metrics() ->
+    ets:tab2list(node_node_metrics).
 
 select_range_sample(Table, #range{first = First, last = Last}) ->
     Range = Last - First,
