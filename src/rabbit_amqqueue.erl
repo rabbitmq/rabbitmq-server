@@ -275,7 +275,6 @@ queues_to_recover() ->
     {atomic, ok} =
         mnesia:sync_transaction(
             fun () ->
-                rabbit_log:error("Deleting ~p~n", [LocalQueuesWithoutVhost]),
                 [ internal_delete1(Name, false)
                   || #amqqueue{name = Name} <- LocalQueuesWithoutVhost ],
                 ok
