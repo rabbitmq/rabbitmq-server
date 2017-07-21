@@ -74,6 +74,7 @@ defmodule CloseAllConnectionsCommandTest do
       [[vhost: @vhost], [vhost: @vhost], [vhost: @vhost]] = fetch_connections_vhosts(node, nodes)
       opts = %{node: node, vhost: @vhost, global: false, per_connection_delay: 0, limit: 2}
       assert {:ok, "Closed 2 connections"} == @command.run(["test"], opts)
+      :timer.sleep(1000)
       assert fetch_connections_vhosts(node, nodes) == [[vhost: @vhost]]
     end)
   end
