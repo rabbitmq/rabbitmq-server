@@ -61,7 +61,7 @@ init([]) ->
 start_on_all_nodes(VHost) ->
     NodesStart = [ {Node, start_vhost(VHost, Node)}
                    || Node <- rabbit_nodes:all_running() ],
-    Failures = lists:filter(fun({_, ok}) -> false; (_) -> true end, NodesStart),
+    Failures = lists:filter(fun({_, {ok, _}}) -> false; (_) -> true end, NodesStart),
     case Failures of
         []     -> ok;
         Errors -> {error, {failed_to_start_vhost_on_nodes, Errors}}
@@ -144,9 +144,9 @@ vhost_sup(VHost) ->
     case vhost_sup_pid(VHost) of
         no_pid ->
             case start_vhost(VHost) of
-                ok ->
+                {ok, Pid} ->
                     true = is_vhost_alive(VHost),
-                    ok;
+                    {ok, Pid};
                 {error, {no_such_vhost, VHost}} ->
                     {error, {no_such_vhost, VHost}};
                 Error ->
