@@ -42,7 +42,6 @@
          lookup_element/3
         ]).
 
-
 -import(rabbit_misc, [pget/2]).
 
 -type maybe_slide() :: exometer_slide:slide() | not_found.
