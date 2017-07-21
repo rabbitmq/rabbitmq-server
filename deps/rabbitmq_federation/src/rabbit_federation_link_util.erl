@@ -300,6 +300,8 @@ disposable_connection_call(Params, Method, ErrFun) ->
                 amqp_channel:call(Ch, Method)
             catch exit:{{shutdown, {connection_closing,
                                     {server_initiated_close, Code, Txt}}}, _} ->
+                    ErrFun(Code, Txt);
+                    exit:{{shutdown, {server_initiated_close, Code, Txt}}, _} ->
                     ErrFun(Code, Txt)
             after
                 ensure_connection_closed(Conn)
