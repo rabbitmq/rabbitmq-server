@@ -593,18 +593,18 @@ node_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(node_stats, Obj) || Obj <- Objs],
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_node_data, [Ids, Ranges]}),
     [begin
-       Id = id_lookup(node_stats, Obj),
-       NData = dict:fetch(Id, DataLookup),
-       Props = dict:fetch(node_stats, NData),
-       Stats = format_range(NData, node_coarse_stats,
-                            pick_range(coarse_node_stats, Ranges), Interval) ++
-               format_range(NData, node_persister_stats,
-                            pick_range(coarse_node_stats, Ranges), Interval),
-       NodeNodeStats = node_node_stats(NData, Id, Ranges, Interval),
-       StatsD = [{cluster_links, NodeNodeStats}],
-       MgmtStats = dict:fetch(mgmt_stats, NData),
-       Details = augment_details(Obj, []), % augmentation needs to be node local
-       combine(Props, Obj) ++ Details ++ Stats ++ StatsD ++ MgmtStats
+     Id = id_lookup(node_stats, Obj),
+     NData = dict:fetch(Id, DataLookup),
+     Props = dict:fetch(node_stats, NData),
+     Stats = format_range(NData, node_coarse_stats,
+                          pick_range(coarse_node_stats, Ranges), Interval) ++
+             format_range(NData, node_persister_stats,
+                          pick_range(coarse_node_stats, Ranges), Interval),
+     NodeNodeStats = node_node_stats(NData, Id, Ranges, Interval),
+     StatsD = [{cluster_links, NodeNodeStats}],
+     MgmtStats = dict:fetch(mgmt_stats, NData),
+     Details = augment_details(Obj, []), % augmentation needs to be node local
+     combine(Props, Obj) ++ Details ++ Stats ++ StatsD ++ MgmtStats
      end || Obj <- Objs].
 
 combine(New, Old) ->
