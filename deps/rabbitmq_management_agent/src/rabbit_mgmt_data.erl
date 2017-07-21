@@ -114,6 +114,7 @@ vhost_data(Ranges, Id) ->
 node_data(Ranges, Id) ->
     dict:from_list(
       [{mgmt_stats, mgmt_qeue_length_stats()}] ++
+      [{node_node_metrics, node_node_metrics()}] ++
       node_raw_detail_stats_data(Ranges, Id) ++
       [raw_message_data(node_coarse_stats,
                         pick_range(coarse_node_stats, Ranges), Id),
@@ -384,6 +385,7 @@ to_match_condition({Id0, '_'}) when is_tuple(Id0) ->
     {'==', {Id0}, '$1'};
 to_match_condition({Id0, '_'}) ->
     {'==', Id0, '$1'}.
+
 mgmt_qeue_length_stats() ->
     GCsQueueLengths = lists:map(fun (T) ->
         case whereis(rabbit_mgmt_metrics_gc:name(T)) of
@@ -396,6 +398,9 @@ mgmt_qeue_length_stats() ->
     end,
     ?GC_EVENTS),
     [{metrics_gc_queue_length, GCsQueueLengths}].
+
+node_node_metrics() ->
+    ets:tab2list(node_node_metrics).
 
 select_range_sample(Table, #range{first = First, last = Last}) ->
     Range = Last - First,
