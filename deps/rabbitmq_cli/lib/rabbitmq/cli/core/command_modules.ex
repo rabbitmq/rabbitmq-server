@@ -61,9 +61,22 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
 
   def plugin_modules(opts) do
     Helpers.require_rabbit(opts)
+    enabled_plugins =
+      try do
+        PluginsHelpers.read_enabled(opts)
+      catch err ->
+        {:ok, enabled_plugins_file} = PluginsHelpers.enabled_plugins_file(opts)
+        require Logger
+        Logger.warn("Unable to read enebled plugins file.\n" <>
+                    "  Reason: #{inspect(err)}\n" <>
+                    "  Plugins commands will not be available.\n" <>
+                    "  Please make sure you have access to\n" <>
+                    "    #{enabled_plugins_file}")
+        []
+      end
 
     partitioned =
-      Enum.group_by(PluginsHelpers.read_enabled(opts), fn(app) ->
+      Enum.group_by(enabled_plugins, fn(app) ->
         case Application.load(app) do
           :ok -> :loaded;
           {:error, {:already_loaded, ^app}} -> :loaded;
