@@ -31,7 +31,7 @@ if [ `id -u` = `id -u rabbitmq` -a "$SCRIPT" = "rabbitmq-server" ] ; then
     . "$RABBITMQ_ENV"
 
     exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
-elif [ `id -u` = `id -u rabbitmq` -o "$SCRIPT" = "rabbitmq-plugins" ] ; then
+elif [ `id -u` = `id -u rabbitmq` ] ; then
     if [ -f $PWD/.erlang.cookie ] ; then
         export HOME=.
     fi
