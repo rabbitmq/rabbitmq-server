@@ -47,10 +47,7 @@ groups() ->
       {cluster_size_1_network, [], ClusterSize1Tests},
       {cluster_size_2_network, [], ClusterSize2Tests},
       {cluster_size_1_direct, [], ClusterSize1Tests},
-      {cluster_size_2_direct, [], ClusterSize2Tests},
-      {cluster_rename, [], [
-          vhost_limit_after_node_renamed
-        ]}
+      {cluster_size_2_direct, [], ClusterSize2Tests}
     ].
 
 suite() ->
@@ -86,10 +83,7 @@ init_per_group(cluster_size_1_direct, Config) ->
     init_per_multinode_group(cluster_size_1_direct, Config1, 1);
 init_per_group(cluster_size_2_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
-    init_per_multinode_group(cluster_size_2_direct, Config1, 2);
-
-init_per_group(cluster_rename, Config) ->
-    init_per_multinode_group(cluster_rename, Config, 2).
+    init_per_multinode_group(cluster_size_2_direct, Config1, 2).
 
 init_per_multinode_group(Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
@@ -97,19 +91,11 @@ init_per_multinode_group(Group, Config, NodeCount) ->
                                                     {rmq_nodes_count, NodeCount},
                                                     {rmq_nodename_suffix, Suffix}
       ]),
-    case Group of
-        cluster_rename ->
-            % The broker is managed by {init,end}_per_testcase().
-            Config1;
-        _ ->
-            rabbit_ct_helpers:run_steps(Config1,
-              rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps())
-    end.
 
-end_per_group(cluster_rename, Config) ->
-    % The broker is managed by {init,end}_per_testcase().
-    Config;
+    rabbit_ct_helpers:run_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
