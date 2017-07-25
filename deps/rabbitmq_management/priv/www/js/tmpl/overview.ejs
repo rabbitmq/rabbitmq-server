@@ -19,7 +19,7 @@
 <% } %>
 <% for (i = 0; i < vhosts.length; i++) { if (vhosts[i].state == 'down') { %>
 <p class="warning">
-  Vhost <b><%= vhosts[i].name %></b> not running
+  Virtual host <b><%= vhosts[i].name %></b> experienced an error and is inaccessible
 </p>
 <% }} %>
 </div>
