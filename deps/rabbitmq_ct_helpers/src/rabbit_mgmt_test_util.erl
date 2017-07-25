@@ -139,6 +139,15 @@ http_upload_raw(Config, Type, Path, Body, User, Pass, CodeExp, MoreHeaders) ->
 http_delete(Config, Path, CodeExp) ->
     http_delete(Config, Path, "guest", "guest", CodeExp).
 
+http_delete(Config, Path, CodeExp, Body) ->
+    http_delete(Config, Path, "guest", "guest", CodeExp, Body).
+
+http_delete(Config, Path, User, Pass, CodeExp, Body) ->
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
+        req(Config, 0, delete, Path, [auth_header(User, Pass)], Body),
+    assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
+    decode(CodeExp, Headers, ResBody).
+
 http_delete(Config, Path, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(Config, 0, delete, Path, [auth_header(User, Pass)]),
