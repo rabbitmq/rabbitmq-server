@@ -29,7 +29,7 @@
                                 http_get_no_map/2,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
-                                http_delete/3, http_delete/5,
+                                http_delete/3, http_delete/4, http_delete/5,
                                 http_put_raw/4, http_post_accept_json/4,
                                 req/4, auth_header/2,
                                 amqp_port/1]).
@@ -57,6 +57,7 @@ groups() ->
                                vhosts_test,
                                vhosts_trace_test,
                                users_test,
+                               users_bulk_delete_test,
                                users_legacy_administrator_test,
                                adding_a_user_with_password_test,
                                adding_a_user_with_password_hash_test,
@@ -382,6 +383,26 @@ users_test(Config) ->
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     test_auth(Config, ?NOT_AUTHORISED, [auth_header("myuser", "password")]),
     http_get(Config, "/users/myuser", ?NOT_FOUND),
+    passed.
+
+users_bulk_delete_test(Config) ->
+    assert_item(#{name => <<"guest">>, tags => <<"administrator">>},
+                http_get(Config, "/whoami")),
+    http_put(Config, "/users/myuser1", [{tags, <<"management">>}, {password, <<"myuser">>}],
+             {group, '2xx'}),
+    http_put(Config, "/users/myuser2", [{tags, <<"management">>}, {password, <<"myuser">>}],
+             {group, '2xx'}),
+    http_put(Config, "/users/myuser3", [{tags, <<"management">>}, {password, <<"myuser">>}],
+             {group, '2xx'}),
+    http_get(Config, "/users/myuser1", {group, '2xx'}),
+    http_get(Config, "/users/myuser2", {group, '2xx'}),
+    http_get(Config, "/users/myuser3", {group, '2xx'}),
+    http_delete(Config, "/users", {group, '2xx'}, "{\"users\": [\"myuser1\", \"myuser2\"]}"),
+    http_get(Config, "/users/myuser1", ?NOT_FOUND),
+    http_get(Config, "/users/myuser2", ?NOT_FOUND),
+    http_get(Config, "/users/myuser3", {group, '2xx'}),
+    http_delete(Config, "/users", {group, '2xx'}, "{\"users\": [\"myuser3\"]}"),
+    http_get(Config, "/users/myuser3", ?NOT_FOUND),
     passed.
 
 users_legacy_administrator_test(Config) ->
