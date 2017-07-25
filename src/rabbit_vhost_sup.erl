@@ -28,5 +28,4 @@ start_link(VHost) ->
     supervisor2:start_link(?MODULE, [VHost]).
 
 init([VHost]) ->
-rabbit_log:error("Starting VHost sup ~p~n", [VHost]),
     {ok, {{one_for_all, 0, 1}, []}}.
