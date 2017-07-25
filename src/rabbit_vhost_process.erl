@@ -14,10 +14,21 @@
 %% Copyright (c) 2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
-%% This module implements a watcher process which should stop
-%% the parent supervisor if its vhost is missing from the mnesia DB
+%% This module implements a vhost identity process.
 
--module(rabbit_vhost_sup_watcher).
+%% On start this process will try to recover the vhost data and
+%% processes structure (queues and message stores).
+%% If recovered successfully, the process will save it's PID
+%% to vhost process registry. If vhost process PID is in the registry and the
+%% process is alive - the vhost is considered running.
+
+%% On termination, the ptocess will notify of vhost going down.
+
+%% The process will also check periodically if the vhost still
+%% present in mnesia DB and stop the vhost supervision tree when it
+%% disappears.
+
+-module(rabbit_vhost_process).
 
 -include("rabbit.hrl").
 
@@ -29,15 +40,26 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
-
 start_link(VHost) ->
     gen_server2:start_link(?MODULE, [VHost], []).
 
 
 init([VHost]) ->
-    Interval = interval(),
-    timer:send_interval(Interval, check_vhost),
-    {ok, VHost}.
+    process_flag(trap_exit, true),
+    rabbit_log:debug("Recovering data for VHost ~p~n", [VHost]),
+    try
+        %% Recover the vhost data and save it to vhost registry.
+        ok = rabbit_vhost:recover(VHost),
+        rabbit_vhost_sup_sup:save_vhost_process(VHost, self()),
+        Interval = interval(),
+        timer:send_interval(Interval, check_vhost),
+        {ok, VHost}
+    catch _:Reason ->
+        rabbit_log:error("Unable to recover vhost ~p data. Reason ~p~n"
+                         " Stacktrace ~p",
+                         [VHost, Reason, erlang:get_stacktrace()]),
+        {stop, Reason}
+    end.
 
 handle_call(_,_,VHost) ->
     {reply, ok, VHost}.
@@ -64,7 +86,11 @@ handle_info(check_vhost, VHost) ->
 handle_info(_, VHost) ->
     {noreply, VHost}.
 
-terminate(_, _) -> ok.
+terminate(shutdown, VHost) ->
+    %% Notify that vhost is stopped.
+    rabbit_vhost:vhost_down(VHost);
+terminate(_, _VHost) ->
+    ok.
 
 code_change(_OldVsn, VHost, _Extra) ->
     {ok, VHost}.
