@@ -316,6 +316,10 @@ absent(#amqqueue{name = QueueName, pid = QPid, durable = true}, nodedown) ->
                    "home node '~s' of durable ~s is down or inaccessible",
                    [node(QPid), rs(QueueName)]);
 
+absent(#amqqueue{name = QueueName}, stopped) ->
+    protocol_error(not_found,
+                   "~s process is stopped by supervisor", [rs(QueueName)]);
+
 absent(#amqqueue{name = QueueName}, crashed) ->
     protocol_error(not_found,
                    "~s has crashed and failed to restart", [rs(QueueName)]);
