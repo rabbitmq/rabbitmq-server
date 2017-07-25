@@ -333,8 +333,8 @@ vhosts_test(Config) ->
 
 vhosts_trace_test(Config) ->
     http_put(Config, "/vhosts/myvhost", none, {group, '2xx'}),
-    Disabled = #{name => <<"myvhost">>, tracing => false},
-    Enabled  = #{name => <<"myvhost">>, tracing => true},
+    Disabled = #{name => <<"myvhost">>, tracing => false, state => <<"running">>},
+    Enabled  = #{name => <<"myvhost">>, tracing => true, state => <<"running">>},
     Disabled = http_get(Config, "/vhosts/myvhost"),
     http_put(Config, "/vhosts/myvhost", [{tracing, true}], {group, '2xx'}),
     Enabled = http_get(Config, "/vhosts/myvhost"),
