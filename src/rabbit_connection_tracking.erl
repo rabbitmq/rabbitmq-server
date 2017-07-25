@@ -34,7 +34,7 @@
          delete_tracked_connections_table_for_node/1, delete_per_vhost_tracked_connections_table_for_node/1,
          clear_tracked_connection_tables_for_this_node/0,
          register_connection/1, unregister_connection/1,
-         list/0, list/1, list_on_node/1, list_of_user/1,
+         list/0, list/1, list_on_node/1, list_on_node/2, list_of_user/1,
          tracked_connection_from_connection_created/1,
          tracked_connection_from_connection_state/1,
          count_connections_in/1]).
@@ -216,6 +216,16 @@ list_on_node(Node) ->
           #tracked_connection{_ = '_'})
     catch exit:{aborted, {no_exists, _}} -> []
     end.
+
+-spec list_on_node(node(), rabbit_types:vhsot()) -> [rabbit_types:tracked_connection()].
+
+list_on_node(Node, VHost) ->
+    try mnesia:dirty_match_object(
+          tracked_connection_table_name_for(Node),
+          #tracked_connection{vhost = VHost, _ = '_'})
+    catch exit:{aborted, {no_exists, _}} -> []
+    end.
+
 
 -spec list_of_user(rabbit_types:username()) -> [rabbit_types:tracked_connection()].
 

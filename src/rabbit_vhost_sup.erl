@@ -28,8 +28,4 @@ start_link(VHost) ->
     supervisor2:start_link(?MODULE, [VHost]).
 
 init([VHost]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{rabbit_vhost_sup_watcher,
-            {rabbit_vhost_sup_watcher, start_link, [VHost]},
-             intrinsic, ?WORKER_WAIT, worker,
-             [rabbit_vhost_sup]}]}}.
+    {ok, {{one_for_all, 0, 1}, []}}.

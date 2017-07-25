@@ -39,8 +39,7 @@ groups() ->
         single_node_single_vhost_limit,
         single_node_single_vhost_zero_limit,
         single_node_multiple_vhosts_limit,
-        single_node_multiple_vhosts_zero_limit,
-        single_node_vhost_deletion_forces_connection_closure
+        single_node_multiple_vhosts_zero_limit
     ],
     ClusterSize2Tests = [
         most_basic_cluster_connection_count,
@@ -51,8 +50,7 @@ groups() ->
         cluster_single_vhost_limit,
         cluster_single_vhost_limit2,
         cluster_single_vhost_zero_limit,
-        cluster_multiple_vhosts_zero_limit,
-        cluster_vhost_deletion_forces_connection_closure
+        cluster_multiple_vhosts_zero_limit
     ],
     [
       {cluster_size_1_network, [], ClusterSize1Tests},
@@ -638,57 +636,6 @@ cluster_multiple_vhosts_zero_limit(Config) ->
 
     set_vhost_connection_limit(Config, VHost1, -1),
     set_vhost_connection_limit(Config, VHost2, -1).
-
-
-single_node_vhost_deletion_forces_connection_closure(Config) ->
-    VHost1 = <<"vhost1">>,
-    VHost2 = <<"vhost2">>,
-
-    set_up_vhost(Config, VHost1),
-    set_up_vhost(Config, VHost2),
-
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
-
-    [Conn1] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
-
-    [_Conn2] = open_connections(Config, [{0, VHost2}]),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
-
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-    timer:sleep(200),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
-
-    close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
-
-cluster_vhost_deletion_forces_connection_closure(Config) ->
-    VHost1 = <<"vhost1">>,
-    VHost2 = <<"vhost2">>,
-
-    set_up_vhost(Config, VHost1),
-    set_up_vhost(Config, VHost2),
-
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
-
-    [Conn1] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
-
-    [_Conn2] = open_connections(Config, [{1, VHost2}]),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
-
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-    timer:sleep(200),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
-
-    close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
 
 vhost_limit_after_node_renamed(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

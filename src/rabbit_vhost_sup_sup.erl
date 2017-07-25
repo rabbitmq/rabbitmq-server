@@ -23,14 +23,17 @@
 -export([init/1]).
 
 -export([start_link/0, start/0]).
--export([vhost_sup/1, vhost_sup/2, save_vhost_sup/3]).
+-export([init_vhost/1, vhost_sup/1, vhost_sup/2, save_vhost_sup/3]).
 -export([delete_on_all_nodes/1]).
--export([start_vhost/1, start_vhost/2, start_on_all_nodes/1, vhost_restart_strategy/0]).
+-export([start_on_all_nodes/1]).
+
+-export([save_vhost_process/2]).
+-export([is_vhost_alive/1]).
 
 %% Internal
--export([stop_and_delete_vhost/1]).
+-export([stop_and_delete_vhost/1, start_vhost/1]).
 
--record(vhost_sup, {vhost, vhost_sup_pid, wrapper_pid}).
+-record(vhost_sup, {vhost, vhost_sup_pid, wrapper_pid, vhost_process_pid}).
 
 start() ->
     case supervisor:start_child(rabbit_sup, {?MODULE,
@@ -56,48 +59,23 @@ init([]) ->
             [rabbit_vhost_sup_wrapper, rabbit_vhost_sup]}]}}.
 
 start_on_all_nodes(VHost) ->
-    [ {ok, _} = start_vhost(VHost, Node) || Node <- rabbit_nodes:all_running() ],
-    ok.
+    NodesStart = [ {Node, start_vhost(VHost, Node)}
+                   || Node <- rabbit_nodes:all_running() ],
+    Failures = lists:filter(fun({_, {ok, _}}) -> false; (_) -> true end, NodesStart),
+    case Failures of
+        []     -> ok;
+        Errors -> {error, {failed_to_start_vhost_on_nodes, Errors}}
+    end.
 
 delete_on_all_nodes(VHost) ->
     [ stop_and_delete_vhost(VHost, Node) || Node <- rabbit_nodes:all_running() ],
     ok.
 
-start_vhost(VHost, Node) when Node == node(self()) ->
-    start_vhost(VHost);
-start_vhost(VHost, Node) ->
-    case rabbit_misc:rpc_call(Node, rabbit_vhost_sup_sup, start_vhost, [VHost]) of
-        {ok, Pid} when is_pid(Pid) ->
-            {ok, Pid};
-        {badrpc, RpcErr} ->
-            {error, RpcErr}
-    end.
-
-start_vhost(VHost) ->
-    case rabbit_vhost:exists(VHost) of
-        false -> {error, {no_such_vhost, VHost}};
-        true  ->
-            case vhost_sup_pid(VHost) of
-                no_pid ->
-                    case supervisor2:start_child(?MODULE, [VHost]) of
-                        {ok, _}                       -> ok;
-                        {error, {already_started, _}} -> ok;
-                        Error                         ->
-                            rabbit_log:error("Could not start process tree "
-                                             "for vhost '~s': ~p", [VHost, Error]),
-                            throw(Error)
-                    end,
-                    {ok, _} = vhost_sup_pid(VHost);
-                {ok, Pid} when is_pid(Pid) ->
-                    {ok, Pid}
-            end
-    end.
-
 stop_and_delete_vhost(VHost) ->
     case get_vhost_sup(VHost) of
         not_found -> ok;
         #vhost_sup{wrapper_pid = WrapperPid,
-                   vhost_sup_pid = VHostSupPid} = VHostSup ->
+                   vhost_sup_pid = VHostSupPid} ->
             case is_process_alive(WrapperPid) of
                 false -> ok;
                 true  ->
@@ -106,7 +84,7 @@ stop_and_delete_vhost(VHost) ->
                                     [VHostSupPid, VHost]),
                     case supervisor2:terminate_child(?MODULE, WrapperPid) of
                         ok ->
-                            ets:delete_object(?MODULE, VHostSup),
+                            ets:delete(?MODULE, VHost),
                             ok = rabbit_vhost:delete_storage(VHost);
                         Other ->
                             Other
@@ -128,9 +106,31 @@ stop_and_delete_vhost(VHost, Node) ->
             {error, RpcErr}
     end.
 
--spec vhost_sup(rabbit_types:vhost(), node()) -> {ok, pid()}.
-vhost_sup(VHost, Local) when Local == node(self()) ->
-    vhost_sup(VHost);
+-spec init_vhost(rabbit_types:vhost()) -> ok.
+init_vhost(VHost) ->
+    case start_vhost(VHost) of
+        {ok, _} -> ok;
+        {error, {no_such_vhost, VHost}} ->
+            {error, {no_such_vhost, VHost}};
+        {error, Reason} ->
+            case vhost_restart_strategy() of
+                permanent ->
+                    rabbit_log:error(
+                        "Unable to initialize vhost data store for vhost '~s'."
+                        " Reason: ~p",
+                        [VHost, Reason]),
+                    throw({error, Reason});
+                transient ->
+                    rabbit_log:warning(
+                        "Unable to initialize vhost data store for vhost '~s'."
+                        " The vhost will be stopped for this node. "
+                        " Reason: ~p",
+                        [VHost, Reason]),
+                    ok
+            end
+    end.
+
+-spec vhost_sup(rabbit_types:vhost(), node()) -> {ok, pid()} | {error, {no_such_vhost, rabbit_types:vhost()} | term()}.
 vhost_sup(VHost, Node) ->
     case rabbit_misc:rpc_call(Node, rabbit_vhost_sup_sup, vhost_sup, [VHost]) of
         {ok, Pid} when is_pid(Pid) ->
@@ -139,15 +139,75 @@ vhost_sup(VHost, Node) ->
             {error, RpcErr}
     end.
 
--spec vhost_sup(rabbit_types:vhost()) -> {ok, pid()}.
+-spec vhost_sup(rabbit_types:vhost()) -> {ok, pid()} | {error, {no_such_vhost, rabbit_types:vhost()}}.
 vhost_sup(VHost) ->
-    start_vhost(VHost).
+    case vhost_sup_pid(VHost) of
+        no_pid ->
+            case start_vhost(VHost) of
+                {ok, Pid} ->
+                    true = is_vhost_alive(VHost),
+                    {ok, Pid};
+                {error, {no_such_vhost, VHost}} ->
+                    {error, {no_such_vhost, VHost}};
+                Error ->
+                    throw(Error)
+            end;
+        {ok, Pid} when is_pid(Pid) ->
+            {ok, Pid}
+    end.
+
+-spec start_vhost(rabbit_types:vhost(), node()) -> {ok, pid()} | {error, term()}.
+start_vhost(VHost, Node) ->
+    case rabbit_misc:rpc_call(Node, rabbit_vhost_sup_sup, start_vhost, [VHost]) of
+        {ok, Pid} when is_pid(Pid) ->
+            {ok, Pid};
+        {badrpc, RpcErr} ->
+            {error, RpcErr}
+    end.
+
+-spec start_vhost(rabbit_types:vhost()) -> {ok, pid()} | {error, term()}.
+start_vhost(VHost) ->
+    case rabbit_vhost:exists(VHost) of
+        false -> {error, {no_such_vhost, VHost}};
+        true  ->
+            case supervisor2:start_child(?MODULE, [VHost]) of
+                {ok, Pid}                       -> {ok, Pid};
+                {error, {already_started, Pid}} -> {ok, Pid};
+                {error, Err}                    -> {error, Err}
+            end
+    end.
+
+-spec is_vhost_alive(rabbit_types:vhost()) -> boolean().
+is_vhost_alive(VHost) ->
+%% A vhost is considered alive if it's supervision tree is alive and
+%% saved in the ETS table
+    case get_vhost_sup(VHost) of
+        #vhost_sup{wrapper_pid = WrapperPid,
+                   vhost_sup_pid = VHostSupPid,
+                   vhost_process_pid = VHostProcessPid}
+                when is_pid(WrapperPid),
+                     is_pid(VHostSupPid),
+                     is_pid(VHostProcessPid) ->
+            is_process_alive(WrapperPid)
+            andalso
+            is_process_alive(VHostSupPid)
+            andalso
+            is_process_alive(VHostProcessPid);
+        _ -> false
+    end.
+
 
 -spec save_vhost_sup(rabbit_types:vhost(), pid(), pid()) -> ok.
 save_vhost_sup(VHost, WrapperPid, VHostPid) ->
     true = ets:insert(?MODULE, #vhost_sup{vhost = VHost,
                                           vhost_sup_pid = VHostPid,
                                           wrapper_pid = WrapperPid}),
+    ok.
+
+-spec save_vhost_process(rabbit_types:vhost(), pid()) -> ok.
+save_vhost_process(VHost, VHostProcessPid) ->
+    true = ets:update_element(?MODULE, VHost,
+                              {#vhost_sup.vhost_process_pid, VHostProcessPid}),
     ok.
 
 -spec get_vhost_sup(rabbit_types:vhost()) -> #vhost_sup{}.
