@@ -91,7 +91,9 @@ id(ReqData) ->
 put_vhost(Name, Trace, Username) ->
     case rabbit_vhost:exists(Name) of
         true  -> ok;
-        false -> rabbit_vhost:add(Name, Username)
+        false -> rabbit_vhost:add(Name, Username),
+                 rabbit_auth_backend_internal:set_permissions(
+                   Username, Name, <<".*">>, <<".*">>, <<".*">>, Username)
     end,
     case Trace of
         true      -> rabbit_trace:start(Name);
