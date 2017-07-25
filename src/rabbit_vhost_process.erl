@@ -26,7 +26,7 @@
 
 %% The process will also check periodically if the vhost still
 %% present in mnesia DB and stop the vhost supervision tree when it
-%% desapears.
+%% disappears.
 
 -module(rabbit_vhost_process).
 
