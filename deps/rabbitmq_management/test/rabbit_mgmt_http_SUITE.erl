@@ -57,6 +57,7 @@ groups() ->
                                vhosts_test,
                                vhosts_trace_test,
                                users_test,
+                               users_bulk_delete_test,
                                users_legacy_administrator_test,
                                adding_a_user_with_password_test,
                                adding_a_user_with_password_hash_test,
@@ -382,6 +383,22 @@ users_test(Config) ->
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     test_auth(Config, ?NOT_AUTHORISED, [auth_header("myuser", "password")]),
     http_get(Config, "/users/myuser", ?NOT_FOUND),
+    passed.
+
+users_bulk_delete_test(Config) ->
+    http_put(Config, "/users/myuser1", [{password, <<"myuser">>}],
+             {group, '2xx'}),
+    http_put(Config, "/users/myuser2", [{password, <<"myuser">>}],
+             {group, '2xx'}),
+    http_put(Config, "/users/myuser3", [{password, <<"myuser">>}],
+             {group, '2xx'}),
+    assert_list(lists:sort([#{name => <<"myuser1">>},
+                            #{name => <<"myuser2">>},
+                            #{name => <<"myuser3">>}]),
+                lists:sort(http_get(Config, "/users"))),
+    http_delete(Config, "/users", {group, '2xx'}),
+    assert_list(lists:sort([#{name => <<"myuser3">>}]),
+                lists:sort(http_get(Config, "/users"))),
     passed.
 
 users_legacy_administrator_test(Config) ->
