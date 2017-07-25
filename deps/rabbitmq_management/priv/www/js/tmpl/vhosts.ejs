@@ -9,7 +9,7 @@
 <table class="list">
   <thead>
   <tr>
-    <th colspan="2">Overview</th>
+    <th colspan="3">Overview</th>
     <%= group_heading('vhosts', 'Messages', []) %>
     <%= group_heading('vhosts', 'Network', []) %>
 <% if (rates_mode != 'none') { %>
@@ -20,6 +20,7 @@
     <tr>
       <th><%= fmt_sort('Name', 'name') %></th>
       <th>Users <span class="help" id="internal-users-only"></span></th>
+      <th>State</th>
 <% if (show_column('vhosts',           'msgs-ready')) { %>
       <th><%= fmt_sort('Ready',        'messages_ready') %></th>
 <% } %>
@@ -54,6 +55,7 @@
          <td><%= link_vhost(vhost.name) %></td>
          <td class="c"><%= fmt_permissions(vhost, permissions, 'vhost', 'user',
                            '<p class="warning">No users</p>') %></td>
+         <td><%= vhost.state %></td>
 <% if (show_column('vhosts', 'msgs-ready')) { %>
    <td class="r"><%= fmt_num_thousands(vhost.messages_ready) %></td>
 <% } %>
