@@ -17,6 +17,11 @@
   <% } %>
 </p>
 <% } %>
+<% for (i = 0; i < vhosts.length; i++) { if (vhosts[i].state == 'down') { %>
+<p class="warning">
+  Vhost <b><%= vhosts[i].name %></b> not running
+</p>
+<% }} %>
 </div>
 
 <div class="section">
