@@ -22,7 +22,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  @info_keys ~w(name tracing)a
+  @info_keys ~w(name tracing state)a
 
   def info_keys(), do: @info_keys
 
@@ -45,7 +45,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   def usage, do: "list_vhosts [<vhostinfoitem> ...]"
 
   def usage_additional() do
-    "<vhostinfoitem> must be a member of the list [name, tracing]."
+    "<vhostinfoitem> must be a member of the list [name, tracing, state]."
   end
 
   defp filter_by_arg(vhosts, _) when is_tuple(vhosts) do
