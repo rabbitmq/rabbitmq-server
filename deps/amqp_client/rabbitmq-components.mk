@@ -107,7 +107,7 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy_commit = 1.1.0
+dep_cowboy_commit = 1.1.2
 dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
 dep_ranch_commit = 1.3.2
 dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d36dbf5e1e64942d9b0a1daf
