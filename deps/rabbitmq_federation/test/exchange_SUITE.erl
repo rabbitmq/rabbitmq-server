@@ -27,8 +27,7 @@
         [expect/3, expect_empty/2,
          set_upstream/4, clear_upstream/3, set_upstream_set/4,
          set_policy/5, clear_policy/3,
-         set_policy_upstream/5, set_policy_upstreams/4,
-         no_plugins/1]).
+         set_policy_upstream/5, set_policy_upstreams/4]).
 
 all() ->
     [
