@@ -124,6 +124,7 @@ dispatcher() ->
      %% /channels/:channel is already taken, we cannot use our standard scheme here
      {"/vhosts/:vhost/channels",                               rabbit_mgmt_wm_channels_vhost, []},
      {"/users",                                                rabbit_mgmt_wm_users, []},
+     {"/users/bulk-delete",                                    rabbit_mgmt_wm_users_bulk_delete, []},
      {"/users/:user",                                          rabbit_mgmt_wm_user, []},
      {"/users/:user/permissions",                              rabbit_mgmt_wm_permissions_user, []},
      {"/users/:user/topic-permissions",                        rabbit_mgmt_wm_topic_permissions_user, []},
