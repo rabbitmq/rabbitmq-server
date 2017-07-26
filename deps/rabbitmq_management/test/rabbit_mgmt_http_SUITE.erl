@@ -29,7 +29,7 @@
                                 http_get_no_map/2,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
-                                http_delete/3, http_delete/5,
+                                http_delete/3, http_delete/4, http_delete/5,
                                 http_put_raw/4, http_post_accept_json/4,
                                 req/4, auth_header/2,
                                 amqp_port/1]).
@@ -58,6 +58,7 @@ groups() ->
                                vhosts_trace_test,
                                users_test,
                                orphan_users_test,
+                               users_bulk_delete_test,
                                users_legacy_administrator_test,
                                adding_a_user_with_password_test,
                                adding_a_user_with_password_hash_test,
@@ -333,8 +334,8 @@ vhosts_test(Config) ->
 
 vhosts_trace_test(Config) ->
     http_put(Config, "/vhosts/myvhost", none, {group, '2xx'}),
-    Disabled = #{name => <<"myvhost">>, tracing => false},
-    Enabled  = #{name => <<"myvhost">>, tracing => true},
+    Disabled = #{name => <<"myvhost">>, tracing => false, state => <<"running">>},
+    Enabled  = #{name => <<"myvhost">>, tracing => true, state => <<"running">>},
     Disabled = http_get(Config, "/vhosts/myvhost"),
     http_put(Config, "/vhosts/myvhost", [{tracing, true}], {group, '2xx'}),
     Enabled = http_get(Config, "/vhosts/myvhost"),
@@ -402,6 +403,26 @@ orphan_users_test(Config) ->
                 http_get(Config, "/users/orphan")),
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     http_delete(Config, "/users/myorphanuser", {group, '2xx'}),
+    passed.
+
+users_bulk_delete_test(Config) ->
+    assert_item(#{name => <<"guest">>, tags => <<"administrator">>},
+                http_get(Config, "/whoami")),
+    http_put(Config, "/users/myuser1", [{tags, <<"management">>}, {password, <<"myuser">>}],
+             {group, '2xx'}),
+    http_put(Config, "/users/myuser2", [{tags, <<"management">>}, {password, <<"myuser">>}],
+             {group, '2xx'}),
+    http_put(Config, "/users/myuser3", [{tags, <<"management">>}, {password, <<"myuser">>}],
+             {group, '2xx'}),
+    http_get(Config, "/users/myuser1", {group, '2xx'}),
+    http_get(Config, "/users/myuser2", {group, '2xx'}),
+    http_get(Config, "/users/myuser3", {group, '2xx'}),
+    http_delete(Config, "/users", {group, '2xx'}, "{\"users\": [\"myuser1\", \"myuser2\"]}"),
+    http_get(Config, "/users/myuser1", ?NOT_FOUND),
+    http_get(Config, "/users/myuser2", ?NOT_FOUND),
+    http_get(Config, "/users/myuser3", {group, '2xx'}),
+    http_delete(Config, "/users", {group, '2xx'}, "{\"users\": [\"myuser3\"]}"),
+    http_get(Config, "/users/myuser3", ?NOT_FOUND),
     passed.
 
 users_legacy_administrator_test(Config) ->
@@ -572,7 +593,9 @@ permissions_list_test(Config) ->
     http_put(Config, "/permissions/myvhost2/myuser1", Perms, {group, '2xx'}),
     http_put(Config, "/permissions/myvhost1/myuser2", Perms, {group, '2xx'}),
 
-    4 = length(http_get(Config, "/permissions")),
+    %% The user that creates the vhosts gets permission automatically
+    %% See https://github.com/rabbitmq/rabbitmq-management/issues/444
+    6 = length(http_get(Config, "/permissions")),
     2 = length(http_get(Config, "/users/myuser1/permissions")),
     1 = length(http_get(Config, "/users/myuser2/permissions")),
 
@@ -599,13 +622,21 @@ permissions_test(Config) ->
                    configure => <<"foo">>,
                    write => <<"foo">>,
                    read => <<"foo">>},
+    %% The user that creates the vhosts gets permission automatically
+    %% See https://github.com/rabbitmq/rabbitmq-management/issues/444
+    PermissionOwner = #{user => <<"guest">>,
+                        vhost => <<"/">>,
+                        configure => <<".*">>,
+                        write => <<".*">>,
+                        read => <<".*">>},
     Default = #{user => <<"guest">>,
                 vhost => <<"/">>,
                 configure => <<".*">>,
                 write => <<".*">>,
                 read => <<".*">>},
     Permission = http_get(Config, "/permissions/myvhost/myuser"),
-    assert_list(lists:sort([Permission, Default]), lists:sort(http_get(Config, "/permissions"))),
+    assert_list(lists:sort([Permission, PermissionOwner, Default]),
+                lists:sort(http_get(Config, "/permissions"))),
     assert_list([Permission], http_get(Config, "/users/myuser/permissions")),
     http_delete(Config, "/permissions/myvhost/myuser", {group, '2xx'}),
     http_get(Config, "/permissions/myvhost/myuser", ?NOT_FOUND),
@@ -721,11 +752,6 @@ exchanges_test(Config) ->
     %% Can pass booleans or strings
     Good = [{type, <<"direct">>}, {durable, <<"true">>}],
     http_put(Config, "/vhosts/myvhost", none, {group, '2xx'}),
-    http_get(Config, "/exchanges/myvhost/foo", ?NOT_AUTHORISED),
-    http_put(Config, "/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
-    http_put(Config, "/permissions/myvhost/guest",
-             [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-             {group, '2xx'}),
     http_get(Config, "/exchanges/myvhost/foo", ?NOT_FOUND),
     http_put(Config, "/exchanges/myvhost/foo", Good, {group, '2xx'}),
     http_put(Config, "/exchanges/myvhost/foo", Good, {group, '2xx'}),

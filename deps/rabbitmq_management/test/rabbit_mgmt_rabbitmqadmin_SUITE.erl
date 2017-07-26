@@ -202,14 +202,15 @@ users(Config) ->
 permissions(Config) ->
     {ok, _} = run(Config, ["declare", "vhost", "name=foo"]),
     {ok, _} = run(Config, ["declare", "user", "name=bar", "password=pass", "tags="]),
-    {ok, [["guest", "/"]]} = run_table(Config, ["list", "permissions",
-                                                "user", "vhost"]),
+    %% The user that creates the vhosts gets permission automatically
+    %% See https://github.com/rabbitmq/rabbitmq-management/issues/444
+    {ok, [["guest", "/"],
+          ["guest", "foo"]]} = run_table(Config, ["list", "permissions",
+                                                  "user", "vhost"]),
     {ok, _} = run(Config, ["declare", "permission", "user=bar", "vhost=foo",
                            "configure=.*", "write=.*", "read=.*"]),
-    {ok, [["guest", "/"], ["bar", "foo"]]} =  run_table(Config, ["list",
-                                                                 "permissions",
-                                                                 "user",
-                                                                 "vhost"]),
+    {ok, [["guest", "/"], ["bar", "foo"], ["guest", "foo"]]}
+     =  run_table(Config, ["list", "permissions", "user", "vhost"]),
     {ok, _} = run(Config, ["delete", "user", "name=bar"]),
     {ok, _} = run(Config, ["delete", "vhost", "name=foo"]).
 

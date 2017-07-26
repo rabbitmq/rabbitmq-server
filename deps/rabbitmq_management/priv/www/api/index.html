@@ -674,10 +674,11 @@ Content-Length: 0</pre>
       <tr>
         <td>X</td>
         <td></td>
-        <td></td>
+        <td>X</td>
         <td></td>
         <td class="path">/api/users</td>
-        <td>A list of all users.</td>
+        <td>A list of all users. To bulk DELETE a list of users, you will need a body looking something like this:
+        <pre>{"users" : ["user1", "user2", "user3"]}</pre></td>
       </tr>
       <tr>
         <td>X</td>
