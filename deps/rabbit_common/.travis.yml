@@ -8,8 +8,9 @@ notifications:
     - alerts@rabbitmq.com
 
 otp_release:
-  - "18.3"
+  - "19.2"
   - "19.3"
+  - "20.0"
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
@@ -24,8 +25,8 @@ before_script:
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
   - kiex selfupdate
-  - test -x ~/.kiex/elixirs/elixir-1.4.4/bin/elixir || kiex install 1.4.4
-  - kiex default 1.4.4
+  - test -x ~/.kiex/elixirs/elixir-1.4.5/bin/elixir || kiex install 1.4.5
+  - kiex default 1.4.5
 
 script: make tests
 
