@@ -161,7 +161,7 @@ vhost_failure_forces_connection_closure(Config) ->
     [_Conn2] = open_connections(Config, [{0, VHost2}]),
     ?assertEqual(1, count_connections_in(Config, VHost2)),
 
-    force_vhost_failure(Config, VHost2),
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, VHost2),
     timer:sleep(200),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
@@ -181,7 +181,7 @@ dead_vhost_connection_refused(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    force_vhost_failure(Config, VHost2),
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, VHost2),
     timer:sleep(200),
 
     [_Conn1] = open_connections(Config, [{0, VHost1}]),
@@ -213,7 +213,7 @@ vhost_failure_forces_connection_closure_on_failure_node(Config) ->
     [_Conn21] = open_connections(Config, [{1, VHost2}]),
     ?assertEqual(2, count_connections_in(Config, VHost2)),
 
-    force_vhost_failure(Config, 0, VHost2),
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, 0, VHost2),
     timer:sleep(200),
     %% Vhost2 connection on node 1 is still alive
     ?assertEqual(1, count_connections_in(Config, VHost2)),
@@ -236,7 +236,7 @@ dead_vhost_connection_refused_on_failure_node(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    force_vhost_failure(Config, 0, VHost2),
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, 0, VHost2),
     timer:sleep(200),
     %% Can open connections to vhost1 on node 0 and 1
     [_Conn10] = open_connections(Config, [{0, VHost1}]),
@@ -256,37 +256,6 @@ dead_vhost_connection_refused_on_failure_node(Config) ->
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
-
-force_vhost_failure(Config, VHost) -> force_vhost_failure(Config, 0, VHost).
-
-force_vhost_failure(Config, Node, VHost) ->
-    force_vhost_failure(Config, Node, VHost, 10).
-
-force_vhost_failure(_Config, _Node, VHost, 0) ->
-    error({failed_to_force_vhost_failure, no_more_attempts_left, VHost});
-force_vhost_failure(Config, Node, VHost, Attempts) ->
-    MessageStorePid = get_message_store_pid(Config, VHost),
-    rabbit_ct_broker_helpers:rpc(Config, Node,
-                                 erlang, exit,
-                                 [MessageStorePid, force_vhost_failure]),
-    %% Give it a time to fail
-    timer:sleep(200),
-    case rabbit_ct_broker_helpers:rpc(Config, 0,
-                                      rabbit_vhost_sup_sup, is_vhost_alive,
-                                      [VHost]) of
-        true  -> force_vhost_failure(Config, Node, VHost, Attempts - 1);
-        false -> ok
-    end.
-
-get_message_store_pid(Config, VHost) ->
-    {ok, VHostSup} = rabbit_ct_broker_helpers:rpc(Config, 0,
-        rabbit_vhost_sup_sup, vhost_sup, [VHost]),
-    Children = rabbit_ct_broker_helpers:rpc(Config, 0,
-                                            supervisor, which_children,
-                                            [VHostSup]),
-    [MsgStorePid] = [Pid || {Name, Pid, _, _} <- Children,
-                            Name == msg_store_persistent],
-    MsgStorePid.
 
 cluster_vhost_deletion_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
