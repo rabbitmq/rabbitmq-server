@@ -93,6 +93,9 @@
     delete_vhost/3,
     delete_vhost/4,
 
+    force_vhost_failure/2,
+    force_vhost_failure/3,
+
     add_user/2,
     add_user/3,
     add_user/4,
@@ -860,6 +863,38 @@ delete_vhost(Config, Node, VHost) ->
 
 delete_vhost(Config, Node, VHost, Username) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, delete, [VHost, Username]).
+
+force_vhost_failure(Config, VHost) -> force_vhost_failure(Config, 0, VHost).
+
+force_vhost_failure(Config, Node, VHost) ->
+    force_vhost_failure(Config, Node, VHost, 10).
+
+force_vhost_failure(_Config, _Node, VHost, 0) ->
+    error({failed_to_force_vhost_failure, no_more_attempts_left, VHost});
+force_vhost_failure(Config, Node, VHost, Attempts) ->
+    case rabbit_ct_broker_helpers:rpc(Config, Node,
+                                      rabbit_vhost_sup_sup, is_vhost_alive,
+                                      [VHost]) of
+        true  ->
+            MessageStorePid = get_message_store_pid(Config, Node, VHost),
+            rabbit_ct_broker_helpers:rpc(Config, Node,
+                                         erlang, exit,
+                                         [MessageStorePid, force_vhost_failure]),
+            %% Give it a time to fail
+            timer:sleep(300),
+            force_vhost_failure(Config, Node, VHost, Attempts - 1);
+        false -> ok
+    end.
+
+get_message_store_pid(Config, Node, VHost) ->
+    {ok, VHostSup} = rabbit_ct_broker_helpers:rpc(Config, Node,
+        rabbit_vhost_sup_sup, vhost_sup, [VHost]),
+    Children = rabbit_ct_broker_helpers:rpc(Config, Node,
+                                            supervisor, which_children,
+                                            [VHostSup]),
+    [MsgStorePid] = [Pid || {Name, Pid, _, _} <- Children,
+                            Name == msg_store_persistent],
+    MsgStorePid.
 
 add_user(Config, Username) ->
     %% for many tests it is convenient that
