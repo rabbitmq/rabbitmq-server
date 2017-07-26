@@ -19,8 +19,8 @@ addons:
       - elixir
       - xsltproc
 otp_release:
-  - "18.3"
-  - "19.0"
+  - "19.2"
+  - "19.3"
 services:
   - docker
 env:
