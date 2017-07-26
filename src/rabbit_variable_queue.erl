@@ -620,7 +620,8 @@ terminate(_Reason, State) ->
         purge_pending_ack(true, State),
     PRef = case MSCStateP of
                undefined -> undefined;
-               {MP, CP}  -> ok = MP:client_terminate(CP),
+               {MP, CP}  ->
+                            ok = maybe_client_terminate(MP, CP),
                             MP:client_ref(CP)
            end,
     {MT, CT} = MSCStateT,
@@ -2838,7 +2839,7 @@ move_messages_to_vhost_store(Queues) ->
     ok = delete_old_store(OldStore),
     ok = rabbit_queue_index:cleanup_global_recovery_terms(),
     [ok= rabbit_recovery_terms:close_table(VHost) || VHost <- VHosts],
-    ok = stop_new_store(NewMsgStore).
+    ok = stop_new_store(NewMsgStore),
     rabbit_file:write_term_file(msg_store_module_file(), [rabbit_msg_store]),
     ok.
 
@@ -2992,12 +2993,12 @@ log_upgrade_verbose(Msg) ->
 log_upgrade_verbose(Msg, Args) ->
     rabbit_log_upgrade:info(Msg, Args).
 
-maybe_client_terminate(MSCStateP) ->
+maybe_client_terminate(MP, CP) ->
     %% Queue might have been asked to stop by the supervisor, it needs a clean
     %% shutdown in order for the supervising strategy to work - if it reaches max
     %% restarts might bring the vhost down.
     try
-        rabbit_msg_store:client_terminate(MSCStateP)
+        MP:client_terminate(CP)
     catch
         _:_ ->
             ok

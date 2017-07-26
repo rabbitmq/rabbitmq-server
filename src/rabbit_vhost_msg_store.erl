@@ -21,14 +21,16 @@
 -export([start/4, stop/2, client_init/5, successfully_recovered_state/2]).
 
 
-start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
-                                                     ClientRefs == undefined  ->
+start(VHost, Type, ClientRefs, StartupFunState, MsgStoreModule)
+when is_list(ClientRefs); ClientRefs == undefined  ->
     case rabbit_vhost_sup_sup:vhost_sup(VHost) of
         {ok, VHostSup} ->
+            ets:insert(rabbit_vhost_sup_sup, {{VHost, Type}, MsgStoreModule}),
             VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
             supervisor2:start_child(VHostSup,
                                     {Type, {rabbit_msg_store, start_link,
-                                            [Type, VHostDir, ClientRefs, StartupFunState]},
+                                            [Type, VHostDir, ClientRefs,
+                                             StartupFunState, MsgStoreModule]},
                                      transient, ?WORKER_WAIT, worker, [rabbit_msg_store]});
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
@@ -52,8 +54,8 @@ stop(VHost, Type) ->
     end.
 
 client_init(VHost, Type, Ref, MsgOnDiskFun, CloseFDsFun) ->
-    with_vhost_store(VHost, Type, fun(StorePid) ->
-        rabbit_msg_store:client_init(StorePid, Ref, MsgOnDiskFun, CloseFDsFun)
+    with_vhost_store(VHost, Type, fun(StorePid, MsgStoreModule) ->
+        MsgStoreModule:client_init(StorePid, Ref, MsgOnDiskFun, CloseFDsFun)
     end).
 
 with_vhost_store(VHost, Type, Fun) ->
@@ -61,7 +63,10 @@ with_vhost_store(VHost, Type, Fun) ->
         no_pid ->
             throw({message_store_not_started, Type, VHost});
         Pid when is_pid(Pid) ->
-            Fun(Pid)
+            case ets:lookup(rabbit_vhost_sup_sup, {VHost, Type}) of
+                [MsgStoreModule] -> Fun(Pid, MsgStoreModule);
+                [] -> error({message_store_module_not_found, {VHost, Type, Pid}})
+            end
     end.
 
 vhost_store_pid(VHost, Type) ->
@@ -72,6 +77,6 @@ vhost_store_pid(VHost, Type) ->
     end.
 
 successfully_recovered_state(VHost, Type) ->
-    with_vhost_store(VHost, Type, fun(StorePid) ->
-        rabbit_msg_store:successfully_recovered_state(StorePid)
+    with_vhost_store(VHost, Type, fun(StorePid, MsgStoreModule) ->
+        MsgStoreModule:successfully_recovered_state(StorePid)
     end).
