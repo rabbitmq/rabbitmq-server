@@ -533,16 +533,16 @@ cycle_detection(Config) ->
     declare_exchange(Cycle1Ch, x(<<"cycle">>)),
     declare_exchange(Cycle2Ch, x(<<"cycle">>)),
 
-    Q1 = bind_queue(Cycle1Ch, <<"cycle">>, <<"key">>),
-    Q2 = bind_queue(Cycle2Ch, <<"cycle">>, <<"key">>),
+    Q1 = bind_queue(Cycle1Ch, <<"cycle">>, <<"cycle_detection-key">>),
+    Q2 = bind_queue(Cycle2Ch, <<"cycle">>, <<"cycle_detection-key">>),
 
     %% "key" present twice because once for the local queue and once
     %% for federation in each case
-    await_binding(Config, Cycle1, <<"cycle">>, <<"key">>, 2),
-    await_binding(Config, Cycle2, <<"cycle">>, <<"key">>, 2),
+    await_binding(Config, Cycle1, <<"cycle">>, <<"cycle_detection-key">>, 2),
+    await_binding(Config, Cycle2, <<"cycle">>, <<"cycle_detection-key">>, 2),
 
-    publish(Cycle1Ch, <<"cycle">>, <<"key">>, <<"HELLO1">>),
-    publish(Cycle2Ch, <<"cycle">>, <<"key">>, <<"HELLO2">>),
+    publish(Cycle1Ch, <<"cycle">>, <<"cycle_detection-key">>, <<"HELLO1">>),
+    publish(Cycle2Ch, <<"cycle">>, <<"cycle_detection-key">>, <<"HELLO2">>),
 
     Msgs = [<<"HELLO1">>, <<"HELLO2">>],
     expect(Cycle1Ch, Q1, Msgs),
