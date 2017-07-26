@@ -65,7 +65,7 @@ users(all) ->
          {ok, User} = rabbit_auth_backend_internal:lookup_user(pget(user, U)),
          rabbit_mgmt_format:internal_user(User)
      end || U <- rabbit_auth_backend_internal:list_users()];
-users(orphan) ->
+users(without_permissions) ->
     lists:foldl(fun(U, Acc) ->
                         Username = pget(user, U),
                         case rabbit_auth_backend_internal:list_user_permissions(Username) of
