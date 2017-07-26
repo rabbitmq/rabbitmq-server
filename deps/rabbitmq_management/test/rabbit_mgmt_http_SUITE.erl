@@ -57,6 +57,7 @@ groups() ->
                                vhosts_test,
                                vhosts_trace_test,
                                users_test,
+                               without_permissions_users_test,
                                users_bulk_delete_test,
                                users_legacy_administrator_test,
                                adding_a_user_with_password_test,
@@ -383,6 +384,25 @@ users_test(Config) ->
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     test_auth(Config, ?NOT_AUTHORISED, [auth_header("myuser", "password")]),
     http_get(Config, "/users/myuser", ?NOT_FOUND),
+    passed.
+
+without_permissions_users_test(Config) ->
+    assert_item(#{name => <<"guest">>, tags => <<"administrator">>},
+                http_get(Config, "/whoami")),
+    http_put(Config, "/users/myuser", [{password_hash,
+                                        <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
+                                       {tags, <<"management">>}], {group, '2xx'}),
+    Perms = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/permissions/%2f/myuser", Perms, {group, '2xx'}),
+    http_put(Config, "/users/myuserwithoutpermissions", [{password_hash,
+                                                          <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
+                                                         {tags, <<"management">>}], {group, '2xx'}),
+    assert_list([#{name => <<"myuserwithoutpermissions">>, tags => <<"management">>,
+                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>,
+                   password_hash => <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>}],
+                http_get(Config, "/users/without-permissions")),
+    http_delete(Config, "/users/myuser", {group, '2xx'}),
+    http_delete(Config, "/users/myuserwithoutpermissions", {group, '2xx'}),
     passed.
 
 users_bulk_delete_test(Config) ->

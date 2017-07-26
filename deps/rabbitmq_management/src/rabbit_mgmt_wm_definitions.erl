@@ -72,7 +72,7 @@ all_definitions(ReqData, Context) ->
     rabbit_mgmt_util:reply(
       [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)}] ++
       filter(
-        [{users,             rabbit_mgmt_wm_users:users()},
+        [{users,             rabbit_mgmt_wm_users:users(all)},
          {vhosts,            rabbit_mgmt_wm_vhosts:basic()},
          {permissions,       rabbit_mgmt_wm_permissions:permissions()},
          {topic_permissions, rabbit_mgmt_wm_topic_permissions:topic_permissions()},
