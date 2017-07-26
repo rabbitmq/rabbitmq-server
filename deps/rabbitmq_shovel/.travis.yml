@@ -19,8 +19,9 @@ addons:
       - elixir
       - xsltproc
 otp_release:
-  - "18.3"
-  - "19.0"
+  - "19.2"
+  - "19.3"
+  - "20.0"
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
