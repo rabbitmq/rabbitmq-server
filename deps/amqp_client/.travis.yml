@@ -13,7 +13,7 @@ addons:
 env:
   - OTP_TAG_NAME=OTP-20.0
   - OTP_TAG_NAME=OTP-19.3.6
-  - OTP_TAG_NAME=OTP-18.3.4.5
+  - OTP_TAG_NAME=OTP-19.2
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
@@ -33,8 +33,9 @@ before_script:
   - source "$HOME/otp/$OTP_TAG_NAME/activate"
   - kerl active
   - test -s "$HOME/.kiex/scripts/kiex" && source "$HOME/.kiex/scripts/kiex"
-  - test -x "$HOME/.kiex/elixirs/elixir-1.4.4/bin/elixir" || kiex install 1.4.4
-  - kiex use 1.4.4 --default
+  - kiex selfupdate
+  - test -x "$HOME/.kiex/elixirs/elixir-1.4.5/bin/elixir" || kiex install 1.4.5
+  - kiex use 1.4.5 --default
   - mix local.hex --force
   - make --version
 
