@@ -85,8 +85,9 @@ handle_info({'DOWN', MRef, process, DownPid, _Reason},
             State = #state{client_ids = Ids}) ->
     Ids1 = dict:filter(fun (ClientId, {Pid, M})
                            when Pid =:= DownPid, MRef =:= M ->
-                               rabbit_log:warning("MQTT disconnect from ~p~n",
-                                                  [ClientId]),
+                               rabbit_log:log(connection, warning,
+                                              "MQTT disconnect from ~p~n",
+                                              [ClientId]),
                                false;
                            (_, _) ->
                                true

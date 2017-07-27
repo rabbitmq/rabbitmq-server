@@ -96,13 +96,13 @@ process_request(?CONNECT,
             _ ->
                 case creds(Username, Password, SSLLoginName) of
                     nocreds ->
-                        rabbit_log:error("MQTT login failed: no credentials provided~n"),
+                        log(error, "MQTT login failed: no credentials provided~n"),
                         {?CONNACK_CREDENTIALS, PState};
                     {invalid_creds, {undefined, Pass}} when is_list(Pass) ->
-                        rabbit_log:error("MQTT login failed: no user username is provided"),
+                        log(error, "MQTT login failed: no user username is provided"),
                         {?CONNACK_CREDENTIALS, PState};
                     {invalid_creds, {User, undefined}} when is_list(User) ->
-                        rabbit_log:error("MQTT login failed for ~p: no password provided", [User]),
+                        log(error, "MQTT login failed for ~p: no password provided", [User]),
                         {?CONNACK_CREDENTIALS, PState};
                     {UserBin, PassBin} ->
                         case process_login(UserBin, PassBin, ProtoVersion, PState) of
@@ -459,7 +459,7 @@ process_login(UserBin, PassBin, ProtoVersion,
                            ssl_login_name = SslLoginName}) ->
     {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
-    rabbit_log:info(
+    log(info,
         "MQTT vhost picked using ~s~n",
         [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
     case rabbit_vhost:exists(VHost) of
@@ -480,30 +480,30 @@ process_login(UserBin, PassBin, ProtoVersion,
                                     vhost = VHost}};
                         not_allowed ->
                             amqp_connection:close(Connection),
-                            rabbit_log:warning(
+                            log(warning,
                                 "MQTT login failed for ~p access_refused "
                                 "(access must be from localhost)~n",
                                 [binary_to_list(UsernameBin)]),
                             ?CONNACK_AUTH
                     end;
                 {error, {auth_failure, Explanation}} ->
-                    rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
+                    log(error, "MQTT login failed for ~p auth_failure: ~s~n",
                         [binary_to_list(UserBin), Explanation]),
                     ?CONNACK_CREDENTIALS;
                 {error, access_refused} ->
-                    rabbit_log:warning("MQTT login failed for ~p access_refused "
+                    log(warning, "MQTT login failed for ~p access_refused "
                     "(vhost access not allowed)~n",
                         [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH;
                 {error, not_allowed} ->
                     %% when vhost allowed for TLS connection
-                    rabbit_log:warning("MQTT login failed for ~p access_refused "
+                    log(warning, "MQTT login failed for ~p access_refused "
                     "(vhost access not allowed)~n",
                         [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH
             end;
         false ->
-            rabbit_log:error("MQTT login failed for ~p auth_failure: vhost ~s does not exist~n",
+            log(error, "MQTT login failed for ~p auth_failure: vhost ~s does not exist~n",
                 [binary_to_list(UserBin), VHost]),
             ?CONNACK_CREDENTIALS
     end.
@@ -765,7 +765,7 @@ human_readable_mqtt_version(_) ->
     "N/A".
 
 send_client(Frame, #proc_state{ socket = Sock }) ->
-    %rabbit_log:info("MQTT sending frame ~p ~n", [Frame]),
+    %log(info, "MQTT sending frame ~p ~n", [Frame]),
     rabbit_net:port_command(Sock, rabbit_mqtt_frame:serialise(Frame)).
 
 close_connection(PState = #proc_state{ connection = undefined }) ->
@@ -809,3 +809,7 @@ check_topic_access(TopicName, Access,
                        kind = topic,
                        name = TopicName},
   rabbit_access_control:check_resource_access(User, Resource, Access).
+
+log(Level, Fmt) -> log(Level, Fmt, []).
+
+log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
