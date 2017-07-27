@@ -280,7 +280,7 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
 
 get_message_store_pid(Config, VHost) ->
     {ok, VHostSup} = rabbit_ct_broker_helpers:rpc(Config, 0,
-        rabbit_vhost_sup_sup, vhost_sup, [VHost]),
+        rabbit_vhost_sup_sup, get_vhost_sup, [VHost]),
     Children = rabbit_ct_broker_helpers:rpc(Config, 0,
                                             supervisor, which_children,
                                             [VHostSup]),

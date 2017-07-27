@@ -23,7 +23,7 @@
 -export([init/1]).
 
 -export([start_link/0, start/0]).
--export([init_vhost/1, vhost_sup/1, vhost_sup/2, save_vhost_sup/3]).
+-export([init_vhost/1, get_vhost_sup/1, get_vhost_sup/2, save_vhost_sup/3]).
 -export([delete_on_all_nodes/1]).
 -export([start_on_all_nodes/1]).
 
@@ -72,7 +72,7 @@ delete_on_all_nodes(VHost) ->
     ok.
 
 stop_and_delete_vhost(VHost) ->
-    case get_vhost_sup(VHost) of
+    case lookup_vhost_sup_record(VHost) of
         not_found -> ok;
         #vhost_sup{wrapper_pid = WrapperPid,
                    vhost_sup_pid = VHostSupPid} ->
@@ -106,7 +106,7 @@ stop_and_delete_vhost(VHost, Node) ->
             {error, RpcErr}
     end.
 
--spec init_vhost(rabbit_types:vhost()) -> ok.
+-spec init_vhost(rabbit_types:vhost()) -> ok | {error, {no_such_vhost, rabbit_types:vhsot()}}.
 init_vhost(VHost) ->
     case start_vhost(VHost) of
         {ok, _} -> ok;
@@ -130,30 +130,32 @@ init_vhost(VHost) ->
             end
     end.
 
--spec vhost_sup(rabbit_types:vhost(), node()) -> {ok, pid()} | {error, {no_such_vhost, rabbit_types:vhost()} | term()}.
-vhost_sup(VHost, Node) ->
-    case rabbit_misc:rpc_call(Node, rabbit_vhost_sup_sup, vhost_sup, [VHost]) of
+-type vhost_error() :: {no_such_vhost, rabbit_types:vhost()} |
+                       {vhost_supervisor_not_running, rabbit_types:vhost()}.
+
+-spec get_vhost_sup(rabbit_types:vhost(), node()) -> {ok, pid()} | {error, vhost_error() | term()}.
+get_vhost_sup(VHost, Node) ->
+    case rabbit_misc:rpc_call(Node, rabbit_vhost_sup_sup, get_vhost_sup, [VHost]) of
         {ok, Pid} when is_pid(Pid) ->
             {ok, Pid};
+        {error, Err} ->
+            {error, Err};
         {badrpc, RpcErr} ->
             {error, RpcErr}
     end.
 
--spec vhost_sup(rabbit_types:vhost()) -> {ok, pid()} | {error, {no_such_vhost, rabbit_types:vhost()}}.
-vhost_sup(VHost) ->
-    case vhost_sup_pid(VHost) of
-        no_pid ->
-            case start_vhost(VHost) of
-                {ok, Pid} ->
-                    true = is_vhost_alive(VHost),
-                    {ok, Pid};
-                {error, {no_such_vhost, VHost}} ->
-                    {error, {no_such_vhost, VHost}};
-                Error ->
-                    throw(Error)
-            end;
-        {ok, Pid} when is_pid(Pid) ->
-            {ok, Pid}
+-spec get_vhost_sup(rabbit_types:vhost()) -> {ok, pid()} | {error, vhost_error()}.
+get_vhost_sup(VHost) ->
+    case rabbit_vhost:exists(VHost) of
+        false ->
+            {error, {no_such_vhost, VHost}};
+        true ->
+            case vhost_sup_pid(VHost) of
+                no_pid ->
+                    {error, {vhost_supervisor_not_running, VHost}};
+                {ok, Pid} when is_pid(Pid) ->
+                    {ok, Pid}
+            end
     end.
 
 -spec start_vhost(rabbit_types:vhost(), node()) -> {ok, pid()} | {error, term()}.
@@ -181,7 +183,7 @@ start_vhost(VHost) ->
 is_vhost_alive(VHost) ->
 %% A vhost is considered alive if it's supervision tree is alive and
 %% saved in the ETS table
-    case get_vhost_sup(VHost) of
+    case lookup_vhost_sup_record(VHost) of
         #vhost_sup{wrapper_pid = WrapperPid,
                    vhost_sup_pid = VHostSupPid,
                    vhost_process_pid = VHostProcessPid}
@@ -210,8 +212,8 @@ save_vhost_process(VHost, VHostProcessPid) ->
                               {#vhost_sup.vhost_process_pid, VHostProcessPid}),
     ok.
 
--spec get_vhost_sup(rabbit_types:vhost()) -> #vhost_sup{}.
-get_vhost_sup(VHost) ->
+-spec lookup_vhost_sup_record(rabbit_types:vhost()) -> #vhost_sup{}.
+lookup_vhost_sup_record(VHost) ->
     case ets:lookup(?MODULE, VHost) of
         [] -> not_found;
         [#vhost_sup{} = VHostSup] -> VHostSup
@@ -219,7 +221,7 @@ get_vhost_sup(VHost) ->
 
 -spec vhost_sup_pid(rabbit_types:vhost()) -> no_pid | {ok, pid()}.
 vhost_sup_pid(VHost) ->
-    case get_vhost_sup(VHost) of
+    case lookup_vhost_sup_record(VHost) of
         not_found ->
             no_pid;
         #vhost_sup{vhost_sup_pid = Pid} = VHostSup ->
