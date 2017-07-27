@@ -471,6 +471,13 @@ restart_upstream(Config) ->
 
     delete_exchange(Downstream, <<"hare.downstream">>),
     delete_exchange(Upstream1, <<"upstream">>),
+
+    rabbit_federation_test_util:clear_policy(Config,
+      Rabbit, <<"hare">>),
+    rabbit_federation_test_util:clear_upstream_set(Config,
+      Rabbit, <<"upstream">>),
+    rabbit_federation_test_util:clear_upstream(Config,
+      Rabbit, <<"hare">>),
     ok.
 
 %% flopsy, mopsy and cottontail, connected in a ring with max_hops = 2
