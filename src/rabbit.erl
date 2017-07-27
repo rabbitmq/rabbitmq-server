@@ -810,7 +810,7 @@ start(normal, []) ->
                   "minimum required version is ~s (erts ~s)",
             Args = [OTPRel, ERTSVer, ?OTP_MINIMUM, ?ERTS_MINIMUM],
             rabbit_log:error(Msg, Args),
-            %% also print to stdout to make this more visible
+            %% also print to stderr to make this more visible
             io:format(standard_error, "Error: " ++ Msg ++ "~n", Args),
             {error, {erlang_version_too_old, rabbit_misc:format("Erlang ~s or later is required, started on ~s", [?OTP_MINIMUM, OTPRel])}};
         Error ->
