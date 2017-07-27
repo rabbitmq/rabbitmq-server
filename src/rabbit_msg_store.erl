@@ -16,8 +16,7 @@
 
 -module(rabbit_msg_store).
 
--behaviour(gen_server2).
-
+-behaviour(rabbit_msg_store_behaviour).
 -export([start_link/4, start_global_store_link/4, successfully_recovered_state/1,
          client_init/4, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1, close_all_indicated/1,
@@ -28,6 +27,7 @@
 
 -export([transform_dir/3, force_recovery/2]). %% upgrade
 
+-behaviour(gen_server2).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, prioritise_call/4, prioritise_cast/3,
          prioritise_info/3, format_message_queue/2]).

@@ -20,6 +20,7 @@ define PROJECT_ENV
 	    {memory_monitor_interval, 2500},
 	    {disk_free_limit, 50000000}, %% 50MB
 	    {msg_store_index_module, rabbit_msg_store_ets_index},
+	    {msg_store_module, rabbit_msg_store},
 	    {backing_queue_module, rabbit_variable_queue},
 	    %% 0 ("no limit") would make a better default, but that
 	    %% breaks the QPid Java client

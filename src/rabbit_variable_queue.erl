@@ -31,7 +31,7 @@
 -export([start/2, stop/1]).
 
 %% exported for testing only
--export([start_msg_store/3, stop_msg_store/1, init/6]).
+-export([start_msg_store/4, stop_msg_store/1, init/6]).
 
 -export([move_messages_to_vhost_store/0]).
 
@@ -43,6 +43,7 @@
 
 -define(QUEUE_MIGRATION_BATCH_SIZE, 100).
 -define(EMPTY_START_FUN_STATE, {fun (ok) -> finished end, ok}).
+-define(MSG_STORE_MODULE_FILE, "msg_store_module").
 
 %%----------------------------------------------------------------------------
 %% Messages, and their position in the queue, can be in memory or on
@@ -480,28 +481,49 @@ explicit_gc_run_operation_threshold_for_mode(Mode) ->
 
 start(VHost, DurableQueues) ->
     {AllTerms, StartFunState} = rabbit_queue_index:start(VHost, DurableQueues),
-    %% Group recovery terms by vhost.
     ClientRefs = [Ref || Terms <- AllTerms,
                       Terms /= non_clean_shutdown,
                       begin
                           Ref = proplists:get_value(persistent_ref, Terms),
                           Ref =/= undefined
                       end],
-    start_msg_store(VHost, ClientRefs, StartFunState),
+    IsEmpty = DurableQueues == [],
+    start_msg_store(VHost, ClientRefs, StartFunState, IsEmpty),
     {ok, AllTerms}.
 
 stop(VHost) ->
     ok = stop_msg_store(VHost),
     ok = rabbit_queue_index:stop(VHost).
 
-start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
+start_msg_store(VHost, Refs, StartFunState, IsEmpty) when is_list(Refs); Refs == undefined ->
     rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
-    do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE),
-    do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState),
+    MsgStoreModule = application:get_env(rabbit, msg_store_module, rabbit_msg_store),
+    case rabbit_file:read_term_file(msg_store_module_file()) of
+        %% The same message store module
+        {ok, [MsgStoreModule]} -> ok;
+        %% Fresh message store
+        {error, enoent} -> ok;
+        {ok, [OldModule]} ->
+            case IsEmpty of
+                %% There is no data in the old message store.
+                %% So it's safe to start with the new one
+                true  -> ok;
+                false ->
+                    error({msg_store_module_mismatch,
+                           MsgStoreModule,
+                           OldModule})
+            end;
+        Other ->
+            error(Other)
+    end,
+    rabbit_log:info("Using ~p to provide message store", [MsgStoreModule]),
+    do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE, MsgStoreModule),
+    do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState, MsgStoreModule),
+    rabbit_file:write_term_file(msg_store_module_file(), [MsgStoreModule]),
     ok.
 
-do_start_msg_store(VHost, Type, Refs, StartFunState) ->
-    case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
+do_start_msg_store(VHost, Type, Refs, StartFunState, MsgStoreModule) ->
+    case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState, MsgStoreModule) of
         {ok, _} ->
             rabbit_log:info("Started message store of type ~s for vhost '~s'~n", [abbreviated_type(Type), VHost]);
         {error, {no_such_vhost, VHost}} = Err ->
@@ -513,6 +535,9 @@ do_start_msg_store(VHost, Type, Refs, StartFunState) ->
                              [Type, VHost, Error]),
             exit({error, Error})
     end.
+
+msg_store_module_file() ->
+    filename:join(rabbit_mnesia:dir(), ?MSG_STORE_MODULE_FILE).
 
 abbreviated_type(?TRANSIENT_MSG_STORE)  -> transient;
 abbreviated_type(?PERSISTENT_MSG_STORE) -> persistent.
@@ -552,14 +577,17 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
     VHost = QueueName#resource.virtual_host,
     {PersistentClient, ContainsCheckFun} =
         case IsDurable of
-            true  -> C = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
-                                               MsgOnDiskFun, AsyncCallback,
-                                               VHost),
-                     {C, fun (MsgId) when is_binary(MsgId) ->
-                                 rabbit_msg_store:contains(MsgId, C);
-                             (#basic_message{is_persistent = Persistent}) ->
-                                 Persistent
-                         end};
+            true  -> {M, C} = msg_store_client_init(?PERSISTENT_MSG_STORE,
+                                                    PRef,
+                                                    MsgOnDiskFun, AsyncCallback,
+                                                    VHost),
+                     {{M, C},
+                      fun
+                      (MsgId) when is_binary(MsgId) ->
+                          M:contains(MsgId, C);
+                      (#basic_message{is_persistent = Persistent}) ->
+                          Persistent
+                      end};
             false -> {undefined, fun(_MsgId) -> false end}
         end,
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
@@ -592,10 +620,12 @@ terminate(_Reason, State) ->
         purge_pending_ack(true, State),
     PRef = case MSCStateP of
                undefined -> undefined;
-               _         -> ok = maybe_client_terminate(MSCStateP),
-                            rabbit_msg_store:client_ref(MSCStateP)
+               {MP, CP}  ->
+                            ok = maybe_client_terminate(MP, CP),
+                            MP:client_ref(CP)
            end,
-    ok = rabbit_msg_store:client_delete_and_terminate(MSCStateT),
+    {MT, CT} = MSCStateT,
+    ok = MT:client_delete_and_terminate(CT),
     Terms = [{persistent_ref,   PRef},
              {persistent_count, PCount},
              {persistent_bytes, PBytes}],
@@ -614,9 +644,10 @@ delete_and_terminate(_Reason, State) ->
         purge_pending_ack_delete_and_terminate(State1),
     case MSCStateP of
         undefined -> ok;
-        _         -> rabbit_msg_store:client_delete_and_terminate(MSCStateP)
+        {MP, CP}  -> MP:client_delete_and_terminate(CP)
     end,
-    rabbit_msg_store:client_delete_and_terminate(MSCStateT),
+    {MT, CT} = MSCStateT,
+    MT:client_delete_and_terminate(CT),
     a(State2 #vqstate { msg_store_clients = undefined }).
 
 delete_crashed(#amqqueue{name = QName}) ->
@@ -1236,18 +1267,19 @@ trim_msg_status(MsgStatus) ->
         queue_index -> MsgStatus
     end.
 
-with_msg_store_state({MSCStateP, MSCStateT},  true, Fun) ->
-    {Result, MSCStateP1} = Fun(MSCStateP),
-    {Result, {MSCStateP1, MSCStateT}};
-with_msg_store_state({MSCStateP, MSCStateT}, false, Fun) ->
-    {Result, MSCStateT1} = Fun(MSCStateT),
-    {Result, {MSCStateP, MSCStateT1}}.
+with_msg_store_state({{Mod, MSCStatePInternal}, MSCStateT},  true, Fun) ->
+    {Result, MSCStatePInternal1} = Fun(Mod, MSCStatePInternal),
+    {Result, {{Mod, MSCStatePInternal1}, MSCStateT}};
+with_msg_store_state({MSCStateP, {Mod, MSCStateTInternal}}, false, Fun) ->
+    {Result, MSCStateTInternal1} = Fun(Mod, MSCStateTInternal),
+    {Result, {MSCStateP, {Mod, MSCStateTInternal1}}}.
 
 with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
-    {Res, MSCState} = with_msg_store_state(MSCState, IsPersistent,
-                                           fun (MSCState1) ->
-                                                   {Fun(MSCState1), MSCState1}
-                                           end),
+    {Res, MSCState} = with_msg_store_state(
+        MSCState, IsPersistent,
+        fun (Mod, MSCState1) ->
+            {Fun(Mod, MSCState1), MSCState1}
+        end),
     Res.
 
 msg_store_client_init(MsgStore, MsgOnDiskFun, Callback, VHost) ->
@@ -1265,28 +1297,30 @@ msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback, VHost) ->
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) ->
-              rabbit_msg_store:write_flow(MsgId, Msg, MSCState1)
+      fun (Mod, MSCStateInternal) ->
+          Mod:write_flow(MsgId, Msg, MSCStateInternal)
       end).
 
 msg_store_read(MSCState, IsPersistent, MsgId) ->
     with_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) ->
-              rabbit_msg_store:read(MsgId, MSCState1)
+      fun (Mod, MSCStateInternal) ->
+          Mod:read(MsgId, MSCStateInternal)
       end).
 
 msg_store_remove(MSCState, IsPersistent, MsgIds) ->
     with_immutable_msg_store_state(
       MSCState, IsPersistent,
-      fun (MCSState1) ->
-              rabbit_msg_store:remove(MsgIds, MCSState1)
+      fun (Mod, MSCStateInternal) ->
+              Mod:remove(MsgIds, MSCStateInternal)
       end).
 
 msg_store_close_fds(MSCState, IsPersistent) ->
     with_msg_store_state(
       MSCState, IsPersistent,
-      fun (MSCState1) -> rabbit_msg_store:close_all_indicated(MSCState1) end).
+      fun (Mod, MSCStateInternal) ->
+          Mod:close_all_indicated(MSCStateInternal)
+      end).
 
 msg_store_close_fds_fun(IsPersistent) ->
     fun (?MODULE, State = #vqstate { msg_store_clients = MSCState }) ->
@@ -2805,7 +2839,9 @@ move_messages_to_vhost_store(Queues) ->
     ok = delete_old_store(OldStore),
     ok = rabbit_queue_index:cleanup_global_recovery_terms(),
     [ok= rabbit_recovery_terms:close_table(VHost) || VHost <- VHosts],
-    ok = stop_new_store(NewMsgStore).
+    ok = stop_new_store(NewMsgStore),
+    rabbit_file:write_term_file(msg_store_module_file(), [rabbit_msg_store]),
+    ok.
 
 in_batches(Size, MFA, List, MessageStart, MessageEnd) ->
     in_batches(Size, 1, MFA, List, MessageStart, MessageEnd).
@@ -2957,12 +2993,12 @@ log_upgrade_verbose(Msg) ->
 log_upgrade_verbose(Msg, Args) ->
     rabbit_log_upgrade:info(Msg, Args).
 
-maybe_client_terminate(MSCStateP) ->
+maybe_client_terminate(MP, CP) ->
     %% Queue might have been asked to stop by the supervisor, it needs a clean
     %% shutdown in order for the supervising strategy to work - if it reaches max
     %% restarts might bring the vhost down.
     try
-        rabbit_msg_store:client_terminate(MSCStateP)
+        MP:client_terminate(CP)
     catch
         _:_ ->
             ok
