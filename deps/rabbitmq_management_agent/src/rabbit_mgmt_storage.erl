@@ -38,8 +38,8 @@ reset() ->
     ok.
 
 reset_all() ->
-    [rpc:call(Node, rabbit_mgmt_storage, reset, [])
-     || Node <- rabbit_nodes:all_running()],
+    _ = [rpc:call(Node, rabbit_mgmt_storage, reset, [])
+         || Node <- rabbit_nodes:all_running()],
     ok.
 
 init(_) ->
