@@ -20,7 +20,7 @@
          content_types_provided/2,
          is_authorized/2, allowed_methods/2]).
 -export([variances/2]).
--export([users/0]).
+-export([users/1]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -31,8 +31,8 @@
 
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-rest_init(Req, _Config) ->
-    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+rest_init(Req, [Mode]) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), {Mode, #context{}}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
@@ -43,16 +43,28 @@ content_types_provided(ReqData, Context) ->
 allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"OPTIONS">>], ReqData, Context}.
 
-to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(users(), ReqData, Context).
+to_json(ReqData, {Mode, Context}) ->
+    rabbit_mgmt_util:reply_list(users(Mode), ReqData, Context).
 
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+is_authorized(ReqData, {Mode, Context}) ->
+    {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized_admin(ReqData, Context),
+    {Res, Req2, {Mode, Context2}}.
 
 %%--------------------------------------------------------------------
 
-users() ->
+users(all) ->
     [begin
          {ok, User} = rabbit_auth_backend_internal:lookup_user(pget(user, U)),
          rabbit_mgmt_format:internal_user(User)
-     end || U <- rabbit_auth_backend_internal:list_users()].
+     end || U <- rabbit_auth_backend_internal:list_users()];
+users(without_permissions) ->
+    lists:foldl(fun(U, Acc) ->
+                        Username = pget(user, U),
+                        case rabbit_auth_backend_internal:list_user_permissions(Username) of
+                            [] ->
+                                {ok, User} = rabbit_auth_backend_internal:lookup_user(Username),
+                                [rabbit_mgmt_format:internal_user(User) | Acc];
+                            _ ->
+                                Acc
+                        end
+                end, [], rabbit_auth_backend_internal:list_users()).
