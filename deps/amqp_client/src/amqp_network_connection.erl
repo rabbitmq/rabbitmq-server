@@ -86,6 +86,9 @@ handle_message({Ref, {error, Reason}},
                {_,          _} -> {socket_error, Reason}
            end, State}.
 
+closing(_ChannelCloseType, {server_initiated_close, _, _} = Reason, State) ->
+    {ok, State#state{waiting_socket_close = true,
+                     closing_reason = Reason}};
 closing(_ChannelCloseType, Reason, State) ->
     {ok, State#state{closing_reason = Reason}}.
 
