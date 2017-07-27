@@ -441,6 +441,9 @@ def maybe_utf8(s):
     if isinstance(s, int):
         # s can be also an int for ex messages count
         return str(s)
+    if isinstance(s, float):
+        # s can be also a float for message rate
+        return str(s)
     if sys.version_info[0] == 3:
         # It will have an encoding, which Python will respect
         return s
