@@ -42,4 +42,4 @@ init([Type, Connection, ConnName]) ->
     {ok, {{simple_one_for_one, 0, 1},
           [{channel_sup,
             {amqp_channel_sup, start_link, [Type, Connection, ConnName]},
-            temporary, brutal_kill, supervisor, [amqp_channel_sup]}]}}.
+            temporary, infinity, supervisor, [amqp_channel_sup]}]}}.
