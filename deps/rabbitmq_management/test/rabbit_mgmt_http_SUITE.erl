@@ -861,6 +861,9 @@ queues_test(Config) ->
     http_delete(Config, "/queues/%2f/baz", {group, '2xx'}),
     http_delete(Config, "/queues/%2f/foo", ?NOT_FOUND),
     http_get(Config, "/queues/badvhost", ?NOT_FOUND),
+
+    http_delete(Config, "/queues/downvhost/foo", {group, '2xx'}),
+    http_delete(Config, "/queues/downvhost/bar", {group, '2xx'}),
     passed.
 
 queues_well_formed_json_test(Config) ->
