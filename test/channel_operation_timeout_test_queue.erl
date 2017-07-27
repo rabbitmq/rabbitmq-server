@@ -237,11 +237,13 @@ start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefine
     {ok, _} = rabbit_vhost_msg_store:start(VHost,
                                            ?TRANSIENT_MSG_STORE,
                                            undefined,
-                                           ?EMPTY_START_FUN_STATE),
+                                           ?EMPTY_START_FUN_STATE,
+                                           rabbit_msg_store),
     {ok, _} = rabbit_vhost_msg_store:start(VHost,
                                            ?PERSISTENT_MSG_STORE,
                                            Refs,
-                                           StartFunState),
+                                           StartFunState,
+                                           rabbit_msg_store),
     rabbit_log:info("Message stores for vhost '~s' are started~n", [VHost]).
 
 stop_msg_store(VHost) ->

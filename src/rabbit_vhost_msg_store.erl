@@ -18,20 +18,20 @@
 
 -include("rabbit.hrl").
 
--export([start/4, stop/2, client_init/5, successfully_recovered_state/2]).
+-export([start/5, stop/2, client_init/5, successfully_recovered_state/2]).
 
 
 start(VHost, Type, ClientRefs, StartupFunState, MsgStoreModule)
 when is_list(ClientRefs); ClientRefs == undefined  ->
     case rabbit_vhost_sup_sup:vhost_sup(VHost) of
         {ok, VHostSup} ->
-            ets:insert(rabbit_vhost_sup_sup, {{VHost, Type}, MsgStoreModule}),
+            true = ets:insert(rabbit_vhost_sup_sup, {msg_store_module, {VHost, Type}, MsgStoreModule}),
             VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
             supervisor2:start_child(VHostSup,
-                                    {Type, {rabbit_msg_store, start_link,
+                                    {Type, {MsgStoreModule, start_link,
                                             [Type, VHostDir, ClientRefs,
-                                             StartupFunState, MsgStoreModule]},
-                                     transient, ?WORKER_WAIT, worker, [rabbit_msg_store]});
+                                             StartupFunState]},
+                                     transient, ?WORKER_WAIT, worker, [MsgStoreModule]});
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} = E ->
@@ -55,7 +55,7 @@ stop(VHost, Type) ->
 
 client_init(VHost, Type, Ref, MsgOnDiskFun, CloseFDsFun) ->
     with_vhost_store(VHost, Type, fun(StorePid, MsgStoreModule) ->
-        MsgStoreModule:client_init(StorePid, Ref, MsgOnDiskFun, CloseFDsFun)
+        {MsgStoreModule, MsgStoreModule:client_init(StorePid, Ref, MsgOnDiskFun, CloseFDsFun)}
     end).
 
 with_vhost_store(VHost, Type, Fun) ->
@@ -64,8 +64,10 @@ with_vhost_store(VHost, Type, Fun) ->
             throw({message_store_not_started, Type, VHost});
         Pid when is_pid(Pid) ->
             case ets:lookup(rabbit_vhost_sup_sup, {VHost, Type}) of
-                [MsgStoreModule] -> Fun(Pid, MsgStoreModule);
-                [] -> error({message_store_module_not_found, {VHost, Type, Pid}})
+                [{msg_store_module, _, MsgStoreModule}] ->
+                    Fun(Pid, MsgStoreModule);
+                [] ->
+                    error({message_store_module_not_found, {VHost, Type, Pid}})
             end
     end.
 

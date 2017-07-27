@@ -377,7 +377,7 @@ on_disk_stop(Pid) ->
 
 msg_store_client_init_capture(MsgStore, Ref) ->
     Pid = spawn(fun on_disk_capture/0),
-    {rabbit_msg_store, MSCState} = rabbit_msg_store_vhost_sup:client_init(
+    {rabbit_msg_store, MSCState} = rabbit_vhost_msg_store:client_init(
             ?VHOST, MsgStore, Ref,
             fun (MsgIds, _ActionTaken) ->
                 Pid ! {on_disk, MsgIds}
@@ -460,7 +460,7 @@ test_msg_store_confirm_timer() ->
     Ref = rabbit_guid:gen(),
     MsgId  = msg_id_bin(1),
     Self = self(),
-    {rabbit_msg_store, MSCState} = rabbit_msg_store_vhost_sup:client_init(
+    {rabbit_msg_store, MSCState} = rabbit_vhost_msg_store:client_init(
                  ?VHOST,
                  ?PERSISTENT_MSG_STORE, Ref,
                  fun (MsgIds, _ActionTaken) ->
@@ -1342,7 +1342,7 @@ nop(_) -> ok.
 nop(_, _) -> ok.
 
 msg_store_client_init(MsgStore, Ref) ->
-    {rabbit_msg_store, MSCState} = rabbit_msg_store_vhost_sup:client_init(?VHOST, MsgStore, Ref, undefined, undefined),
+    {rabbit_msg_store, MSCState} = rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref, undefined, undefined),
     MSCState.
 
 variable_queue_init(Q, Recover) ->
