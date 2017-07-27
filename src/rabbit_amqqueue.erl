@@ -463,11 +463,8 @@ with(Name, F, E, RetriesLeft) ->
         {ok, Q = #amqqueue{state = crashed}} ->
             E({absent, Q, crashed});
         {ok, Q = #amqqueue{state = stopped}} ->
-            %% If the queue process was stopped by the supervisor
-            %% we don't want to retry an operation.
-            rabbit_misc:with_exit_handler(
-              fun () -> E({absent, Q, stopped})
-              end, fun () -> F(Q) end);
+            %% The queue process was stopped by the supervisor
+            E({absent, Q, stopped});
         {ok, Q = #amqqueue{pid = QPid}} ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
