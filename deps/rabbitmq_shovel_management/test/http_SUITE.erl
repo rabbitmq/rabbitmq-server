@@ -135,7 +135,7 @@ shovels(Config) ->
     Perms = #{configure => <<".*">>,
               write     => <<".*">>,
               read      => <<".*">>},
-    http_put(Config, "/permissions/v/guest",  Perms, ?CREATED),
+    http_put(Config, "/permissions/v/guest",  Perms, ?NO_CONTENT),
     http_put(Config, "/permissions/v/admin",  Perms, ?CREATED),
     http_put(Config, "/permissions/v/mon",    Perms, ?CREATED),
 
