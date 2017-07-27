@@ -217,7 +217,7 @@ list_on_node(Node) ->
     catch exit:{aborted, {no_exists, _}} -> []
     end.
 
--spec list_on_node(node(), rabbit_types:vhsot()) -> [rabbit_types:tracked_connection()].
+-spec list_on_node(node(), rabbit_types:vhost()) -> [rabbit_types:tracked_connection()].
 
 list_on_node(Node, VHost) ->
     try mnesia:dirty_match_object(
