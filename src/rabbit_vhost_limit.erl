@@ -55,7 +55,12 @@ notify(VHost, <<"vhost-limits">>, <<"limits">>, Limits, ActingUser) ->
 notify_clear(VHost, <<"vhost-limits">>, <<"limits">>, ActingUser) ->
     rabbit_event:notify(vhost_limits_cleared, [{name, <<"limits">>},
                                                {user_who_performed_action, ActingUser}]),
-    update_vhost(VHost, undefined).
+    %% If the function is called as a part of vhost deletion, the vhost can
+    %% be already deleted.
+    case rabbit_vhost:exists(VHost) of
+        true  -> update_vhost(VHost, undefined);
+        false -> ok
+    end.
 
 connection_limit(VirtualHost) ->
     get_limit(VirtualHost, <<"max-connections">>).
