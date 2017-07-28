@@ -16,8 +16,9 @@
 
 -module(rabbit_mgmt_wm_users).
 
--export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2,
-         allowed_methods/2, delete_resource/2]).
+-export([init/3, rest_init/2, to_json/2,
+         content_types_provided/2,
+         is_authorized/2, allowed_methods/2]).
 -export([variances/2]).
 -export([users/1]).
 
@@ -40,7 +41,7 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"HEAD">>, <<"GET">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
+    {[<<"HEAD">>, <<"GET">>, <<"OPTIONS">>], ReqData, Context}.
 
 to_json(ReqData, {Mode, Context}) ->
     rabbit_mgmt_util:reply_list(users(Mode), ReqData, Context).
@@ -48,15 +49,6 @@ to_json(ReqData, {Mode, Context}) ->
 is_authorized(ReqData, {Mode, Context}) ->
     {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized_admin(ReqData, Context),
     {Res, Req2, {Mode, Context2}}.
-
-delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}) ->
-    rabbit_mgmt_util:with_decode(
-      [users], ReqData, Context,
-      fun([Users], _, _ReqData) ->
-              [rabbit_auth_backend_internal:delete_user(User, ActingUser)
-               || User <- Users]
-      end),
-    {true, ReqData, Context}.
 
 %%--------------------------------------------------------------------
 
