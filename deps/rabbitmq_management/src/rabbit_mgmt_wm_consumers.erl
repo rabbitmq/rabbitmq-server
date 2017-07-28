@@ -50,10 +50,10 @@ to_json(ReqData, Context = #context{user = User}) ->
               VHost -> VHost
           end,
 
-    Consumers = rabbit_mgmt_format:strip_pids(
-                          rabbit_mgmt_db:get_all_consumers(Arg)),
+    Consumers = rabbit_mgmt_format:strip_pids(rabbit_mgmt_db:get_all_consumers(Arg)),
+    Formatted = [rabbit_mgmt_format:format_consumer_arguments(C) || C <- Consumers],
     rabbit_mgmt_util:reply_list(
-      filter_user(Consumers, User), ReqData, Context).
+      filter_user(Formatted, User), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
