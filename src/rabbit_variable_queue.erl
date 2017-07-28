@@ -2917,7 +2917,7 @@ run_old_persistent_store(Refs, StartFunState) ->
     OldStoreName.
 
 start_new_store(VHosts) ->
-    %% Ensure vhost supervisor is started, so we can add vhsots to it.
+    %% Ensure vhost supervisor is started, so we can add vhosts to it.
     lists:map(fun(VHost) ->
         VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
         {ok, Pid} = rabbit_msg_store:start_link(?PERSISTENT_MSG_STORE,
