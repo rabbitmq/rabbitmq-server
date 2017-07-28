@@ -21,27 +21,65 @@ for arg in "$@" ; do
     CMDLINE="${CMDLINE} '${arg}'"
 done
 
-cd /var/lib/rabbitmq
+SCRIPT="$(basename "$0")"
+RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
+RABBITMQ_SCRIPTS_DIR="$(dirname "$RABBITMQ_ENV")"
 
-SCRIPT=`basename $0`
-
-if [ `id -u` = `id -u rabbitmq` -a "$SCRIPT" = "rabbitmq-server" ] ; then
-    RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
-    RABBITMQ_SCRIPTS_DIR=$(dirname "$RABBITMQ_ENV")
-    . "$RABBITMQ_ENV"
-
-    exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
-elif [ `id -u` = `id -u rabbitmq` ] ; then
-    if [ -f $PWD/.erlang.cookie ] ; then
-        export HOME=`pwd`
+main() {
+  if current_user_is_rabbitmq
+  then
+    if calling_rabbitmq_server
+    then
+      exec_rabbitmq_server "$@"
+    else
+      exec_script_as_rabbitmq "$@"
     fi
-    exec /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
-elif [ `id -u` = 0 ] ; then
-    @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
-else
-    /usr/lib/rabbitmq/bin/${SCRIPT}
-    echo
-    echo "Only root or rabbitmq should run ${SCRIPT}"
-    echo
-    exit 1
-fi
+  elif current_user_is_root
+  then
+    exec_script_as_root
+  else
+    run_script_help_and_fail
+  fi
+}
+
+current_user_is_rabbitmq() {
+  [ "$(id -un)" = "rabbitmq" ]
+}
+
+current_user_is_root() {
+  [ "$(id -u)" = 0 ]
+}
+
+calling_rabbitmq_server() {
+  [ "$SCRIPT" = "rabbitmq-server" ]
+}
+
+exec_rabbitmq_server() {
+  RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
+  # RABBITMQ_SCRIPTS_DIR is used in rabbitmq-env
+  # shellcheck disable=SC2034
+  RABBITMQ_SCRIPTS_DIR="$(dirname "$RABBITMQ_ENV")"
+  # shellcheck source=/dev/null
+  . "$RABBITMQ_ENV"
+
+  exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
+}
+
+exec_script_as_rabbitmq() {
+  HOME="$(cd ~rabbitmq && pwd)" exec "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+}
+
+exec_script_as_root() {
+  @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE"
+}
+
+run_script_help_and_fail() {
+  "/usr/lib/rabbitmq/bin/$SCRIPT" help
+
+  echo "
+Only root or rabbitmq can run $SCRIPT
+"
+  exit 1
+}
+
+main "$@"
