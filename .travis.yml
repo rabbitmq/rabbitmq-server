@@ -11,8 +11,6 @@ addons:
       - libwxgtk2.8-dev
 
 otp_release:
-  - "19.2"
-  - "19.3"
   - "20.0"
  
 services:
@@ -50,8 +48,8 @@ before_script:
   - source "$HOME/otp/$OTP_TAG_NAME/activate"
   - kerl active
   - test -s "$HOME/.kiex/scripts/kiex" && source "$HOME/.kiex/scripts/kiex"
-  - test -x "$HOME/.kiex/elixirs/elixir-1.4.4/bin/elixir" || kiex install 1.4.4
-  - kiex use 1.4.4 --default
+  - test -x "$HOME/.kiex/elixirs/elixir-1.4.5/bin/elixir" || kiex install 1.4.5
+  - kiex use 1.4.5 --default
   - mix local.hex --force
   - make --version
 
