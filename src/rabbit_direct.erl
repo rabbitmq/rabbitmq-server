@@ -90,16 +90,21 @@ connect(Creds, VHost, Protocol, Pid, Infos) ->
                 true  ->
                     {error, not_allowed};
                 false ->
-                    case AuthFun() of
-                        {ok, User = #user{username = Username}} ->
-                            notify_auth_result(Username,
-                                user_authentication_success, []),
-                            connect1(User, VHost, Protocol, Pid, Infos);
-                        {refused, Username, Msg, Args} ->
-                            notify_auth_result(Username,
-                                user_authentication_failure,
-                                [{error, rabbit_misc:format(Msg, Args)}]),
-                            {error, {auth_failure, "Refused"}}
+                    case is_vhost_alive(VHost, Creds, Pid) of
+                        false ->
+                            {error, {internal_error, vhost_is_down}};
+                        true  ->
+                            case AuthFun() of
+                                {ok, User = #user{username = Username}} ->
+                                    notify_auth_result(Username,
+                                        user_authentication_success, []),
+                                    connect1(User, VHost, Protocol, Pid, Infos);
+                                {refused, Username, Msg, Args} ->
+                                    notify_auth_result(Username,
+                                        user_authentication_failure,
+                                        [{error, rabbit_misc:format(Msg, Args)}]),
+                                    {error, {auth_failure, "Refused"}}
+                            end
                     end
             end;
         false -> {error, broker_not_found_on_node}
@@ -140,6 +145,21 @@ maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos) ->
             []
     end.
 
+is_vhost_alive(VHost, {Username, _Password}, Pid) ->
+    PrintedUsername = case Username of
+        none -> "";
+        _    -> Username
+    end,
+    case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
+        true  -> true;
+        false ->
+            rabbit_log_connection:error(
+                "Error on Direct connection ~p~n"
+                "access to vhost '~s' refused for user '~s': "
+                "vhost '~s' is down",
+                [Pid, VHost, PrintedUsername, VHost]),
+            false
+    end.
 
 is_over_connection_limit(VHost, {Username, _Password}, Pid) ->
     PrintedUsername = case Username of

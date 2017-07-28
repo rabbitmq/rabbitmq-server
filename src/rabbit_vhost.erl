@@ -26,9 +26,10 @@
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
 -export([delete_storage/1]).
+-export([vhost_down/1]).
 
--spec add(rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
--spec delete(rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
+-spec add(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+-spec delete(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 -spec update(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
 -spec exists(rabbit_types:vhost()) -> boolean().
 -spec list() -> [rabbit_types:vhost()].
@@ -54,8 +55,9 @@ recover() ->
     %% rabbit_vhost_sup_sup will start the actual recovery.
     %% So recovery will be run every time a vhost supervisor is restarted.
     ok = rabbit_vhost_sup_sup:start(),
-    [{ok, _} = rabbit_vhost_sup_sup:vhost_sup(VHost)
-     || VHost <- rabbit_vhost:list()],
+
+    [ ok = rabbit_vhost_sup_sup:init_vhost(VHost)
+      || VHost <- rabbit_vhost:list()],
     ok.
 
 recover(VHost) ->
@@ -73,7 +75,7 @@ recover(VHost) ->
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [name, tracing]).
+-define(INFO_KEYS, [name, tracing, state]).
 
 add(VHostPath, ActingUser) ->
     rabbit_log:info("Adding vhost '~s'~n", [VHostPath]),
@@ -104,10 +106,20 @@ add(VHostPath, ActingUser) ->
                            {<<"amq.rabbitmq.trace">>, topic,   true}]],
                   ok
           end),
-    ok = rabbit_vhost_sup_sup:start_on_all_nodes(VHostPath),
-    rabbit_event:notify(vhost_created, info(VHostPath)
-                        ++ [{user_who_performed_action, ActingUser}]),
-    R.
+    case rabbit_vhost_sup_sup:start_on_all_nodes(VHostPath) of
+        ok ->
+            rabbit_event:notify(vhost_created, info(VHostPath)
+                                ++ [{user_who_performed_action, ActingUser}]),
+            R;
+        {error, {no_such_vhost, VHostPath}} ->
+            Msg = rabbit_misc:format("failed to set up vhost '~s': it was concurrently deleted!",
+                                     [VHostPath]),
+            {error, Msg};
+        {error, Reason} ->
+            Msg = rabbit_misc:format("failed to set up vhost '~s': ~p",
+                                     [VHostPath, Reason]),
+            {error, Msg}
+    end.
 
 delete(VHostPath, ActingUser) ->
     %% FIXME: We are forced to delete the queues and exchanges outside
@@ -125,11 +137,20 @@ delete(VHostPath, ActingUser) ->
           with(VHostPath, fun () -> internal_delete(VHostPath, ActingUser) end)),
     ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath},
                                              {user_who_performed_action, ActingUser}]),
-    [ok = Fun() || Fun <- Funs],
+    [case Fun() of
+         ok                                  -> ok;
+         {error, {no_such_vhost, VHostPath}} -> ok
+     end || Fun <- Funs],
     %% After vhost was deleted from mnesia DB, we try to stop vhost supervisors
     %% on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHostPath),
     ok.
+
+vhost_down(VHostPath) ->
+    ok = rabbit_event:notify(vhost_down,
+                             [{name, VHostPath},
+                              {node, node()},
+                              {user_who_performed_action, ?INTERNAL_USER}]).
 
 delete_storage(VHost) ->
     VhostDir = msg_store_dir_path(VHost),
@@ -240,6 +261,10 @@ infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
 i(name,    VHost) -> VHost;
 i(tracing, VHost) -> rabbit_trace:enabled(VHost);
+i(state,   VHost) -> case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
+                         true -> running;
+                         false -> down
+                     end;
 i(Item, _)        -> throw({bad_argument, Item}).
 
 info(VHost)        -> infos(?INFO_KEYS, VHost).

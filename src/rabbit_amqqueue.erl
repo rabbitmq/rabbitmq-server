@@ -29,7 +29,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
--export([list_down/1, count/1, list_names/0]).
+-export([list_down/1, count/1, list_names/0, list_local_names/0]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
 -export([basic_get/4, basic_consume/11, basic_cancel/5, notify_decorators/1]).
@@ -234,8 +234,13 @@ recover(VHost) ->
     %% for further processing in recover_durable_queues.
     {ok, OrderedRecoveryTerms} =
         BQ:start(VHost, [QName || #amqqueue{name = QName} <- Queues]),
-    {ok, _} = rabbit_amqqueue_sup_sup:start_for_vhost(VHost),
-    recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms)).
+    case rabbit_amqqueue_sup_sup:start_for_vhost(VHost) of
+        {ok, _}         ->
+            recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms));
+        {error, Reason} ->
+            rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
+            throw({error, Reason})
+    end.
 
 stop(VHost) ->
     ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
@@ -587,7 +592,13 @@ list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
 
 list_names() -> mnesia:dirty_all_keys(rabbit_queue).
 
-list(VHostPath) -> list(VHostPath, rabbit_queue).
+list_local_names() ->
+    [ Q#amqqueue.name || #amqqueue{state = State, pid = QPid} = Q <- list(),
+           State =/= crashed,
+           node() =:= node(QPid) ].
+
+list(VHostPath) ->
+    list(VHostPath, rabbit_queue).
 
 %% Not dirty_match_object since that would not be transactional when used in a
 %% tx context
@@ -601,12 +612,16 @@ list(VHostPath, TableName) ->
       end).
 
 list_down(VHostPath) ->
-    Present = list(VHostPath),
-    Durable = list(VHostPath, rabbit_durable_queue),
-    PresentS = sets:from_list([N || #amqqueue{name = N} <- Present]),
-    sets:to_list(sets:filter(fun (#amqqueue{name = N}) ->
-                                     not sets:is_element(N, PresentS)
-                             end, sets:from_list(Durable))).
+    case rabbit_vhost:exists(VHostPath) of
+        false -> [];
+        true  ->
+            Present = list(VHostPath),
+            Durable = list(VHostPath, rabbit_durable_queue),
+            PresentS = sets:from_list([N || #amqqueue{name = N} <- Present]),
+            sets:to_list(sets:filter(fun (#amqqueue{name = N}) ->
+                                             not sets:is_element(N, PresentS)
+                                     end, sets:from_list(Durable)))
+    end.
 
 count(VHost) ->
   try

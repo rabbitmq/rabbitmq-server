@@ -705,7 +705,8 @@ status() ->
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
-          {listeners,            listeners()}],
+          {listeners,            listeners()},
+          {vm_memory_calculation_strategy, vm_memory_monitor:get_memory_calculation_strategy()}],
     S2 = rabbit_misc:filter_exit_map(
            fun ({Key, {M, F, A}}) -> {Key, erlang:apply(M, F, A)} end,
            [{vm_memory_high_watermark, {vm_memory_monitor,
@@ -802,6 +803,16 @@ start(normal, []) ->
             warn_if_disc_io_options_dubious(),
             rabbit_boot_steps:run_boot_steps(),
             {ok, SupPid};
+        {error, {erlang_version_too_old,
+                 {found, OTPRel, ERTSVer},
+                 {required, ?OTP_MINIMUM, ?ERTS_MINIMUM}}} ->
+            Msg = "This RabbitMQ version cannot run on Erlang ~s (erts ~s): "
+                  "minimum required version is ~s (erts ~s)",
+            Args = [OTPRel, ERTSVer, ?OTP_MINIMUM, ?ERTS_MINIMUM],
+            rabbit_log:error(Msg, Args),
+            %% also print to stderr to make this more visible
+            io:format(standard_error, "Error: " ++ Msg ++ "~n", Args),
+            {error, {erlang_version_too_old, rabbit_misc:format("Erlang ~s or later is required, started on ~s", [?OTP_MINIMUM, OTPRel])}};
         Error ->
             Error
     end.

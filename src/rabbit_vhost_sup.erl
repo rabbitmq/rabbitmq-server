@@ -18,7 +18,8 @@
 
 -include("rabbit.hrl").
 
-%% Supervisor is a per-vhost supervisor to contain queues and message stores
+%% Each vhost gets an instance of this supervisor that supervises
+%% message stores and queues (via rabbit_amqqueue_sup_sup).
 -behaviour(supervisor2).
 -export([init/1]).
 -export([start_link/1]).
@@ -26,9 +27,5 @@
 start_link(VHost) ->
     supervisor2:start_link(?MODULE, [VHost]).
 
-init([VHost]) ->
-    {ok, {{one_for_all, 0, 1},
-          [{rabbit_vhost_sup_watcher,
-            {rabbit_vhost_sup_watcher, start_link, [VHost]},
-             intrinsic, ?WORKER_WAIT, worker,
-             [rabbit_vhost_sup]}]}}.
+init([_VHost]) ->
+    {ok, {{one_for_all, 0, 1}, []}}.

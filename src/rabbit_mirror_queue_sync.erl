@@ -16,7 +16,7 @@
 
 -module(rabbit_mirror_queue_sync).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([master_prepare/4, master_go/8, slave/7, conserve_resources/3]).
 

@@ -22,13 +22,13 @@ number(_Name, Term) when is_number(Term) ->
     ok;
 
 number(Name, Term) ->
-    {error, "~s should be number, actually was ~p", [Name, Term]}.
+    {error, "~s should be a number, actually was ~p", [Name, Term]}.
 
 integer(_Name, Term) when is_integer(Term) ->
     ok;
 
 integer(Name, Term) ->
-    {error, "~s should be number, actually was ~p", [Name, Term]}.
+    {error, "~s should be a number, actually was ~p", [Name, Term]}.
 
 binary(_Name, Term) when is_binary(Term) ->
     ok;

@@ -112,17 +112,19 @@ define PROJECT_ENV
 	                            {passphrase, undefined}
 	                           ]},
 
-	    %% rabbitmq-server-973
+	    %% rabbitmq-server#973
 	    {queue_explicit_gc_run_operation_threshold, 1000},
 	    {lazy_queue_explicit_gc_run_operation_threshold, 1000},
 	    {background_gc_enabled, false},
 	    {background_gc_target_interval, 60000},
-	    %% rabbitmq-server-589
+	    %% rabbitmq-server#589
 	    {proxy_protocol, false},
 	    {disk_monitor_failure_retries, 10},
 	    {disk_monitor_failure_retry_interval, 120000},
-	    %% either "stop_node" or "ignore"
-	    {vhost_restart_strategy, stop_node}
+	    %% either "stop_node" or "continue".
+	    %% by default we choose to not terminate the entire node if one
+	    %% vhost had to shut down, see server#1158 and server#1280
+	    {vhost_restart_strategy, continue}
 	  ]
 endef
 

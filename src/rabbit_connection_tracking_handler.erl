@@ -82,6 +82,15 @@ handle_event(#event{type = vhost_deleted, props = Details}, State) ->
     close_connections(rabbit_connection_tracking:list(VHost),
                       rabbit_misc:format("vhost '~s' is deleted", [VHost])),
     {ok, State};
+handle_event(#event{type = vhost_down, props = Details}, State) ->
+    VHost = pget(name, Details),
+    Node = pget(node, Details),
+    rabbit_log_connection:info("Closing all connections in vhost '~s' at node '~s'"
+                               " because the vhost database has stopped working",
+                               [VHost, Node]),
+    close_connections(rabbit_connection_tracking:list_on_node(Node, VHost),
+                      rabbit_misc:format("vhost '~s' is down", [VHost])),
+    {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
     Username = pget(name, Details),
     rabbit_log_connection:info("Closing all connections from user '~s' because it's being deleted", [Username]),

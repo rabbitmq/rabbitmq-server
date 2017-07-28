@@ -48,20 +48,35 @@
 %%----------------------------------------------------------------------------
 
 start(VHost) ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
-    {ok, _} = supervisor2:start_child(
-        VHostSup,
-        {?MODULE,
-         {?MODULE, start_link, [VHost]},
-         transient, ?WORKER_WAIT, worker,
-         [?MODULE]}),
+    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+      {ok, VHostSup} ->
+            {ok, _} = supervisor2:start_child(
+                        VHostSup,
+                        {?MODULE,
+                         {?MODULE, start_link, [VHost]},
+                         transient, ?WORKER_WAIT, worker,
+                         [?MODULE]});
+        %% we can get here if a vhost is added and removed concurrently
+        %% e.g. some integration tests do it
+        {error, {no_such_vhost, VHost}} ->
+            rabbit_log:error("Failed to start a recovery terms manager for vhost ~s: vhost no longer exists!",
+                             [VHost])
+    end,
     ok.
 
 stop(VHost) ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
-    case supervisor:terminate_child(VHostSup, ?MODULE) of
-        ok -> supervisor:delete_child(VHostSup, ?MODULE);
-        E  -> E
+    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+        {ok, VHostSup} ->
+            case supervisor:terminate_child(VHostSup, ?MODULE) of
+                ok -> supervisor:delete_child(VHostSup, ?MODULE);
+                E  -> E
+            end;
+        %% see start/1
+        {error, {no_such_vhost, VHost}} ->
+            rabbit_log:error("Failed to stop a recovery terms manager for vhost ~s: vhost no longer exists!",
+                             [VHost]),
+
+            ok
     end.
 
 store(VHost, DirBaseName, Terms) ->
@@ -74,7 +89,14 @@ read(VHost, DirBaseName) ->
     end.
 
 clear(VHost) ->
-    ok = dets:delete_all_objects(VHost),
+    try
+        dets:delete_all_objects(VHost)
+    %% see start/1
+    catch _:badarg ->
+            rabbit_log:error("Failed to clear recovery terms for vhost ~s: table no longer exists!",
+                             [VHost]),
+            ok
+    end,
     flush(VHost).
 
 start_link(VHost) ->
@@ -126,8 +148,15 @@ open_global_table() ->
     ok.
 
 close_global_table() ->
-    ok = dets:sync(?MODULE),
-    ok = dets:close(?MODULE).
+    try
+        dets:sync(?MODULE),
+        dets:close(?MODULE)
+    %% see clear/1
+    catch _:badarg ->
+            rabbit_log:error("Failed to clear global recovery terms: table no longer exists!",
+                             []),
+            ok
+    end.
 
 read_global(DirBaseName) ->
     read(?MODULE, DirBaseName).
@@ -163,8 +192,23 @@ open_table(VHost) ->
                                      {ram_file,  true},
                                      {auto_save, infinity}]).
 
-flush(VHost) -> ok = dets:sync(VHost).
+flush(VHost) ->
+    try
+        dets:sync(VHost)
+    %% see clear/1
+    catch _:badarg ->
+            rabbit_log:error("Failed to sync recovery terms table for vhost ~s: the table no longer exists!",
+                             [VHost]),
+            ok
+    end.
 
 close_table(VHost) ->
-    ok = flush(VHost),
-    ok = dets:close(VHost).
+    try
+        ok = flush(VHost),
+        ok = dets:close(VHost)
+    %% see clear/1
+    catch _:badarg ->
+            rabbit_log:error("Failed to close recovery terms table for vhost ~s: the table no longer exists!",
+                             [VHost]),
+            ok
+    end.
