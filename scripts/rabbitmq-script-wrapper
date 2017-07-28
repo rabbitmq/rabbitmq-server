@@ -26,6 +26,7 @@ RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
 RABBITMQ_SCRIPTS_DIR="$(dirname "$RABBITMQ_ENV")"
 
 main() {
+  ensure_we_are_in_a_readable_dir
   if current_user_is_rabbitmq
   then
     if calling_rabbitmq_server
@@ -40,6 +41,11 @@ main() {
   else
     run_script_help_and_fail
   fi
+}
+
+ensure_we_are_in_a_readable_dir() {
+  # shellcheck disable=SC2164
+  cd ~rabbitmq || cd /
 }
 
 current_user_is_rabbitmq() {
