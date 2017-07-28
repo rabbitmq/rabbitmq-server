@@ -28,6 +28,7 @@
 -export([print/2, print/1]).
 
 -export([format_queue_stats/1, format_channel_stats/1,
+         format_consumer_arguments/1,
          format_connection_created/1,
          format_accept_content/1, format_args/1]).
 
@@ -563,7 +564,8 @@ clean_channel_details(Obj) ->
 format_consumer_arguments(Obj) ->
     case pget(arguments, Obj) of
          undefined -> Obj;
-         []        -> Obj;
+         #{}       -> Obj;
+         []        -> pset(arguments, #{}, Obj);
          Args      -> pset(arguments, amqp_table(Args), Obj)
      end.
 
