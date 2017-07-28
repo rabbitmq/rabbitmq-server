@@ -72,7 +72,7 @@ delete_on_all_nodes(VHost) ->
     ok.
 
 stop_and_delete_vhost(VHost) ->
-    case lookup_vhost_sup_record(VHost) of
+    StopResult = case lookup_vhost_sup_record(VHost) of
         not_found -> ok;
         #vhost_sup{wrapper_pid = WrapperPid,
                    vhost_sup_pid = VHostSupPid} ->
@@ -84,13 +84,15 @@ stop_and_delete_vhost(VHost) ->
                                     [VHostSupPid, VHost]),
                     case supervisor2:terminate_child(?MODULE, WrapperPid) of
                         ok ->
-                            ets:delete(?MODULE, VHost),
-                            ok = rabbit_vhost:delete_storage(VHost);
+                            true = ets:delete(?MODULE, VHost),
+                            ok;
                         Other ->
                             Other
                     end
             end
-    end.
+    end,
+    ok = rabbit_vhost:delete_storage(VHost),
+    StopResult.
 
 %% We take an optimistic approach whan stopping a remote VHost supervisor.
 stop_and_delete_vhost(VHost, Node) when Node == node(self()) ->
@@ -212,7 +214,7 @@ save_vhost_process(VHost, VHostProcessPid) ->
                               {#vhost_sup.vhost_process_pid, VHostProcessPid}),
     ok.
 
--spec lookup_vhost_sup_record(rabbit_types:vhost()) -> #vhost_sup{}.
+-spec lookup_vhost_sup_record(rabbit_types:vhost()) -> #vhost_sup{} | not_found.
 lookup_vhost_sup_record(VHost) ->
     case ets:lookup(?MODULE, VHost) of
         [] -> not_found;
