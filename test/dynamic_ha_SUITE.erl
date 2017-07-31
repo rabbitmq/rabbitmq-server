@@ -57,7 +57,11 @@ groups() ->
       {clustered, [], [
           {cluster_size_2, [], [
               vhost_deletion,
-              promote_on_shutdown
+              promote_on_shutdown,
+              slave_recovers_after_vhost_failure,
+              slave_recovers_after_vhost_down_an_up,
+              master_migrates_on_vhost_down,
+              slave_recovers_after_vhost_down_and_master_migrated
             ]},
           {cluster_size_3, [], [
               change_policy,
@@ -303,6 +307,71 @@ nodes_policy_should_pick_master_from_its_params(Config) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = ?QNAME}),
     _ = rabbit_ct_broker_helpers:clear_policy(Config, A, ?POLICY).
 
+slave_recovers_after_vhost_failure(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:set_ha_policy_all(Config),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    QName = <<"slave_recovers_after_vhost_failure-q">>,
+    amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
+    timer:sleep(300),
+    assert_slaves(A, QName, {A, [B]}, [{A, []}]),
+
+    %% Crash vhost on slave node
+    {ok, Sup} = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, vhost_sup, [<<"/">>]),
+    exit(Sup, foo),
+
+    assert_slaves(A, QName, {A, [B]}, [{A, []}]).
+
+slave_recovers_after_vhost_down_an_up(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:set_ha_policy_all(Config),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    QName = <<"slave_recovers_after_vhost_down_an_up-q">>,
+    amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
+    timer:sleep(100),
+    assert_slaves(A, QName, {A, [B]}, [{A, []}]),
+
+    %% Crash vhost on slave node
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, B, <<"/">>),
+    %% Vhost is down now
+    false = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, is_vhost_alive, [<<"/">>]),
+    %% Vhost is back up
+    {ok, _Sup} = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, vhost_sup, [<<"/">>]),
+
+    assert_slaves(A, QName, {A, [B]}, [{A, []}]).
+
+master_migrates_on_vhost_down(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:set_ha_policy_all(Config),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    QName = <<"master_migrates_on_vhost_down-q">>,
+    amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
+    timer:sleep(100),
+    assert_slaves(A, QName, {A, [B]}, [{A, []}]),
+
+    %% Crash vhost on master node
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, A, <<"/">>),
+    timer:sleep(300),
+    assert_slaves(A, QName, {B, []}).
+
+slave_recovers_after_vhost_down_and_master_migrated(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:set_ha_policy_all(Config),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    QName = <<"slave_recovers_after_vhost_down_and_master_migrated-q">>,
+    amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
+    timer:sleep(100),
+    assert_slaves(A, QName, {A, [B]}, [{A, []}]),
+    %% Crash vhost on master node
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, A, <<"/">>),
+    timer:sleep(300),
+    assert_slaves(B, QName, {B, []}),
+
+    %% Restart the vhost on (former) master node
+    {ok, _Sup} = rabbit_ct_broker_helpers:rpc(Config, A, rabbit_vhost_sup_sup, vhost_sup, [<<"/">>]),
+    timer:sleep(300),
+    assert_slaves(B, QName, {B, [A]}, [{B, []}]).
+
 random_policy(Config) ->
     run_proper(fun prop_random_policy/1, [Config]).
 
@@ -367,9 +436,11 @@ assert_slaves(RPCNode, QName, Exp) ->
 assert_slaves(RPCNode, QName, Exp, PermittedIntermediate) ->
     assert_slaves0(RPCNode, QName, Exp,
                   [{get(previous_exp_m_node), get(previous_exp_s_nodes)} |
-                   PermittedIntermediate]).
+                   PermittedIntermediate], 1000).
 
-assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate) ->
+assert_slaves0(_, _, _, _, 0) ->
+    error(give_up_waiting_for_slaves);
+assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Attempts) ->
     Q = find_queue(QName, RPCNode),
     Pid = proplists:get_value(pid, Q),
     SPids = proplists:get_value(slave_pids, Q),
@@ -395,7 +466,8 @@ assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate) ->
                            [State, {ExpMNode, ExpSNodes}]),
                     timer:sleep(100),
                     assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes},
-                                   PermittedIntermediate)
+                                   PermittedIntermediate,
+                                   Attempts - 1)
             end;
         true ->
             put(previous_exp_m_node, ExpMNode),
@@ -415,10 +487,14 @@ equal_list([H|T], Act)  -> case lists:member(H, Act) of
                            end.
 
 find_queue(QName, RPCNode) ->
+    find_queue(QName, RPCNode, 1000).
+
+find_queue(QName, RPCNode, 0) -> error({did_not_find_queue, QName, RPCNode});
+find_queue(QName, RPCNode, Attempts) ->
     Qs = rpc:call(RPCNode, rabbit_amqqueue, info_all, [?VHOST], infinity),
     case find_queue0(QName, Qs) of
         did_not_find_queue -> timer:sleep(100),
-                              find_queue(QName, RPCNode);
+                              find_queue(QName, RPCNode, Attempts - 1);
         Q -> Q
     end.
 
