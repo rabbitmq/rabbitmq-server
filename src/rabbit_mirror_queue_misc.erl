@@ -238,8 +238,8 @@ add_mirror(QName, MirrorNode, SyncMode) ->
                             rabbit_mirror_queue_slave:go(SPid, SyncMode);
                         {error, Error} ->
                             log_warning(QName,
-                                        "Unable to start queue slave on node '~p'. "
-                                        "Vhost is not started: ~p~n",
+                                        "Unable to start queue mirror on node '~p'. "
+                                        "Target virtual host is not running: ~p~n",
                                         [MirrorNode, Error]),
                             ok
                     end
