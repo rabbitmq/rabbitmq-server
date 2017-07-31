@@ -9,6 +9,7 @@ Group=rabbitmq
 WorkingDirectory=/var/lib/rabbitmq
 ExecStart=/usr/sbin/rabbitmq-server
 ExecStop=/usr/sbin/rabbitmqctl stop
+ExecStop=/bin/sh -c "while ps -p $MAINPID >/dev/null 2>&1; do sleep 1; done"
 NotifyAccess=all
 TimeoutStartSec=3600
 
