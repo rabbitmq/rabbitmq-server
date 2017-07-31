@@ -192,6 +192,10 @@ set_upstream_set(Config, Node, Name, Set) ->
       <<"federation-upstream-set">>, Name,
       [[{<<"upstream">>, UStream} | Extra] || {UStream, Extra} <- Set]).
 
+clear_upstream_set(Config, Node, Name) ->
+    rabbit_ct_broker_helpers:clear_parameter(Config, Node,
+      <<"federation-upstream-set">>, Name).
+
 set_policy(Config, Node, Name, Pattern, UpstreamSet) ->
     rabbit_ct_broker_helpers:set_policy(Config, Node,
       Name, Pattern, <<"all">>,
