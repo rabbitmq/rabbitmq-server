@@ -123,8 +123,11 @@ open_conn(NodeConfig, {Conn, _} = ConnTuple) ->
 close_everything(Conn, [{Ch, MRef} | Rest]) ->
     case erlang:is_process_alive(Ch) of
         true ->
-            erlang:demonitor(MRef, [flush]),
-            amqp_channel:close(Ch);
+            amqp_channel:close(Ch),
+            receive
+                {'DOWN', MRef, _, Ch, Info} ->
+                    ct:pal("Channel ~p closed: ~p~n", [Ch, Info])
+            end;
         false ->
             ok
     end,
@@ -132,8 +135,11 @@ close_everything(Conn, [{Ch, MRef} | Rest]) ->
 close_everything({Conn, MRef}, []) ->
     case erlang:is_process_alive(Conn) of
         true ->
-            erlang:demonitor(MRef),
-            amqp_connection:close(Conn);
+            amqp_connection:close(Conn),
+            receive
+                {'DOWN', MRef, _, Conn, Info} ->
+                    ct:pal("Connection ~p closed: ~p~n", [Conn, Info])
+            end;
         false ->
             ok
     end;
