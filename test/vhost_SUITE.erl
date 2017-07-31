@@ -87,7 +87,7 @@ init_per_group(cluster_size_2_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
     init_per_multinode_group(cluster_size_2_direct, Config1, 2).
 
-init_per_multinode_group(Group, Config, NodeCount) ->
+init_per_multinode_group(_Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodes_count, NodeCount},
@@ -115,11 +115,17 @@ end_per_testcase(Testcase, Config) ->
         cluster_vhost_deletion_forces_connection_closure -> ok;
         single_node_vhost_deletion_forces_connection_closure -> ok;
         _ ->
-            ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost2)
+            delete_vhost(Config, VHost2)
     end,
-    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
+    delete_vhost(Config, VHost1),
     clear_all_connection_tracking_tables(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+delete_vhost(Config, VHost) ->
+    case rabbit_ct_broker_helpers:delete_vhost(Config, VHost) of
+        ok                          -> ok;
+        {error, {no_such_vhost, _}} -> ok
+    end.
 
 clear_all_connection_tracking_tables(Config) ->
     [rabbit_ct_broker_helpers:rpc(Config,
@@ -131,6 +137,7 @@ clear_all_connection_tracking_tables(Config) ->
 %% -------------------------------------------------------------------
 %% Test cases.
 %% -------------------------------------------------------------------
+
 single_node_vhost_deletion_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
@@ -252,7 +259,10 @@ dead_vhost_connection_refused_on_failure_node(Config) ->
 
     %% Can open connections to vhost2 on node 1
     [_Conn21] = open_connections(Config, [{1, VHost2}]),
-    ?assertEqual(1, count_connections_in(Config, VHost2)).
+    ?assertEqual(1, count_connections_in(Config, VHost2)),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
 
 cluster_vhost_deletion_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
@@ -380,7 +390,7 @@ open_connections(Config, NodesAndVHosts) ->
       (Node) ->
           rabbit_ct_client_helpers:OpenConnectionFun(Config, Node)
       end, NodesAndVHosts),
-    timer:sleep(500),
+    timer:sleep(700),
     Conns.
 
 close_connections(Conns) ->
@@ -388,12 +398,12 @@ close_connections(Conns) ->
       (Conn) ->
           rabbit_ct_client_helpers:close_connection(Conn)
       end, Conns),
-    timer:sleep(500).
+    timer:sleep(700).
 
 count_connections_in(Config, VHost) ->
     count_connections_in(Config, VHost, 0).
 count_connections_in(Config, VHost, NodeIndex) ->
-    timer:sleep(200),
+    timer:sleep(300),
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_connection_tracking,
                                  count_connections_in, [VHost]).

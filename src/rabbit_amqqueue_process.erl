@@ -265,9 +265,18 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
     notify_decorators(startup, State3),
     State3.
 
-terminate(shutdown = R,      State = #q{backing_queue = BQ}) ->
+terminate(shutdown = R,      State = #q{backing_queue = BQ, q = #amqqueue{ name = QName }}) ->
     rabbit_core_metrics:queue_deleted(qname(State)),
-    terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
+    terminate_shutdown(
+    fun (BQS) ->
+        rabbit_misc:execute_mnesia_transaction(
+             fun() ->
+                [Q] = mnesia:read({rabbit_queue, QName}),
+                Q2 = Q#amqqueue{state = stopped},
+                rabbit_amqqueue:store_queue(Q2)
+             end),
+        BQ:terminate(R, BQS)
+    end, State);
 terminate({shutdown, missing_owner} = Reason, State) ->
     %% if the owner was missing then there will be no queue, so don't emit stats
     terminate_shutdown(terminate_delete(false, Reason, State), State);
