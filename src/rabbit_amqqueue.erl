@@ -40,6 +40,7 @@
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1, is_mirrored/1]).
 
 -export([pid_of/1, pid_of/2]).
+-export([mark_local_durable_queues_stopped/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -255,6 +256,15 @@ start(Qs) ->
     [Pid ! {self(), go} || #amqqueue{pid = Pid} <- Qs],
     ok.
 
+mark_local_durable_queues_stopped(VHost) ->
+    Qs = find_durable_queues(VHost),
+    rabbit_misc:execute_mnesia_transaction(
+        fun() ->
+            [ store_queue(Q#amqqueue{ state = stopped })
+              || Q = #amqqueue{ state  = State } <- Qs,
+              State =/= stopped ]
+        end).
+
 find_durable_queues(VHost) ->
     Node = node(),
     mnesia:async_dirty(
@@ -452,6 +462,9 @@ with(Name, F, E, RetriesLeft) ->
             E({absent, Q, timeout});
         {ok, Q = #amqqueue{state = crashed}} ->
             E({absent, Q, crashed});
+        {ok, Q = #amqqueue{state = stopped}} ->
+            %% The queue process was stopped by the supervisor
+            E({absent, Q, stopped});
         {ok, Q = #amqqueue{pid = QPid}} ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
@@ -642,10 +655,13 @@ info_keys() -> rabbit_amqqueue_process:info_keys().
 map(Qs, F) -> rabbit_misc:filter_exit_map(F, Qs).
 
 info(Q = #amqqueue{ state = crashed }) -> info_down(Q, crashed);
+info(Q = #amqqueue{ state = stopped }) -> info_down(Q, stopped);
 info(#amqqueue{ pid = QPid }) -> delegate:invoke(QPid, {gen_server2, call, [info, infinity]}).
 
 info(Q = #amqqueue{ state = crashed }, Items) ->
     info_down(Q, Items, crashed);
+info(Q = #amqqueue{ state = stopped }, Items) ->
+    info_down(Q, Items, stopped);
 info(#amqqueue{ pid = QPid }, Items) ->
     case delegate:invoke(QPid, {gen_server2, call, [{info, Items}, infinity]}) of
         {ok, Res}      -> Res;
