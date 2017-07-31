@@ -549,6 +549,10 @@ function fmt_object_state(obj) {
         explanation = 'The queue has crashed repeatedly and been unable to ' +
             'restart.';
     }
+    else if (obj.state == 'stopped') {
+        colour = 'red';
+        explanation = 'The queue process was stopped by the vhost supervisor.';
+    }
 
     return fmt_state(colour, text, explanation);
 }

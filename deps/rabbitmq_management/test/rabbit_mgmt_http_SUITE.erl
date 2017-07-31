@@ -176,6 +176,9 @@ end_per_testcase(Testcase, Config) ->
     Config1 = end_per_testcase0(Testcase, Config),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
+end_per_testcase0(queues_test, Config) ->
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"downvhost">>),
+    Config;
 end_per_testcase0(vhost_limits_list_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_2">>),
@@ -768,7 +771,6 @@ exchanges_test(Config) ->
                   internal => false,
                   arguments => #{}},
                 http_get(Config, "/exchanges/myvhost/foo")),
-
     http_put(Config, "/exchanges/badvhost/bar", Good, ?NOT_FOUND),
     http_put(Config, "/exchanges/myvhost/bar", [{type, <<"bad_exchange_type">>}],
              ?BAD_REQUEST),
@@ -792,6 +794,41 @@ queues_test(Config) ->
     http_put(Config, "/queues/%2f/foo", Good, {group, '2xx'}),
     http_get(Config, "/queues/%2f/foo", ?OK),
 
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"downvhost">>),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"downvhost">>),
+    http_put(Config, "/queues/downvhost/foo", Good, {group, '2xx'}),
+    http_put(Config, "/queues/downvhost/bar", Good, {group, '2xx'}),
+
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, <<"downvhost">>),
+    %% The vhost is down
+    DownVHost = #{name => <<"downvhost">>, tracing => false, state => <<"down">>},
+    assert_item(DownVHost, http_get(Config, "/vhosts/downvhost")),
+
+    DownQueues = http_get(Config, "/queues/downvhost"),
+    DownQueue  = http_get(Config, "/queues/downvhost/foo"),
+
+    assert_list([#{name        => <<"bar">>,
+                   vhost       => <<"downvhost">>,
+                   state       => <<"stopped">>,
+                   durable     => true,
+                   auto_delete => false,
+                   exclusive   => false,
+                   arguments   => #{}},
+                 #{name        => <<"foo">>,
+                   vhost       => <<"downvhost">>,
+                   state       => <<"stopped">>,
+                   durable     => true,
+                   auto_delete => false,
+                   exclusive   => false,
+                   arguments   => #{}}], DownQueues),
+    assert_item(#{name        => <<"foo">>,
+                  vhost       => <<"downvhost">>,
+                  state       => <<"stopped">>,
+                  durable     => true,
+                  auto_delete => false,
+                  exclusive   => false,
+                  arguments   => #{}}, DownQueue),
+
     http_put(Config, "/queues/badvhost/bar", Good, ?NOT_FOUND),
     http_put(Config, "/queues/%2f/bar",
              [{durable, <<"troo">>}],
@@ -801,7 +838,6 @@ queues_test(Config) ->
              ?BAD_REQUEST),
 
     http_put(Config, "/queues/%2f/baz", Good, {group, '2xx'}),
-
     Queues = http_get(Config, "/queues/%2f"),
     Queue = http_get(Config, "/queues/%2f/foo"),
     assert_list([#{name        => <<"baz">>,
@@ -812,12 +848,14 @@ queues_test(Config) ->
                    arguments   => #{}},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
+                   state       => <<"running">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
                    arguments   => #{}}], Queues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"/">>,
+                  state       => <<"running">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
@@ -827,6 +865,9 @@ queues_test(Config) ->
     http_delete(Config, "/queues/%2f/baz", {group, '2xx'}),
     http_delete(Config, "/queues/%2f/foo", ?NOT_FOUND),
     http_get(Config, "/queues/badvhost", ?NOT_FOUND),
+
+    http_delete(Config, "/queues/downvhost/foo", {group, '2xx'}),
+    http_delete(Config, "/queues/downvhost/bar", {group, '2xx'}),
     passed.
 
 queues_well_formed_json_test(Config) ->
