@@ -124,7 +124,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   end
 
   def output({:error, err}, _opts) do
-    {:error, ExitCodes.exit_software(), to_string(err)}
+    {:error, err}
   end
   def output({:stream, stream}, _opts) do
     {:stream, stream}
