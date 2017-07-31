@@ -390,7 +390,7 @@ open_connections(Config, NodesAndVHosts) ->
       (Node) ->
           rabbit_ct_client_helpers:OpenConnectionFun(Config, Node)
       end, NodesAndVHosts),
-    timer:sleep(700),
+    timer:sleep(500),
     Conns.
 
 close_connections(Conns) ->
@@ -398,12 +398,12 @@ close_connections(Conns) ->
       (Conn) ->
           rabbit_ct_client_helpers:close_connection(Conn)
       end, Conns),
-    timer:sleep(700).
+    timer:sleep(500).
 
 count_connections_in(Config, VHost) ->
     count_connections_in(Config, VHost, 0).
 count_connections_in(Config, VHost, NodeIndex) ->
-    timer:sleep(300),
+    timer:sleep(200),
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_connection_tracking,
                                  count_connections_in, [VHost]).
