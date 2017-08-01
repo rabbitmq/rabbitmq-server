@@ -75,7 +75,7 @@ recover(VHost) ->
 
 %%----------------------------------------------------------------------------
 
--define(INFO_KEYS, [name, tracing, state]).
+-define(INFO_KEYS, [name, tracing, cluster_state]).
 
 add(VHostPath, ActingUser) ->
     rabbit_log:info("Adding vhost '~s'~n", [VHostPath]),
@@ -261,10 +261,19 @@ infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
 i(name,    VHost) -> VHost;
 i(tracing, VHost) -> rabbit_trace:enabled(VHost);
-i(state,   VHost) -> case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
-                         true -> running;
-                         false -> down
-                     end;
+i(cluster_state, VHost) ->
+    Nodes = rabbit_nodes:all_running(),
+    lists:map(fun(Node) ->
+        State = case rabbit_misc:rpc_call(Node,
+                                          rabbit_vhost_sup_sup, is_vhost_alive,
+                                          [VHost]) of
+            {badrpc, nodedown} -> nodedown;
+            true               -> running;
+            false              -> down
+        end,
+        {Node, State}
+    end,
+    Nodes);
 i(Item, _)        -> throw({bad_argument, Item}).
 
 info(VHost)        -> infos(?INFO_KEYS, VHost).
