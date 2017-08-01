@@ -92,8 +92,8 @@ is_authorized_monitor(ReqData, Context) ->
 is_authorized_vhost(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access virtual host">>,
-                  fun(User) ->
-                          user_matches_vhost(ReqData, User)
+                  fun(#user{tags = Tags} = User) ->
+                          is_admin(Tags) orelse user_matches_vhost(ReqData, User)
                   end).
 
 is_authorized_vhost_visible(ReqData, Context) ->

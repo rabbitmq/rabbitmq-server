@@ -189,6 +189,12 @@ end_per_testcase0(vhost_limit_set_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_1_user">>),
     Config;
+end_per_testcase0(permissions_vhost_test, Config) ->
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost1">>),
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"myuser1">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"myuser2">>),
+    Config;
 end_per_testcase0(_, Config) -> Config.
 %% -------------------------------------------------------------------
 %% Testcases.
@@ -1024,6 +1030,8 @@ permissions_administrator_test(Config) ->
 permissions_vhost_test(Config) ->
     QArgs = #{},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/users/myadmin", [{password, <<"myadmin">>},
+                                        {tags, <<"administrator">>}], {group, '2xx'}),
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},
                                        {tags, <<"management">>}], {group, '2xx'}),
     http_put(Config, "/vhosts/myvhost1", none, {group, '2xx'}),
@@ -1055,14 +1063,22 @@ permissions_vhost_test(Config) ->
                 http_get(Config, Path1 ++ "/myvhost2/" ++ Path2, "myuser", "myuser",
                          ?NOT_AUTHORISED)
         end,
+    Test3 =
+        fun(Path1) ->
+                http_get(Config, Path1 ++ "/myvhost1/", "myadmin", "myadmin",
+                         ?OK)
+        end,
     Test1("/exchanges"),
     Test2("/exchanges", ""),
     Test2("/exchanges", "amq.direct"),
+    Test3("/exchanges"),
     Test1("/queues"),
     Test2("/queues", ""),
+    Test3("/queues"),
     Test2("/queues", "myqueue"),
     Test1("/bindings"),
     Test2("/bindings", ""),
+    Test3("/bindings"),
     Test2("/queues", "myqueue/bindings"),
     Test2("/exchanges", "amq.default/bindings/source"),
     Test2("/exchanges", "amq.default/bindings/destination"),
@@ -1071,6 +1087,7 @@ permissions_vhost_test(Config) ->
     http_delete(Config, "/vhosts/myvhost1", {group, '2xx'}),
     http_delete(Config, "/vhosts/myvhost2", {group, '2xx'}),
     http_delete(Config, "/users/myuser", {group, '2xx'}),
+    http_delete(Config, "/users/myadmin", {group, '2xx'}),
     passed.
 
 permissions_amqp_test(Config) ->
