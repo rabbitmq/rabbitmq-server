@@ -115,7 +115,8 @@ var COLUMNS =
                   ['connected_at', 'Connected at', false]]},
 
      'vhosts':
-     {'Messages': [['msgs-ready',      'Ready',          true],
+     {'Overview': [['cluster-state',   'Cluster state',  false]],
+      'Messages': [['msgs-ready',      'Ready',          true],
                    ['msgs-unacked',    'Unacknowledged', true],
                    ['msgs-total',      'Total',          true]],
       'Network': [['from_client',  'From client',  true],
