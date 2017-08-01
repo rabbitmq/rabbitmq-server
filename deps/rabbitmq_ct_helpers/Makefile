@@ -14,3 +14,5 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 
 include rabbitmq-components.mk
 include erlang.mk
+
+ERLC_OPTS := $(filter-out -Werror,$(ERLC_OPTS))
