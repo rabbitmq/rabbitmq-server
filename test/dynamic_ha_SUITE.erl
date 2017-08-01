@@ -57,13 +57,15 @@ groups() ->
       {clustered, [], [
           {cluster_size_2, [], [
               vhost_deletion,
-              promote_on_shutdown
+              promote_on_shutdown,
+              queue_survive_adding_dead_vhost_mirror
             ]},
           {cluster_size_3, [], [
               change_policy,
               rapid_change,
               nodes_policy_should_pick_master_from_its_params,
-              promote_slave_after_standalone_restart
+              promote_slave_after_standalone_restart,
+              queue_survive_adding_dead_vhost_mirror
               % FIXME: Re-enable those tests when the know issues are
               % fixed.
               % failing_random_policies,
@@ -217,6 +219,19 @@ rapid_loop(Config, Node, MRef) ->
             ok = rabbit_ct_broker_helpers:clear_policy(Config, Node, ?POLICY),
             rapid_loop(Config, Node, MRef)
     end.
+
+queue_survive_adding_dead_vhost_mirror(Config) ->
+    rabbit_ct_broker_helpers:force_vhost_failure(Config, 1, <<"/">>),
+    NodeA = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    ChA = rabbit_ct_client_helpers:open_channel(Config, NodeA),
+    QName = <<"queue_survive_adding_dead_vhost_mirror-q-1">>,
+    amqp_channel:call(ChA, #'queue.declare'{queue = QName}),
+    Q = find_queue(QName, NodeA),
+    Pid = proplists:get_value(pid, Q),
+    rabbit_ct_broker_helpers:set_ha_policy_all(Config),
+    %% Queue should not fail
+    Q1 = find_queue(QName, NodeA),
+    Pid = proplists:get_value(pid, Q1).
 
 %% Vhost deletion needs to successfully tear down policies and queues
 %% with policies. At least smoke-test that it doesn't blow up.

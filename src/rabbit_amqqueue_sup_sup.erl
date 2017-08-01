@@ -57,7 +57,7 @@ find_for_vhost(VHost) ->
 
 -spec find_for_vhost(rabbit_types:vhost(), atom()) -> {ok, pid()} | {error, term()}.
 find_for_vhost(VHost, Node) ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost, Node),
+    {ok, VHostSup} = rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node),
     case supervisor2:find_child(VHostSup, rabbit_amqqueue_sup_sup) of
         [QSup] -> {ok, QSup};
         Result -> {error, {queue_supervisor_not_found, Result}}
@@ -65,7 +65,7 @@ find_for_vhost(VHost, Node) ->
 
 -spec start_for_vhost(rabbit_types:vhost()) -> {ok, pid()} | {error, term()}.
 start_for_vhost(VHost) ->
-    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
         {ok, VHostSup} ->
             supervisor2:start_child(
               VHostSup,
@@ -82,7 +82,7 @@ start_for_vhost(VHost) ->
 
 -spec stop_for_vhost(rabbit_types:vhost()) -> ok.
 stop_for_vhost(VHost) ->
-    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
         {ok, VHostSup} ->
             ok = supervisor2:terminate_child(VHostSup, rabbit_amqqueue_sup_sup),
             ok = supervisor2:delete_child(VHostSup, rabbit_amqqueue_sup_sup);

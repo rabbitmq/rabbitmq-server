@@ -228,11 +228,21 @@ add_mirror(QName, MirrorNode, SyncMode) ->
             rabbit_misc:with_exit_handler(
               rabbit_misc:const(ok),
               fun () ->
-                      SPid = rabbit_amqqueue_sup_sup:start_queue_process(
-                               MirrorNode, Q, slave),
-                      log_info(QName, "Adding mirror on node ~p: ~p~n",
-                               [MirrorNode, SPid]),
-                      rabbit_mirror_queue_slave:go(SPid, SyncMode)
+                    #amqqueue{name = #resource{virtual_host = VHost}} = Q,
+                    case rabbit_vhost_sup_sup:get_vhost_sup(VHost, MirrorNode) of
+                        {ok, _} ->
+                            SPid = rabbit_amqqueue_sup_sup:start_queue_process(
+                                       MirrorNode, Q, slave),
+                            log_info(QName, "Adding mirror on node ~p: ~p~n",
+                                     [MirrorNode, SPid]),
+                            rabbit_mirror_queue_slave:go(SPid, SyncMode);
+                        {error, Error} ->
+                            log_warning(QName,
+                                        "Unable to start queue mirror on node '~p'. "
+                                        "Target virtual host is not running: ~p~n",
+                                        [MirrorNode, Error]),
+                            ok
+                    end
               end);
         {error, not_found} = E ->
             E

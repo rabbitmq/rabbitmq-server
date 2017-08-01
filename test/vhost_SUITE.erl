@@ -41,7 +41,9 @@ groups() ->
         vhost_failure_forces_connection_closure,
         dead_vhost_connection_refused,
         vhost_failure_forces_connection_closure_on_failure_node,
-        dead_vhost_connection_refused_on_failure_node
+        dead_vhost_connection_refused_on_failure_node,
+        node_starts_with_dead_vhosts,
+        node_starts_with_dead_vhosts_and_ignore_slaves
     ],
     [
       {cluster_size_1_network, [], ClusterSize1Tests},
@@ -85,7 +87,7 @@ init_per_group(cluster_size_2_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
     init_per_multinode_group(cluster_size_2_direct, Config1, 2).
 
-init_per_multinode_group(Group, Config, NodeCount) ->
+init_per_multinode_group(_Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodes_count, NodeCount},
@@ -107,8 +109,23 @@ init_per_testcase(Testcase, Config) ->
     Config.
 
 end_per_testcase(Testcase, Config) ->
+    VHost1 = <<"vhost1">>,
+    VHost2 = <<"vhost2">>,
+    case Testcase of
+        cluster_vhost_deletion_forces_connection_closure -> ok;
+        single_node_vhost_deletion_forces_connection_closure -> ok;
+        _ ->
+            delete_vhost(Config, VHost2)
+    end,
+    delete_vhost(Config, VHost1),
     clear_all_connection_tracking_tables(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+delete_vhost(Config, VHost) ->
+    case rabbit_ct_broker_helpers:delete_vhost(Config, VHost) of
+        ok                          -> ok;
+        {error, {no_such_vhost, _}} -> ok
+    end.
 
 clear_all_connection_tracking_tables(Config) ->
     [rabbit_ct_broker_helpers:rpc(Config,
@@ -120,6 +137,7 @@ clear_all_connection_tracking_tables(Config) ->
 %% -------------------------------------------------------------------
 %% Test cases.
 %% -------------------------------------------------------------------
+
 single_node_vhost_deletion_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
@@ -141,9 +159,7 @@ single_node_vhost_deletion_forces_connection_closure(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
+    ?assertEqual(0, count_connections_in(Config, VHost1)).
 
 vhost_failure_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
@@ -166,10 +182,7 @@ vhost_failure_forces_connection_closure(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
+    ?assertEqual(0, count_connections_in(Config, VHost1)).
 
 dead_vhost_connection_refused(Config) ->
     VHost1 = <<"vhost1">>,
@@ -190,10 +203,7 @@ dead_vhost_connection_refused(Config) ->
     [_Conn2] = open_connections(Config, [{0, VHost2}]),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    expect_that_client_connection_is_rejected(Config, 0, VHost2),
-
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
+    expect_that_client_connection_is_rejected(Config, 0, VHost2).
 
 
 vhost_failure_forces_connection_closure_on_failure_node(Config) ->
@@ -221,10 +231,7 @@ vhost_failure_forces_connection_closure_on_failure_node(Config) ->
     ?assertEqual(1, count_connections_in(Config, VHost1)),
 
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
+    ?assertEqual(0, count_connections_in(Config, VHost1)).
 
 dead_vhost_connection_refused_on_failure_node(Config) ->
     VHost1 = <<"vhost1">>,
@@ -278,9 +285,93 @@ cluster_vhost_deletion_forces_connection_closure(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
+    ?assertEqual(0, count_connections_in(Config, VHost1)).
 
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
+node_starts_with_dead_vhosts(Config) ->
+    VHost1 = <<"vhost1">>,
+    VHost2 = <<"vhost2">>,
+
+    set_up_vhost(Config, VHost1),
+    set_up_vhost(Config, VHost2),
+
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1, VHost1),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+
+    QName = <<"node_starts_with_dead_vhosts-q-1">>,
+    amqp_channel:call(Chan, #'queue.declare'{queue = QName, durable = true}),
+    rabbit_ct_client_helpers:publish(Chan, QName, 10),
+
+    DataStore1 = rabbit_ct_broker_helpers:rpc(
+        Config, 1, rabbit_vhost, msg_store_dir_path, [VHost1]),
+
+    rabbit_ct_broker_helpers:stop_node(Config, 1),
+
+    file:write_file(filename:join(DataStore1, "recovery.dets"), <<"garbage">>),
+
+    %% The node should start without a vhost
+    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+
+    timer:sleep(500),
+
+    false = rabbit_ct_broker_helpers:rpc(Config, 1,
+                rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
+    true = rabbit_ct_broker_helpers:rpc(Config, 1,
+                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]).
+
+node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
+    VHost1 = <<"vhost1">>,
+    VHost2 = <<"vhost2">>,
+
+    set_up_vhost(Config, VHost1),
+    set_up_vhost(Config, VHost2),
+
+    true = rabbit_ct_broker_helpers:rpc(Config, 1,
+                rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
+    true = rabbit_ct_broker_helpers:rpc(Config, 1,
+                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
+
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost1),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+
+    QName = <<"node_starts_with_dead_vhosts_and_ignore_slaves-q-0">>,
+    amqp_channel:call(Chan, #'queue.declare'{queue = QName, durable = true}),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+             rabbit_policy, set,
+             [VHost1, <<"mirror">>, <<".*">>, [{<<"ha-mode">>, <<"all">>}],
+              0, <<"queues">>, <<"acting-user">>]),
+
+    %% Wait for the queue to create a slave
+    timer:sleep(300),
+
+    rabbit_ct_client_helpers:publish(Chan, QName, 10),
+
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(
+                Config, 0,
+                rabbit_amqqueue, lookup,
+                [rabbit_misc:r(VHost1, queue, QName)], infinity),
+
+    Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+
+    #amqqueue{sync_slave_pids = [Pid]} = Q,
+
+    Node1 = node(Pid),
+
+    DataStore1 = rabbit_ct_broker_helpers:rpc(
+        Config, 1, rabbit_vhost, msg_store_dir_path, [VHost1]),
+
+    rabbit_ct_broker_helpers:stop_node(Config, 1),
+
+    file:write_file(filename:join(DataStore1, "recovery.dets"), <<"garbage">>),
+
+    %% The node should start without a vhost
+    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+
+    timer:sleep(500),
+
+    false = rabbit_ct_broker_helpers:rpc(Config, 1,
+                rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
+    true = rabbit_ct_broker_helpers:rpc(Config, 1,
+                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]).
 
 %% -------------------------------------------------------------------
 %% Helpers

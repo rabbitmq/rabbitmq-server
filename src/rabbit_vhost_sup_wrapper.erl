@@ -29,7 +29,12 @@
 start_link(VHost) ->
     %% Using supervisor, because supervisor2 does not stop a started child when
     %% another one fails to start. Bug?
-    supervisor:start_link(?MODULE, [VHost]).
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
+        {ok, Pid}  ->
+            {error, {already_started, Pid}};
+        {error, _} ->
+            supervisor:start_link(?MODULE, [VHost])
+    end.
 
 init([VHost]) ->
     %% 2 restarts in 5 minutes. One per message store.
