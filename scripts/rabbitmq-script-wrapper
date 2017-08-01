@@ -31,7 +31,7 @@ if [ `id -u` = `id -u rabbitmq` -a "$SCRIPT" = "rabbitmq-server" ] ; then
     . "$RABBITMQ_ENV"
 
     exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
-elif [ `id -u` = `id -u rabbitmq` ] ; then
+elif [ \( `id -u` = `id -u rabbitmq` -a "$SCRIPT" != "rabbitmq-plugins" \) -o \( `id -u` = 0 -a "$SCRIPT" = "rabbitmq-plugins" \) ] ; then
     if [ -f $PWD/.erlang.cookie ] ; then
         export HOME=.
     fi
@@ -41,7 +41,11 @@ elif [ `id -u` = 0 ] ; then
 else
     /usr/lib/rabbitmq/bin/${SCRIPT}
     echo
-    echo "Only root or rabbitmq should run ${SCRIPT}"
+    if [ "$SCRIPT" = 'rabbitmq-plugins' ]; then
+        echo "Only root should run ${SCRIPT}"
+    else
+        echo "Only root or rabbitmq should run ${SCRIPT}"
+    fi
     echo
     exit 1
 fi
