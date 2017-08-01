@@ -27,14 +27,15 @@ RABBITMQ_SCRIPTS_DIR="$(dirname "$RABBITMQ_ENV")"
 
 main() {
   ensure_we_are_in_a_readable_dir
-  if current_user_is_rabbitmq
+  if current_user_is_rabbitmq && calling_rabbitmq_server
   then
-    if calling_rabbitmq_server
-    then
-      exec_rabbitmq_server "$@"
-    else
-      exec_script_as_rabbitmq "$@"
-    fi
+    exec_rabbitmq_server "$@"
+  elif current_user_is_rabbitmq && ! calling_rabbitmq_plugins
+  then
+    exec_script_as_rabbitmq "$@"
+  elif current_user_is_root && calling_rabbitmq_plugins
+  then
+    exec_script_as_rabbitmq "$@"
   elif current_user_is_root
   then
     exec_script_as_root
@@ -58,6 +59,10 @@ current_user_is_root() {
 
 calling_rabbitmq_server() {
   [ "$SCRIPT" = "rabbitmq-server" ]
+}
+
+calling_rabbitmq_plugins() {
+  [ "$SCRIPT" = "rabbitmq-plugins" ]
 }
 
 exec_rabbitmq_server() {
