@@ -31,6 +31,7 @@
 -export([list_queues_local/1
         ,list_queues_offline/1
         ,list_queues_online/1
+        ,list_queues_stopped/1
         ]).
 
 all() ->
@@ -44,6 +45,7 @@ groups() ->
             [list_queues_local
             ,list_queues_online
             ,list_queues_offline
+            ,list_queues_stopped
             ]}
     ].
 
@@ -96,12 +98,18 @@ end_per_group(list_queues, Config0) ->
     rabbit_ct_helpers:run_steps(Config1,
                                 rabbit_ct_client_helpers:teardown_steps() ++
                                     rabbit_ct_broker_helpers:teardown_steps());
-end_per_group(global_parameters, Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-        rabbit_ct_client_helpers:teardown_steps() ++
-        rabbit_ct_broker_helpers:teardown_steps());
 end_per_group(_, Config) ->
     Config.
+
+init_per_testcase(list_queues_stopped, Config0) ->
+    %% Start node 3 to crash it's queues
+    rabbit_ct_broker_helpers:start_node(Config0, 2),
+    %% Make vhost "down" on nodes 2 and 3
+    rabbit_ct_broker_helpers:force_vhost_failure(Config0, 1, <<"/">>),
+    rabbit_ct_broker_helpers:force_vhost_failure(Config0, 2, <<"/">>),
+
+    rabbit_ct_broker_helpers:stop_node(Config0, 2),
+    rabbit_ct_helpers:testcase_started(Config0, list_queues_stopped);
 
 init_per_testcase(Testcase, Config0) ->
     rabbit_ct_helpers:testcase_started(Config0, Testcase).
@@ -133,6 +141,23 @@ list_queues_offline(Config) ->
     assert_ctl_queues(Config, 0, ["--offline"], OfflineQueues),
     assert_ctl_queues(Config, 1, ["--offline"], OfflineQueues),
     ok.
+
+list_queues_stopped(Config) ->
+    Node1Queues = lists:sort(lists:nth(1, ?config(per_node_queues, Config))),
+    Node2Queues = lists:sort(lists:nth(2, ?config(per_node_queues, Config))),
+    Node3Queues = lists:sort(lists:nth(3, ?config(per_node_queues, Config))),
+
+    %% All queues are listed
+    ListedQueues =
+        [ {Name, State}
+          || [Name, State] <- rabbit_ct_broker_helpers:rabbitmqctl_list(
+                                Config, 0, ["list_queues", "name", "state"]) ],
+
+    [ <<"running">> = proplists:get_value(Q, ListedQueues) || Q <- Node1Queues ],
+    %% Node is running. Vhost is down
+    [ <<"stopped">> = proplists:get_value(Q, ListedQueues) || Q <- Node2Queues ],
+    %% Node is not running. Vhost is down
+    [ <<"down">> = proplists:get_value(Q, ListedQueues) || Q <- Node3Queues ].
 
 %%----------------------------------------------------------------------------
 %% Helpers

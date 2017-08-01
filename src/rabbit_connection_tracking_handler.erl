@@ -82,11 +82,14 @@ handle_event(#event{type = vhost_deleted, props = Details}, State) ->
     close_connections(rabbit_connection_tracking:list(VHost),
                       rabbit_misc:format("vhost '~s' is deleted", [VHost])),
     {ok, State};
+%% Note: under normal circumstances this will be called immediately
+%% after the vhost_deleted above. Therefore we should be careful about
+%% what we log and be more defensive.
 handle_event(#event{type = vhost_down, props = Details}, State) ->
     VHost = pget(name, Details),
     Node = pget(node, Details),
-    rabbit_log_connection:info("Closing all connections in vhost '~s' at node '~s'"
-                               " because the vhost database has stopped working",
+    rabbit_log_connection:info("Closing all connections in vhost '~s' on node '~s'"
+                               " because the vhost is stopping",
                                [VHost, Node]),
     close_connections(rabbit_connection_tracking:list_on_node(Node, VHost),
                       rabbit_misc:format("vhost '~s' is down", [VHost])),
@@ -131,7 +134,17 @@ close_connections(Tracked, Message, Delay) ->
     ok.
 
 close_connection(#tracked_connection{pid = Pid, type = network}, Message) ->
-    rabbit_networking:close_connection(Pid, Message);
+    try
+        rabbit_networking:close_connection(Pid, Message)
+    catch error:{not_a_connection, _} ->
+            %% could has been closed concurrently, or the input
+            %% is bogus. In any case, we should not terminate
+            ok;
+          _:Err ->
+            %% ignore, don't terminate
+            rabbit_log:warning("Could not close connection ~p: ~p", [Pid, Err]),
+            ok
+    end;
 close_connection(#tracked_connection{pid = Pid, type = direct}, Message) ->
     %% Do an RPC call to the node running the direct client.
     Node = node(Pid),
