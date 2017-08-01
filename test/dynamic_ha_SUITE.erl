@@ -352,7 +352,7 @@ slave_recovers_after_vhost_down_an_up(Config) ->
     false = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, is_vhost_alive, [<<"/">>]),
     timer:sleep(300),
     %% Vhost is back up
-    {ok, _Sup} = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, get_vhost_sup, [<<"/">>]),
+    {ok, _Sup} = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, start_vhost, [<<"/">>]),
 
     assert_slaves(A, QName, {A, [B]}, [{A, []}]).
 
@@ -384,7 +384,7 @@ slave_recovers_after_vhost_down_and_master_migrated(Config) ->
     assert_slaves(B, QName, {B, []}),
 
     %% Restart the vhost on the node (previously) hosting queue master
-    {ok, _Sup} = rabbit_ct_broker_helpers:rpc(Config, A, rabbit_vhost_sup_sup, get_vhost_sup, [<<"/">>]),
+    {ok, _Sup} = rabbit_ct_broker_helpers:rpc(Config, A, rabbit_vhost_sup_sup, start_vhost, [<<"/">>]),
     timer:sleep(300),
     assert_slaves(B, QName, {B, [A]}, [{B, []}]).
 
