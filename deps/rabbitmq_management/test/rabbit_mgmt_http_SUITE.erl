@@ -1014,8 +1014,6 @@ permissions_administrator_test(Config) ->
                 http_get(Config, Path, "isadmin", "isadmin", ?OK),
                 http_get(Config, Path, "guest", "guest", ?OK)
         end,
-    %% All users can get a list of vhosts. It may be filtered.
-    %%Test("/vhosts"),
     Test("/vhosts/%2f"),
     Test("/vhosts/%2f/permissions"),
     Test("/users"),
@@ -1733,15 +1731,19 @@ exchanges_pagination_test(Config) ->
 exchanges_pagination_permissions_test(Config) ->
     http_put(Config, "/users/admin",   [{password, <<"admin">>},
                                         {tags, <<"administrator">>}], {group, '2xx'}),
+    http_put(Config, "/users/non-admin", [{password, <<"non-admin">>},
+                                          {tags, <<"management">>}], {group, '2xx'}),
     Perms = [{configure, <<".*">>},
              {write,     <<".*">>},
              {read,      <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
+    http_put(Config, "/permissions/vh1/non-admin",   Perms, {group, '2xx'}),
+    http_put(Config, "/permissions/%2f/admin",   Perms, {group, '2xx'}),
     http_put(Config, "/permissions/vh1/admin",   Perms, {group, '2xx'}),
     QArgs = #{},
-    http_put(Config, "/exchanges/%2f/test0", QArgs, {group, '2xx'}),
-    http_put(Config, "/exchanges/vh1/test1", QArgs, "admin","admin", {group, '2xx'}),
-    FirstPage = http_get(Config, "/exchanges?page=1&name=test1","admin","admin", ?OK),
+    http_put(Config, "/exchanges/%2f/test0", QArgs, "admin", "admin", {group, '2xx'}),
+    http_put(Config, "/exchanges/vh1/test1", QArgs, "non-admin", "non-admin", {group, '2xx'}),
+    FirstPage = http_get(Config, "/exchanges?page=1&name=test1", "non-admin", "non-admin", ?OK),
     ?assertEqual(8, maps:get(total_count, FirstPage)),
     ?assertEqual(1, maps:get(item_count, FirstPage)),
     ?assertEqual(1, maps:get(page, FirstPage)),
@@ -1750,8 +1752,9 @@ exchanges_pagination_permissions_test(Config) ->
     assert_list([#{name => <<"test1">>, vhost => <<"vh1">>}
                 ], maps:get(items, FirstPage)),
     http_delete(Config, "/exchanges/%2f/test0", {group, '2xx'}),
-    http_delete(Config, "/exchanges/vh1/test1","admin","admin", {group, '2xx'}),
+    http_delete(Config, "/exchanges/vh1/test1", {group, '2xx'}),
     http_delete(Config, "/users/admin", {group, '2xx'}),
+    http_delete(Config, "/users/non-admin", {group, '2xx'}),
     passed.
 
 
@@ -1912,17 +1915,21 @@ queue_pagination_columns_test(Config) ->
     passed.
 
 queues_pagination_permissions_test(Config) ->
+    http_put(Config, "/users/non-admin", [{password, <<"non-admin">>},
+                                          {tags, <<"management">>}], {group, '2xx'}),
     http_put(Config, "/users/admin",   [{password, <<"admin">>},
                                         {tags, <<"administrator">>}], {group, '2xx'}),
     Perms = [{configure, <<".*">>},
              {write,     <<".*">>},
              {read,      <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
+    http_put(Config, "/permissions/vh1/non-admin",   Perms, {group, '2xx'}),
+    http_put(Config, "/permissions/%2f/admin",   Perms, {group, '2xx'}),
     http_put(Config, "/permissions/vh1/admin",   Perms, {group, '2xx'}),
     QArgs = #{},
     http_put(Config, "/queues/%2f/test0", QArgs, {group, '2xx'}),
-    http_put(Config, "/queues/vh1/test1", QArgs, "admin","admin", {group, '2xx'}),
-    FirstPage = http_get(Config, "/queues?page=1","admin","admin", ?OK),
+    http_put(Config, "/queues/vh1/test1", QArgs, "non-admin","non-admin", {group, '2xx'}),
+    FirstPage = http_get(Config, "/queues?page=1", "non-admin", "non-admin", ?OK),
     ?assertEqual(1, maps:get(total_count, FirstPage)),
     ?assertEqual(1, maps:get(item_count, FirstPage)),
     ?assertEqual(1, maps:get(page, FirstPage)),
@@ -1930,9 +1937,21 @@ queues_pagination_permissions_test(Config) ->
     ?assertEqual(1, maps:get(page_count, FirstPage)),
     assert_list([#{name => <<"test1">>, vhost => <<"vh1">>}
                 ], maps:get(items, FirstPage)),
+
+    FirstPageAdm = http_get(Config, "/queues?page=1", "admin", "admin", ?OK),
+    ?assertEqual(2, maps:get(total_count, FirstPageAdm)),
+    ?assertEqual(2, maps:get(item_count, FirstPageAdm)),
+    ?assertEqual(1, maps:get(page, FirstPageAdm)),
+    ?assertEqual(100, maps:get(page_size, FirstPageAdm)),
+    ?assertEqual(1, maps:get(page_count, FirstPageAdm)),
+    assert_list([#{name => <<"test1">>, vhost => <<"vh1">>},
+                 #{name => <<"test0">>, vhost => <<"/">>}
+                ], maps:get(items, FirstPageAdm)),
+
     http_delete(Config, "/queues/%2f/test0", {group, '2xx'}),
     http_delete(Config, "/queues/vh1/test1","admin","admin", {group, '2xx'}),
     http_delete(Config, "/users/admin", {group, '2xx'}),
+    http_delete(Config, "/users/non-admin", {group, '2xx'}),
     passed.
 
 samples_range_test(Config) ->
@@ -2397,17 +2416,15 @@ policy_permissions_test(Config) ->
     http_put(Config, "/parameters/test/%2f/good", Param, {group, '2xx'}),
 
     Pos = fun (U) ->
-                  Expected = case U of "admin" -> ?CREATED; _ -> ?NO_CONTENT end,
-                  http_put(Config, "/policies/v/HA",        Policy, U, U, Expected),
-                  http_put(Config,
-                           "/parameters/test/v/good",       Param, U, U, {group, '2xx'}),
-                  1 = length(http_get(Config, "/policies",          U, U, ?OK)),
-                  1 = length(http_get(Config, "/parameters/test",   U, U, ?OK)),
-                  1 = length(http_get(Config, "/parameters",        U, U, ?OK)),
-                  1 = length(http_get(Config, "/policies/v",        U, U, ?OK)),
-                  1 = length(http_get(Config, "/parameters/test/v", U, U, ?OK)),
-                  http_get(Config, "/policies/v/HA",                U, U, ?OK),
-                  http_get(Config, "/parameters/test/v/good",       U, U, ?OK)
+                  http_put(Config, "/policies/v/HA", Policy, U, U, {group, '2xx'}),
+                  http_put(Config, "/parameters/test/v/good", Param, U, U, {group, '2xx'}),
+                  http_get(Config, "/policies",          U, U, {group, '2xx'}),
+                  http_get(Config, "/parameters/test",   U, U, {group, '2xx'}),
+                  http_get(Config, "/parameters",        U, U, {group, '2xx'}),
+                  http_get(Config, "/policies/v",        U, U, {group, '2xx'}),
+                  http_get(Config, "/parameters/test/v", U, U, {group, '2xx'}),
+                  http_get(Config, "/policies/v/HA",          U, U, {group, '2xx'}),
+                  http_get(Config, "/parameters/test/v/good", U, U, {group, '2xx'})
           end,
     Neg = fun (U) ->
                   http_put(Config, "/policies/v/HA",    Policy, U, U, ?NOT_AUTHORISED),
@@ -2427,15 +2444,22 @@ policy_permissions_test(Config) ->
     AlwaysNeg =
         fun (U) ->
                 http_put(Config, "/policies/%2f/HA",  Policy, U, U, ?NOT_AUTHORISED),
-                http_put(Config,
-                         "/parameters/test/%2f/good", Param, U, U, ?NOT_AUTHORISED),
+                http_put(Config, "/parameters/test/%2f/good", Param, U, U, ?NOT_AUTHORISED),
                 http_get(Config, "/policies/%2f/HA",          U, U, ?NOT_AUTHORISED),
                 http_get(Config, "/parameters/test/%2f/good", U, U, ?NOT_AUTHORISED)
+        end,
+    AdminPos =
+        fun (U) ->
+                http_put(Config, "/policies/%2f/HA",  Policy, U, U, {group, '2xx'}),
+                http_put(Config, "/parameters/test/%2f/good", Param, U, U, {group, '2xx'}),
+                http_get(Config, "/policies/%2f/HA",          U, U, {group, '2xx'}),
+                http_get(Config, "/parameters/test/%2f/good", U, U, {group, '2xx'})
         end,
 
     [Neg(U) || U <- ["mon", "mgmt"]],
     [Pos(U) || U <- ["admin", "policy"]],
-    [AlwaysNeg(U) || U <- ["mon", "mgmt", "admin", "policy"]],
+    [AlwaysNeg(U) || U <- ["mon", "mgmt", "policy"]],
+    [AdminPos(U) || U <- ["admin"]],
 
     %% This one is deliberately different between admin and policymaker.
     http_put(Config, "/parameters/test/v/admin", Param, "admin", "admin", {group, '2xx'}),
@@ -2723,4 +2747,3 @@ wait_until(Fun, N) ->
 http_post_json(Config, Path, Body, Assertion) ->
     http_upload_raw(Config,  post, Path, Body, "guest", "guest",
                     Assertion, [{"Content-Type", "application/json"}]).
-

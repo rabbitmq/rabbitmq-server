@@ -136,8 +136,9 @@ is_authorized_policies(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access object">>,
                   fun(User = #user{tags = Tags}) ->
-                          is_policymaker(Tags) andalso
-                              user_matches_vhost(ReqData, User)
+                          is_admin(Tags) orelse
+                                           (is_policymaker(Tags) andalso
+                                            user_matches_vhost(ReqData, User))
                   end).
 
 %% For global parameters. Must be policymaker.
