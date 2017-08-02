@@ -10,9 +10,9 @@ Build-Depends: debhelper (>= 9),
  python-simplejson,
  xmlto,
  xsltproc,
- erlang-nox (>= 1:18.3-1) | esl-erlang (>= 1:18.3),
- erlang-dev (>= 1:18.3-1) | esl-erlang (>= 1:18.3),
- erlang-src (>= 1:18.3-1) | esl-erlang (>= 1:18.3),
+ erlang-nox (>= 1:19.2.1+dfsg-2~bpo8+1) | esl-erlang (>= 1:19.2-1),
+ erlang-dev (>= 1:19.2.1+dfsg-2~bpo8+1) | esl-erlang (>= 1:19.2-1),
+ erlang-src (>= 1:19.2.1+dfsg-2~bpo8+1) | esl-erlang (>= 1:19.2-1),
  elixir (>= 1.4.5-1),
  zip,
  rsync
@@ -20,7 +20,7 @@ Standards-Version: 3.9.4
 
 Package: rabbitmq-server
 Architecture: all
-Depends: erlang-nox (>= 1:18.3-1) | esl-erlang (>= 1:18.3), adduser,
+Depends: erlang-nox (>= 1:19.2) | esl-erlang (>= 1:19.2), adduser,
  logrotate, socat, init-system-helpers (>= 1.13~)
 Description: Multi-protocol messaging broker
  RabbitMQ is an open source multi-protocol messaging broker.
