@@ -339,11 +339,17 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
               {ok, Node0}  -> Node0;
               {error, _}   -> Node
             end,
-
     Node1 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
-    gen_server2:call(
-      rabbit_amqqueue_sup_sup:start_queue_process(Node1, Q, declare),
-      {init, new}, infinity).
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node1) of
+        {ok, _} ->
+            gen_server2:call(
+              rabbit_amqqueue_sup_sup:start_queue_process(Node1, Q, declare),
+              {init, new}, infinity);
+        {error, Error} ->
+            rabbit_misc:protocol_error(internal_error,
+                            "Cannot declare a queue '~s' on node '~s': ~255p",
+                            [rabbit_misc:rs(QueueName), Node1, Error])
+    end.
 
 internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
