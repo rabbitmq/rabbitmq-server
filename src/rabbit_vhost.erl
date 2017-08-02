@@ -269,7 +269,7 @@ i(cluster_state, VHost) ->
                                           [VHost]) of
             {badrpc, nodedown} -> nodedown;
             true               -> running;
-            false              -> down
+            false              -> stopped
         end,
         {Node, State}
     end,
