@@ -933,7 +933,7 @@ function fmt_vhost_state(vhost){
     var non_ok_count = 0;
     for(var node in cluster_state){
         var node_state = cluster_state[node];
-        if(cluster_state[node] == "down" || cluster_state[node] == "nodedown"){
+        if(cluster_state[node] == "stopped" || cluster_state[node] == "nodedown"){
             non_ok_count++;
             down_nodes.push(node);
         } else if(cluster_state[node] == "running"){
@@ -943,9 +943,9 @@ function fmt_vhost_state(vhost){
     if(non_ok_count == 0 ){
         return fmt_state('green', 'running', '');
     } else if(non_ok_count > 0 && ok_count == 0){
-        return fmt_state('red', 'down', 'Vhost supervisor is not running.');
+        return fmt_state('red', 'stopped', 'Vhost supervisor is not running.');
     } else if(non_ok_count > 0 && ok_count > 0){
-        return fmt_state('yellow', 'partial', 'Vhost supervisor is down on some cluster nodes: ' + down_nodes.join(', '));
+        return fmt_state('yellow', 'partial', 'Vhost supervisor is stopped on some cluster nodes: ' + down_nodes.join(', '));
     }
 }
 
