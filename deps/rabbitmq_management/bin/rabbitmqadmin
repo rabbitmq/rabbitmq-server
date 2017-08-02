@@ -14,6 +14,8 @@
 #
 #   The Initial Developer of the Original Code is GoPivotal, Inc.
 #   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+from __future__ import print_function
+
 try:
     from signal import signal, SIGPIPE, SIG_DFL
     signal(SIGPIPE, SIG_DFL)
@@ -22,7 +24,7 @@ except ImportError:
 
 import sys
 if sys.version_info[0] < 2 or (sys.version_info[0] == 2 and sys.version_info[1] < 6):
-    print("Sorry, rabbitmqadmin requires at least Python 2.6 (2.7.9 when HTTPS is enabled).")
+    eprint("Sorry, rabbitmqadmin requires at least Python 2.6 (2.7.9 when HTTPS is enabled).")
     sys.exit(1)
 
 from optparse import OptionParser, TitledHelpFormatter
@@ -324,7 +326,9 @@ def make_parser():
     add("--ssl-ca-cert-file", dest="ssl_ca_cert_file",
         help="PEM format CA certificate file for SSL")
     add("--ssl-disable-hostname-verification", dest="ssl_disable_hostname_verification",
-        help="Disables peer hostname verification", default=False, action="store_true" )
+        help="Disables peer hostname verification", default=False, action="store_true")
+    add("-k", "--ssl-insecure", dest="ssl_insecure",
+        help="Disables all SSL validations like curl's '-k' argument", default=False, action="store_true")
     add("-f", "--format", dest="format",
         help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]")
     add("-S", "--sort", dest="sort", help="sort key for listing queries")
@@ -397,18 +401,18 @@ def make_configuration():
                 setattr(options, key, getattr(u, key))
 
         if u.path is not None and (u.path != "") and (u.path != "/"):
-            print("WARN: path in --base-uri is ignored. Please specify --vhost and/or --path-prefix separately.\n")
+            eprint("WARNING: path in --base-uri is ignored. Please specify --vhost and/or --path-prefix separately.\n")
 
     return (options, args)
 
 def assert_usage(expr, error):
     if not expr:
-        output("\nERROR: {0}\n".format(error))
-        output("{0} --help for help\n".format(os.path.basename(sys.argv[0])))
+        eprint("\nERROR: {0}\n".format(error))
+        eprint("{0} --help for help\n".format(os.path.basename(sys.argv[0])))
         sys.exit(1)
 
 def print_version():
-    output("rabbitmqadmin {0}".format(VERSION))
+    print("rabbitmqadmin {0}".format(VERSION))
     sys.exit(0)
 
 def column_sort_key(col):
@@ -421,7 +425,7 @@ def main():
     (options, args) = make_configuration()
     if options.bash_completion:
         print_bash_completion()
-        exit(0)
+        sys.exit(0)
     assert_usage(len(args) > 0, 'Action not specified')
     mgmt = Management(options, args[1:])
     mode = "invoke_" + args[0]
@@ -430,12 +434,12 @@ def main():
     method = getattr(mgmt, "invoke_%s" % args[0])
     method()
 
-def output(s):
-    print(s)
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
 def die(s):
-    sys.stderr.write("*** {0}\n".format(s))
-    exit(1)
+    eprint("*** {0}\n".format(s))
+    sys.exit(1)
 
 def maybe_utf8(s):
     if isinstance(s, int):
@@ -477,7 +481,7 @@ class Management:
         # Python < 2.7.8, note: those versions still have SSLv3 enabled
         #                       and other limitations. See rabbitmq/rabbitmq-management#225
         else:
-            print("Warning: rabbitmqadmin requires Python 2.7.9+ when HTTPS is used.")
+            eprint("WARNING: rabbitmqadmin requires Python 2.7.9+ when HTTPS is used.")
             return httplib.HTTPSConnection(hostname, port,
                                            cert_file = self.options.ssl_cert_file,
                                            key_file  = self.options.ssl_key_file)
@@ -486,8 +490,16 @@ class Management:
         # Python 2.7.9+ only
         ssl_ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         ssl_ctx.options &= ~ssl.OP_NO_SSLv3
-        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        ssl_ctx.check_hostname = not self.options.ssl_disable_hostname_verification
+
+        ssl_insecure = self.options.ssl_insecure
+        ssl_disable_hostname_verification = ssl_insecure or \
+                self.options.ssl_disable_hostname_verification
+        # Note: you must set check_hostname prior to verify_mode
+        if ssl_disable_hostname_verification:
+            ssl_ctx.check_hostname = False
+        if ssl_insecure:
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+
         if self.options.ssl_key_file:
             ssl_ctx.load_cert_chain(self.options.ssl_cert_file,
                                     self.options.ssl_key_file)
@@ -532,7 +544,7 @@ class Management:
 
     def verbose(self, string):
         if self.options.verbose:
-            output(string)
+            print(string)
 
     def get_arg(self):
         assert_usage(len(self.args) == 1, 'Exactly one argument required')
@@ -557,7 +569,7 @@ class Management:
   subcommands
   config""")
             print(usage)
-        exit(0)
+        sys.exit(0)
 
     def invoke_publish(self):
         (uri, upload) = self.parse_args(self.args, EXTRA_VERBS['publish'])
@@ -710,18 +722,18 @@ class Management:
         try:
             return json.loads(text)
         except ValueError:
-            print("Could not parse JSON:\n  {0}".format(text))
+            eprint("ERROR: Could not parse JSON:\n  {0}".format(text))
             sys.exit(1)
 
 def format_list(json_list, columns, args, options):
     format = options.format
     formatter = None
     if format == "raw_json":
-        output(json_list)
+        print(json_list)
         return
     elif format == "pretty_json":
         enc = json.JSONEncoder(False, False, True, True, True, 2)
-        output(enc.encode(json.loads(json_list)))
+        print(enc.encode(json.loads(json_list)))
         return
     else:
         formatter = FORMATS[format]
@@ -733,7 +745,7 @@ def format_list(json_list, columns, args, options):
 class Lister:
     def verbose(self, string):
         if self.options.verbose:
-            output(string)
+            print(string)
 
     def display(self, json_list):
         depth = sys.maxsize
@@ -810,7 +822,7 @@ class TSVList(Lister):
 
         for row in table:
             line = "\t".join(row)
-            output(line)
+            print(line)
 
 class LongList(Lister):
     def __init__(self, columns, obj_info, options):
@@ -824,11 +836,11 @@ class LongList(Lister):
         for col in columns:
             max_width = max(max_width, len(col))
         fmt = "{0:>" + str(max_width) + "}: {1}"
-        output(sep)
+        print(sep)
         for i in range(0, len(table)):
             for j in range(0, len(columns)):
-                output(fmt.format(columns[j], table[i][j]))
-            output(sep)
+                print(fmt.format(columns[j], table[i][j]))
+            print(sep)
 
 class TableList(Lister):
     def __init__(self, columns, obj_info, options):
@@ -859,13 +871,13 @@ class TableList(Lister):
         for i in range(0, len(col_widths)):
             fmt = " {0:" + align + str(col_widths[i]) + "} "
             txt += fmt.format(row[i]) + "|"
-        output(txt)
+        print(txt)
 
     def ascii_bar(self, col_widths):
         txt = "+"
         for w in col_widths:
             txt += ("-" * (w + 2)) + "+"
-        output(txt)
+        print(txt)
 
 class KeyValueList(Lister):
     def __init__(self, columns, obj_info, options):
@@ -878,7 +890,7 @@ class KeyValueList(Lister):
             row = []
             for j in range(0, len(columns)):
                 row.append("{0}=\"{1}\"".format(columns[j], table[i][j]))
-            output(" ".join(row))
+            print(" ".join(row))
 
 # TODO handle spaces etc in completable names
 class BashList(Lister):
@@ -896,7 +908,7 @@ class BashList(Lister):
             res = []
             for row in table:
                 res.append(row[ix])
-            output(" ".join(res))
+            print(" ".join(res))
 
 FORMATS = {
     'raw_json'    : None, # Special cased
@@ -1027,7 +1039,7 @@ _rabbitmqadmin()
 }
 complete -F _rabbitmqadmin rabbitmqadmin
 """
-    output(script)
+    print(script)
 
 if __name__ == "__main__":
     main()
