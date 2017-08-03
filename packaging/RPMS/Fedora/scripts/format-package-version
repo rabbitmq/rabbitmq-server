@@ -1,0 +1,8 @@
+#!/bin/sh
+# vim:sw=2:et:
+
+set -e
+
+VERSION=$1
+
+echo "$VERSION" | sed -E -e 's/-/~/g'
