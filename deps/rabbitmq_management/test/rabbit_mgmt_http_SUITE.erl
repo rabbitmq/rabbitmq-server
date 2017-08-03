@@ -809,8 +809,9 @@ queues_test(Config) ->
 
     rabbit_ct_broker_helpers:force_vhost_failure(Config, <<"downvhost">>),
     %% The vhost is down
-    DownVHost = #{name => <<"downvhost">>, tracing => false, state => <<"down">>},
-    assert_item(DownVHost, http_get(Config, "/vhosts/downvhost")),
+    #{name := <<"downvhost">>, tracing := false, cluster_state := DownClusterState} =
+        http_get(Config, "/vhosts/downvhost"),
+    ?assertEqual([<<"stopped">>], lists:usort(maps:values(DownClusterState))),
 
     DownQueues = http_get(Config, "/queues/downvhost"),
     DownQueue  = http_get(Config, "/queues/downvhost/foo"),
