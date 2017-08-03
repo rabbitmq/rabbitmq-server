@@ -17,7 +17,7 @@
 -module(rabbit_mirror_queue_misc).
 -behaviour(rabbit_policy_validator).
 
--export([remove_from_queue/3, on_node_up/0, add_mirrors/3,
+-export([remove_from_queue/3, on_vhost_up/1, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,
          initial_queue_node/2, suggested_queue_nodes/1,
          is_mirrored/1, update_mirrors/2, update_mirrors/1, validate_policy/1,
@@ -53,7 +53,6 @@
 -spec remove_from_queue
         (rabbit_amqqueue:name(), pid(), [pid()]) ->
             {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'}.
--spec on_node_up() -> 'ok'.
 -spec add_mirrors(rabbit_amqqueue:name(), [node()], 'sync' | 'async') ->
           'ok'.
 -spec store_updated_slaves(rabbit_types:amqqueue()) ->
@@ -167,12 +166,16 @@ slaves_to_start_on_failure(Q, DeadGMPids) ->
     {_, NewNodes} = suggested_queue_nodes(Q, ClusterNodes),
     NewNodes -- OldNodes.
 
-on_node_up() ->
+on_vhost_up(VHost) ->
     QNames =
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   mnesia:foldl(
-                    fun (Q = #amqqueue{name       = QName,
+                    fun
+                    (#amqqueue{name = #resource{virtual_host = OtherVhost}},
+                         QNames0) when OtherVhost =/= VHost ->
+                        QNames0;
+                    (Q = #amqqueue{name       = QName,
                                        pid        = Pid,
                                        slave_pids = SPids}, QNames0) ->
                             %% We don't want to pass in the whole
