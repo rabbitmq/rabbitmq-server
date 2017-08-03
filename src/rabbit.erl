@@ -168,12 +168,6 @@
                     {requires,    recovery},
                     {enables,     routing_ready}]}).
 
--rabbit_boot_step({mirrored_queues,
-                   [{description, "adding mirrors to queues"},
-                    {mfa,         {rabbit_mirror_queue_misc, on_node_up, []}},
-                    {requires,    recovery},
-                    {enables,     routing_ready}]}).
-
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"},
                     {requires,    core_initialized}]}).

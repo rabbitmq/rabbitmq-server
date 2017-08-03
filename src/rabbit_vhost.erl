@@ -71,6 +71,8 @@ recover(VHost) ->
     ok = rabbit_binding:recover(rabbit_exchange:recover(VHost),
                                 [QName || #amqqueue{name = QName} <- Qs]),
     ok = rabbit_amqqueue:start(Qs),
+    %% Start queue mirrors.
+    ok = rabbit_mirror_queue_misc:on_vhost_up(VHost),
     ok.
 
 %%----------------------------------------------------------------------------
