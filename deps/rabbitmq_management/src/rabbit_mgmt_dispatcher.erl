@@ -117,6 +117,7 @@ dispatcher() ->
      {"/bindings/:vhost/e/:source/:dtype/:destination/:props", rabbit_mgmt_wm_binding, []},
      {"/vhosts",                                               rabbit_mgmt_wm_vhosts, []},
      {"/vhosts/:vhost",                                        rabbit_mgmt_wm_vhost, []},
+     {"/vhosts/:vhost/start/:node",                            rabbit_mgmt_wm_vhost_restart, []},
      {"/vhosts/:vhost/permissions",                            rabbit_mgmt_wm_permissions_vhost, []},
      {"/vhosts/:vhost/topic-permissions",                      rabbit_mgmt_wm_topic_permissions_vhost, []},
      %% /connections/:connection is already taken, we cannot use our standard scheme here

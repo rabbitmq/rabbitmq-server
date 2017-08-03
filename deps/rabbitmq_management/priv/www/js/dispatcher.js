@@ -282,6 +282,9 @@ dispatcher_add(function(sammy) {
             }
         }
     });
+    sammy.post('#/restart_vhost', function(){
+        if(sync_post(this, '/vhosts/:vhost/start/:node')) update();
+    })
     sammy.del('#/limits', function() {
         if (sync_delete(this, '/vhost-limits/:vhost/:name')) update();
     });
