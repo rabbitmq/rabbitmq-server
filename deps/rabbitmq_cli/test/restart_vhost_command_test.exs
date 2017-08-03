@@ -69,8 +69,10 @@ defmodule RestartVhostCommandTest do
   end
 
   test "run: restarting an failed vhost returns ok", context do
-    force_vhost_failure(context[:opts][:node], context[:opts][:vhost])
+    vhost = context[:opts][:vhost]
+    force_vhost_failure(context[:opts][:node], vhost)
     {:ok, _} = @command.run([], context[:opts])
+    {:ok, _} = :rpc.call(node_name, :rabbit_vhost_sup_sup, :get_vhost_sup, [vhost])
   end
 
   def force_vhost_failure(node_name, vhost) do
