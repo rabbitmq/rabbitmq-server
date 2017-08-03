@@ -75,6 +75,13 @@ all: package
 	@:
 
 package: clean
+# Log Erlang version.
+	@echo
+	@echo '--------------------------------------------------'
+	@echo "Erlang version used to compile:"
+	@erl -A0 -noinput -eval 'io:format("~s", [erlang:system_info(system_version)]), halt().'
+	@echo '--------------------------------------------------'
+	@echo
 # If a signing key ID was specified, verify that the key is available
 # before starting a possibly long build. At the same time, display some
 # useful informations on the key so the caller can double-check if he
