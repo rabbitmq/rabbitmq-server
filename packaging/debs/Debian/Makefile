@@ -56,13 +56,6 @@ all: package
 	@:
 
 package: clean
-# Log Erlang version.
-	@echo
-	@echo '--------------------------------------------------'
-	@echo "Erlang version used to compile:"
-	@erl -A0 -noinput -eval 'io:format("~s", [erlang:system_info(system_version)]), halt().'
-	@echo '--------------------------------------------------'
-	@echo
 # If a signing key ID was specified, verify that the key is available
 # before starting a possibly long build. At the same time, display some
 # useful informations on the key so the caller can double-check if he
@@ -97,6 +90,13 @@ ifeq ($(INSTALL_BUILD_DEPS),yes)
 	apt-get install -y -f -V --no-install-recommends
 	dpkg -i ./rabbitmq-server-build-deps_*_all.deb
 endif
+# Log Erlang version.
+	@echo
+	@echo '--------------------------------------------------'
+	@echo "Erlang version used to compile:"
+	@erl -A0 -noinput -eval 'io:format("~s", [erlang:system_info(system_version)]), halt().'
+	@echo '--------------------------------------------------'
+	@echo
 # Possibly update debian/changelog (in the created source directory):
 #   - if it contains an entry for the specified version, do nothing;
 #   - otherwise, prepend a generated entry using "1" as the package
