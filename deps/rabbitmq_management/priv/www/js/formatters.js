@@ -926,6 +926,29 @@ function fmt_regex_request(template, defaultName){
     return result;
 }
 
+function fmt_vhost_state(vhost){
+    var cluster_state = vhost.cluster_state;
+    var down_nodes = [];
+    var ok_count = 0;
+    var non_ok_count = 0;
+    for(var node in cluster_state){
+        var node_state = cluster_state[node];
+        if(cluster_state[node] == "stopped" || cluster_state[node] == "nodedown"){
+            non_ok_count++;
+            down_nodes.push(node);
+        } else if(cluster_state[node] == "running"){
+            ok_count++;
+        }
+    }
+    if(non_ok_count == 0 ){
+        return fmt_state('green', 'running', '');
+    } else if(non_ok_count > 0 && ok_count == 0){
+        return fmt_state('red', 'stopped', 'Vhost supervisor is not running.');
+    } else if(non_ok_count > 0 && ok_count > 0){
+        return fmt_state('yellow', 'partial', 'Vhost supervisor is stopped on some cluster nodes: ' + down_nodes.join(', '));
+    }
+}
+
 function isNumberKey(evt){
     var charCode = (evt.which) ? evt.which : event.keyCode
     if (charCode > 31 && (charCode < 48 || charCode > 57))

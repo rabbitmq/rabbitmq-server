@@ -22,7 +22,16 @@
         <td><%= fmt_boolean(vhost.tracing) %></td>
       <tr>
         <th>State:</th>
-        <td><%= vhost.state %></td>
+        <td>
+        <table class="mini">
+        <% for (var node in vhost.cluster_state) { %>
+            <tr>
+            <th><%= fmt_escape_html(node) %> :</th>
+            <td><%= vhost.cluster_state[node] %></td>
+            </tr>
+        <% } %>
+        </table>
+        </td>
       </tr>
     </table>
 </div>

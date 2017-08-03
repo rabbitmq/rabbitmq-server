@@ -344,15 +344,17 @@ vhosts_test(Config) ->
 
 vhosts_trace_test(Config) ->
     http_put(Config, "/vhosts/myvhost", none, {group, '2xx'}),
-    Disabled = #{name => <<"myvhost">>, tracing => false, state => <<"running">>},
-    Enabled  = #{name => <<"myvhost">>, tracing => true, state => <<"running">>},
-    Disabled = http_get(Config, "/vhosts/myvhost"),
+    ?assertMatch(#{name := <<"myvhost">>, tracing := false,  cluster_state := _},
+                 http_get(Config, "/vhosts/myvhost")),
     http_put(Config, "/vhosts/myvhost", [{tracing, true}], {group, '2xx'}),
-    Enabled = http_get(Config, "/vhosts/myvhost"),
+    ?assertMatch(#{name := <<"myvhost">>, tracing := true, cluster_state := _},
+                 http_get(Config, "/vhosts/myvhost")),
     http_put(Config, "/vhosts/myvhost", [{tracing, true}], {group, '2xx'}),
-    Enabled = http_get(Config, "/vhosts/myvhost"),
+    ?assertMatch(#{name := <<"myvhost">>, tracing := true},
+                 http_get(Config, "/vhosts/myvhost")),
     http_put(Config, "/vhosts/myvhost", [{tracing, false}], {group, '2xx'}),
-    Disabled = http_get(Config, "/vhosts/myvhost"),
+    ?assertMatch(#{name := <<"myvhost">>, tracing := false},
+                 http_get(Config, "/vhosts/myvhost")),
     http_delete(Config, "/vhosts/myvhost", {group, '2xx'}),
 
     passed.
@@ -807,8 +809,9 @@ queues_test(Config) ->
 
     rabbit_ct_broker_helpers:force_vhost_failure(Config, <<"downvhost">>),
     %% The vhost is down
-    DownVHost = #{name => <<"downvhost">>, tracing => false, state => <<"down">>},
-    assert_item(DownVHost, http_get(Config, "/vhosts/downvhost")),
+    #{name := <<"downvhost">>, tracing := false, cluster_state := DownClusterState} =
+        http_get(Config, "/vhosts/downvhost"),
+    ?assertEqual([<<"stopped">>], lists:usort(maps:values(DownClusterState))),
 
     DownQueues = http_get(Config, "/queues/downvhost"),
     DownQueue  = http_get(Config, "/queues/downvhost/foo"),
