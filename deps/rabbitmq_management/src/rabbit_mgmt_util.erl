@@ -92,15 +92,15 @@ is_authorized_monitor(ReqData, Context) ->
 is_authorized_vhost(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access virtual host">>,
-                  fun(User) ->
-                          user_matches_vhost(ReqData, User)
+                  fun(#user{tags = Tags} = User) ->
+                          is_admin(Tags) orelse user_matches_vhost(ReqData, User)
                   end).
 
 is_authorized_vhost_visible(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access virtual host">>,
-                  fun(User) ->
-                          user_matches_vhost_visible(ReqData, User)
+                  fun(#user{tags = Tags} = User) ->
+                          is_admin(Tags) orelse user_matches_vhost_visible(ReqData, User)
                   end).
 
 user_matches_vhost(ReqData, User) ->
@@ -136,8 +136,9 @@ is_authorized_policies(ReqData, Context) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access object">>,
                   fun(User = #user{tags = Tags}) ->
-                          is_policymaker(Tags) andalso
-                              user_matches_vhost(ReqData, User)
+                          is_admin(Tags) orelse
+                                           (is_policymaker(Tags) andalso
+                                            user_matches_vhost(ReqData, User))
                   end).
 
 %% For global parameters. Must be policymaker.
@@ -877,7 +878,12 @@ all_or_one_vhost(ReqData, Fun) ->
     end.
 
 filter_vhost(List, ReqData, Context) ->
-    VHosts = list_login_vhosts(Context#context.user, cowboy_req:get(socket, ReqData)),
+    User = #user{tags = Tags} = Context#context.user,
+    Fn   = case is_admin(Tags) of
+               true  -> fun list_visible_vhosts/2;
+               false -> fun list_login_vhosts/2
+           end,
+    VHosts = Fn(User, cowboy_req:get(socket, ReqData)),
     [I || I <- List, lists:member(pget(vhost, I), VHosts)].
 
 filter_user(List, _ReqData, #context{user = User}) ->
@@ -924,12 +930,9 @@ is_mgmt_user(T)   -> intersects(T, [administrator, monitoring, policymaker,
 intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
 
 %% The distinction between list_visible_vhosts and list_login_vhosts
-%% is there to ensure that admins / monitors can always learn of the
+%% is there to ensure that monitors can always learn of the
 %% existence of all vhosts, and can always see their contribution to
-%% global stats. However, if an admin / monitor does not have any
-%% permissions for a vhost, it's probably less confusing to make that
-%% prevent them from seeing "into" it, than letting them see stuff
-%% that they then can't touch.
+%% global stats.
 
 list_visible_vhosts(User) ->
     list_visible_vhosts(User, undefined).

@@ -633,7 +633,7 @@ function link_conn(name, desc) {
 }
 
 function link_channel(name) {
-    return _link_to(short_chan(name), '#/channels/' + esc(name))
+    return _link_to(short_chan(name), '#/channels/' + esc(name));
 }
 
 function link_exchange(vhost, name, args) {
@@ -646,19 +646,19 @@ function link_queue(vhost, name, args) {
 }
 
 function link_vhost(name) {
-    return _link_to(name, '#/vhosts/' + esc(name))
+    return _link_to(name, '#/vhosts/' + esc(name));
 }
 
 function link_user(name) {
-    return _link_to(name, '#/users/' + esc(name))
+    return _link_to(name, '#/users/' + esc(name));
 }
 
 function link_node(name) {
-    return _link_to(name, '#/nodes/' + esc(name))
+    return _link_to(name, '#/nodes/' + esc(name));
 }
 
 function link_policy(vhost, name) {
-    return _link_to(name, '#/policies/' + esc(vhost) + '/' + esc(name))
+    return _link_to(name, '#/policies/' + esc(vhost) + '/' + esc(name));
 }
 
 function _link_to(name, url, highlight, args) {
