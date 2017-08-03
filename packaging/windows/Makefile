@@ -26,6 +26,13 @@ all: dist
 	@:
 
 dist:
+# Log Erlang version.
+	@echo
+	@echo '--------------------------------------------------'
+	@echo "Erlang version used to compile:"
+	@erl -A0 -noinput -eval 'io:format("~s", [erlang:system_info(system_version)]), halt().'
+	@echo '--------------------------------------------------'
+	@echo
 	xzcat $(SOURCE_DIST_FILE) | tar -xf -
 	$(MAKE) -C $(SOURCE_DIR) install-windows \
 		DESTDIR=$(abspath $(TARGET_DIR)) \
