@@ -133,6 +133,9 @@ function args_to_features(obj) {
             res.arguments[fmt_escape_html(k)] = fmt_escape_html(obj.arguments[k]);
         }
     }
+    if (obj.exclusive) {
+        res['exclusive'] = true;
+    }
     if (obj.durable) {
         res['durable'] = true;
     }
