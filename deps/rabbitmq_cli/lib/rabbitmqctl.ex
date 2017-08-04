@@ -80,19 +80,20 @@ defmodule RabbitMQCtl do
                 :ok ->
                   # then optionally validate execution environment
                   case maybe_validate_execution_environment(command, arguments, options) do
-                    :ok                            -> proceed_to_execution(command, arguments, options)
-                    {:validation_failure, _} = err -> err
-                    {:error, _}              = err -> err
+                    :ok   -> proceed_to_execution(command, arguments, options)
+                    other -> other
                   end
                 other -> other
               end
             other -> other
+          # handle_command_output will handle all the errors
+          # among other things
           end |> handle_command_output(command, options, unparsed_command, output_fun)
         end)
     end
   end
 
-  defp maybe_validate_rabbit_app_state(command, arguments, %{offline: true} = options) do
+  defp maybe_validate_rabbit_app_state(_command, _arguments, %{offline: true}) do
     :ok
   end
   defp maybe_validate_rabbit_app_state(command, arguments, options) do
