@@ -28,14 +28,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   end
 
   def validate([], _),  do: {:validation_failure, :not_enough_args}
-  def validate([_,_|_], _),   do: {:validation_failure, :too_many_args}
-  def validate([_node_to_remove] = args, %{offline: true} = opts) do
+  def validate([_,_|_], _), do: {:validation_failure, :too_many_args}
+  def validate([_], _), do: :ok
+
+
+  def validate_execution_environment([_node_to_remove] = args, %{offline: true} = opts) do
     Validators.chain([&Validators.node_is_not_running/2,
                       &Validators.mnesia_dir_is_set/2,
                       &Validators.rabbit_is_loaded/2],
                      [args, opts])
   end
-  def validate([_], %{offline: false}) do
+  def validate_execution_environment([_], %{offline: false}) do
     :ok
   end
 
