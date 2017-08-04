@@ -27,7 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost_sup_sup, :start_vhost, [vhost], timeout)
   end
 
-  def usage, do: "restart_vhost"
+  def usage, do: "restart_vhost [-p <vhost>]"
 
   def banner(_,%{node: node_name, vhost: vhost}) do
     "Trying to restart vhost '#{vhost}' on node '#{node_name}' ..."
