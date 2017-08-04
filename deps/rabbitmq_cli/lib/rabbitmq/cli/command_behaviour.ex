@@ -30,7 +30,8 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
                       usage_additional: 0,
                       switches: 0,
                       aliases: 0,
-                      required_rabbit_app_state: 2
+                      required_rabbit_app_state: 2,
+                      validate_execution_environment: 2
 
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t

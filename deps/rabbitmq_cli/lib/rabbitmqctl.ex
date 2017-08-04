@@ -69,15 +69,57 @@ defmodule RabbitMQCtl do
         {arguments, options} = command.merge_defaults(arguments, options)
 
         with_distribution(options, fn() ->
-          output = case command.validate(arguments, options) do
+          # The code below implements a tiny decision tree that has
+          # to do with CLI argument and environment state validation.
+
+          # validate CLI arguments
+          case command.validate(arguments, options) do
             :ok ->
-              maybe_print_banner(command, arguments, options)
-              maybe_run_command(command, arguments, options)
-            {:validation_failure, _} = err -> err
-          end
-          handle_command_output(output, command, options, unparsed_command, output_fun)
+              # then validate RabbitMQ application state (running or not)
+              case maybe_validate_rabbit_app_state(command, arguments, options) do
+                :ok ->
+                  # then optionally validate execution environment
+                  case maybe_validate_execution_environment(command, arguments, options) do
+                    :ok                            -> proceed_to_execution(command, arguments, options)
+                    {:validation_failure, _} = err -> err
+                    {:error, _}              = err -> err
+                  end
+                other -> other
+              end
+            other -> other
+          end |> handle_command_output(command, options, unparsed_command, output_fun)
         end)
     end
+  end
+
+  defp maybe_validate_rabbit_app_state(command, arguments, %{offline: true} = options) do
+    :ok
+  end
+  defp maybe_validate_rabbit_app_state(command, arguments, options) do
+    required_state = case function_exported?(command, :required_rabbit_app_state, 2) do
+                       false -> :running
+                       true  -> command.required_rabbit_app_state(arguments, options)
+                     end
+
+    compare_rabbit_app_state(Helpers.rabbit_app_running?(options), required_state)
+  end
+
+  defp compare_rabbit_app_state(true, :running),  do: :ok
+  defp compare_rabbit_app_state(false, :stopped), do: :ok
+  defp compare_rabbit_app_state(true, :stopped),  do: {:validation_error, "rabbit app not running"}
+  defp compare_rabbit_app_state(false, :running), do: {:validation_error, "rabbit app running"}
+  defp compare_rabbit_app_state(error, _), do: error
+
+  defp maybe_validate_execution_environment(command, arguments, options) do
+    case function_exported?(command, :validate_execution_environment, 2) do
+      false -> :ok
+      true  -> command.validate_execution_environment(arguments, options)
+    end
+  end
+
+  defp proceed_to_execution(command, arguments, options) do
+    maybe_print_banner(command, arguments, options)
+    maybe_run_command(command, arguments, options)
   end
 
   defp maybe_run_command(_, _, %{dry_run: true}) do
