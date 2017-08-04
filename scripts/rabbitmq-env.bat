@@ -316,12 +316,16 @@ if "!RABBITMQ_LOGS!"=="" (
         set RABBITMQ_LOGS=!LOGS!
     )
 )
-if not "!RABBITMQ_LOGS" == "-" (
+if not "!RABBITMQ_LOGS!" == "-" (
     if not exist "!RABBITMQ_LOGS!" (
         for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do mkdir %%~dpF 2>NUL
         copy /y NUL "!RABBITMQ_LOGS!" >NUL
     )
     for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do set RABBITMQ_LOGS=%%~sF
+)
+rem [ "x" = "x$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log"
+if "!RABBITMQ_UPGRADE_LOG!" == "" (
+    set RABBITMQ_UPGRADE_LOG=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!_upgrade.log
 )
 
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}

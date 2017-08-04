@@ -130,9 +130,11 @@ REM particularly useful for Docker images.
 if "!RABBITMQ_LOGS!" == "-" (
     set SASL_ERROR_LOGGER=tty
     set RABBIT_LAGER_HANDLER=tty
+    set RABBITMQ_LAGER_HANDLER_UPGRADE=tty
 ) else (
     set SASL_ERROR_LOGGER=false
     set RABBIT_LAGER_HANDLER=\""!RABBITMQ_LOGS:\=/!"\"
+    set RABBITMQ_LAGER_HANDLER_UPGRADE=\""!RABBITMQ_UPGRADE_LOG:\=/!"\"
 )
 
 set RABBITMQ_START_RABBIT=
@@ -178,6 +180,7 @@ if "!ENV_OK!"=="false" (
 -sasl sasl_error_logger !SASL_ERROR_LOGGER! ^
 -rabbit lager_log_root \""!RABBITMQ_LOG_BASE:\=/!"\" ^
 -rabbit lager_handler !RABBIT_LAGER_HANDLER! ^
+-rabbit lager_handler_upgrade !RABBITMQ_LAGER_HANDLER_UPGRADE! ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
 -rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
