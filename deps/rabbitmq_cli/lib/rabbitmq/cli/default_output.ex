@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output({:badrpc_multi, _, _} = input), do: {:error, input}
   defp normalize_output({:badrpc, :nodedown} = input), do: {:error, input}
   defp normalize_output({:badrpc, :timeout} = input), do: {:error, input}
-  defp normalize_output({:badrpc, {:EXIT, reason}} = input), do: {:error, reason}
+  defp normalize_output({:badrpc, {:EXIT, reason}}), do: {:error, reason}
   defp normalize_output({:error, format, args})
     when (is_list(format) or is_binary(format)) and is_list(args) do
       {:error, to_string(:rabbit_misc.format(format, args))}
