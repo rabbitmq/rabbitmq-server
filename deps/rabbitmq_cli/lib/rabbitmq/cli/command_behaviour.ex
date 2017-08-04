@@ -29,7 +29,8 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
                       scopes: 0,
                       usage_additional: 0,
                       switches: 0,
-                      aliases: 0
+                      aliases: 0,
+                      required_rabbit_app_state: 2
 
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t

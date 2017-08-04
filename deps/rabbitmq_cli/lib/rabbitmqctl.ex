@@ -67,10 +67,29 @@ defmodule RabbitMQCtl do
       _ ->
         options = parsed_options |> merge_all_defaults |> normalize_options
         {arguments, options} = command.merge_defaults(arguments, options)
+
         with_distribution(options, fn() ->
-          validate_and_run_command(options, command, arguments)
-          |> handle_command_output(command, options, unparsed_command, output_fun)
+          output = case command.validate(arguments, options) do
+            :ok ->
+              maybe_print_banner(command, arguments, options)
+              maybe_run_command(command, arguments, options)
+            {:validation_failure, _} = err -> err
+          end
+          handle_command_output(output, command, options, unparsed_command, output_fun)
         end)
+    end
+  end
+
+  defp maybe_run_command(_, _, %{dry_run: true}) do
+    :ok
+  end
+  defp maybe_run_command(command, arguments, options) do
+    try do
+      command.run(arguments, options) |> command.output(options)
+    catch _error_type, error ->
+      {:error, ExitCodes.exit_software,
+       to_string(:io_lib.format("Error: ~n~p~n Stacktrace ~p~n",
+                                [error, System.stacktrace()]))}
     end
   end
 
@@ -152,28 +171,6 @@ defmodule RabbitMQCtl do
   end
   defp normalize_timeout(opts) do
     opts
-  end
-
-  defp validate_and_run_command(options, command, arguments) do
-    case command.validate(arguments, options) do
-      :ok ->
-        maybe_print_banner(command, arguments, options)
-        maybe_run_command(command, arguments, options)
-      {:validation_failure, _} = err -> err
-    end
-  end
-
-  defp maybe_run_command(_, _, %{dry_run: true}) do
-    :ok
-  end
-  defp maybe_run_command(command, arguments, options) do
-    try do
-      command.run(arguments, options) |> command.output(options)
-    catch _error_type, error ->
-      {:error, ExitCodes.exit_software,
-       to_string(:io_lib.format("Error: ~n~p~n Stacktrace ~p~n",
-                                [error, System.stacktrace()]))}
-    end
   end
 
   defp get_formatter(command, %{formatter: formatter}) do
