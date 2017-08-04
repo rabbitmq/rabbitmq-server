@@ -75,41 +75,18 @@ defmodule RabbitMQCtl do
           # validate CLI arguments
           case command.validate(arguments, options) do
             :ok ->
-              # then validate RabbitMQ application state (running or not)
-              case maybe_validate_rabbit_app_state(command, arguments, options) do
-                :ok ->
-                  # then optionally validate execution environment
-                  case maybe_validate_execution_environment(command, arguments, options) do
-                    :ok   -> proceed_to_execution(command, arguments, options)
-                    other -> other
-                  end
+              # then optionally validate execution environment
+              case maybe_validate_execution_environment(command, arguments, options) do
+                :ok   -> proceed_to_execution(command, arguments, options)
                 other -> other
               end
             other -> other
-          # handle_command_output will handle all the errors
-          # among other things
+            # handle_command_output will handle all the errors
+            # among other things
           end |> handle_command_output(command, options, unparsed_command, output_fun)
         end)
     end
   end
-
-  defp maybe_validate_rabbit_app_state(_command, _arguments, %{offline: true}) do
-    :ok
-  end
-  defp maybe_validate_rabbit_app_state(command, arguments, options) do
-    required_state = case function_exported?(command, :required_rabbit_app_state, 2) do
-                       false -> :running
-                       true  -> command.required_rabbit_app_state(arguments, options)
-                     end
-
-    compare_rabbit_app_state(Helpers.rabbit_app_running?(options), required_state)
-  end
-
-  defp compare_rabbit_app_state(true, :running),  do: :ok
-  defp compare_rabbit_app_state(false, :stopped), do: :ok
-  defp compare_rabbit_app_state(true, :stopped),  do: {:validation_error, "rabbit app not running"}
-  defp compare_rabbit_app_state(false, :running), do: {:validation_error, "rabbit app running"}
-  defp compare_rabbit_app_state(error, _), do: error
 
   defp maybe_validate_execution_environment(command, arguments, options) do
     case function_exported?(command, :validate_execution_environment, 2) do

@@ -16,6 +16,7 @@
 
 defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback usage() :: String.t | [String.t]
+  # validates CLI arguments
   @callback validate(List.t, Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, String.t}}
   @callback merge_defaults(List.t, Map.t) :: {List.t, Map.t}
   @callback banner(List.t, Map.t) :: String.t | nil
@@ -30,8 +31,10 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
                       usage_additional: 0,
                       switches: 0,
                       aliases: 0,
-                      required_rabbit_app_state: 2,
+                      # validates execution environment, e.g. file presence,
+                      # whether RabbitMQ is in an expected state on a node, etc
                       validate_execution_environment: 2
+                      
 
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t

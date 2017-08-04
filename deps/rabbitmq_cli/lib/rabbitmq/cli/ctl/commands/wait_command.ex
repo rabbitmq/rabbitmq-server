@@ -13,9 +13,10 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-
 defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
+  alias RabbitMQ.CLI.Core.Validators, as: Validators
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @default_timeout 10_000
 
@@ -30,9 +31,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], %{pid: _}), do: {:validation_failure, "Cannot specify both pid and pidfile"}
-  def validate([],  %{pid: _} = opts), do: RabbitMQ.CLI.Ctl.Validators.rabbit_is_loaded([], opts)
+  def validate([],  %{pid: _} = opts), do: Validators.rabbit_is_loaded([], opts)
   def validate([],  _), do: {:validation_failure, "No pid or pidfile specified"}
-  def validate([_], opts), do: RabbitMQ.CLI.Ctl.Validators.rabbit_is_loaded([], opts)
+  def validate([_], opts), do: Validators.rabbit_is_loaded([], opts)
 
   def switches(), do: [pid: :integer]
 

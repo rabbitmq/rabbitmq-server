@@ -120,6 +120,14 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
+  def rabbit_app_running?(%{node: node, timeout: timeout}) do
+    case :rabbit_misc.rpc_call(node, :rabbit, :is_running, [], timeout) do
+      true  -> true
+      false -> false
+      other -> {:error, other}
+    end
+  end
+  
   def add_plugins_to_load_path(opts) do
     with {:ok, plugins_dir} <- plugins_dir(opts)
     do
@@ -185,14 +193,6 @@ defmodule RabbitMQ.CLI.Core.Helpers do
 
   def node_running?(node) do
     :net_adm.ping(node) == :pong
-  end
-
-  def rabbit_app_running?(%{node: node, timeout: timeout}) do
-    case :rabbit_misc.rpc_call(node, :rabbit, :is_running, [], timeout) do
-      true  -> true
-      false -> false
-      other -> {:error, other}
-    end
   end
 
   # Convert function to stream
