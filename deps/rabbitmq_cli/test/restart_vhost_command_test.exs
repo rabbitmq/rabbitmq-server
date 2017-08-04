@@ -49,7 +49,7 @@ defmodule RestartVhostCommandTest do
       {:validation_failure, :too_many_args}
   end
 
-  test "run: request to a non-existent node returns nodedown", context do
+  test "run: request to a non-existent node returns nodedown", _context do
     target = :jake@thedog
 
     opts = %{node: target, vhost: @vhost, timeout: @timeout}
@@ -61,7 +61,7 @@ defmodule RestartVhostCommandTest do
 
   test "banner", context do
     expected = "Trying to restart vhost '#{@vhost}' on node '#{get_rabbit_hostname()}' ..."
-    expected = @command.banner([], context[:opts])
+    ^expected = @command.banner([], context[:opts])
   end
 
   test "run: restarting an existing vhost returns already_started", context do
@@ -70,7 +70,8 @@ defmodule RestartVhostCommandTest do
 
   test "run: restarting an failed vhost returns ok", context do
     vhost = context[:opts][:vhost]
-    force_vhost_failure(context[:opts][:node], vhost)
+    node_name = context[:opts][:node]
+    force_vhost_failure(node_name, vhost)
     {:ok, _} = @command.run([], context[:opts])
     {:ok, _} = :rpc.call(node_name, :rabbit_vhost_sup_sup, :get_vhost_sup, [vhost])
   end
