@@ -18,12 +18,6 @@
         <th>Policy</th>
         <td><%= fmt_string(queue.policy, '') %></td>
       </tr>
-      <% if (queue.owner_pid_details != undefined) { %>
-      <tr>
-        <th>Exclusive owner</th>
-        <td><%= link_conn(queue.owner_pid_details.name) %></td>
-      </tr>
-<% } %>
 <% if (nodes_interesting) { %>
       <tr>
         <th>Node</th>
