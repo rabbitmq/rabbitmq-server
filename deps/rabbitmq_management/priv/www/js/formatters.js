@@ -91,11 +91,6 @@ function fmt_features_short(obj) {
     var res = '';
     var features = args_to_features(obj);
 
-    if (obj.owner_pid_details != undefined) {
-        res += '<acronym title="Exclusive queue: click for owning connection">'
-            + link_conn(obj.owner_pid_details.name, "Excl") + '</acronym> ';
-    }
-
     for (var k in ALL_ARGS) {
         if (features[k] != undefined) {
             res += '<acronym title="' + k + ': ' + fmt_string(features[k]) +
@@ -132,6 +127,9 @@ function args_to_features(obj) {
             if (res.arguments == undefined) res.arguments = {};
             res.arguments[fmt_escape_html(k)] = fmt_escape_html(obj.arguments[k]);
         }
+    }
+    if (obj.exclusive) {
+        res['exclusive'] = true;
     }
     if (obj.durable) {
         res['durable'] = true;
