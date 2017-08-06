@@ -23,7 +23,7 @@
         <th>Node</th>
         <td><%= fmt_node(queue.node) %></td>
       </tr>
-  <% if (queue.owner_pid_details == undefined) { %>
+  <% if (!queue.exclusive) { %>
       <tr>
         <th>Slaves</th>
         <td>
