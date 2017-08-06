@@ -26,18 +26,12 @@
         <th>Effective policy definition</th>
         <td><%= fmt_table_short(queue.effective_policy_definition) %></td>
       </tr>
-      <% if (queue.owner_pid_details != undefined) { %>
-      <tr>
-        <th>Exclusive owner</th>
-        <td><%= link_conn(queue.owner_pid_details.name) %></td>
-      </tr>
-<% } %>
 <% if (nodes_interesting) { %>
       <tr>
         <th>Node</th>
         <td><%= fmt_node(queue.node) %></td>
       </tr>
-  <% if (queue.owner_pid_details == undefined) { %>
+  <% if (!queue.exclusive) { %>
       <tr>
         <th>Slaves</th>
         <td>
