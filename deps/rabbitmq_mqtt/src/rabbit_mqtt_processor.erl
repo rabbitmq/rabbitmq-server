@@ -100,13 +100,13 @@ process_request(?CONNECT,
             _ ->
                 case creds(Username, Password, SSLLoginName) of
                     nocreds ->
-                        log(error, "MQTT login failed: no credentials provided~n"),
+                        rabbit_log_connection:error("MQTT login failed: no credentials provided~n"),
                         {?CONNACK_CREDENTIALS, PState};
                     {invalid_creds, {undefined, Pass}} when is_list(Pass) ->
-                        log(error, "MQTT login failed: no user username is provided"),
+                        rabbit_log_connection:error("MQTT login failed: no user username is provided"),
                         {?CONNACK_CREDENTIALS, PState};
                     {invalid_creds, {User, undefined}} when is_list(User) ->
-                        log(error, "MQTT login failed for ~p: no password provided", [User]),
+                        rabbit_log_connection:error("MQTT login failed for ~p: no password provided", [User]),
                         {?CONNACK_CREDENTIALS, PState};
                     {UserBin, PassBin} ->
                         case process_login(UserBin, PassBin, ProtoVersion, PState) of
@@ -473,7 +473,7 @@ process_login(UserBin, PassBin, ProtoVersion,
                            ssl_login_name = SslLoginName}) ->
     {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
-    log(info,
+    rabbit_log_connection:info(
         "MQTT vhost picked using ~s~n",
         [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
     case rabbit_vhost:exists(VHost) of
@@ -494,30 +494,30 @@ process_login(UserBin, PassBin, ProtoVersion,
                                     vhost = VHost}};
                         not_allowed ->
                             amqp_connection:close(Connection),
-                            log(warning,
+                            rabbit_log_connection:warning(
                                 "MQTT login failed for ~p access_refused "
                                 "(access must be from localhost)~n",
                                 [binary_to_list(UsernameBin)]),
                             ?CONNACK_AUTH
                     end;
                 {error, {auth_failure, Explanation}} ->
-                    log(error, "MQTT login failed for ~p auth_failure: ~s~n",
+                    rabbit_log_connection:error("MQTT login failed for ~p auth_failure: ~s~n",
                         [binary_to_list(UserBin), Explanation]),
                     ?CONNACK_CREDENTIALS;
                 {error, access_refused} ->
-                    log(warning, "MQTT login failed for ~p access_refused "
+                    rabbit_log_connection:warning("MQTT login failed for ~p access_refused "
                     "(vhost access not allowed)~n",
                         [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH;
                 {error, not_allowed} ->
                     %% when vhost allowed for TLS connection
-                    log(warning, "MQTT login failed for ~p access_refused "
+                    rabbit_log_connection:warning("MQTT login failed for ~p access_refused "
                     "(vhost access not allowed)~n",
                         [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH
             end;
         false ->
-            log(error, "MQTT login failed for ~p auth_failure: vhost ~s does not exist~n",
+            rabbit_log_connection:error("MQTT login failed for ~p auth_failure: vhost ~s does not exist~n",
                 [binary_to_list(UserBin), VHost]),
             ?CONNACK_CREDENTIALS
     end.
@@ -786,7 +786,7 @@ human_readable_mqtt_version(_) ->
     "N/A".
 
 send_client(Frame, #proc_state{ socket = Sock }) ->
-    %log(info, "MQTT sending frame ~p ~n", [Frame]),
+    %rabbit_log_connection:info("MQTT sending frame ~p ~n", [Frame]),
     rabbit_net:port_command(Sock, rabbit_mqtt_frame:serialise(Frame)).
 
 close_connection(PState = #proc_state{ connection = undefined }) ->
@@ -892,7 +892,3 @@ additional_info(Key,
                 #proc_state{adapter_info =
                             #amqp_adapter_info{additional_info = AddInfo}}) ->
     proplists:get_value(Key, AddInfo).
-
-log(Level, Fmt) -> log(Level, Fmt, []).
-
-log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
