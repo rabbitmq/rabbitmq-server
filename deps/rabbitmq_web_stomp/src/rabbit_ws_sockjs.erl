@@ -54,12 +54,16 @@ init() ->
         {ok, _}                       -> ok;
         {error, {already_started, _}} -> ok;
         {error, Err}                  ->
-            rabbit_log:error("Failed to start an HTTP listener for SockJS. Error: ~p, listener settings: ~p~n", [Err, TcpConf]),
+            rabbit_log_connection:error(
+                "Failed to start an HTTP listener for SockJS. Error: ~p,"
+                " listener settings: ~p~n",
+                [Err, TcpConf]),
             throw(Err)
     end,
     listener_started('http/web-stomp', TcpConf),
-    rabbit_log:info("rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
-                    [get_binding_address(TcpConf), Port]),
+    rabbit_log_connection:info(
+        "rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
+        [get_binding_address(TcpConf), Port]),
     case get_env(ssl_config, []) of
         [] ->
             ok;
@@ -75,8 +79,9 @@ init() ->
                                          TLSConf,
                                          [{env, [{dispatch, Routes}]} | CowboyOpts]),
             listener_started('https/web-stomp', TLSConf),
-            rabbit_log:info("rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
-                            [get_binding_address(TLSConf), TLSPort])
+            rabbit_log_connection:info(
+                "rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
+                [get_binding_address(TLSConf), TLSPort])
     end,
     ok.
 
