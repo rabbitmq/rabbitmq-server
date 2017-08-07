@@ -44,7 +44,7 @@ websocket_init(_, Req, Opts) ->
     Sock = cowboy_req:get(socket, Req),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
-            rabbit_log:log(connection, info, "accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
+            rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
             AdapterInfo0 = #amqp_adapter_info{additional_info=Extra}
                 = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
             %% Flow control is not supported for Web-MQTT connections.
@@ -76,7 +76,7 @@ websocket_init(_, Req, Opts) ->
 websocket_handle({binary, Data}, Req, State) ->
     handle_data(Data, Req, State);
 websocket_handle(Frame, Req, State) ->
-    rabbit_log:log(connection, info, "Web MQTT: unexpected WebSocket frame ~p~n",
+    rabbit_log_connection:info("Web MQTT: unexpected WebSocket frame ~p~n",
                     [Frame]),
     {ok, Req, State, hibernate}.
 
@@ -105,7 +105,7 @@ websocket_info({'EXIT', _, _}, Req, State) ->
     {shutdown, Req, State};
 websocket_info({'$gen_cast', duplicate_id}, Req, State = #state{ proc_state = ProcState,
                                                                  conn_name = ConnName }) ->
-    rabbit_log:log(connection, warning, "WEB-MQTT disconnecting duplicate client id ~p (~p)~n",
+    rabbit_log_connection:warning("WEB-MQTT disconnecting duplicate client id ~p (~p)~n",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
     {shutdown, Req, State};
 websocket_info({start_keepalives, Keepalive}, Req,
@@ -120,20 +120,20 @@ websocket_info({start_keepalives, Keepalive}, Req,
     {ok, Req, State #state { keepalive = Heartbeater }};
 websocket_info(keepalive_timeout, Req, State = #state {conn_name = ConnStr,
                                                        proc_state = PState}) ->
-    rabbit_log:log(connection, error, "closing WEB-MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
+    rabbit_log_connection:error("closing WEB-MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
     rabbit_mqtt_processor:send_will(PState),
     {shutdown, Req, State};
 websocket_info(emit_stats, Req, State) ->
     {ok, Req, emit_stats(State)};
 websocket_info(Msg, Req, State) ->
-    rabbit_log:log(connection, info, "WEB-MQTT: unexpected message ~p~n",
+    rabbit_log_connection:info("WEB-MQTT: unexpected message ~p~n",
                     [Msg]),
     {ok, Req, State, hibernate}.
 
 websocket_terminate(_, _, State = #state{ proc_state = ProcState,
                                           conn_name  = ConnName }) ->
     maybe_emit_stats(State),
-    rabbit_log:log(connection, info, "closing WEB-MQTT connection ~p (~s)~n", [self(), ConnName]),
+    rabbit_log_connection:info("closing WEB-MQTT connection ~p (~s)~n", [self(), ConnName]),
     rabbit_mqtt_processor:close_connection(ProcState),
     ok;
 websocket_terminate(_, _, State) ->
@@ -160,18 +160,18 @@ handle_data(Data, Req, State = #state{ parse_state = ParseState,
                                     proc_state = ProcState1,
                                     connection = ConnPid });
                 {error, Reason, _} ->
-                    rabbit_log:log(connection, info, "MQTT protocol error ~p for connection ~p~n",
+                    rabbit_log_connection:info("MQTT protocol error ~p for connection ~p~n",
                         [Reason, ConnStr]),
                     {shutdown, Req, State};
                 {error, Error} ->
-                    rabbit_log:log(connection, error, "MQTT detected framing error '~p' for connection ~p~n",
+                    rabbit_log_connection:error("MQTT detected framing error '~p' for connection ~p~n",
                         [Error, ConnStr]),
                     {shutdown, Req, State};
                 {stop, _} ->
                     {shutdown, Req, State}
             end;
         {error, Error} ->
-            rabbit_log:log(connection, error, "MQTT detected framing error '~p' for connection ~p~n",
+            rabbit_log_connection:error("MQTT detected framing error '~p' for connection ~p~n",
                 [ConnStr, Error]),
             {shutdown, Req, State}
     end.
