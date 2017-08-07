@@ -15,10 +15,8 @@
 
 
 defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
-
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -42,8 +40,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   def validate(_, %{online: true, offline: true}) do
     {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}
   end
+  def validate(_, _) do
+    :ok
+  end
 
-  def validate(_plugins, opts) do
+  def validate_execution_environment(_plugins, opts) do
     :ok
     |> Helpers.validate_step(fn() -> Helpers.require_rabbit_and_plugins(opts) end)
     |> Helpers.validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
