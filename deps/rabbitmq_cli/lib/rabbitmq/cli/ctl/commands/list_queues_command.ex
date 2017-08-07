@@ -83,12 +83,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
           {_, false, true}  -> {Kernel.length(nodes), [online_mfa]};
           {_, true, false}  -> {1, [offline_mfa]}
         end
-        RpcStream.receive_list_items(node_name, mfas, timeout, info_keys, chunks)
+        RpcStream.receive_list_items_with_fun(node_name, mfas, timeout, info_keys, chunks,
+          fn({{:error, {:badrpc, {:timeout, to}}}, :finished}) ->
+            {{:error, {:badrpc, {:timeout, to, "Some queue(s) are unresponsive, use list_unresponsive_queues command."}}}, :finished};
+            (any) -> any
+          end)
       end)
   end
 
   defp default_opts() do
-    %{vhost: "/", offline: false, online: false, local: false}
+    %{vhost: "/", offline: false, online: false, local: false, timeout: 60}
   end
 
   def banner(_,%{vhost: vhost}), do: "Listing queues for vhost #{vhost} ..."
