@@ -274,9 +274,15 @@ log_terminate(Reason, Upstream, UParams, XorQName) ->
 log_info   (XorQName, Fmt, Args) -> log(info,    XorQName, Fmt, Args).
 log_warning(XorQName, Fmt, Args) -> log(warning, XorQName, Fmt, Args).
 
-log(Level, XorQName, Fmt, Args) ->
-    rabbit_log:log(federation, Level, "Federation ~s " ++ Fmt,
-                   [rabbit_misc:rs(XorQName) | Args]).
+log(Level, XorQName, Fmt0, Args0) ->
+    Fmt = "Federation ~s " ++ Fmt0,
+    Args = [rabbit_misc:rs(XorQName) | Args0],
+    case Level of
+        debug   -> rabbit_log_federation:debug(Fmt, Args);
+        info    -> rabbit_log_federation:info(Fmt, Args);
+        warning -> rabbit_log_federation:warning(Fmt, Args);
+        error   -> rabbit_log_federation:error(Fmt, Args)
+    end.
 
 %%----------------------------------------------------------------------------
 
