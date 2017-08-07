@@ -38,7 +38,7 @@
 -export([on_node_up/1, on_node_down/1]).
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1, is_mirrored/1]).
--export([emit_unresponsive/5, emit_unresponsive_local/4, is_unresponsive/2]).
+-export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 
 -export([pid_of/1, pid_of/2]).
 
@@ -705,18 +705,18 @@ emit_info_down(VHostPath, Items, Ref, AggregatorPid) ->
       AggregatorPid, Ref, fun(Q) -> info_down(Q, Items, down) end,
       list_down(VHostPath)).
 
-emit_unresponsive_local(VHostPath, Timeout, Ref, AggregatorPid) ->
+emit_unresponsive_local(VHostPath, Items, Timeout, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
       AggregatorPid, Ref, fun(Q) -> case is_unresponsive(Q, Timeout) of
-                                        true -> [{name, Q#amqqueue.name}];
+                                        true -> info_down(Q, Items, unresponsive);
                                         false -> []
                                     end
                           end, list_local(VHostPath)
      ).
 
-emit_unresponsive(Nodes, VHostPath, Timeout, Ref, AggregatorPid) ->
+emit_unresponsive(Nodes, VHostPath, Items, Timeout, Ref, AggregatorPid) ->
     Pids = [ spawn_link(Node, rabbit_amqqueue, emit_unresponsive_local,
-                        [VHostPath, Timeout, Ref, AggregatorPid]) || Node <- Nodes ],
+                        [VHostPath, Items, Timeout, Ref, AggregatorPid]) || Node <- Nodes ],
     rabbit_control_misc:await_emitters_termination(Pids).
 
 info_local(VHostPath) ->
