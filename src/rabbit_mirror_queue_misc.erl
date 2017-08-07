@@ -262,12 +262,12 @@ report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
                      rabbit_misc:pid_to_string(MirrorPid),
                      [[$ , rabbit_misc:pid_to_string(P)] || P <- DeadPids]]).
 
-log_info   (QName, Fmt, Args) -> log(info,    QName, Fmt, Args).
-log_warning(QName, Fmt, Args) -> log(warning, QName, Fmt, Args).
-
-log(Level, QName, Fmt, Args) ->
-    rabbit_log:log(mirroring, Level, "Mirrored ~s: " ++ Fmt,
-                   [rabbit_misc:rs(QName) | Args]).
+log_info   (QName, Fmt, Args) ->
+    rabbit_log_mirroring:info("Mirrored ~s: " ++ Fmt,
+                              [rabbit_misc:rs(QName) | Args]).
+log_warning(QName, Fmt, Args) ->
+    rabbit_log_mirroring:warning("Mirrored ~s: " ++ Fmt,
+                                 [rabbit_misc:rs(QName) | Args]).
 
 store_updated_slaves(Q = #amqqueue{slave_pids         = SPids,
                                    sync_slave_pids    = SSPids,
