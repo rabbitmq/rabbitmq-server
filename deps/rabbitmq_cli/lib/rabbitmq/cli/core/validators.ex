@@ -26,7 +26,6 @@ defmodule RabbitMQ.CLI.Core.Validators do
       {:ok, _}                   -> chain(rest, args)
       {:validation_failure, err} -> {:validation_failure, err}
       {:error, err}              -> {:validation_failure, err}
-      other                      -> other
     end
   end
   def chain([], _) do
