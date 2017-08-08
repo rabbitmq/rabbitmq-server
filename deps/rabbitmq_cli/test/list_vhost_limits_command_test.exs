@@ -114,8 +114,6 @@ defmodule ListVhostLimitsCommandTest do
   end
 
   test "banner", context do
-    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
-
     assert @command.banner([], %{vhost: context[:vhost]})
       == "Listing limits for vhost \"#{context[:vhost]}\" ..."
     assert @command.banner([], %{global: true})
