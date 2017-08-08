@@ -328,6 +328,11 @@ if "!RABBITMQ_UPGRADE_LOG!" == "" (
     set RABBITMQ_UPGRADE_LOG=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!_upgrade.log
 )
 
+REM [ "x" = "x$ERL_CRASH_DUMP"] && ERL_CRASH_DUMP="${RABBITMQ_LOG_BASE}/erl_crash.dump"
+if "!ERL_CRASH_DUMP!"=="" (
+    set ERL_CRASH_DUMP=!RABBITMQ_LOG_BASE!\erl_crash.dump
+)
+
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 if "!$RABBITMQ_CTL_ERL_ARGS!"=="" (
     if not "!CTL_ERL_ARGS!"=="" (

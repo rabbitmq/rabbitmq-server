@@ -84,6 +84,7 @@ RABBITMQ_PRELAUNCH_NODENAME="rabbitmqprelaunch${$}@localhost"
 # success of our startup sequence to systemd.
 NOTIFY_SOCKET= \
 RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
+ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
 RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
     -boot "${CLEAN_BOOT_FILE}" \
@@ -203,6 +204,7 @@ start_rabbitmq_server() {
     check_start_params &&
     RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
     ERL_MAX_ETS_TABLES=$ERL_MAX_ETS_TABLES \
+    ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
     exec ${ERL_DIR}erl \
         -pa ${RABBITMQ_SERVER_CODE_PATH} ${RABBITMQ_EBIN_ROOT} \
         ${RABBITMQ_START_RABBIT} \
