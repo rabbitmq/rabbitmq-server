@@ -111,7 +111,7 @@ connection_closed(Pid) ->
     ets:delete(connection_created, Pid),
     ets:delete(connection_metrics, Pid),
     %% Delete marker
-    ets_compat:update_element(connection_coarse_metrics, Pid, {5, 1}),
+    ets:update_element(connection_coarse_metrics, Pid, {5, 1}),
     ok.
 
 connection_stats(Pid, Infos) ->
@@ -143,43 +143,43 @@ channel_stats(reductions, Id, Value) ->
 
 channel_stats(exchange_stats, publish, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0}),
+    ets:update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, confirm, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0}),
+    ets:update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, return_unroutable, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0}),
+    ets:update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_exchange_stats, publish, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0, 0}),
+    ets:update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0, 0}),
     ok;
 channel_stats(queue_stats, get, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    ets:update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, get_no_ack, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    ets:update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    ets:update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver_no_ack, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    ets:update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, redeliver, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    ets:update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, ack, Id, Value) ->
     %% Includes delete marker
-    ets_compat:update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    ets:update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok.
 
 delete(Table, Key) ->
@@ -187,17 +187,17 @@ delete(Table, Key) ->
 
 channel_queue_down(Id) ->
     %% Delete marker
-    ets_compat:update_element(channel_queue_metrics, Id, {8, 1}),
+    ets:update_element(channel_queue_metrics, Id, {8, 1}),
     ok.
 
 channel_queue_exchange_down(Id) ->
     %% Delete marker
-    ets_compat:update_element(channel_queue_exchange_metrics, Id, {3, 1}),
+    ets:update_element(channel_queue_exchange_metrics, Id, {3, 1}),
     ok.
 
 channel_exchange_down(Id) ->
     %% Delete marker
-    ets_compat:update_element(channel_exchange_metrics, Id, {5, 1}),
+    ets:update_element(channel_exchange_metrics, Id, {5, 1}),
     ok.
 
 consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
@@ -223,14 +223,14 @@ queue_stats(Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions) ->
 queue_deleted(Name) ->
     ets:delete(queue_coarse_metrics, Name),
     %% Delete markers
-    ets_compat:update_element(queue_metrics, Name, {3, 1}),
+    ets:update_element(queue_metrics, Name, {3, 1}),
     CQX = ets:select(channel_queue_exchange_metrics, match_spec_cqx(Name)),
     lists:foreach(fun(Key) ->
-                          ets_compat:update_element(channel_queue_exchange_metrics, Key, {3, 1})
+                          ets:update_element(channel_queue_exchange_metrics, Key, {3, 1})
                   end, CQX),
     CQ = ets:select(channel_queue_metrics, match_spec_cq(Name)),
     lists:foreach(fun(Key) ->
-                          ets_compat:update_element(channel_queue_metrics, Key, {8, 1})
+                          ets:update_element(channel_queue_metrics, Key, {8, 1})
                   end, CQ).
 
 node_stats(persister_metrics, Infos) ->
