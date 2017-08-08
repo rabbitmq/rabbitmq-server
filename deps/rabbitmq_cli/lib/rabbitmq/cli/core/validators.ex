@@ -31,18 +31,6 @@ defmodule RabbitMQ.CLI.Core.Validators do
   def chain([], _) do
     :ok
   end
-  def chain([validator | rest], args, error_key) do
-    case apply(validator, args) do
-      :ok                        -> chain(rest, args, error_key)
-      {:ok, _}                   -> chain(rest, args, error_key)
-      {:validation_failure, err} -> {error_key, err}
-      {:error, err}              -> {error_key, err}
-    end
-  end
-  def chain([], _, _) do
-    :ok
-  end
-
 
   def node_is_not_running(_, %{node: node_name}) do
     case Helpers.node_running?(node_name) do

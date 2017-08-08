@@ -50,8 +50,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
                       &Helpers.require_rabbit_and_plugins/2,
                       &PluginHelpers.enabled_plugins_file/2,
                       &Helpers.plugins_dir/2],
-                     [args, opts],
-                     :environment_validation_failure)
+                     [args, opts])
   end
 
   def usage, do: "disable <plugin>|--all [--offline] [--online]"
@@ -62,7 +61,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
   def banner(plugins, %{node: node_name}) do
     ["Disabling plugins on node #{node_name}:" | plugins]
   end
-
 
   def run(plugin_names, %{all: all_flag, node: node_name} = opts) do
     plugins = case all_flag do

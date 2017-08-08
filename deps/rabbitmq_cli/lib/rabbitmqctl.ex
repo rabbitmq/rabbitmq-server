@@ -77,13 +77,15 @@ defmodule RabbitMQCtl do
             :ok ->
               # then optionally validate execution environment
               case maybe_validate_execution_environment(command, arguments, options) do
-                :ok   -> proceed_to_execution(command, arguments, options)
-                other -> other
+                :ok                        ->
+                  result = proceed_to_execution(command, arguments, options)
+                  handle_command_output(result, command, options, output_fun);
+                {:validation_failure, err} ->
+                  argument_validation_error_output(err, command, unparsed_command, options)
               end
-            other -> other
-            # handle_command_output will handle all the errors
-            # among other things
-          end |> handle_command_output(command, options, unparsed_command, output_fun)
+            {:validation_failure, err} ->
+              environment_validation_error_output(err, command, unparsed_command, options)
+          end
         end)
     end
   end
@@ -113,16 +115,12 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp handle_command_output(output, command, options, unparsed_command, output_fun) do
+  def handle_command_output(output, command, options, output_fun) do
     case output do
       {:error, _, _} = err ->
         err;
       {:error, _} = err ->
         format_error(err, options, command);
-      {:validation_failure, err} ->
-        argument_validation_error_output(err, command, unparsed_command, options);
-      {:environment_validation_failure, err} ->
-        environment_validation_error_output(err, command, unparsed_command, options);
       _  ->
         output_fun.(output, command, options)
     end
@@ -252,13 +250,13 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp argument_validation_error_output(err_detail, command, unparsed_command, options) do
+  def argument_validation_error_output(err_detail, command, unparsed_command, options) do
     err = format_validation_error(err_detail)
     base_error = "Error (argument validation): #{err}\nArguments given:\n\t#{unparsed_command |> Enum.join(" ")}"
     validation_error_output(err_detail, base_error, command, options)
   end
 
-  defp environment_validation_error_output(err_detail, command, unparsed_command, options) do
+  def environment_validation_error_output(err_detail, command, unparsed_command, options) do
     err = format_validation_error(err_detail)
     base_error = "Error: #{err}\nArguments given:\n\t#{unparsed_command |> Enum.join(" ")}"
     validation_error_output(err_detail, base_error, command, options)

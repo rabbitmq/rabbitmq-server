@@ -188,7 +188,7 @@ defmodule RabbitMQCtlTest do
     {:error, ^exit_code, message} =
         RabbitMQCtl.handle_command_output(
           {:error, {:badrpc, :nodedown}},
-          :no_command, %{node: node}, [],
+          :no_command, %{node: node},
           fn(output, _, _) -> output end)
 
     assert message =~ ~r/Error: unable to perform an operation on node/
@@ -199,7 +199,7 @@ defmodule RabbitMQCtlTest do
     {:error, ^exit_code, message} =
         RabbitMQCtl.handle_command_output(
           {:error, {:badrpc, :nodedown}},
-          :no_command, %{node: localnode}, [],
+          :no_command, %{node: localnode},
           fn(output, _, _) -> output end)
     assert message =~ ~r/DIAGNOSTICS/
     assert message =~ ~r/attempted to contact/
@@ -214,7 +214,7 @@ defmodule RabbitMQCtlTest do
     {:error, ^exit_code, ^err_msg} =
       RabbitMQCtl.handle_command_output(
           {:error, {:badrpc, :timeout}},
-          ExampleCommand,%{timeout: timeout, node: nodename}, ["example"],
+          ExampleCommand, %{timeout: timeout, node: nodename},
           fn(output, _, _) -> output end)
   end
 
@@ -223,7 +223,7 @@ defmodule RabbitMQCtlTest do
     {:error, ^exit_code, "Error:\nerror message"} =
       RabbitMQCtl.handle_command_output(
         {:error, "error message"},
-        :no_command, %{}, [],
+        :no_command, %{},
         fn(output, _, _) -> output end)
   end
 
@@ -234,7 +234,7 @@ defmodule RabbitMQCtlTest do
     {:error, ^exit_code, "Error:\n" <> ^inspected} =
       RabbitMQCtl.handle_command_output(
         {:error, error},
-        :no_command, %{}, [],
+        :no_command, %{},
         fn(output, _, _) -> output end)
   end
 
@@ -243,7 +243,7 @@ defmodule RabbitMQCtlTest do
     {:error, ^exit_code, "Error:\nerror_message"} =
       RabbitMQCtl.handle_command_output(
         {:error, :error_message},
-        :no_command, %{}, [],
+        :no_command, %{},
         fn(output, _, _) -> output end)
   end
 
