@@ -42,6 +42,10 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
+  def enabled_plugins_file(_, opts) do
+    enabled_plugins_file(opts)
+  end
+
   def set_enabled_plugins(plugins, opts) do
     plugin_atoms = :lists.usort(for plugin <- plugins, do: to_atom(plugin))
     CliHelpers.require_rabbit_and_plugins(opts)

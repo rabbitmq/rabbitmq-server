@@ -63,6 +63,7 @@ defmodule ListPluginsCommandTest do
       :ok,
       opts: Map.merge(context[:opts], %{
               node: get_rabbit_hostname(),
+              timeout: 1000
             })
     }
   end
@@ -79,29 +80,29 @@ defmodule ListPluginsCommandTest do
       {:validation_failure, :too_many_args}
   end
 
-  test "validate: not specifying enabled_plugins_file is reported as an error", context do
-    assert @command.validate(["a"], Map.delete(context[:opts], :enabled_plugins_file)) ==
+  test "validate_execution_environment: not specifying enabled_plugins_file is reported as an error", context do
+    assert @command.validate_execution_environment(["a"], Map.delete(context[:opts], :enabled_plugins_file)) ==
       {:validation_failure, :no_plugins_file}
   end
 
-  test "validate: not specifying plugins_dir is reported as an error", context do
-    assert @command.validate(["a"], Map.delete(context[:opts], :plugins_dir)) ==
+  test "validate_execution_environment: not specifying plugins_dir is reported as an error", context do
+    assert @command.validate_execution_environment(["a"], Map.delete(context[:opts], :plugins_dir)) ==
       {:validation_failure, :no_plugins_dir}
   end
 
 
-  test "validate: specifying non existent enabled_plugins_file is fine", context do
-    assert @command.validate(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) == :ok
+  test "validate_execution_environment: specifying a non-existent enabled_plugins_file is fine", context do
+    assert @command.validate_execution_environment(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) == :ok
   end
 
-  test "validate: specifying non existent plugins_dir is reported as an error", context do
-    assert @command.validate(["a"], Map.merge(context[:opts], %{plugins_dir: "none"})) ==
+  test "validate_execution_environment: specifying non existent plugins_dir is reported as an error", context do
+    assert @command.validate_execution_environment(["a"], Map.merge(context[:opts], %{plugins_dir: "none"})) ==
       {:validation_failure, :plugins_dir_does_not_exist}
   end
 
-  test "validate: failure to load rabbit application is reported as an error", context do
+  test "validate_execution_environment: failure to load rabbit application is reported as an error", context do
     assert {:validation_failure, {:unable_to_load_rabbit, _}} =
-      @command.validate(["a"], Map.delete(context[:opts], :rabbitmq_home))
+      @command.validate_execution_environment(["a"], Map.delete(context[:opts], :rabbitmq_home))
   end
 
   test "will report list of plugins from file for stopped node", context do

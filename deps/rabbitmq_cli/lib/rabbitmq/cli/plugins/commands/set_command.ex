@@ -15,9 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
-
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Validators, as: Validators
   alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -38,21 +38,12 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
     :ok
   end
 
-  def validate_execution_environment(_plugins, opts) do
-    :ok
-    |> validate_step(fn() -> Helpers.require_rabbit_and_plugins(opts) end)
-    |> validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
-    |> validate_step(fn() -> Helpers.plugins_dir(opts) end)
-  end
-
-  def validate_step(:ok, step) do
-    case step.() do
-      {:error, err} -> {:validation_failure, err};
-      _             -> :ok
-    end
-  end
-  def validate_step({:validation_failure, err}, _) do
-    {:validation_failure, err}
+  def validate_execution_environment(args, opts) do
+    Validators.chain([&Validators.rabbit_is_running_or_offline_flag_used/2,
+                      &Helpers.require_rabbit_and_plugins/2,
+                      &PluginHelpers.enabled_plugins_file/2,
+                      &Helpers.plugins_dir/2],
+                     [args, opts])
   end
 
   def usage, do: "set [<plugin>] [--offline] [--online]"

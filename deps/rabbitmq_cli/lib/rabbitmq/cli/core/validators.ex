@@ -22,8 +22,11 @@ defmodule RabbitMQ.CLI.Core.Validators do
 
   def chain([validator | rest], args) do
     case apply(validator, args) do
-      :ok -> chain(rest, args);
-      err -> err
+      :ok                        -> chain(rest, args)
+      {:ok, _}                   -> chain(rest, args)
+      {:validation_failure, err} -> {:validation_failure, err}
+      {:error, err}              -> {:validation_failure, err}
+      other                      -> other
     end
   end
   def chain([], _) do
@@ -58,6 +61,13 @@ defmodule RabbitMQ.CLI.Core.Validators do
       other    -> other
     end
   end
+
+  def rabbit_is_running_or_offline_flag_used(_args, %{offline: true}) do
+    :ok
+  end
+  def rabbit_is_running_or_offline_flag_used(args, opts) do
+    rabbit_is_running(args, opts)
+  end  
 
   def rabbit_is_not_running(args, opts) do
     case rabbit_app_state(args, opts) do

@@ -57,6 +57,7 @@ defmodule EnablePluginsCommandTest do
       :ok,
       opts: Map.merge(context[:opts], %{
               node: get_rabbit_hostname(),
+              timeout: 1000
             })
     }
   end
