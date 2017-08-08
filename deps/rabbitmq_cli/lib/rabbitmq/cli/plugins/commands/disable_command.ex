@@ -50,7 +50,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
                       &Helpers.require_rabbit_and_plugins/2,
                       &PluginHelpers.enabled_plugins_file/2,
                       &Helpers.plugins_dir/2],
-                     [args, opts])
+                     [args, opts],
+                     :environment_validation_failure)
   end
 
   def usage, do: "disable <plugin>|--all [--offline] [--online]"

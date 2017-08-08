@@ -62,8 +62,8 @@ defmodule RabbitMQCtl do
         {:error, ExitCodes.exit_usage, suggest_message};
       {_, [_|_]} ->
 
-        validation_error({:bad_option, invalid}, command,
-                         unparsed_command, parsed_options);
+        argument_validation_error_output({:bad_option, invalid}, command,
+          unparsed_command, parsed_options);
       _ ->
         options = parsed_options |> merge_all_defaults |> normalize_options
         {arguments, options} = command.merge_defaults(arguments, options)
@@ -120,7 +120,9 @@ defmodule RabbitMQCtl do
       {:error, _} = err ->
         format_error(err, options, command);
       {:validation_failure, err} ->
-        validation_error(err, command, unparsed_command, options);
+        argument_validation_error_output(err, command, unparsed_command, options);
+      {:environment_validation_failure, err} ->
+        environment_validation_error_output(err, command, unparsed_command, options);
       _  ->
         output_fun.(output, command, options)
     end
@@ -250,9 +252,19 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp validation_error(err_detail, command, unparsed_command, options) do
-    err = format_validation_error(err_detail) # TODO format the error better
-    base_error = "Error: #{err}\nGiven:\n\t#{unparsed_command |> Enum.join(" ")}"
+  defp argument_validation_error_output(err_detail, command, unparsed_command, options) do
+    err = format_validation_error(err_detail)
+    base_error = "Error (argument validation): #{err}\nArguments given:\n\t#{unparsed_command |> Enum.join(" ")}"
+    validation_error_output(err_detail, base_error, command, options)
+  end
+
+  defp environment_validation_error_output(err_detail, command, unparsed_command, options) do
+    err = format_validation_error(err_detail)
+    base_error = "Error: #{err}\nArguments given:\n\t#{unparsed_command |> Enum.join(" ")}"
+    validation_error_output(err_detail, base_error, command, options)
+  end
+
+  defp validation_error_output(err_detail, base_error, command, options) do
     usage = HelpCommand.base_usage(command, options)
     message = base_error <> "\n" <> usage
     {:error, ExitCodes.exit_code_for({:validation_failure, err_detail}), message}
@@ -268,6 +280,9 @@ defmodule RabbitMQCtl do
     header = "Invalid options for this command:"
     Enum.join([header | for {key, val} <- opts do "#{key} : #{val}" end], "\n")
   end
+  defp format_validation_error({:bad_info_key, keys}), do: "Info key(s) #{Enum.join(keys, ",")} are not supported"
+  defp format_validation_error(:rabbit_app_is_stopped), do: "this command requires the 'rabbit' app to be running on the target node. Start it with rabbitmqctl start_app."
+  defp format_validation_error(:rabbit_app_is_running), do: "this command requires the 'rabbit' app to be stopped on the target node. Stop it with rabbitmqctl stop_app."
   defp format_validation_error(err), do: inspect err
 
   defp exit_program(code) do
