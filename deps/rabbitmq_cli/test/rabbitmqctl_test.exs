@@ -85,14 +85,14 @@ defmodule RabbitMQCtlTest do
     command = ["status", "extra"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/Given:\n\t.*\nUsage:\n.* status/
+    end) =~ ~r/given:\n\t.*\nUsage:\n.* status/
   end
 
   test "Insufficient arguments return a usage error" do
     command = ["list_user_permissions"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/Given:\n\t.*\nUsage:\n.* list_user_permissions/
+    end) =~ ~r/given:\n\t.*\nUsage:\n.* list_user_permissions/
   end
 
   test "A bad argument returns a data error" do
@@ -109,17 +109,17 @@ defmodule RabbitMQCtlTest do
     command1 = ["--invalid=true", "list_permissions", "-p", "/"]
     assert capture_io(:stderr, fn ->
       error_check(command1, exit_usage())
-    end) =~ ~r/Error: Invalid options for this command/
+    end) =~ ~r/Invalid options for this command/
 
     command2 = ["--node", "rabbit", "status", "quack"]
     assert capture_io(:stderr, fn ->
       error_check(command2, exit_usage())
-    end) =~ ~r/Error: too many arguments./
+    end) =~ ~r/too many arguments./
 
     command3 = ["--node", "rabbit", "add_user", "quack"]
     assert capture_io(:stderr, fn ->
       error_check(command3, exit_usage())
-    end) =~ ~r/Error: not enough arguments./
+    end) =~ ~r/not enough arguments./
   end
 
 ## ------------------------- Default Flags ------------------------------------
@@ -150,12 +150,12 @@ defmodule RabbitMQCtlTest do
     command1 = ["status", "--nod=rabbit"]
     assert capture_io(:stderr, fn ->
       error_check(command1, exit_usage())
-    end) =~ ~r/Error: Invalid options for this command/
+    end) =~ ~r/Invalid options for this command/
 
     command2 = ["list_permissions", "-o", "/"]
     assert capture_io(:stderr, fn ->
       error_check(command2, exit_usage())
-    end) =~ ~r/Error: Invalid options for this command/
+    end) =~ ~r/Invalid options for this command/
   end
 
 ## ------------------------- Auto-complete ------------------------------------
