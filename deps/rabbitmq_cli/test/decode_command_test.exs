@@ -82,7 +82,6 @@ defmodule DecodeCommandTest do
   end
 
   defp encrypt_decrypt(secret) do
-    secret_as_erlang_term = format_as_erlang_term(secret)
     passphrase = "passphrase"
     cipher = :rabbit_pbe.default_cipher()
     hash = :rabbit_pbe.default_hash()

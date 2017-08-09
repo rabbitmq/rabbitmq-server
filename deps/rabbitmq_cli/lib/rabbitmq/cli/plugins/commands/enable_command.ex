@@ -18,7 +18,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
 
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -124,7 +123,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   end
 
   def output({:error, err}, _opts) do
-    {:error, ExitCodes.exit_software(), to_string(err)}
+    {:error, err}
   end
   def output({:stream, stream}, _opts) do
     {:stream, stream}
