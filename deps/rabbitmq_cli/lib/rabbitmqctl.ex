@@ -283,6 +283,11 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_code_for(result),
      "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{to}"}
   end
+  defp format_error({:error, {:badrpc, {:timeout, to, warning}}}, opts, module) do
+    op = CommandModules.module_to_command(module)
+    {:error, ExitCodes.exit_code_for({:timeout, to}),
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{to}. #{warning}"}
+  end
   defp format_error({:error, {:no_such_vhost, vhost} = result}, _opts, _) do
     {:error, ExitCodes.exit_code_for(result),
      "Virtual host '#{vhost}' does not exist"}

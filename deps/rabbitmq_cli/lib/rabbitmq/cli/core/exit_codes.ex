@@ -46,6 +46,7 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   def exit_code_for({:badrpc_multi, :timeout, _}),       do: exit_tempfail()
   def exit_code_for({:badrpc, :timeout}),       do: exit_tempfail()
   def exit_code_for({:badrpc, {:timeout, _}}),  do: exit_tempfail()
+  def exit_code_for({:badrpc, {:timeout, _, _}}),  do: exit_tempfail()
   def exit_code_for(:timeout),                  do: exit_tempfail()
   def exit_code_for({:timeout, _}),             do: exit_tempfail()
   def exit_code_for({:badrpc_multi, :nodedown, _}),      do: exit_unavailable()

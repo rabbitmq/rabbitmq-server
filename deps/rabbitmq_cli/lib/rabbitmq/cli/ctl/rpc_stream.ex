@@ -29,14 +29,18 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
   end
 
   def receive_list_items(node, mfas, timeout, info_keys, chunks_init) do
+    receive_list_items_with_fun(node, mfas, timeout, info_keys, chunks_init, fn(v) -> v end)
+  end
+
+  def receive_list_items_with_fun(node, mfas, timeout, info_keys, chunks_init, response_fun) do
     pid = Kernel.self
     ref = Kernel.make_ref
     for {m,f,a} <- mfas, do: init_items_stream(node, m, f, a, timeout, pid, ref)
     Stream.unfold({chunks_init, :continue},
       fn
-        :finished -> nil;
+        :finished -> response_fun.(nil);
         {chunks, :continue} ->
-          receive do
+          received = receive do
             {^ref, :finished} when chunks === 1 -> nil;
             {^ref, :finished}         -> {[], {chunks - 1, :continue}};
             {^ref, {:timeout, t}}     -> {{:error, {:badrpc, {:timeout, (t / 1000)}}}, :finished};
@@ -48,6 +52,7 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
             {:DOWN, _mref, :process, _pid, :normal} -> {[], {chunks, :continue}};
             {:DOWN, _mref, :process, _pid, reason}  ->  {{:error, simplify_emission_error(reason)}, :finished}
           end
+          response_fun.(received)
       end)
     |> display_list_items(info_keys)
   end
