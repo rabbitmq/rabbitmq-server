@@ -43,7 +43,8 @@ groups() ->
       {net_ticktime_1, [], [
           {cluster_size_2, [], [
               ctl_ticktime_sync,
-              prompt_disconnect_detection
+              prompt_disconnect_detection,
+              clean_up_exclusive_queues
             ]},
           {cluster_size_3, [], [
               autoheal,
@@ -280,6 +281,15 @@ prompt_disconnect_detection(Config) ->
     [] = rabbit_ct_broker_helpers:rpc(Config, A,
       rabbit_amqqueue, info_all, [<<"/">>], ?DELAY),
     rabbit_ct_client_helpers:close_channel(ChB),
+    ok.
+
+clean_up_exclusive_queues(Config) ->
+    rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<".*">>, <<"all">>),
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ChA = rabbit_ct_client_helpers:open_channel(Config, A),
+    amqp_channel:call(ChA, #'queue.declare'{queue = <<"excl">>,
+                                            exclusive = true}),
+    block_unblock([{A, B}]),
     ok.
 
 ctl_ticktime_sync(Config) ->
