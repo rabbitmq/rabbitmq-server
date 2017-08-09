@@ -17,7 +17,7 @@
 -module(rabbit_mirror_queue_misc).
 -behaviour(rabbit_policy_validator).
 
--export([remove_from_queue/3, on_node_up/0, add_mirrors/3,
+-export([remove_from_queue/3, on_vhost_up/1, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,
          initial_queue_node/2, suggested_queue_nodes/1,
          is_mirrored/1, update_mirrors/2, update_mirrors/1, validate_policy/1,
@@ -53,7 +53,6 @@
 -spec remove_from_queue
         (rabbit_amqqueue:name(), pid(), [pid()]) ->
             {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'}.
--spec on_node_up() -> 'ok'.
 -spec add_mirrors(rabbit_amqqueue:name(), [node()], 'sync' | 'async') ->
           'ok'.
 -spec store_updated_slaves(rabbit_types:amqqueue()) ->
@@ -167,12 +166,16 @@ slaves_to_start_on_failure(Q, DeadGMPids) ->
     {_, NewNodes} = suggested_queue_nodes(Q, ClusterNodes),
     NewNodes -- OldNodes.
 
-on_node_up() ->
+on_vhost_up(VHost) ->
     QNames =
         rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   mnesia:foldl(
-                    fun (Q = #amqqueue{name       = QName,
+                    fun
+                    (#amqqueue{name = #resource{virtual_host = OtherVhost}},
+                         QNames0) when OtherVhost =/= VHost ->
+                        QNames0;
+                    (Q = #amqqueue{name       = QName,
                                        pid        = Pid,
                                        slave_pids = SPids}, QNames0) ->
                             %% We don't want to pass in the whole
@@ -228,11 +231,21 @@ add_mirror(QName, MirrorNode, SyncMode) ->
             rabbit_misc:with_exit_handler(
               rabbit_misc:const(ok),
               fun () ->
-                      SPid = rabbit_amqqueue_sup_sup:start_queue_process(
-                               MirrorNode, Q, slave),
-                      log_info(QName, "Adding mirror on node ~p: ~p~n",
-                               [MirrorNode, SPid]),
-                      rabbit_mirror_queue_slave:go(SPid, SyncMode)
+                    #amqqueue{name = #resource{virtual_host = VHost}} = Q,
+                    case rabbit_vhost_sup_sup:get_vhost_sup(VHost, MirrorNode) of
+                        {ok, _} ->
+                            SPid = rabbit_amqqueue_sup_sup:start_queue_process(
+                                       MirrorNode, Q, slave),
+                            log_info(QName, "Adding mirror on node ~p: ~p~n",
+                                     [MirrorNode, SPid]),
+                            rabbit_mirror_queue_slave:go(SPid, SyncMode);
+                        {error, Error} ->
+                            log_warning(QName,
+                                        "Unable to start queue mirror on node '~p'. "
+                                        "Target virtual host is not running: ~p~n",
+                                        [MirrorNode, Error]),
+                            ok
+                    end
               end);
         {error, not_found} = E ->
             E
@@ -249,12 +262,12 @@ report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
                      rabbit_misc:pid_to_string(MirrorPid),
                      [[$ , rabbit_misc:pid_to_string(P)] || P <- DeadPids]]).
 
-log_info   (QName, Fmt, Args) -> log(info,    QName, Fmt, Args).
-log_warning(QName, Fmt, Args) -> log(warning, QName, Fmt, Args).
-
-log(Level, QName, Fmt, Args) ->
-    rabbit_log:log(mirroring, Level, "Mirrored ~s: " ++ Fmt,
-                   [rabbit_misc:rs(QName) | Args]).
+log_info   (QName, Fmt, Args) ->
+    rabbit_log_mirroring:info("Mirrored ~s: " ++ Fmt,
+                              [rabbit_misc:rs(QName) | Args]).
+log_warning(QName, Fmt, Args) ->
+    rabbit_log_mirroring:warning("Mirrored ~s: " ++ Fmt,
+                                 [rabbit_misc:rs(QName) | Args]).
 
 store_updated_slaves(Q = #amqqueue{slave_pids         = SPids,
                                    sync_slave_pids    = SSPids,

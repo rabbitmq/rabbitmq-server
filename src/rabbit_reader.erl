@@ -279,18 +279,20 @@ socket_error(Reason) when is_atom(Reason) ->
     rabbit_log_connection:error("Error on AMQP connection ~p: ~s~n",
         [self(), rabbit_misc:format_inet_error(Reason)]);
 socket_error(Reason) ->
-    Level =
-        case Reason of
-            {ssl_upgrade_error, closed} ->
-                %% The socket was closed while upgrading to SSL.
-                %% This is presumably a TCP healthcheck, so don't log
-                %% it unless specified otherwise.
-                debug;
-            _ ->
-                error
-        end,
-    rabbit_log:log(rabbit_log_connection, Level,
-      "Error on AMQP connection ~p:~n~p~n", [self(), Reason]).
+    Fmt = "Error on AMQP connection ~p:~n~p~n",
+    Args = [self(), Reason],
+    case Reason of
+        %% The socket was closed while upgrading to SSL.
+        %% This is presumably a TCP healthcheck, so don't log
+        %% it unless specified otherwise.
+        {ssl_upgrade_error, closed} ->
+            %% Lager sinks (rabbit_log_connection)
+            %% are handled by the lager parse_transform.
+            %% Hence have to define the loglevel as a function call.
+            rabbit_log_connection:debug(Fmt, Args);
+        _ ->
+            rabbit_log_connection:error(Fmt, Args)
+    end.
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -402,30 +404,40 @@ log_connection_exception(Name, Ex) ->
 
 log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
     %% Long line to avoid extra spaces and line breaks in log
-    rabbit_log:log(rabbit_log_connection, Severity,
+    log_connection_exception_with_severity(Severity,
         "closing AMQP connection ~p (~s):~n"
         "missed heartbeats from client, timeout: ~ps~n",
         [self(), Name, TimeoutSec]);
 log_connection_exception(Severity, Name, {connection_closed_abruptly,
                                           #v1{connection = #connection{user  = #user{username = Username},
                                                                        vhost = VHost}}}) ->
-    rabbit_log:log(rabbit_log_connection, Severity, "closing AMQP connection ~p (~s, vhost: '~s', user: '~s'):~nclient unexpectedly closed TCP connection~n",
+    log_connection_exception_with_severity(Severity,
+        "closing AMQP connection ~p (~s, vhost: '~s', user: '~s'):~nclient unexpectedly closed TCP connection~n",
         [self(), Name, VHost, Username]);
 %% when client abruptly closes connection before connection.open/authentication/authorization
 %% succeeded, don't log username and vhost as 'none'
 log_connection_exception(Severity, Name, {connection_closed_abruptly, _}) ->
-    rabbit_log:log(rabbit_log_connection, Severity, "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
+    log_connection_exception_with_severity(Severity,
+        "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
         [self(), Name]);
 %% old exception structure
 log_connection_exception(Severity, Name, connection_closed_abruptly) ->
-    rabbit_log:log(rabbit_log_connection, Severity,
+    log_connection_exception_with_severity(Severity,
         "closing AMQP connection ~p (~s):~n"
         "client unexpectedly closed TCP connection~n",
         [self(), Name]);
 log_connection_exception(Severity, Name, Ex) ->
-    rabbit_log:log(rabbit_log_connection, Severity,
+    log_connection_exception_with_severity(Severity,
         "closing AMQP connection ~p (~s):~n~p~n",
         [self(), Name, Ex]).
+
+log_connection_exception_with_severity(Severity, Fmt, Args) ->
+    case Severity of
+        debug   -> rabbit_log_connection:debug(Fmt, Args);
+        info    -> rabbit_log_connection:info(Fmt, Args);
+        warning -> rabbit_log_connection:warning(Fmt, Args);
+        error   -> rabbit_log_connection:warning(Fmt, Args)
+    end.
 
 run({M, F, A}) ->
     try apply(M, F, A)
@@ -475,13 +487,12 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             %%
             %% The goal is to not log TCP healthchecks (a connection
             %% with no data received) unless specified otherwise.
-            Level = case Recv of
-                closed -> debug;
-                _      -> info
-            end,
-            rabbit_log:log(rabbit_log_connection, Level,
-                "accepting AMQP connection ~p (~s)~n",
-                [self(), ConnName]);
+            Fmt = "accepting AMQP connection ~p (~s)~n",
+            Args = [self(), ConnName],
+            case Recv of
+                closed -> rabbit_log_connection:debug(Fmt, Args);
+                _      -> rabbit_log_connection:info(Fmt, Args)
+            end;
         _ ->
             ok
     end,

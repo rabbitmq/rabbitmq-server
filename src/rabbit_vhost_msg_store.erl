@@ -23,7 +23,7 @@
 
 start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
                                                      ClientRefs == undefined  ->
-    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
         {ok, VHostSup} ->
             VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
             supervisor2:start_child(VHostSup,
@@ -39,7 +39,7 @@ start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
     end.
 
 stop(VHost, Type) ->
-    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
         {ok, VHostSup} ->
             ok = supervisor2:terminate_child(VHostSup, Type),
             ok = supervisor2:delete_child(VHostSup, Type);
@@ -65,7 +65,7 @@ with_vhost_store(VHost, Type, Fun) ->
     end.
 
 vhost_store_pid(VHost, Type) ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:vhost_sup(VHost),
+    {ok, VHostSup} = rabbit_vhost_sup_sup:get_vhost_sup(VHost),
     case supervisor2:find_child(VHostSup, Type) of
         [Pid] -> Pid;
         []    -> no_pid

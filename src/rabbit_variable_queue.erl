@@ -2766,9 +2766,15 @@ transform_store(Store, TransformFun) ->
 
 move_messages_to_vhost_store() ->
     case list_persistent_queues() of
-        % []     -> ok;
-        Queues -> move_messages_to_vhost_store(Queues)
-    end.
+        []     ->
+            log_upgrade("No durable queues found."
+                        " Skipping message store migration"),
+            ok;
+        Queues ->
+            move_messages_to_vhost_store(Queues)
+    end,
+    ok = delete_old_store(),
+    ok = rabbit_queue_index:cleanup_global_recovery_terms().
 
 move_messages_to_vhost_store(Queues) ->
     log_upgrade("Moving messages to per-vhost message store"),
@@ -2802,8 +2808,7 @@ move_messages_to_vhost_store(Queues) ->
         "message_store upgrades: Batch ~p of ~p queues migrated ~n. ~p total left"),
 
     log_upgrade("Message store migration finished"),
-    ok = delete_old_store(OldStore),
-    ok = rabbit_queue_index:cleanup_global_recovery_terms(),
+    ok = rabbit_sup:stop_child(OldStore),
     [ok= rabbit_recovery_terms:close_table(VHost) || VHost <- VHosts],
     ok = stop_new_store(NewMsgStore).
 
@@ -2936,8 +2941,8 @@ stop_new_store(NewStore) ->
     NewStore),
     ok.
 
-delete_old_store(OldStore) ->
-    ok = rabbit_sup:stop_child(OldStore),
+delete_old_store() ->
+    log_upgrade("Removing the old message store data"),
     rabbit_file:recursive_delete(
         [filename:join([rabbit_mnesia:dir(), ?PERSISTENT_MSG_STORE])]),
     %% Delete old transient store as well

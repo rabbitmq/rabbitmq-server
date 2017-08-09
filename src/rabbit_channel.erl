@@ -2142,6 +2142,8 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
            fun (not_found)            -> {ok, 0};
                ({absent, Q, crashed}) -> rabbit_amqqueue:delete_crashed(Q, Username),
                                          {ok, 0};
+               ({absent, Q, stopped}) -> rabbit_amqqueue:delete_crashed(Q, Username),
+                                         {ok, 0};
                ({absent, Q, Reason})  -> rabbit_misc:absent(Q, Reason)
            end) of
         {error, in_use} ->

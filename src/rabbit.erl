@@ -168,12 +168,6 @@
                     {requires,    recovery},
                     {enables,     routing_ready}]}).
 
--rabbit_boot_step({mirrored_queues,
-                   [{description, "adding mirrors to queues"},
-                    {mfa,         {rabbit_mirror_queue_misc, on_node_up, []}},
-                    {requires,    recovery},
-                    {enables,     routing_ready}]}).
-
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"},
                     {requires,    core_initialized}]}).
@@ -803,6 +797,16 @@ start(normal, []) ->
             warn_if_disc_io_options_dubious(),
             rabbit_boot_steps:run_boot_steps(),
             {ok, SupPid};
+        {error, {erlang_version_too_old,
+                 {found, OTPRel, ERTSVer},
+                 {required, ?OTP_MINIMUM, ?ERTS_MINIMUM}}} ->
+            Msg = "This RabbitMQ version cannot run on Erlang ~s (erts ~s): "
+                  "minimum required version is ~s (erts ~s)",
+            Args = [OTPRel, ERTSVer, ?OTP_MINIMUM, ?ERTS_MINIMUM],
+            rabbit_log:error(Msg, Args),
+            %% also print to stderr to make this more visible
+            io:format(standard_error, "Error: " ++ Msg ++ "~n", Args),
+            {error, {erlang_version_too_old, rabbit_misc:format("Erlang ~s or later is required, started on ~s", [?OTP_MINIMUM, OTPRel])}};
         Error ->
             Error
     end.

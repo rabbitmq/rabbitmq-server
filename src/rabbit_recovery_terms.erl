@@ -48,7 +48,7 @@
 %%----------------------------------------------------------------------------
 
 start(VHost) ->
-    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
       {ok, VHostSup} ->
             {ok, _} = supervisor2:start_child(
                         VHostSup,
@@ -65,7 +65,7 @@ start(VHost) ->
     ok.
 
 stop(VHost) ->
-    case rabbit_vhost_sup_sup:vhost_sup(VHost) of
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
         {ok, VHostSup} ->
             case supervisor:terminate_child(VHostSup, ?MODULE) of
                 ok -> supervisor:delete_child(VHostSup, ?MODULE);
