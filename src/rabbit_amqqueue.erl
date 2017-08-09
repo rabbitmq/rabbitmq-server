@@ -35,7 +35,7 @@
 -export([on_node_up/1, on_node_down/1]).
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
--export([is_mirrored/1, is_exclusive/1]). % Note: exported due to use in qlc expression.
+-export([is_mirrored/1, is_dead_exclusive/1]). % Note: exported due to use in qlc expression.
 
 -export([pid_of/1, pid_of/2]).
 
@@ -920,10 +920,10 @@ cancel_sync_mirrors(QPid)                  -> delegate:call(QPid, cancel_sync_mi
 is_mirrored(Q) ->
     rabbit_mirror_queue_misc:is_mirrored(Q).
 
-is_exclusive(#amqqueue{exclusive_owner = none}) ->
+is_dead_exclusive(#amqqueue{exclusive_owner = none}) ->
     false;
-is_exclusive(#amqqueue{exclusive_owner = Pid}) when is_pid(Pid) ->
-    true.
+is_dead_exclusive(#amqqueue{exclusive_owner = Pid}) when is_pid(Pid) ->
+    not rabbit_mnesia:is_process_alive(Pid).
 
 on_node_up(Node) ->
     ok = rabbit_misc:execute_mnesia_transaction(
@@ -974,7 +974,7 @@ on_node_down(Node) ->
                                     node(Pid) == Node andalso
                                     not rabbit_mnesia:is_process_alive(Pid) andalso
                                     (not rabbit_amqqueue:is_mirrored(Q) orelse
-                                     rabbit_amqqueue:is_exclusive(Q))])),
+                                     rabbit_amqqueue:is_dead_exclusive(Q))])),
                 {Qs, Dels} = lists:unzip(QsDels),
                 T = rabbit_binding:process_deletions(
                       lists:foldl(fun rabbit_binding:combine_deletions/2,
