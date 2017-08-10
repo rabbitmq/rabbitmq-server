@@ -19,7 +19,11 @@ Standards-Version: 3.9.6
 
 Package: rabbitmq-server
 Architecture: all
-Depends: ${misc:Depends},
+# FIXME: We remove ${misc:Depends} and hard-code the dependency on
+# init-system-helpers. we need this because we build the package on
+# Debian, where dh-systemd/init-system-helpers is at version 1.18, but
+# Ubuntu 14.04 only has init-system-helpers 1.14.
+Depends: init-system-helpers (>= 1.13~),
  erlang-nox (>= 1:16.b.3) | esl-erlang (>= 1:16.b.3),
  adduser,
  logrotate,
