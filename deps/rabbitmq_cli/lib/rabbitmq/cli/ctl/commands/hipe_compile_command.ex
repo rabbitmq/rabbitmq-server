@@ -54,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
     |> Helpers.validate_step(fn() -> Helpers.require_rabbit(opts) end)
   end
   def validate(_, _),   do: {:validation_failure, :too_many_args}
-
+  
   def run([target_dir], _opts) do
     Code.ensure_loaded(:rabbit_hipe)
     hipe_compile(String.trim(target_dir))

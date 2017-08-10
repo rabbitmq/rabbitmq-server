@@ -32,6 +32,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearGlobalParameterCommand do
   end
   def validate([_], _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([key], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,

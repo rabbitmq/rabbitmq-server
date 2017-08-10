@@ -31,6 +31,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
   def validate([_], _), do: {:validation_failure, {:bad_argument, "The node type must be either disc or ram."}}
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
+
   def run([node_type_arg], %{node: node_name}) do
     normalized_type = normalize_type(String.to_atom(node_type_arg))
     current_type = :rabbit_misc.rpc_call(node_name,

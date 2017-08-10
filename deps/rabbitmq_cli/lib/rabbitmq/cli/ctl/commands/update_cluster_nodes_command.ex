@@ -27,6 +27,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   def validate([_], _), do: :ok
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
+
   def run([seed_node], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
         :rabbit_mnesia,

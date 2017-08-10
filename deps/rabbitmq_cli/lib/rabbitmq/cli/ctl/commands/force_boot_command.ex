@@ -32,6 +32,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
     end
   end
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
+  
   def run([], %{node: node_name} = opts) do
     case :rabbit_misc.rpc_call(node_name,
                                :rabbit_mnesia, :force_load_next_boot, []) do

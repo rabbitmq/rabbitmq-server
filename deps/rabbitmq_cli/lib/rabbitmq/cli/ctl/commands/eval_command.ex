@@ -13,14 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts), do: {args, opts}
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def validate([], _) do
     {:validation_failure, :not_enough_args}
@@ -37,6 +34,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
     end
   end
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([expr | arguments],  %{node: node_name} = opts) do
     {:ok, parsed} = parse_expr(expr)
     bindings = make_bindings(arguments, opts)
@@ -45,6 +44,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
       err                -> err
     end
   end
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def usage, do: "eval <expr>"
 
@@ -76,5 +77,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
   defp format_parse_error({_line, mod, err}) do
     to_string(:lists.flatten(mod.format_error(err)))
   end
-
 end

@@ -15,7 +15,6 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -31,6 +30,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand do
     {:validation_failure, :too_many_args}
   end
   def validate([_], _), do: :ok
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([key], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,

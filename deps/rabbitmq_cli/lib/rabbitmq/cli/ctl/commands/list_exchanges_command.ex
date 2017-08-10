@@ -29,6 +29,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
+  def merge_defaults([], opts) do
+    merge_defaults(~w(name type), opts)
+  end
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/"}, opts)}
+  end
+  
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
@@ -36,12 +44,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
       end
   end
 
-  def merge_defaults([], opts) do
-    merge_defaults(~w(name type), opts)
-  end
-
-  def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/"}, opts)}
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  
+  def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
+      info_keys = InfoKeys.prepare_info_keys(args)
+      RpcStream.receive_list_items(node_name, :rabbit_exchange, :info_all,
+        [vhost, info_keys],
+        timeout,
+        info_keys)
   end
 
   def usage() do
@@ -52,14 +62,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
       "<exchangeinfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."
   end
-
-  def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
-      info_keys = InfoKeys.prepare_info_keys(args)
-      RpcStream.receive_list_items(node_name, :rabbit_exchange, :info_all,
-        [vhost, info_keys],
-        timeout,
-        info_keys)
-  end
-
+  
   def banner(_,%{vhost: vhost}), do: "Listing exchanges for vhost #{vhost} ..."
 end

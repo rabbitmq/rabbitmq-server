@@ -37,6 +37,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   def validate([_,_], _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([_, _] = args, %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,

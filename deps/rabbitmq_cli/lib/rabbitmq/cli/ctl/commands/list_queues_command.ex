@@ -41,12 +41,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def validate(args, _opts) do
-      case InfoKeys.validate_info_keys(args, @info_keys) do
-        {:ok, _} -> :ok
-        err -> err
-      end
+  defp default_opts() do
+    %{vhost: "/", offline: false, online: false, local: false}
   end
+
   def merge_defaults([_|_] = args, opts) do
     timeout = case opts[:timeout] do
       nil       -> @default_timeout;
@@ -62,14 +60,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def switches(), do: [offline: :boolean, online: :boolean, local: :boolean]
 
-  def usage() do
-      "list_queues [-p <vhost>] [--online] [--offline] [--local] [<queueinfoitem> ...]"
+  def validate(args, _opts) do
+      case InfoKeys.validate_info_keys(args, @info_keys) do
+        {:ok, _} -> :ok
+        err -> err
+      end
   end
 
-  def usage_additional() do
-      "<queueinfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
-  end
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost,
                           online: online_opt, offline: offline_opt,
@@ -98,8 +96,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       end)
   end
 
-  defp default_opts() do
-    %{vhost: "/", offline: false, online: false, local: false}
+  def usage() do
+      "list_queues [-p <vhost>] [--online] [--offline] [--local] [<queueinfoitem> ...]"
+  end
+
+  def usage_additional() do
+      "<queueinfoitem> must be a member of the list [" <>
+      Enum.join(@info_keys, ", ") <> "]."
   end
 
   def banner(_,%{vhost: vhost, timeout: timeout}) do

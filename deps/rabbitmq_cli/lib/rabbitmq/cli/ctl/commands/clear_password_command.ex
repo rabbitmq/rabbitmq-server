@@ -20,10 +20,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPasswordCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+
+  def merge_defaults(args, opts), do: {args, opts}
+
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], _), do: :ok
-  def merge_defaults(args, opts), do: {args, opts}
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([_user] = args, %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :clear_password,

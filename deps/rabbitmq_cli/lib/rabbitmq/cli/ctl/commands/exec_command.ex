@@ -20,8 +20,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Inspect
-
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
@@ -46,6 +44,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
     end
   end
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([expr], %{} = opts) do
     try do
       {val, _} = Code.eval_string(expr, [options: opts], __ENV__)
@@ -55,8 +55,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
     end
   end
 
+  def formatter(), do: RabbitMQ.CLI.Formatters.Inspect
+
   def usage, do: "exec <expr>"
 
   def banner(_, _), do: nil
-
 end

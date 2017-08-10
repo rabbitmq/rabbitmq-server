@@ -13,10 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-
-# Small helper functions, mostly related to connecting to RabbitMQ and
-# handling memory units.
-
+# Provides common validation functions.
 defmodule RabbitMQ.CLI.Core.Validators do
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 

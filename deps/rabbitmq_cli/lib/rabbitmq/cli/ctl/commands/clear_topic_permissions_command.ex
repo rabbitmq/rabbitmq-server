@@ -33,6 +33,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearTopicPermissionsCommand do
   def validate([_], _), do: :ok
   def validate([_, _], _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([username], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal, :clear_topic_permissions, [username, vhost, Helpers.cli_acting_user()])
