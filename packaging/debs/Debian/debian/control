@@ -16,12 +16,15 @@ Build-Depends: debhelper (>= 9),
  elixir (>= 1.4.5-1),
  zip,
  rsync
-Standards-Version: 3.9.4
+Standards-Version: 3.9.6
 
 Package: rabbitmq-server
 Architecture: all
-Depends: erlang-nox (>= 1:19.2) | esl-erlang (>= 1:19.2), adduser,
- logrotate, socat, init-system-helpers (>= 1.13~)
+Depends: ${misc:Depends},
+ erlang-nox (>= 1:19.2) | esl-erlang (>= 1:19.2),
+ adduser,
+ logrotate,
+ socat
 Description: Multi-protocol messaging broker
  RabbitMQ is an open source multi-protocol messaging broker.
 Homepage: http://www.rabbitmq.com/
