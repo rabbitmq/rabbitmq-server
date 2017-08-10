@@ -21,6 +21,8 @@
 
 -compile(export_all).
 
+-define(DELAY, 8000).
+
 all() ->
     [
       {group, cluster_size_2},
@@ -119,6 +121,7 @@ declare_synchrony(Config) ->
                       #amqp_msg{props = #'P_basic'{delivery_mode = 2}}),
     amqp_channel:wait_for_confirms(RabbitCh),
     rabbit_ct_broker_helpers:kill_node(Config, Rabbit),
+    timer:sleep(?DELAY),
 
     #'queue.declare_ok'{message_count = 1} = declare(HareCh, Q),
     ok.
