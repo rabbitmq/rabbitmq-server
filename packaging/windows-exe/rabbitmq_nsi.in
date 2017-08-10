@@ -147,13 +147,23 @@ Section "Start Menu" RabbitStartMenu
   CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Plugins.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\plugins"
   CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Logs.lnk" "$APPDATA\RabbitMQ\log"
   CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Database Directory.lnk" "$APPDATA\RabbitMQ\db"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - (re)install.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "install" "$INSTDIR\rabbitmq.ico"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - remove.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "remove" "$INSTDIR\rabbitmq.ico"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - start.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "start" "$INSTDIR\rabbitmq.ico"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - stop.lnk" "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" "stop" "$INSTDIR\rabbitmq.ico"
+
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - (re)install.lnk" "%comspec%" '/k "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" install & if not errorlevel 1 exit /b 0' "$INSTDIR\rabbitmq.ico"
+  ShellLink::SetRunAsAdministrator "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - (re)install.lnk"
+
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - remove.lnk" "%comspec%" '/k "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" remove & if not errorlevel 1 exit /b 0' "$INSTDIR\rabbitmq.ico"
+  ShellLink::SetRunAsAdministrator "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - remove.lnk"
+
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - start.lnk" "%comspec%" '/k "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" start & if not errorlevel 1 exit /b 0' "$INSTDIR\rabbitmq.ico"
+  ShellLink::SetRunAsAdministrator "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - start.lnk"
+
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - stop.lnk" "%comspec%" '/k "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" stop & if not errorlevel 1 exit /b 0' "$INSTDIR\rabbitmq.ico"
+  ShellLink::SetRunAsAdministrator "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - stop.lnk"
 
   SetOutPath "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Command Prompt (sbin dir).lnk" "$WINDIR\system32\cmd.exe" "" "$WINDIR\system32\cmd.exe"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Command Prompt (sbin dir).lnk" "$WINDIR\system32\cmd.exe" "/k cd $INSTDIR\rabbitmq_server-%%VERSION%%\sbin" "$WINDIR\system32\cmd.exe"
+  ShellLink::SetRunAsAdministrator "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Command Prompt (sbin dir).lnk"
+
   SetOutPath $INSTDIR
 SectionEnd
 
