@@ -719,7 +719,9 @@ rabbitmqctl(Config, Node, Args) ->
 
 rabbitmqctl_list(Config, Node, Args) ->
     {ok, StdOut} = rabbitmqctl(Config, Node, Args),
-    [<<"Listing", _/binary>>|Rows] = re:split(StdOut, <<"\n">>, [trim]),
+    [<<"Timeout:", _/binary>>,
+     <<"Listing", _/binary>>
+     | Rows] = re:split(StdOut, <<"\n">>, [trim]),
     [re:split(Row, <<"\t">>) || Row <- Rows].
 
 %% -------------------------------------------------------------------
