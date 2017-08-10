@@ -121,7 +121,6 @@ declare_synchrony(Config) ->
                       #amqp_msg{props = #'P_basic'{delivery_mode = 2}}),
     amqp_channel:wait_for_confirms(RabbitCh),
     rabbit_ct_broker_helpers:kill_node(Config, Rabbit),
-    timer:sleep(?DELAY),
 
     #'queue.declare_ok'{message_count = 1} = declare(HareCh, Q),
     ok.
@@ -139,8 +138,10 @@ clean_up_exclusive_queues(Config) ->
     amqp_channel:call(ChA, #'queue.declare'{queue = QName,
                                             exclusive = true}),
     ok = rabbit_ct_broker_helpers:kill_node(Config, A),
+    timer:sleep(?DELAY),
     [] = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_amqqueue, list, []),
     ok = rabbit_ct_broker_helpers:start_node(Config, A),
+    timer:sleep(?DELAY),
     [[],[]] = rabbit_ct_broker_helpers:rpc_all(Config, rabbit_amqqueue, list, []),
     ok.
 
