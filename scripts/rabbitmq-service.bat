@@ -76,7 +76,8 @@ if not exist "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv.exe" (
 )
 
 if "!P1!" == "install" goto INSTALL_SERVICE
-for %%i in (start stop disable enable list remove) do if "%%i" == "!P1!" goto MODIFY_SERVICE
+for %%i in (start stop) do if "%%i" == "!P1!" goto START_STOP_SERVICE
+for %%i in (disable enable list remove) do if "%%i" == "!P1!" goto MODIFY_SERVICE
 
 echo.
 echo *********************
@@ -226,15 +227,26 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 if ERRORLEVEL 1 (
     EXIT /B 1
 )
-
 goto END
 
 
 :MODIFY_SERVICE
 
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" !P1! !RABBITMQ_SERVICENAME!
+if ERRORLEVEL 1 (
+    EXIT /B 1
+)
 goto END
 
+
+:START_STOP_SERVICE
+
+REM start and stop via erlsrv reports no error message. Using net instead
+net !P1! !RABBITMQ_SERVICENAME!
+if ERRORLEVEL 1 (
+    EXIT /B 1
+)
+goto END
 
 :END
 
