@@ -31,7 +31,8 @@ groups() ->
     [
       {cluster_size_2, [], [
           rapid_redeclare,
-          declare_synchrony
+          declare_synchrony,
+          clean_up_exclusive_queues
         ]},
       {cluster_size_3, [], [
           consume_survives_stop,
@@ -124,6 +125,21 @@ declare_synchrony(Config) ->
 
 declare(Ch, Name) ->
     amqp_channel:call(Ch, #'queue.declare'{durable = true, queue = Name}).
+
+%% Ensure that exclusive queues are cleaned up when part of ha cluster
+%% and node is killed abruptly then restarted
+clean_up_exclusive_queues(Config) ->
+    QName = <<"excl">>,
+    rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<".*">>, <<"all">>),
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ChA = rabbit_ct_client_helpers:open_channel(Config, A),
+    amqp_channel:call(ChA, #'queue.declare'{queue = QName,
+                                            exclusive = true}),
+    ok = rabbit_ct_broker_helpers:kill_node(Config, A),
+    [] = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_amqqueue, list, []),
+    ok = rabbit_ct_broker_helpers:start_node(Config, A),
+    [[],[]] = rabbit_ct_broker_helpers:rpc_all(Config, rabbit_amqqueue, list, []),
+    ok.
 
 consume_survives_stop(Cf)     -> consume_survives(Cf, fun stop/2,    true).
 consume_survives_sigkill(Cf)  -> consume_survives(Cf, fun sigkill/2, true).
