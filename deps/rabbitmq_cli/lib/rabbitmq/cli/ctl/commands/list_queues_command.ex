@@ -27,6 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  @default_timeout 60_000
   @info_keys ~w(name durable auto_delete
             arguments policy pid owner_pid exclusive exclusive_consumer_pid
             exclusive_consumer_tag messages_ready messages_unacknowledged messages
@@ -47,7 +48,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       end
   end
   def merge_defaults([_|_] = args, opts) do
-    {args, Map.merge(default_opts(), opts)}
+    timeout = case opts[:timeout] do
+      nil       -> @default_timeout;
+      :infinity -> @default_timeout;
+      other     -> other
+    end
+    {args, Map.merge(default_opts(),
+        Map.merge(opts, %{timeout: timeout}))}
   end
   def merge_defaults([], opts) do
       merge_defaults(~w(name messages), opts)
@@ -83,7 +90,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
           {_, false, true}  -> {Kernel.length(nodes), [online_mfa]};
           {_, true, false}  -> {1, [offline_mfa]}
         end
-        RpcStream.receive_list_items(node_name, mfas, timeout, info_keys, chunks)
+        RpcStream.receive_list_items_with_fun(node_name, mfas, timeout, info_keys, chunks,
+          fn({{:error, {:badrpc, {:timeout, to}}}, :finished}) ->
+            {{:error, {:badrpc, {:timeout, to, "Some queue(s) are unresponsive, use list_unresponsive_queues command."}}}, :finished};
+            (any) -> any
+          end)
       end)
   end
 
@@ -91,5 +102,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
     %{vhost: "/", offline: false, online: false, local: false}
   end
 
-  def banner(_,%{vhost: vhost}), do: "Listing queues for vhost #{vhost} ..."
+  def banner(_,%{vhost: vhost, timeout: timeout}) do
+    ["Timeout: #{timeout / 1000} seconds ...",
+     "Listing queues for vhost #{vhost} ..."]
+  end
 end
