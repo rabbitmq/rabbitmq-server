@@ -468,10 +468,10 @@
 ## lengths) is retained. Please read the plugin's documentation in
 ## http://www.rabbitmq.com/management.html#configuration for more
 ## details.
-## Your can use 'minute', 'hour' and '24hours' keys or integer key (in seconds)
+## Your can use 'minute', 'hour' and 'day' keys or integer key (in seconds)
 # management.sample_retention_policies.global.minute    = 5
 # management.sample_retention_policies.global.hour  = 60
-# management.sample_retention_policies.global.24hours = 1200
+# management.sample_retention_policies.global.day = 1200
 
 # management.sample_retention_policies.basic.minute   = 5
 # management.sample_retention_policies.basic.hour = 60
