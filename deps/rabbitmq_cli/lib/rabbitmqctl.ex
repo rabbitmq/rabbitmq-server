@@ -81,10 +81,14 @@ defmodule RabbitMQCtl do
                   result = proceed_to_execution(command, arguments, options)
                   handle_command_output(result, command, options, output_fun);
                 {:validation_failure, err} ->
-                  environment_validation_error_output(err, command, unparsed_command, options)
+                  environment_validation_error_output(err, command, unparsed_command, options);
+                {:error, _} = err ->
+                  format_error(err, options, command)
               end
             {:validation_failure, err} ->
-              argument_validation_error_output(err, command, unparsed_command, options)
+              argument_validation_error_output(err, command, unparsed_command, options);
+            {:error, _} = err ->
+              format_error(err, options, command)
           end
         end)
     end
