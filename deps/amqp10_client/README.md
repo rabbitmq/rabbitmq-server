@@ -1,21 +1,23 @@
 # Erlang AMQP 1.0 client
 
-This is an experimental [Erlang client for the AMQP 1.0](https://www.amqp.org/resources/specifications) protocol.
+This is an [Erlang client for the AMQP 1.0](https://www.amqp.org/resources/specifications) protocol.
 
 It's primary purpose is to be used in RabbitMQ related projects but it is a
 generic client that was tested with at least 4 implementations of AMQP 1.0.
 
+If you are looking for an Erlang client for [AMQP 0-9-](https://www.rabbitmq.com/tutorials/amqp-concepts.html)1 — a completely different
+protocol despite the name — [consider this one](https://github.com/rabbitmq/rabbitmq-erlang-client).
+
 ## Project Maturity and Status
 
-This project is very young and not 100% feature complete. It is used in the next generation of the
-RabbitMQ Shovel plugin.
+This project is young and not 100% feature complete. It is used in the cross-protocol version of the
+RabbitMQ Shovel plugin (available as of 3.7.0).
 
 This client library is not officially supported by Pivotal at this time.
 
+## Usage
 
-## API
-
-### Connection config
+### Connection Configuration
 
 The `connection_config` map contains various configuration properties.
 
