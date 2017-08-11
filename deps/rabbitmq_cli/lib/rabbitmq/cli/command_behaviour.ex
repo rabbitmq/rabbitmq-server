@@ -17,7 +17,7 @@
 defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback usage() :: String.t | [String.t]
   # validates CLI arguments
-  @callback validate(List.t, Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, String.t}}
+  @callback validate(List.t, Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, any}}
   @callback merge_defaults(List.t, Map.t) :: {List.t, Map.t}
   @callback banner(List.t, Map.t) :: String.t | nil
   @callback run(List.t, Map.t) :: any
@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
                       # whether RabbitMQ is in an expected state on a node, etc
                       validate_execution_environment: 2
 
-  @callback validate_execution_environment(List.t, Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, String.t}}
+  @callback validate_execution_environment(List.t, Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, any}}
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t
 
