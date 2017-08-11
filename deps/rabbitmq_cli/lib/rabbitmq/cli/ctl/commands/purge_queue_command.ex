@@ -18,8 +18,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/"}, opts)}
+  end
 
-  def usage, do: "purge_queue <queue>"
+  def validate(args, _) when length(args) > 1 do
+    {:validation_failure, :too_many_args}
+  end
+
+  def validate([], _) do
+    {:validation_failure, :not_enough_args}
+  end
+
+  def validate(_, _), do: :ok
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([queue], %{node: node_name, vhost: vhost, timeout: timeout}) do
     res = :rabbit_misc.rpc_call(node_name,
@@ -39,19 +52,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
     end
   end
 
-  def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/"}, opts)}
-  end
-
-  def validate(args, _) when length(args) > 1 do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate([], _) do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate(_, _), do: :ok
+  def usage, do: "purge_queue <queue>"
 
   def banner([queue], %{vhost: vhost}) do
     "Purging queue '#{queue}' in vhost '#{vhost}' ..."

@@ -20,6 +20,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @default_timeout 10_000
 
+  def switches(), do: [pid: :integer]
+
+  def aliases(), do: ['P': :pid]
+
+  def scopes(), do: [:ctl, :diagnostics]
+  
   def merge_defaults(args, opts) do
     timeout = case opts[:timeout] do
       nil       -> @default_timeout;
@@ -34,13 +40,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   def validate([],  %{pid: _} = opts), do: Validators.rabbit_is_loaded([], opts)
   def validate([],  _), do: {:validation_failure, "No pid or pidfile specified"}
   def validate([_], opts), do: Validators.rabbit_is_loaded([], opts)
-
-  def switches(), do: [pid: :integer]
-
-  def aliases(), do: ['P': :pid]
-
-  def scopes(), do: [:ctl, :diagnostics]
-
 
   def run([pid_file], %{node: node_name, timeout: timeout} = opts) do
     app_names = :rabbit_and_plugins

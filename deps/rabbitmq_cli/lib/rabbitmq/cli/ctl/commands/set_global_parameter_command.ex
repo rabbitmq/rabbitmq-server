@@ -15,12 +15,10 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-
 
   def merge_defaults(args, opts) do
     {args, opts}
@@ -39,6 +37,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
   end
 
   def validate(_, _), do: :ok
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([name, value], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,

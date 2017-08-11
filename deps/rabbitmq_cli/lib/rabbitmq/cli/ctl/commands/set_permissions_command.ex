@@ -15,12 +15,10 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
@@ -39,6 +37,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
   end
   def validate(_, _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  
   def run([user, conf, write, read], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
@@ -48,7 +48,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
   end
 
   def usage, do: "set_permissions [-p <vhost>] <username> <conf> <write> <read>"
-
 
   def banner([user|_], %{vhost: vhost}), do: "Setting permissions for user \"#{user}\" in vhost \"#{vhost}\" ..."
 end

@@ -28,14 +28,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
+  def merge_defaults([], opts), do: {["name"], opts}
+  def merge_defaults(args, opts), do: {args, opts}
+
   def validate(args, _) do
     case InfoKeys.validate_info_keys(args, @info_keys) do
       {:ok, _} -> :ok
       err -> err
     end
   end
-  def merge_defaults([], opts), do: {["name"], opts}
-  def merge_defaults(args, opts), do: {args, opts}
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([_|_] = args, %{node: node_name, timeout: time_out}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :info_all, [], time_out)
@@ -65,5 +68,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   end
 
   def banner(_,_), do: "Listing vhosts ..."
-
 end

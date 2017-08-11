@@ -56,6 +56,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
     {:validation_failure, :too_many_args}
   end
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run(["mem_relative", _] = args, opts) do
     set_disk_free_limit_relative(args, opts)
   end

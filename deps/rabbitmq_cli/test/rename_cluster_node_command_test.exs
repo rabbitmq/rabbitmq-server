@@ -47,12 +47,6 @@ defmodule RenameClusterNodeCommandTest do
     }
   end
 
-  test "validate: specifying an uneven number of arguments fails validation", context do
-    assert match?(
-      {:validation_failure, {:bad_argument, _}},
-      @command.validate(["a", "b", "c"], context[:opts]))
-  end
-
   test "validate: specifying no nodes fails validation", context do
     assert @command.validate([], context[:opts]) ==
       {:validation_failure, :not_enough_args}
@@ -63,16 +57,22 @@ defmodule RenameClusterNodeCommandTest do
       {:validation_failure, :not_enough_args}
   end
 
-  test "validate: request to a running node fails", _context do
-    node = get_rabbit_hostname()
-    assert match?({:validation_failure, :node_running},
-      @command.validate([to_string(node), "other_node@localhost"], %{node: node}))
+  test "validate_execution_environment: specifying an uneven number of arguments fails validation", context do
+    assert match?(
+      {:validation_failure, {:bad_argument, _}},
+      @command.validate_execution_environment(["a", "b", "c"], context[:opts]))
   end
 
-  test "validate: not providing node mnesia dir fails validation", context do
+  test "validate_execution_environment: request to a running node fails", _context do
+    node = get_rabbit_hostname()
+    assert match?({:validation_failure, :node_running},
+      @command.validate_execution_environment([to_string(node), "other_node@localhost"], %{node: node}))
+  end
+
+  test "validate_execution_environment: not providing node mnesia dir fails validation", context do
     opts_without_mnesia = Map.delete(context[:opts], :mnesia_dir)
     assert match?({:validation_failure, :mnesia_dir_not_found},
-      @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
+      @command.validate_execution_environment(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
     Application.put_env(:mnesia, :dir, "/tmp")
     on_exit(fn -> Application.delete_env(:mnesia, :dir) end)
     assert :ok == @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia)

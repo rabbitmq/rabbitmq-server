@@ -26,6 +26,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   def validate([], _), do: :ok
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  
   def run([], %{node: node_name}) do
     case :rabbit_misc.rpc_call(node_name, :os, :getpid, []) do
       pid when is_list(pid) ->

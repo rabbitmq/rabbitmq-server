@@ -18,10 +18,12 @@ alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
 defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
+
   def validate([], _),  do: :ok
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
-  def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, vhost: vhost, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost_sup_sup, :start_vhost, [vhost], timeout)
@@ -45,5 +47,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
       "Reason: #{inspect(err)}"]}
   end
   use RabbitMQ.CLI.DefaultOutput
-
 end

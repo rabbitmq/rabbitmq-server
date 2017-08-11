@@ -15,7 +15,6 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -39,6 +38,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
 
   def validate(_, _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([component_name, name, value], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,
@@ -48,7 +49,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
   end
 
   def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"
-
 
   def banner([component_name, name, value], _) do
     "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" ..."

@@ -15,7 +15,6 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -25,6 +24,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
 
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate(_, _), do: :ok
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  
   def run([user | tags], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
@@ -34,7 +36,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
   end
 
   def usage, do: "set_user_tags <username> <tag> [...]"
-
 
   def banner([user | tags], _) do
     "Setting tags for user \"#{user}\" to [#{tags |> Enum.join(", ")}] ..."

@@ -15,7 +15,6 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -35,13 +34,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
 
   def validate(_, _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  
   def run([definition], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
                           :rabbit_vhost_limit, :parse_set, [vhost, definition, Helpers.cli_acting_user()])
   end
 
   def usage, do: "set_vhost_limits [-p <vhost>] <definition>"
-
 
   def banner([definition], %{vhost: vhost}) do
     "Setting vhost limits to \"#{definition}\" for vhost \"#{vhost}\" ..."

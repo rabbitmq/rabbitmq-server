@@ -20,13 +20,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserTopicPermissionsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  def scopes(), do: [:ctl, :diagnostics]
+
+  def merge_defaults(args, opts), do: {args, opts}
+
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], _), do: :ok
 
-  def scopes(), do: [:ctl, :diagnostics]
-
-  def merge_defaults(args, opts), do: {args, opts}
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([username], %{node: node_name, timeout: time_out}) do
     :rabbit_misc.rpc_call(node_name,
@@ -40,5 +42,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserTopicPermissionsCommand do
   def usage, do: "list_user_topic_permissions <username>"
 
   def banner([username], _), do: "Listing topic permissions for user \"#{username}\" ..."
-
 end

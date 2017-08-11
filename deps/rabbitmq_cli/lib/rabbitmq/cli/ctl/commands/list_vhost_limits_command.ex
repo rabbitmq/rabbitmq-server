@@ -34,6 +34,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
   end
   def validate(_, _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([], %{node: node_name, global: true}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :list, []) do
       []              -> []

@@ -18,17 +18,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-
   def merge_defaults(args, opts), do: {args, opts}
+
   def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :rotate_logs, [])
   end
 
   def usage, do: "rotate_logs"
-
 
   def banner(_, %{node: node_name}), do: "Rotating logs for node #{node_name} ..."
 end

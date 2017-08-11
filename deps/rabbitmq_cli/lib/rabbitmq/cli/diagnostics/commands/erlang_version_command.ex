@@ -17,6 +17,8 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  def switches(), do: [details: :boolean]
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{details: false}, opts)}
   end
@@ -25,10 +27,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
     {:validation_failure, :too_many_args}
   end
   def validate(_, _), do: :ok
-
-  def switches(), do: [details: :boolean]
-
-  def usage, do: "erlang_version"
 
   def run([], %{node: node_name, timeout: timeout, details: details}) do
     case details do
@@ -47,6 +45,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} for its Erlang/OTP version..."
   end
+
+  def usage, do: "erlang_version"
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
 end

@@ -15,7 +15,6 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -33,14 +32,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
 
   def validate(_, _), do: :ok
 
-  def banner([cluster_name], _) do
-    "Setting cluster name to #{cluster_name} ..."
-  end
-
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([cluster_name], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_nodes, :set_cluster_name, [cluster_name, Helpers.cli_acting_user()])
+  end
+
+  def banner([cluster_name], _) do
+    "Setting cluster name to #{cluster_name} ..."
   end
 
   def usage, do: "set_cluster_name <name>"

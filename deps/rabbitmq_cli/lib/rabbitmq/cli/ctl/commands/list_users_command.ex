@@ -19,14 +19,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
-  def merge_defaults(args, opts), do: {args, opts}
 
   def scopes(), do: [:ctl, :diagnostics]
+
+  def merge_defaults(args, opts), do: {args, opts}
 
   def validate([_|_], _) do
     {:validation_failure, :too_many_args}
   end
   def validate(_, _), do: :ok
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :list_users, [], timeout)
@@ -35,5 +38,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   def usage, do: "list_users"
 
   def banner(_,_), do: "Listing users ..."
-
 end

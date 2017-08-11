@@ -41,7 +41,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
         OsPid.wait_for_os_process_death(pid)
         {:ok, "process #{pid} (take from pid file #{pidfile_path}) is no longer running"}
     end
-
   end
 
   def usage, do: "stop [<pidfile>]"
