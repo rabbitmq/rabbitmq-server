@@ -34,8 +34,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
     end
   end
 
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
   def run([expr | arguments],  %{node: node_name} = opts) do
     {:ok, parsed} = parse_expr(expr)
     bindings = make_bindings(arguments, opts)

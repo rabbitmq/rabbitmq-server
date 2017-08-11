@@ -27,8 +27,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
 
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :environment, [])
   end

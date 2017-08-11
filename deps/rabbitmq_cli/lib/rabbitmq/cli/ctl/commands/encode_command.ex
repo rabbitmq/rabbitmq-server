@@ -51,8 +51,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     end
   end
 
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
   def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do
     try do
       term_value = Helpers.evaluate_input_as_term(value)

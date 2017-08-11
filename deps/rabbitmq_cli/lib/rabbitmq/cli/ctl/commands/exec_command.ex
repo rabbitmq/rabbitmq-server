@@ -44,8 +44,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
     end
   end
 
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
   def run([expr], %{} = opts) do
     try do
       {val, _} = Code.eval_string(expr, [options: opts], __ENV__)
