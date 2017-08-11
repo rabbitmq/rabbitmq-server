@@ -34,8 +34,8 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
                       # validates execution environment, e.g. file presence,
                       # whether RabbitMQ is in an expected state on a node, etc
                       validate_execution_environment: 2
-                      
 
+  @callback validate_execution_environment(List.t, Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, String.t}}
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t
 
