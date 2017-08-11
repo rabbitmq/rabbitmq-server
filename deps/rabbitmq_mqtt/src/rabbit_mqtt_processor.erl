@@ -714,7 +714,10 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
 send_will(PState = #proc_state{will_msg = undefined}) ->
     PState;
 
-send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain, topic = Topic}, retainer_pid = RPid}) ->
+send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
+                                                              topic = Topic},
+                               retainer_pid = RPid,
+                               channels = {ChQos0, ChQos1}}) ->
     case check_topic_access(Topic, write, PState) of
         ok ->
             amqp_pub(WillMsg, PState),
@@ -727,7 +730,15 @@ send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain, t
                 "Could not send last will: ~p~n",
                 [Error])
     end,
-    PState.
+    case ChQos1 of
+        undefined -> ok;
+        _         -> amqp_channel:close(ChQos1)
+    end,
+    case ChQos0 of
+        undefined -> ok;
+        _         -> amqp_channel:close(ChQos0)
+    end,
+    PState #proc_state{ channels = {undefined, undefined} }.
 
 amqp_pub(undefined, PState) ->
     PState;
