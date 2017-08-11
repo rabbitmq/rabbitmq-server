@@ -5,7 +5,7 @@ This is an [Erlang client for the AMQP 1.0](https://www.amqp.org/resources/speci
 It's primary purpose is to be used in RabbitMQ related projects but it is a
 generic client that was tested with at least 4 implementations of AMQP 1.0.
 
-If you are looking for an Erlang client for [AMQP 0-9-](https://www.rabbitmq.com/tutorials/amqp-concepts.html)1 — a completely different
+If you are looking for an Erlang client for [AMQP 0-9-1](https://www.rabbitmq.com/tutorials/amqp-concepts.html) — a completely different
 protocol despite the name — [consider this one](https://github.com/rabbitmq/rabbitmq-erlang-client).
 
 ## Project Maturity and Status
