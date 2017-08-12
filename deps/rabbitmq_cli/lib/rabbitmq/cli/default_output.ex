@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
 
   def mnesia_running_error(node_name) do
     "Mnesia is still running on node #{node_name}.\n" <>
-    "Please stop RabbitMQ with rabbitmqctl stop_app first."
+    "Please stop RabbitMQ with 'rabbitmqctl stop_app' first."
   end
 
   defp normalize_output(:ok), do: :ok
