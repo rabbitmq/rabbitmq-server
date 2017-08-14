@@ -32,10 +32,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   def switches(), do: [verbose: :boolean,
                        minimal: :boolean,
                        enabled: :boolean,
-                       implicitly_enabled: :boolean,
-                       rabbitmq_home: :string,
-                       enabled_plugins_file: :string,
-                       plugins_dir: :string]
+                       implicitly_enabled: :boolean]
   def aliases(), do: [v: :verbose, m: :minimal,
                       'E': :enabled, e: :implicitly_enabled]
 

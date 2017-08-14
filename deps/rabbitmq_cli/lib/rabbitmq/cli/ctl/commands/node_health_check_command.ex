@@ -20,8 +20,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [timeout: :integer]
-
   def merge_defaults(args, opts) do
     timeout = case opts[:timeout] do
       nil       -> @default_timeout;

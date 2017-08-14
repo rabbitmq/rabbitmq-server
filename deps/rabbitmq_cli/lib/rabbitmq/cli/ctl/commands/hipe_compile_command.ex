@@ -27,8 +27,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
     {args, opts}
   end
 
-  def switches(), do: [rabbitmq_home: :string]
-
   def usage, do: "hipe_compile <directory>"
 
   def validate([], _),  do: {:validation_failure, :not_enough_args}
