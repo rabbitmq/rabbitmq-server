@@ -20,17 +20,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListTopicPermissionsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  def scopes(), do: [:ctl, :diagnostics]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def scopes(), do: [:ctl, :diagnostics]
-
   def validate([_|_], _) do
     {:validation_failure, :too_many_args}
   end
   def validate([], _), do: :ok
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
@@ -44,5 +45,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListTopicPermissionsCommand do
   def usage, do: "list_topic_permissions [-p <vhost>]"
 
   def banner(_, %{vhost: vhost}), do: "Listing topic permissions for vhost \"#{vhost}\" ..."
-
 end

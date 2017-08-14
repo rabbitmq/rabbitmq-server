@@ -26,6 +26,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
   def validate([_|_] = args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([_user, _] = args, %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal, :change_password, args ++ [Helpers.cli_acting_user()])

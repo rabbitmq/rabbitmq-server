@@ -15,7 +15,6 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -41,6 +40,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
 
   def validate(_, _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([name, pattern, definition], %{node: node_name,
                                          vhost: vhost,
                                          priority: priority,
@@ -58,7 +59,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
   end
 
   def usage, do: "set_operator_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern>  <definition>"
-
 
   def banner([name, pattern, definition], %{vhost: vhost, priority: priority}) do
     "Setting operator policy override \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{priority}\" for vhost \"#{vhost}\" ..."

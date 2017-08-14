@@ -16,10 +16,14 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+
+  def merge_defaults(args, opts), do: {args, opts}
+
   def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
   def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
   def validate([_,_], _), do: :ok
-  def merge_defaults(args, opts), do: {args, opts}
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([user, password], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
@@ -32,7 +36,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   def usage, do: "authenticate_user <username> <password>"
 
   def banner([username, _password], _), do: "Authenticating user \"#{username}\" ..."
-
 
   def output({:refused, user, msg, args}, _) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_dataerr,

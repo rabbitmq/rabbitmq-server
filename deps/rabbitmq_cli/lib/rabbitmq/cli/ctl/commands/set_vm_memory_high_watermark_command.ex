@@ -67,6 +67,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
   end
   def validate(_, _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  
   def run(["absolute", arg], opts) do
     case Integer.parse(arg) do
       {num, rest}   ->  valid_units = rest in Helpers.memory_units
@@ -97,7 +99,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
   end
 
   def usage, do: ["set_vm_memory_high_watermark <fraction>", "set_vm_memory_high_watermark absolute <value>"]
-
 
   def banner(["absolute", arg], %{node: node_name}), do: "Setting memory threshold on #{node_name} to #{arg} bytes ..."
   def banner([arg], %{node: node_name}), do: "Setting memory threshold on #{node_name} to #{arg} ..."

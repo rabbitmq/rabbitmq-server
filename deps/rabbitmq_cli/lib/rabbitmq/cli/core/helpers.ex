@@ -81,6 +81,10 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
+  def plugins_dir(_, opts) do
+    plugins_dir(opts)
+  end
+
   def plugins_dir(opts) do
     case Config.get_option(:plugins_dir, opts) do
       nil -> {:error, :no_plugins_dir};
@@ -93,10 +97,18 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
+  def require_rabbit_and_plugins(_, opts) do
+    require_rabbit_and_plugins(opts)
+  end
+
   def require_rabbit_and_plugins(opts) do
     with :ok <- require_rabbit(opts),
          :ok <- add_plugins_to_load_path(opts),
          do: :ok
+  end
+
+  def require_rabbit(_, opts) do
+    require_rabbit(opts)
   end
 
   def require_rabbit(opts) do
@@ -118,6 +130,18 @@ defmodule RabbitMQ.CLI.Core.Helpers do
             {:error, {:unable_to_load_rabbit, err}}
         end
     end
+  end
+
+  def rabbit_app_running?(%{node: node, timeout: timeout}) do
+    case :rabbit_misc.rpc_call(node, :rabbit, :is_running, [], timeout) do
+      true  -> true
+      false -> false
+      other -> {:error, other}
+    end
+  end
+
+  def rabbit_app_running?(_, opts) do
+    rabbit_app_running?(opts)
   end
 
   def add_plugins_to_load_path(opts) do

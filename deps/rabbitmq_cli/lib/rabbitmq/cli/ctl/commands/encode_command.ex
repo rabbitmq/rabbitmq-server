@@ -13,11 +13,19 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-
 defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+
+  def switches() do
+    [
+      cipher: :atom,
+      hash: :atom,
+      iterations: :integer
+    ]
+  end
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{
@@ -43,14 +51,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     end
   end
 
-  def switches() do
-      [
-        cipher: :atom,
-        hash: :atom,
-        iterations: :integer
-      ]
-    end
-
   def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do
     try do
       term_value = Helpers.evaluate_input_as_term(value)
@@ -72,5 +72,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
   defp supports_cipher(cipher), do: Enum.member?(:rabbit_pbe.supported_ciphers(), cipher)
 
   defp supports_hash(hash), do: Enum.member?(:rabbit_pbe.supported_hashes(), hash)
-
 end

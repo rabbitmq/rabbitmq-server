@@ -62,26 +62,69 @@ defmodule RabbitMQCtl do
         {:error, ExitCodes.exit_usage, suggest_message};
       {_, [_|_]} ->
 
-        validation_error({:bad_option, invalid}, command,
-                         unparsed_command, parsed_options);
+        argument_validation_error_output({:bad_option, invalid}, command,
+          unparsed_command, parsed_options);
       _ ->
         options = parsed_options |> merge_all_defaults |> normalize_options
         {arguments, options} = command.merge_defaults(arguments, options)
+
         with_distribution(options, fn() ->
-          validate_and_run_command(options, command, arguments)
-          |> handle_command_output(command, options, unparsed_command, output_fun)
+          # The code below implements a tiny decision tree that has
+          # to do with CLI argument and environment state validation.
+
+          # validate CLI arguments
+          case command.validate(arguments, options) do
+            :ok ->
+              # then optionally validate execution environment
+              case maybe_validate_execution_environment(command, arguments, options) do
+                :ok                        ->
+                  result = proceed_to_execution(command, arguments, options)
+                  handle_command_output(result, command, options, output_fun);
+                {:validation_failure, err} ->
+                  environment_validation_error_output(err, command, unparsed_command, options);
+                {:error, _} = err ->
+                  format_error(err, options, command)
+              end
+            {:validation_failure, err} ->
+              argument_validation_error_output(err, command, unparsed_command, options);
+            {:error, _} = err ->
+              format_error(err, options, command)
+          end
         end)
     end
   end
 
-  defp handle_command_output(output, command, options, unparsed_command, output_fun) do
+  defp maybe_validate_execution_environment(command, arguments, options) do
+    case function_exported?(command, :validate_execution_environment, 2) do
+      false -> :ok
+      true  -> command.validate_execution_environment(arguments, options)
+    end
+  end
+
+  defp proceed_to_execution(command, arguments, options) do
+    maybe_print_banner(command, arguments, options)
+    maybe_run_command(command, arguments, options)
+  end
+
+  defp maybe_run_command(_, _, %{dry_run: true}) do
+    :ok
+  end
+  defp maybe_run_command(command, arguments, options) do
+    try do
+      command.run(arguments, options) |> command.output(options)
+    catch _error_type, error ->
+      {:error, ExitCodes.exit_software,
+       to_string(:io_lib.format("Error: ~n~p~n Stacktrace ~p~n",
+                                [error, System.stacktrace()]))}
+    end
+  end
+
+  def handle_command_output(output, command, options, output_fun) do
     case output do
       {:error, _, _} = err ->
         err;
       {:error, _} = err ->
         format_error(err, options, command);
-      {:validation_failure, err} ->
-        validation_error(err, command, unparsed_command, options);
       _  ->
         output_fun.(output, command, options)
     end
@@ -154,28 +197,6 @@ defmodule RabbitMQCtl do
     opts
   end
 
-  defp validate_and_run_command(options, command, arguments) do
-    case command.validate(arguments, options) do
-      :ok ->
-        maybe_print_banner(command, arguments, options)
-        maybe_run_command(command, arguments, options)
-      {:validation_failure, _} = err -> err
-    end
-  end
-
-  defp maybe_run_command(_, _, %{dry_run: true}) do
-    :ok
-  end
-  defp maybe_run_command(command, arguments, options) do
-    try do
-      command.run(arguments, options) |> command.output(options)
-    catch _error_type, error ->
-      {:error, ExitCodes.exit_software,
-       to_string(:io_lib.format("Error: ~n~p~n Stacktrace ~p~n",
-                                [error, System.stacktrace()]))}
-    end
-  end
-
   defp get_formatter(command, %{formatter: formatter}) do
     module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Macro.camelize(formatter))
     case Code.ensure_loaded(module_name) do
@@ -233,9 +254,19 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp validation_error(err_detail, command, unparsed_command, options) do
-    err = format_validation_error(err_detail) # TODO format the error better
-    base_error = "Error: #{err}\nGiven:\n\t#{unparsed_command |> Enum.join(" ")}"
+  def argument_validation_error_output(err_detail, command, unparsed_command, options) do
+    err = format_validation_error(err_detail)
+    base_error = "Error (argument validation): #{err}\nArguments given:\n\t#{unparsed_command |> Enum.join(" ")}"
+    validation_error_output(err_detail, base_error, command, options)
+  end
+
+  def environment_validation_error_output(err_detail, command, unparsed_command, options) do
+    err = format_validation_error(err_detail)
+    base_error = "Error: #{err}\nArguments given:\n\t#{unparsed_command |> Enum.join(" ")}"
+    validation_error_output(err_detail, base_error, command, options)
+  end
+
+  defp validation_error_output(err_detail, base_error, command, options) do
     usage = HelpCommand.base_usage(command, options)
     message = base_error <> "\n" <> usage
     {:error, ExitCodes.exit_code_for({:validation_failure, err_detail}), message}
@@ -251,6 +282,9 @@ defmodule RabbitMQCtl do
     header = "Invalid options for this command:"
     Enum.join([header | for {key, val} <- opts do "#{key} : #{val}" end], "\n")
   end
+  defp format_validation_error({:bad_info_key, keys}), do: "Info key(s) #{Enum.join(keys, ",")} are not supported"
+  defp format_validation_error(:rabbit_app_is_stopped), do: "this command requires the 'rabbit' app to be running on the target node. Start it with 'rabbitmqctl start_app'."
+  defp format_validation_error(:rabbit_app_is_running), do: "this command requires the 'rabbit' app to be stopped on the target node. Stop it with 'rabbitmqctl stop_app'."
   defp format_validation_error(err), do: inspect err
 
   defp exit_program(code) do

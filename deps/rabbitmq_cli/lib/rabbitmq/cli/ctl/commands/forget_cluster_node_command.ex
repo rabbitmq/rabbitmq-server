@@ -13,10 +13,9 @@
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Ctl.Validators, as: Validators
-alias RabbitMQ.CLI.Core.Distribution,   as: Distribution
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
+  alias RabbitMQ.CLI.Core.Validators, as: Validators
+  alias RabbitMQ.CLI.Core.Distribution, as: Distribution
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -29,14 +28,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   end
 
   def validate([], _),  do: {:validation_failure, :not_enough_args}
-  def validate([_,_|_], _),   do: {:validation_failure, :too_many_args}
-  def validate([_node_to_remove] = args, %{offline: true} = opts) do
+  def validate([_,_|_], _), do: {:validation_failure, :too_many_args}
+  def validate([_], _), do: :ok
+
+
+  def validate_execution_environment([_node_to_remove] = args, %{offline: true} = opts) do
     Validators.chain([&Validators.node_is_not_running/2,
                       &Validators.mnesia_dir_is_set/2,
                       &Validators.rabbit_is_loaded/2],
                      [args, opts])
   end
-  def validate([_], %{offline: false}) do
+  def validate_execution_environment([_], %{offline: false}) do
     :ok
   end
 

@@ -34,30 +34,27 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def validate(args, _opts) do
-      case InfoKeys.validate_info_keys(args, @info_keys) do
-        {:ok, _} -> :ok
-        err -> err
-      end
+  def switches(), do: [queue_timeout: :integer, local: :boolean]
+
+  defp default_opts() do
+    %{vhost: "/", local: false, queue_timeout: 15}
   end
 
   def merge_defaults([_|_] = args, opts) do
     {args, Map.merge(default_opts(), opts)}
   end
   def merge_defaults([], opts) do
-      merge_defaults(~w(name), opts)
+    merge_defaults(~w(name), opts)
   end
 
-  def switches(), do: [queue_timeout: :integer, local: :boolean]
-
-  def usage() do
-    "list_unresponsive_queues [--local] [--queue-timeout <queue-timeout>] [<unresponsiveq_ueueinfoitem> ...]"
+  def validate(args, _opts) do
+    case InfoKeys.validate_info_keys(args, @info_keys) do
+      {:ok, _} -> :ok
+      err -> err
+    end
   end
 
-  def usage_additional() do
-      "<unresponsive_queueinfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
-  end
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run(args, %{node: node_name, vhost: vhost, timeout: timeout,
                   queue_timeout: qtimeout, local: local_opt}) do
@@ -74,8 +71,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
       end)
   end
 
-  defp default_opts() do
-    %{vhost: "/", local: false, queue_timeout: 15}
+  def usage() do
+    "list_unresponsive_queues [--local] [--queue-timeout <queue-timeout>] [<unresponsiveq_ueueinfoitem> ...]"
+  end
+
+  def usage_additional() do
+      "<unresponsive_queueinfoitem> must be a member of the list [" <>
+      Enum.join(@info_keys, ", ") <> "]."
   end
 
   def banner(_,%{vhost: vhost}), do: "Listing unresponsive queues for vhost #{vhost} ..."

@@ -15,9 +15,9 @@
 
 
 defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
-
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Validators, as: Validators
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -41,12 +41,16 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   def validate(_, %{online: true, offline: true}) do
     {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}
   end
-
-  def validate(_plugins, opts) do
+  def validate(_, _) do
     :ok
-    |> Helpers.validate_step(fn() -> Helpers.require_rabbit_and_plugins(opts) end)
-    |> Helpers.validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
-    |> Helpers.validate_step(fn() -> Helpers.plugins_dir(opts) end)
+  end
+
+  def validate_execution_environment(args, opts) do
+    Validators.chain([&Validators.rabbit_is_running_or_offline_flag_used/2,
+                      &Helpers.require_rabbit_and_plugins/2,
+                      &PluginHelpers.enabled_plugins_file/2,
+                      &Helpers.plugins_dir/2],
+                     [args, opts])
   end
 
   def usage, do: "enable <plugin>|--all [--offline] [--online]"

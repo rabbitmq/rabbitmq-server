@@ -18,13 +18,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def validate([_|_], _), do: {:validation_failure, :too_many_args}
-  def validate(_, _), do: :ok
-  def merge_defaults(args, opts), do: {args, opts}
-
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def scopes(), do: [:ctl, :diagnostics]
+
+  def merge_defaults(args, opts), do: {args, opts}
+
+  def validate([_|_], _), do: {:validation_failure, :too_many_args}
+  def validate(_, _), do: :ok
+
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :environment, [])
   end
@@ -32,5 +34,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
   def usage, do: "environment"
 
   def banner(_, %{node: node_name}), do: "Application environment of node #{node_name} ..."
-
 end

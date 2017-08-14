@@ -16,9 +16,10 @@
 
 defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback usage() :: String.t | [String.t]
+  # validates CLI arguments
   @callback validate(list(), map()) :: :ok | {:validation_failure, atom() | {atom(), String.t}}
   @callback merge_defaults(list(), map()) :: {list(), map()}
-  @callback banner(list(), map()) :: String.t | nil
+  @callback banner(list(), map()) :: [String.t] | String.t | nil
   @callback run(list(), map()) :: any
   # Coerces run/2 return value into the standard command output form
   # that is then formatted, printed and returned as an exit code.
@@ -29,8 +30,12 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
                       scopes: 0,
                       usage_additional: 0,
                       switches: 0,
-                      aliases: 0
+                      aliases: 0,
+                      # validates execution environment, e.g. file presence,
+                      # whether RabbitMQ is in an expected state on a node, etc
+                      validate_execution_environment: 2
 
+  @callback validate_execution_environment(list(), map()) :: :ok | {:validation_failure, atom() | {atom(), any}}
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t
 

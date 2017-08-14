@@ -29,13 +29,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def validate(args, _) do
-      case InfoKeys.validate_info_keys(args, @info_keys) do
-        {:ok, _} -> :ok
-        err -> err
-      end
-  end
-
   def merge_defaults([], opts) do
     {~w(source_name source_kind
              destination_name destination_kind
@@ -45,14 +38,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
     {args, Map.merge(default_opts(), opts)}
   end
 
-  def usage() do
-      "list_bindings [-p <vhost>] [<bindinginfoitem> ...]"
+
+  def validate(args, _) do
+      case InfoKeys.validate_info_keys(args, @info_keys) do
+        {:ok, _} -> :ok
+        err -> err
+      end
   end
 
-  def usage_additional() do
-      "<bindinginfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
-  end
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
       info_keys = InfoKeys.prepare_info_keys(args)
@@ -61,6 +55,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
         [vhost, info_keys],
         timeout,
         info_keys)
+  end
+
+  def usage() do
+      "list_bindings [-p <vhost>] [<bindinginfoitem> ...]"
+  end
+
+  def usage_additional() do
+      "<bindinginfoitem> must be a member of the list [" <>
+      Enum.join(@info_keys, ", ") <> "]."
   end
 
   defp default_opts() do

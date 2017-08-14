@@ -15,9 +15,8 @@
 
 require Integer
 
-alias RabbitMQ.CLI.Ctl.Validators, as: Validators
-
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
+  alias RabbitMQ.CLI.Core.Validators, as: Validators
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -29,13 +28,27 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
 
   def validate([], _),  do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: {:validation_failure, :not_enough_args}
-  def validate(args, opts) do
+  def validate(_, _) do
+    :ok
+  end
+
+  def validate_execution_environment(args, opts) do
     Validators.chain([&validate_args_count_even/2,
                       &Validators.node_is_not_running/2,
                       &Validators.mnesia_dir_is_set/2,
                       &Validators.rabbit_is_loaded/2],
                      [args, opts])
   end
+
+  def run(nodes, %{node: node_name}) do
+    node_pairs = make_node_pairs(nodes)
+    try do
+      :rabbit_mnesia_rename.rename(node_name, node_pairs)
+    catch _, reason ->
+      {:rename_failed, reason}
+    end
+  end
+
 
   defp validate_args_count_even(args, _) do
     case agrs_count_even?(args) do
@@ -48,15 +61,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
 
   defp agrs_count_even?(args) do
     Integer.is_even(length(args))
-  end
-
-  def run(nodes, %{node: node_name}) do
-    node_pairs = make_node_pairs(nodes)
-    try do
-      :rabbit_mnesia_rename.rename(node_name, node_pairs)
-    catch _, reason ->
-      {:rename_failed, reason}
-    end
   end
 
   defp make_node_pairs([]) do

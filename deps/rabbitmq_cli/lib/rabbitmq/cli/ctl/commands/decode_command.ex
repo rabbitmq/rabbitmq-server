@@ -19,6 +19,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
+  def switches() do
+      [
+        cipher: :atom,
+        hash: :atom,
+        iterations: :integer
+      ]
+  end
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{
         cipher:       :rabbit_pbe.default_cipher(),
@@ -41,14 +49,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
       {_, _, false}      -> {:validation_failure, {:bad_argument, "The requested number of iterations is incorrect (must be a positive integer)"}}
       {true, true, true} -> :ok
     end
-  end
-
-  def switches() do
-      [
-        cipher: :atom,
-        hash: :atom,
-        iterations: :integer
-      ]
   end
 
   def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do

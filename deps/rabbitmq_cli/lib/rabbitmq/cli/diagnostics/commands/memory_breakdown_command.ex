@@ -19,11 +19,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  def switches(), do: [unit: :string]
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{unit: "gb"}, opts)}
   end
-
-  def switches(), do: [unit: :string]
 
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
@@ -37,8 +37,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
     end
   end
 
-  def usage, do: "memory_breakdown [--unit <unit>]"
-
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vm, :memory, [], timeout)
   end
@@ -46,6 +44,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   def output(result, _options) do
     {:ok, compute_relative_values(result)}
   end
+
+  def usage, do: "memory_breakdown [--unit <unit>]"
 
   def banner([], %{node: node_name}) do
     "Reporting memory breakdown on node #{node_name}..."

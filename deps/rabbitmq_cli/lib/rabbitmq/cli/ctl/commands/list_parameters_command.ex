@@ -17,13 +17,15 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
+
+  def scopes(), do: [:ctl, :diagnostics]
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
-
-  def scopes(), do: [:ctl, :diagnostics]
 
   def validate([_|_], _) do
     {:validation_failure, :too_many_args}
@@ -41,5 +43,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
   def usage, do: "list_parameters [-p <vhost>]"
 
   def banner(_, %{vhost: vhost}), do: "Listing runtime parameters for vhost \"#{vhost}\" ..."
-
 end

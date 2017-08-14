@@ -43,12 +43,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
   end
   def validate([], _), do: :ok
 
-  defp run_command(command, args, opts) do
-    {args, opts} = command.merge_defaults(args, opts)
-    banner = command.banner(args, opts)
-    command_result = command.run(args, opts) |> command.output(opts)
-    {command, banner, command_result}
-  end
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name} = opts) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :list, []) do
@@ -74,6 +69,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
         data ++ vhost_data
     end
   end
+
+  defp run_command(command, args, opts) do
+    {args, opts} = command.merge_defaults(args, opts)
+    banner = command.banner(args, opts)
+    command_result = command.run(args, opts) |> command.output(opts)
+    {command, banner, command_result}
+  end
+
 
   defp info_keys(command) do
     command.info_keys()

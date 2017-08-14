@@ -31,6 +31,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
   end
   def validate([], _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,

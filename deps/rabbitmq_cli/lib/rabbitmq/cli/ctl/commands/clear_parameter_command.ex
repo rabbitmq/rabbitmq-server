@@ -32,6 +32,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand do
   end
   def validate([_,_], _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([component_name, key], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,

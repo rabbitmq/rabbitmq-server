@@ -17,10 +17,12 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-
   def merge_defaults(args, opts), do: {args, opts}
+
   def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :force_reset, [])

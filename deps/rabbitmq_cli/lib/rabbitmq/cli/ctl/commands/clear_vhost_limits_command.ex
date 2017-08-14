@@ -15,7 +15,6 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearVhostLimitsCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -41,8 +40,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearVhostLimitsCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :clear, [vhost, Helpers.cli_acting_user()])
   end
 
-  def usage, do: "clear_vhost_limits [-p <vhost>]"
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
+  def usage, do: "clear_vhost_limits [-p <vhost>]"
 
   def banner([], %{vhost: vhost}) do
     "Clearing vhost \"#{vhost}\" limits ..."

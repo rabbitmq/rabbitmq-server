@@ -15,11 +15,12 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
-
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end

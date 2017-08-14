@@ -19,11 +19,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts), do: {args, opts}
+
   def validate(args, _) when length(args) != 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
-  def scopes(), do: [:ctl, :diagnostics]
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, []) do
@@ -42,8 +42,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
     end
   end
 
-  def usage, do: "cluster_status"
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
+  def scopes(), do: [:ctl, :diagnostics]
+
+  def usage, do: "cluster_status"
 
   defp alarms_by_node(node) do
     alarms = :rabbit_misc.rpc_call(node, :rabbit, :alarms, [])

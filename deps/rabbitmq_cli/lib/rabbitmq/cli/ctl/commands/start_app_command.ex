@@ -29,6 +29,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StartAppCommand do
 
   def usage, do: "start_app"
 
-
   def banner(_, %{node: node_name}), do: "Starting node #{node_name} ..."
 end

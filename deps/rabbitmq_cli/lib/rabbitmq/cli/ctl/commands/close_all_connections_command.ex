@@ -24,6 +24,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
   def validate(args, _) when length(args) < 1, do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([explanation], %{node: node_name, vhost: vhost, global: global_opt,
                            per_connection_delay: delay, limit: limit}) do
     conns = case global_opt do

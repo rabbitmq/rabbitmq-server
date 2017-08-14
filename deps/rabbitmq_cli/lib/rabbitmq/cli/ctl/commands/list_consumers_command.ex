@@ -31,6 +31,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
 
   def info_keys(), do: @info_keys
 
+  def merge_defaults([], opts) do
+    {Enum.map(@info_keys, &Atom.to_string/1), Map.merge(%{vhost: "/"}, opts)}
+  end
+  def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
+
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
@@ -38,20 +43,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
       end
   end
 
-  def merge_defaults([], opts) do
-    {Enum.map(@info_keys, &Atom.to_string/1), Map.merge(%{vhost: "/"}, opts)}
-  end
-  def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
-
-
-  def usage() do
-      "list_consumers [-p vhost] [<consumerinfoitem> ...]"
-  end
-
-  def usage_additional() do
-      "<consumerinfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
-  end
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
       info_keys = InfoKeys.prepare_info_keys(args)
@@ -60,6 +52,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
           :rabbit_amqqueue, :emit_consumers_all,
           [nodes, vhost], timeout, info_keys)
       end)
+  end
+
+  def usage() do
+      "list_consumers [-p vhost] [<consumerinfoitem> ...]"
+  end
+
+  def usage_additional() do
+      "<consumerinfoitem> must be a member of the list [" <>
+      Enum.join(@info_keys, ", ") <> "]."
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing consumers on vhost #{vhost} ..."

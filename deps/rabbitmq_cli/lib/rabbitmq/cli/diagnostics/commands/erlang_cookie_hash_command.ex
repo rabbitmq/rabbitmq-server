@@ -24,8 +24,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
   end
   def validate(_, _), do: :ok
 
-  def usage, do: "erlang_cookie_hash"
-
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_nodes_common, :cookie_hash, [], timeout)
   end
@@ -37,6 +35,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} its Erlang cookie hash..."
   end
+
+  def usage, do: "erlang_cookie_hash"
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
 end

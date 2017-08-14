@@ -38,6 +38,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   def validate([_], _), do: :ok
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
+
   def run([target_node], %{node: node_name, ram: ram, disc: disc}) do
     node_type = case {ram, disc} do
       {true, false}  -> :ram

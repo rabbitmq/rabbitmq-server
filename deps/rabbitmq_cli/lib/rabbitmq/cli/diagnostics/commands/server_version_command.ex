@@ -24,8 +24,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
   end
   def validate(_, _), do: :ok
 
-  def usage, do: "server_version"
-
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout)
   end
@@ -34,6 +32,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
     {:ok, result}
   end
   use RabbitMQ.CLI.DefaultOutput
+
+  def usage, do: "server_version"
 
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} for its RabbitMQ version..."

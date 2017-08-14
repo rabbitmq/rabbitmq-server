@@ -20,7 +20,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-
   def scopes(), do: [:ctl, :diagnostics]
 
   def merge_defaults(args, opts) do
@@ -31,6 +30,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
     {:validation_failure, :too_many_args}
   end
   def validate([], _), do: :ok
+
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
@@ -43,5 +44,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
   def usage, do: "list_policies [-p <vhost>]"
 
   def banner(_, %{vhost: vhost}), do: "Listing policies for vhost \"#{vhost}\" ..."
-
 end

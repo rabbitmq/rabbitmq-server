@@ -34,25 +34,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
 
   def info_keys(), do: @info_keys
 
+  def merge_defaults([], opts) do
+    {~w(pid user consumer_count messages_unacknowledged), opts}
+  end
+  def merge_defaults(args, opts), do: {args, opts}
+
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
         err -> err
       end
   end
-  def merge_defaults([], opts) do
-    {~w(pid user consumer_count messages_unacknowledged), opts}
-  end
-  def merge_defaults(args, opts), do: {args, opts}
 
-  def usage() do
-      "list_channels [<channelinfoitem> ...]"
-  end
-
-  def usage_additional() do
-      "<channelinfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
-  end
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], opts) do
       run(~w(pid user consumer_count messages_unacknowledged), opts)
@@ -68,6 +62,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
                                      info_keys,
                                      Kernel.length(nodes))
       end)
+  end
+
+  def usage() do
+      "list_channels [<channelinfoitem> ...]"
+  end
+
+  def usage_additional() do
+      "<channelinfoitem> must be a member of the list [" <>
+      Enum.join(@info_keys, ", ") <> "]."
   end
 
   def banner(_, _), do: "Listing channels ..."

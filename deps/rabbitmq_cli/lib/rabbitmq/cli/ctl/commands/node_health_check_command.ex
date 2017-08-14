@@ -20,8 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def validate(args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
-  def validate([], _), do: :ok
+  def switches(), do: [timeout: :integer]
 
   def merge_defaults(args, opts) do
     timeout = case opts[:timeout] do
@@ -32,14 +31,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
     {args, Map.merge(opts, %{timeout: timeout})}
   end
 
-  def switches(), do: [timeout: :integer]
+  def validate(args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
+  def validate([], _), do: :ok
 
-  def usage, do: "node_health_check"
-
-  def banner(_, %{node: node_name, timeout: timeout}) do
-    ["Timeout: #{timeout / 1000} seconds ...",
-     "Checking health of node #{node_name} ..."]
-  end
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_health_check, :node, [node_name, timeout]) do
@@ -66,4 +61,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
      "Error: healthcheck failed. Message: #{message}"}
   end
   use RabbitMQ.CLI.DefaultOutput
+
+  def usage, do: "node_health_check"
+
+  def banner(_, %{node: node_name, timeout: timeout}) do
+    ["Timeout: #{timeout / 1000} seconds ...",
+     "Checking health of node #{node_name} ..."]
+  end
 end
