@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([start/4, stop/2, client_init/5, successfully_recovered_state/2]).
-
+-export([vhost_store_pid/2]).
 
 start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
                                                      ClientRefs == undefined  ->
