@@ -21,11 +21,13 @@ defmodule RabbitMQ.CLI.InformationUnit do
   @gigabyte_bytes @megabyte_bytes * 1000
   @terabyte_bytes @gigabyte_bytes * 1000
 
-  @known_units    MapSet.new(["bytes",
-                              "kb", "kilobytes",
-                              "mb", "megabytes",
-                              "gb", "gigabytes",
-                              "tb", "terabytes"])
+  def known_units() do
+    MapSet.new(["bytes",
+                "kb", "kilobytes",
+                "mb", "megabytes",
+                "gb", "gigabytes",
+                "tb", "terabytes"])
+  end
 
   def convert(bytes, "bytes") do
     bytes
@@ -36,7 +38,7 @@ defmodule RabbitMQ.CLI.InformationUnit do
   end
 
   def known_unit?(val) do
-    MapSet.member?(@known_units, String.downcase(val))
+    MapSet.member?(known_units(), String.downcase(val))
   end
 
 

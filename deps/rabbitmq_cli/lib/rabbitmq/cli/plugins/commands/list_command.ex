@@ -78,9 +78,10 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     all     = PluginHelpers.list(opts)
     enabled = PluginHelpers.read_enabled(opts)
 
-    case MapSet.difference(MapSet.new(enabled), MapSet.new(PluginHelpers.plugin_names(all))) do
-        %MapSet{} -> :ok;
-        missing   -> IO.puts("WARNING - plugins currently enabled but missing: #{missing}~n~n")
+    missing = MapSet.difference(MapSet.new(enabled), MapSet.new(PluginHelpers.plugin_names(all)))
+    case Enum.empty?(missing) do
+        true  -> :ok;
+        false -> IO.puts("WARNING - plugins currently enabled but missing: #{Enum.to_list(missing)}~n~n")
     end
     implicit           = :rabbit_plugins.dependencies(false, enabled, all)
     enabled_implicitly = implicit -- enabled

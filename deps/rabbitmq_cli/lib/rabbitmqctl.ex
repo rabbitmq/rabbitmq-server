@@ -29,7 +29,7 @@ defmodule RabbitMQCtl do
   # Enable unit tests for private functions
   @compile if Mix.env == :test, do: :export_all
 
-  @type options() :: Map.t
+  @type options() :: map()
   @type command_result() :: {:error, ExitCodes.exit_code, term()} | term()
 
   def main(["--auto-complete" | []]) do

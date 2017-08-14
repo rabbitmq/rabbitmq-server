@@ -16,15 +16,15 @@
 
 defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback usage() :: String.t | [String.t]
-  @callback validate(List.t, Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, String.t}}
-  @callback merge_defaults(List.t, Map.t) :: {List.t, Map.t}
-  @callback banner(List.t, Map.t) :: String.t | nil
-  @callback run(List.t, Map.t) :: any
+  @callback validate(list(), map()) :: :ok | {:validation_failure, atom() | {atom(), String.t}}
+  @callback merge_defaults(list(), map()) :: {list(), map()}
+  @callback banner(list(), map()) :: String.t | nil
+  @callback run(list(), map()) :: any
   # Coerces run/2 return value into the standard command output form
   # that is then formatted, printed and returned as an exit code.
   # There is a default implementation for this callback in DefaultOutput module
-  @callback output(any, Map.t) :: :ok | {:ok, any} | {:stream, Enum.t} |
-                                  {:error, ExitCodes.exit_code, [String.t]}
+  @callback output(any, map()) :: :ok | {:ok, any} | {:stream, Enum.t} |
+                                  {:error, RabbitMQ.CLI.Core.ExitCodes.exit_code, [String.t]}
   @optional_callbacks formatter: 0,
                       scopes: 0,
                       usage_additional: 0,
@@ -34,7 +34,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t
 
-  @callback formatter() :: Atom.t
-  @callback scopes() :: [Atom.t]
+  @callback formatter() :: atom()
+  @callback scopes() :: [atom()]
   @callback usage_additional() :: String.t | [String.t]
 end

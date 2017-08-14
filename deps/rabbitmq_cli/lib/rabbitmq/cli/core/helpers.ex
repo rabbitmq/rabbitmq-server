@@ -159,7 +159,8 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
-  defp add_dir_code_path(app_dir) do
+  defp add_dir_code_path(app_dir_0) do
+    app_dir = to_charlist(app_dir_0)
     case :erl_prim_loader.list_dir(app_dir) do
       {:ok, list} ->
         case Enum.member?(list, 'ebin') do

@@ -15,6 +15,6 @@
 
 # Formats returned values e.g. to human-readable text or JSON.
 defmodule RabbitMQ.CLI.FormatterBehaviour do
-  @callback format_output(any, Map.t) :: String.t | [String.t]
-  @callback format_stream(Enumerable.t, Map.t) :: Enumerable.t
+  @callback format_output(any, map()) :: String.t | [String.t]
+  @callback format_stream(Enumerable.t, map()) :: Enumerable.t
 end
