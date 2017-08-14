@@ -357,6 +357,11 @@ add_vhost(VHost, Username) ->
     VHostTrace = maps:get(tracing, VHost, undefined),
     rabbit_mgmt_wm_vhost:put_vhost(VHostName, VHostTrace, Username).
 
+%% when loading definitions on startup, don't grant
+%% permissions to the dummy user
+add_permission(_Permission, ?INTERNAL_USER) ->
+    ok;
+
 add_permission(Permission, Username) ->
     rabbit_auth_backend_internal:set_permissions(maps:get(user,      Permission, undefined),
                                                  maps:get(vhost,     Permission, undefined),
@@ -364,6 +369,11 @@ add_permission(Permission, Username) ->
                                                  maps:get(write,     Permission, undefined),
                                                  maps:get(read,      Permission, undefined),
                                                  Username).
+
+%% when loading definitions on startup, don't grant
+%% permissions to the dummy user
+add_topic_permission(_TopicPermission, ?INTERNAL_USER) ->
+    ok;
 
 add_topic_permission(TopicPermission, Username) ->
     rabbit_auth_backend_internal:set_topic_permissions(
