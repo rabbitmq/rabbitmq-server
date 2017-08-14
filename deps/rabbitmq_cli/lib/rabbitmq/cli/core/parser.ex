@@ -195,7 +195,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
     command_switches = apply_if_exported(command, :switches, [], [])
     merge_if_different(default, command_switches,
                        {:command_invalid,
-                        {command, {:invalid_switches,
+                        {command, {:redefining_global_switches,
                                    command_switches}}})
   end
 
@@ -203,7 +203,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
     command_aliases = apply_if_exported(command, :aliases, [], [])
     merge_if_different(default, command_aliases,
                        {:command_invalid,
-                        {command, {:invalid_aliases,
+                        {command, {:redefining_global_aliases,
                                    command_aliases}}})
   end
 
