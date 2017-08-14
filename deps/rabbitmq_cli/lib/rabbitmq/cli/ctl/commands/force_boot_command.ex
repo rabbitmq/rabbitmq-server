@@ -24,16 +24,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
+  def validate([], %{}), do: :ok
 
-  def validate([], %{node: node_name}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit, :is_running, []) do
-      true -> {:validation_failure, :rabbit_running};
-      _    -> :ok
+  ##
+  def validate_execution_environment(args, opts) do
+    ## We don't use RequiresRabbitAppStopped helper because we don't want to fail
+    ## the validation if the node is not running.
+    case RabbitMQ.CLI.Core.Validators.rabbit_is_not_running(args, opts) do
+      :ok -> :ok
+      {:validation_failure, _} = failure -> failure
+      other -> RabbitMQ.CLI.Core.Validators.node_is_not_running(args, opts)
     end
   end
 
-  use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
-  
   def run([], %{node: node_name} = opts) do
     case :rabbit_misc.rpc_call(node_name,
                                :rabbit_mnesia, :force_load_next_boot, []) do
