@@ -119,9 +119,9 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   defp write_enabled_plugins(plugins, plugins_file, opts) do
     all              = list(opts)
     all_plugin_names = Enum.map(all, &plugin_name/1)
-
-    case MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names)) do
-      %MapSet{} ->
+    missing = MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names))
+    case Enum.empty?(missing) do
+      true ->
         case :rabbit_file.write_term_file(to_charlist(plugins_file), [plugins]) do
           :ok ->
             all_enabled = :rabbit_plugins.dependencies(false, plugins, all)
@@ -129,8 +129,8 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
           {:error, reason} ->
             {:error, {:cannot_write_enabled_plugins_file, plugins_file, reason}}
         end;
-      missing  ->
-        {:error, {:plugins_not_found, missing}}
+      false ->
+        {:error, {:plugins_not_found, Enum.to_list(missing)}}
     end
   end
 

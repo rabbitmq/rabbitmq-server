@@ -88,6 +88,9 @@ else
 	$(verbose) echo "TEST_FILE must be set, e.g. TEST_FILE=./test/close_all_connections_command_test.exs" 1>&2; false
 endif
 
+dialyzer:: $(ESCRIPTS)
+	$(MIX_TEST) dialyzer
+
 .PHONY: install
 
 install: $(ESCRIPTS)

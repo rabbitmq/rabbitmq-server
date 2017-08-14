@@ -45,7 +45,7 @@ defmodule ListParametersCommandTest do
              plugins_dir: plugins_dir,
              rabbitmq_home: rabbitmq_home}
 
-    set_enabled_plugins([:rabbitmq_metronome, :rabbitmq_federation], :online, node, opts)
+    set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online, node, opts)
 
     add_vhost @vhost
 

@@ -24,7 +24,7 @@ defmodule Rabbitmq.CLI.AutoComplete do
   end
   def complete(script_name, args) do
     case Parser.parse_global(args) do
-      %{script_name: _args_script_name} ->
+      {_, %{script_name: _args_script_name}, _} ->
         complete(args);
       _                                ->
         complete(["--script-name", script_name | args])

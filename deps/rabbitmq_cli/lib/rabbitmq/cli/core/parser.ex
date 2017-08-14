@@ -22,10 +22,10 @@ defmodule RabbitMQ.CLI.Core.Parser do
   # the English language is 5.
   @levenshtein_distance_limit 5
 
-  @spec parse(String.t) :: {command :: :no_command | atom() | {:suggest, String.t()},
+  @spec parse(String.t) :: {command :: :no_command | atom() | {:suggest, String.t},
                             command_name :: String.t,
                             arguments :: [String.t],
-                            options :: Map.t,
+                            options :: map(),
                             invalid :: [{String.t, String.t | nil}]}
 
   def parse(input) do
@@ -224,9 +224,10 @@ defmodule RabbitMQ.CLI.Core.Parser do
   defp keyword_intersect(one, two) do
     one_keys = MapSet.new(Keyword.keys(one))
     two_keys = MapSet.new(Keyword.keys(two))
-    case MapSet.intersection(one_keys, two_keys) do
-      %MapSet{} -> [];
-      set       -> MapSet.to_list(set)
+    intersection = MapSet.intersection(one_keys, two_keys)
+    case Enum.empty?(intersection) do
+      true  -> [];
+      false -> MapSet.to_list(intersection)
     end
   end
 
