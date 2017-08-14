@@ -17,6 +17,7 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
