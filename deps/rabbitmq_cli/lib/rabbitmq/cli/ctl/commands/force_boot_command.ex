@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
     case RabbitMQ.CLI.Core.Validators.rabbit_is_not_running(args, opts) do
       :ok -> :ok
       {:validation_failure, _} = failure -> failure
-      other -> RabbitMQ.CLI.Core.Validators.node_is_not_running(args, opts)
+      _other -> RabbitMQ.CLI.Core.Validators.node_is_not_running(args, opts)
     end
   end
 
