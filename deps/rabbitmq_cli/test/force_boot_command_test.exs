@@ -28,7 +28,13 @@ defmodule ForceBootCommandTest do
   end
 
   setup _ do
-    {:ok, opts: %{node: get_rabbit_hostname()}}
+    {
+      :ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: 1000
+     }
+    }
   end
 
   test "validate: providing too many arguments fails validation" do
@@ -37,7 +43,7 @@ defmodule ForceBootCommandTest do
   end
 
   test "validate: the rabbit app running on target node fails validation", context do
-    assert @command.validate([], context[:opts]) == {:validation_failure, :rabbit_running}
+    assert @command.validate_execution_environment([], context[:opts]) == {:validation_failure, :rabbit_app_is_running}
   end
 
   test "run: sets a force boot marker file on target node", context do
