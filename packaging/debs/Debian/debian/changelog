@@ -1,3 +1,9 @@
+rabbitmq-server (3.6.11-1) unstable; urgency=medium
+
+  * New Upstream Release
+
+ -- Michael Klishin <michael@rabbitmq.com>  Wed, 16 Aug 2017 13:06:42 +0100
+
 rabbitmq-server (3.6.10-1) unstable; urgency=low
 
   * New Upstream Release
