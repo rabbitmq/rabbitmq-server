@@ -81,7 +81,16 @@ exec_script_as_rabbitmq() {
 }
 
 exec_script_as_root() {
-  @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE"
+  if [ -x /sbin/runuser ]
+  then
+    exec /sbin/runuser -u rabbitmq /bin/sh -c "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE"
+  elif [ -x /bin/su ]
+  then
+    exec /bin/su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE"
+  else
+    echo 'No command present to run as rabbitmq user. Please ensure /bin/su or /sbin/runuser is available.' 1>&2
+    exit 1
+  fi
 }
 
 run_script_help_and_fail() {
