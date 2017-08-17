@@ -81,8 +81,7 @@ install -p -D -m 0755 scripts/zsh_autocomplete.sh %{buildroot}%{_datarootdir}/zs
 mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 
 mkdir -p %{buildroot}%{_sbindir}
-sed -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
-	-e 's|@STDOUT_STDERR_REDIRECTION@||' \
+sed -e 's|@STDOUT_STDERR_REDIRECTION@||' \
 	< scripts/rabbitmq-script-wrapper \
 	> %{buildroot}%{_sbindir}/rabbitmqctl
 chmod 0755 %{buildroot}%{_sbindir}/rabbitmqctl
