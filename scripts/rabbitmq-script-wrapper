@@ -88,7 +88,7 @@ exec_script_as_root() {
   then
     exec /bin/su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE"
   else
-    echo 'No command present to run as rabbitmq user. Please ensure /bin/su or /sbin/runuser is available.' 1>&2
+    echo "Please ensure /bin/su or /sbin/runuser exists and can be executed by $USER." 1>&2
     exit 1
   fi
 }
