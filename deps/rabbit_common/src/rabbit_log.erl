@@ -26,6 +26,7 @@
          alert/1, alert/2, alert/3,
          emergency/1, emergency/2, emergency/3,
          none/1, none/2, none/3]).
+-export([make_internal_sink_name/1]).
 
 -include("rabbit_log.hrl").
 %%----------------------------------------------------------------------------
