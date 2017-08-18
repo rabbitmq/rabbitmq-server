@@ -990,80 +990,98 @@ end}.
     {datatype, string},
     {validators, ["dir_writable"]}]}.
 
-{mapping, "log.console", "lager.handlers", [
+{mapping, "log.console", "rabbit.log.console.enabled", [
     {datatype, {enum, [true, false]}}
 ]}.
+{mapping, "log.console.level", "rabbit.log.console.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
 
-{mapping, "log.syslog", "lager.handlers", [
+{mapping, "log.syslog", "rabbit.log.syslog.enabled", [
     {datatype, {enum, [true, false]}}
 ]}.
-{mapping, "log.file", "lager.handlers", [
-    {datatype, [{enum, [false]}, string]}
+{mapping, "log.syslog.level", "rabbit.log.syslog.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
-
-{mapping, "log.file.level", "lager.handlers", [
-    {datatype, {enum, [debug, info, warning, error]}}
-]}.
-{mapping, "log.$handler.level", "lager.handlers", [
-    {datatype, {enum, [debug, info, warning, error]}}
-]}.
-{mapping, "log.file.rotation.date", "lager.handlers", [
+{mapping, "log.syslog.identity", "rabbit.log.syslog.identity", [
     {datatype, string}
 ]}.
-{mapping, "log.file.rotation.size", "lager.handlers", [
-    {datatype, integer}
-]}.
-{mapping, "log.file.rotation.count", "lager.handlers", [
-    {datatype, integer}
-]}.
-
-{mapping, "log.syslog.identity", "lager.handlers", [
-    {datatype, string}
-]}.
-{mapping, "log.syslog.facility", "lager.handlers", [
+{mapping, "log.syslog.facility", "rabbit.log.syslog.facility", [
     {datatype, atom}
 ]}.
 
-{translation, "lager.handlers",
-fun(Conf) ->
-    ConsoleHandler = case cuttlefish:conf_get("log.console", Conf, false) of
-        true  ->
-            ConsoleLevel = cuttlefish:conf_get("log.console.level", Conf, info),
-            [{lager_console_backend, ConsoleLevel}];
-        false -> []
-    end,
-    FileHandler = case cuttlefish:conf_get("log.file", Conf, undefined) of
-        false -> [];
-        File  ->
-            FileLevel = cuttlefish:conf_get("log.file.level", Conf, info),
-            RotationDate  = cuttlefish:conf_get("log.file.rotation.date", Conf, ""),
-            RotationSize  = cuttlefish:conf_get("log.file.rotation.size", Conf, 0),
-            RotationCount = cuttlefish:conf_get("log.file.rotation.count", Conf, 10),
-            [{lager_file_backend, [{file, File},
-                                   {level, FileLevel},
-                                   {date, RotationDate},
-                                   {size, RotationSize},
-                                   {formatter_config,
-                                        [date, " ", time, " ", color,
-                                         "[", severity, "] ",
-                                         {pid, ""},
-                                         " ", message, "\n"]},
-                                   {count, RotationCount}]}]
-    end,
-    SyslogHandler = case cuttlefish:conf_get("log.syslog", Conf, false) of
-        false -> [];
-        true  ->
-            SyslogLevel = cuttlefish:conf_get("log.syslog.level", Conf, info),
-            Identity = cuttlefish:conf_get("log.syslog.identity", Conf),
-            Facility = cuttlefish:conf_get("log.syslog.facility", Conf),
-            [{lager_syslog_backend, [Identity, Facility, SyslogLevel]}]
-    end,
-    case ConsoleHandler ++ FileHandler ++ SyslogHandler of
-        []    -> undefined;
-        Other -> Other
-    end
-end}.
+{mapping, "log.file", "rabbit.log.file.file", [
+    {datatype, [{enum, [false]}, string]}
+]}.
+{mapping, "log.file.level", "rabbit.log.file.level", [
+    {datatype,
+        {enum, ['=debug', debug,
+                info, '!=info',
+                notice, '<=notice',
+                '<warning', warning,
+                error,
+                critical,
+                alert,
+                emergency,
+                none]}}
+]}.
+{mapping, "log.file.rotation.date", "rabbit.log.file.date", [
+    {datatype, string}
+]}.
+{mapping, "log.file.rotation.size", "rabbit.log.file.size", [
+    {datatype, integer}
+]}.
+{mapping, "log.file.rotation.count", "rabbit.log.file.count", [
+    {datatype, integer}
+]}.
 
+%% Log categories
+
+{mapping, "log.connection.level", "rabbit.log.categories.connection.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.connection.file", "rabbit.log.categories.connection.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.channel.level", "rabbit.log.categories.channel.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.channel.file", "rabbit.log.categories.channel.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.mirroring.level", "rabbit.log.categories.mirroring.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.mirroring.file", "rabbit.log.categories.mirroring.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.queue.level", "rabbit.log.categories.queue.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.queue.file", "rabbit.log.categories.queue.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.federation.level", "rabbit.log.categories.federation.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.federation.file", "rabbit.log.categories.federation.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.upgrade.level", "rabbit.log.categories.upgrade.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.upgrade.file", "rabbit.log.categories.upgrade.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.default.level", "rabbit.log.categories.default.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
 
 % ===============================
 % Validators

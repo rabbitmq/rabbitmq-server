@@ -238,18 +238,20 @@ log_management1(_Config) ->
     %% logging directed to tty (first, remove handlers)
     ok = rabbit:stop(),
     ok = clean_logs([LogFile], Suffix),
-    ok = application:set_env(rabbit, lager_handler, tty),
+    ok = application:set_env(rabbit, lager_default_file, tty),
+    application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
     timer:sleep(200),
     rabbit_log:info("test info"),
-    [{error, enoent}] = empty_files([LogFile]),
+    [{error, enoent}] = non_empty_files([LogFile]),
 
     %% rotate logs when logging is turned off
     ok = rabbit:stop(),
     ok = clean_logs([LogFile], Suffix),
-    ok = application:set_env(rabbit, lager_handler, false),
+    ok = application:set_env(rabbit, lager_default_file, false),
+    application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
@@ -261,7 +263,8 @@ log_management1(_Config) ->
     %% cleanup
     ok = rabbit:stop(),
     ok = clean_logs([LogFile], Suffix),
-    ok = application:set_env(rabbit, lager_handler, LogFile),
+    ok = application:set_env(rabbit, lager_default_file, LogFile),
+    application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
@@ -279,7 +282,8 @@ log_management_during_startup1(_Config) ->
     %% start application with simple tty logging
     ok = rabbit:stop(),
     ok = clean_logs([LogFile], Suffix),
-    ok = application:set_env(rabbit, lager_handler, tty),
+    ok = application:set_env(rabbit, lager_default_file, tty),
+    application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
@@ -289,7 +293,8 @@ log_management_during_startup1(_Config) ->
     delete_file(NonExistent),
     delete_file(filename:dirname(NonExistent)),
     ok = rabbit:stop(),
-    ok = application:set_env(rabbit, lager_handler, NonExistent),
+    ok = application:set_env(rabbit, lager_default_file, NonExistent),
+    application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
@@ -301,7 +306,8 @@ log_management_during_startup1(_Config) ->
     delete_file(NoPermission1),
     delete_file(filename:dirname(NoPermission1)),
     ok = rabbit:stop(),
-    ok = application:set_env(rabbit, lager_handler, NoPermission1),
+    ok = application:set_env(rabbit, lager_default_file, NoPermission1),
+    application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
     ok = try rabbit:start() of
@@ -326,7 +332,8 @@ log_management_during_startup1(_Config) ->
         ok                         -> ok;
         {error, lager_not_running} -> ok
     end,
-    ok = application:set_env(rabbit, lager_handler, NoPermission2),
+    ok = application:set_env(rabbit, lager_default_file, NoPermission2),
+    application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
     ok = try rabbit:start() of
@@ -343,7 +350,8 @@ log_management_during_startup1(_Config) ->
     end,
 
     %% cleanup
-    ok = application:set_env(rabbit, lager_handler, LogFile),
+    ok = application:set_env(rabbit, lager_default_file, LogFile),
+    application:unset_env(rabbit, log),
     application:unset_env(lager, handlers),
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
