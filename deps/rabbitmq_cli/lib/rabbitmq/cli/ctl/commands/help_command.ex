@@ -29,7 +29,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def scopes(), do: [:ctl, :diagnostics, :plugins]
 
   def switches(), do: [list_commands: :boolean]
-  def aliases(), do: [l: :list_commands]
 
   def run([command_name|_], opts) do
     CommandModules.load(opts)
