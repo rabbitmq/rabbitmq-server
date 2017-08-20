@@ -47,31 +47,34 @@ CLI core consists of several modules implementing command execution process:
 
 #### Arguments parsing
 
- Command line arguments are parsed with [OptionParser](http://elixir-lang.org/docs/stable/elixir/OptionParser.html)
- Parser returns a list of unnamed arguments and a map of options (named arguemtns)
- First unnamed argument is a command name.
- Named arguments can be global or command specific.
- Command specific argument names and types are apecified in the `switches/0` callback.
- Global argument names are described in [Global arguments]
+Command line arguments are parsed with [OptionParser](http://elixir-lang.org/docs/stable/elixir/OptionParser.html)
+Parser returns a list of unnamed arguments and a map of options (named arguemtns)
+First unnamed argument is a command name.
+Named arguments can be global or command specific.
+Command specific argument names and types are apecified in the `switches/0` callback.
+Global argument names are described in [Global arguments]
 
 #### Command discovery
 
- If arguments list is not empty, its first element is considered a command name.
- Command name is converted to CamelCase and a module with
- `RabbitMQ.CLI.*.Commands.<CommandName>Command` name is selected as a command module.
+If arguments list is not empty, its first element is considered a command name.
+Command name is converted to CamelCase and a module with
+`RabbitMQ.CLI.*.Commands.<CommandName>Command` name is selected as a command module.
 
- List of available command modules depend on current tool scope
- (see [Command scopes](#command-scopes))
+List of available command modules depend on current tool scope
+(see [Command scopes](#command-scopes))
 
 #### Defaults and validation
 
- After the command module is found, effective command arguments are calculated by
+After the command module is found, effective command arguments are calculated by
  merging global defaults and command specific defaults for both unnamed and named arguments.
 
- A command specifies defaults using the `merge_defaults/2` callback
+A command specifies defaults using the `merge_defaults/2` callback
  (see [Command behaviour](#command-behaviour))
 
- Arguments are then validated using the `validate/2` callback
+Arguments are then validated using the `validate/2` callback. `validate_execution_environment/2` is
+another (optional) validation function with the same signature as `validate/2`. It is meant to
+validate everything that is not CLI arguments, for example, whether a file exists or RabbitMQ is running
+or stopped on the target node.
 
 ##### Command Aliases
 

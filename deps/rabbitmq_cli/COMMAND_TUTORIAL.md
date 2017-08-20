@@ -141,7 +141,7 @@ without executing the actual command:
 The function above can access arguments and command flags (named arguments)
 to decide what exactly it should do.
 
-### Default Argument Values and Validation
+### Default Argument Values and Argument Validation
 
 As you can see, the `banner/2` function accepts exactly one argument and expects
 the `vhost`, `if_empty` and `if_unused` options.
@@ -178,7 +178,7 @@ with effective arguments and options that will be passed on to `validate/2`,
 `banner/2` and `run/2`.
 
 The `validate/2` function can return either `:ok` (just the atom) or a
-tuple in the form of `{:validate, error}`. The function above checks
+tuple in the form of `{:validation_failure, error}`. The function above checks
 that we have exactly one position argument and that it is not empty.
 
 While this is not enforced, for a command to be practical
@@ -186,6 +186,16 @@ at least one `validate/2` head must return `:ok`.
 
 
 ### Command Execution
+
+`validate/2` is useful for command line argument validation but there can be
+other things that require validation before a command can be executed. For example,
+a command may require a RabbitMQ node to be running (or stopped), a file to exist
+and be readable, an environment variable to be exported and so on.
+
+There's another validation function, `validate_execution_environment/2`, for
+such cases. That function accepts the same arguments and must return either `:ok`
+or `{:validation_failure, error}`. What's the difference, you may ask?
+`validate_execution_environment/2` is optional.
 
 To perform the actual command operation, the `run/2` command needs to be defined:
 
