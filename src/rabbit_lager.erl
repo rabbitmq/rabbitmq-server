@@ -21,6 +21,9 @@
 %% API
 -export([start_logger/0, log_locations/0, fold_sinks/2]).
 
+%% For test purposes
+-export([configure_lager/0]).
+
 start_logger() ->
     application:stop(lager),
     ensure_lager_configured(),
@@ -300,11 +303,12 @@ default_config_value(formatter_config) ->
        " ", message, "\n"].
 
 prepare_rabbit_log_config() ->
-    %% If RABBIT_LOGS is not set, we should use console logger
-    DefaultFile = application:get_env(rabbit, lager_default_file, tty),
+    %% If RABBIT_LOGS is not set, we should ignore it.
+    DefaultFile = application:get_env(rabbit, lager_default_file, undefined),
     %% If RABBIT_UPGRADE_LOGS is not set, we should ignore it.
     UpgradeFile = application:get_env(rabbit, lager_upgrade_file, undefined),
     case DefaultFile of
+        undefined -> ok;
         false ->
             set_env_default_log_disabled();
         tty ->
@@ -403,9 +407,13 @@ generate_lager_sinks(SinkNames, SinkConfigs) ->
                         generate_lager_handlers([{file, [{file, File}, {level, Level}]}]);
                     FileHandler ->
                         %% Replace a filename in the handler
+                        FileHandlerChanges = case handler_level_more_verbose(FileHandler, Level) of
+                            true  -> [{file, File}, {level, Level}];
+                            false -> [{file, File}]
+                        end,
+
                         [{lager_file_backend,
-                            lists:ukeymerge(1,
-                                            [{file, File}, {level, Level}],
+                            lists:ukeymerge(1, FileHandlerChanges,
                                             lists:ukeysort(1, FileHandler))}]
                 end,
                 %% Remove all file handlers.
