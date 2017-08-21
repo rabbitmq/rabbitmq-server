@@ -206,16 +206,16 @@ configure_lager() ->
         {[], []} -> [];
         {[], LogLevels} ->
             io:format("Using deprecated config parameter 'log_levels'. "
-                      "Please update your configuration file according to: "
+                      "Please update your configuration file according to "
                       "https://rabbitmq.com/logging.html"),
             lists:map(fun({Name, Level}) -> {Name, [{level, Level}]} end,
                       LogLevels);
         {Categories, []} ->
             Categories;
         {Categories, LogLevels} ->
-            io:format("Using the deprecated config parameter 'log_levels' together "
-                      "with the new parameter 'categories'."
-                      " 'log_levels' will be ignored. Please remove 'log_levels' "
+            io:format("Using the deprecated config parameter 'rabbit.log_levels' together "
+                      "with a new parameter for log categories."
+                      " 'rabbit.log_levels' will be ignored. Please remove it from the config. More at "
                       "https://rabbitmq.com/logging.html"),
             Categories
     end,
