@@ -85,12 +85,10 @@ sink_file_rewrites_file_backends(_) ->
         {lager_console_backend, [{level, info}]}
     ],
     application:set_env(lager, handlers, LagerHandlers),
-
     rabbit_lager:configure_lager(),
 
     ExpectedSinks = sort_sinks(sink_rewrite_sinks()),
-
-    ExpectedSinks = sort_sinks(application:get_env(lager, extra_sinks, undefined)).
+    ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
 sink_rewrite_sinks() ->
     [{error_logger_lager_event,
@@ -157,8 +155,8 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
                 [{lager_console_backend, [{level, debug}]},
                  {lager_file_backend, [{level, error},
                                        {file, "channel_lager.log"}]}]}]}],
-    application:set_env(lager, extra_sinks, LagerSinks),
 
+    application:set_env(lager, extra_sinks, LagerSinks),
     rabbit_lager:configure_lager(),
 
     ExpectedSinks = sort_sinks([
@@ -209,8 +207,7 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
             [{handlers,[{lager_forwarder_backend,[lager_event,info]}]},
              {rabbit_handlers,[{lager_forwarder_backend,[lager_event,info]}]}]}]),
 
-    ct:pal("Expected ~p~n", [ExpectedSinks]),
-    ExpectedSinks = sort_sinks(application:get_env(lager, extra_sinks, undefined)).
+    ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
 
 
@@ -226,7 +223,6 @@ config_handlers_merged_with_lager_handlers(_) ->
         {lager_console_backend, [{level, info}]}
     ],
     application:set_env(lager, handlers, LagerHandlers),
-
     rabbit_lager:configure_lager(),
 
     FileHandlers = default_expected_handlers("rabbit_file.log", debug),
@@ -236,8 +232,8 @@ config_handlers_merged_with_lager_handlers(_) ->
     ExpectedRabbitHandlers = sort_handlers(FileHandlers ++ ConsoleHandlers ++ SyslogHandlers),
     ExpectedHandlers = sort_handlers(ExpectedRabbitHandlers ++ LagerHandlers),
 
-    ExpectedRabbitHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)).
+    ?assertEqual(ExpectedRabbitHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))).
 
 config_sinks_level(_) ->
     DefaultLogFile = "rabbit_default.log",
@@ -298,8 +294,7 @@ config_sink_file(_) ->
     rabbit_lager:configure_lager(),
 
     ExpectedSinks = sort_sinks(file_sinks()),
-    ct:pal("Expected ~p~n", [ExpectedSinks]),
-    ExpectedSinks = sort_sinks(application:get_env(lager, extra_sinks, undefined)).
+    ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
 config_sink_file_override_config_handler_file(_) ->
     DefaultLogFile = "rabbit_default.log",
@@ -318,8 +313,7 @@ config_sink_file_override_config_handler_file(_) ->
     rabbit_lager:configure_lager(),
 
     ExpectedSinks = sort_sinks(file_sinks()),
-    ct:pal("Expected ~p~n", [ExpectedSinks]),
-    ExpectedSinks = sort_sinks(application:get_env(lager, extra_sinks, undefined)).
+    ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
 
 file_sinks() ->
@@ -386,14 +380,13 @@ config_multiple_handlers(_) ->
 
     ExpectedHandlers = sort_handlers(SyslogHandlers ++ ConsoleHandlers),
 
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)).
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 
 config_console_handler(_) ->
     DefaultLogFile = "rabbit_default.log",
     application:set_env(rabbit, lager_default_file, DefaultLogFile),
-
     application:set_env(rabbit, log, [{console, [{enabled, true}]}]),
 
     rabbit_lager:configure_lager(),
@@ -403,8 +396,8 @@ config_console_handler(_) ->
 
     ExpectedHandlers = sort_handlers(FileHandlers ++ ConsoleHandlers),
 
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)).
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 expected_console_handler() ->
     expected_console_handler(info).
@@ -416,7 +409,6 @@ expected_console_handler(Level) ->
 config_syslog_handler(_) ->
     DefaultLogFile = "rabbit_default.log",
     application:set_env(rabbit, lager_default_file, DefaultLogFile),
-
     application:set_env(rabbit, log, [{syslog, [{enabled, true}]}]),
 
     rabbit_lager:configure_lager(),
@@ -426,13 +418,12 @@ config_syslog_handler(_) ->
 
     ExpectedHandlers = sort_handlers(FileHandlers ++ SyslogHandlers),
 
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)).
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 config_syslog_handler_options(_) ->
     DefaultLogFile = "rabbit_default.log",
     application:set_env(rabbit, lager_default_file, DefaultLogFile),
-
     application:set_env(rabbit, log, [{syslog, [{enabled, true},
                                                 {identity, "foo"},
                                                 {facility, local1},
@@ -445,8 +436,8 @@ config_syslog_handler_options(_) ->
 
     ExpectedHandlers = sort_handlers(FileHandlers ++ SyslogHandlers),
 
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)).
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 expected_syslog_handler() ->
     expected_syslog_handler(info, "rabbitmq", daemon).
@@ -465,12 +456,11 @@ env_var_overrides_config(_) ->
     application:set_env(rabbit, log, [{file, [{file, ConfigLogFile}]}]),
 
     os:putenv("RABBITMQ_LOGS_source", "environment"),
-
     rabbit_lager:configure_lager(),
 
     ExpectedHandlers = default_expected_handlers(EnvLogFile),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)).
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 env_var_disable_log(_) ->
     application:set_env(rabbit, lager_default_file, false),
@@ -479,12 +469,11 @@ env_var_disable_log(_) ->
     application:set_env(rabbit, log, [{file, [{file, ConfigLogFile}]}]),
 
     os:putenv("RABBITMQ_LOGS_source", "environment"),
-
     rabbit_lager:configure_lager(),
 
     ExpectedHandlers = [],
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)).
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 config_file_handler(_) ->
     DefaultLogFile = "rabbit_default.log",
@@ -496,32 +485,30 @@ config_file_handler(_) ->
     rabbit_lager:configure_lager(),
 
     ExpectedHandlers = default_expected_handlers(NonDefaultLogFile),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)).
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 config_file_handler_level(_) ->
     DefaultLogFile = "rabbit_default.log",
     application:set_env(rabbit, lager_default_file, DefaultLogFile),
 
     application:set_env(rabbit, log, [{file, [{level, warning}]}]),
-
     rabbit_lager:configure_lager(),
 
     ExpectedHandlers = default_expected_handlers(DefaultLogFile, warning),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)).
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 config_file_handler_rotation(_) ->
     DefaultLogFile = "rabbit_default.log",
     application:set_env(rabbit, lager_default_file, DefaultLogFile),
 
     application:set_env(rabbit, log, [{file, [{date, "$D0"}, {size, 5000}, {count, 10}]}]),
-
     rabbit_lager:configure_lager(),
 
     ExpectedHandlers = sort_handlers(default_expected_handlers(DefaultLogFile, info, 5000, "$D0", [{count, 10}])),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)).
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 default(_) ->
     LogRoot = "/tmp/log_base",
@@ -536,10 +523,10 @@ default(_) ->
     ExpectedHandlers = default_expected_handlers(LogFile),
     LogRoot = application:get_env(lager, log_root, undefined),
     ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))),
 
     ExpectedSinks = default_expected_sinks(LogUpgradeFile),
-    ExpectedSinks = sort_sinks(application:get_env(lager, extra_sinks, undefined)).
+    ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
 
 default_expected_handlers(File) ->
@@ -604,12 +591,12 @@ env_var_tty(_) ->
     rabbit_lager:configure_lager(),
 
     ExpectedHandlers = tty_expected_handlers(),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, handlers, undefined)),
-    ExpectedHandlers = sort_handlers(application:get_env(lager, rabbit_handlers, undefined)),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))),
 
     %% Upgrade sink will be different.
     ExpectedSinks = tty_expected_sinks(),
-    ExpectedSinks = sort_sinks(application:get_env(lager, extra_sinks, undefined)).
+    ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
 tty_expected_handlers() ->
     [{lager_console_backend,
@@ -663,11 +650,9 @@ sort_handlers(Handlers) ->
                 {Name, lists:ukeysort(1, Config)};
             %% Non-proplist configuration. forwarder backend
             (Other) ->
-                ct:pal("Skip sort ~p~n", [Other]),
                 Other
             end,
             Handlers)).
 
 formatter_config() ->
     [date," ",time," ",color,"[",severity, "] ", {pid,[]}, " ",message,"\n"].
-
