@@ -83,7 +83,7 @@ exec_script_as_rabbitmq() {
 exec_script_as_root() {
   if [ -x /sbin/runuser ]
   then
-    exec /sbin/runuser -u rabbitmq /bin/sh -c "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE"
+    exec /sbin/runuser -c "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE" rabbitmq
   elif [ -x /bin/su ]
   then
     exec /bin/su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE"
