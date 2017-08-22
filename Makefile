@@ -47,7 +47,6 @@ define PROJECT_ENV
 	    {auth_backends, [rabbit_auth_backend_internal]},
 	    {delegate_count, 16},
 	    {trace_vhosts, []},
-	    {log_levels, [{connection, info}]},
 	    {ssl_cert_login_from, distinguished_name},
 	    {ssl_handshake_timeout, 5000},
 	    {ssl_allow_poodle_attack, false},

@@ -21,6 +21,9 @@
 %% API
 -export([start_logger/0, log_locations/0, fold_sinks/2]).
 
+%% For test purposes
+-export([configure_lager/0]).
+
 start_logger() ->
     application:stop(lager),
     ensure_lager_configured(),
@@ -137,28 +140,6 @@ ensure_logfile_exist(FileName) ->
         {error, Err} -> throw({error, {cannot_log_to_file, LogFile, Err}})
     end.
 
-lager_handlers(Silent) when Silent == silent; Silent == false ->
-    [];
-lager_handlers(tty) ->
-    [{lager_console_backend, info}];
-lager_handlers(FileName) when is_list(FileName) ->
-    LogFile = lager_util:expand_path(FileName),
-    case rabbit_file:ensure_dir(LogFile) of
-        ok -> ok;
-        {error, Reason} ->
-            throw({error, {cannot_log_to_file, LogFile,
-                           {cannot_create_parent_dirs, LogFile, Reason}}})
-    end,
-    [{lager_file_backend, [{file, FileName},
-                           {level, info},
-                           {formatter_config,
-                            [date, " ", time, " ", color, "[", severity, "] ",
-                             {pid, ""},
-                             " ", message, "\n"]},
-                           {date, ""},
-                           {size, 0}]}].
-
-
 ensure_lager_configured() ->
     case lager_configured() of
         false -> configure_lager();
@@ -193,36 +174,62 @@ configure_lager() ->
             end;
         _ -> ok
     end,
+    %% Set rabbit.log config variable based on environment.
+    prepare_rabbit_log_config(),
+    %% At this point we should have rabbit.log application variable
+    %% configured to generate RabbitMQ log handlers.
+    GeneratedHandlers = generate_lager_handlers(),
 
-    %% Configure the default sink/handlers.
-    Handlers0 = application:get_env(lager, handlers, undefined),
-    DefaultHandlers = lager_handlers(application:get_env(rabbit,
-                                                         lager_handler,
-                                                         tty)),
-    Handlers = case os:getenv("RABBITMQ_LOGS_source") of
-        %% There are no default handlers in rabbitmq.config, create a
-        %% configuration from $RABBITMQ_LOGS.
-        false when Handlers0 =:= undefined -> DefaultHandlers;
-        %% There are default handlers configure in rabbitmq.config, but
-        %% the user explicitely sets $RABBITMQ_LOGS; create new handlers
-        %% based on that, instead of using rabbitmq.config.
-        "environment"                      -> DefaultHandlers;
-        %% Use the default handlers configured in rabbitmq.com.
-        _                                  -> Handlers0
+    %% If there are lager handlers configured,
+    %% both lager and generate RabbitMQ handlers  are used.
+    %% This is because it's hard to decide clear preference rules.
+    %% RabbitMQ handlers can be set to [] to use only lager handlers.
+    Handlers = case application:get_env(lager, handlers, undefined) of
+        undefined -> GeneratedHandlers;
+        LagerHandlers ->
+            %% Remove handlers generated in previous starts
+            FormerRabbitHandlers = application:get_env(lager, rabbit_handlers, []),
+            GeneratedHandlers ++ remove_rabbit_handlers(LagerHandlers,
+                                                        FormerRabbitHandlers)
     end,
+
     application:set_env(lager, handlers, Handlers),
+    application:set_env(lager, rabbit_handlers, GeneratedHandlers),
 
     %% Setup extra sink/handlers. If they are not configured, redirect
     %% messages to the default sink. To know the list of expected extra
     %% sinks, we look at the 'lager_extra_sinks' compilation option.
-    Sinks0 = application:get_env(lager, extra_sinks, []),
-    Sinks1 = configure_extra_sinks(Sinks0,
-                                   [error_logger | list_expected_sinks()]),
-    %% TODO Waiting for basho/lager#303
-    %% Sinks2 = lists:keystore(error_logger_lager_event, 1, Sinks1,
-    %%                         {error_logger_lager_event,
-    %%                          [{handlers, Handlers}]}),
-    application:set_env(lager, extra_sinks, Sinks1),
+    LogConfig = application:get_env(rabbit, log, []),
+    LogLevels = application:get_env(rabbit, log_levels, []),
+    Categories = proplists:get_value(categories, LogConfig, []),
+    CategoriesConfig = case {Categories, LogLevels} of
+        {[], []} -> [];
+        {[], LogLevels} ->
+            io:format("Using deprecated config parameter 'log_levels'. "
+                      "Please update your configuration file according to "
+                      "https://rabbitmq.com/logging.html"),
+            lists:map(fun({Name, Level}) -> {Name, [{level, Level}]} end,
+                      LogLevels);
+        {Categories, []} ->
+            Categories;
+        {Categories, LogLevels} ->
+            io:format("Using the deprecated config parameter 'rabbit.log_levels' together "
+                      "with a new parameter for log categories."
+                      " 'rabbit.log_levels' will be ignored. Please remove it from the config. More at "
+                      "https://rabbitmq.com/logging.html"),
+            Categories
+    end,
+    SinkConfigs = lists:map(
+        fun({Name, Config}) ->
+            {rabbit_log:make_internal_sink_name(Name), Config}
+        end,
+        CategoriesConfig),
+    LagerSinks = application:get_env(lager, extra_sinks, []),
+    GeneratedSinks = generate_lager_sinks(
+        [error_logger_lager_event | list_expected_sinks()],
+        SinkConfigs),
+    Sinks = merge_lager_sink_handlers(LagerSinks, GeneratedSinks, []),
+    application:set_env(lager, extra_sinks, Sinks),
 
     case application:get_env(lager, error_logger_hwm) of
         undefined ->
@@ -234,27 +241,235 @@ configure_lager() ->
     end,
     ok.
 
-configure_extra_sinks(Sinks, [SinkName | Rest]) ->
-    Sink0 = proplists:get_value(SinkName, Sinks, []),
-    Sink1 = case proplists:is_defined(handlers, Sink0) of
-        false -> default_sink_config(SinkName, Sink0);
-        true  -> Sink0
+remove_rabbit_handlers(Handlers, FormerHandlers) ->
+    lists:filter(fun(Handler) ->
+        not lists:member(Handler, FormerHandlers)
     end,
-    Sinks1 = lists:keystore(SinkName, 1, Sinks, {SinkName, Sink1}),
-    configure_extra_sinks(Sinks1, Rest);
-configure_extra_sinks(Sinks, []) ->
-    Sinks.
+    Handlers).
 
-default_sink_config(rabbit_log_upgrade_lager_event, Sink) ->
-    Handlers = lager_handlers(application:get_env(rabbit,
-                                                  lager_handler_upgrade,
-                                                  tty)),
-    lists:keystore(handlers, 1, Sink, {handlers, Handlers});
-default_sink_config(_, Sink) ->
-    lists:keystore(handlers, 1, Sink,
-                   {handlers,
-                    [{lager_forwarder_backend,
-                      lager_util:make_internal_sink_name(lager)}]}).
+generate_lager_handlers() ->
+    LogConfig = application:get_env(rabbit, log, []),
+    LogHandlersConfig = lists:keydelete(categories, 1, LogConfig),
+    generate_lager_handlers(LogHandlersConfig).
+
+generate_lager_handlers(LogHandlersConfig) ->
+    lists:flatmap(
+    fun
+        ({file, HandlerConfig}) ->
+            case proplists:get_value(file, HandlerConfig, false) of
+                false -> [];
+                FileName when is_list(FileName) ->
+                    Backend = lager_backend(file),
+                    generate_handler(Backend, HandlerConfig)
+            end;
+        ({Other, HandlerConfig}) when Other =:= console; Other =:= syslog ->
+            case proplists:get_value(enabled, HandlerConfig, false) of
+                false -> [];
+                true  ->
+                    Backend = lager_backend(Other),
+                    generate_handler(Backend,
+                                     lists:keydelete(enabled, 1, HandlerConfig))
+            end
+    end,
+    LogHandlersConfig).
+
+lager_backend(file) -> lager_file_backend;
+lager_backend(console) -> lager_console_backend;
+lager_backend(syslog) -> lager_syslog_backend.
+
+generate_handler(Backend, HandlerConfig) ->
+    [{Backend,
+        lists:ukeymerge(1, lists:ukeysort(1, HandlerConfig),
+                           lists:ukeysort(1, default_handler_config(Backend)))}].
+
+default_handler_config(lager_syslog_backend) ->
+    [{level, default_config_value(level)},
+     {identity, "rabbitmq"},
+     {facility, daemon},
+     {formatter_config, default_config_value(formatter_config)}];
+default_handler_config(lager_console_backend) ->
+    [{level, default_config_value(level)},
+     {formatter_config, default_config_value(formatter_config)}];
+default_handler_config(lager_file_backend) ->
+    [{level, default_config_value(level)},
+     {formatter_config, default_config_value(formatter_config)},
+     {date, ""},
+     {size, 0}].
+
+default_config_value(level) -> info;
+default_config_value(formatter_config) ->
+    [date, " ", time, " ", color, "[", severity, "] ",
+       {pid, ""},
+       " ", message, "\n"].
+
+prepare_rabbit_log_config() ->
+    %% If RABBIT_LOGS is not set, we should ignore it.
+    DefaultFile = application:get_env(rabbit, lager_default_file, undefined),
+    %% If RABBIT_UPGRADE_LOGS is not set, we should ignore it.
+    UpgradeFile = application:get_env(rabbit, lager_upgrade_file, undefined),
+    case DefaultFile of
+        undefined -> ok;
+        false ->
+            set_env_default_log_disabled();
+        tty ->
+            set_env_default_log_console();
+        FileName when is_list(FileName) ->
+            case os:getenv("RABBITMQ_LOGS_source") of
+                %% The user explicitely sets $RABBITMQ_LOGS;
+                %% we should override a file location even
+                %% if it's set in rabbitmq.config
+                "environment" -> set_env_default_log_file(FileName, override);
+                _             -> set_env_default_log_file(FileName, keep)
+            end
+    end,
+
+    %% Upgrade log file never overrides the value set in rabbitmq.config
+    case UpgradeFile of
+        %% No special env for upgrade logs - rederect to the default sink
+        undefined -> ok;
+        %% Redirect logs to default output.
+        DefaultFile -> ok;
+        UpgradeFileName when is_list(UpgradeFileName) ->
+            set_env_upgrade_log_file(UpgradeFileName)
+    end.
+
+set_env_default_log_disabled() ->
+    %% Disabling all the logs.
+    application:set_env(rabbit, log, []).
+
+set_env_default_log_console() ->
+    LogConfig = application:get_env(rabbit, log, []),
+    ConsoleConfig = proplists:get_value(console, LogConfig, []),
+    LogConfigConsole =
+        lists:keystore(console, 1, LogConfig,
+                       {console, lists:keystore(enabled, 1, ConsoleConfig,
+                                                {enabled, true})}),
+    %% Remove the file handler - disable logging to file
+    LogConfigConsoleNoFile = lists:keydelete(file, 1, LogConfigConsole),
+    application:set_env(rabbit, log, LogConfigConsoleNoFile).
+
+set_env_default_log_file(FileName, Override) ->
+    LogConfig = application:get_env(rabbit, log, []),
+    FileConfig = proplists:get_value(file, LogConfig, []),
+    NewLogConfig = case proplists:get_value(file, FileConfig, undefined) of
+        undefined ->
+            lists:keystore(file, 1, LogConfig,
+                           {file, lists:keystore(file, 1, FileConfig,
+                                                 {file, FileName})});
+        _ConfiguredFileName ->
+            case Override of
+                override ->
+                    lists:keystore(
+                        file, 1, LogConfig,
+                        {file, lists:keystore(file, 1, FileConfig,
+                                              {file, FileName})});
+                keep ->
+                    LogConfig
+            end
+    end,
+    application:set_env(rabbit, log, NewLogConfig).
+
+set_env_upgrade_log_file(FileName) ->
+    LogConfig = application:get_env(rabbit, log, []),
+    SinksConfig = proplists:get_value(categories, LogConfig, []),
+    UpgradeSinkConfig = proplists:get_value(upgrade, SinksConfig, []),
+    FileConfig = proplists:get_value(file, SinksConfig, []),
+    NewLogConfig = case proplists:get_value(file, FileConfig, undefined) of
+        undefined ->
+            lists:keystore(
+                categories, 1, LogConfig,
+                {categories,
+                    lists:keystore(
+                        upgrade, 1, SinksConfig,
+                        {upgrade,
+                            lists:keystore(file, 1, UpgradeSinkConfig,
+                                           {file, FileName})})});
+        %% No cahnge. We don't want to override the configured value.
+        _File -> LogConfig
+    end,
+    application:set_env(rabbit, log, NewLogConfig).
+
+generate_lager_sinks(SinkNames, SinkConfigs) ->
+    lists:map(fun(SinkName) ->
+        SinkConfig = proplists:get_value(SinkName, SinkConfigs, []),
+        Level = proplists:get_value(level, SinkConfig, default_config_value(level)),
+        SinkHandlers = case proplists:get_value(file, SinkConfig, false) of
+            %% If no file defined - forward everything to the default backend
+            false ->
+                [{lager_forwarder_backend,
+                    [lager_util:make_internal_sink_name(lager), Level]}];
+            %% If a file defined - add a file backend to handlers and remove all default file backends.
+            File ->
+                DefaultGeneratedHandlers = application:get_env(lager, rabbit_handlers, []),
+                SinkFileHandlers = case proplists:get_value(lager_file_backend, DefaultGeneratedHandlers, undefined) of
+                    undefined ->
+                        %% Create a new file handler.
+                        generate_lager_handlers([{file, [{file, File}, {level, Level}]}]);
+                    FileHandler ->
+                        %% Replace a filename in the handler
+                        FileHandlerChanges = case handler_level_more_verbose(FileHandler, Level) of
+                            true  -> [{file, File}, {level, Level}];
+                            false -> [{file, File}]
+                        end,
+
+                        [{lager_file_backend,
+                            lists:ukeymerge(1, FileHandlerChanges,
+                                            lists:ukeysort(1, FileHandler))}]
+                end,
+                %% Remove all file handlers.
+                AllLagerHandlers = application:get_env(lager, handlers, []),
+                HandlersWithoutFile = lists:filter(
+                    fun({lager_file_backend, _}) -> false;
+                       ({_, _}) -> true
+                    end,
+                    AllLagerHandlers),
+                %% Set level for handlers which are more verbose.
+                %% We don't increase verbosity in sinks so it works like forwarder backend.
+                HandlersWithoutFileWithLevel = lists:map(fun({Name, Handler}) ->
+                    case handler_level_more_verbose(Handler, Level) of
+                        true  -> {Name, lists:keystore(level, 1, Handler, {level, Level})};
+                        false -> {Name, Handler}
+                    end
+                end,
+                HandlersWithoutFile),
+
+                HandlersWithoutFileWithLevel ++ SinkFileHandlers
+        end,
+        {SinkName, [{handlers, SinkHandlers}, {rabbit_handlers, SinkHandlers}]}
+    end,
+    SinkNames).
+
+handler_level_more_verbose(Handler, Level) ->
+    HandlerLevel = proplists:get_value(level, Handler, default_config_value(level)),
+    lager_util:level_to_num(HandlerLevel) > lager_util:level_to_num(Level).
+
+merge_lager_sink_handlers([{Name, Sink} | RestSinks], GeneratedSinks, Agg) ->
+    case lists:keytake(Name, 1, GeneratedSinks) of
+        {value, {Name, GenSink}, RestGeneratedSinks} ->
+            Handlers = proplists:get_value(handlers, Sink, []),
+            GenHandlers = proplists:get_value(handlers, GenSink, []),
+            FormerRabbitHandlers = proplists:get_value(rabbit_handlers, Sink, []),
+
+            %% Remove handlers defined in previous starts
+            ConfiguredHandlers = remove_rabbit_handlers(Handlers, FormerRabbitHandlers),
+            NewHandlers = GenHandlers ++ ConfiguredHandlers,
+            MergedSink = lists:keystore(rabbit_handlers, 1,
+                                        lists:keystore(handlers, 1, Sink,
+                                                       {handlers, NewHandlers}),
+                                        {rabbit_handlers, GenHandlers}),
+
+            merge_lager_sink_handlers(
+                RestSinks,
+                RestGeneratedSinks,
+                [{Name, MergedSink} | Agg]);
+        false ->
+            merge_lager_sink_handlers(
+                RestSinks,
+                GeneratedSinks,
+                [{Name, Sink} | Agg])
+    end;
+merge_lager_sink_handlers([], GeneratedSinks, Agg) -> GeneratedSinks ++ Agg.
+
 
 list_expected_sinks() ->
     case application:get_env(rabbit, lager_extra_sinks) of
