@@ -63,7 +63,7 @@
                                                   },
           aws_ec2_region                     => #peer_discovery_config_entry_meta{
                                                    type          = string,
-                                                   env_variable  = "AWS_DEFAULT_REGION",
+                                                   env_variable  = "AWS_EC2_REGION",
                                                    default_value = "undefined"
                                                   },
           aws_use_private_ip                 => #peer_discovery_config_entry_meta{
