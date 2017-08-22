@@ -158,6 +158,24 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 include rabbitmq-components.mk
 include erlang.mk
 
+ifeq ($(strip $(BATS)),)
+BATS := $(ERLANG_MK_TMP)/bats/bin/bats
+endif
+
+BATS_GIT ?= https://github.com/sstephenson/bats
+BATS_COMMIT ?= v0.4.0
+
+$(BATS):
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)
+	$(gen_verbose) git clone --depth 1 --branch=$(BATS_COMMIT) $(BATS_GIT) $(ERLANG_MK_TMP)/bats
+
+.PHONY: bats
+
+bats: $(BATS)
+	$(verbose) $(BATS) $(TEST_DIR)
+
+tests:: bats
+
 SLOW_CT_SUITES := backing_queue \
 		  cluster_rename \
 		  clustering_management \

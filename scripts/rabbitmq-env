@@ -77,6 +77,10 @@ ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 ## Set defaults
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
 
+## Get configuration variables from the configure environment file
+[ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
+[ -f ${RABBITMQ_CONF_ENV_FILE} ] && . ${RABBITMQ_CONF_ENV_FILE} || true
+
 DEFAULT_SCHEDULER_BIND_TYPE="db"
 [ "x" = "x$RABBITMQ_SCHEDULER_BIND_TYPE" ] && RABBITMQ_SCHEDULER_BIND_TYPE=${DEFAULT_SCHEDULER_BIND_TYPE}
 
@@ -90,11 +94,6 @@ SERVER_ERL_ARGS="+P 1048576 +t 5000000 +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbb
 # an init script. If $CONF_ENV_FILE overrides it again, we must ignore
 # it and warn the user.
 saved_RABBITMQ_PID_FILE=$RABBITMQ_PID_FILE
-
-## Get configuration variables from the configure environment file
-[ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
-
-[ -f ${RABBITMQ_CONF_ENV_FILE} ] && . ${RABBITMQ_CONF_ENV_FILE} || true
 
 if [ "$saved_RABBITMQ_PID_FILE" -a \
      "$saved_RABBITMQ_PID_FILE" != "$RABBITMQ_PID_FILE" ]; then
