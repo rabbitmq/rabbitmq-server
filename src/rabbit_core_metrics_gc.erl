@@ -70,10 +70,17 @@ gc_channels() ->
     ok.
 
 gc_queues() ->
+    gc_local_queues(),
+    gc_global_queues().
+
+gc_local_queues() ->
     Queues = rabbit_amqqueue:list_local_names(),
     GbSet = gb_sets:from_list(Queues),
     gc_entity(queue_metrics, GbSet),
-    gc_entity(queue_coarse_metrics, GbSet),
+    gc_entity(queue_coarse_metrics, GbSet).
+
+gc_global_queues() ->
+    GbSet = gb_sets:from_list(rabbit_amqqueue:list_names()),
     gc_process_and_entity(channel_queue_metrics, GbSet),
     gc_process_and_entity(consumer_created, GbSet),
     ExchangeGbSet = gb_sets:from_list(rabbit_exchange:list_names()),
