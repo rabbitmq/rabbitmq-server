@@ -9,6 +9,36 @@
             ]}
         ], [rabbitmq_peer_discovery_etcd]
     },
+    {etcd_port, "cluster_formation.etcd.port = 7979", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_port, 7979}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    {etcd_key_prefix, "cluster_formation.etcd.scheme = https", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_scheme, "https"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+    {etcd_key_prefix, "cluster_formation.etcd.key_prefix = rabbit_", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {etcd_prefix, "rabbit_"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
     {etcd_ttl, "cluster_formation.etcd.ttl = 60", [
             {rabbit, [
                 {cluster_formation, [
