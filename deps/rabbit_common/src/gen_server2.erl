@@ -648,17 +648,17 @@ drain(GS2State) ->
     after 0 -> GS2State
     end.
 
-process_next_msg(GS2State = #gs2_state { time          = Time,
+process_next_msg(GS2State0 = #gs2_state { time          = Time,
                                          timeout_state = TimeoutState,
                                          queue         = Queue }) ->
     case priority_queue:out(Queue) of
         {{value, Msg}, Queue1} ->
-            process_msg(Msg, GS2State #gs2_state { queue = Queue1 });
+            process_msg(Msg, GS2State0 #gs2_state { queue = Queue1 });
         {empty, Queue1} ->
-            {Time1, HibOnTimeout}
+            {Time1, HibOnTimeout, GS2State}
                 = case {Time, TimeoutState} of
                       {hibernate, {backoff, Current, _Min, _Desired, _RSt}} ->
-                          {Current, true};
+                          {Current, true, maybe_stop_stats(GS2State0)};
                       {hibernate, _} ->
                           %% wake_hib/7 will set Time to hibernate. If
                           %% we were woken and didn't receive a msg
@@ -667,8 +667,8 @@ process_next_msg(GS2State = #gs2_state { time          = Time,
                           %% R13B1 always waits infinitely when waking
                           %% from hibernation, so that's what we do
                           %% here too.
-                          {infinity, false};
-                      _ -> {Time, false}
+                          {infinity, false, GS2State0};
+                      _ -> {Time, false, GS2State0}
                   end,
             receive
                 Input ->
@@ -678,6 +678,7 @@ process_next_msg(GS2State = #gs2_state { time          = Time,
             after Time1 ->
                     case HibOnTimeout of
                         true ->
+                            emit_stats_for_empty_queue(),
                             pre_hibernate(
                               GS2State #gs2_state { queue = Queue1 });
                         false ->
@@ -1391,3 +1392,6 @@ maybe_stop_stats(#gs2_state{timer = undefined} = GS2State) ->
     GS2State;
 maybe_stop_stats(GS2State) ->
     rabbit_event:stop_stats_timer(GS2State, #gs2_state.timer).
+
+emit_stats_for_empty_queue() ->
+    rabbit_core_metrics:gen_server2_stats(self(), 0).
