@@ -1,14 +1,4 @@
 [
-    {etcd_region, "cluster_formation.etcd.region = us-west-1", [
-            {rabbit, [
-                {cluster_formation, [
-                    {peer_discovery_etcd, [
-                        {etcd_region, "us-west-1"}
-                    ]}
-                ]}
-            ]}
-        ], [rabbitmq_peer_discovery_etcd]
-    },
     {etcd_host, "cluster_formation.etcd.host = etcd.eng.megacorp.local", [
             {rabbit, [
                 {cluster_formation, [

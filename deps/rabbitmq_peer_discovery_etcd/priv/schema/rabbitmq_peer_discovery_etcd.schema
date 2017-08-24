@@ -1,17 +1,3 @@
-%% region
-
-{mapping, "cluster_formation.etcd.region", "rabbit.cluster_formation.peer_discovery_etcd.etcd_region", [
-    {datatype, string}
-]}.
-
-{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_region",
-fun(Conf) ->
-    case cuttlefish:conf_get("cluster_formation.etcd.region", Conf, undefined) of
-        undefined -> cuttlefish:unset();
-        Value     -> Value
-    end
-end}.
-
 %% host
 
 {mapping, "cluster_formation.etcd.host", "rabbit.cluster_formation.peer_discovery_etcd.etcd_host", [
