@@ -41,7 +41,7 @@ fun(Conf) ->
     end
 end}.
 
-%% etcd key prefix
+%% key prefix
 
 {mapping, "cluster_formation.etcd.key_prefix", "rabbit.cluster_formation.peer_discovery_etcd.etcd_prefix", [
     {datatype, string}
@@ -55,16 +55,45 @@ fun(Conf) ->
     end
 end}.
 
-%% ttl
+%% cluster name
 
-{mapping, "cluster_formation.etcd.ttl", "rabbit.cluster_formation.peer_discovery_etcd.etcd_ttl", [
+{mapping, "cluster_formation.etcd.cluster_name", "rabbit.cluster_formation.peer_discovery_etcd.cluster_name", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.cluster_name",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.cluster_name", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% node ttl
+
+{mapping, "cluster_formation.etcd.node_ttl", "rabbit.cluster_formation.peer_discovery_etcd.etcd_node_ttl", [
     {datatype, integer},
     {validators, ["non_negative_integer"]}
 ]}.
 
-{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_ttl",
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_node_ttl",
 fun(Conf) ->
-    case cuttlefish:conf_get("cluster_formation.etcd.ttl", Conf, undefined) of
+    case cuttlefish:conf_get("cluster_formation.etcd.node_ttl", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% lock acquisition timeout
+
+{mapping, "cluster_formation.etcd.lock_wait_time", "rabbit.cluster_formation.peer_discovery_etcd.lock_wait_time", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_etcd.lock_wait_time",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.etcd.lock_wait_time", Conf, undefined) of
         undefined -> cuttlefish:unset();
         Value     -> Value
     end

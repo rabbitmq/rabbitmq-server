@@ -153,6 +153,14 @@ cluster_name_path_part(Map) ->
 base_path(Map) ->
   [v2, keys, get_config_key(etcd_prefix, Map), cluster_name_path_part(Map)].
 
+%% @doc Return a list of path segments that are the base path for all
+%% etcd keys related to current cluster.
+%% @end
+-spec base_path() -> [rabbit_peer_discovery_httpc:path_component()].
+base_path() ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    base_path(M).
+
 %% @doc Returns etcd path under which nodes should be registered.
 %% @end
 -spec nodes_path(Map :: #{atom() => peer_discovery_config_value()}) -> [?HTTPC_MODULE:path_component()].
@@ -301,14 +309,6 @@ set_etcd_lock_key(UniqueId, Ttl) ->
 -spec startup_lock_path() -> [rabbit_peer_discovery_httpc:path_component()].
 startup_lock_path() ->
     base_path() ++ ["startup_lock"].
-
-%% @doc Return a list of path segments that are the base path for all
-%% etcd keys related to current cluster.
-%% @end
--spec base_path() -> [rabbit_peer_discovery_httpc:path_component()].
-base_path() ->
-    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    [v2, keys, get_config_key(etcd_prefix, M), get_config_key(cluster_name, M)].
 
 %% @doc Generate random string. We are using it for compare-and-change
 %% operations in etcd.
