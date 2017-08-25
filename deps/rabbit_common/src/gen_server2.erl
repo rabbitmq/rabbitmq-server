@@ -516,7 +516,7 @@ enter_loop(Mod, Options, State, ServerName, Timeout, Backoff) ->
     Queue = priority_queue:new(),
     Backoff1 = extend_backoff(Backoff),
     {InitStatsFun, EmitStatsFun, StopStatsFun} = stats_funs(),
-    loop(InitStatsFun(find_prioritisers(
+    loop(call_init_stats(find_prioritisers(
            #gs2_state { parent = Parent, name = Name, state = State,
                         mod = Mod, time = Timeout, timeout_state = Backoff1,
                         queue = Queue, debug = Debug, 
@@ -554,25 +554,25 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
     case catch Mod:init(Args) of
         {ok, State} ->
             proc_lib:init_ack(Starter, {ok, self()}),
-            loop(InitStatsFun(GS2State#gs2_state { state         = State,
+            loop(call_init_stats(GS2State#gs2_state { state         = State,
                                                    time          = infinity,
                                                    timeout_state = undefined }));
         {ok, State, Timeout} ->
             proc_lib:init_ack(Starter, {ok, self()}),
-            loop(InitStatsFun(
+            loop(call_init_stats(
                    GS2State#gs2_state { state         = State,
                                         time          = Timeout,
                                         timeout_state = undefined }));
         {ok, State, Timeout, Backoff = {backoff, _, _, _}} ->
             Backoff1 = extend_backoff(Backoff),
             proc_lib:init_ack(Starter, {ok, self()}),
-            loop(InitStatsFun(GS2State#gs2_state { state         = State,
+            loop(call_init_stats(GS2State#gs2_state { state         = State,
                                                    time          = Timeout,
                                                    timeout_state = Backoff1 }));
         {ok, State, Timeout, Backoff = {backoff, _, _, _}, Mod1} ->
             Backoff1 = extend_backoff(Backoff),
             proc_lib:init_ack(Starter, {ok, self()}),
-            loop(InitStatsFun(find_prioritisers(
+            loop(call_init_stats(find_prioritisers(
                                 GS2State#gs2_state { mod           = Mod1,
                                                      state         = State,
                                                      time          = Timeout,
@@ -658,7 +658,7 @@ process_next_msg(GS2State0 = #gs2_state { time          = Time,
             {Time1, HibOnTimeout, GS2State}
                 = case {Time, TimeoutState} of
                       {hibernate, {backoff, Current, _Min, _Desired, _RSt}} ->
-                          {Current, true, maybe_stop_stats(GS2State0)};
+                          {Current, true, maybe_stop_stats_timer(GS2State0)};
                       {hibernate, _} ->
                           %% wake_hib/7 will set Time to hibernate. If
                           %% we were woken and didn't receive a msg
@@ -678,9 +678,9 @@ process_next_msg(GS2State0 = #gs2_state { time          = Time,
             after Time1 ->
                     case HibOnTimeout of
                         true ->
-                            emit_stats_for_empty_queue(),
+                            GS2State1 = call_emit_stats(GS2State, ignore_timer),
                             pre_hibernate(
-                              GS2State #gs2_state { queue = Queue1 });
+                              GS2State1 #gs2_state { queue = Queue1 });
                         false ->
                             process_msg(timeout,
                                         GS2State #gs2_state { queue = Queue1 })
@@ -711,7 +711,7 @@ hibernate(GS2State = #gs2_state { timeout_state = TimeoutState }) ->
 
 pre_hibernate(GS2State0 = #gs2_state { state   = State,
                                        mod     = Mod }) ->
-    GS2State = maybe_stop_stats(GS2State0),
+    GS2State = maybe_stop_stats_timer(GS2State0),
     case erlang:function_exported(Mod, handle_pre_hibernate, 1) of
         true ->
             case catch Mod:handle_pre_hibernate(State) of
@@ -725,9 +725,8 @@ pre_hibernate(GS2State0 = #gs2_state { state   = State,
     end.
 
 post_hibernate(GS2State0 = #gs2_state { state = State,
-                                        mod   = Mod,
-                                        init_stats_fun = InitStatsFun }) ->
-    GS2State = InitStatsFun(GS2State0),
+                                        mod   = Mod }) ->
+    GS2State = call_init_stats(GS2State0),
     case erlang:function_exported(Mod, handle_post_hibernate, 1) of
         true ->
             case catch Mod:handle_post_hibernate(State) of
@@ -781,8 +780,8 @@ in({'EXIT', Parent, _R} = Input, GS2State = #gs2_state { parent = Parent }) ->
     in(Input, infinity, GS2State);
 in({system, _From, _Req} = Input, GS2State) ->
     in(Input, infinity, GS2State);
-in(emit_gen_server2_stats, GS2State = #gs2_state{ emit_stats_fun = EmitStatsFun }) ->
-    EmitStatsFun(GS2State);
+in(emit_gen_server2_stats, GS2State) ->
+    call_emit_stats(GS2State, ensure_timer_exists);
 in(Input, GS2State = #gs2_state { prioritisers = {_, _, F} }) ->
     in(Input, F(Input, GS2State), GS2State).
 
@@ -1142,9 +1141,9 @@ print_event(Dev, Event, Name) ->
 terminate(Reason, Msg, #gs2_state { name  = Name,
                                     mod   = Mod,
                                     state = State,
-                                    debug = Debug,
-                                    stop_stats_fun = StopStatsFun} = GS2State) ->
-    StopStatsFun(GS2State),
+                                    debug = Debug
+                                    } = GS2State) ->
+    call_stop_stats(GS2State),
     case catch Mod:terminate(Reason, State) of
         {'EXIT', R} ->
             error_info(R, Reason, Name, Msg, State, Debug),
@@ -1375,23 +1374,32 @@ stats_funs() ->
             {fun init_stats/1, fun emit_stats/1, fun stop_stats/1}
     end.
 
-init_stats(GS2State) ->
-    emit_stats(rabbit_event:init_stats_timer(GS2State, #gs2_state.timer)).
+call_init_stats(State = #gs2_state{ init_stats_fun = InitStats }) ->
+    StateWithInitTimer = rabbit_event:init_stats_timer(State, #gs2_state.timer),
+    InitStats(StateWithInitTimer).
 
-emit_stats(GS2State = #gs2_state{queue = Queue}) ->
-    rabbit_core_metrics:gen_server2_stats(self(), priority_queue:len(Queue)),
+call_emit_stats(State = #gs2_state{ emit_stats_fun = EmitStats }, ignore_timer) ->
+    EmitStats(State);
+call_emit_stats(State = #gs2_state{ emit_stats_fun = EmitStats }, ensure_timer_exists) ->
+    State1 = EmitStats(State),
     rabbit_event:ensure_stats_timer(
-      rabbit_event:reset_stats_timer(GS2State, #gs2_state.timer),
+      rabbit_event:reset_stats_timer(State1, #gs2_state.timer),
       #gs2_state.timer, emit_gen_server2_stats).
 
-stop_stats(GS2State) ->
-    maybe_stop_stats(GS2State),
+call_stop_stats(State = #gs2_state{ stop_stats_fun = StopStats}) ->
+    State1 = maybe_stop_stats_timer(State),
+    StopStats(State1).
+
+init_stats(State) ->
+    call_emit_stats(State, ensure_timer_exists).
+
+emit_stats(_State = #gs2_state{queue = Queue}) ->
+    rabbit_core_metrics:gen_server2_stats(self(), priority_queue:len(Queue)).
+
+stop_stats(_State) ->
     rabbit_core_metrics:gen_server2_deleted(self()).
 
-maybe_stop_stats(#gs2_state{timer = undefined} = GS2State) ->
-    GS2State;
-maybe_stop_stats(GS2State) ->
-    rabbit_event:stop_stats_timer(GS2State, #gs2_state.timer).
-
-emit_stats_for_empty_queue() ->
-    rabbit_core_metrics:gen_server2_stats(self(), 0).
+maybe_stop_stats_timer(State = #gs2_state{timer = undefined}) ->
+    State;
+maybe_stop_stats_timer(State) ->
+    rabbit_event:stop_stats_timer(State, #gs2_state.timer).
