@@ -209,6 +209,21 @@ fun(Conf) ->
 end}.
 
 
+%% should a node in warning state be deregister by Consul after a period of time?
+
+{mapping, "cluster_formation.consul.deregister_after", "rabbit.cluster_formation.peer_discovery_consul.consul_deregister_after", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_deregister_after",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.deregister_after", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
 %% use long node names?
 
 {mapping, "cluster_formation.consul.use_longname", "rabbit.cluster_formation.peer_discovery_consul.consul_use_longname", [

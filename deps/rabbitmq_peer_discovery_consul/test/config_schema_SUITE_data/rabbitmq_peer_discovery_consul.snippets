@@ -151,6 +151,16 @@
  [rabbitmq_peer_discovery_consul]}
 
 
+ , {consul_deregister_after,
+  "cluster_formation.consul.deregister_after = 60",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_deregister_after, 60}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+
  , {consul_use_longname,
   "cluster_formation.consul.use_longname = true",
   [{rabbit, [{cluster_formation, [
