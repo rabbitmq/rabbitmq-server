@@ -48,7 +48,7 @@
           cleanup_only_log_warning  => #peer_discovery_config_entry_meta{
                                           type          = atom,
                                           env_variable  = "CLEANUP_ONLY_LOG_WARNING",
-                                          default_value = false
+                                          default_value = true
                                          }
          }).
 
