@@ -148,15 +148,15 @@ fun(Conf) ->
 end}.
 
 
-%% (node in Consul) domain name
+%% (optionally) append a suffix to node names retrieved from Consul
 
-{mapping, "cluster_formation.consul.domain", "rabbit.cluster_formation.peer_discovery_consul.consul_domain", [
+{mapping, "cluster_formation.consul.domain_suffix", "rabbit.cluster_formation.peer_discovery_consul.consul_domain", [
     {datatype, string}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_consul.consul_domain",
 fun(Conf) ->
-    case cuttlefish:conf_get("cluster_formation.consul.domain", Conf, undefined) of
+    case cuttlefish:conf_get("cluster_formation.consul.domain_suffix", Conf, undefined) of
         undefined -> cuttlefish:unset();
         Value     -> Value
     end

@@ -63,11 +63,11 @@
 
 
 
- , {consul_domain,
-  "cluster_formation.consul.domain = abcdef",
+ , {consul_domain_suffix,
+  "cluster_formation.consul.domain_suffix = rabbitmq.eng.local",
   [{rabbit, [{cluster_formation, [
                                   {peer_discovery_consul, [
-                                                           {consul_domain, "abcdef"}
+                                                           {consul_domain, "rabbitmq.eng.local"}
                                                           ]}
                                  ]}]}],
  [rabbitmq_peer_discovery_consul]}
