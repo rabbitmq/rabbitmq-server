@@ -284,9 +284,9 @@ registration_body_maybe_add_check(Payload) ->
     -> list().
 registration_body_maybe_add_check(Payload, undefined) ->
     case registration_body_maybe_add_deregister([]) of
-        [{'Deregister_critical_service_after', _}]->
-            rabbit_log:warning("Can't use Consul Deregister After without " ++
-            "using TTL. The parameter CONSUL_DEREGISTER_AFTER will be ignored"),
+        [{'DeregisterCriticalServiceAfter', _}]->
+            rabbit_log:warning("Can't use Consul's service deregistration feature without " ++
+            "using TTL. The parameter  will be ignored"),
             Payload;
 
         _ -> Payload
@@ -313,7 +313,7 @@ registration_body_maybe_add_deregister(Payload) ->
         -> list().
 registration_body_maybe_add_deregister(Payload, undefined) -> Payload;
 registration_body_maybe_add_deregister(Payload, Deregister_After) ->
-    Deregister = {'Deregister_critical_service_after',
+    Deregister = {'DeregisterCriticalServiceAfter',
         list_to_atom(service_ttl(Deregister_After))},
     Payload ++ [Deregister].
 

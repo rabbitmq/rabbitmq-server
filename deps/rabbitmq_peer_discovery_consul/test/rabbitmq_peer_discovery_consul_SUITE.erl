@@ -190,7 +190,7 @@ registration_body_deregister_after_set_via_env_var(_Config) ->
                    {'Check',
                     [{'Notes', ?CONSUL_CHECK_NOTES},
                      {'TTL','30s'},
-                     {'Deregister_critical_service_after','520s'}]}],
+                     {'DeregisterCriticalServiceAfter','520s'}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 registration_body_ttl_and_deregister_after_both_unset_via_env_var(_Config) ->
