@@ -233,7 +233,7 @@ run-background-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	  $(RABBITMQ_SERVER) -detached
 
 # --------------------------------------------------------------------
-# Used by testsuites.
+# Start RabbitMQ in the background.
 # --------------------------------------------------------------------
 
 ifneq ($(LOG_TO_STDIO),yes)
@@ -266,6 +266,54 @@ start-rabbit-on-node:
 stop-rabbit-on-node:
 	$(exec_verbose) echo 'rabbit:stop().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
 
+stop-node:
+	$(exec_verbose) ( \
+	pid=$$(test -f $(RABBITMQ_PID_FILE) && cat $(RABBITMQ_PID_FILE)) && \
+	$(ERL_CALL) $(ERL_CALL_OPTS) -q && \
+	while ps -p "$$pid" >/dev/null 2>&1; do sleep 1; done \
+	) || :
+
+# " <-- To please Vim syntax hilighting.
+
+# --------------------------------------------------------------------
+# Start a RabbitMQ cluster in the background.
+# --------------------------------------------------------------------
+
+NODES ?= 2
+
+start-brokers start-cluster:
+	@for n in $$(seq $(NODES)); do \
+		nodename="rabbit-$$n@$$(hostname -s)"; \
+		$(MAKE) start-background-broker \
+		  RABBITMQ_NODENAME="$$nodename" \
+		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
+		  RABBITMQ_SERVER_START_ARGS=" \
+		  -rabbit loopback_users [] \
+		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
+		  "; \
+		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
+			ERL_LIBS="$(DIST_ERL_LIBS)" \
+			  $(RABBITMQCTL) -n "$$nodename" stop_app; \
+			ERL_LIBS="$(DIST_ERL_LIBS)" \
+			  $(RABBITMQCTL) -n "$$nodename" join_cluster "$$nodename1"; \
+			ERL_LIBS="$(DIST_ERL_LIBS)" \
+			  $(RABBITMQCTL) -n "$$nodename" start_app; \
+		else \
+			nodename1=$$nodename; \
+		fi; \
+	done
+
+stop-brokers stop-cluster:
+	@for n in $$(seq $(NODES) 1); do \
+		nodename="rabbit-$$n@$$(hostname -s)"; \
+		$(MAKE) stop-node \
+		  RABBITMQ_NODENAME="$$nodename"; \
+	done
+
+# --------------------------------------------------------------------
+# Used by testsuites.
+# --------------------------------------------------------------------
+
 set-resource-alarm:
 	$(exec_verbose) echo 'rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []}).' | \
 	$(ERL_CALL) $(ERL_CALL_OPTS)
@@ -273,10 +321,3 @@ set-resource-alarm:
 clear-resource-alarm:
 	$(exec-verbose) echo 'rabbit_alarm:clear_alarm({resource_limit, $(SOURCE), node()}).' | \
 	$(ERL_CALL) $(ERL_CALL_OPTS)
-
-stop-node:
-	$(exec_verbose) ( \
-	pid=$$(test -f $(RABBITMQ_PID_FILE) && cat $(RABBITMQ_PID_FILE)) && \
-	$(ERL_CALL) $(ERL_CALL_OPTS) -q && \
-	while ps -p "$$pid" >/dev/null 2>&1; do sleep 1; done \
-	) || :
