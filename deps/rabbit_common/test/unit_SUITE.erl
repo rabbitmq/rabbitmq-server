@@ -26,7 +26,8 @@
 all() ->
     [
         {group, parallel_tests},
-        {group, parse_mem_limit}
+        {group, parse_mem_limit},
+        {group, gen_server2}
     ].
 
 groups() ->
@@ -45,11 +46,136 @@ groups() ->
             parse_mem_relative_above_max,
             parse_mem_relative_integer,
             parse_mem_relative_invalid
+        ]},
+        {gen_server2, [], [
+            stats_timer_is_working,
+            stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists,
+            stop_stats_timer_on_hibernation,
+            stop_stats_timer_on_backoff,
+            stop_stats_timer_on_backoff_when_backoff_less_then_stats_timeout
         ]}
     ].
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
+
+stats_timer_is_working(_) ->
+    StatsInterval = 300,
+    set_stats_interval(StatsInterval),
+
+    {ok, TestServer} = gen_server2_test_server:start_link(count_stats),
+    %% Start the emission
+    % TestServer ! emit_gen_server2_stats,
+
+    timer:sleep(StatsInterval * 4 + 100),
+    StatsCount = gen_server2_test_server:stats_count(TestServer),
+    4 = StatsCount.
+
+stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists(_) ->
+    rabbit_core_metrics:init(),
+
+    StatsInterval = 300,
+    set_stats_interval(StatsInterval),
+
+    {ok, TestServer} = gen_server2_test_server:start_link(),
+    timer:sleep(StatsInterval * 4),
+
+    %% No messages in the buffer
+    0 = rabbit_core_metrics:get_gen_server2_stats(TestServer),
+
+    %% Sleep to accumulate messages
+    gen_server2:cast(TestServer, {sleep, StatsInterval + 100}),
+
+    %% Sleep to get results
+    gen_server2:cast(TestServer, {sleep, 1000}),
+    gen_server2:cast(TestServer, ignore),
+    gen_server2:cast(TestServer, ignore),
+    gen_server2:cast(TestServer, ignore),
+
+    timer:sleep(StatsInterval + 150),
+    4 = rabbit_core_metrics:get_gen_server2_stats(TestServer).
+
+stop_stats_timer_on_hibernation(_) ->
+    StatsInterval = 300,
+    set_stats_interval(StatsInterval),
+
+    %% No backoff configured
+    {ok, TestServer} = gen_server2_test_server:start_link(count_stats),
+
+    ok = gen_server2:call(TestServer, hibernate),
+
+    {current_function,{erlang,hibernate,3}} =
+        erlang:process_info(TestServer, current_function),
+
+    timer:sleep(StatsInterval * 4 + 100),
+    StatsCount = gen_server2_test_server:stats_count(TestServer),
+    %% The process was hibernated. No stats collected
+    1 = StatsCount,
+
+    %% A message will wake up the process
+    gen_server2:call(TestServer, wake_up),
+
+    timer:sleep(StatsInterval * 4 + 100),
+    StatsCount5 = gen_server2_test_server:stats_count(TestServer),
+    5 = StatsCount5.
+
+stop_stats_timer_on_backoff(_) ->
+    StatsInterval = 300,
+    set_stats_interval(StatsInterval),
+
+    %% No backoff configured
+    {ok, TestServer} =
+        gen_server2_test_server:start_link(
+            count_stats,
+            {backoff, 1000, 1000, 10000}),
+
+    ok = gen_server2:call(TestServer, hibernate),
+
+    {current_function,{erlang,hibernate,3}} =
+        erlang:process_info(TestServer, current_function),
+
+    timer:sleep(StatsInterval * 4 + 100),
+    StatsCount = gen_server2_test_server:stats_count(TestServer),
+    %% The process was hibernated. No stats collected
+    1 = StatsCount,
+
+    %% A message will wake up the process
+    gen_server2:call(TestServer, wake_up),
+
+    timer:sleep(StatsInterval * 4 + 100),
+    StatsCount5 = gen_server2_test_server:stats_count(TestServer),
+    5 = StatsCount5.
+
+stop_stats_timer_on_backoff_when_backoff_less_then_stats_timeout(_) ->
+    StatsInterval = 300,
+    set_stats_interval(StatsInterval),
+
+    %% No backoff configured
+    {ok, TestServer} =
+        gen_server2_test_server:start_link(
+            count_stats,
+            {backoff, 200, 200, 10000}),
+
+    ok = gen_server2:call(TestServer, hibernate),
+
+    {current_function,{erlang,hibernate,3}} =
+        erlang:process_info(TestServer, current_function),
+
+    timer:sleep(StatsInterval * 4 + 100),
+    StatsCount = gen_server2_test_server:stats_count(TestServer),
+    %% The process was hibernated. No stats collected
+    1 = StatsCount,
+
+    %% A message will wake up the process
+    gen_server2:call(TestServer, wake_up),
+
+    timer:sleep(StatsInterval * 4 + 100),
+    StatsCount5 = gen_server2_test_server:stats_count(TestServer),
+    5 = StatsCount5.
+
+set_stats_interval(Interval) ->
+    application:set_env(rabbit, collect_statistics, coarse),
+    application:set_env(rabbit, collect_statistics_interval, Interval).
 
 parse_mem_limit_relative_exactly_max(_Config) ->
     MemLimit = vm_memory_monitor:parse_mem_limit(1.0),
