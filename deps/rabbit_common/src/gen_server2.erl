@@ -678,9 +678,8 @@ process_next_msg(GS2State0 = #gs2_state { time          = Time,
             after Time1 ->
                     case HibOnTimeout of
                         true ->
-                            GS2State1 = call_emit_stats(GS2State, ignore_timer),
                             pre_hibernate(
-                              GS2State1 #gs2_state { queue = Queue1 });
+                              GS2State #gs2_state { queue = Queue1 });
                         false ->
                             process_msg(timeout,
                                         GS2State #gs2_state { queue = Queue1 })
@@ -711,7 +710,7 @@ hibernate(GS2State = #gs2_state { timeout_state = TimeoutState }) ->
 
 pre_hibernate(GS2State0 = #gs2_state { state   = State,
                                        mod     = Mod }) ->
-    GS2State = maybe_stop_stats_timer(GS2State0),
+    GS2State = call_emit_stats(maybe_stop_stats_timer(GS2State0), ignore_timer),
     case erlang:function_exported(Mod, handle_pre_hibernate, 1) of
         true ->
             case catch Mod:handle_pre_hibernate(State) of
