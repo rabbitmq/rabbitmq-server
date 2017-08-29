@@ -519,7 +519,7 @@ enter_loop(Mod, Options, State, ServerName, Timeout, Backoff) ->
     loop(call_init_stats(find_prioritisers(
            #gs2_state { parent = Parent, name = Name, state = State,
                         mod = Mod, time = Timeout, timeout_state = Backoff1,
-                        queue = Queue, debug = Debug, 
+                        queue = Queue, debug = Debug,
                         init_stats_fun = InitStatsFun,
                         emit_stats_fun = EmitStatsFun,
                         stop_stats_fun = StopStatsFun }))).
@@ -1376,7 +1376,8 @@ stats_funs() ->
 
 call_init_stats(State = #gs2_state{ init_stats_fun = InitStats }) ->
     StateWithInitTimer = rabbit_event:init_stats_timer(State, #gs2_state.timer),
-    InitStats(StateWithInitTimer).
+    StateWithInitStats = InitStats(StateWithInitTimer),
+    call_emit_stats(StateWithInitStats, ensure_timer_exists).
 
 call_emit_stats(State = #gs2_state{ emit_stats_fun = EmitStats }, ignore_timer) ->
     EmitStats(State);
@@ -1390,14 +1391,15 @@ call_stop_stats(State = #gs2_state{ stop_stats_fun = StopStats}) ->
     State1 = maybe_stop_stats_timer(State),
     StopStats(State1).
 
-init_stats(State) ->
-    call_emit_stats(State, ensure_timer_exists).
+init_stats(State) -> State.
 
-emit_stats(_State = #gs2_state{queue = Queue}) ->
-    rabbit_core_metrics:gen_server2_stats(self(), priority_queue:len(Queue)).
+emit_stats(State = #gs2_state{queue = Queue}) ->
+    rabbit_core_metrics:gen_server2_stats(self(), priority_queue:len(Queue)),
+    State.
 
-stop_stats(_State) ->
-    rabbit_core_metrics:gen_server2_deleted(self()).
+stop_stats(State) ->
+    rabbit_core_metrics:gen_server2_deleted(self()),
+    State.
 
 maybe_stop_stats_timer(State = #gs2_state{timer = undefined}) ->
     State;
