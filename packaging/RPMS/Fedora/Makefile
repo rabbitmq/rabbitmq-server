@@ -34,7 +34,7 @@ REQUIRES=/sbin/chkconfig /sbin/service
 OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .suse_1012' --define 'suse_version 1012'
 SPEC_DEFINES=--define 'group_tag Productivity/Networking/Other'
 START_PROG=startproc
-else ifeq "$(RPM_OS)" "suse1315"
+else ifeq "$(RPM_OS)" "suse"
 FUNCTION_LIBRARY=
 REQUIRES=/sbin/chkconfig /sbin/service
 OS_DEFINES=--define '_unitdir /usr/lib/systemd/system' --define 'dist .suse' --define 'suse_version 1315'

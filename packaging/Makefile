@@ -74,7 +74,7 @@ packages: package-deb package-rpm package-windows package-generic-unix
 package-deb: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C debs/Debian $(VARS) all $(DO_CLEAN)
 
-package-rpm-opensuse package-rpm-suse: package-rpm-opensuse1012 package-rpm-opensuse1315 
+package-rpm-suse: package-rpm-opensuse1012 package-rpm-opensuse 
 	@:
 
 package-rpm: package-rpm-rhel6 package-rpm-rhel7 package-rpm-opensuse
@@ -92,8 +92,8 @@ package-rpm-rhel7: $(SOURCE_DIST_FILE)
 package-rpm-opensuse1012: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=suse1012 all $(DO_CLEAN)
 
-package-rpm-opensuse1315: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=suse1315 all $(DO_CLEAN)
+package-rpm-opensuse: $(SOURCE_DIST_FILE)
+	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=suse all $(DO_CLEAN)
 
 package-windows: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C windows $(VARS) all $(DO_CLEAN)
