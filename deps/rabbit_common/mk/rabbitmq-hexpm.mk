@@ -8,6 +8,7 @@ HEXPM_URL = https://github.com/rabbitmq/hexpm-cli/releases/download/v0.1.0/hexpm
 HEXPM_CLI = $(ERLANG_MK_TMP)/hexpm
 
 $(HEXPM_CLI):
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)
 	$(gen_verbose) $(call core_http_get,$@,$(HEXPM_URL))
 	$(verbose) chmod +x $@
 
