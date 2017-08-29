@@ -171,7 +171,7 @@ define test_rabbitmq_config_with_tls
           {port, 15671},
           {ssl,  true},
           {ssl_opts, [
-	    {cacertfile, "$(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem"},
+            {cacertfile, "$(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem"},
             {certfile,   "$(TEST_TLS_CERTS_DIR_in_config)/server/cert.pem"},
             {keyfile,    "$(TEST_TLS_CERTS_DIR_in_config)/server/key.pem"},
             {verify, verify_peer},
@@ -196,7 +196,7 @@ $(TEST_CONFIG_FILE): node-tmpdir
 
 $(TEST_TLS_CERTS_DIR): node-tmpdir
 	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_ct_helpers/tools/tls-certs \
-		DIR=$(TEST_TLS_CERTS_DIR) all
+	  DIR=$(TEST_TLS_CERTS_DIR) all
 
 show-test-tls-certs-dir: $(TEST_TLS_CERTS_DIR)
 	@echo $(TEST_TLS_CERTS_DIR)
