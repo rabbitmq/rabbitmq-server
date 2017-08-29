@@ -59,6 +59,26 @@ groups() ->
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
+init_per_testcase(_, Config) -> Config.
+
+end_per_testcase(stats_timer_is_working, Config) ->
+    reset_stats_interval(),
+    Config;
+end_per_testcase(stop_stats_timer_on_hibernation, Config) ->
+    reset_stats_interval(),
+    Config;
+end_per_testcase(stop_stats_timer_on_backoff, Config) ->
+    reset_stats_interval(),
+    Config;
+end_per_testcase(stop_stats_timer_on_backoff_when_backoff_less_then_stats_timeout, Config) ->
+    reset_stats_interval(),
+    Config;
+end_per_testcase(stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists, Config) ->
+    rabbit_core_metrics:terminate(),
+    reset_stats_interval(),
+    Config;
+end_per_testcase(_, Config) -> Config.
+
 stats_timer_is_working(_) ->
     StatsInterval = 300,
     set_stats_interval(StatsInterval),
@@ -109,73 +129,82 @@ stop_stats_timer_on_hibernation(_) ->
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount = gen_server2_test_server:stats_count(TestServer),
-    %% The process was hibernated. No stats collected
-    1 = StatsCount,
+    %% The timer was stopped. No stats collected
+    %% The count is 2 because hibernation emits stats
+    2 = StatsCount,
 
     %% A message will wake up the process
     gen_server2:call(TestServer, wake_up),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
-    5 = StatsCount5.
+    6 = StatsCount5.
 
 stop_stats_timer_on_backoff(_) ->
     StatsInterval = 300,
     set_stats_interval(StatsInterval),
 
-    %% No backoff configured
+    Backoff = 1000,
     {ok, TestServer} =
         gen_server2_test_server:start_link(
             count_stats,
-            {backoff, 1000, 1000, 10000}),
+            {backoff, Backoff, Backoff, 10000}),
 
     ok = gen_server2:call(TestServer, hibernate),
+
+    {current_function,{gen_server2,process_next_msg,1}} =
+        erlang:process_info(TestServer, current_function),
+
+    timer:sleep(Backoff + 50),
 
     {current_function,{erlang,hibernate,3}} =
         erlang:process_info(TestServer, current_function),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount = gen_server2_test_server:stats_count(TestServer),
-    %% The process was hibernated. No stats collected
-    1 = StatsCount,
+    %% The timer was stopped. No stats collected
+    %% The count is 2 because hibernation emits stats
+    2 = StatsCount,
 
     %% A message will wake up the process
     gen_server2:call(TestServer, wake_up),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
-    5 = StatsCount5.
+    6 = StatsCount5.
 
 stop_stats_timer_on_backoff_when_backoff_less_then_stats_timeout(_) ->
     StatsInterval = 300,
     set_stats_interval(StatsInterval),
 
-    %% No backoff configured
+    Backoff = 200,
     {ok, TestServer} =
         gen_server2_test_server:start_link(
             count_stats,
-            {backoff, 200, 200, 10000}),
+            {backoff, Backoff, Backoff, 10000}),
 
     ok = gen_server2:call(TestServer, hibernate),
+
+    {current_function,{gen_server2,process_next_msg,1}} =
+        erlang:process_info(TestServer, current_function),
+
+    timer:sleep(Backoff + 50),
 
     {current_function,{erlang,hibernate,3}} =
         erlang:process_info(TestServer, current_function),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount = gen_server2_test_server:stats_count(TestServer),
-    %% The process was hibernated. No stats collected
-    1 = StatsCount,
+    %% The timer was stopped. No stats collected
+    %% The count is 2 because hibernation emits stats
+    2 = StatsCount,
 
     %% A message will wake up the process
     gen_server2:call(TestServer, wake_up),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
-    5 = StatsCount5.
-
-set_stats_interval(Interval) ->
-    application:set_env(rabbit, collect_statistics, coarse),
-    application:set_env(rabbit, collect_statistics_interval, Interval).
+    6 = StatsCount5.
 
 parse_mem_limit_relative_exactly_max(_Config) ->
     MemLimit = vm_memory_monitor:parse_mem_limit(1.0),
@@ -474,3 +503,11 @@ raw_to_string(Char)
     integer_to_list(Char);
 raw_to_string(Char) ->
     Char.
+
+set_stats_interval(Interval) ->
+    application:set_env(rabbit, collect_statistics, coarse),
+    application:set_env(rabbit, collect_statistics_interval, Interval).
+
+reset_stats_interval() ->
+    application:unset_env(rabbit, collect_statistics),
+    application:unset_env(rabbit, collect_statistics_interval).

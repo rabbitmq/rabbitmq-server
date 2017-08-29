@@ -52,7 +52,12 @@ init([]) ->
 init([Time]) ->
     Counter = ets:new(stats_count, [public]),
     ets:insert(Counter, {count, 0}),
-    {ok, #{counter => Counter}, Time}.
+    case Time of
+        {backoff, _, _, _} ->
+            {ok, #{counter => Counter}, hibernate, Time};
+        _ ->
+            {ok, #{counter => Counter}, Time}
+    end.
 
 count_stats(Counter) ->
     ets:update_counter(Counter, count, 1).
