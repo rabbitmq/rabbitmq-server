@@ -15,7 +15,7 @@ URL: http://www.rabbitmq.com/
 BuildArch: noarch
 BuildRequires: erlang >= %{erlang_minver}, python-simplejson, xmlto, libxslt, gzip, sed, zip, rsync
 
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 BuildRequires:  systemd
 %endif
 
@@ -23,7 +23,7 @@ Requires: erlang >= %{erlang_minver}, logrotate, socat
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 Requires(pre): systemd
 Requires(post): systemd
 Requires(preun): systemd
@@ -63,7 +63,7 @@ mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 
 #Copy all necessary lib files etc.
 
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 install -p -D -m 0644 %{S:3} %{buildroot}%{_unitdir}/%{name}.service
 %else
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
@@ -86,7 +86,7 @@ for script in rabbitmq-server rabbitmq-plugins; do \
 	 %{buildroot}%{_sbindir}/$script; \
 done
 
-%if 0%{?fedora} > 14 || 0%{?rhel} >= 7 || 0%{?suse_version}
+%if 0%{?fedora} > 14 || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 install -D -p -m 0644 %{SOURCE4} %{buildroot}%{_prefix}/lib/tmpfiles.d/%{name}.conf
 %endif
 
@@ -118,7 +118,7 @@ fi
 
 %post
 
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 # %%systemd_post %%{name}.service
 # manual expansion of systemd_post as this doesn't appear to
 # expand correctly on debian machines
@@ -139,7 +139,7 @@ chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 %preun
 if [ $1 = 0 ]; then
   #Complete uninstall
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
   systemctl stop rabbitmq-server
 %else
   /sbin/service rabbitmq-server stop
@@ -157,7 +157,7 @@ for ext in rel script boot ; do
 done
 
 %postun
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 # %%systemd_postun_with_restart %%{name}.service
 # manual expansion of systemd_postun_with_restart as this doesn't appear to
 # expand correctly on debian machines
@@ -171,7 +171,7 @@ if [ $1 -gt 1 ]; then
 fi
 %endif
 
-%if 0%{?fedora} > 17 || 0%{?rhel} >= 7 || 0%{?suse_version}
+%if 0%{?fedora} > 17 || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 # For prior versions older than this, do a conversion
 # from sysv to systemd
 %triggerun -- %{name} < 3.6.5
