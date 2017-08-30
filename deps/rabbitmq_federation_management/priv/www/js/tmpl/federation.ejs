@@ -38,7 +38,7 @@
         <sub><%= fmt_string(link.upstream_queue) %></sub>
       <% } %>
     </td>
-    <td><%= fmt_string(link.uri) %></td>
+    <td><%= fmt_string(fmt_uri_with_credentials(link.uri)) %></td>
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(link.vhost) %></td>
 <% } %>
