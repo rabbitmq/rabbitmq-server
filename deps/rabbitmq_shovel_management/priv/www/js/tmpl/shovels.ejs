@@ -50,10 +50,10 @@
 <% } else { %>
     <td><%= fmt_state('green', shovel.state) %></td>
       <td><%= fmt_string(shovel.src_protocol) %></td>
-      <td><%= fmt_string(shovel.src_uri) %></td>
+      <td><%= fmt_string(fmt_uri_with_credentials(shovel.src_uri)) %></td>
       <td><%= fmt_shovel_endpoint('src_', shovel) %></td>
       <td><%= fmt_string(shovel.dest_protocol) %></td>
-      <td><%= fmt_string(shovel.dest_uri) %></td>
+      <td><%= fmt_string(fmt_uri_with_credentials(shovel.dest_uri)) %></td>
       <td><%= fmt_shovel_endpoint('dest_', shovel) %></td>
     <td><%= shovel.timestamp %></td>
   </tr>
