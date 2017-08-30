@@ -18,7 +18,7 @@
 -behaviour(gen_server2).
 -record(gs2_state, {parent, name, state, mod, time,
                     timeout_state, queue, debug, prioritisers,
-                    timer, init_stats_fun, emit_stats_fun, stop_stats_fun}).
+                    timer, emit_stats_fun, stop_stats_fun}).
 
 -export([start_link/0, start_link/1, start_link/2, stats_count/1]).
 
