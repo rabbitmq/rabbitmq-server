@@ -10,7 +10,7 @@
          </th>
       <tr>
         <th>URI</th>
-        <td><%= fmt_string(upstream.value.uri) %></td>
+        <td><%= fmt_string(fmt_uri_with_credentials(upstream.value.uri)) %></td>
       </tr>
       <tr>
         <th>Prefetch Count</th>
