@@ -35,7 +35,7 @@
      <td><%= fmt_string(upstream.vhost) %></td>
 <% } %>
      <td><%= link_fed_conn(upstream.vhost, upstream.name) %></td>
-     <td><%= fmt_shortened_uri(upstream.value.uri) %></td>
+     <td><%= fmt_shortened_uri(fmt_uri_with_credentials(upstream.value.uri)) %></td>
      <td class="r"><%= upstream.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(upstream.value['reconnect-delay'], 's') %></td>
      <td class="c"><%= fmt_string(upstream.value['ack-mode']) %></td>
