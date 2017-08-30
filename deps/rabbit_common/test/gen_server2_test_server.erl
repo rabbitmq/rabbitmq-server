@@ -54,17 +54,20 @@ init([Time]) ->
     ets:insert(Counter, {count, 0}),
     case Time of
         {backoff, _, _, _} ->
-            {ok, #{counter => Counter}, hibernate, Time};
+            {ok, {counter, Counter}, hibernate, Time};
         _ ->
-            {ok, #{counter => Counter}, Time}
+            {ok, {counter, Counter}, Time}
     end.
 
 count_stats(Counter) ->
-    ets:update_counter(Counter, count, 1).
+    ets:update_counter(Counter, count, {2, 1}).
 
-handle_call(get_counter,_,State) -> {reply, maps:get(counter, State), State};
-handle_call(hibernate, _, State) -> {reply, ok, State, hibernate};
-handle_call(_,_,State) -> {reply, ok, State}.
+handle_call(get_counter,_, {counter, Counter} = State) ->
+    {reply, Counter, State};
+handle_call(hibernate, _, State) ->
+    {reply, ok, State, hibernate};
+handle_call(_,_,State) ->
+    {reply, ok, State}.
 
 handle_cast({sleep, Time}, State) -> timer:sleep(Time), {noreply, State};
 handle_cast(_,State) -> {noreply, State}.

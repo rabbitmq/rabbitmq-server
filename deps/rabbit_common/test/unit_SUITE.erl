@@ -47,7 +47,7 @@ groups() ->
             parse_mem_relative_integer,
             parse_mem_relative_invalid
         ]},
-        {gen_server2, [], [
+        {gen_server2, [parallel], [
             stats_timer_is_working,
             stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists,
             stop_stats_timer_on_hibernation,
