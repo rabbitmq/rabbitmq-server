@@ -392,19 +392,23 @@ set_env_upgrade_log_file(FileName) ->
 generate_lager_sinks(SinkNames, SinkConfigs) ->
     lists:map(fun(SinkName) ->
         SinkConfig = proplists:get_value(SinkName, SinkConfigs, []),
-        Level = proplists:get_value(level, SinkConfig, default_config_value(level)),
         SinkHandlers = case proplists:get_value(file, SinkConfig, false) of
             %% If no file defined - forward everything to the default backend
             false ->
+                ForwarderLevel = proplists:get_value(level, SinkConfig, inherit),
                 [{lager_forwarder_backend,
-                    [lager_util:make_internal_sink_name(lager), Level]}];
+                    [lager_util:make_internal_sink_name(lager), ForwarderLevel]}];
             %% If a file defined - add a file backend to handlers and remove all default file backends.
             File ->
+                %% Use `debug` as a default handler to not override a handler level
+                Level = proplists:get_value(level, SinkConfig, debug),
                 DefaultGeneratedHandlers = application:get_env(lager, rabbit_handlers, []),
                 SinkFileHandlers = case proplists:get_value(lager_file_backend, DefaultGeneratedHandlers, undefined) of
                     undefined ->
                         %% Create a new file handler.
-                        generate_lager_handlers([{file, [{file, File}, {level, Level}]}]);
+                        %% `info` is a default level here.
+                        FileLevel = proplists:get_value(level, SinkConfig, default_config_value(level)),
+                        generate_lager_handlers([{file, [{file, File}, {level, FileLevel}]}]);
                     FileHandler ->
                         %% Replace a filename in the handler
                         FileHandlerChanges = case handler_level_more_verbose(FileHandler, Level) of
