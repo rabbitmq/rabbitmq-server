@@ -6,7 +6,7 @@
     <table class="facts">
       <tr>
         <th>Source</th>
-        <td><%= fmt_string(shovel.value['src-uri']) %></td>
+        <td><%= fmt_string(fmt_uri_with_credentials(shovel.value['src-uri'])) %></td>
       </tr>
       <tr>
         <th> </th>
@@ -14,7 +14,7 @@
       </tr>
       <tr>
         <th>Destination</th>
-        <td><%= fmt_string(shovel.value['dest-uri']) %></td>
+        <td><%= fmt_string(fmt_uri_with_credentials(shovel.value['dest-uri'])) %></td>
       </tr>
       <tr>
         <th> </th>

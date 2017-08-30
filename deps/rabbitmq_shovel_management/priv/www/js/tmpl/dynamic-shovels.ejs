@@ -29,9 +29,9 @@
      <td><%= fmt_string(shovel.vhost) %></td>
 <% } %>
      <td><%= link_shovel(shovel.vhost, shovel.name) %></td>
-     <td><%= fmt_shortened_uri(shovel.value['src-uri']) %></td>
+     <td><%= fmt_shortened_uri(fmt_uri_with_credentials(shovel.value['src-uri'])) %></td>
      <td><%= fmt_shovel_endpoint('src', shovel.value) %></td>
-     <td><%= fmt_shortened_uri(shovel.value['dest-uri']) %></td>
+     <td><%= fmt_shortened_uri(fmt_uri_with_credentials(shovel.value['dest-uri'])) %></td>
      <td><%= fmt_shovel_endpoint('dest', shovel.value) %></td>
      <td class="r"><%= shovel.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
