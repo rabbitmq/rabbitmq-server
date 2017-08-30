@@ -345,8 +345,14 @@ select_hostname() ->
 %%
 instance_id() ->
     case httpc:request(?INSTANCE_ID_URL) of
-        {ok, {{_, 200, _}, _, Value}} -> Value;
-        _ -> error
+        {ok, {{_, 200, _}, _, Value}} ->
+            rabbit_log:debug("Fetched EC2 instance ID from ~p: ~p",
+                             [?INSTANCE_ID_URL, Value]),
+            Value;
+        Other ->
+            rabbit_log:error("Failed to fetch EC2 instance ID from ~p: ~p",
+                             [?INSTANCE_ID_URL, Other]),
+            error
     end.
 
 -spec get_tags() -> tags().
