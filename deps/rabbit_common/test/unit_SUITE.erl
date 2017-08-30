@@ -52,7 +52,7 @@ groups() ->
             stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists,
             stop_stats_timer_on_hibernation,
             stop_stats_timer_on_backoff,
-            stop_stats_timer_on_backoff_when_backoff_less_then_stats_timeout
+            stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout
         ]}
     ].
 
@@ -70,7 +70,7 @@ end_per_testcase(stop_stats_timer_on_hibernation, Config) ->
 end_per_testcase(stop_stats_timer_on_backoff, Config) ->
     reset_stats_interval(),
     Config;
-end_per_testcase(stop_stats_timer_on_backoff_when_backoff_less_then_stats_timeout, Config) ->
+end_per_testcase(stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout, Config) ->
     reset_stats_interval(),
     Config;
 end_per_testcase(stats_timer_writes_gen_server2_metrics_if_core_metrics_ets_exists, Config) ->
@@ -124,21 +124,38 @@ stop_stats_timer_on_hibernation(_) ->
 
     ok = gen_server2:call(TestServer, hibernate),
 
+    timer:sleep(50),
+
     {current_function,{erlang,hibernate,3}} =
         erlang:process_info(TestServer, current_function),
 
-    timer:sleep(StatsInterval * 4 + 100),
-    StatsCount = gen_server2_test_server:stats_count(TestServer),
+    timer:sleep(StatsInterval * 6 + 100),
+    StatsCount1 = gen_server2_test_server:stats_count(TestServer),
     %% The timer was stopped. No stats collected
-    %% The count is 2 because hibernation emits stats
-    2 = StatsCount,
+    %% The count is 1 because hibernation emits stats
+    1 = StatsCount1,
 
     %% A message will wake up the process
+    gen_server2:call(TestServer, wake_up),
+    gen_server2:call(TestServer, wake_up),
     gen_server2:call(TestServer, wake_up),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
-    6 = StatsCount5.
+    5 = StatsCount5,
+
+    ok = gen_server2:call(TestServer, hibernate),
+
+    timer:sleep(50),
+
+    {current_function,{erlang,hibernate,3}} =
+        erlang:process_info(TestServer, current_function),
+
+    timer:sleep(StatsInterval * 4 + 100),
+    StatsCount6 = gen_server2_test_server:stats_count(TestServer),
+    %% The timer was stopped. No stats collected
+    %% The count is 1 because hibernation emits stats
+    6 = StatsCount6.
 
 stop_stats_timer_on_backoff(_) ->
     StatsInterval = 300,
@@ -155,25 +172,33 @@ stop_stats_timer_on_backoff(_) ->
     {current_function,{gen_server2,process_next_msg,1}} =
         erlang:process_info(TestServer, current_function),
 
-    timer:sleep(Backoff + 50),
+    %% Receiving messages during backoff period does not emit stats
+    timer:sleep(Backoff div 2),
+    ok = gen_server2:call(TestServer, hibernate),
 
+    timer:sleep(Backoff div 2 + 50),
+    {current_function,{gen_server2,process_next_msg,1}} =
+        erlang:process_info(TestServer, current_function),
+
+    %% Hibernate after backoff time after last message
+    timer:sleep(Backoff div 2),
     {current_function,{erlang,hibernate,3}} =
         erlang:process_info(TestServer, current_function),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount = gen_server2_test_server:stats_count(TestServer),
     %% The timer was stopped. No stats collected
-    %% The count is 2 because hibernation emits stats
-    2 = StatsCount,
+    %% The count is 1 because hibernation emits stats
+    1 = StatsCount,
 
     %% A message will wake up the process
     gen_server2:call(TestServer, wake_up),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
-    6 = StatsCount5.
+    5 = StatsCount5.
 
-stop_stats_timer_on_backoff_when_backoff_less_then_stats_timeout(_) ->
+stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout(_) ->
     StatsInterval = 300,
     set_stats_interval(StatsInterval),
 
@@ -196,15 +221,15 @@ stop_stats_timer_on_backoff_when_backoff_less_then_stats_timeout(_) ->
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount = gen_server2_test_server:stats_count(TestServer),
     %% The timer was stopped. No stats collected
-    %% The count is 2 because hibernation emits stats
-    2 = StatsCount,
+    %% The count is 1 because hibernation emits stats
+    1 = StatsCount,
 
     %% A message will wake up the process
     gen_server2:call(TestServer, wake_up),
 
     timer:sleep(StatsInterval * 4 + 100),
     StatsCount5 = gen_server2_test_server:stats_count(TestServer),
-    6 = StatsCount5.
+    5 = StatsCount5.
 
 parse_mem_limit_relative_exactly_max(_Config) ->
     MemLimit = vm_memory_monitor:parse_mem_limit(1.0),
