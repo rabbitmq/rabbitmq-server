@@ -35,6 +35,9 @@ HELP = {
     'queue-lazy':
       'Set the queue into lazy mode, keeping as many messages as possible on disk to reduce RAM usage; if not set, the queue will keep an in-memory cache to deliver messages as fast as possible.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/lazy-queues.html">x-queue-mode</a>" argument.)',
 
+    'queue-master-locator':
+       'Set the queue into master location mode, determining the rule by which the queue master is located when declared on a cluster of nodes.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/ha.html">x-queue-master-locator</a>" argument.)',
+
     'queue-messages':
       '<p>Message counts.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p>',
 
