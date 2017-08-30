@@ -1,0 +1,61 @@
+[
+    %% interval
+    {host_proxy, "cluster_formation.node_cleanup.interval = 60", [
+            {rabbit, [
+                {cluster_formation, [
+                    {node_cleanup, [
+                        {cleanup_interval, 60}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_common]
+    }
+    %% only log warnings?
+    , {host_proxy, "cluster_formation.node_cleanup.only_log_warning = true", [
+            {rabbit, [
+                {cluster_formation, [
+                    {node_cleanup, [
+                        {cleanup_only_log_warning, true}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_common]
+    }
+    %% HTTP proxy host
+    , {host_proxy, "cluster_formation.proxy.http_proxy = proxy.example.local", [
+            {rabbit, [
+                {cluster_formation, [
+                    {proxy, [
+                        {http_proxy, "proxy.example.local"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_common]
+    }
+    %% HTTPS proxy host
+    , {host_proxy, "cluster_formation.proxy.https_proxy = proxy.example.local", [
+            {rabbit, [
+                {cluster_formation, [
+                    {proxy, [
+                        {https_proxy, "proxy.example.local"}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_common]
+    }
+    %% proxy exclusions
+    , {host_proxy,
+"
+cluster_formation.proxy.proxy_exclusions.1 = host.a
+cluster_formation.proxy.proxy_exclusions.2 = host.b
+cluster_formation.proxy.proxy_exclusions.3 = host.c", [
+            {rabbit, [
+                {cluster_formation, [
+                    {proxy, [
+                        {proxy_exclusions, ["host.a", "host.b", "host.c"]}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_common]
+    }
+].

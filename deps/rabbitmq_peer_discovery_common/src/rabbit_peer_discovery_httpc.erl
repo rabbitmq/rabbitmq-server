@@ -17,6 +17,8 @@
 
 -module(rabbit_peer_discovery_httpc).
 
+-include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
+
 %%
 %% API
 %%
@@ -28,12 +30,36 @@
          get/5,
          get/7,
          post/6,
-         put/6]).
+         put/6,
+         maybe_configure_proxy/0]).
 
 %% Export all for unit tests
 -ifdef(TEST).
 -compile(export_all).
 -endif.
+
+
+-define(CONFIG_MODULE, rabbit_peer_discovery_config).
+-define(CONFIG_KEY, proxy).
+
+-define(CONFIG_MAPPING,
+        #{
+          http_proxy   => #peer_discovery_config_entry_meta{
+                             type          = string,
+                             env_variable  = "HTTP_PROXY",
+                             default_value = undefined
+                            },
+          https_proxy  => #peer_discovery_config_entry_meta{
+                             type          = string,
+                             env_variable  = "HTTPS_PROXY",
+                             default_value = undefined
+                            },
+          proxy_exclusions => #peer_discovery_config_entry_meta{
+                                 type          = list,
+                                 env_variable  = "PROXY_EXCLUSIONS",
+                                 default_value = []
+                                }
+         }).
 
 
 -define(CONTENT_JSON, "application/json").
@@ -207,6 +233,69 @@ delete(Scheme, Host, Port, Path, Args, Body) ->
   Response = httpc:request(delete, {URL, [], ?CONTENT_URLENCODED, Body}, [], []),
   rabbit_log:debug("Response: [~p]", [Response]),
   parse_response(Response).
+
+
+%% @public
+%% @spec maybe_configure_proxy() -> Result
+%% @where Result = ok.
+%% @doc Configures HTTP[S] proxy settings in httpc, if necessary
+%% @end
+-spec maybe_configure_proxy() -> ok.
+maybe_configure_proxy() ->
+  Map = ?CONFIG_MODULE:config_map(?CONFIG_KEY),
+  case map_size(Map) of
+      0 ->
+          rabbit_log:debug("HTTP client proxy is not configured"),
+          ok;
+      _ ->
+          HttpProxy       = ?CONFIG_MODULE:get(http_proxy,  ?CONFIG_MAPPING, Map),
+          HttpsProxy      = ?CONFIG_MODULE:get(https_proxy, ?CONFIG_MAPPING, Map),
+          ProxyExclusions = ?CONFIG_MODULE:get(proxy_exclusions, ?CONFIG_MAPPING, Map),
+          rabbit_log:debug("Configured HTTP proxy: ~p, HTTPS proxy: ~p, exclusions: ~p",
+                           [HttpProxy, HttpsProxy, ProxyExclusions]),
+          maybe_set_proxy(proxy, HttpProxy, ProxyExclusions),
+          maybe_set_proxy(https_proxy, HttpsProxy, ProxyExclusions),
+          ok
+  end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Set httpc proxy options.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_set_proxy(Option :: atom(),
+                      ProxyUrl :: string(),
+                      ProxyExclusions :: list()) -> ok | {error, Reason :: term()}.
+maybe_set_proxy(_Option, "undefined", _ProxyExclusions) -> ok;
+maybe_set_proxy(Option, ProxyUrl, ProxyExclusions) ->
+  case parse_proxy_uri(Option, ProxyUrl) of
+    {ok, {_Scheme, _UserInfo, Host, Port, _Path, _Query}} ->
+      rabbit_log:debug(
+        "Configuring HTTP client's ~s setting: ~p, exclusions: ~p",
+        [Option, {Host, Port}, ProxyExclusions]),
+      httpc:set_options([{Option, {{Host, Port}, ProxyExclusions}}]);
+    {error, Reason} ->
+          rabbit_log:error("Failed to set HTTP client setting ~p"
+                           " with value of ~p, exclusions of ~p: ~p",
+                           [Option, ProxyUrl, ProxyExclusions, {error, Reason}])
+  end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Support defining proxy address with or without uri scheme.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_proxy_uri(ProxyType :: atom(), ProxyUrl :: string()) -> tuple().
+parse_proxy_uri(ProxyType, ProxyUrl) ->
+  case http_uri:parse(ProxyUrl) of
+    {ok, Result} -> {ok, Result};
+    {error, _} ->
+      case ProxyType of
+        proxy       -> http_uri:parse("http://" ++ ProxyUrl);
+        https_proxy -> http_uri:parse("https://" ++ ProxyUrl)
+      end
+  end.
+
 
 
 %% @private
