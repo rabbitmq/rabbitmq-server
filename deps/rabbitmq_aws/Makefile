@@ -7,21 +7,20 @@ define PROJECT_ENV
 []
 endef
 
-LOCAL_DEPS = crypto ssl inets
-TEST_DEPS =
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
-
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-current_rmq_ref = stable
+LOCAL_DEPS = crypto ssl inets
+BUILD_DEPS = rabbit_common
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+
+current_rmq_ref = master
 
 include rabbitmq-components.mk
 include erlang.mk
-
 
 # --------------------------------------------------------------------
 # Testing.
