@@ -1382,9 +1382,9 @@ stats_funs() ->
             {fun emit_stats/1, fun stop_stats/1}
     end.
 
-init_stats(State) ->
+init_stats(State = #gs2_state{ emit_stats_fun = EmitStatsFun }) ->
     StateWithInitTimer = rabbit_event:init_stats_timer(State, #gs2_state.timer),
-    next_stats_timer(StateWithInitTimer).
+    next_stats_timer(EmitStatsFun(StateWithInitTimer)).
 
 next_stats_timer(State) ->
     ensure_stats_timer(rabbit_event:reset_stats_timer(State, #gs2_state.timer)).
