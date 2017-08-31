@@ -17,7 +17,7 @@
 -module(rabbit_autoheal).
 
 -export([init/0, enabled/0, maybe_start/1, rabbit_down/2, node_down/2,
-         handle_msg/3]).
+         handle_msg/3, process_down/2]).
 
 %% The named process we are running in.
 -define(SERVER, rabbit_node_monitor).
@@ -196,6 +196,16 @@ node_down(Node, _State) ->
     rabbit_log:info("Autoheal: aborting - ~p went down~n", [Node]),
     not_healing.
 
+%% If the process that has to restart the node crashes for an unexpected reason,
+%% we go back to a not healing state so the node is able to recover.
+process_down({'EXIT', Pid, Reason}, {restarting, Pid}) when Reason =/= normal ->
+    rabbit_log:info("Autoheal: aborting - the process responsible for restarting the "
+                    "node terminated with reason: ~p~n", [Reason]),
+    not_healing;
+
+process_down(_, State) ->
+    State.
+
 %% By receiving this message we become the leader
 %% TODO should we try to debounce this?
 handle_msg({request_start, Node},
@@ -252,17 +262,19 @@ handle_msg({become_winner, _},
 handle_msg({winner_is, Winner}, State = not_healing,
            _Partitions) ->
     %% This node is a loser, nothing else.
-    restart_loser(State, Winner),
-    restarting;
+    Pid = restart_loser(State, Winner),
+    {restarting, Pid};
 handle_msg({winner_is, Winner}, State = {leader_waiting, Winner, _},
            _Partitions) ->
     %% This node is the leader and a loser at the same time.
-    restart_loser(State, Winner),
-    restarting;
+    Pid = restart_loser(State, Winner),
+    {restarting, Pid};
 
-handle_msg(_, restarting, _Partitions) ->
+handle_msg(Request, {restarting, Pid} = St, _Partitions) ->
     %% ignore, we can contribute no further
-    restarting;
+    rabbit_log:info("Autoheal: Received the request ~p while waiting for ~p "
+                    "to restart the node. Ignoring it ~n", [Request, Pid]),
+    St;
 
 handle_msg(report_autoheal_status, not_healing, _Partitions) ->
     %% The leader is asking about the autoheal status to us (the

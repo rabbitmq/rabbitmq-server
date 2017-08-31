@@ -623,6 +623,10 @@ handle_info(ping_up_nodes, State) ->
     [cast(N, keepalive) || N <- alive_nodes() -- [node()]],
     {noreply, ensure_keepalive_timer(State#state{keepalive_timer = undefined})};
 
+handle_info({'EXIT', _, _} = Info, State = #state{autoheal = AState0}) ->
+    AState = rabbit_autoheal:process_down(Info, AState0),
+    {noreply, State#state{autoheal = AState}};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
