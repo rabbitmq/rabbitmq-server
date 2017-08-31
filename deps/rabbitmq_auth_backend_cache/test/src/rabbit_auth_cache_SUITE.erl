@@ -26,6 +26,9 @@ init_per_suite(Config) ->
     {ok, TTL} = application:get_env(rabbitmq_auth_backend_cache, cache_ttl),
     rabbit_ct_helpers:set_config(Config, {current_ttl, TTL}).
 
+end_per_suite(Config) ->
+    Config.
+
 init_per_group(Group, Config)
     when Group =:= rabbit_auth_cache_dict; Group =:= rabbit_auth_cache_ets ->
     set_auth_cache_module(Group, [], Config);
