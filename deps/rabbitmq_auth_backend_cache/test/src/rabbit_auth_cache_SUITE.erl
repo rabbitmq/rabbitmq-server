@@ -75,7 +75,9 @@ init_per_testcase0(_, Config) -> Config.
 
 end_per_testcase(Test, Config) ->
     AuthCacheModule = ?config(auth_cache_module, Config),
-    gen_server:stop(AuthCacheModule),
+    % gen_server:stop(AuthCacheModule),
+    Pid = whereis(AuthCacheModule),
+    exit(Pid, normal),
     end_per_testcase0(Test, Config).
 
 end_per_testcase0(get_expired, Config) ->

@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_auth_backend_cache
 
-DEPS = rabbit_common
+DEPS = rabbit_common rabbit
 TEST_DEPS += rabbit rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
