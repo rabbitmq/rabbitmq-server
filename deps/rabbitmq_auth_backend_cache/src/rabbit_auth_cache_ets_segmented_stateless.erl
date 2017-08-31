@@ -78,7 +78,7 @@ handle_cast(_, State = #state{}) ->
     {noreply, State}.
 
 handle_info(gc, State = #state{}) ->
-    Now = erlang:system_time(milli_seconds),
+    Now = time_compat:erlang_system_time(milli_seconds),
     MatchSpec = [{{'$1', '$2'}, [{'<', '$1', {const, Now}}], ['$2']}],
     Expired = ets:select(?SEGMENT_TABLE, MatchSpec),
     [ets:delete(Table) || Table <- Expired],
@@ -110,7 +110,7 @@ do_add_segment(Segment) ->
     end.
 
 get_segment_tables() ->
-    Now = erlang:system_time(milli_seconds),
+    Now = time_compat:erlang_system_time(milli_seconds),
     MatchSpec = [{{'$1', '$2'}, [{'>', '$1', {const, Now}}], ['$_']}],
     [V || {K, V} <- ets:select(?SEGMENT_TABLE, MatchSpec), K =/= segment_size].
 
