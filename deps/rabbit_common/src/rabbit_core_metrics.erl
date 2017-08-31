@@ -19,6 +19,7 @@
 -include("rabbit_core_metrics.hrl").
 
 -export([init/0]).
+-export([terminate/0]).
 
 -export([connection_created/2,
          connection_closed/1,
@@ -101,6 +102,11 @@
 init() ->
     [ets:new(Table, [Type, public, named_table, {write_concurrency, true}])
      || {Table, Type} <- ?CORE_TABLES ++ ?CORE_EXTRA_TABLES],
+    ok.
+
+terminate() ->
+    [ets:delete(Table)
+     || {Table, _Type} <- ?CORE_TABLES ++ ?CORE_EXTRA_TABLES],
     ok.
 
 connection_created(Pid, Infos) ->
