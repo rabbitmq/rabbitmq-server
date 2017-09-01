@@ -210,8 +210,10 @@ clean-unpacked-source-dist:
 # archive.
 PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 
-packages package-deb package-rpm package-rpm-fedora \
-package-rpm-suse package-windows package-standalone-macosx \
+packages package-deb package-rpm \
+package-rpm-redhat package-rpm-fedora package-rpm-rhel6 package-rpm-rhel7 \
+package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
+package-windows package-standalone-macosx \
 package-standalone-linux-x86_64 \
 package-standalone-freebsd-x86_64 \
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)

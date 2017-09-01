@@ -34,13 +34,14 @@ all: packages
 # --------------------------------------------------------------------
 
 .PHONY: packages package-deb \
-	package-rpm package-rpm-fedora \
-	package-rpm-opensuse package-rpm-suse\
+	package-rpm \
+	package-rpm-redhat package-rpm-fedora \
 	package-rpm-rhel6 package-rpm-rhel7 \
+	package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
 	package-windows package-standalone-macosx \
 	package-standalone-linux-x86_64 \
 	package-standalone-freebsd-x86_64 \
-	package-generic-unix 
+	package-generic-unix
 
 PACKAGES_DIR ?= ../PACKAGES
 SOURCE_DIST_FILE ?= $(wildcard $(PACKAGES_DIR)/rabbitmq-server-*.tar.xz)
@@ -74,10 +75,11 @@ packages: package-deb package-rpm package-windows package-generic-unix
 package-deb: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C debs/Debian $(VARS) all $(DO_CLEAN)
 
-package-rpm-suse: package-rpm-opensuse1012 package-rpm-opensuse 
+package-rpm: package-rpm-redhat package-rpm-suse
 	@:
 
-package-rpm: package-rpm-rhel6 package-rpm-rhel7 package-rpm-opensuse
+# FIXME: Why not package-rpm-fedora?
+package-rpm-redhat: package-rpm-rhel6 package-rpm-rhel7
 	@:
 
 package-rpm-fedora: $(SOURCE_DIST_FILE)
@@ -89,11 +91,14 @@ package-rpm-rhel6: $(SOURCE_DIST_FILE)
 package-rpm-rhel7: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=rhel7 all $(DO_CLEAN)
 
-package-rpm-opensuse1012: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=suse1012 all $(DO_CLEAN)
+package-rpm-suse: package-rpm-opensuse package-rpm-sles11
+	@:
 
 package-rpm-opensuse: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=suse all $(DO_CLEAN)
+	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=opensuse all $(DO_CLEAN)
+
+package-rpm-sles11: $(SOURCE_DIST_FILE)
+	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=sles11 all $(DO_CLEAN)
 
 package-windows: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C windows $(VARS) all $(DO_CLEAN)

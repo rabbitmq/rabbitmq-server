@@ -28,13 +28,13 @@ DEFINES = --define 'upstream_version $(VERSION)' \
 
 RPM_OS ?= fedora
 
-ifeq "$(RPM_OS)" "suse1012"
+ifeq "$(RPM_OS)" "sles11"
 FUNCTION_LIBRARY=
 REQUIRES=/sbin/chkconfig /sbin/service
-OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .suse_1012' --define 'suse_version 1012'
+OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .sles11' --define 'suse_version 1012'
 SPEC_DEFINES=--define 'group_tag Productivity/Networking/Other'
 START_PROG=startproc
-else ifeq "$(RPM_OS)" "suse"
+else ifeq "$(RPM_OS)" "opensuse"
 FUNCTION_LIBRARY=
 REQUIRES=/sbin/chkconfig /sbin/service
 OS_DEFINES=--define '_unitdir /usr/lib/systemd/system' --define 'dist .suse' --define 'suse_version 1315'
