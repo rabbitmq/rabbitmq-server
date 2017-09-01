@@ -690,12 +690,12 @@ await_cluster_recovery(Condition) ->
     ok.
 
 run_outside_applications(Fun, WaitForExistingProcess) ->
-    spawn(fun () ->
-                  %% If our group leader is inside an application we are about
-                  %% to stop, application:stop/1 does not return.
-                  group_leader(whereis(init), self()),
-                  register_outside_app_process(Fun, WaitForExistingProcess)
-          end).
+    spawn_link(fun () ->
+                       %% If our group leader is inside an application we are about
+                       %% to stop, application:stop/1 does not return.
+                       group_leader(whereis(init), self()),
+                       register_outside_app_process(Fun, WaitForExistingProcess)
+               end).
 
 register_outside_app_process(Fun, WaitForExistingProcess) ->
     %% Ensure only one such process at a time, the exit(badarg) is
