@@ -20,7 +20,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
--include_lib("rabbitmq_peer_discovery_k8s/include/rabbit_peer_discovery_k8s.hrl").
+-include("rabbit_peer_discovery_k8s.hrl").
 
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0,
          post_registration/0, lock/1, unlock/1]).
