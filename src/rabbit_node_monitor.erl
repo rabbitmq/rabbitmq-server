@@ -691,6 +691,12 @@ await_cluster_recovery(Condition) ->
 
 run_outside_applications(Fun, WaitForExistingProcess) ->
     spawn_link(fun () ->
+                       %% Ignore exit messages from the monitor - the link is needed
+                       %% to ensure the monitor detects abnormal exits from this process
+                       %% and can reset the 'restarting' status on the autoheal, avoiding
+                       %% a deadlock. The monitor is restarted when rabbit does, so messages
+                       %% in the other direction should be ignored.
+                       process_flag(trap_exit, true),
                        %% If our group leader is inside an application we are about
                        %% to stop, application:stop/1 does not return.
                        group_leader(whereis(init), self()),
