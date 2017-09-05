@@ -42,4 +42,3 @@ spec:
             value: "true"
           - name: RABBITMQ_NODENAME
             value: "rabbit@$(MY_POD_IP)"
- 

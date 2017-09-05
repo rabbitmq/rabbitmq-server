@@ -1,5 +1,6 @@
-The example shows how to deploy RabbitMQ on K8s [StatefulSet  Controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/). It uses the Pivotal Docker image: [pivotalrabbitmq/rabbitmq-autocluster:3.7-k8s-BETA](https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-autocluster/)  
-
+The example shows how to deploy RabbitMQ on K8s using [StatefulSet  Controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/). 
+----
+The example uses Pivotal Docker image: [pivotalrabbitmq/rabbitmq-autocluster:3.7-k8s-BETA](https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-autocluster/)  
 
 1. Install [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 
