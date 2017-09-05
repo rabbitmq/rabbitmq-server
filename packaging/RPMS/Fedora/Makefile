@@ -27,6 +27,7 @@ DEFINES = --define 'upstream_version $(VERSION)' \
 	  --define '_sysconfdir /etc' --define '_localstatedir /var'
 
 RPM_OS ?= fedora
+DO_SIGN ?= yes
 
 ifeq "$(RPM_OS)" "sles11"
 FUNCTION_LIBRARY=
@@ -34,6 +35,7 @@ REQUIRES=/sbin/chkconfig /sbin/service
 OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .sles11' --define 'suse_version 1012'
 SPEC_DEFINES=--define 'group_tag Productivity/Networking/Other'
 START_PROG=startproc
+DO_SIGN=no
 else ifeq "$(RPM_OS)" "opensuse"
 FUNCTION_LIBRARY=
 REQUIRES=/sbin/chkconfig /sbin/service
@@ -93,12 +95,21 @@ package: clean
 # useful informations on the key so the caller can double-check if he
 # wants.
 ifneq ($(SIGNING_KEY),)
+ifeq ($(DO_SIGN),yes)
 	@echo
 	@echo '--------------------------------------------------'
 	@echo "The package will be signed with key $(SIGNING_KEY):"
 	@gpg -K "$(SIGNING_KEY)"
 	@echo '--------------------------------------------------'
 	@echo
+else
+	@echo
+	@echo '--------------------------------------------------'
+	@echo "Packages of type '$(RPM_OS)' are not signed because"
+	@echo "the signature can't be verified on the target OS"
+	@echo '--------------------------------------------------'
+	@echo
+endif
 endif
 # Create the build tree and populate it.
 	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
@@ -135,6 +146,7 @@ endif
 # rpm(1) in a new session and redirect its stdin so that it doesn't
 # prompt for a passphrase.
 # https://ask.fedoraproject.org/en/question/56107/can-gpg-agent-be-used-when-signing-rpm-packages/?answer=76395#post-id-76395
+ifeq ($(DO_SIGN),yes)
 ifneq ($(SIGNING_KEY),)
 	setsid \
 		rpm --addsign \
@@ -143,6 +155,7 @@ ifneq ($(SIGNING_KEY),)
 		SRPMS/*-$(RPM_VERSION)*.rpm \
 		RPMS/noarch/*-$(RPM_VERSION)*.rpm \
 		< /dev/null
+endif
 endif
 # If $(PACKAGES_DIR) is specified, move all package files to that
 # location.
