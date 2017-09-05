@@ -32,7 +32,7 @@ spec:
             command: ["rabbitmqctl", "status"]
           initialDelaySeconds: 10
           timeoutSeconds: 5
-        imagePullPolicy: Never
+        imagePullPolicy: Always
         env:
           - name: MY_POD_IP
             valueFrom:
@@ -42,9 +42,4 @@ spec:
             value: "true"
           - name: RABBITMQ_NODENAME
             value: "rabbit@$(MY_POD_IP)"
-          - name: K8S_ADDRESS_TYPE
-            value: "ip" 
-          - name: CLEANUP_INTERVAL
-            value: "10"
-          - name: CLEANUP_ONLY_LOG_WARNING
-            value: "false"
+ 
