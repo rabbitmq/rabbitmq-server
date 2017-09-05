@@ -623,6 +623,10 @@ handle_info(ping_up_nodes, State) ->
     [cast(N, keepalive) || N <- alive_nodes() -- [node()]],
     {noreply, ensure_keepalive_timer(State#state{keepalive_timer = undefined})};
 
+handle_info({'EXIT', _, _} = Info, State = #state{autoheal = AState0}) ->
+    AState = rabbit_autoheal:process_down(Info, AState0),
+    {noreply, State#state{autoheal = AState}};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -686,12 +690,18 @@ await_cluster_recovery(Condition) ->
     ok.
 
 run_outside_applications(Fun, WaitForExistingProcess) ->
-    spawn(fun () ->
-                  %% If our group leader is inside an application we are about
-                  %% to stop, application:stop/1 does not return.
-                  group_leader(whereis(init), self()),
-                  register_outside_app_process(Fun, WaitForExistingProcess)
-          end).
+    spawn_link(fun () ->
+                       %% Ignore exit messages from the monitor - the link is needed
+                       %% to ensure the monitor detects abnormal exits from this process
+                       %% and can reset the 'restarting' status on the autoheal, avoiding
+                       %% a deadlock. The monitor is restarted when rabbit does, so messages
+                       %% in the other direction should be ignored.
+                       process_flag(trap_exit, true),
+                       %% If our group leader is inside an application we are about
+                       %% to stop, application:stop/1 does not return.
+                       group_leader(whereis(init), self()),
+                       register_outside_app_process(Fun, WaitForExistingProcess)
+               end).
 
 register_outside_app_process(Fun, WaitForExistingProcess) ->
     %% Ensure only one such process at a time, the exit(badarg) is
