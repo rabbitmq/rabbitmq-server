@@ -294,7 +294,7 @@ unreachable_nodes() ->
 -spec service_discovery_nodes() -> [node()].
 service_discovery_nodes() ->
     Module = rabbit_peer_discovery:backend(),
-    case Module:list_nodes() of
+    case rabbit_peer_discovery:normalize(Module:list_nodes()) of
         {ok, {Nodes, _Type}} ->
             rabbit_log:debug("Peer discovery cleanup: ~p returned ~p",
                              [Module, Nodes]),
