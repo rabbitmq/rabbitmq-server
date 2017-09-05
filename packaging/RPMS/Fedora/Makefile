@@ -33,7 +33,6 @@ FUNCTION_LIBRARY=
 REQUIRES=/sbin/chkconfig /sbin/service
 OS_DEFINES=--define '_initrddir /etc/init.d' --define 'dist .sles11' --define 'suse_version 1012'
 SPEC_DEFINES=--define 'group_tag Productivity/Networking/Other'
-RPMSIGN_DEFINES=--define '%__gpg_sign_cmd %{__gpg} gpg --force-v3-sigs --digest-algo=sha1 --batch --no-verbose --no-armor --passphrase-fd 3 --no-secmem-warning -u "%{_gpg_name}" -sbo %{__signature_filename} %{__plaintext_filename}'
 START_PROG=startproc
 else ifeq "$(RPM_OS)" "opensuse"
 FUNCTION_LIBRARY=
@@ -141,7 +140,6 @@ ifneq ($(SIGNING_KEY),)
 		rpm --addsign \
 		--define '_signature gpg' \
 		--define '_gpg_name $(SIGNING_KEY)' \
-		$(RPMSIGN_DEFINES) \
 		SRPMS/*-$(RPM_VERSION)*.rpm \
 		RPMS/noarch/*-$(RPM_VERSION)*.rpm \
 		< /dev/null
