@@ -1,4 +1,4 @@
-PROJECT = rabbitmq_random
+PROJECT = rabbitmq_random_exchange
 PROJECT_DESCRIPTION = RabbitMQ Random Exchange
 
 DEPS = rabbit_common rabbit
