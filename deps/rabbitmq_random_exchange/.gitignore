@@ -11,4 +11,4 @@ erl_crash.dump
 /logs/
 /plugins/
 
-/rabbitmq_random.d
+/rabbitmq_random_exchange.d
