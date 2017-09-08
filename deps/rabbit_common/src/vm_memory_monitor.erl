@@ -225,7 +225,7 @@ start_link(MemFraction, AlarmSet, AlarmClear) ->
                           [MemFraction, {AlarmSet, AlarmClear}], []).
 
 init([MemFraction, AlarmFuns]) ->
-    TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
+    TRef = erlang:send_after(?DEFAULT_MEMORY_CHECK_INTERVAL, self(), update),
     State = #state { timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                      timer      = TRef,
                      alarmed    = false,
@@ -243,8 +243,14 @@ handle_call(get_check_interval, _From, State) ->
     {reply, State#state.timeout, State};
 
 handle_call({set_check_interval, Timeout}, _From, State) ->
-    {ok, cancel} = timer:cancel(State#state.timer),
-    {reply, ok, State#state{timeout = Timeout, timer = start_timer(Timeout)}};
+    State1 = case erlang:cancel_timer(State#state.timer) of
+        false ->
+            State#state{timeout = Timeout};
+        _ ->
+            State#state{timeout = Timeout,
+                        timer = erlang:send_after(Timeout, self(), update)}
+    end,
+    {reply, ok, State1};
 
 handle_call(get_memory_limit, _From, State) ->
     {reply, State#state.memory_limit, State};
@@ -256,7 +262,10 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(update, State) ->
-    {noreply, internal_update(State)};
+    erlang:cancel_timer(State#state.timer),
+    State1 = internal_update(State),
+    TRef = erlang:send_after(State1#state.timeout, self(), update),
+    {noreply, State1#state{ timer = TRef }};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -380,10 +389,6 @@ emit_update_info(AlarmState, MemUsed, MemLimit) ->
     rabbit_log:info(
       "vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
       [AlarmState, MemUsed, MemLimit]).
-
-start_timer(Timeout) ->
-    {ok, TRef} = timer:send_interval(Timeout, update),
-    TRef.
 
 %% According to http://msdn.microsoft.com/en-us/library/aa366778(VS.85).aspx
 %% Windows has 2GB and 8TB of address space for 32 and 64 bit accordingly.
