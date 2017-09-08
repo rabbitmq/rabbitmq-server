@@ -27,17 +27,20 @@ Then run the following command:
 rabbitmq-plugins enable rabbitmq_recent_history_exchange
 ```
 
-## Building from Source ##
+## Building from Source
 
-Install and setup the RabbitMQ Public Umbrella as explained here: [http://www.rabbitmq.com/plugin-development.html#getting-started](http://www.rabbitmq.com/plugin-development.html#getting-started).
+Please see [RabbitMQ Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
 
-Then `cd` into the umbrella folder and type:
+To build the plugin:
 
-    $ git clone git://github.com/videlalvaro/rabbitmq-recent-history-exchange.git
-    $ cd rabbitmq-recent-history-exchange
-    $ make
+    git clone git://github.com/rabbitmq/rabbitmq-recent-history-exchange.git
+    cd rabbitmq-recent-history-exchange
+    make
 
-Finally copy all the `*.ez` files inside the `dist` folder to the `$RABBITMQ_HOME/plugins` folder. Don't copy the file `rabbit_common-x.y.z` since it's not needed inside the broker installation.
+Then copy all the `*.ez` files inside the `plugins` folder to the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html)
+and enable the plugin:
+
+    [sudo] rabbitmq-plugins enable rabbitmq_recent_history_exchange
 
 ## Usage ##
 
