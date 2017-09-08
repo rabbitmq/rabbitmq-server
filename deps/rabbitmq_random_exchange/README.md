@@ -9,7 +9,7 @@ There is no weighting or anything, so maybe load "balancing" might be a bit
 of a misnomer. It uses Erlang's crypto:rand_uniform/2 function, if you're 
 interested.
 
-## Installation ##
+## Installation
 
 Install the corresponding .ez files from our
 [Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
@@ -20,17 +20,21 @@ Then run the following command:
 rabbitmq-plugins enable rabbitmq_random_exchange
 ```
 
-## Building from Source ##
+## Building from Source
 
-Install and setup the RabbitMQ Public Umbrella as explained here: [http://www.rabbitmq.com/plugin-development.html#getting-started](http://www.rabbitmq.com/plugin-development.html#getting-started).
+Please see [RabbitMQ Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
 
-Then `cd` into the umbrella folder and type:
+To build the plugin:
 
-    git clone git://github.com//rabbitmq-random-exchange.git
+    git clone git://github.com/rabbitmq/rabbitmq-random-exchange.git
     cd rabbitmq-random-exchange
     make
 
-Finally copy all the `*.ez` files inside the `dist` folder to the `$RABBITMQ_HOME/plugins` folder. Don't copy the file `rabbit_common-x.y.z` since it's not needed inside the broker installation.
+Then copy all the `*.ez` files inside the `plugins` folder to the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html)
+and enable the plugin:
+
+    [sudo] rabbitmq-plugins enable rabbitmq_random_exchange
+
 
 ## Usage
 
