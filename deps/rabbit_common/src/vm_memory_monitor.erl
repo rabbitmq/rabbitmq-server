@@ -54,6 +54,8 @@
 
 -include("rabbit_memory.hrl").
 
+-define(MEM_CACHE_EXP, 500).
+
 %%----------------------------------------------------------------------------
 
 -type vm_memory_high_watermark() :: (float() | {'absolute', integer() | string()}).
@@ -111,15 +113,27 @@ get_memory_limit() ->
 
 get_memory_use(bytes) ->
     MemoryLimit = get_memory_limit(),
-    {get_process_memory(), case MemoryLimit > 0.0 of
+    {get_process_memory_cached(), case MemoryLimit > 0.0 of
                                true  -> MemoryLimit;
                                false -> infinity
                            end};
 get_memory_use(ratio) ->
     MemoryLimit = get_memory_limit(),
     case MemoryLimit > 0.0 of
-        true  -> get_process_memory() / MemoryLimit;
+        true  ->
+            Cached = get_process_memory_cached(),
+            Cached / MemoryLimit;
         false -> infinity
+    end.
+
+get_process_memory_cached() ->
+    Now = time_compat:erlang_system_time(milli_seconds),
+    case ets:lookup(?MODULE, memory) of
+        [{memory, Val, ExpTime}] when ExpTime >= Now -> Val;
+        _ ->
+            Mem = get_process_memory(),
+            ets:insert(?MODULE, {memory, Mem, Now + ?MEM_CACHE_EXP}),
+            Mem
     end.
 
 %% Memory reported by erlang:memory(total) is not supposed to
@@ -225,6 +239,7 @@ start_link(MemFraction, AlarmSet, AlarmClear) ->
                           [MemFraction, {AlarmSet, AlarmClear}], []).
 
 init([MemFraction, AlarmFuns]) ->
+    ets:new(?MODULE, [named_table, public]),
     TRef = erlang:send_after(?DEFAULT_MEMORY_CHECK_INTERVAL, self(), update),
     State = #state { timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                      timer      = TRef,
