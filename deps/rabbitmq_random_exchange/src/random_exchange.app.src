@@ -1,7 +1,7 @@
 {application, random_exchange,
  [
   {description, "RabbitMQ Random Exchange Plugin"},
-  {vsn, "0.1.0"},
+  {vsn, "0.9.0"},
   {modules, []},
   {registered, []},
   {env, []},

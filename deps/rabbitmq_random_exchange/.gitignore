@@ -1,4 +1,14 @@
 .DS_Store
-deps
-dist
-ebin
+erl_crash.dump
+.sw?
+.*.sw?
+*.beam
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/logs/
+/plugins/
+
+/rabbitmq_random.d
