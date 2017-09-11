@@ -1,15 +1,24 @@
 #!/bin/sh
+# vim:sw=2:et:
 
 set -e
 
-SPEC=$1
-PACKAGE_VERSION=$2
+case $# in
+  1)
+    SPEC=$(dirname "$0")/../rabbitmq-server.spec
+    PACKAGE_VERSION=$1
+    ;;
+  2)
+    SPEC=$1
+    PACKAGE_VERSION=$2
+    ;;
+esac
 
 SCRIPT=$(basename "$0")
 SCRIPTS_DIR=$(dirname "$0")
 
 if test -z "$SPEC" -o ! -f "$SPEC" -o -z "$PACKAGE_VERSION"; then
-    echo "Syntax: $SCRIPT <spec file> <rpm version>" 1>&2
+    echo "Syntax: $SCRIPT [<spec file>] <rpm version>" 1>&2
     exit 64
 fi
 
