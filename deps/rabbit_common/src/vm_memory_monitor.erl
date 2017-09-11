@@ -54,7 +54,7 @@
 
 -include("rabbit_memory.hrl").
 
--define(MEM_CACHE_EXP, 500).
+-define(MEM_CACHE_EXP, 1000).
 
 %%----------------------------------------------------------------------------
 
@@ -389,7 +389,7 @@ parse_mem_limit(MemLimit) ->
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed      = Alarmed,
                                  alarm_funs   = {AlarmSet, AlarmClear} }) ->
-    MemUsed = get_process_memory(),
+    MemUsed = get_process_memory_cached(),
     NewAlarmed = MemUsed > MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} -> emit_update_info(set, MemUsed, MemLimit),
