@@ -372,6 +372,29 @@ tcp_listen_options.exit_on_close = false",
   "tcp_listen_options.linger.timeout = 100",
   [{rabbit,[{tcp_listen_options,[{linger,{false,100}}]}]}],
   []},
+
+ {cluster_formation_randomized_startup_delay_both_values,
+  "cluster_formation.randomized_startup_delay_range.min = 10
+   cluster_formation.randomized_startup_delay_range.max = 30",
+  [{rabbit, [{cluster_formation, [
+                                  {randomized_delay_range, {10, 30}}
+                                  ]}]}],
+  []},
+
+ {cluster_formation_randomized_startup_delay_min_only,
+  "cluster_formation.randomized_startup_delay_range.min = 10",
+  [{rabbit, [{cluster_formation, [
+                                  {randomized_delay_range, {10, 60}}
+                                  ]}]}],
+  []},
+
+ {cluster_formation_randomized_startup_delay_max_only,
+  "cluster_formation.randomized_startup_delay_range.max = 30",
+  [{rabbit, [{cluster_formation, [
+                                  {randomized_delay_range, {5, 30}}
+                                  ]}]}],
+  []},
+
  {cluster_formation_dns,
   "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_dns
    cluster_formation.dns.hostname = 192.168.0.2.xip.io

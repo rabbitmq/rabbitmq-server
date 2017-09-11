@@ -833,6 +833,32 @@ fun(Conf) ->
     end
 end}.
 
+%% Cluster formation: Randomized startup delay
+
+{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_delay_range",
+    [{datatype, integer}]}.
+{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_delay_range",
+    [{datatype, integer}]}.
+
+{translation, "rabbit.cluster_formation.randomized_delay_range",
+fun(Conf) ->
+    Min = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.min", Conf, undefined),
+    Max = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.max", Conf, undefined),
+
+    case {Min, Max} of
+        {undefined, undefined} ->
+            cuttlefish:unset();
+        {undefined, Max}       ->
+            %% fallback default
+            {5, Max};
+        {Min, undefined}       ->
+            %% fallback default
+            {Min, 60};
+        {Min, Max}             ->
+            {Min, Max}
+    end
+end}.
+
 %% Classic config-driven peer discuvery backend.
 %%
 %% Make clustering happen *automatically* at startup - only applied
