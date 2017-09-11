@@ -80,17 +80,23 @@ connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
 
 connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
     case rabbit:is_running() of
-        true  -> case AuthFun() of
-                     {ok, User = #user{username = Username}} ->
-                         notify_auth_result(Username,
-                           user_authentication_success, []),
-                         connect1(User, VHost, Protocol, Pid, Infos);
-                     {refused, Username, Msg, Args} ->
-                         notify_auth_result(Username,
-                           user_authentication_failure,
-                           [{error, rabbit_misc:format(Msg, Args)}]),
-                         {error, {auth_failure, "Refused"}}
-                 end;
+        true  ->
+            case whereis(rabbit_direct_client_sup) of
+                undefined ->
+                    {error, broker_is_booting};
+                _ ->
+                    case AuthFun() of
+                        {ok, User = #user{username = Username}} ->
+                            notify_auth_result(Username,
+                                user_authentication_success, []),
+                            connect1(User, VHost, Protocol, Pid, Infos);
+                         {refused, Username, Msg, Args} ->
+                            notify_auth_result(Username,
+                                user_authentication_failure,
+                                [{error, rabbit_misc:format(Msg, Args)}]),
+                            {error, {auth_failure, "Refused"}}
+                    end
+            end;
         false -> {error, broker_not_found_on_node}
     end.
 
