@@ -35,7 +35,7 @@
 %%----------------------------------------------------------------------------
 
 description() ->
-    [{description, <<"AMQP topic exchange, as per the AMQP specification">>}].
+    [{description, <<"AMQP 0-9-1 topic exchange, a built-in type">>}].
 
 serialise_events() -> false.
 

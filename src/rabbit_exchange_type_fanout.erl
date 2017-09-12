@@ -32,7 +32,7 @@
                     {enables,     kernel_ready}]}).
 
 description() ->
-    [{description, <<"AMQP fanout exchange, as per the AMQP specification">>}].
+    [{description, <<"AMQP 0-9-1 fanout exchange, a built-in type">>}].
 
 serialise_events() -> false.
 

@@ -37,7 +37,7 @@
             boolean().
 
 description() ->
-    [{description, <<"AMQP headers exchange, as per the AMQP specification">>}].
+    [{description, <<"AMQP 0-9-1 headers exchange, a built-in type">>}].
 
 serialise_events() -> false.
 
