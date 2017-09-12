@@ -12,7 +12,7 @@ interested.
 ## Installation
 
 Install the corresponding .ez files from our
-[Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
+[GitHub releases](https://github.com/rabbitmq/rabbitmq-random-exchange/releases) or [Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
 
 Then run the following command:
 
@@ -38,17 +38,50 @@ and enable the plugin:
 
 ## Usage
 
-### Creating an exchange
-
 To create a _random_, just declare an exchange providing the type `"x-random"`.
 
 ```java
 channel.exchangeDeclare("logs", "x-random");
 ```
 
-### Usage
+and bind several queues to it. Routing keys will be ignored by modern releases
+of this exchange plugin: the binding and its target queue (exchange) are picked
+entirely randomly.
 
-To use it, declare an exchange of type "x-random".
+### Extended Example
+
+This example uses [Bunny](http://rubybunny.info) and demonstrates
+how the plugin is mean to be used with 3 queues:
+
+``` ruby
+#!/usr/bin/env ruby
+
+require 'bundler'
+Bundler.setup(:default)
+require 'bunny'
+
+c  = Bunny.new; c.start
+ch = c.create_channel
+
+rx  = ch.exchange("x.rnd", durable: true, type: "x-random")
+
+q1 = ch.queue("r1").bind(rx)
+q2 = ch.queue("r2").bind(rx)
+q3 = ch.queue("r3").bind(rx)
+
+ch.confirm_select
+
+100.times do
+  rx.publish(rand.to_s, routing_key: rand.to_s)
+end
+
+ch.wait_for_confirms
+
+# the consumer part is left out: see
+# management UI
+
+puts "Done"
+```
 
 
 ## License
