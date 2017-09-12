@@ -1,15 +1,17 @@
 # RabbitMQ Random Exchange Type
 
-This exchange plugin is a way to distribute messages among N queues to avoid the [Single
-Giant Queue anti-pattern](http://www.rabbitmq.com/queues.html). It was originally
-developed by [Jon Brisbin](https://github.com/jbrisbin).
+This exchange plugin is a way to distribute messages among N queues to avoid the [Single Giant Queue anti-pattern](http://www.rabbitmq.com/queues.html).
+It was originally developed by [Jon Brisbin](https://github.com/jbrisbin).
 
 [rabbitmq-sharding/](https://github.com/rabbitmq/rabbitmq-sharding/) and [rabbitmq-consistent-hash-exchange](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange)
 are two other plugins that approach the same problem in a different way or with
 a different set of features.
 
 Unlike the original version by Jon, this iteration of the plugin **will completely ignore routing keys**
-(much like the fanout exchange) and pick a binding/destination at random.
+(much like the fanout exchange) and pick a binding/destination at random. If the original
+behaviour (using routing key the same way the direct exchange does but picking
+target queue/exchange from N bindings is randomized) is desired, [exchange-to-exchange bindings](http://www.rabbitmq.com/e2e.html)
+can be used to combine a direct exchange with this one.
 
 
 ## Installation
