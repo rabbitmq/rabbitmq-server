@@ -576,6 +576,7 @@ declare_args() ->
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
      {<<"x-max-priority">>,            fun check_non_neg_int_arg/2},
+     {<<"x-overflow">>,                fun check_overflow/2},
      {<<"x-queue-mode">>,              fun check_queue_mode/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
@@ -621,6 +622,14 @@ check_dlxrk_arg({longstr, _}, Args) ->
         _         -> ok
     end;
 check_dlxrk_arg({Type,    _}, _Args) ->
+    {error, {unacceptable_type, Type}}.
+
+check_overflow({longstr, Val}, _Args) ->
+    case lists:member(Val, [<<"drop_head">>, <<"reject_publish">>]) of
+        true  -> ok;
+        false -> {error, invalid_overflow}
+    end;
+check_overflow({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 check_queue_mode({longstr, Val}, _Args) ->

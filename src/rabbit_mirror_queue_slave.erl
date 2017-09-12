@@ -302,6 +302,7 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender, flow = Flow}, true},
     %% We are acking messages to the channel process that sent us
     %% the message delivery. See
     %% rabbit_amqqueue_process:handle_ch_down for more info.
+    %% TODO: reject publishes
     maybe_flow_ack(Sender, Flow),
     noreply(maybe_enqueue_message(Delivery, State));
 

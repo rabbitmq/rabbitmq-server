@@ -44,7 +44,8 @@ groups() ->
           auto_resume_no_ccn_client,
           confirms_survive_stop,
           confirms_survive_sigkill,
-          confirms_survive_policy
+          confirms_survive_policy,
+          rejects_survive_stop
         ]}
     ].
 
@@ -156,6 +157,10 @@ confirms_survive_stop(Cf)    -> confirms_survive(Cf, fun stop/2).
 confirms_survive_sigkill(Cf) -> confirms_survive(Cf, fun sigkill/2).
 confirms_survive_policy(Cf)  -> confirms_survive(Cf, fun policy/2).
 
+rejects_survive_stop(Cf) -> rejecets_survive(Cf, fun stop/2).
+rejects_survive_sigkill(Cf) -> rejecets_survive(Cf, fun sigkill/2).
+rejects_survive_policy(Cf) -> rejecets_survive(Cf, fun policy/2).
+
 %%----------------------------------------------------------------------------
 
 consume_survives(Config, DeathFun, CancelOnFailover) ->
@@ -212,6 +217,38 @@ confirms_survive(Config, DeathFun) ->
     DeathFun(Config, A),
     rabbit_ha_test_producer:await_response(ProducerPid),
     ok.
+
+rejecets_survive(Config, DeathFun) ->
+    [A, B, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Msgs = rabbit_ct_helpers:cover_work_factor(Config, 20000),
+    Node1Channel = rabbit_ct_client_helpers:open_channel(Config, A),
+    Node2Channel = rabbit_ct_client_helpers:open_channel(Config, B),
+
+    %% declare the queue on the master, mirrored to the two slaves
+    Queue = <<"test_rejects">>,
+    amqp_channel:call(Node1Channel,#'queue.declare'{queue       = Queue,
+                                                    auto_delete = false,
+                                                    durable     = true,
+                                                    arguments = [{<<"x-max-length">>, long, 1},
+                                                                 {<<"x-overflow">>, longstr, <<"reject_publish">>}]}),
+    Payload = <<"there can be only one">>,
+    amqp_channel:call(Node1Channel,
+                      #'basic.publish'{routing_key = Queue},
+                      #amqp_msg{payload = Payload}),
+
+    %% send a bunch of messages from the producer. Tolerating nacks.
+    ProducerPid = rabbit_ha_test_producer:create(Node2Channel, Queue,
+                                                 self(), true, Msgs, nacks),
+    DeathFun(Config, A),
+    rabbit_ha_test_producer:await_response(ProducerPid),
+
+    {#'basic.get_ok'{}, #amqp_msg{payload = Payload}} =
+        amqp_channel:call(Node2Channel, #'basic.get'{queue = Queue}),
+    %% There is only one message.
+    #'basic.get_empty'{} = amqp_channel:call(Node2Channel, #'basic.get'{queue = Queue}),
+    ok.
+
+
 
 stop(Config, Node) ->
     rabbit_ct_broker_helpers:stop_node_after(Config, Node, 50).

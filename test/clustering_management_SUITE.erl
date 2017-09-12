@@ -704,7 +704,7 @@ assert_failure(Fun) ->
         {error_string, Reason}         -> Reason;
         {badrpc, {'EXIT', Reason}}     -> Reason;
         {badrpc_multi, Reason, _Nodes} -> Reason;
-        Other                          -> exit({expected_failure, Other})
+        Other                          -> error({expected_failure, Other})
     end.
 
 stop_app(Node) ->
