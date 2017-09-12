@@ -1,13 +1,16 @@
 # RabbitMQ Random Exchange Type
 
-This exchange type is for load-balancing among consumers. It's basically 
-a direct exchange, with the exception that, instead of each consumer bound 
-to that exchange with the same routing key getting a copy of the message, 
-the exchange type randomly selects a queue to route to.
+This exchange plugin is a way to distribute messages among N queues to avoid the [Single
+Giant Queue anti-pattern](http://www.rabbitmq.com/queues.html). It was originally
+developed by [Jon Brisbin](https://github.com/jbrisbin).
 
-There is no weighting or anything, so maybe load "balancing" might be a bit 
-of a misnomer. It uses Erlang's crypto:rand_uniform/2 function, if you're 
-interested.
+[rabbitmq-sharding/](https://github.com/rabbitmq/rabbitmq-sharding/) and [rabbitmq-consistent-hash-exchange](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange)
+are two other plugins that approach the same problem in a different way or with
+a different set of features.
+
+Unlike the original version by Jon, this iteration of the plugin **will completely ignore routing keys**
+(much like the fanout exchange) and pick a binding/destination at random.
+
 
 ## Installation
 
