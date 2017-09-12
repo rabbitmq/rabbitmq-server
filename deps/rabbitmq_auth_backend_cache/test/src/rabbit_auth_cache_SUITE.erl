@@ -153,7 +153,7 @@ random_timing(Config) ->
 
 random_timing(Config, MaxTTL, Parallel) ->
     AuthCacheModule = ?config(auth_cache_module, Config),
-    RandomTTls = [{N, rabbit_misc:random(MaxTTL) + 50} || N <- lists:seq(1, Parallel)],
+    RandomTTls = [{N, rabbit_misc:random(MaxTTL) + 100} || N <- lists:seq(1, Parallel)],
     Pid = self(),
     Ref = make_ref(),
     Pids = lists:map(
@@ -166,7 +166,7 @@ random_timing(Config, MaxTTL, Parallel) ->
                     ok = AuthCacheModule:put(Key, Value, TTL),
                     {ok, Value} = AuthCacheModule:get(Key),
                     % 20ms expiry error
-                    timer:sleep(TTL + 20),
+                    timer:sleep(TTL + 40),
                     {error, not_found} = AuthCacheModule:get(Key),
                     Pid ! {ok, self(), Ref}
                 end)
