@@ -103,6 +103,14 @@ find %{buildroot} -path "*%{_initrddir}*" -type f -printf "/%%P\n" >>%{_builddir
 
 %pre
 
+# If the log directory exists, record its permissions so we can restore
+# them after an upgrade. The goal is to set the permissions to 0750 on a
+# fresh install but to keep permissions set by the user or a different
+# default from a previous package.
+if test -d /var/log/rabbitmq; then
+    stat --format '%a' /var/log/rabbitmq > /var/log/rabbitmq/permissions
+fi
+
 if [ $1 -gt 1 ]; then
   # Upgrade - stop previous instance of rabbitmq-server init.d (this
   # will also activate systemd if it was used) script.
@@ -140,6 +148,13 @@ if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitm
 fi
 
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
+
+# Restore permissions saved during %pre. See comment in %pre for the
+# reason behind this.
+if test -f /var/log/rabbitmq/permissions; then
+    chmod "$(cat /var/log/rabbitmq/permissions)" /var/log/rabbitmq
+    rm -f /var/log/rabbitmq/permissions
+fi
 
 # Update profile to enable autocompletion
 . /etc/profile
@@ -203,9 +218,8 @@ systemctl try-restart %{name}.service >/dev/null 2>&1 || :
 %defattr(-,root,root,-)
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq/mnesia
-%attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
 %attr(2750, -, rabbitmq) %dir %{_sysconfdir}/rabbitmq
- 
 
 %{_sysconfdir}/profile.d/rabbitmqctl-autocomplete.sh
 %{_datarootdir}/zsh/vendor-functions/_enable_rabbitmqctl_completion
