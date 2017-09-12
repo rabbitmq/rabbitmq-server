@@ -181,7 +181,7 @@ $(MIX_DIST_EZS): $(mix_task_archive_deps)
 		$(MIX) do deps.get, deps.compile, compile, archive.build.all \
 		-e -o $(abspath $(DIST_DIR)) --skip "rabbit $(ERLANGMK_DIST_APPS)"
 
-MIX_TASK_ARCHIVE_DEPS_URL = https://github.com/hairyhum/mix_task_archive_deps/releases/download/$(MIX_TASK_ARCHIVE_DEPS_VERSION)/mix_task_archive_deps-$(MIX_TASK_ARCHIVE_DEPS_VERSION).ez
+MIX_TASK_ARCHIVE_DEPS_URL = https://github.com/rabbitmq/mix_task_archive_deps/releases/download/$(MIX_TASK_ARCHIVE_DEPS_VERSION)/mix_task_archive_deps-$(MIX_TASK_ARCHIVE_DEPS_VERSION).ez
 
 $(mix_task_archive_deps):
 	$(gen_verbose) mix archive.install --force $(MIX_TASK_ARCHIVE_DEPS_URL)
