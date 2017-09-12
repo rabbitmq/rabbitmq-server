@@ -86,26 +86,31 @@ connect(Creds, VHost, Protocol, Pid, Infos) ->
     AuthFun = auth_fun(Creds, VHost, ExtraAuthProps),
     case rabbit:is_running() of
         true  ->
-            case is_over_connection_limit(VHost, Creds, Pid) of
-                true  ->
-                    {error, not_allowed};
-                false ->
-                    case is_vhost_alive(VHost, Creds, Pid) of
-                        false ->
-                            {error, {internal_error, vhost_is_down}};
+            case whereis(rabbit_direct_client_sup) of
+                undefined ->
+                    {error, broker_is_booting};
+                _ ->
+                    case is_over_connection_limit(VHost, Creds, Pid) of
                         true  ->
-                            case AuthFun() of
-                                {ok, User = #user{username = Username}} ->
-                                    notify_auth_result(Username,
-                                        user_authentication_success, []),
-                                    connect1(User, VHost, Protocol, Pid, Infos);
-                                {refused, Username, Msg, Args} ->
-                                    notify_auth_result(Username,
-                                        user_authentication_failure,
-                                        [{error, rabbit_misc:format(Msg, Args)}]),
-                                    {error, {auth_failure, "Refused"}}
-                            end
-                    end
+                            {error, not_allowed};
+                        false ->
+                            case is_vhost_alive(VHost, Creds, Pid) of
+                                false ->
+                                    {error, {internal_error, vhost_is_down}};
+                                true  ->
+                                    case AuthFun() of
+                                        {ok, User = #user{username = Username}} ->
+                                            notify_auth_result(Username,
+                                                               user_authentication_success, []),
+                                            connect1(User, VHost, Protocol, Pid, Infos);
+                                        {refused, Username, Msg, Args} ->
+                                            notify_auth_result(Username,
+                                                               user_authentication_failure,
+                                                               [{error, rabbit_misc:format(Msg, Args)}]),
+                                            {error, {auth_failure, "Refused"}}
+                                    end %% AuthFun()
+                            end %% is_vhost_alive
+                    end %% is_over_connection_limit
             end;
         false -> {error, broker_not_found_on_node}
     end.
