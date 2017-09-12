@@ -289,7 +289,7 @@ if "!RABBITMQ_LOGS!"=="" (
         set RABBITMQ_LOGS=!LOGS!
     )
 )
-if not "!RABBITMQ_LOGS" == "-" (
+if not "!RABBITMQ_LOGS!" == "-" (
     if not exist "!RABBITMQ_LOGS!" (
         for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do mkdir %%~dpF 2>NUL
         copy /y NUL "!RABBITMQ_LOGS!" >NUL
@@ -306,7 +306,7 @@ if "!RABBITMQ_SASL_LOGS!"=="" (
         set RABBITMQ_SASL_LOGS=!SASL_LOGS!
     )
 )
-if not "!RABBITMQ_SASL_LOGS" == "-" (
+if not "!RABBITMQ_SASL_LOGS!" == "-" (
     if not exist "!RABBITMQ_SASL_LOGS!" (
         for /f "delims=" %%F in ("!RABBITMQ_SASL_LOGS!") do mkdir %%~dpF 2>NUL
         copy /y NUL "!RABBITMQ_SASL_LOGS!" >NUL
