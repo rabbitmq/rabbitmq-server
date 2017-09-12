@@ -78,7 +78,6 @@ dep_rabbitmq_peer_discovery_common    = git_rmq rabbitmq-peer-discovery-common $
 dep_rabbitmq_peer_discovery_consul    = git_rmq rabbitmq-peer-discovery-consul $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_peer_discovery_etcd      = git_rmq rabbitmq-peer-discovery-etcd $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_peer_discovery_k8s       = git_rmq rabbitmq-peer-discovery-k8s $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_random_exchange          = git_rmq rabbitmq-random-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
@@ -108,14 +107,12 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy_commit = 1.0.4
+dep_cowboy_commit = 1.1.2
 dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
-# Last commit of PropEr supporting Erlang R16B03.
-dep_proper_commit = 735d972758d8bd85b12483626fe1b66450d6a6fe
 dep_ranch_commit = 1.3.2
-# Last commit of sockjs support Erlang R16B03 and 17.x.
-dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 5af2b588c812c318b19bc105b577a759c71c3e0a
+dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d36dbf5e1e64942d9b0a1daf
 dep_webmachine_commit = 1.10.8p2
+dep_ranch_proxy_protocol = git git://github.com/heroku/ranch_proxy_protocol.git 1.4.2
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
@@ -158,7 +155,6 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_peer_discovery_consul \
 		      rabbitmq_peer_discovery_etcd \
 		      rabbitmq_peer_discovery_k8s \
-		      rabbitmq_random_exchange \
 		      rabbitmq_recent_history_exchange \
 		      rabbitmq_routing_node_stamp \
 		      rabbitmq_rtopic_exchange \
