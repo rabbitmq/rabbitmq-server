@@ -55,8 +55,6 @@
 
 -include("rabbit_memory.hrl").
 
--define(MEM_CACHE_EXP, 1000).
-
 %%----------------------------------------------------------------------------
 
 -type vm_memory_high_watermark() :: (float() | {'absolute', integer() | string()}).
