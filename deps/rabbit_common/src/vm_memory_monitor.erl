@@ -45,6 +45,7 @@
 
 -record(state, {total_memory,
                 memory_limit,
+                process_memory,
                 memory_config_limit,
                 timeout,
                 timer,
@@ -71,7 +72,7 @@
 -spec get_memory_limit() -> non_neg_integer().
 -spec get_memory_use(bytes) -> {non_neg_integer(),  float() | infinity};
                     (ratio) -> float() | infinity.
-
+-spec get_cached_process_memory_and_limit() -> {non_neg_integer(), non_neg_integer()}.
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
@@ -111,29 +112,20 @@ set_vm_memory_high_watermark(Fraction) ->
 get_memory_limit() ->
     gen_server:call(?MODULE, get_memory_limit, infinity).
 
-get_memory_use(bytes) ->
-    MemoryLimit = get_memory_limit(),
-    {get_process_memory_cached(), case MemoryLimit > 0.0 of
-                               true  -> MemoryLimit;
-                               false -> infinity
-                           end};
-get_memory_use(ratio) ->
-    MemoryLimit = get_memory_limit(),
-    case MemoryLimit > 0.0 of
-        true  ->
-            Cached = get_process_memory_cached(),
-            Cached / MemoryLimit;
-        false -> infinity
-    end.
+get_cached_process_memory_and_limit() ->
+    gen_server:call(?MODULE, get_cached_process_memory_and_limit, infinity).
 
-get_process_memory_cached() ->
-    Now = time_compat:erlang_system_time(milli_seconds),
-    case ets:lookup(?MODULE, memory) of
-        [{memory, Val, ExpTime}] when ExpTime >= Now -> Val;
-        _ ->
-            Mem = get_process_memory(),
-            ets:insert(?MODULE, {memory, Mem, Now + ?MEM_CACHE_EXP}),
-            Mem
+get_memory_use(bytes) ->
+    {ProcessMemory, MemoryLimit} = get_cached_process_memory_and_limit(),
+    {ProcessMemory, case MemoryLimit > 0.0 of
+                        true  -> MemoryLimit;
+                        false -> infinity
+                    end};
+get_memory_use(ratio) ->
+    {ProcessMemory, MemoryLimit} = get_cached_process_memory_and_limit(),
+    case MemoryLimit > 0.0 of
+        true  -> ProcessMemory / MemoryLimit;
+        false -> infinity
     end.
 
 %% Memory reported by erlang:memory(total) is not supposed to
@@ -239,7 +231,6 @@ start_link(MemFraction, AlarmSet, AlarmClear) ->
                           [MemFraction, {AlarmSet, AlarmClear}], []).
 
 init([MemFraction, AlarmFuns]) ->
-    ets:new(?MODULE, [named_table, public]),
     TRef = erlang:send_after(?DEFAULT_MEMORY_CHECK_INTERVAL, self(), update),
     State = #state { timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                      timer      = TRef,
@@ -269,6 +260,9 @@ handle_call({set_check_interval, Timeout}, _From, State) ->
 
 handle_call(get_memory_limit, _From, State) ->
     {reply, State#state.memory_limit, State};
+
+handle_call(get_cached_process_memory_and_limit, _From, State) ->
+    {reply, {State#state.process_memory, State#state.memory_limit}, State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -386,19 +380,19 @@ parse_mem_limit(MemLimit) ->
     ),
     ?DEFAULT_VM_MEMORY_HIGH_WATERMARK.
 
-internal_update(State = #state { memory_limit = MemLimit,
-                                 alarmed      = Alarmed,
-                                 alarm_funs   = {AlarmSet, AlarmClear} }) ->
-    MemUsed = get_process_memory_cached(),
-    NewAlarmed = MemUsed > MemLimit,
+internal_update(State = #state { memory_limit   = MemLimit,
+                                 alarmed        = Alarmed,
+                                 alarm_funs     = {AlarmSet, AlarmClear} }) ->
+    ProcMem = get_process_memory(),
+    NewAlarmed = ProcMem > MemLimit,
     case {Alarmed, NewAlarmed} of
-        {false, true} -> emit_update_info(set, MemUsed, MemLimit),
+        {false, true} -> emit_update_info(set, ProcMem, MemLimit),
                          AlarmSet({{resource_limit, memory, node()}, []});
-        {true, false} -> emit_update_info(clear, MemUsed, MemLimit),
+        {true, false} -> emit_update_info(clear, ProcMem, MemLimit),
                          AlarmClear({resource_limit, memory, node()});
         _             -> ok
     end,
-    State #state {alarmed = NewAlarmed}.
+    State #state {alarmed = NewAlarmed, process_memory = ProcMem}.
 
 emit_update_info(AlarmState, MemUsed, MemLimit) ->
     rabbit_log:info(
