@@ -7,8 +7,12 @@ PROCESS_THRESHOLDS=[[0.75, 'red'],
                     [0.5, 'yellow']];
 
 function fmt_string(str, unknown) {
-    if (unknown == undefined) unknown = UNKNOWN_REPR;
-    if (str == undefined) return unknown;
+    if (unknown == undefined) {
+        unknown = UNKNOWN_REPR;
+    }
+    if (str == undefined) {
+        return unknown;
+    }
     return fmt_escape_html("" + str);
 }
 
@@ -490,11 +494,19 @@ function fmt_maybe_wrap(txt, encoding) {
     return fmt_escape_html(res);
 }
 
+// Note: since the default node name is 'rabbit'
+// we strip it off here to save UI space
 function fmt_node(node_host) {
-    var both = node_host.split('@');
-    var node = both.slice(0, 1);
-    var host = both.slice(1);
-    return node == 'rabbit' ? host : (node + '@' + host);
+    var fmt_node_re = /^rabbit@(.*)$/;
+    function do_fmt_node(nh) {
+        var rslt = null;
+        if (rslt = fmt_node_re.exec(nh)) {
+            return fmt_string(rslt[1]);
+        } else {
+            return fmt_string(nh);
+        }
+    };
+    return do_fmt_node(node_host);
 }
 
 function fmt_object_state(obj) {
@@ -643,7 +655,7 @@ function link_user(name) {
 }
 
 function link_node(name) {
-    return _link_to(name, '#/nodes/' + esc(name))
+    return _link_to(fmt_node(name), '#/nodes/' + esc(name))
 }
 
 function link_policy(vhost, name) {
