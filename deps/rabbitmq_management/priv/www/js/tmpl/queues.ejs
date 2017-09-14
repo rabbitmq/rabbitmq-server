@@ -223,7 +223,7 @@
           <td>
             <select name="node">
               <% for (var i = 0; i < nodes.length; i++) { %>
-              <option value="<%= nodes[i].name %>"><%= fmt_node(nodes[i].name) %></option>
+              <option value="<%= fmt_string(nodes[i].name) %>"><%= fmt_node(nodes[i].name) %></option>
               <% } %>
             </select>
           </td>
