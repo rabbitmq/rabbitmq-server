@@ -380,9 +380,9 @@ parse_mem_limit(MemLimit) ->
     ),
     ?DEFAULT_VM_MEMORY_HIGH_WATERMARK.
 
-internal_update(State = #state { memory_limit   = MemLimit,
-                                 alarmed        = Alarmed,
-                                 alarm_funs     = {AlarmSet, AlarmClear} }) ->
+internal_update(State = #state { memory_limit = MemLimit,
+                                 alarmed      = Alarmed,
+                                 alarm_funs   = {AlarmSet, AlarmClear} }) ->
     ProcMem = get_process_memory(),
     NewAlarmed = ProcMem > MemLimit,
     case {Alarmed, NewAlarmed} of
