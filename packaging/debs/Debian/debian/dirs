@@ -5,6 +5,5 @@ usr/share/man
 var/lib/rabbitmq/mnesia
 var/log/rabbitmq
 etc/logrotate.d
-ets/profile.d
+etc/profile.d
 etc/rabbitmq
-
