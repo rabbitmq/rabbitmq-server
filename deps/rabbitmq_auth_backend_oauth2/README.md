@@ -4,6 +4,15 @@ Allows to use access tokens provided by CF UAA to authorize in RabbitMQ.
 
 This plugin is **experimental** and should not be used until this notice is removed.
 
+### RabbitMQ version
+
+This plugins is developed for RabbitMQ 3.7 which is pending release.
+This plugin **will not work** with any released versions of RabbitMQ
+
+To test the plugin, you should build it yourself, together with RabbitMQ.
+
+You can find build instructions [here](https://github.com/rabbitmq/rabbitmq-public-umbrella)
+
 ### Usage
 
 First, enable the plugin. Then, configure access to UAA:
