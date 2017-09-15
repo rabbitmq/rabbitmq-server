@@ -63,7 +63,7 @@ dep_rabbitmq_java_client              = git_rmq rabbitmq-java-client $(current_r
 dep_rabbitmq_jms_client               = git_rmq rabbitmq-jms-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_jms_cts                  = git_rmq rabbitmq-jms-cts $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_jms_topic_exchange       = git_rmq rabbitmq-jms-topic-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_lvc                      = git_rmq rabbitmq-lvc-plugin $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_lvc_exchange             = git_rmq rabbitmq-lvc-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management               = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management_agent         = git_rmq rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management_exchange      = git_rmq rabbitmq-management-exchange $(current_rmq_ref) $(base_rmq_ref) master
@@ -107,14 +107,12 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy_commit = 1.0.4
+dep_cowboy_commit = 1.1.2
 dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
-# Last commit of PropEr supporting Erlang R16B03.
-dep_proper_commit = 735d972758d8bd85b12483626fe1b66450d6a6fe
-dep_ranch_commit = 1.3.1
-# Last commit of sockjs support Erlang R16B03 and 17.x.
-dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 5af2b588c812c318b19bc105b577a759c71c3e0a
+dep_ranch_commit = 1.3.2
+dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d36dbf5e1e64942d9b0a1daf
 dep_webmachine_commit = 1.10.8p2
+dep_ranch_proxy_protocol = git git://github.com/heroku/ranch_proxy_protocol.git 1.4.2
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
@@ -142,7 +140,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_jms_client \
 		      rabbitmq_jms_cts \
 		      rabbitmq_jms_topic_exchange \
-		      rabbitmq_lvc \
+		      rabbitmq_lvc_exchange \
 		      rabbitmq_management \
 		      rabbitmq_management_agent \
 		      rabbitmq_management_exchange \
@@ -184,7 +182,7 @@ NO_AUTOPATCH += $(RABBITMQ_COMPONENTS)
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
 current_rmq_ref := $(shell (\
-	ref=$$(git branch --list | awk '/^\* \(.*detached / {ref=$$0; sub(/.*detached [^ ]+ /, "", ref); sub(/\)$$/, "", ref); print ref; exit;} /^\* / {ref=$$0; sub(/^\* /, "", ref); print ref; exit}');\
+	ref=$$(LANG=C git branch --list | awk '/^\* \(.*detached / {ref=$$0; sub(/.*detached [^ ]+ /, "", ref); sub(/\)$$/, "", ref); print ref; exit;} /^\* / {ref=$$0; sub(/^\* /, "", ref); print ref; exit}');\
 	if test "$$(git rev-parse --short HEAD)" != "$$ref"; then echo "$$ref"; fi))
 else
 current_rmq_ref := master
