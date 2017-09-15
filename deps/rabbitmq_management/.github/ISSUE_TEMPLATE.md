@@ -6,11 +6,11 @@ In order for the RabbitMQ team to investigate your issue, the following *must* b
   
 * Erlang version
 * RabbitMQ version
-* RabbitMQ plugin version(s)
+* RabbitMQ plugin information via `rabbitmq-plugins list`
 * Client library version (for all libraries used)
 * Operating system, version, and patchlevel
 * RabbitMQ, server and client application logs
-* A *complete*, working code sample, terminal transcript or set of instructions that can be used to reproduce the issue. We can't stress enough how much this helps!
+* A working code sample, terminal transcript or detailed set of instructions that can be used to reproduce the issue
 
 Running the [`rabbitmq-collect-env`][rmq-collect-env] script can provide most of the information needed. Please make the archive available via a third-party service and note that the script does *not* attempt to scrub any sensitive data.
 
