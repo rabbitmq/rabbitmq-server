@@ -64,8 +64,19 @@ ensure(FileJustChanged0) ->
                                                             {disabled, Stop}]),
             rabbit:stop_apps(Stop),
             clean_plugins(Stop),
-            rabbit_log:info("Plugins changed; enabled ~p, disabled ~p~n",
-                            [Start, Stop]),
+            case {Start, Stop} of
+                {[], []} ->
+                    ok;
+                {[], _} ->
+                    rabbit_log:info("Plugins changed; disabled ~p~n",
+                                    [Stop]);
+                {_, []} ->
+                    rabbit_log:info("Plugins changed; enabled ~p~n",
+                                    [Start]);
+                {_, _} ->
+                    rabbit_log:info("Plugins changed; enabled ~p, disabled ~p~n",
+                                    [Start, Stop])
+            end,
             {ok, Start, Stop};
         _ ->
             {error, {enabled_plugins_mismatch, FileJustChanged, OurFile}}

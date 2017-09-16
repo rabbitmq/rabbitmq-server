@@ -621,6 +621,8 @@ decrypt_list([{Key, Value}|Tail], Algo, Acc) when Key =/= encrypted ->
 decrypt_list([Value|Tail], Algo, Acc) ->
     decrypt_list(Tail, Algo, [decrypt(Value, Algo)|Acc]).
 
+stop_apps([]) ->
+    ok;
 stop_apps(Apps) ->
     rabbit_log:info(
         lists:flatten(["Stopping RabbitMQ applications and their dependencies in the following order:~n",
