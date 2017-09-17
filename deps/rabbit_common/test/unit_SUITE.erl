@@ -213,7 +213,7 @@ stop_stats_timer_on_backoff_when_backoff_less_than_stats_timeout(_) ->
     {current_function,{gen_server2,process_next_msg,1}} =
         erlang:process_info(TestServer, current_function),
 
-    timer:sleep(Backoff + 50),
+    timer:sleep(Backoff + 150),
 
     {current_function,{erlang,hibernate,3}} =
         erlang:process_info(TestServer, current_function),
