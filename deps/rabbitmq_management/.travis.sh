@@ -19,25 +19,11 @@ function main
     # this function exits early
     kiex_cleanup
 
-    # Note: if script_arg is tests,
-    # this function exits early
-    maybe_run_tests "$@"
-
     ensure_directories
     ensure_kerl
     ensure_kiex
     ensure_make
     ensure_otp
-}
-
-function maybe_run_tests
-{
-    if [[ $script_arg == 'tests' ]]
-    then
-        make tests
-        # Only doing tests, so early exit
-        exit 0
-    fi
 }
 
 function kiex_cleanup

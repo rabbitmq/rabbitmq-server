@@ -38,8 +38,7 @@ before_script:
   - mix local.hex --force
   - make --version
 
-script:
-  - $TRAVIS_BUILD_DIR/.travis.sh tests $TEST_SUITE
+script: make tests
 
 before_cache:
   - $TRAVIS_BUILD_DIR/.travis.sh kiex_cleanup
