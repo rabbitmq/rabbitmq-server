@@ -45,6 +45,7 @@
 
 -record(state, {total_memory,
                 memory_limit,
+                process_memory,
                 memory_config_limit,
                 timeout,
                 timer,
@@ -69,7 +70,7 @@
 -spec get_memory_limit() -> non_neg_integer().
 -spec get_memory_use(bytes) -> {non_neg_integer(),  float() | infinity};
                     (ratio) -> float() | infinity.
-
+-spec get_cached_process_memory_and_limit() -> {non_neg_integer(), non_neg_integer()}.
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
@@ -109,16 +110,19 @@ set_vm_memory_high_watermark(Fraction) ->
 get_memory_limit() ->
     gen_server:call(?MODULE, get_memory_limit, infinity).
 
+get_cached_process_memory_and_limit() ->
+    gen_server:call(?MODULE, get_cached_process_memory_and_limit, infinity).
+
 get_memory_use(bytes) ->
-    MemoryLimit = get_memory_limit(),
-    {get_process_memory(), case MemoryLimit > 0.0 of
-                               true  -> MemoryLimit;
-                               false -> infinity
-                           end};
+    {ProcessMemory, MemoryLimit} = get_cached_process_memory_and_limit(),
+    {ProcessMemory, case MemoryLimit > 0.0 of
+                        true  -> MemoryLimit;
+                        false -> infinity
+                    end};
 get_memory_use(ratio) ->
-    MemoryLimit = get_memory_limit(),
+    {ProcessMemory, MemoryLimit} = get_cached_process_memory_and_limit(),
     case MemoryLimit > 0.0 of
-        true  -> get_process_memory() / MemoryLimit;
+        true  -> ProcessMemory / MemoryLimit;
         false -> infinity
     end.
 
@@ -225,7 +229,7 @@ start_link(MemFraction, AlarmSet, AlarmClear) ->
                           [MemFraction, {AlarmSet, AlarmClear}], []).
 
 init([MemFraction, AlarmFuns]) ->
-    TRef = start_timer(?DEFAULT_MEMORY_CHECK_INTERVAL),
+    TRef = erlang:send_after(?DEFAULT_MEMORY_CHECK_INTERVAL, self(), update),
     State = #state { timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                      timer      = TRef,
                      alarmed    = false,
@@ -243,11 +247,20 @@ handle_call(get_check_interval, _From, State) ->
     {reply, State#state.timeout, State};
 
 handle_call({set_check_interval, Timeout}, _From, State) ->
-    {ok, cancel} = timer:cancel(State#state.timer),
-    {reply, ok, State#state{timeout = Timeout, timer = start_timer(Timeout)}};
+    State1 = case erlang:cancel_timer(State#state.timer) of
+        false ->
+            State#state{timeout = Timeout};
+        _ ->
+            State#state{timeout = Timeout,
+                        timer = erlang:send_after(Timeout, self(), update)}
+    end,
+    {reply, ok, State1};
 
 handle_call(get_memory_limit, _From, State) ->
     {reply, State#state.memory_limit, State};
+
+handle_call(get_cached_process_memory_and_limit, _From, State) ->
+    {reply, {State#state.process_memory, State#state.memory_limit}, State};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -256,7 +269,10 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(update, State) ->
-    {noreply, internal_update(State)};
+    erlang:cancel_timer(State#state.timer),
+    State1 = internal_update(State),
+    TRef = erlang:send_after(State1#state.timeout, self(), update),
+    {noreply, State1#state{ timer = TRef }};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -365,25 +381,21 @@ parse_mem_limit(MemLimit) ->
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed      = Alarmed,
                                  alarm_funs   = {AlarmSet, AlarmClear} }) ->
-    MemUsed = get_process_memory(),
-    NewAlarmed = MemUsed > MemLimit,
+    ProcMem = get_process_memory(),
+    NewAlarmed = ProcMem > MemLimit,
     case {Alarmed, NewAlarmed} of
-        {false, true} -> emit_update_info(set, MemUsed, MemLimit),
+        {false, true} -> emit_update_info(set, ProcMem, MemLimit),
                          AlarmSet({{resource_limit, memory, node()}, []});
-        {true, false} -> emit_update_info(clear, MemUsed, MemLimit),
+        {true, false} -> emit_update_info(clear, ProcMem, MemLimit),
                          AlarmClear({resource_limit, memory, node()});
         _             -> ok
     end,
-    State #state {alarmed = NewAlarmed}.
+    State #state {alarmed = NewAlarmed, process_memory = ProcMem}.
 
 emit_update_info(AlarmState, MemUsed, MemLimit) ->
     rabbit_log:info(
       "vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
       [AlarmState, MemUsed, MemLimit]).
-
-start_timer(Timeout) ->
-    {ok, TRef} = timer:send_interval(Timeout, update),
-    TRef.
 
 %% According to http://msdn.microsoft.com/en-us/library/aa366778(VS.85).aspx
 %% Windows has 2GB and 8TB of address space for 32 and 64 bit accordingly.
