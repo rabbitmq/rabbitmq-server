@@ -494,19 +494,8 @@ function fmt_maybe_wrap(txt, encoding) {
     return fmt_escape_html(res);
 }
 
-// Note: since the default node name is 'rabbit'
-// we strip it off here to save UI space
 function fmt_node(node_host) {
-    var fmt_node_re = /^rabbit@(.*)$/;
-    function do_fmt_node(nh) {
-        var rslt = null;
-        if (rslt = fmt_node_re.exec(nh)) {
-            return fmt_string(rslt[1]);
-        } else {
-            return fmt_string(nh);
-        }
-    };
-    return do_fmt_node(node_host);
+    return fmt_string(node_host);
 }
 
 function fmt_object_state(obj) {
