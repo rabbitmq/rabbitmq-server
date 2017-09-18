@@ -27,7 +27,7 @@ most illuminating.
 application that rabbitmq-auth-backend-http can authenticate against. It's really
 not designed to be anything other than an example.
 
-## Running the Example
+### Running the Example
 
 Import the example as a Maven project in your favorite IDE or run it directly from the command line:
 
