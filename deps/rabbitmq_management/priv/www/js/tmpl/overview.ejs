@@ -81,7 +81,7 @@
 
 <div class="hider updatable">
 <% if (nodes.length == 1) { %>
-    <p>Node: <%= nodes[0].name %> <a href="#/nodes/<%= esc(nodes[0].name) %>">(More about this node)</a></p>
+    <p>Node: <%= fmt_node(nodes[0].name) %> <a href="#/nodes/<%= esc(nodes[0].name) %>">(More about this node)</a></p>
 <% } %>
 
 <table class="list">
