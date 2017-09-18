@@ -30,7 +30,7 @@
      var partition = partitions[i];
 %>
     <tr<%= alt_rows(i)%>>
-      <td><%= partition.node %></td>
+      <td><%= fmt_node(partition.node) %></td>
       <td>
 <%
    for (var j = 0; j < partition.others.length; j++) {

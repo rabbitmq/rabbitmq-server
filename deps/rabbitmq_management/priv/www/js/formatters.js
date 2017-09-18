@@ -7,8 +7,12 @@ PROCESS_THRESHOLDS=[[0.75, 'red'],
                     [0.5, 'yellow']];
 
 function fmt_string(str, unknown) {
-    if (unknown == undefined) unknown = UNKNOWN_REPR;
-    if (str == undefined) return unknown;
+    if (unknown == undefined) {
+        unknown = UNKNOWN_REPR;
+    }
+    if (str == undefined) {
+        return unknown;
+    }
     return fmt_escape_html("" + str);
 }
 
@@ -491,10 +495,7 @@ function fmt_maybe_wrap(txt, encoding) {
 }
 
 function fmt_node(node_host) {
-    var both = node_host.split('@');
-    var node = both.slice(0, 1);
-    var host = both.slice(1);
-    return node == 'rabbit' ? host : (node + '@' + host);
+    return fmt_string(node_host);
 }
 
 function fmt_object_state(obj) {
@@ -643,7 +644,7 @@ function link_user(name) {
 }
 
 function link_node(name) {
-    return _link_to(name, '#/nodes/' + esc(name))
+    return _link_to(fmt_node(name), '#/nodes/' + esc(name))
 }
 
 function link_policy(vhost, name) {

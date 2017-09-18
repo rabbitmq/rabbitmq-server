@@ -2,6 +2,8 @@
 .*.sw?
 *.beam
 *.pem
+erl_crash.dump
+MnesiaCore.*
 .erlang.mk/
 /cover/
 /debug/
