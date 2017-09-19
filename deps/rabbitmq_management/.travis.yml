@@ -1,20 +1,20 @@
+# vim:sw=2:et:
 sudo: false
-language: erlang
-notifications:
-  email:
-    - alerts@rabbitmq.com
+
+language: generic
+
 addons:
   apt:
     packages:
-      - xsltproc
-      - python3
+      - unixodbc
+      - unixodbc-dev
+      - libwxgtk2.8-dev
+
 otp_release:
-  - "R16B03-1"
-  - "17.5"
-  - "18.3"
-  - "19.0"
-  - "19.1"
-  - "19.2"
+  - "20.0"
+
+env:
+  - OTP_TAG_NAME=OTP-20.0
 
 # The checkout made by Travis is a "detached HEAD" and branches
 # information is missing. Our Erlang.mk's git_rmq fetch method relies on
@@ -28,8 +28,25 @@ before_script:
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
+  # Install kerl; build gmake 4.2.1 and OTP
+  - $TRAVIS_BUILD_DIR/.travis.sh $OTP_TAG_NAME
+  - export PATH="$HOME/bin:$HOME/gmake/bin:$PATH"
+  - source "$HOME/otp/$OTP_TAG_NAME/activate"
+  - kerl active
+  - test -s "$HOME/.kiex/scripts/kiex" && source "$HOME/.kiex/scripts/kiex"
+  - test -x "$HOME/.kiex/elixirs/elixir-1.5.1/bin/elixir" || kiex install 1.5.1
+  - kiex use 1.5.1 --default
+  - mix local.hex --force
+  - make --version
 
 script: make tests
 
+before_cache:
+  - $TRAVIS_BUILD_DIR/.travis.sh kiex_cleanup
+
 cache:
-  apt: true
+  directories:
+    - "$HOME/otp"
+    - "$HOME/.kiex"
+    - "$HOME/gmake"
+    - "$HOME/bin"
