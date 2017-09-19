@@ -9,7 +9,8 @@ feedback should be directed to the RabbitMQ mailing list [1] instead.
 
 ## Please Help Maintainers and Contributors Help You
 
-In order for the RabbitMQ team to investigate your issue, the following *must* be provided:
+In order for the RabbitMQ team to investigate your issue, please provide
+**as much as possible** of the following details:
   
 * RabbitMQ version
 * Erlang version
