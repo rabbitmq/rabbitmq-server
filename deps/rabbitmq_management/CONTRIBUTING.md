@@ -11,9 +11,11 @@ take a moment to read through them.
 
 ### GitHub issues
 
-Team RabbitMQ uses GitHub issues for _specific actionable items_ engineers can work on. This assumes the following:
+Team RabbitMQ uses GitHub issues for _specific actionable items_ that
+engineers can work on. This assumes the following:
 
-* GitHub issues are not used for questions, investigations, root cause analysis, discussions of potential issues, etc (as defined by this team)
+* GitHub issues are not used for questions, investigations, root cause
+  analysis, discussions of potential issues, etc (as defined by this team)
 * Enough information is provided by the reporter for maintainers to work with
 
 The team receives many questions through various venues every single
@@ -40,8 +42,7 @@ Please provide versions of the software used:
  * All client libraries used
  * RabbitMQ plugins (if applicable)
 
-The following pieces of information greatly help in investigating and reproducing issues.
-Please provide them!
+The following information greatly helps in investigating and reproducing issues:
 
  * RabbitMQ server logs
  * A code example or terminal transcript that can be used to reproduce
@@ -62,11 +63,12 @@ Pull requests is the primary place of discussing code changes.
 
 Here's the recommended workflow:
 
- * Fork the repository or repositories you plan on contributing to
- * Clone the [RabbitMQ umbrella repository][rmq-umbrella-repo]
- * Run `make co` in the cloned umbrella repository to fetch dependencies into `deps/`
- * Create a branch with a descriptive name in the relevant repositories in `deps/`
- * Make your changes, run tests (usually with `make tests`), commit with a [descriptive message][git-commit-msgs], push to your fork
+ * [Fork the repository][github-fork] or repositories you plan on contributing to. If multiple
+   repositories are involved in addressing the same issue, please use the same branch name
+   in each repository
+ * Create a branch with a descriptive name in the relevant repositories
+ * Make your changes, run tests (usually with `make tests`), commit with a
+   [descriptive message][git-commit-msgs], push to your fork
  * Submit pull requests with an explanation what has been changed and **why**
  * Submit a filled out and signed [Contributor Agreement][ca-agreement] if needed (see below)
  * Be patient. We will get to your pull request eventually
@@ -91,7 +93,7 @@ contribution.
 If something isn't clear, feel free to ask on our [mailing list][rmq-users].
 
 [rmq-collect-env]: https://github.com/rabbitmq/support-tools/blob/master/scripts/rabbitmq-collect-env
-[rmq-umbrella-repo]: https://github.com/rabbitmq/rabbitmq-public-umbrella
 [git-commit-msgs]: http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 [rmq-users]: https://groups.google.com/forum/#!forum/rabbitmq-users
-[ca-agreement]: https://github.com/rabbitmq/ca#how-to-submit
+[ca-agreement]: https://cla.pivotal.io/sign/rabbitmq
+[github-fork]: https://help.github.com/articles/fork-a-repo/
