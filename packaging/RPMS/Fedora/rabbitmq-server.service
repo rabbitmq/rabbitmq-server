@@ -6,12 +6,20 @@ After=syslog.target network.target
 Type=notify
 User=rabbitmq
 Group=rabbitmq
+NotifyAccess=all
+TimeoutStartSec=3600
+# Note:
+# You *may* wish to add the following to automatically restart RabbitMQ
+# in the event of a failure. systemd service restarts are not a
+# replacement for service monitoring. Please see
+# http://www.rabbitmq.com/monitoring.html
+#
+# Restart=on-failure # https://www.freedesktop.org/software/systemd/man/systemd.service.html#Restart=
+# RestartSec=10      # https://www.freedesktop.org/software/systemd/man/systemd.service.html#RestartSec=
 WorkingDirectory=/var/lib/rabbitmq
 ExecStart=/usr/sbin/rabbitmq-server
 ExecStop=/usr/sbin/rabbitmqctl stop
 ExecStop=/bin/sh -c "while ps -p $MAINPID >/dev/null 2>&1; do sleep 1; done"
-NotifyAccess=all
-TimeoutStartSec=3600
 
 [Install]
 WantedBy=multi-user.target
