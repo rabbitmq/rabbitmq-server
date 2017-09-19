@@ -38,11 +38,15 @@
    %%
    %% {handshake_timeout, 10000},
 
-   %% Log levels (currently just used for connection logging).
-   %% One of 'debug', 'info', 'warning', 'error' or 'none', in decreasing
-   %% order of verbosity. Defaults to 'info'.
+   %% Log levels in decreasing order of verbosity:
+   %%   * 'debug'
+   %%   * 'info'
+   %%   * 'warning'
+   %%   * 'error'
+   %%   * 'none'
+   %%  Defaults to '{connection, info}'
    %%
-   %% {log_levels, [{connection, info}, {channel, info}]},
+   %% {log_levels, [{channel, info}, {connection, info}, {federation, info}, {mirroring, info}]},
 
    %% Set to 'true' to perform reverse DNS lookups when accepting a
    %% connection. Hostnames will then be shown instead of IP addresses
