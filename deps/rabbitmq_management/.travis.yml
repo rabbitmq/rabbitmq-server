@@ -12,6 +12,7 @@ addons:
 
 otp_release:
   - "20.0"
+
 env:
   - OTP_TAG_NAME=OTP-20.0
 
@@ -33,7 +34,7 @@ before_script:
   - source "$HOME/otp/$OTP_TAG_NAME/activate"
   - kerl active
   - test -s "$HOME/.kiex/scripts/kiex" && source "$HOME/.kiex/scripts/kiex"
-  - test -x "$HOME/.kiex/elixirs/elixir-1.4.5/bin/elixir" || kiex install 1.5.1
+  - test -x "$HOME/.kiex/elixirs/elixir-1.5.1/bin/elixir" || kiex install 1.5.1
   - kiex use 1.5.1 --default
   - mix local.hex --force
   - make --version
