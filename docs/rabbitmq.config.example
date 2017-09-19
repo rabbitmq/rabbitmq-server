@@ -330,9 +330,14 @@
    %%
    %% {collect_statistics_interval, 5000},
 
-   %% Explicitly enable/disable hipe compilation.
+   %% Explicitly enable/disable HiPE compilation.
    %%
    %% {hipe_compile, true},
+
+   %% Number of delegate processes to use for intra-cluster communication.
+   %% On a machine which has a very large number of cores and is also part of a cluster, you may wish to increase this value.
+   %%
+   %% {delegate_count, 16},
 
    %% Number of times to retry while waiting for Mnesia tables in a cluster to
    %% become available.
