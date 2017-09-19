@@ -10,6 +10,14 @@ User=rabbitmq
 Group=rabbitmq
 NotifyAccess=all
 TimeoutStartSec=3600
+# Note:
+# You *may* wish to add the following to automatically restart RabbitMQ
+# in the event of a failure. This is not recommended as a replacement
+# for service monitoring. Please see
+# http://www.rabbitmq.com/monitoring.html
+#
+# Restart=on-failure # https://www.freedesktop.org/software/systemd/man/systemd.service.html#Restart=
+# RestartSec=10      # https://www.freedesktop.org/software/systemd/man/systemd.service.html#RestartSec=
 WorkingDirectory=/var/lib/rabbitmq
 ExecStart=/usr/lib/rabbitmq/bin/rabbitmq-server
 ExecStop=/usr/lib/rabbitmq/bin/rabbitmqctl stop
