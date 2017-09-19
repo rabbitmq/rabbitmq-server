@@ -11,7 +11,7 @@ take a moment to read through them.
 
 ### GitHub issues
 
-Team RabbitMQ uses GitHub issues for _specific actionable items_ that
+The RabbitMQ team uses GitHub issues for _specific actionable items_ that
 engineers can work on. This assumes the following:
 
 * GitHub issues are not used for questions, investigations, root cause
