@@ -372,6 +372,26 @@
    %%
    %% {queue_index_embed_msgs_below, 4096},
 
+   %% The credits that a queue process is given by the message store.
+   %%
+   %% By default, a queue process is given 4000 message store credits,
+   %% and then 800 for every 800 messages that it processes.
+   %%
+   %% A queue process persists AMQP messages by sending them 1 by 1 to the message store process.
+   %% If the queue process sent 4000 AMQP messages and the message store process didn't manage to persist 800,
+   %% the queue process will enter flow state. If the disks are fast and uncontended, as they should,
+   %% the message store process will give the queue process 800 credits for every 800 messages that it processes.
+   %%
+   %% Messages which need to be paged out due to memory pressure will also use this credit.
+   %%
+   %% The Message Store is the last component in the credit flow chain.
+   %% Learn more about credit flow: https://www.rabbitmq.com/blog/2015/10/06/new-credit-flow-settings-on-rabbitmq-3-5-5/
+   %%
+   %% This value only takes effect when messages are persisted to the message store.
+   %% If messages are embedded on the queue index,
+   %% then modifying this setting has no effect because credit_flow is NOT used when writing to the queue index.
+   %% {msg_store_credit_disc_bound, {4000, 800}},
+
    %% Whether or not to enable background GC.
    %%
    %% {background_gc_enabled, false},
