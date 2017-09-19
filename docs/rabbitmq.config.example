@@ -292,6 +292,13 @@
    %% NB: Change these only if you understand what you are doing!
    %%
 
+   %% Queue master location strategy:
+   %%   * <<"min-masters">>
+   %%   * <<"client-local">>
+   %%   * <<"random">>
+   %% See https://www.rabbitmq.com/ha.html#queue-master-location for further details
+   %% {queue_master_locator, <<"client-local">>},
+
    %% To announce custom properties to clients on connection:
    %%
    %% {server_properties, []},
