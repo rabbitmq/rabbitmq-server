@@ -13,26 +13,101 @@ To test the plugin, you should build it yourself, together with RabbitMQ.
 
 You can find build instructions [here](https://github.com/rabbitmq/rabbitmq-public-umbrella)
 
+### Authorization Workflow
+
+This plugin does not communicate with an UAA server. It decodes an access token and
+authorises a user based on the token data.
+
+The token can be any JWT token, which contains `scope` and `aud` fields.
+The way the token was retrieved (such as grant type) is outside of this plufin scope.
+
+#### Prerequisites
+
+1. A symmetrically encrypted JWT token containing RabbitMQ scopes.
+2. RabbitMQ auth_backends should include `rabbit_auth_backend_uaa`
+3. The RabbitMQ scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`) needs to
+match the `resource_server_id` configuration (empty by default).
+
+#### Authorization
+
+1. Client authorize with UAA, requesting an `access_token` (using any grant type)
+2. Token scope should contain RabbitMQ resource scopes (e.g. `configure:%2F/foo` means "configure queue 'foo' in vhost '/'")
+3. Client passes token as the username when connecting to a RabbitMQ node. The password
+field is not used.
+
 ### Usage
 
-First, enable the plugin. Then, configure access to UAA:
+The plugin should be configured with UAA signing key to check token signatures.
+You can get the signing key from the UAA server using
+[token_key api](https://docs.cloudfoundry.org/api/uaa/version/4.6.0/index.html#token-key-s)
+or [uaac](https://github.com/cloudfoundry/cf-uaac) using `uaac signing key` command.
 
-``` erlang
-[{rabbitmq_auth_backend_uaa,
-  [{resource_server_id, <<"your-resource-server-id"}]},
- {uaa_jwt, [
-  {default_key, <<"key1">>},
-  {signing_keys, #{
-    <<"key1">> => {map, #{<<"kty">> => <<"oct">>, <<"k">> => <<"dG9rZW5rZXk">>}},
-    <<"key2">> => {pem_file, <<"/path/to/public_key.pem">>},
-    <<"key3">> => {json, "{\"kid\":\"key3\",\"alg\":\"HMACSHA256\",\"value\":\"tokenkey\",\"kty\":\"MAC\",\"use\":\"sig\"}"}}}]}].
+Important fields are `kty`, `value`, `alg` and `kid`.
+
+For example if UAA returns
+
+```
+uaac signing key
+  kty: RSA
+  e: AQAB
+  use: sig
+  kid: legacy-token-key
+  alg: RS256
+  value: -----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2dP+vRn+Kj+S/oGd49kq
+6+CKNAduCC1raLfTH7B3qjmZYm45yDl+XmgK9CNmHXkho9qvmhdksdzDVsdeDlhK
+IdcIWadhqDzdtn1hj/22iUwrhH0bd475hlKcsiZ+oy/sdgGgAzvmmTQmdMqEXqV2
+B9q9KFBmo4Ahh/6+d4wM1rH9kxl0RvMAKLe+daoIHIjok8hCO4cKQQEw/ErBe4SF
+2cr3wQwCfF1qVu4eAVNVfxfy/uEvG3Q7x005P3TcK+QcYgJxav3lictSi5dyWLgG
+QAvkknWitpRK8KVLypEj5WKej6CF8nq30utn15FQg0JkHoqzwiCqqeen8GIPteI7
+VwIDAQAB
+-----END PUBLIC KEY-----
+  n: ANnT_r0Z_io_kv6BnePZKuvgijQHbggta2i30x-wd6o5mWJuOcg5fl5oCvQjZh15IaPar5oXZLHcw1bHXg5YSiHXCFmnYag83bZ9YY_9tolMK4R9G3eO-YZSnLImfqMv7HYBoAM75pk0JnTKhF6ldgfavShQZqOAIYf-vneMDNax_ZMZdEbzACi3vnWqCByI6JPIQju
+      HCkEBMPxKwXuEhdnK98EMAnxdalbuHgFTVX8X8v7hLxt0O8dNOT903CvkHGICcWr95YnLUouXcli4BkAL5JJ1oraUSvClS8qRI-Vino-ghfJ6t9LrZ9eRUINCZB6Ks8Igqqnnp_BiD7XiO1c
 ```
 
-where
+The configuration for a signing key should be:
 
- * `your-resource-server-id` is a resource server ID (e.g. 'rabbitmq')
- * `signing_keys` is a map of keys to sign JWT tokens (see [UAA_JWT](https://github.com/rabbitmq/uaa_jwt) library for mode info)
- * `default_key` is the default value used for the `kid` (key id) header parameter.
+```erlang
+[ {rabbitmq_auth_backend_uaa, [{resource_server_id, <<"my_rabbit_server">>}]},
+  {uaa_jwt, [
+    {signing_keys, #{
+        <<"legacy-token-key">> => {map, #{<<"kty">> => <<"RSA">>,
+                                          <<"alg">> => <<"RS256">>,
+                                          <<"kid">> => <<"legacy-token-key">>,
+                                          <<"value">> => <<"-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2dP+vRn+Kj+S/oGd49kq
+6+CKNAduCC1raLfTH7B3qjmZYm45yDl+XmgK9CNmHXkho9qvmhdksdzDVsdeDlhK
+IdcIWadhqDzdtn1hj/22iUwrhH0bd475hlKcsiZ+oy/sdgGgAzvmmTQmdMqEXqV2
+B9q9KFBmo4Ahh/6+d4wM1rH9kxl0RvMAKLe+daoIHIjok8hCO4cKQQEw/ErBe4SF
+2cr3wQwCfF1qVu4eAVNVfxfy/uEvG3Q7x005P3TcK+QcYgJxav3lictSi5dyWLgG
+QAvkknWitpRK8KVLypEj5WKej6CF8nq30utn15FQg0JkHoqzwiCqqeen8GIPteI7
+VwIDAQAB
+-----END PUBLIC KEY-----">>}}
+        }}
+    ]}
+].
+```
+
+If you are using a symmetric key, the configuration will be:
+
+```erlang
+[ {rabbitmq_auth_backend_uaa, [{resource_server_id, <<"my_rabbit_server">>}]},
+  {uaa_jwt, [
+    {signing_keys, #{
+        <<"legacy-token-key">> => {map, #{<<"kty">> => <<"MAC">>,
+                                          <<"alg">> => <<"HMACSHA256">>,
+                                          <<"kid">> => <<"legacy-token-key">>,
+                                          <<"value">> => <<"my_signing_key">>}}
+        }}
+    ]}
+].
+```
+
+see [UAA_JWT](https://github.com/rabbitmq/uaa_jwt) library for more info
+
+`resource_server_id` is a prefix for scopes in UAA to avoid overlap of scopes.
+It is empty by default
 
 To learn more about UAA/OAuth 2 clients, see [UAA docs](https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id73).
 
@@ -77,19 +152,54 @@ These are the typical permissions examples:
 
 See the [./test/wildcard_match_SUITE.erl](wildcard matching test suite) and [./test/scope_SUITE.erl](scopes test suite) for more examples.
 
-### Authorization Workflow
+Scopes should be prefixed with `resource_server_id`. For example,
+if `resource_server_id` is "my_rabbit", a scope to enable read from any vhost will
+be `my_rabbit.read:*/*`
 
-#### Prerequisites
+### Examples
 
-1. A symmetrically encrypted JWT token containing RabbitMQ scopes.
-2. RabbitMQ auth_backends should include `rabbit_auth_backend_uaa`
-3. The RabbitMQ scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`) needs to
-match the `resource_server_id` configuration (empty by default).
+The [demo](/demo) directory contains configuration files which can be used to set up
+a development UAA server and issue tokens, which can be used to access RabbitMQ
+resources.
 
-#### Authorization
+To run the demo you should download [UAA](https://github.com/cloudfoundry/uaa)
 
-1. Client authorize with UAA, requesting an `access_token` (using any grant type)
-2. Token scope should contain RabbitMQ resource scopes (e.g. `configure:%2F/foo` means "configure queue 'foo' in vhost '/'")
-3. Client passes token as the username when connecting to a RabbitMQ node. The password
-field is not used.
+You can set `CLOUD_FOUNDRY_CONFIG_PATH` to  `demo/symmetric_keys` to set
+signing key to be symmetric `MAC` key. The value is `rabbit_signing_key`.
+`demo/symmetric_keys/rabbit.config` contains a RabbitMQ configuration file to
+set up this signing key for RabbitMQ.
+
+To run UAA, from the UAA directory:
+```
+CLOUD_FOUNDRY_CONFIG_PATH=<path_to_plugin>/demo/symmetric_keys ./gradlew run
+```
+
+To run RabbitMQ:
+```
+## To run rabbitmq-server
+RABBITMQ_CONFIG_FILE=<path_to_plugin>/demo/symmetric_keys/rabbitmq rabbitmq-server
+## Or to run from source from the plugin directory
+make run-broker RABBITMQ_CONFIG_FILE=demo/symmetric_keys/rabbitmq
+```
+
+You should enable `rabbitmq_auth_backend_uaa` plugin in RabbitMQ.
+
+Or to use an RSA key, you can set `CLOUD_FOUNDRY_CONFIG_PATH` to  `demo/rsa_keys`.
+This directory also contains `rabbit.config` file, as well as `public_key.pem`,
+which will be used for signature verification.
+
+UAA sets scopes from client scopes and user groups. The demo uses groups to set up
+a set of RabbitMQ permissions scopes.
+
+The `demo/setup.sh` script can be used to configure a demo user and groups.
+The script will also create RabbitMQ resources associated with permissions.
+The script uses `uaac` and `bunny` (RabbitMQ client) and requires rubygems to be installed.
+When running the script, UAA server and RabbitMQ server should be running.
+You should configure `UAA_HOST` (localhost:8080/uaa for local machine) and
+`RABBITMQCTL` (a path to `rabbitmqctl` script) environment variables to run this script.
+
+Please refer to `demo/setup.sh` to get more info about configuring UAA permissions.
+
+The script will return an access tokens, which can be used to authorise
+in RabbitMQ. When authorising, you should use the token as a **username**.
 
