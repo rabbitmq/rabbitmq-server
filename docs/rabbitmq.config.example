@@ -378,6 +378,13 @@
    %%
    %% {msg_store_credit_disc_bound, {4000, 800}},
 
+   %% Minimum number of messages with their queue position held in RAM required
+   %% to trigger writing their queue position to disk.
+   %%
+   %% This value MUST be higher than the initial msg_store_credit_disc_bound value,
+   %% otherwise paging performance may worsen.
+   %% {msg_store_io_batch_size, 4096},
+
    %% Whether or not to enable background GC.
    %%
    %% {background_gc_enabled, false},
