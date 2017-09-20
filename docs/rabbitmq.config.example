@@ -52,7 +52,7 @@
    %% connection. Hostnames will then be shown instead of IP addresses
    %% in rabbitmqctl and the management plugin.
    %%
-   %% {reverse_dns_lookups, true},
+   %% {reverse_dns_lookups, false},
 
    %%
    %% Security / AAA
@@ -124,11 +124,16 @@
    %%
    %% To use the SSL cert's CN instead of its DN as the username
    %%
-   %% {ssl_cert_login_from, common_name},
+   %% {ssl_cert_login_from, distinguished_name},
 
    %% SSL handshake timeout, in milliseconds.
    %%
    %% {ssl_handshake_timeout, 5000},
+
+   %% Whether to allow SSH POODLE attack,
+   %% as is the case of Erlang versions that make it impossible to disable SSLv3
+   %%
+   %% {ssl_allow_poodle_attack, false},
 
    %% Password hashing implementation. Will only affect newly
    %% created users. To recalculate hash for an existing user
@@ -200,7 +205,7 @@
    %% Set the max permissible number of channels per connection.
    %% 0 means "no limit".
    %%
-   %% {channel_max, 128},
+   %% {channel_max, 0},
 
    %% Customising Socket Options.
    %%
@@ -335,9 +340,13 @@
    %%
    %% {collect_statistics_interval, 5000},
 
+   %% Enables vhosts tracing.
+   %%
+   %% {trace_vhosts, []},
+
    %% Explicitly enable/disable HiPE compilation.
    %%
-   %% {hipe_compile, true},
+   %% {hipe_compile, false},
 
    %% Number of delegate processes to use for intra-cluster communication.
    %% On a machine which has a very large number of cores and is also part of a cluster,
@@ -644,8 +653,12 @@
 
    %% TCP/Socket options (as per the broker configuration).
    %%
-   %% {tcp_listen_options, [{backlog,   128},
-   %%                       {nodelay,   true}]}
+   %% {tcp_listen_options, [
+   %%                         {backlog,   128},
+   %%                         {nodelay,       true},
+   %%                         {linger,        {true, 0}},
+   %%                         {exit_on_close, false}
+   %%                      ]},
   ]},
 
  %% ----------------------------------------------------------------------------
