@@ -355,12 +355,17 @@
    %%
    %% {mnesia_table_loading_retry_timeout, 30000},
 
-   %% Size in bytes below which to embed messages in the queue index. See
-   %% http://www.rabbitmq.com/persistence-conf.html
+   %% Size in bytes below which to embed messages in the queue index.
+   %% See http://www.rabbitmq.com/persistence-conf.html
    %%
    %% {queue_index_embed_msgs_below, 4096},
 
-   %% The credits that a queue process is given by the message store.
+   %% Maximum number of queue index entries to keep in journal
+   %% See http://www.rabbitmq.com/persistence-conf.html
+   %%
+   %% {queue_index_max_journal_entries, 32768},
+
+   %% Number of credits that a queue process is given by the message store
    %% By default, a queue process is given 4000 message store credits,
    %% and then 800 for every 800 messages that it processes.
    %%
@@ -371,7 +376,27 @@
    %%
    %% This value MUST be higher than the initial msg_store_credit_disc_bound value,
    %% otherwise paging performance may worsen.
+   %%
    %% {msg_store_io_batch_size, 4096},
+
+   %% Number of credits that a connection, channel or queue are given
+   %% By default, every connection, channel or queue is given 400 credits,
+   %% and then 200 for every 200 messages that it processes
+   %% See https://www.rabbitmq.com/blog/2015/10/06/new-credit-flow-settings-on-rabbitmq-3-5-5/
+   %%
+   %% {credit_flow_default_credit, {400, 200}},
+
+   %% Number of milliseconds before a channel operation times out
+   %%
+   %% {channel_operation_timeout, 15000},
+
+   %% Number of queue operations required to trigger an explicit garbage collection
+   %%
+   %% {queue_explicit_gc_run_operation_threshold, 1000},
+
+   %% Number of lazy queue operations required to trigger an explicit garbage collection
+   %%
+   %% {lazy_queue_explicit_gc_run_operation_threshold, 1000},
 
    %% Whether or not to enable background GC.
    %%
@@ -379,7 +404,19 @@
    %%
    %% Interval (in milliseconds) at which we run background GC.
    %%
-   %% {background_gc_target_interval, 60000}
+   %% {background_gc_target_interval, 60000},
+
+   %% File size in bytes used for persisting messages
+   %%
+   %% {msg_store_file_size_limit, 16777216},
+
+   %% Whether or not to enable write file handle cache buffering
+   %%
+   %% {fhc_write_buffering, true},
+
+   %% Whether or not to enable read file handle cache buffering
+   %%
+   %% {fhc_read_buffering, false}
 
   ]},
 
