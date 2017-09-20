@@ -24,7 +24,7 @@
          get_location_mod_by_config/1,
          get_location_mod_by_args/1,
          get_location_mod_by_policy/1,
-         all_nodes/0]).
+         all_nodes/1]).
 
 lookup_master(QueueNameBin, VHostPath) when is_binary(QueueNameBin),
                                             is_binary(VHostPath) ->
@@ -92,4 +92,6 @@ get_location_mod_by_config(#amqqueue{}) ->
         _ -> {error, "queue_master_locator undefined"}
     end.
 
-all_nodes()  -> rabbit_mnesia:cluster_nodes(running).
+all_nodes(Queue=#amqqueue{}) ->
+    {MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Queue),
+    [MNode|SNodes].
