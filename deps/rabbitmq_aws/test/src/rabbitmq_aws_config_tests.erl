@@ -327,4 +327,3 @@ setup_test_file_with_env_var(EnvVar, Filename) ->
 setup_test_credentials_env_var() ->
   setup_test_file_with_env_var("AWS_SHARED_CREDENTIALS_FILE",
                                "test_aws_credentials.ini").
-

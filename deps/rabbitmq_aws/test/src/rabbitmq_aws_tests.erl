@@ -2,7 +2,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--include("rabbitmq_aws.hrl").
+-include("include/rabbitmq_aws.hrl").
 
 init_test_() ->
   {foreach,
@@ -18,13 +18,21 @@ init_test_() ->
       {"ok", fun() ->
         os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
         os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
-        Expectation = {ok,{state,"Sésame","ouvre-toi",undefined,undefined,"us-west-3", undefined}},
-        ?assertEqual(Expectation, rabbitmq_aws:init([]))
+        {ok, Pid} = rabbitmq_aws:start_link(),
+        {ok, State} = gen_server:call(Pid, get_state),
+        ok = gen_server:stop(Pid),
+        os:unsetenv("AWS_ACCESS_KEY_ID"),
+        os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+        Expectation = {state,"Sésame","ouvre-toi",undefined,undefined,"us-west-3", undefined},
+        ?assertEqual(Expectation, State)
        end},
       {"error", fun() ->
         meck:expect(rabbitmq_aws_config, credentials, fun() -> {error, test_result} end),
-        Expectation = {ok,{state,undefined,undefined,undefined,undefined,"us-west-3",test_result}},
-        ?assertEqual(Expectation, rabbitmq_aws:init([])),
+        {ok, Pid} = rabbitmq_aws:start_link(),
+        {ok, State} = gen_server:call(Pid, get_state),
+        ok = gen_server:stop(Pid),
+        Expectation = {state,undefined,undefined,undefined,undefined,"us-west-3",test_result},
+        ?assertEqual(Expectation, State),
         meck:validate(rabbitmq_aws_config)
        end}
     ]
@@ -112,11 +120,20 @@ gen_server_call_test_() ->
   {
     foreach,
     fun () ->
+      % We explicitely set a few defaults, in case the caller has
+      % something in ~/.aws.
+      os:putenv("AWS_DEFAULT_REGION", "us-west-3"),
+      os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
+      os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
       meck:new(httpc, []),
-      meck:new(rabbitmq_aws_config, []),
-      [httpc, rabbitmq_aws_config]
+      [httpc]
     end,
-    fun meck:unload/1,
+    fun (Mods) ->
+      meck:unload(Mods),
+      os:unsetenv("AWS_DEFAULT_REGION"),
+      os:unsetenv("AWS_ACCESS_KEY_ID"),
+      os:unsetenv("AWS_SECRET_ACCESS_KEY")
+    end,
     [
       {
         "request",
@@ -135,7 +152,7 @@ gen_server_call_test_() ->
             fun(get, {"https://ec2.us-east-1.amazonaws.com/?Action=DescribeTags&Version=2015-10-01", _Headers}, _Options, []) ->
                 {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
             end),
-          Expectation = {reply, {ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State},
+          Expectation = {reply, {ok, {[{"content-type", "application/json"}], #{"pass" => true}}}, State},
           Result = rabbitmq_aws:handle_call({request, Service, Method, Headers, Path, Body, Options, Host}, eunit, State),
           ?assertEqual(Expectation, Result),
           meck:validate(httpc)
@@ -162,6 +179,7 @@ gen_server_call_test_() ->
                           region = "us-east-1",
                           security_token = "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L2",
                           expiration = calendar:local_time()},
+          meck:new(rabbitmq_aws_config, [passthrough]),
           meck:expect(rabbitmq_aws_config, credentials,
             fun() ->
               {ok,
@@ -171,14 +189,16 @@ gen_server_call_test_() ->
                 State2#state.security_token}
             end),
           ?assertEqual({reply, ok, State2}, rabbitmq_aws:handle_call(refresh_credentials, eunit, State)),
-          meck:validate(rabbitmq_aws_config)
+          meck:validate(rabbitmq_aws_config),
+          meck:unload(rabbitmq_aws_config)
         end
       },
       {
         "set_credentials",
         fun() ->
           State = #state{access_key = "AKIDEXAMPLE",
-                         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"},
+                         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+                         region = "us-west-3"},
           ?assertEqual({reply, ok, State},
                        rabbitmq_aws:handle_call({set_credentials,
                                               State#state.access_key,
@@ -188,7 +208,9 @@ gen_server_call_test_() ->
       {
         "set_region",
         fun() ->
-          State = #state{region = "us-east-5"},
+          State = #state{access_key = "Sésame",
+                         secret_access_key = "ouvre-toi",
+                         region = "us-east-5"},
           ?assertEqual({reply, ok, State},
                        rabbitmq_aws:handle_call({set_region, "us-east-5"}, eunit, #state{}))
         end
@@ -245,13 +267,13 @@ maybe_decode_body_test_() ->
     {"application/x-amz-json-1.0", fun() ->
       ContentType = {"application", "x-amz-json-1.0"},
       Body = "{\"test\": true}",
-      Expectation = [{"test", true}],
+      Expectation = #{"test" => true},
       ?assertEqual(Expectation, rabbitmq_aws:maybe_decode_body(ContentType, Body))
      end},
     {"application/json", fun() ->
       ContentType = {"application", "json"},
       Body = "{\"test\": true}",
-      Expectation = [{"test", true}],
+      Expectation = #{"test" => true},
       ?assertEqual(Expectation, rabbitmq_aws:maybe_decode_body(ContentType, Body))
      end},
     {"text/xml", fun() ->
@@ -317,7 +339,7 @@ perform_request_test_() ->
                             {ok, {{"HTTP/1.0", 400, "RequestFailure", [{"content-type", "application/json"}],  "{\"pass\": false}"}}}
                         end
                       end),
-          Expectation = {{ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State},
+          Expectation = {{ok, {[{"content-type", "application/json"}], #{"pass" => true}}}, State},
           Result = rabbitmq_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
           ?assertEqual(Expectation, Result),
           meck:validate(httpc)
@@ -396,7 +418,7 @@ perform_request_test_() ->
                          State2#state.security_token}
                       end),
 
-          Expectation = {{ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State2},
+          Expectation = {{ok, {[{"content-type", "application/json"}], #{"pass" => true}}}, State2},
           Result = rabbitmq_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
           ?assertEqual(Expectation, Result),
           meck:validate(httpc),

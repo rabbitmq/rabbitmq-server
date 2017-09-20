@@ -12,29 +12,30 @@
 -spec decode(Value :: string() | binary()) -> list().
 %% @doc Decode a JSON string returning a proplist
 %% @end
-decode(Value) when is_binary(Value) ->
-  decode(binary_to_list(Value));
+decode(Value) when is_list(Value) ->
+  decode(list_to_binary(Value));
 decode(Value) ->
-  {ok, Decoded} = rabbit_misc:json_decode(Value),
-  convert_binary_values(rabbit_misc:json_to_term(Decoded), []).
+  Decoded = rabbit_json:decode(Value),
+  convert_binary_values(Decoded).
 
-
--spec convert_binary_values(Value :: atom() | binary() | integer() | list(),
-                            Accumulator :: list()) -> list().
+-spec convert_binary_values
+        (Value :: map()) -> map();
+        (Value :: list()) -> list();
+        (Value :: binary()) -> list();
+        (Value :: atom()) -> atom();
+        (Value :: integer()) -> integer().
 %% @doc Convert the binary key/value pairs returned by JSX to strings.
 %% @end
-convert_binary_values([], Value) ->  Value;
-convert_binary_values([{K, V}|T], Accum) when is_list(V) ->
-  convert_binary_values(T, lists:append(Accum, [{binary_to_list(K), convert_binary_values(V, [])}]));
-convert_binary_values([{K, V}|T], Accum) when is_binary(V) ->
-  convert_binary_values(T, lists:append(Accum, [{binary_to_list(K), binary_to_list(V)}]));
-convert_binary_values([{K, V}|T], Accum) ->
-  convert_binary_values(T, lists:append(Accum, [{binary_to_list(K), V}]));
-convert_binary_values([H|T], Accum) when is_binary(H) ->
-  convert_binary_values(T, lists:append(Accum, [binary_to_list(H)]));
-convert_binary_values([H|T], Accum) when is_integer(H) ->
-  convert_binary_values(T, lists:append(Accum, [H]));
-convert_binary_values([H|T], Accum) when is_atom(H) ->
-  convert_binary_values(T, lists:append(Accum, [H]));
-convert_binary_values([H|T], Accum) ->
-  convert_binary_values(T, lists:append(Accum, convert_binary_values(H, []))).
+convert_binary_values(Map) when is_map(Map) ->
+    maps:fold(fun convert_binary_values/3, #{}, Map);
+convert_binary_values(List) when is_list(List) ->
+    lists:map(fun convert_binary_values/1, List);
+convert_binary_values(Binary) when is_binary(Binary) ->
+    binary_to_list(Binary);
+convert_binary_values(Other) ->
+    Other.
+
+convert_binary_values(Key, Value, Map) ->
+    Key1 = convert_binary_values(Key),
+    Value1 = convert_binary_values(Value),
+    Map#{Key1 => Value1}.
