@@ -130,7 +130,7 @@
    %%
    %% {ssl_handshake_timeout, 5000},
 
-   %% Whether to allow SSH POODLE attack,
+   %% Whether to allow SSL POODLE attack,
    %% as is the case of Erlang versions that make it impossible to disable SSLv3
    %%
    %% {ssl_allow_poodle_attack, false},
