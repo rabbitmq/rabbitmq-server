@@ -2384,6 +2384,9 @@ reduce_memory_use(State = #vqstate {
         end,
 
     State3 =
+        %% If there are more messages with their queue position held in RAM,
+        %% a.k.a. betas, in Q2 & Q3 than IoBatchSize,
+        %% write their queue position to disk, a.k.a. push_betas_to_deltas
         case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
                         permitted_beta_count(State1)) of
             S2 when S2 >= IoBatchSize ->
