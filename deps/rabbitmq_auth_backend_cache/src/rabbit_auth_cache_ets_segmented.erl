@@ -65,8 +65,7 @@ init([SegmentSize]) ->
 handle_call({get_write_segment, Expiration}, _From,
             State = #state{segments = Segments,
                            segment_size = SegmentSize}) ->
-    NewBoundary = new_boundary(Expiration, SegmentSize),
-    [{_, Segment} | _] = NewSegments = maybe_add_segment(NewBoundary, Segments),
+    [{_, Segment} | _] = NewSegments = maybe_add_segment(Expiration, SegmentSize, Segments),
     {reply, Segment, State#state{segments = NewSegments}};
 handle_call(get_segment_tables, _From, State = #state{segments = Segments}) ->
     {_, Valid} = partition_expired_segments(Segments),
@@ -95,17 +94,15 @@ partition_expired_segments(Segments) ->
         fun({Boundary, _}) -> rabbit_auth_cache:expired(Boundary) end,
         Segments).
 
-maybe_add_segment(Boundary, OldSegments) ->
+maybe_add_segment(Expiration, SegmentSize, OldSegments) ->
     case OldSegments of
-        [{OldBoundary, _}|_] when OldBoundary > Boundary ->
+        [{OldBoundary, _}|_] when OldBoundary > Expiration ->
             OldSegments;
         _ ->
+            NewBoundary = Expiration + SegmentSize,
             Segment = ets:new(segment, [set, public]),
-            [{Boundary, Segment} | OldSegments]
+            [{NewBoundary, Segment} | OldSegments]
     end.
-
-new_boundary(Expiration, SegmentSize) ->
-    ((Expiration div SegmentSize) * SegmentSize) + SegmentSize.
 
 get_from_segments(Key) ->
     Tables = gen_server2:call(?MODULE, get_segment_tables),
