@@ -178,12 +178,12 @@
 %% (betas+gammas+delta)/(target_ram_count+betas+gammas+delta). I.e. as
 %% the target_ram_count shrinks to 0, so must betas and gammas.
 %%
-%% The conversion of betas to gammas is done in batches of at least
-%% ?IO_BATCH_SIZE. This value should not be too small, otherwise the
-%% frequent operations on the queues of q2 and q3 will not be
-%% effectively amortised (switching the direction of queue access
-%% defeats amortisation). Note that there is a natural upper bound due
-%% to credit_flow limits on the alpha to beta conversion.
+%% The conversion of betas to deltas is done if there are at least
+%% ?IO_BATCH_SIZE betas in q2 & q3. This value should not be too small,
+%% otherwise the frequent operations on the queues of q2 and q3 will not be
+%% effectively amortised (switching the direction of queue access defeats
+%% amortisation). Note that there is a natural upper bound due to credit_flow
+%% limits on the alpha to beta conversion.
 %%
 %% The conversion from alphas to betas is chunked due to the
 %% credit_flow limits of the msg_store. This further smooths the
