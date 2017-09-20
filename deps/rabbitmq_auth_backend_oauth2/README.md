@@ -24,7 +24,7 @@ First, enable the plugin. Then, configure access to UAA:
   {default_key, <<"key1">>},
   {signing_keys, #{
     <<"key1">> => {map, #{<<"kty">> => <<"oct">>, <<"k">> => <<"dG9rZW5rZXk">>}},
-    <<"key2">> => {pem, <<"/path/to/public_key.pem">>},
+    <<"key2">> => {pem_file, <<"/path/to/public_key.pem">>},
     <<"key3">> => {json, "{\"kid\":\"key3\",\"alg\":\"HMACSHA256\",\"value\":\"tokenkey\",\"kty\":\"MAC\",\"use\":\"sig\"}"}}}]}].
 ```
 
