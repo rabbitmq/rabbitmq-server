@@ -296,25 +296,13 @@
    %%   * <<"min-masters">>
    %%   * <<"client-local">>
    %%   * <<"random">>
-   %% See https://www.rabbitmq.com/ha.html#queue-master-location for further details
+   %% See https://www.rabbitmq.com/ha.html#queue-master-location
+   %%
    %% {queue_master_locator, <<"client-local">>},
 
-   %% Since RabbitMQ 3.6.0, masters perform synchronisation in batches.
-   %% Earlier versions will synchronise 1 message at a time by default.
-   %% By synchronising messages in batches, the synchronisation process can be sped up considerably.
-   %% To choose the right value, you need to consider:
-   %%   * average message size
-   %%   * network throughput between RabbitMQ nodes
-   %%   * net_ticktime value
+   %% Batch size of messages to synchronise between queue mirrors
+   %% See https://www.rabbitmq.com/ha.html#batch-sync
    %%
-   %% For example, if you set this value to 50000 (messages),
-   %% and each message in the queue is 1KB,
-   %% then each synchronisation message between nodes will be ~49MB.
-   %%
-   %% You need to make sure that your network between queue mirrors can accomodate this kind of traffic.
-   %%
-   %% If the network takes longer than net_ticktime to send one batch of messages,
-   %% then nodes in the cluster could think they are in the presence of a network partition.
    %% {mirroring_sync_batch_size, 4096},
 
    %% To announce custom properties to clients on connection:
@@ -322,14 +310,13 @@
    %% {server_properties, []},
 
    %% How to respond to cluster partitions.
-   %% See http://www.rabbitmq.com/partitions.html for further details.
+   %% See http://www.rabbitmq.com/partitions.html for
    %%
    %% {cluster_partition_handling, ignore},
 
    %% Make clustering happen *automatically* at startup - only applied
    %% to nodes that have just been reset or started for the first time.
-   %% See http://www.rabbitmq.com/clustering.html#auto-config for
-   %% further details.
+   %% See http://www.rabbitmq.com/clustering.html#auto-config
    %%
    %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
@@ -353,7 +340,8 @@
    %% {hipe_compile, true},
 
    %% Number of delegate processes to use for intra-cluster communication.
-   %% On a machine which has a very large number of cores and is also part of a cluster, you may wish to increase this value.
+   %% On a machine which has a very large number of cores and is also part of a cluster,
+   %% you may wish to increase this value.
    %%
    %% {delegate_count, 16},
 
