@@ -63,7 +63,7 @@ dep_rabbitmq_java_client              = git_rmq rabbitmq-java-client $(current_r
 dep_rabbitmq_jms_client               = git_rmq rabbitmq-jms-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_jms_cts                  = git_rmq rabbitmq-jms-cts $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_jms_topic_exchange       = git_rmq rabbitmq-jms-topic-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_lvc_exchange             = git_rmq rabbitmq-lvc-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_lvc                      = git_rmq rabbitmq-lvc-plugin $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management               = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management_agent         = git_rmq rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management_exchange      = git_rmq rabbitmq-management-exchange $(current_rmq_ref) $(base_rmq_ref) master
@@ -78,7 +78,6 @@ dep_rabbitmq_peer_discovery_common    = git_rmq rabbitmq-peer-discovery-common $
 dep_rabbitmq_peer_discovery_consul    = git_rmq rabbitmq-peer-discovery-consul $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_peer_discovery_etcd      = git_rmq rabbitmq-peer-discovery-etcd $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_peer_discovery_k8s       = git_rmq rabbitmq-peer-discovery-k8s $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_random_exchange          = git_rmq rabbitmq-random-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
@@ -143,7 +142,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_jms_client \
 		      rabbitmq_jms_cts \
 		      rabbitmq_jms_topic_exchange \
-		      rabbitmq_lvc_exchange \
+		      rabbitmq_lvc \
 		      rabbitmq_management \
 		      rabbitmq_management_agent \
 		      rabbitmq_management_exchange \
@@ -158,7 +157,6 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_peer_discovery_consul \
 		      rabbitmq_peer_discovery_etcd \
 		      rabbitmq_peer_discovery_k8s \
-		      rabbitmq_random_exchange \
 		      rabbitmq_recent_history_exchange \
 		      rabbitmq_routing_node_stamp \
 		      rabbitmq_rtopic_exchange \
