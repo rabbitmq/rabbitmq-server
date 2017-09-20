@@ -164,8 +164,11 @@ random_timing(Config, MaxTTL, Parallel) ->
                     Value = {tuple_with, N, TTL},
                     {error, not_found} = AuthCacheModule:get(Key),
                     ok = AuthCacheModule:put(Key, Value, TTL),
-                    {ok, Value} = AuthCacheModule:get(Key),
-                    % 20ms expiry error
+                    case AuthCacheModule:get(Key) of
+                        {ok, Value} -> ok;
+                        Other -> error({Other, Value})
+                    end,
+                    % expiry error
                     timer:sleep(TTL + 40),
                     {error, not_found} = AuthCacheModule:get(Key),
                     Pid ! {ok, self(), Ref}
