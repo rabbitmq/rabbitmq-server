@@ -15,12 +15,6 @@
 ##  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 ##
 
-for arg in "$@" ; do
-    # Wrap each arg in single quotes and wrap single quotes in double quotes, so that they're passed through cleanly.
-    arg=`printf %s "$arg" | sed -e "s#'#'\"'\"'#g"`
-    CMDLINE="${CMDLINE} '${arg}'"
-done
-
 SCRIPT="$(basename "$0")"
 RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
 RABBITMQ_SCRIPTS_DIR="$(dirname "$RABBITMQ_ENV")"
@@ -38,7 +32,7 @@ main() {
     exec_script_as_rabbitmq "$@"
   elif current_user_is_root
   then
-    exec_script_as_root
+    exec_script_as_root "$@"
   else
     run_script_help_and_fail
   fi
@@ -83,10 +77,21 @@ exec_script_as_rabbitmq() {
 exec_script_as_root() {
   if [ -x /sbin/runuser ]
   then
-    exec /sbin/runuser -s /bin/sh -c "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE" rabbitmq
+    # TODO:
+    # At some point all of the RabbitMQ supported distributions will be using
+    # the util-linux version of /sbin/runuser, as it has been removed from GNU
+    # coreutils as of 2012. At that point the first clause of the following
+    # if statement can become the only statement used and the if/then
+    # removed
+    if /sbin/runuser --version | grep -qF util-linux
+    then
+        exec /sbin/runuser -u rabbitmq -- "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+    else
+        exec /sbin/runuser -s /bin/sh -- rabbitmq "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
+    fi
   elif [ -x /bin/su ]
   then
-    exec /bin/su rabbitmq -s /bin/sh -c "/usr/lib/rabbitmq/bin/$SCRIPT $CMDLINE"
+    exec /bin/su -s /bin/sh rabbitmq -- "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
   else
     echo "Please ensure /bin/su or /sbin/runuser exists and can be executed by $USER." 1>&2
     exit 1
