@@ -16,14 +16,9 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 LOCAL_DEPS = crypto ssl inets
 BUILD_DEPS = rabbit_common
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+TEST_DEPS = meck
 
 current_rmq_ref = master
 
 include rabbitmq-components.mk
 include erlang.mk
-
-# --------------------------------------------------------------------
-# Testing.
-# --------------------------------------------------------------------
-
-WITH_BROKER_TEST_COMMANDS := rabbitmq_aws_all_tests:run()
