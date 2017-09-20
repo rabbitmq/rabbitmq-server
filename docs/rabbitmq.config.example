@@ -321,7 +321,7 @@
    %% {server_properties, []},
 
    %% How to respond to cluster partitions.
-   %% See http://www.rabbitmq.com/partitions.html for
+   %% See http://www.rabbitmq.com/partitions.html
    %%
    %% {cluster_partition_handling, ignore},
 
