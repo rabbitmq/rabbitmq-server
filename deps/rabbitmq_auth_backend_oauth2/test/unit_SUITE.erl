@@ -154,7 +154,7 @@ test_command_json(_) ->
 
     true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
 
-test_command_pem(Config) ->
+test_command_pem_file(Config) ->
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     CertsDir = ?config(rmq_certsdir, Config),
     Keyfile = filename:join([CertsDir, "client", "key.pem"]),
@@ -166,7 +166,51 @@ test_command_pem(Config) ->
 
     'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
         [<<"token-key">>],
-        #{node => node(), pem => PublicKeyFile}),
+        #{node => node(), pem_file => PublicKeyFile}),
+
+    Token = sign_token_rsa(fixture_token(), Jwk, <<"token-key">>),
+    {ok, #auth_user{username = Token} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+
+    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+
+
+test_command_pem_file_no_kid(Config) ->
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+    CertsDir = ?config(rmq_certsdir, Config),
+    Keyfile = filename:join([CertsDir, "client", "key.pem"]),
+    Jwk = jose_jwk:from_pem_file(Keyfile),
+
+    PublicJwk  = jose_jwk:to_public(Jwk),
+    PublicKeyFile = filename:join([CertsDir, "client", "public.pem"]),
+    jose_jwk:to_pem_file(PublicKeyFile, PublicJwk),
+
+    'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
+        [<<"token-key">>],
+        #{node => node(), pem_file => PublicKeyFile}),
+
+    %% Set default kid
+
+    application:set_env(uaa_jwt, default_key, <<"token-key">>),
+
+    Token = sign_token_no_kid(fixture_token(), Jwk),
+    {ok, #auth_user{username = Token} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+
+    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+
+test_command_pem(Config) ->
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+    CertsDir = ?config(rmq_certsdir, Config),
+    Keyfile = filename:join([CertsDir, "client", "key.pem"]),
+    Jwk = jose_jwk:from_pem_file(Keyfile),
+
+    PublicJwk  = jose_jwk:to_public(Jwk),
+    Pem = jose_jwk:to_pem(PublicJwk),
+
+    'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
+        [<<"token-key">>],
+        #{node => node(), pem => Pem}),
 
     Token = sign_token_rsa(fixture_token(), Jwk, <<"token-key">>),
     {ok, #auth_user{username = Token} = User} =
@@ -182,12 +226,11 @@ test_command_pem_no_kid(Config) ->
     Jwk = jose_jwk:from_pem_file(Keyfile),
 
     PublicJwk  = jose_jwk:to_public(Jwk),
-    PublicKeyFile = filename:join([CertsDir, "client", "public.pem"]),
-    jose_jwk:to_pem_file(PublicKeyFile, PublicJwk),
+    Pem = jose_jwk:to_pem(PublicJwk),
 
     'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
         [<<"token-key">>],
-        #{node => node(), pem => PublicKeyFile}),
+        #{node => node(), pem => Pem}),
 
     %% Set default kid
 

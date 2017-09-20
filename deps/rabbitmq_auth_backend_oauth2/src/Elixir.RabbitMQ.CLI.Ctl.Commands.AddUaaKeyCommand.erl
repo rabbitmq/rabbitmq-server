@@ -16,11 +16,12 @@
 
 
 usage() ->
-    <<"add_uaa_key <name> [--json=<json_key>] [--pem=<pem_file>]">>.
+    <<"add_uaa_key <name> [--json=<json_key>] [--pem=<public_key>] [--pem_file=<pem_file>]">>.
 
 switches() ->
     [{json, string},
-     {pem, string}].
+     {pem, string},
+     {pem_file, string}].
 
 aliases() -> [].
 
@@ -29,17 +30,20 @@ validate([_,_|_], _Options) -> {validation_failure, too_many_args};
 validate([_], Options) ->
     Json = maps:get(json, Options, undefined),
     Pem = maps:get(pem, Options, undefined),
-    case {is_binary(Json), is_binary(Pem)} of
-        {false, false} ->
+    PemFile = maps:get(pem_file, Options, undefined),
+    case {is_binary(Json), is_binary(Pem), is_binary(PemFile)} of
+        {false, false, false} ->
             {validation_failure,
              {bad_argument, <<"No key specified">>}};
-        {true, true} ->
-            {validation_failure,
-             {bad_argument, <<"Key type should be either json or pem">>}};
-        {true, false} ->
+        {true, false, false} ->
             validate_json(Json);
-        {false, true} ->
-            validate_pem_file(Pem)
+        {false, true, false} ->
+            validate_pem(Pem);
+        {false, false, true} ->
+            validate_pem_file(PemFile);
+        {_, _, _} ->
+            {validation_failure,
+             {bad_argument, <<"There can be only one key type">>}}
     end.
 
 validate_json(Json) ->
@@ -66,8 +70,17 @@ validate_json(Json) ->
             {validation_failure, {bad_argument, <<"Invalid JSON">>}}
     end.
 
-validate_pem_file(Pem) ->
+validate_pem(Pem) ->
     case 'Elixir.UaaJWT':verify_signing_key(pem, Pem) of
+        ok -> ok;
+        {error, invalid_pem_string} ->
+            {validation_failure, <<"Unable to read a key from the PEM string">>};
+        {error, Err} ->
+            {validation_failure, Err}
+    end.
+
+validate_pem_file(PemFile) ->
+    case 'Elixir.UaaJWT':verify_signing_key(pem_file, PemFile) of
         ok -> ok;
         {error, enoent} ->
             {validation_failure, {bad_argument, <<"PEM file not found">>}};
@@ -77,9 +90,9 @@ validate_pem_file(Pem) ->
             {validation_failure, Err}
     end.
 
-merge_defaults(Args, #{pem := FileName} = Options) ->
+merge_defaults(Args, #{pem_file := FileName} = Options) ->
     AbsFileName = filename:absname(FileName),
-    {Args, Options#{pem := AbsFileName}};
+    {Args, Options#{pem_file := AbsFileName}};
 merge_defaults(Args, Options) -> {Args, Options}.
 
 banner([Name], #{json := Json}) ->
@@ -90,13 +103,19 @@ banner([Name], #{json := Json}) ->
 banner([Name], #{pem := Pem}) ->
     <<"Adding UAA signing key \"",
       Name/binary,
+      "\" public key: \"",
+      Pem/binary, "\"">>;
+banner([Name], #{pem_file := PemFile}) ->
+    <<"Adding UAA signing key \"",
+      Name/binary,
       "\" filename: \"",
-      Pem/binary, "\"">>.
+      PemFile/binary, "\"">>.
 
 run([Name], #{node := Node} = Options) ->
     {Type, Value} = case Options of
-        #{json := Json} -> {json, Json};
-        #{pem := Pem}   -> {pem, Pem}
+        #{json := Json}        -> {json, Json};
+        #{pem := Pem}          -> {pem, Pem};
+        #{pem_file := PemFile} -> {pem_file, PemFile}
     end,
     case rabbit_misc:rpc_call(Node,
                               'Elixir.UaaJWT', add_signing_key,
