@@ -310,6 +310,12 @@
    %%
    %% {mirroring_sync_batch_size, 4096},
 
+   %% Controls flow control between queue mirrors
+   %% Be careful with this configuration, it's controversial
+   %% https://github.com/rabbitmq/rabbitmq-server/pull/133
+   %%
+   %% {mirroring_flow_control, true},
+
    %% To announce custom properties to clients on connection:
    %%
    %% {server_properties, []},
@@ -406,6 +412,14 @@
    %% Number of lazy queue operations required to trigger an explicit garbage collection
    %%
    %% {lazy_queue_explicit_gc_run_operation_threshold, 1000},
+
+   %% Number of times to retry querying disk space usage
+   %%
+   %% {disk_monitor_failure_retries, 10},
+
+   %% Milliseconds to wait for disk space usage values
+   %%
+   %% {disk_monitor_failure_retry_interval, 120000},
 
    %% Whether or not to enable background GC.
    %%
