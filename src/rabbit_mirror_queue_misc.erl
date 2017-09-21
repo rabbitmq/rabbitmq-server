@@ -19,7 +19,7 @@
 
 -export([remove_from_queue/3, on_node_up/0, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,
-         initial_queue_node/2, suggested_queue_nodes/1,
+         initial_queue_node/2, suggested_queue_nodes/1, actual_queue_nodes/1,
          is_mirrored/1, update_mirrors/2, update_mirrors/1, validate_policy/1,
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
          sync_batch_size/1, log_info/3, log_warning/3]).

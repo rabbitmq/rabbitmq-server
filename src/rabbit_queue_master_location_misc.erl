@@ -95,7 +95,7 @@ get_location_mod_by_config(#amqqueue{}) ->
 all_nodes(Queue = #amqqueue{}) ->
     handle_suggested_queue_nodes(rabbit_mirror_queue_misc:suggested_queue_nodes(Queue)).
 
-handle_suggested_queue_nodes({MNode, []}) ->
+handle_suggested_queue_nodes({_MNode, []}) ->
     rabbit_nodes:all_running();
 handle_suggested_queue_nodes({MNode, SNodes}) ->
     [MNode | SNodes].
