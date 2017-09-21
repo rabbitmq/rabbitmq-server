@@ -51,6 +51,9 @@ groups() ->
       {cluster_size_3, [], [
           declare_args,
           declare_policy,
+          declare_policy_nodes,
+          declare_policy_all,
+          declare_policy_exactly,
           declare_config,
           calculate_min_master,
           calculate_random,
@@ -124,6 +127,56 @@ declare_policy(Config) ->
     QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     declare(Config, QueueName, false, false, _Args=[], none),
     verify_min_master(Config, Q).
+
+declare_policy_nodes(Config) ->
+    setup_test_environment(Config),
+    unset_location_config(Config),
+    % Note:
+    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
+    Node0Name = rabbit_data_coercion:to_binary(
+                  rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
+    Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    Node1Name =  rabbit_data_coercion:to_binary(Node1),
+    Nodes = [Node1Name, Node0Name],
+    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
+              {<<"ha-mode">>, <<"nodes">>},
+              {<<"ha-params">>, Nodes}],
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
+                                             <<".*">>, <<"queues">>, Policy),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
+    declare(Config, QueueName, false, false, _Args=[], none),
+    verify_min_master(Config, Q, Node1).
+
+declare_policy_all(Config) ->
+    setup_test_environment(Config),
+    unset_location_config(Config),
+    % Note:
+    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
+    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
+              {<<"ha-mode">>, <<"all">>}],
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
+                                             <<".*">>, <<"queues">>, Policy),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
+    declare(Config, QueueName, false, false, _Args=[], none),
+    verify_min_master(Config, Q).
+
+declare_policy_exactly(Config) ->
+    setup_test_environment(Config),
+    unset_location_config(Config),
+    % Note:
+    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
+    Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
+              {<<"ha-mode">>, <<"exactly">>},
+              {<<"ha-params">>, 2}],
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
+                                             <<".*">>, <<"queues">>, Policy),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
+    declare(Config, QueueName, false, false, _Args=[], none),
+    % Note: even though Node2 has the fewest masters, the "exactly" policy
+    % chooses Node0 and Node1 as eligible, and then "min-masters"
+    % chooses Node1
+    verify_min_master(Config, Q, Node1).
 
 declare_config(Config) ->
     setup_test_environment(Config),
@@ -249,11 +302,15 @@ declare(Config, QueueName, Durable, AutoDelete, Args, Owner) ->
                             [QueueName, Durable, AutoDelete, Args, Owner]),
     Queue.
 
-verify_min_master(Config, Q) ->
+verify_min_master(Config, Q, MinMasterNode) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Rpc = rpc:call(Node, rabbit_queue_master_location_misc,
+                   lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
+    ?assertEqual({ok, MinMasterNode}, Rpc).
+
+verify_min_master(Config, Q) ->
     MinMaster = min_master_node(Config),
-    ?assertEqual({ok, MinMaster}, rpc:call(Node, rabbit_queue_master_location_misc,
-                                           lookup_master, [Q, ?DEFAULT_VHOST_PATH])).
+    verify_min_master(Config, Q, MinMaster).
 
 verify_random(Config, Q) ->
     [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config,
