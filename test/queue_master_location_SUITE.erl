@@ -163,29 +163,36 @@ declare_policy_all(Config) ->
 declare_policy_exactly(Config) ->
     setup_test_environment(Config),
     unset_location_config(Config),
-    % Note:
-    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
     Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
               {<<"ha-mode">>, <<"exactly">>},
               {<<"ha-params">>, 2}],
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
                                              <<".*">>, <<"queues">>, Policy),
-    QueueRec = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
-    declare(Config, QueueRec, false, false, _Args=[], none),
+    QueueRes = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
+    declare(Config, QueueRes, false, false, _Args=[], none),
 
     Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     rabbit_ct_broker_helpers:control_action(sync_queue, Node0,
                                             [binary_to_list(Q)], [{"-p", "/"}]),
-    wait_for_sync(Config, Node0, QueueRec, 1),
+    wait_for_sync(Config, Node0, QueueRes, 1),
 
     {ok, Queue} = rabbit_ct_broker_helpers:rpc(Config, Node0,
-                                               rabbit_amqqueue, lookup, [QueueRec]),
-    ct:pal("Queue after sync ~p~n", [Queue]),
-    {MNode, SNodes, SSNodes} = rabbit_ct_broker_helpers:rpc(Config, Node0,
-                                                            rabbit_mirror_queue_misc,
-                                                            actual_queue_nodes, [Queue]),
-    ct:pal("MNode ~p SNodes ~p SSNodes ~p~n", [MNode, SNodes, SSNodes]),
-    verify_min_master(Config, Q, Node0).
+                                               rabbit_amqqueue, lookup, [QueueRes]),
+    {MNode0, [SNode], [SSNode]} = rabbit_ct_broker_helpers:rpc(Config, Node0,
+                                                               rabbit_mirror_queue_misc,
+                                                               actual_queue_nodes, [Queue]),
+    ?assertEqual(SNode, SSNode),
+    {ok, MNode1} = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                rabbit_queue_master_location_misc,
+                                                lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
+    ?assertEqual(MNode0, MNode1),
+    MIdx = rabbit_ct_broker_helpers:nodename_to_index(Config, MNode1),
+    SIdx = rabbit_ct_broker_helpers:nodename_to_index(Config, SNode),
+    % Note:
+    % We know that the nodes are indexed in the configuration in such a way
+    % that higher indexes have fewer queues assigned to them
+    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
+    ?assert(MIdx > SIdx).
 
 declare_config(Config) ->
     setup_test_environment(Config),
@@ -353,8 +360,8 @@ wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, N) ->
     end.
 
 synced(Config, Nodename, Q, ExpectedSSPidLen) ->
+    Args = [<<"/">>, [name, synchronised_slave_pids]],
     Info = rabbit_ct_broker_helpers:rpc(Config, Nodename,
-      rabbit_amqqueue, info_all, [<<"/">>, [name, synchronised_slave_pids]]),
-    ct:pal("synced Info: ~p~n", [Info]),
+                                        rabbit_amqqueue, info_all, Args),
     [SSPids] = [Pids || [{name, Q1}, {synchronised_slave_pids, Pids}] <- Info, Q =:= Q1],
     length(SSPids) =:= ExpectedSSPidLen.
