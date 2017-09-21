@@ -112,7 +112,7 @@ end_per_testcase(Testcase, Config) ->
 declare_args(Config) ->
     setup_test_environment(Config),
     unset_location_config(Config),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     Args = [{<<"x-queue-master-locator">>, longstr, <<"min-masters">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_min_master(Config, Q).
@@ -121,14 +121,14 @@ declare_policy(Config) ->
     setup_test_environment(Config),
     unset_location_config(Config),
     set_location_policy(Config, ?POLICY, <<"min-masters">>),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     declare(Config, QueueName, false, false, _Args=[], none),
     verify_min_master(Config, Q).
 
 declare_config(Config) ->
     setup_test_environment(Config),
     set_location_config(Config, <<"min-masters">>),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     declare(Config, QueueName, false, false, _Args=[], none),
     verify_min_master(Config, Q),
     unset_location_config(Config),
@@ -140,7 +140,7 @@ declare_config(Config) ->
 
 calculate_min_master(Config) ->
     setup_test_environment(Config),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     Args = [{<<"x-queue-master-locator">>, longstr, <<"min-masters">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_min_master(Config, Q),
@@ -148,7 +148,7 @@ calculate_min_master(Config) ->
 
 calculate_random(Config) ->
     setup_test_environment(Config),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     Args = [{<<"x-queue-master-locator">>, longstr, <<"random">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_random(Config, Q),
@@ -156,7 +156,7 @@ calculate_random(Config) ->
 
 calculate_client_local(Config) ->
     setup_test_environment(Config),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     Args = [{<<"x-queue-master-locator">>, longstr, <<"client-local">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_client_local(Config, Q),

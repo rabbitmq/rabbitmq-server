@@ -3,6 +3,7 @@
 .*.sw?
 *.beam
 *.coverdata
+MNesiaCore.*
 /.erlang.mk/
 /cover/
 /debug/
