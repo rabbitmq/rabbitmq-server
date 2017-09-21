@@ -34,6 +34,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -251,21 +252,20 @@ declare(Config, QueueName, Durable, AutoDelete, Args, Owner) ->
 verify_min_master(Config, Q) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     MinMaster = min_master_node(Config),
-    ct:pal("Expecting min master ~p~n", [MinMaster]),
-    {ok, MinMaster} = rpc:call(Node, rabbit_queue_master_location_misc,
-                               lookup_master, [Q, ?DEFAULT_VHOST_PATH]).
+    ?assertEqual({ok, MinMaster}, rpc:call(Node, rabbit_queue_master_location_misc,
+                                           lookup_master, [Q, ?DEFAULT_VHOST_PATH])).
 
 verify_random(Config, Q) ->
     [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
     {ok, Master} = rpc:call(Node, rabbit_queue_master_location_misc,
                             lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
-    true = lists:member(Master, Nodes).
+    ?assert(lists:member(Master, Nodes)).
 
 verify_client_local(Config, Q) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, Node} = rpc:call(Node, rabbit_queue_master_location_misc,
-                          lookup_master, [Q, ?DEFAULT_VHOST_PATH]).
+    ?assertEqual({ok, Node}, rpc:call(Node, rabbit_queue_master_location_misc,
+                                      lookup_master, [Q, ?DEFAULT_VHOST_PATH])).
 
 set_location_policy(Config, Name, Strategy) ->
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0,
