@@ -92,6 +92,6 @@ get_location_mod_by_config(#amqqueue{}) ->
         _ -> {error, "queue_master_locator undefined"}
     end.
 
-all_nodes(Queue=#amqqueue{}) ->
+all_nodes(Queue = #amqqueue{}) ->
     {MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Queue),
-    [MNode|SNodes].
+    [MNode | SNodes].
