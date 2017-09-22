@@ -644,12 +644,29 @@ invalid_pagination(Type,Reason, ReqData, Context) ->
     halt_response(400, Type, Reason, ReqData, Context).
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
+    ReasonFormatted = format_reason(Reason),
     Json = #{<<"error">>  => Type,
-             <<"reason">> => rabbit_mgmt_format:tuple(Reason)},
+             <<"reason">> => ReasonFormatted},
     {ok, ReqData1} = cowboy_req:reply(Code,
         [{<<"content-type">>, <<"application/json">>}],
         rabbit_json:encode(Json), ReqData),
     {halt, ReqData1, Context}.
+
+format_reason(Tuple) when is_tuple(Tuple) ->
+    rabbit_mgmt_format:tuple(Tuple);
+format_reason(Binary) when is_binary(Binary) ->
+    Binary;
+format_reason(Other) ->
+    case is_string(Other) of
+        true ->  rabbit_mgmt_format:print("~ts", [Other]);
+        false -> rabbit_mgmt_format:print("~p", [Other])
+    end.
+
+is_string(List) when is_list(List) ->
+    lists:all(
+        fun(El) -> is_integer(El) andalso El > 0 andalso El < 16#10ffff end,
+        List);
+is_string(_) -> false.
 
 id(Key, ReqData) when Key =:= exchange;
                       Key =:= source;
