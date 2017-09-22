@@ -130,8 +130,8 @@
    %%
    %% {ssl_handshake_timeout, 5000},
 
-   %% Whether to allow SSL POODLE attack,
-   %% as is the case of Erlang versions that make it impossible to disable SSLv3
+   %% Makes RabbitMQ accept SSLv3 client connections by default.
+   %% DO NOT DO THIS IF YOU CAN HELP IT.
    %%
    %% {ssl_allow_poodle_attack, false},
 
@@ -311,7 +311,10 @@
    %% {mirroring_sync_batch_size, 4096},
 
    %% Controls flow control between queue mirrors
-   %% Be careful with this configuration, it's controversial
+   %% Be careful with this configuration.
+   %% It's dangerous for masters to outpace mirrors and not allow mirrors to catch up.
+   %% Mirrors will end up using more and more RAM,
+   %% until they will eventually trigger the memory alarm and block publishers.
    %% https://github.com/rabbitmq/rabbitmq-server/pull/133
    %%
    %% {mirroring_flow_control, true},
@@ -355,7 +358,7 @@
    %% {hipe_compile, false},
 
    %% Number of delegate processes to use for intra-cluster communication.
-   %% On a machine which has a very large number of cores and is also part of a cluster,
+   %% On a node which is part of cluster, has 16 cores and plenty of network bandwidth,
    %% you may wish to increase this value.
    %%
    %% {delegate_count, 16},
@@ -396,7 +399,9 @@
 
    %% Number of credits that a connection, channel or queue are given
    %% By default, every connection, channel or queue is given 400 credits,
-   %% and then 200 for every 200 messages that it processes
+   %% and then 200 for every 200 messages that it processes.
+   %% Increasing these values may help with throughput, but they can also be dangerous:
+   %% very high credit flow values are no different from not having flow control.
    %% See https://www.rabbitmq.com/blog/2015/10/06/new-credit-flow-settings-on-rabbitmq-3-5-5/
    %%
    %% {credit_flow_default_credit, {400, 200}},
@@ -417,7 +422,7 @@
    %%
    %% {disk_monitor_failure_retries, 10},
 
-   %% Milliseconds to wait for disk space usage values
+   %% Milliseconds to wait before retrying to query disk space usage
    %%
    %% {disk_monitor_failure_retry_interval, 120000},
 
@@ -429,7 +434,10 @@
    %%
    %% {background_gc_target_interval, 60000},
 
-   %% File size in bytes used for persisting messages
+   %% Message store operations are stored in a sequence of files called segments.
+   %% This controls max size of a segment file.
+   %% Increasing this value may speed up (sequential) disk writes but will slow down segment GC process.
+   %% DO NOT CHANGE THIS for existing installations.
    %%
    %% {msg_store_file_size_limit, 16777216},
 
@@ -666,10 +674,10 @@
    %% {num_ssl_acceptors, 1},
 
    %% TCP/Socket options (as per the broker configuration).
+   %% See http://www.rabbitmq.com/networking.html
    %%
    %% {tcp_listen_options, [
    %%                         {backlog,   128},
-   %%                         {nodelay,       true},
    %%                         {linger,        {true, 0}},
    %%                         {exit_on_close, false}
    %%                      ]},
