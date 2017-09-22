@@ -186,13 +186,8 @@ declare_policy_exactly(Config) ->
                                                 rabbit_queue_master_location_misc,
                                                 lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
     ?assertEqual(MNode0, MNode1),
-    MIdx = rabbit_ct_broker_helpers:nodename_to_index(Config, MNode1),
-    SIdx = rabbit_ct_broker_helpers:nodename_to_index(Config, SNode),
-    % Note:
-    % We know that the nodes are indexed in the configuration in such a way
-    % that higher indexes have fewer queues assigned to them
-    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
-    ?assert(MIdx > SIdx).
+    Node2 = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
+    ?assertEqual(MNode1, Node2).
 
 declare_config(Config) ->
     setup_test_environment(Config),
