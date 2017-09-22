@@ -189,7 +189,10 @@
    %% =====================================================
    %%
 
-   %% Set the default AMQP heartbeat delay (in seconds).
+   %% Sets the default AMQP 0-9-1 heartbeat timeout in seconds.
+   %% Values lower than 6 can produce false positives and are not
+   %% recommended.
+   %% See http://www.rabbitmq.com/heartbeats.html.
    %%
    %% {heartbeat, 60},
 
@@ -207,10 +210,9 @@
    %%
    %% {channel_max, 0},
 
-   %% Customising Socket Options.
+   %% TCP socket options.
    %%
-   %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
-   %% further documentation.
+   %% See http://www.rabbitmq.com/networking.html.
    %%
    %% {tcp_listen_options, [{backlog,       128},
    %%                       {nodelay,       true},
@@ -305,21 +307,21 @@
    %%
    %% {queue_master_locator, <<"client-local">>},
 
-   %% Batch size of messages to synchronise between queue mirrors
-   %% See https://www.rabbitmq.com/ha.html#batch-sync
+   %% Batch size (number of messages) used during eager queue mirror synchronisation.
+   %% See https://www.rabbitmq.com/ha.html#batch-sync. When average message size is relatively large
+   %% (say, 10s of kilobytes or greater), reducing this value will decrease peak amount
+   %% of RAM used by newly joining nodes that need eager synchronisation.
    %%
    %% {mirroring_sync_batch_size, 4096},
 
-   %% Controls flow control between queue mirrors
-   %% Be careful with this configuration.
-   %% It's dangerous for masters to outpace mirrors and not allow mirrors to catch up.
-   %% Mirrors will end up using more and more RAM,
-   %% until they will eventually trigger the memory alarm and block publishers.
-   %% https://github.com/rabbitmq/rabbitmq-server/pull/133
+   %% Enables flow control between queue mirrors.
+   %% Disabling this can be dangerous and is not recommended.
+   %% When flow control is disablied, queue masters can outpace mirrors and not allow mirrors to catch up.
+   %% Mirrors will end up using increasingly more RAM, eventually triggering a memory alarm.
    %%
    %% {mirroring_flow_control, true},
 
-   %% To announce custom properties to clients on connection:
+   %% Additional server properties to announce to connecting clients.
    %%
    %% {server_properties, []},
 
@@ -358,18 +360,20 @@
    %% {hipe_compile, false},
 
    %% Number of delegate processes to use for intra-cluster communication.
-   %% On a node which is part of cluster, has 16 cores and plenty of network bandwidth,
-   %% you may wish to increase this value.
+   %% On a node which is part of cluster, has more than 16 cores and plenty of network bandwidth,
+   %% it may make sense to increase this value.
    %%
    %% {delegate_count, 16},
 
-   %% Number of times to retry while waiting for Mnesia tables in a cluster to
-   %% become available.
+   %% Number of times to retry while waiting for internal database tables (Mnesia tables) to sync
+   %% from a peer. In deployments where nodes can take a long time to boot, this value
+   %% may need increasing.
    %%
    %% {mnesia_table_loading_retry_limit, 10},
 
-   %% Time to wait per retry for Mnesia tables in a cluster to become
-   %% available.
+   %% Amount of time in milliseconds which this node will wait for internal database tables (Mnesia tables) to sync
+   %% from a peer. In deployments where nodes can take a long time to boot, this value
+   %% may need increasing.
    %%
    %% {mnesia_table_loading_retry_timeout, 30000},
 
@@ -379,7 +383,7 @@
    %% {queue_index_embed_msgs_below, 4096},
 
    %% Maximum number of queue index entries to keep in journal
-   %% See http://www.rabbitmq.com/persistence-conf.html
+   %% See http://www.rabbitmq.com/persistence-conf.html.
    %%
    %% {queue_index_max_journal_entries, 32768},
 
@@ -397,32 +401,38 @@
    %%
    %% {msg_store_io_batch_size, 4096},
 
-   %% Number of credits that a connection, channel or queue are given
+   %% Number of credits that a connection, channel or queue are given.
+   %%
    %% By default, every connection, channel or queue is given 400 credits,
-   %% and then 200 for every 200 messages that it processes.
-   %% Increasing these values may help with throughput, but they can also be dangerous:
-   %% very high credit flow values are no different from not having flow control.
+   %% and then 200 for every 200 messages that it sends to a peer process.
+   %% Increasing these values may help with throughput but also can be dangerous:
+   %% high credit flow values are no different from not having flow control at all.
+   %%
    %% See https://www.rabbitmq.com/blog/2015/10/06/new-credit-flow-settings-on-rabbitmq-3-5-5/
+   %% and http://alvaro-videla.com/2013/09/rabbitmq-internals-credit-flow-for-erlang-processes.html.
    %%
    %% {credit_flow_default_credit, {400, 200}},
 
-   %% Number of milliseconds before a channel operation times out
+   %% Number of milliseconds before a channel operation times out.
    %%
    %% {channel_operation_timeout, 15000},
 
-   %% Number of queue operations required to trigger an explicit garbage collection
+   %% Number of queue operations required to trigger an explicit garbage collection.
+   %% Increasing this value may reduce CPU load and increase peak RAM consumption of queues.
    %%
    %% {queue_explicit_gc_run_operation_threshold, 1000},
 
-   %% Number of lazy queue operations required to trigger an explicit garbage collection
+   %% Number of lazy queue operations required to trigger an explicit garbage collection.
+   %% Increasing this value may reduce CPU load and increase peak RAM consumption of lazy queues.
    %%
    %% {lazy_queue_explicit_gc_run_operation_threshold, 1000},
 
-   %% Number of times to retry querying disk space usage
+   %% Number of times disk monitor will retry free disk space queries before
+   %% giving up.
    %%
    %% {disk_monitor_failure_retries, 10},
 
-   %% Milliseconds to wait before retrying to query disk space usage
+   %% Milliseconds to wait between disk monitor retries on failures.
    %%
    %% {disk_monitor_failure_retry_interval, 120000},
 
@@ -441,11 +451,13 @@
    %%
    %% {msg_store_file_size_limit, 16777216},
 
-   %% Whether or not to enable write file handle cache buffering
+   %% Whether or not to enable file write buffering.
    %%
    %% {fhc_write_buffering, true},
 
-   %% Whether or not to enable read file handle cache buffering
+   %% Whether or not to enable file read buffering. Enabling
+   %% this may slightly speed up reads but will also increase
+   %% node's memory consumption, in particular on boot.
    %%
    %% {fhc_read_buffering, false}
 
@@ -662,18 +674,20 @@
    %%
    %% {prefetch, 10},
 
-   %% TCP/SSL Configuration (as per the broker configuration).
+   %% TLS listeners.
+   %% See http://www.rabbitmq.com/networking.html
    %%
    %% {tcp_listeners, [1883]},
    %% {ssl_listeners, []},
 
    %% Number of Erlang processes that will accept connections for the TCP
-   %% and SSL listeners.
+   %% and TLS listeners.
+   %% See http://www.rabbitmq.com/networking.html
    %%
    %% {num_tcp_acceptors, 10},
    %% {num_ssl_acceptors, 1},
 
-   %% TCP/Socket options (as per the broker configuration).
+   %% TCP socket options.
    %% See http://www.rabbitmq.com/networking.html
    %%
    %% {tcp_listen_options, [
