@@ -37,8 +37,8 @@ description() ->
     [{description,
       <<"Locate queue master node from cluster in a random manner">>}].
 
-queue_master_location(#amqqueue{}) ->
-    Cluster    = rabbit_queue_master_location_misc:all_nodes(),
+queue_master_location(#amqqueue{} = Q) ->
+    Cluster    = rabbit_queue_master_location_misc:all_nodes(Q),
     RandomPos  = erlang:phash2(erlang:monotonic_time(), length(Cluster)),
     MasterNode = lists:nth(RandomPos + 1, Cluster),
     {ok, MasterNode}.

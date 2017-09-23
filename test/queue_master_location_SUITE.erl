@@ -34,6 +34,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -50,6 +51,9 @@ groups() ->
       {cluster_size_3, [], [
           declare_args,
           declare_policy,
+          declare_policy_nodes,
+          declare_policy_all,
+          declare_policy_exactly,
           declare_config,
           calculate_min_master,
           calculate_random,
@@ -111,7 +115,7 @@ end_per_testcase(Testcase, Config) ->
 declare_args(Config) ->
     setup_test_environment(Config),
     unset_location_config(Config),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     Args = [{<<"x-queue-master-locator">>, longstr, <<"min-masters">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_min_master(Config, Q).
@@ -120,14 +124,75 @@ declare_policy(Config) ->
     setup_test_environment(Config),
     unset_location_config(Config),
     set_location_policy(Config, ?POLICY, <<"min-masters">>),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     declare(Config, QueueName, false, false, _Args=[], none),
     verify_min_master(Config, Q).
+
+declare_policy_nodes(Config) ->
+    setup_test_environment(Config),
+    unset_location_config(Config),
+    % Note:
+    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
+    Node0Name = rabbit_data_coercion:to_binary(
+                  rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
+    Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    Node1Name =  rabbit_data_coercion:to_binary(Node1),
+    Nodes = [Node1Name, Node0Name],
+    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
+              {<<"ha-mode">>, <<"nodes">>},
+              {<<"ha-params">>, Nodes}],
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
+                                             <<".*">>, <<"queues">>, Policy),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
+    declare(Config, QueueName, false, false, _Args=[], none),
+    verify_min_master(Config, Q, Node1).
+
+declare_policy_all(Config) ->
+    setup_test_environment(Config),
+    unset_location_config(Config),
+    % Note:
+    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
+    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
+              {<<"ha-mode">>, <<"all">>}],
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
+                                             <<".*">>, <<"queues">>, Policy),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
+    declare(Config, QueueName, false, false, _Args=[], none),
+    verify_min_master(Config, Q).
+
+declare_policy_exactly(Config) ->
+    setup_test_environment(Config),
+    unset_location_config(Config),
+    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
+              {<<"ha-mode">>, <<"exactly">>},
+              {<<"ha-params">>, 2}],
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
+                                             <<".*">>, <<"queues">>, Policy),
+    QueueRes = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
+    declare(Config, QueueRes, false, false, _Args=[], none),
+
+    Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    rabbit_ct_broker_helpers:control_action(sync_queue, Node0,
+                                            [binary_to_list(Q)], [{"-p", "/"}]),
+    wait_for_sync(Config, Node0, QueueRes, 1),
+
+    {ok, Queue} = rabbit_ct_broker_helpers:rpc(Config, Node0,
+                                               rabbit_amqqueue, lookup, [QueueRes]),
+    {MNode0, [SNode], [SSNode]} = rabbit_ct_broker_helpers:rpc(Config, Node0,
+                                                               rabbit_mirror_queue_misc,
+                                                               actual_queue_nodes, [Queue]),
+    ?assertEqual(SNode, SSNode),
+    {ok, MNode1} = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                rabbit_queue_master_location_misc,
+                                                lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
+    ?assertEqual(MNode0, MNode1),
+    Node2 = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
+    ?assertEqual(MNode1, Node2).
 
 declare_config(Config) ->
     setup_test_environment(Config),
     set_location_config(Config, <<"min-masters">>),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     declare(Config, QueueName, false, false, _Args=[], none),
     verify_min_master(Config, Q),
     unset_location_config(Config),
@@ -139,7 +204,7 @@ declare_config(Config) ->
 
 calculate_min_master(Config) ->
     setup_test_environment(Config),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     Args = [{<<"x-queue-master-locator">>, longstr, <<"min-masters">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_min_master(Config, Q),
@@ -147,7 +212,7 @@ calculate_min_master(Config) ->
 
 calculate_random(Config) ->
     setup_test_environment(Config),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     Args = [{<<"x-queue-master-locator">>, longstr, <<"random">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_random(Config, Q),
@@ -155,7 +220,7 @@ calculate_random(Config) ->
 
 calculate_client_local(Config) ->
     setup_test_environment(Config),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q= <<"qm.test">>),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     Args = [{<<"x-queue-master-locator">>, longstr, <<"client-local">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_client_local(Config, Q),
@@ -232,42 +297,66 @@ min_master_node(Config) ->
 
 set_location_config(Config, Strategy) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    [ok = rpc:call(Node, application, set_env,
-                   [rabbit, queue_master_locator, Strategy]) || Node <- Nodes],
+    [ok = rabbit_ct_broker_helpers:rpc(Config, Node,
+                                       application, set_env,
+                                       [rabbit, queue_master_locator, Strategy]) || Node <- Nodes],
     ok.
 
 unset_location_config(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    [ok = rpc:call(Node, application, unset_env,
-                   [rabbit, queue_master_locator]) || Node <- Nodes],
+    [ok = rabbit_ct_broker_helpers:rpc(Config, Node,
+                                       application, unset_env,
+                                       [rabbit, queue_master_locator]) || Node <- Nodes],
     ok.
 
-declare(Config, QueueName, Durable, AutoDelete, Args, Owner) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {new, Queue} = rpc:call(Node, rabbit_amqqueue, declare,
-                            [QueueName, Durable, AutoDelete, Args, Owner,
-                             <<"acting-user">>]),
+declare(Config, QueueName, Durable, AutoDelete, Args0, Owner) ->
+    Args1 = [QueueName, Durable, AutoDelete, Args0, Owner, <<"acting-user">>],
+    {new, Queue} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, declare, Args1),
     Queue.
 
+verify_min_master(Config, Q, MinMasterNode) ->
+    Rpc = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                       rabbit_queue_master_location_misc,
+                                       lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
+    ?assertEqual({ok, MinMasterNode}, Rpc).
+
 verify_min_master(Config, Q) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     MinMaster = min_master_node(Config),
-    ct:pal("Expecting min master ~p~n", [MinMaster]),
-    {ok, MinMaster} = rpc:call(Node, rabbit_queue_master_location_misc,
-                               lookup_master, [Q, ?DEFAULT_VHOST_PATH]).
+    verify_min_master(Config, Q, MinMaster).
 
 verify_random(Config, Q) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
-    {ok, Master} = rpc:call(Node, rabbit_queue_master_location_misc,
-                            lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
-    true = lists:member(Master, Nodes).
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {ok, Master} = rabbit_ct_broker_helpers:rpc(Config, Node,
+                                                rabbit_queue_master_location_misc,
+                                                lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
+    ?assert(lists:member(Master, Nodes)).
 
 verify_client_local(Config, Q) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, Node} = rpc:call(Node, rabbit_queue_master_location_misc,
-                          lookup_master, [Q, ?DEFAULT_VHOST_PATH]).
+    Rpc = rabbit_ct_broker_helpers:rpc(Config, Node,
+                                       rabbit_queue_master_location_misc,
+                                       lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
+    ?assertEqual({ok, Node}, Rpc).
 
 set_location_policy(Config, Name, Strategy) ->
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0,
       Name, <<".*">>, <<"queues">>, [{<<"queue-master-locator">>, Strategy}]).
+
+wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen) ->
+    wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, 600).
+
+wait_for_sync(_, _, _, _, 0) ->
+    throw(sync_timeout);
+wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, N) ->
+    case synced(Config, Nodename, Q, ExpectedSSPidLen) of
+        true  -> ok;
+        false -> timer:sleep(100),
+                 wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, N-1)
+    end.
+
+synced(Config, Nodename, Q, ExpectedSSPidLen) ->
+    Args = [<<"/">>, [name, synchronised_slave_pids]],
+    Info = rabbit_ct_broker_helpers:rpc(Config, Nodename,
+                                        rabbit_amqqueue, info_all, Args),
+    [SSPids] = [Pids || [{name, Q1}, {synchronised_slave_pids, Pids}] <- Info, Q =:= Q1],
+    length(SSPids) =:= ExpectedSSPidLen.

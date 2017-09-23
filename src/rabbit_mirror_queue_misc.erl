@@ -19,8 +19,9 @@
 
 -export([remove_from_queue/3, on_vhost_up/1, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,
-         initial_queue_node/2, suggested_queue_nodes/1,
-         is_mirrored/1, update_mirrors/2, update_mirrors/1, validate_policy/1,
+         initial_queue_node/2, suggested_queue_nodes/1, actual_queue_nodes/1,
+         is_mirrored/1, is_mirrored_ha_nodes/1,
+         update_mirrors/2, update_mirrors/1, validate_policy/1,
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
          sync_batch_size/1, log_info/3, log_warning/3]).
 
@@ -30,6 +31,8 @@
 -export([module/1]).
 
 -include("rabbit.hrl").
+
+-define(HA_NODES_MODULE, rabbit_mirror_queue_mode_nodes).
 
 -rabbit_boot_step(
    {?MODULE,
@@ -368,6 +371,12 @@ is_mirrored(Q) ->
     case module(Q) of
         {ok, _}  -> true;
         _        -> false
+    end.
+
+is_mirrored_ha_nodes(Q) ->
+    case module(Q) of
+        {ok, ?HA_NODES_MODULE} -> true;
+        _ -> false
     end.
 
 actual_queue_nodes(#amqqueue{pid             = MPid,
