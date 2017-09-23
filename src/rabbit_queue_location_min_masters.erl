@@ -37,8 +37,8 @@ description() ->
     [{description,
       <<"Locate queue master node from cluster node with least bound queues">>}].
 
-queue_master_location(#amqqueue{}) ->
-    Cluster            = rabbit_queue_master_location_misc:all_nodes(),
+queue_master_location(#amqqueue{} = Q) ->
+    Cluster            = rabbit_queue_master_location_misc:all_nodes(Q),
     VHosts             = rabbit_vhost:list(),
     BoundQueueMasters  = get_bound_queue_masters_per_vhost(VHosts, []),
     {_Count, MinMaster}= get_min_master(Cluster, BoundQueueMasters),
