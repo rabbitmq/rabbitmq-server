@@ -163,47 +163,47 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
                        VHost)
     end.
 
-apply_defs(Body, Username, SuccessFun, ErrorFun) ->
+apply_defs(Body, ActingUser, SuccessFun, ErrorFun) ->
     case rabbit_mgmt_util:decode([], Body) of
         {error, E} ->
             ErrorFun(E);
         {ok, _, All} ->
             Version = maps:get(rabbit_version, All, undefined),
             try
-                for_all(users,              Username, All,
+                for_all(users,              ActingUser, All,
                         fun(User, _Username) ->
                                 rabbit_mgmt_wm_user:put_user(
                                   User,
                                   Version,
-                                  Username)
+                                  ActingUser)
                         end),
-                for_all(vhosts,             Username, All, fun add_vhost/2),
+                for_all(vhosts,             ActingUser, All, fun add_vhost/2),
                 validate_limits(All),
-                for_all(permissions,        Username, All, fun add_permission/2),
-                for_all(topic_permissions,  Username, All, fun add_topic_permission/2),
-                for_all(parameters,         Username, All, fun add_parameter/2),
-                for_all(global_parameters,  Username, All, fun add_global_parameter/2),
-                for_all(policies,           Username, All, fun add_policy/2),
-                for_all(queues,             Username, All, fun add_queue/2),
-                for_all(exchanges,          Username, All, fun add_exchange/2),
-                for_all(bindings,           Username, All, fun add_binding/2),
+                for_all(permissions,        ActingUser, All, fun add_permission/2),
+                for_all(topic_permissions,  ActingUser, All, fun add_topic_permission/2),
+                for_all(parameters,         ActingUser, All, fun add_parameter/2),
+                for_all(global_parameters,  ActingUser, All, fun add_global_parameter/2),
+                for_all(policies,           ActingUser, All, fun add_policy/2),
+                for_all(queues,             ActingUser, All, fun add_queue/2),
+                for_all(exchanges,          ActingUser, All, fun add_exchange/2),
+                for_all(bindings,           ActingUser, All, fun add_binding/2),
                 SuccessFun()
             catch {error, E} -> ErrorFun(format(E));
                   exit:E     -> ErrorFun(format(E))
             end
     end.
 
-apply_defs(Body, Username, SuccessFun, ErrorFun, VHost) ->
+apply_defs(Body, ActingUser, SuccessFun, ErrorFun, VHost) ->
     case rabbit_mgmt_util:decode([], Body) of
         {error, E} ->
             ErrorFun(E);
         {ok, _, All} ->
             try
                 validate_limits(All, VHost),
-                for_all(policies,    Username, All, VHost, fun add_policy/3),
-                for_all(queues,      Username, All, VHost, fun add_queue/3),
-                for_all(exchanges,   Username, All, VHost, fun add_exchange/3),
-                for_all(bindings,    Username, All, VHost, fun add_binding/3),
+                for_all(policies,    ActingUser, All, VHost, fun add_policy/3),
+                for_all(queues,      ActingUser, All, VHost, fun add_queue/3),
+                for_all(exchanges,   ActingUser, All, VHost, fun add_exchange/3),
+                for_all(bindings,    ActingUser, All, VHost, fun add_binding/3),
                 SuccessFun()
             catch {error, E} -> ErrorFun(format(E));
                   exit:E     -> ErrorFun(format(E))
@@ -296,19 +296,19 @@ strip_vhost(Item) ->
 
 %%--------------------------------------------------------------------
 
-for_all(Name, Username, All, Fun) ->
+for_all(Name, ActingUser, All, Fun) ->
     case maps:get(Name, All, undefined) of
         undefined -> ok;
         List      -> [Fun(maps:from_list([{atomise_name(K), V} || {K, V} <- maps:to_list(M)]),
-                          Username) ||
+                          ActingUser) ||
                          M <- List, is_map(M)]
     end.
 
-for_all(Name, Username, All, VHost, Fun) ->
+for_all(Name, ActingUser, All, VHost, Fun) ->
     case maps:get(Name, All, undefined) of
         undefined -> ok;
         List      -> [Fun(VHost, maps:from_list([{atomise_name(K), V} || {K, V} <- maps:to_list(M)]),
-                          Username) ||
+                          ActingUser) ||
                          M <- List, is_map(M)]
     end.
 
@@ -357,11 +357,6 @@ add_vhost(VHost, Username) ->
     VHostTrace = maps:get(tracing, VHost, undefined),
     rabbit_mgmt_wm_vhost:put_vhost(VHostName, VHostTrace, Username).
 
-%% when loading definitions on startup, don't grant
-%% permissions to the dummy user
-add_permission(_Permission, ?INTERNAL_USER) ->
-    ok;
-
 add_permission(Permission, Username) ->
     rabbit_auth_backend_internal:set_permissions(maps:get(user,      Permission, undefined),
                                                  maps:get(vhost,     Permission, undefined),
@@ -369,11 +364,6 @@ add_permission(Permission, Username) ->
                                                  maps:get(write,     Permission, undefined),
                                                  maps:get(read,      Permission, undefined),
                                                  Username).
-
-%% when loading definitions on startup, don't grant
-%% permissions to the dummy user
-add_topic_permission(_TopicPermission, ?INTERNAL_USER) ->
-    ok;
 
 add_topic_permission(TopicPermission, Username) ->
     rabbit_auth_backend_internal:set_topic_permissions(
