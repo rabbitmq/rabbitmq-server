@@ -1142,7 +1142,7 @@ fun(Dir) ->
     Res
 end}.
 
-{validator, "file_accessible", "file doesnt exist or unaccessible",
+{validator, "file_accessible", "file doesn/t exist or isn't readable",
 fun(File) ->
     ReadFile = file:read_file_info(File),
     element(1, ReadFile) == ok
