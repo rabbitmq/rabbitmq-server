@@ -92,11 +92,18 @@ put_vhost(Name, Trace, Username) ->
     case rabbit_vhost:exists(Name) of
         true  -> ok;
         false -> rabbit_vhost:add(Name, Username),
-                 rabbit_auth_backend_internal:set_permissions(
-                   Username, Name, <<".*">>, <<".*">>, <<".*">>, Username)
+                 maybe_grant_full_permissions(Name, Username)
     end,
     case Trace of
         true      -> rabbit_trace:start(Name);
         false     -> rabbit_trace:stop(Name);
         undefined -> ok
     end.
+
+%% when definitions are loaded on boot, Username here will be ?INTERNAL_USER,
+%% which does not actually exist
+maybe_grant_full_permissions(_Name, ?INTERNAL_USER) ->
+    ok;
+maybe_grant_full_permissions(Name, Username) ->
+    rabbit_auth_backend_internal:set_permissions(
+      Username, Name, <<".*">>, <<".*">>, <<".*">>, Username).
