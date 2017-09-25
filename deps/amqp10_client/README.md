@@ -75,8 +75,8 @@ end.
 % create a new message using a delivery-tag, body and indicate
 % it's settlement status (true meaning no disposition confirmation
 % will be sent by the receiver).
-Msg = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, true),
-ok = amqp10_client:send_msg(Sender, Msg),
+OutMsg = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, true),
+ok = amqp10_client:send_msg(Sender, OutMsg),
 ok = amqp10_client:detach_link(Sender),
 
 % create a receiver link
@@ -89,7 +89,7 @@ ok = amqp10_client:flow_link_credit(Receiver, 5, never),
 
 % wait for a delivery
 receive
-    {amqp10_msg, Receiver, Msg} -> ok
+    {amqp10_msg, Receiver, InMsg} -> ok
 after 2000 ->
       exit(delivery_timeout)
 end.
