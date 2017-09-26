@@ -737,7 +737,7 @@ get_node(Props) ->
 direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                Context = #context{user = User}) ->
     with_vhost_and_props(
-      fun(VHost, Props) ->
+      fun(VHost, Props, ReqData1) ->
               Method = props_to_method(MethodName, Props, Transformers, Extra),
               Node = get_node(Props),
               case rabbit_misc:rpc_call(Node, rabbit_channel, handle_method,
@@ -746,27 +746,27 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                   {badrpc, nodedown} ->
                       Msg = io_lib:format("Node ~p could not be contacted", [Node]),
                       rabbit_log:warning(ErrorMsg, [Msg]),
-                      bad_request(list_to_binary(Msg), ReqData, Context);
+                      bad_request(list_to_binary(Msg), ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = not_found, explanation = Explanation}}} ->
                       rabbit_log:warning(ErrorMsg, [Explanation]),
-                      not_found(Explanation, ReqData, Context);
+                      not_found(Explanation, ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = access_refused, explanation = Explanation}}} ->
                       rabbit_log:warning(ErrorMsg, [Explanation]),
-                      not_authorised(<<"Access refused.">>, ReqData, Context);
+                      not_authorised(<<"Access refused.">>, ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = not_allowed, explanation = Explanation}}} ->
                       rabbit_log:warning(ErrorMsg, [Explanation]),
-                      not_authorised(<<"Access refused.">>, ReqData, Context);
+                      not_authorised(<<"Access refused.">>, ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{explanation = Explanation}}} ->
                       rabbit_log:warning(ErrorMsg, [Explanation]),
-                      bad_request(list_to_binary(Explanation), ReqData, Context);
+                      bad_request(list_to_binary(Explanation), ReqData1, Context);
                   {badrpc, Reason} ->
                       rabbit_log:warning(ErrorMsg, [Reason]),
                       bad_request(
                         list_to_binary(
                           io_lib:format("Request to node ~s failed with ~p",
                                         [Node, Reason])),
-                        ReqData, Context);
-                  _      -> {true, ReqData, Context}
+                        ReqData1, Context);
+                  _      -> {true, ReqData1, Context}
               end
       end, ReqData, Context).
 
@@ -785,7 +785,7 @@ with_vhost_and_props(Fun, ReqData, Context) ->
             case decode(Body) of
                 {ok, Props} ->
                     try
-                        Fun(VHost, props_as_map(Props))
+                        Fun(VHost, props_as_map(Props), ReqData1)
                     catch {error, Error} ->
                             bad_request(Error, ReqData1, Context)
                     end;
