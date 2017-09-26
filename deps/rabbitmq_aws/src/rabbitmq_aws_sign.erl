@@ -129,7 +129,7 @@ canonical_headers(Headers) ->
 canonical_headers([], CanonicalHeaders) ->
   lists:flatten(CanonicalHeaders);
 canonical_headers([{Key, Value}|T], CanonicalHeaders) ->
-  Header = string:join([string:to_lower(Key), to_list(Value)], ":") ++ "\n",
+  Header = string:join([string:to_lower(Key), Value], ":") ++ "\n",
   canonical_headers(T, lists:append(CanonicalHeaders, [Header])).
 
 
@@ -281,10 +281,3 @@ string_to_sign(RequestTimestamp, RequestDate, Region, Service, RequestHash) ->
 %% @end
 sort_headers(Headers) ->
   lists:sort(fun({A,_}, {B, _}) -> string:to_lower(A) =< string:to_lower(B) end, Headers).
-
-
--spec to_list(value()) -> string().
-%% @doc Ensure the value is a string/list.
-%% @end
-to_list(Value) when is_integer(Value) -> integer_to_list(Value);
-to_list(Value) -> Value.
