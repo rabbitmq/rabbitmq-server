@@ -611,8 +611,7 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
    maps:get("Token", Parsed)}.
 
 
--spec perform_http_get(string())
-  -> {ok, Result :: httpc_result()} | {error, Reason :: atom()}.
+-spec perform_http_get(string()) -> httpc_result().
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service requests
 %% @end
 perform_http_get(URL) ->

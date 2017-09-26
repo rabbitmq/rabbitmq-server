@@ -201,7 +201,7 @@ handle_msg({set_region, Region}, State) ->
 handle_msg(_Request, State) ->
     {noreply, State}.
 
--spec endpoint(State :: state, Host :: string(),
+-spec endpoint(State :: state(), Host :: string(),
                Service :: string(), Path :: string()) -> string().
 %% @doc Return the endpoint URL, either by constructing it with the service
 %%      information passed in or by using the passed in Host value.
@@ -264,7 +264,7 @@ expired_credentials(Expiration) ->
   Now >= Expires.
 
 
--spec load_credentials(State :: state) -> {ok, state()} | {error, state()}.
+-spec load_credentials(State :: state()) -> {ok, state()} | {error, state()}.
 %% @doc Load the credentials using the following order of configuration precedence:
 %%        - Environment variables
 %%        - Credentials file
@@ -298,7 +298,7 @@ local_time() ->
   Value.
 
 
--spec maybe_decode_body(MimeType :: string(), Body :: body()) -> list().
+-spec maybe_decode_body(ContentType :: {nonempty_string(), nonempty_string()}, Body :: body()) -> list() | body().
 %% @doc Attempt to decode the response body based upon the mime type that is
 %%      presented.
 %% @end.
@@ -394,7 +394,7 @@ perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options,
 
 -spec perform_request_with_creds(State :: state(), Method :: method(), URI :: string(),
                                  Headers :: headers(), ContentType :: string() | undefined,
-                                 Body :: body(), Options :: http_options)
+                                 Body :: body(), Options :: http_options())
     -> {Result :: result(), NewState :: state()}.
 %% @doc Once it is validated that there are credentials to try and that they have not
 %%      expired, perform the request and return the response.

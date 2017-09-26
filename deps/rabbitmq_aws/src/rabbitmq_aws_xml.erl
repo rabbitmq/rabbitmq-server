@@ -10,6 +10,7 @@
 
 -include_lib("xmerl/include/xmerl.hrl").
 
+-spec parse(Value :: string() | binary()) -> list().
 parse(Value) ->
   {Element, _} = xmerl_scan:string(Value),
   parse_node(Element).

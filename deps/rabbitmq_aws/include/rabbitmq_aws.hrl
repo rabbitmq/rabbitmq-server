@@ -23,7 +23,7 @@
 
 -type access_key() :: nonempty_string().
 -type secret_access_key() :: nonempty_string().
--type expiration() :: nonempty_string() | undefined.
+-type expiration() :: calendar:datetime() | undefined.
 -type security_token() :: nonempty_string() | undefined.
 -type region() :: nonempty_string() | undefined.
 
@@ -32,11 +32,11 @@
 -type sc_error() :: {error, Reason :: atom()}.
 -type security_credentials() :: sc_ok() | sc_error().
 
--record(state, {access_key :: access_key(),
-                secret_access_key :: secret_access_key(),
-                expiration :: expiration(),
-                security_token :: security_token(),
-                region :: region(),
+-record(state, {access_key :: access_key() | undefined,
+                secret_access_key :: secret_access_key() | undefined,
+                expiration :: expiration() | undefined,
+                security_token :: security_token() | undefined,
+                region :: region() | undefined,
                 error :: atom() | string() | undefined}).
 -type state() :: #state{}.
 
@@ -60,13 +60,15 @@
               query :: undefined | query_args(),
               fragment :: undefined | fragment()}).
 
--type method() :: head | get | put | post | trace | options | delete.
+-type method() :: head | get | put | post | trace | options | delete | patch.
 -type http_version() :: string().
 -type status_code() :: integer().
 -type reason_phrase() :: string().
 -type status_line() :: {http_version(), status_code(), reason_phrase()}.
--type value() :: string() | integer().
--type headers() :: [{Field :: string(), Value :: value()}].
+-type field() :: string().
+-type value() :: string().
+-type header() :: {Field :: field(), Value :: value()}.
+-type headers() :: [header()].
 -type body() :: string() | binary().
 
 -type ssl_options() :: [ssl_option()].
@@ -94,11 +96,11 @@
                   body = "" :: body()}).
 -type request() :: #request{}.
 
--type httpc_result() :: {status_line(), headers(), body()} |
-                        {status_code(), body()} |
-                        any().
+-type httpc_result() :: {ok, {status_line(), headers(), body()}} |
+                        {ok, {status_code(), body()}} |
+                        {error, term()}.
 
 -type result_ok() :: {ok, {ResponseHeaders :: headers(), Response :: list()}}.
--type result_error() :: {error, Message :: reason_phrase(), {ResponseHeaders :: headers(), Response :: list()}} |
+-type result_error() :: {error, Message :: reason_phrase(), {ResponseHeaders :: headers(), Response :: list()} | undefined} |
                         {error, {credentials, Reason :: string()}}.
 -type result() :: result_ok() | result_error().
