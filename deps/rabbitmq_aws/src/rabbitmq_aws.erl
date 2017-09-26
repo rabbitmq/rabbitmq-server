@@ -193,16 +193,10 @@ handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
                             secret_access_key = SecretAccessKey,
                             security_token = undefined,
                             expiration = undefined,
-                            error = undefined,
-                            region = State#state.region}};
+                            error = undefined}};
 
 handle_msg({set_region, Region}, State) ->
-    {reply, ok, State#state{access_key = State#state.access_key,
-                            secret_access_key = State#state.secret_access_key,
-                            security_token = State#state.security_token,
-                            expiration = State#state.expiration,
-                            error = State#state.error,
-                            region = Region}};
+    {reply, ok, State#state{region = Region}};
 
 handle_msg(_Request, State) ->
     {noreply, State}.
