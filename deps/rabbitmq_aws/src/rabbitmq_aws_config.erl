@@ -586,14 +586,14 @@ parse_az_response({ok, {{_, 200, _}, _, Body}})
 parse_az_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 
 
- -spec parse_body_response(httpc_result())
-   -> {ok, Value :: string()} | {error, Reason :: atom()}.
- %% @doc Parse the return response from the Instance Metadata service where the
- %%      body value is the string to process.
- %% end.
- parse_body_response({error, _}) -> {error, undefined};
- parse_body_response({ok, {{_, 200, _}, _, Body}}) -> {ok, Body};
- parse_body_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
+-spec parse_body_response(httpc_result())
+ -> {ok, Value :: string()} | {error, Reason :: atom()}.
+%% @doc Parse the return response from the Instance Metadata service where the
+%%      body value is the string to process.
+%% end.
+parse_body_response({error, _}) -> {error, undefined};
+parse_body_response({ok, {{_, 200, _}, _, Body}}) -> {ok, Body};
+parse_body_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 
 
 -spec parse_credentials_response(httpc_result()) -> security_credentials().
