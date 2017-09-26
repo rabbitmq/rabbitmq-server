@@ -605,10 +605,10 @@ parse_credentials_response({ok, {{_, 404, _}, _, _}}) -> {error, undefined};
 parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
   Parsed = rabbitmq_aws_json:decode(Body),
   {ok,
-   maps:get("AccessKeyId", Parsed),
-   maps:get("SecretAccessKey", Parsed),
-   parse_iso8601_timestamp(maps:get("Expiration", Parsed)),
-   maps:get("Token", Parsed)}.
+   proplists:get_value("AccessKeyId", Parsed),
+   proplists:get_value("SecretAccessKey", Parsed),
+   parse_iso8601_timestamp(proplists:get_value("Expiration", Parsed)),
+   proplists:get_value("Token", Parsed)}.
 
 
 -spec perform_http_get(string()) -> httpc_result().

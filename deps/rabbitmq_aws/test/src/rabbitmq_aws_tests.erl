@@ -152,7 +152,7 @@ gen_server_call_test_() ->
             fun(get, {"https://ec2.us-east-1.amazonaws.com/?Action=DescribeTags&Version=2015-10-01", _Headers}, _Options, []) ->
                 {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
             end),
-          Expectation = {reply, {ok, {[{"content-type", "application/json"}], #{"pass" => true}}}, State},
+          Expectation = {reply, {ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State},
           Result = rabbitmq_aws:handle_call({request, Service, Method, Headers, Path, Body, Options, Host}, eunit, State),
           ?assertEqual(Expectation, Result),
           meck:validate(httpc)
@@ -267,13 +267,13 @@ maybe_decode_body_test_() ->
     {"application/x-amz-json-1.0", fun() ->
       ContentType = {"application", "x-amz-json-1.0"},
       Body = "{\"test\": true}",
-      Expectation = #{"test" => true},
+      Expectation = [{"test", true}],
       ?assertEqual(Expectation, rabbitmq_aws:maybe_decode_body(ContentType, Body))
      end},
     {"application/json", fun() ->
       ContentType = {"application", "json"},
       Body = "{\"test\": true}",
-      Expectation = #{"test" => true},
+      Expectation = [{"test", true}],
       ?assertEqual(Expectation, rabbitmq_aws:maybe_decode_body(ContentType, Body))
      end},
     {"text/xml", fun() ->
@@ -339,7 +339,7 @@ perform_request_test_() ->
                             {ok, {{"HTTP/1.0", 400, "RequestFailure", [{"content-type", "application/json"}],  "{\"pass\": false}"}}}
                         end
                       end),
-          Expectation = {{ok, {[{"content-type", "application/json"}], #{"pass" => true}}}, State},
+          Expectation = {{ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State},
           Result = rabbitmq_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
           ?assertEqual(Expectation, Result),
           meck:validate(httpc)
@@ -418,7 +418,7 @@ perform_request_test_() ->
                          State2#state.security_token}
                       end),
 
-          Expectation = {{ok, {[{"content-type", "application/json"}], #{"pass" => true}}}, State2},
+          Expectation = {{ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State2},
           Result = rabbitmq_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
           ?assertEqual(Expectation, Result),
           meck:validate(httpc),
