@@ -19,6 +19,7 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-expires':                 {'short': 'Exp', 'type': 'int'},
                   'x-max-length':              {'short': 'Lim', 'type': 'int'},
                   'x-max-length-bytes':        {'short': 'Lim B', 'type': 'int'},
+                  'x-overflow':                {'short': 'Ovfl', 'type': 'string'},
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
                   'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'},
                   'x-queue-master-locator':    {'short': 'ML', 'type': 'string'},

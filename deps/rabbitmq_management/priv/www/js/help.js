@@ -23,6 +23,9 @@ HELP = {
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 
+    'queue-overflow':
+      'Queue overflow behaviour. One of <code>drop_head</code> (default: drop messages from the head) or <code>reject_publish</code> (discard published messages). <br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/maxlength.html">x-overflow</a>" argument.)',
+
     'queue-dead-letter-exchange':
       'Optional name of an exchange to which messages will be republished if they are rejected or expire.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/dlx.html">x-dead-letter-exchange</a>" argument.)',
 
