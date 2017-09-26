@@ -192,8 +192,8 @@ url_maybe_add_fragment(undefined, URL) -> URL;
 url_maybe_add_fragment([], URL) -> URL;
 url_maybe_add_fragment(Value, URL) ->
   Fragment = case string:left(Value, 1) of
-               "#" -> edoc_lib:escape_uri(string:sub_string(Value, 2));
-               _ -> edoc_lib:escape_uri(Value)
+               "#" -> http_uri:encode(string:sub_string(Value, 2));
+               _ -> http_uri:encode(Value)
              end,
   string:join([URL, Fragment], "#").
 
