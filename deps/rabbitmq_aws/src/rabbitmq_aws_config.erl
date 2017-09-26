@@ -586,14 +586,14 @@ parse_az_response({ok, {{_, 200, _}, _, Body}})
 parse_az_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 
 
- -spec parse_body_response(httpc_result())
-   -> {ok, Value :: string()} | {error, Reason :: atom()}.
- %% @doc Parse the return response from the Instance Metadata service where the
- %%      body value is the string to process.
- %% end.
- parse_body_response({error, _}) -> {error, undefined};
- parse_body_response({ok, {{_, 200, _}, _, Body}}) -> {ok, Body};
- parse_body_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
+-spec parse_body_response(httpc_result())
+ -> {ok, Value :: string()} | {error, Reason :: atom()}.
+%% @doc Parse the return response from the Instance Metadata service where the
+%%      body value is the string to process.
+%% end.
+parse_body_response({error, _}) -> {error, undefined};
+parse_body_response({ok, {{_, 200, _}, _, Body}}) -> {ok, Body};
+parse_body_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 
 
 -spec parse_credentials_response(httpc_result()) -> security_credentials().
@@ -605,14 +605,13 @@ parse_credentials_response({ok, {{_, 404, _}, _, _}}) -> {error, undefined};
 parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
   Parsed = rabbitmq_aws_json:decode(Body),
   {ok,
-   maps:get("AccessKeyId", Parsed),
-   maps:get("SecretAccessKey", Parsed),
-   parse_iso8601_timestamp(maps:get("Expiration", Parsed)),
-   maps:get("Token", Parsed)}.
+   proplists:get_value("AccessKeyId", Parsed),
+   proplists:get_value("SecretAccessKey", Parsed),
+   parse_iso8601_timestamp(proplists:get_value("Expiration", Parsed)),
+   proplists:get_value("Token", Parsed)}.
 
 
--spec perform_http_get(string())
-  -> {ok, Result :: httpc_result()} | {error, Reason :: atom()}.
+-spec perform_http_get(string()) -> httpc_result().
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service requests
 %% @end
 perform_http_get(URL) ->

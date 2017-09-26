@@ -13,7 +13,7 @@ endef
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-LOCAL_DEPS = crypto ssl inets
+LOCAL_DEPS = crypto edoc inets ssl xmerl
 BUILD_DEPS = rabbit_common
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 TEST_DEPS = meck

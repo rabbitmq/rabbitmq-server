@@ -87,15 +87,13 @@ canonical_headers_test_() ->
                {"Content-Type", "content-type:application/x-www-form-urlencoded; charset=utf-8"},
                {"My-Header2", "\"a b c \""},
                {"My-Header1", "a b c"},
-               {"My-Header3", 5},
                {"Date", "20150830T123600Z"}],
       Expectation = lists:flatten([
         "content-type:content-type:application/x-www-form-urlencoded; charset=utf-8\n",
         "date:20150830T123600Z\n",
         "host:iam.amazonaws.com\n",
         "my-header1:a b c\n",
-        "my-header2:\"a b c \"\n",
-        "my-header3:5\n"]),
+        "my-header2:\"a b c \"\n"]),
       ?assertEqual(Expectation, rabbitmq_aws_sign:canonical_headers(Value))
      end}
   ].

@@ -14,28 +14,47 @@
 %% @end
 decode(Value) when is_list(Value) ->
   decode(list_to_binary(Value));
-decode(Value) ->
-  Decoded = rabbit_json:decode(Value),
-  convert_binary_values(Decoded).
+decode(Value) when is_binary(Value) ->
+  % We set an empty list of options because we don't want the default
+  % options set in rabbit_json:cecode/1. And we can't override
+  % 'return_maps' with '{return_maps, false}' because of a bug in jsx's
+  % options handler.
+  % See https://github.com/talentdeficit/jsx/pull/115
+  Decoded0 = rabbit_json:decode(Value, []),
+  Decoded = if
+    is_map(Decoded0)  -> maps:to_list(Decoded0);
+    is_list(Decoded0) -> Decoded0
+  end,
+  convert_binary_values(Decoded, []).
 
--spec convert_binary_values
-        (Value :: map()) -> map();
-        (Value :: list()) -> list();
-        (Value :: binary()) -> list();
-        (Value :: atom()) -> atom();
-        (Value :: integer()) -> integer().
-%% @doc Convert the binary key/value pairs returned by JSX to strings.
+
+-spec convert_binary_values(Value :: list(), Accumulator :: list()) -> list().
+%% @doc Convert the binary key/value pairs returned by rabbit_json to strings.
 %% @end
-convert_binary_values(Map) when is_map(Map) ->
-    maps:fold(fun convert_binary_values/3, #{}, Map);
-convert_binary_values(List) when is_list(List) ->
-    lists:map(fun convert_binary_values/1, List);
-convert_binary_values(Binary) when is_binary(Binary) ->
-    binary_to_list(Binary);
-convert_binary_values(Other) ->
-    Other.
-
-convert_binary_values(Key, Value, Map) ->
-    Key1 = convert_binary_values(Key),
-    Value1 = convert_binary_values(Value),
-    Map#{Key1 => Value1}.
+convert_binary_values([], Value) ->  Value;
+convert_binary_values([{K, V}|T], Accum) when is_map(V) ->
+  convert_binary_values(
+    T,
+    lists:append(
+      Accum,
+      [{binary_to_list(K), convert_binary_values(maps:to_list(V), [])}]));
+convert_binary_values([{K, V}|T], Accum) when is_list(V) ->
+  convert_binary_values(
+    T,
+    lists:append(
+      Accum,
+      [{binary_to_list(K), convert_binary_values(V, [])}]));
+convert_binary_values([{K, V}|T], Accum) when is_binary(V) ->
+  convert_binary_values(T, lists:append(Accum, [{binary_to_list(K), binary_to_list(V)}]));
+convert_binary_values([{K, V}|T], Accum) ->
+  convert_binary_values(T, lists:append(Accum, [{binary_to_list(K), V}]));
+convert_binary_values([H|T], Accum) when is_map(H) ->
+  convert_binary_values(T, lists:append(Accum, convert_binary_values(maps:to_list(H), [])));
+convert_binary_values([H|T], Accum) when is_binary(H) ->
+  convert_binary_values(T, lists:append(Accum, [binary_to_list(H)]));
+convert_binary_values([H|T], Accum) when is_integer(H) ->
+  convert_binary_values(T, lists:append(Accum, [H]));
+convert_binary_values([H|T], Accum) when is_atom(H) ->
+  convert_binary_values(T, lists:append(Accum, [H]));
+convert_binary_values([H|T], Accum) ->
+  convert_binary_values(T, lists:append(Accum, convert_binary_values(H, []))).
