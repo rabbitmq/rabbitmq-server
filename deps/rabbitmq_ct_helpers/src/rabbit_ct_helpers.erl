@@ -74,7 +74,8 @@ run_setup_steps(Config, ExtraSteps) ->
       fun ensure_rabbitmqctl_app/1,
       fun ensure_rabbitmq_plugins_cmd/1,
       fun ensure_ssl_certs/1,
-      fun start_long_running_testsuite_monitor/1
+      fun start_long_running_testsuite_monitor/1,
+      fun load_elixir/1
     ],
     run_steps(Config, Steps ++ ExtraSteps).
 
@@ -421,6 +422,12 @@ start_long_running_testsuite_monitor(Config) ->
           long_running_testsuite_monitor(TimerRef, [])
       end),
     set_config(Config, {long_running_testsuite_monitor, Pid}).
+
+load_elixir(Config) ->
+    application:load(elixir),
+    S = application:ensure_all_started(elixir),
+    ct:pal("Elixir start status: ~p~n", [S]),
+    Config.
 
 stop_long_running_testsuite_monitor(Config) ->
     ?config(long_running_testsuite_monitor, Config) ! stop,
