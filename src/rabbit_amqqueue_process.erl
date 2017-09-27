@@ -80,7 +80,7 @@
             %% max length in bytes, if configured
             max_bytes,
             %% an action to perform if queue is to be over a limit,
-            %% can be either drop_head (default) or reject_publish
+            %% can be either drop-head (default) or reject-publish
             overflow,
             %% when policies change, this version helps queue
             %% determine what previously scheduled/set up state to ignore,
@@ -162,7 +162,7 @@ init_state(Q) ->
                msg_id_to_channel   = gb_trees:empty(),
                status              = running,
                args_policy_version = 0,
-               overflow            = drop_head},
+               overflow            = 'drop-head'},
     rabbit_event:init_stats_timer(State, #q.stats_timer).
 
 init_it(Recover, From, State = #q{q = #amqqueue{exclusive_owner = none}}) ->
@@ -634,9 +634,9 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
 maybe_deliver_or_enqueue(Delivery, Delivered, State = #q{overflow = Overflow}) ->
     send_mandatory(Delivery), %% must do this before confirms
     case {will_overflow(Delivery, State), Overflow} of
-        {true, reject_publish} ->
+        {true, 'reject-publish'} ->
             %% Drop publish and nack to publisher
-            nack_publish_no_space(Delivery, Delivered, State);
+            send_reject_publish(Delivery, Delivered, State);
         _ ->
             %% Enqueue and maybe drop head later
             deliver_or_enqueue(Delivery, Delivered, State)
@@ -686,9 +686,9 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
 maybe_drop_head(State = #q{max_length = undefined,
                            max_bytes  = undefined}) ->
     {false, State};
-maybe_drop_head(State = #q{overflow = reject_publish}) ->
+maybe_drop_head(State = #q{overflow = 'reject-publish'}) ->
     {false, State};
-maybe_drop_head(State = #q{overflow = drop_head}) ->
+maybe_drop_head(State = #q{overflow = 'drop-head'}) ->
     maybe_drop_head(false, State).
 
 maybe_drop_head(AlreadyDropped, State = #q{backing_queue       = BQ,
@@ -707,7 +707,7 @@ maybe_drop_head(AlreadyDropped, State = #q{backing_queue       = BQ,
             {AlreadyDropped, State}
     end.
 
-nack_publish_no_space(#delivery{confirm = true,
+send_reject_publish(#delivery{confirm = true,
                                 sender = SenderPid,
                                 msg_seq_no = MsgSeqNo} = Delivery,
                       _Delivered,
@@ -717,7 +717,7 @@ nack_publish_no_space(#delivery{confirm = true,
     {BQS1, MTC1} = discard(Delivery, BQ, BQS, MTC),
     gen_server2:cast(SenderPid, {reject_publish, MsgSeqNo, self()}),
     State#q{ backing_queue_state = BQS1, msg_id_to_channel = MTC1 };
-nack_publish_no_space(#delivery{confirm = false},
+send_reject_publish(#delivery{confirm = false},
                       _Delivered, State) ->
     State.
 

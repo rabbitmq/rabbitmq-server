@@ -311,7 +311,7 @@ reject(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Q = <<"reject-queue">>,
     declare(Ch, Q, [{<<"x-max-length">>, long, 4},
-                    {<<"x-overflow">>, longstr, <<"reject_publish">>}
+                    {<<"x-overflow">>, longstr, <<"reject-publish">>}
                     | arguments(3)]),
     publish(Ch, Q, [1, 2, 3, 1, 2, 3, 1, 2, 3]),
     %% First 4 messages are published, all others are discarded.

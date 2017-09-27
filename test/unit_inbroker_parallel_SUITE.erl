@@ -1050,7 +1050,7 @@ max_length_drop_head(Config) ->
 
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
-    OverflowArgs = [{<<"x-overflow">>, longstr, <<"drop_head">>}],
+    OverflowArgs = [{<<"x-overflow">>, longstr, <<"drop-head">>}],
     amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     amqp_channel:call(Ch, #'queue.delete'{queue = QNameDefault}),
     amqp_channel:call(Ch, #'queue.delete'{queue = QNameBytes}),
@@ -1076,7 +1076,7 @@ max_length_reject_confirm(Config) ->
     QNameBytes = <<"max_length_bytes_reject_queue">>,
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
-    OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject_publish">>}],
+    OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
     amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     amqp_channel:call(Ch, #'queue.delete'{queue = QNameBytes}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs}),
@@ -1099,12 +1099,12 @@ max_length_drop_publish(Config) ->
     QNameBytes = <<"max_length_bytes_drop_publish_queue">>,
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
-    OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject_publish">>}],
+    OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
     amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     amqp_channel:call(Ch, #'queue.delete'{queue = QNameBytes}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs}),
-    %% If confirms are not enable, publishes will still be dropped in reject_publish mode.
+    %% If confirms are not enable, publishes will still be dropped in reject-publish mode.
     check_max_length_drops_publish(Config, QName, Ch, <<"1">>, <<"2">>, <<"3">>),
 
     %% 80 bytes payload

@@ -230,7 +230,7 @@ rejecets_survive(Config, DeathFun) ->
                                                     auto_delete = false,
                                                     durable     = true,
                                                     arguments = [{<<"x-max-length">>, long, 1},
-                                                                 {<<"x-overflow">>, longstr, <<"reject_publish">>}]}),
+                                                                 {<<"x-overflow">>, longstr, <<"reject-publish">>}]}),
     Payload = <<"there can be only one">>,
     amqp_channel:call(Node1Channel,
                       #'basic.publish'{routing_key = Queue},

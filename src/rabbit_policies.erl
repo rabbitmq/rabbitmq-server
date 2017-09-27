@@ -106,9 +106,9 @@ validate_policy0(<<"queue-mode">>, <<"lazy">>) ->
     ok;
 validate_policy0(<<"queue-mode">>, Value) ->
     {error, "~p is not a valid queue-mode value", [Value]};
-validate_policy0(<<"overflow">>, <<"drop_head">>) ->
+validate_policy0(<<"overflow">>, <<"drop-head">>) ->
     ok;
-validate_policy0(<<"overflow">>, <<"reject_publish">>) ->
+validate_policy0(<<"overflow">>, <<"reject-publish">>) ->
     ok;
 validate_policy0(<<"overflow">>, Value) ->
     {error, "~p is not a valid overflow value", [Value]}.
