@@ -185,9 +185,11 @@ get_system_process_resident_memory({unix,openbsd}) ->
     get_ps_memory();
 
 get_system_process_resident_memory({win32,_OSname}) ->
-    % Note: 3.6.12 shipped with code that used wmic.exe to get the
-    % WorkingSetSize value for the running erl.exe process.
-    % See rabbitmq/rabbitmq-server#1343 for details
+    %% Note: 3.6.12 shipped with code that used wmic.exe to get the
+    %% WorkingSetSize value for the running erl.exe process. Unfortunately
+    %% even with a moderate invocation rate of 1 ops/second that uses more
+    %% CPU resources than some Windows users are willing to tolerate.
+    %% See rabbitmq/rabbitmq-server#1343 for details.
     {ok, erlang:memory(total)};
 
 get_system_process_resident_memory({unix, sunos}) ->
