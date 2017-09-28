@@ -12,6 +12,10 @@ $(HEXPM_CLI):
 	$(gen_verbose) $(call core_http_get,$@,$(HEXPM_URL))
 	$(verbose) chmod +x $@
 
+rebar.config: dep_jsx = hex $(dep_jsx_commit)
+rebar.config: dep_lager = hex $(dep_lager_commit)
+rebar.config: dep_ranch = hex $(dep_ranch_commit)
+rebar.config: dep_ranch_proxy_protocol = hex $(dep_ranch_proxy_protocol_commit)
 rebar.config: dep_rabbit_common = hex $(PROJECT_VERSION)
 rebar.config: dep_amqp_client = hex $(PROJECT_VERSION)
 
