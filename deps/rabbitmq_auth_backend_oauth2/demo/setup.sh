@@ -5,7 +5,8 @@ set -e
 gem install bunny
 gem install cf-uaac
 
-target=${UAA_HOST:="localhost:8080/uaa"}
+target=${UAA_HOST:="http://localhost:8080/uaa"}
+# export to use a different ctl, e.g. if the node was built from source
 ctl=${RABBITMQCTL:="rabbitmqctl"}
 
 # Target the server
