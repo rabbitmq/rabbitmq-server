@@ -18,19 +18,17 @@
 
 -behaviour(application).
 
--export([start/0, boot/0, stop/0,
-         stop_and_halt/0, await_startup/0, await_startup/1,
-         status/0, is_running/0, alarms/0,
-         is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
-         start_fhc/0]).
+-export([start/0, boot/0, stop/0, stop_and_halt/0,
+         await_startup/0, await_startup/1,
+         status/0, alarms/0, environment/0,
+         is_running/0, is_running/1,
+         rotate_logs/0, force_event_refresh/1, start_fhc/0]).
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
 
 -ifdef(TEST).
-
 -export([start_logger/0]).
-
 -endif.
 
 %%---------------------------------------------------------------------------
@@ -240,6 +238,7 @@
 -spec stop() -> 'ok'.
 -spec stop_and_halt() -> no_return().
 -spec await_startup() -> 'ok'.
+-spec await_startup(node()) -> 'ok'.
 -spec status
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -469,7 +468,7 @@ stop() ->
         undefined -> ok;
         _         ->
             rabbit_log:info("RabbitMQ hasn't finished starting yet. Waiting for startup to finish before stopping..."),
-            ok = wait_for_boot_to_finish(node())
+            ok = rabbit_boot_status:wait_for_finish(node())
     end,
     rabbit_log:info("RabbitMQ is asked to stop...~n", []),
     Apps = ?APPS ++ rabbit_plugins:active(),
@@ -648,50 +647,7 @@ await_startup() ->
     await_startup(node()).
 
 await_startup(Node) ->
-    case is_booting(Node) of
-        true -> wait_for_boot_to_finish(Node);
-        false ->
-            case is_running(Node) of
-                true -> ok;
-                false -> wait_for_boot_to_start(Node),
-                         wait_for_boot_to_finish(Node)
-            end
-    end.
-
-is_booting(Node) ->
-    case rpc:call(Node, erlang, whereis, [rabbit_boot]) of
-        {badrpc, _} = Err -> Err;
-        undefined         -> false;
-        P when is_pid(P)  -> true
-    end.
-
-wait_for_boot_to_start(Node) ->
-    case is_booting(Node) of
-        false ->
-            timer:sleep(100),
-            wait_for_boot_to_start(Node);
-        {badrpc, _} = Err ->
-            Err;
-        true  ->
-            ok
-    end.
-
-wait_for_boot_to_finish(Node) ->
-    case is_booting(Node) of
-        false ->
-            %% We don't want badrpc error to be interpreted as false,
-            %% so we don't call rabbit:is_running(Node)
-            case rpc:call(Node, rabbit, is_running, []) of
-                true              -> ok;
-                false             -> {error, rabbit_is_not_running};
-                {badrpc, _} = Err -> Err
-            end;
-        {badrpc, _} = Err ->
-            Err;
-        true  ->
-            timer:sleep(100),
-            wait_for_boot_to_finish(Node)
-    end.
+    rabbit_boot_status:await(Node).
 
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
@@ -745,12 +701,11 @@ listeners() ->
                   ip_address = IP,
                   port       = Port} <- Listeners, Node =:= node()].
 
-%% TODO this only determines if the rabbit application has started,
-%% not if it is running, never mind plugins. It would be nice to have
-%% more nuance here.
-is_running() -> is_running(node()).
+is_running() ->
+    is_running(node()).
 
-is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
+is_running(Node) ->
+    rabbit_boot_status:is_running(Node).
 
 environment() ->
     %% The timeout value is twice that of gen_server:call/2.
