@@ -115,15 +115,12 @@ main(ParseFun, DoFun, UsageMod) ->
                 _ ->
                     print_error("unable to connect to node ~w: ~w", [Node, Reason]),
                     print_badrpc_diagnostics([Node]),
-                    case Command of
-                        stop -> rabbit_misc:quit(?EX_OK);
-                        _    -> rabbit_misc:quit(?EX_UNAVAILABLE)
-                    end
+                    exit_badrpc(Command)
             end;
         {badrpc_multi, Reason, Nodes} ->
             print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
             print_badrpc_diagnostics(Nodes),
-            rabbit_misc:quit(?EX_UNAVAILABLE);
+            exit_badrpc(Command);
         function_clause ->
             print_error("operation ~w used with invalid parameter: ~p",
                         [Command, Args]),
@@ -135,6 +132,11 @@ main(ParseFun, DoFun, UsageMod) ->
             print_error("~p", [Other]),
             rabbit_misc:quit(?EX_SOFTWARE)
     end.
+
+exit_badrpc(stop) ->
+    rabbit_misc:quit(?EX_OK);
+exit_badrpc(_) ->
+    rabbit_misc:quit(?EX_UNAVAILABLE).
 
 start_distribution_anon(0, LastError) ->
     {error, LastError};
