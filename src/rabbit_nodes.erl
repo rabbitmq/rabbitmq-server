@@ -18,9 +18,11 @@
 -module(rabbit_nodes).
 
 -export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0,
-         is_running/2, is_process_running/2,
          cluster_name/0, set_cluster_name/2, ensure_epmd/0,
          all_running/0]).
+%% TODO FUTURE
+%% As of 2017/09/28 these two functions are unused
+-export([is_running/2, is_process_running/2]).
 
 -include_lib("kernel/include/inet.hrl").
 
@@ -55,9 +57,11 @@ parts(NodeStr) ->
 cookie_hash() ->
     rabbit_nodes_common:cookie_hash().
 
+%% TODO FUTURE - UNUSED
 is_running(Node, Application) ->
     rabbit_nodes_common:is_running(Node, Application).
 
+%% TODO FUTURE - UNUSED
 is_process_running(Node, Process) ->
     rabbit_nodes_common:is_process_running(Node, Process).
 
