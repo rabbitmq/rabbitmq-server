@@ -45,7 +45,9 @@ groups() ->
           confirms_survive_stop,
           confirms_survive_sigkill,
           confirms_survive_policy,
-          rejects_survive_stop
+          rejects_survive_stop,
+          rejects_survive_sigkill,
+          rejects_survive_policy
         ]}
     ].
 
@@ -157,9 +159,9 @@ confirms_survive_stop(Cf)    -> confirms_survive(Cf, fun stop/2).
 confirms_survive_sigkill(Cf) -> confirms_survive(Cf, fun sigkill/2).
 confirms_survive_policy(Cf)  -> confirms_survive(Cf, fun policy/2).
 
-rejects_survive_stop(Cf) -> rejecets_survive(Cf, fun stop/2).
-rejects_survive_sigkill(Cf) -> rejecets_survive(Cf, fun sigkill/2).
-rejects_survive_policy(Cf) -> rejecets_survive(Cf, fun policy/2).
+rejects_survive_stop(Cf) -> rejects_survive(Cf, fun stop/2).
+rejects_survive_sigkill(Cf) -> rejects_survive(Cf, fun sigkill/2).
+rejects_survive_policy(Cf) -> rejects_survive(Cf, fun policy/2).
 
 %%----------------------------------------------------------------------------
 
@@ -218,7 +220,7 @@ confirms_survive(Config, DeathFun) ->
     rabbit_ha_test_producer:await_response(ProducerPid),
     ok.
 
-rejecets_survive(Config, DeathFun) ->
+rejects_survive(Config, DeathFun) ->
     [A, B, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Msgs = rabbit_ct_helpers:cover_work_factor(Config, 20000),
     Node1Channel = rabbit_ct_client_helpers:open_channel(Config, A),
