@@ -30,7 +30,14 @@ all() ->
 groups() ->
     [
      {non_parallel_tests, [], [
-                               import_case1
+                               %% Note: to make it easier to see which case failed,
+                               %% these are intentionally not folded into a single case.
+                               %% If generation becomes an alternative worth considering for these tests,
+                               %% we'll just add a case that drives PropEr.
+                               import_case1,
+                               import_case2,
+                               import_case3,
+                               import_case4
                               ]}
     ].
 
@@ -68,8 +75,10 @@ end_per_testcase(Testcase, Config) ->
 %% Tests
 %%
 
-import_case1(Config) ->
-    import_case(Config, "case1").
+import_case1(Config) -> import_case(Config, "case1").
+import_case2(Config) -> import_case(Config, "case2").
+import_case3(Config) -> import_case(Config, "case3").
+import_case4(Config) -> import_case(Config, "case4").
 
 import_case(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
