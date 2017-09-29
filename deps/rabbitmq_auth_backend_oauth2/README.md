@@ -1,57 +1,62 @@
-## RabbitMQ authorisation Backend for [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa)
+# RabbitMQ authorisation Backend for [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa)
 
-Allows to use access tokens provided by CF UAA to authorize in RabbitMQ.
+This [RabbitMQ authentication/authorisation backend](http://www.rabbitmq.com/access-control.html) plugin lets [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa)
+(OAuth 2.0) access tokens to be used by RabbitMQ client connections.
 
-This plugin is **experimental** and should not be used until this notice is removed.
+This plugin is **experimental** and targets RabbitMQ 3.7.0 only.
 
-### RabbitMQ version
+## Supported RabbitMQ Versions
 
-This plugins is developed for RabbitMQ 3.7 which is pending release.
-This plugin **will not work** with any released versions of RabbitMQ
+This plugins is developed for RabbitMQ 3.7 (currently in development).
+This plugin **does not target** RabbitMQ 3.6.x release series.
 
-To test the plugin, you should build it yourself, together with RabbitMQ.
+To test the plugin it has to be [built from source together with RabbitMQ](https://github.com/rabbitmq/rabbitmq-public-umbrella).
 
-You can find build instructions [here](https://github.com/rabbitmq/rabbitmq-public-umbrella)
+
+## How it Works
 
 ### Authorization Workflow
 
-This plugin does not communicate with an UAA server. It decodes an access token and
-authorises a user based on the token data.
+This plugin does not communicate with an UAA server. It decodes an access token provided by
+the client and authorises a user based on the data stored in the token.
 
-The token can be any JWT token, which contains `scope` and `aud` fields.
-The way the token was retrieved (such as grant type) is outside of this plufin scope.
+The token can be any [JWT token](https://jwt.io/introduction/) which
+contains the `scope` and `aud` fields.  The way the token was
+retrieved (such as what grant type was used) is outside of the scope
+of this plugin.
 
-#### Prerequisites
+### Prerequisites
 
-1. A symmetrically encrypted JWT token containing RabbitMQ scopes.
-2. RabbitMQ auth_backends should include `rabbit_auth_backend_uaa`
-3. The RabbitMQ scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`) needs to
-match the `resource_server_id` configuration (empty by default).
+To use this plugin
 
-#### Authorization
+1. A symmetrically encrypted JWT token containing a set of RabbitMQ permission scopes.
+2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_uaa` backend](http://www.rabbitmq.com/access-control.html)
+3. All RabbitMQ nodes must be configure with a resource service ID (`resource_server_id`) that matches the scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`).
 
-1. Client authorize with UAA, requesting an `access_token` (using any grant type)
-2. Token scope should contain RabbitMQ resource scopes (e.g. `configure:%2F/foo` means "configure queue 'foo' in vhost '/'")
-3. Client passes token as the username when connecting to a RabbitMQ node. The password
-field is not used.
+### Authorization Flow
 
-### Usage
+1. Client authorize with UAA, requesting an `access_token` (using any grant type desired)
+2. Token scope returned by UAA must include RabbitMQ resource scopes that follow a convention used by this plugin: `configure:%2F/foo` means "configure permissions for 'foo' in vhost '/'")
+3. Client passes the token as username when connecting to a RabbitMQ node. The **password field is ignored**.
 
-The plugin should be configured with UAA signing key to check token signatures.
-You can get the signing key from the UAA server using
-[token_key api](https://docs.cloudfoundry.org/api/uaa/version/4.6.0/index.html#token-key-s)
-or [uaac](https://github.com/cloudfoundry/cf-uaac) using `uaac signing key` command.
 
-Important fields are `kty`, `value`, `alg` and `kid`.
+## Usage
 
-For example if UAA returns
+The plugin needs a UAA signing key to be configured in order to decrypt and verify client-provided tokens.
+To get the signing key from a running UAA node, use the
+[token_key endpoint](https://docs.cloudfoundry.org/api/uaa/version/4.6.0/index.html#token-key-s)
+or [uaac](https://github.com/cloudfoundry/cf-uaac) (the `uaac signing key` command).
+
+The following fields are required: `kty`, `value`, `alg`, and `kid`.
+
+Assuming UAA reports the following signing key information:
 
 ```
 uaac signing key
   kty: RSA
   e: AQAB
   use: sig
-  kid: legacy-token-key
+  kid: a-key-ID
   alg: RS256
   value: -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2dP+vRn+Kj+S/oGd49kq
@@ -66,15 +71,18 @@ VwIDAQAB
       HCkEBMPxKwXuEhdnK98EMAnxdalbuHgFTVX8X8v7hLxt0O8dNOT903CvkHGICcWr95YnLUouXcli4BkAL5JJ1oraUSvClS8qRI-Vino-ghfJ6t9LrZ9eRUINCZB6Ks8Igqqnnp_BiD7XiO1c
 ```
 
-The configuration for a signing key should be:
+it will translate into the following configuration (in the [advanced RabbitMQ config format](http://next.rabbitmq.com/configure.html)):
 
 ```erlang
-[ {rabbitmq_auth_backend_uaa, [{resource_server_id, <<"my_rabbit_server">>}]},
+[
+  %% ...
+  %% backend configuration
+  {rabbitmq_auth_backend_uaa, [{resource_server_id, <<"my_rabbit_server">>}]},
+  %% UAA signing key configuration
   {uaa_jwt, [
     {signing_keys, #{
-        <<"legacy-token-key">> => {map, #{<<"kty">> => <<"RSA">>,
+        <<"a-key-ID">> => {map, #{<<"kty">> => <<"RSA">>,
                                           <<"alg">> => <<"RS256">>,
-                                          <<"kid">> => <<"legacy-token-key">>,
                                           <<"value">> => <<"-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2dP+vRn+Kj+S/oGd49kq
 6+CKNAduCC1raLfTH7B3qjmZYm45yDl+XmgK9CNmHXkho9qvmhdksdzDVsdeDlhK
@@ -89,31 +97,31 @@ VwIDAQAB
 ].
 ```
 
-If you are using a symmetric key, the configuration will be:
+If you are using a symmetric key, the configuration will look like this:
 
 ```erlang
 [ {rabbitmq_auth_backend_uaa, [{resource_server_id, <<"my_rabbit_server">>}]},
   {uaa_jwt, [
     {signing_keys, #{
-        <<"legacy-token-key">> => {map, #{<<"kty">> => <<"MAC">>,
+        <<"a-key-ID">> => {map, #{<<"kty">> => <<"MAC">>,
                                           <<"alg">> => <<"HMACSHA256">>,
-                                          <<"kid">> => <<"legacy-token-key">>,
                                           <<"value">> => <<"my_signing_key">>}}
         }}
     ]}
 ].
 ```
 
-see [UAA_JWT](https://github.com/rabbitmq/uaa_jwt) library for more info
+Key signature verification is implemented by the [UAA JWT library](https://github.com/rabbitmq/uaa_jwt).
 
-`resource_server_id` is a prefix for scopes in UAA to avoid overlap of scopes.
-It is empty by default
+### Resource Server ID and Scope Prefixes
 
-To learn more about UAA/OAuth 2 clients, see [UAA docs](https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id73).
+OAuth 2.0 and (thus UAA-provided) tokens use scopes to communicate what set of permissions are particular
+client has been granted. The scopes are free form strings.
 
-Then you can use `access_tokens` acquired from UAA as username to authenticate in RabbitMQ.
+`resource_server_id` is a prefix used for scopes in UAA to avoid scope collisions (or unintended overlap).
+It is an empty string by default.
 
-### Scopes
+### Scope-to-Permission Translation
 
 Scopes are translated into permission grants to RabbitMQ resources for the provided token.
 
@@ -154,39 +162,59 @@ See the [./test/wildcard_match_SUITE.erl](wildcard matching test suite) and [./t
 
 Scopes should be prefixed with `resource_server_id`. For example,
 if `resource_server_id` is "my_rabbit", a scope to enable read from any vhost will
-be `my_rabbit.read:*/*`
+be `my_rabbit.read:*/*`.
+
+### Using Tokens with Clients
+
+A client must present a valid `access_token` acquired from UAA as username
+in order to authenticate with RabbitMQ.
+
+To learn more about UAA/OAuth 2.0 clients see [UAA docs](https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id73).
+
 
 ### Examples
 
-The [demo](/demo) directory contains configuration files which can be used to set up
+The [demo](/demo) directory contains example configuration files which can be used to set up
 a development UAA server and issue tokens, which can be used to access RabbitMQ
 resources.
 
-To run the demo you should download [UAA](https://github.com/cloudfoundry/uaa)
+#### UAA and RabbitMQ Config Files
 
-You can set `CLOUD_FOUNDRY_CONFIG_PATH` to  `demo/symmetric_keys` to set
-signing key to be symmetric `MAC` key. The value is `rabbit_signing_key`.
-`demo/symmetric_keys/rabbit.config` contains a RabbitMQ configuration file to
-set up this signing key for RabbitMQ.
+To run the demo you need to have a [UAA](https://github.com/cloudfoundry/uaa) node
+intalled or built from source.
 
-To run UAA, from the UAA directory:
+To make UAA use a particular config file, such as those provided in the demo directory,
+export the `CLOUD_FOUNDRY_CONFIG_PATH` environment variable. For example, to use symmetric keys,
+see the UAA config files under the `demo/symmetric_keys` directory.
+
+`demo/symmetric_keys/rabbit.config` contains a RabbitMQ configuration file that
+sets up a matching signing key on the RbbitMQ end.
+
+### Running UAA
+
+To run UAA with a custom config file path, use the following from the UAA git repository:
+
 ```
 CLOUD_FOUNDRY_CONFIG_PATH=<path_to_plugin>/demo/symmetric_keys ./gradlew run
 ```
 
-To run RabbitMQ:
+#### Running RabbitMQ
+
 ```
-## To run rabbitmq-server
 RABBITMQ_CONFIG_FILE=<path_to_plugin>/demo/symmetric_keys/rabbitmq rabbitmq-server
 ## Or to run from source from the plugin directory
 make run-broker RABBITMQ_CONFIG_FILE=demo/symmetric_keys/rabbitmq
 ```
 
-You should enable `rabbitmq_auth_backend_uaa` plugin in RabbitMQ.
+The `rabbitmq_auth_backend_uaa` plugin must be enabled on the RabbitMQ node.
 
-Or to use an RSA key, you can set `CLOUD_FOUNDRY_CONFIG_PATH` to  `demo/rsa_keys`.
-This directory also contains `rabbit.config` file, as well as `public_key.pem`,
+#### Asymmetric Key Example
+
+To use an RSA (asymmetric) key, you can set `CLOUD_FOUNDRY_CONFIG_PATH` to  `demo/rsa_keys`.
+This directory also contains `rabbit.config` file, as well as a public key (`public_key.pem`)
 which will be used for signature verification.
+
+#### UAA User and Permission Management
 
 UAA sets scopes from client scopes and user groups. The demo uses groups to set up
 a set of RabbitMQ permissions scopes.
@@ -203,3 +231,9 @@ Please refer to `demo/setup.sh` to get more info about configuring UAA permissio
 The script will return an access tokens, which can be used to authorise
 in RabbitMQ. When authorising, you should use the token as a **username**.
 
+
+## License and Copyright
+
+(c) 2016-2017 Pivotal Software Inc.
+
+Released under the Mozilla Public License 1.1, same as RabbitMQ.
