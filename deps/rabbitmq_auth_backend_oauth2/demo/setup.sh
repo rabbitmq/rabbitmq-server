@@ -55,19 +55,19 @@ $ctl set_permissions -p other_vhost guest '.*' '.*' '.*'
 uaac token owner get cf rabbit_super -s "" -p rabbit_super
 uaac token owner get cf rabbit_nosuper -s "" -p rabbit_nosuper
 
-echo "Auth info for rabbit_super user
-This user will have full access to all rabbitmq vhosts.
-Use access_token as a RabbitMQ username"
-echo
-uaac context rabbit_super
-echo
-
 echo "Auth info for rabbit_nosuper user
 This user will have read access to uaa_vhost resources,
 which name start with some and write access to all uaa_vhost resources.
 Use access_token as a RabbitMQ username"
 echo
 uaac context rabbit_nosuper
+echo
+
+echo "Auth info for rabbit_super user
+This user will have full access to all rabbitmq vhosts.
+Use access_token as a RabbitMQ username"
+echo
+uaac context rabbit_super
 echo
 
 # Create queues
