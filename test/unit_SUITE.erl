@@ -31,7 +31,6 @@ all() ->
 groups() ->
     [
       {parallel_tests, [parallel], [
-          arguments_parser,
           auth_backend_internal_expand_topic_permission,
           {basic_header_handling, [parallel], [
               write_table_with_invalid_existing_type,
@@ -44,7 +43,6 @@ groups() ->
           content_transcoding,
           decrypt_config,
           listing_plugins_from_multiple_directories,
-          mutually_exclusive_flags_parsing,
           rabbitmqctl_encode,
           pg_local,
           pmerge,
@@ -97,104 +95,6 @@ end_per_testcase(decrypt_config, _Config) ->
     application:unload(rabbit);
 end_per_testcase(_TC, _Config) ->
     ok.
-
-%% -------------------------------------------------------------------
-%% Argument parsing.
-%% -------------------------------------------------------------------
-
-arguments_parser(_Config) ->
-    GlobalOpts1 = [{"-f1", flag}, {"-o1", {option, "foo"}}],
-    Commands1 = [command1, {command2, [{"-f2", flag}, {"-o2", {option, "bar"}}]}],
-
-    GetOptions =
-        fun (Args) ->
-                rabbit_cli:parse_arguments(Commands1, GlobalOpts1, "-n", Args)
-        end,
-
-    check_parse_arguments(no_command, GetOptions, []),
-    check_parse_arguments(no_command, GetOptions, ["foo", "bar"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "foo"}], []}},
-      GetOptions, ["command1"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
-      GetOptions, ["command1", "-o1", "blah"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", true}, {"-o1", "foo"}], []}},
-      GetOptions, ["command1", "-f1"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
-      GetOptions, ["-o1", "blah", "command1"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], ["quux"]}},
-      GetOptions, ["-o1", "blah", "command1", "quux"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", true}, {"-o1", "blah"}], ["quux", "baz"]}},
-      GetOptions, ["command1", "quux", "-f1", "-o1", "blah", "baz"]),
-    %% For duplicate flags, the last one counts
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "second"}], []}},
-      GetOptions, ["-o1", "first", "command1", "-o1", "second"]),
-    %% If the flag "eats" the command, the command won't be recognised
-    check_parse_arguments(no_command, GetOptions,
-                          ["-o1", "command1", "quux"]),
-    %% If a flag eats another flag, the eaten flag won't be recognised
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "-f1"}], []}},
-      GetOptions, ["command1", "-o1", "-f1"]),
-
-    %% Now for some command-specific flags...
-    check_parse_arguments(
-      {ok, {command2, [{"-f1", false}, {"-f2", false},
-                       {"-o1", "foo"}, {"-o2", "bar"}], []}},
-      GetOptions, ["command2"]),
-
-    check_parse_arguments(
-      {ok, {command2, [{"-f1", false}, {"-f2", true},
-                       {"-o1", "baz"}, {"-o2", "bar"}], ["quux", "foo"]}},
-      GetOptions, ["-f2", "command2", "quux", "-o1", "baz", "foo"]),
-
-    passed.
-
-check_parse_arguments(ExpRes, Fun, As) ->
-    SortRes =
-        fun (no_command)          -> no_command;
-            ({ok, {C, KVs, As1}}) -> {ok, {C, lists:sort(KVs), As1}}
-        end,
-
-    true = SortRes(ExpRes) =:= SortRes(Fun(As)).
-
-mutually_exclusive_flags_parsing(_Config) ->
-    Matcher = fun ({ok, Value}, {ok, Value}) -> true;
-                  ({error, Value}, {error, Pattern}) ->
-                      case re:run(Value, Pattern) of
-                          {match, _} -> true;
-                          _ -> false
-                      end;
-                  (_, _) -> false
-              end,
-    Spec = [{"--online", online}
-           ,{"--offline", offline}
-           ,{"--local", local}],
-    Default = all,
-    Cases =[{["--online"], {ok, online}}
-           ,{[], {ok, Default}}
-           ,{["--offline"], {ok, offline}}
-           ,{["--local"], {ok, local}}
-           ,{["--offline", "--local"], {error, "mutually exclusive"}}
-           ,{["--offline", "--online"], {error, "mutually exclusive"}}
-           ,{["--offline", "--local", "--online"], {error, "mutually exclusive"}}
-           ],
-    lists:foreach(fun({Opts, Expected}) ->
-                          ExpandedOpts = [ {Opt, true} || Opt <- Opts ],
-                          Got = rabbit_cli:mutually_exclusive_flags(ExpandedOpts, all, Spec),
-                          case Matcher(Got, Expected) of
-                              true ->
-                                  ok;
-                              false ->
-                                  exit({no_match, Got, Expected, {opts, Opts}})
-                          end
-                  end, Cases).
 
 %% -------------------------------------------------------------------
 %% basic_header_handling.

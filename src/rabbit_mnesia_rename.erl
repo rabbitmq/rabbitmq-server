@@ -274,8 +274,19 @@ become(BecomeNode) ->
         pong -> exit({node_running, BecomeNode});
         pang -> ok = net_kernel:stop(),
                 io:format("  * Impersonating node: ~s...", [BecomeNode]),
-                {ok, _} = rabbit_cli:start_distribution(BecomeNode),
+                {ok, _} = start_distribution(BecomeNode),
                 io:format(" done~n", []),
                 Dir = mnesia:system_info(directory),
                 io:format("  * Mnesia directory  : ~s~n", [Dir])
     end.
+
+start_distribution(Name) ->
+    rabbit_nodes:ensure_epmd(),
+    net_kernel:start([Name, name_type()]).
+
+name_type() ->
+    case os:getenv("RABBITMQ_USE_LONGNAME") of
+        "true" -> longnames;
+        _      -> shortnames
+    end.
+
