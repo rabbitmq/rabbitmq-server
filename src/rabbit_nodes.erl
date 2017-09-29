@@ -20,7 +20,7 @@
 -export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0,
          is_running/2, is_process_running/2,
          cluster_name/0, set_cluster_name/2, ensure_epmd/0,
-         all_running/0]).
+         all_running/0, name_type/0]).
 
 -include_lib("kernel/include/inet.hrl").
 
@@ -39,6 +39,12 @@
 -spec all_running() -> [node()].
 
 %%----------------------------------------------------------------------------
+
+name_type() ->
+    case os:getenv("RABBITMQ_USE_LONGNAME") of
+        "true" -> longnames;
+        _      -> shortnames
+    end.
 
 names(Hostname) ->
     rabbit_nodes_common:names(Hostname).

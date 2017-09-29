@@ -282,11 +282,4 @@ become(BecomeNode) ->
 
 start_distribution(Name) ->
     rabbit_nodes:ensure_epmd(),
-    net_kernel:start([Name, name_type()]).
-
-name_type() ->
-    case os:getenv("RABBITMQ_USE_LONGNAME") of
-        "true" -> longnames;
-        _      -> shortnames
-    end.
-
+    net_kernel:start([Name, rabbit_nodes:name_type()]).
