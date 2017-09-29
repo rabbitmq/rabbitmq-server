@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -e
-
 gem install bunny
 gem install cf-uaac
 
@@ -53,9 +51,6 @@ $ctl add_vhost other_vhost
 $ctl set_permissions -p uaa_vhost guest '.*' '.*' '.*'
 $ctl set_permissions -p other_vhost guest '.*' '.*' '.*'
 
-# Create queues
-ruby declare_queues.rb uaa_vhost/some_queue uaa_vhost/other_queue other_vhost/some_queue other_vhost/other_queue
-
 # Get access tokens
 uaac token owner get cf rabbit_super -s "" -p rabbit_super
 uaac token owner get cf rabbit_nosuper -s "" -p rabbit_nosuper
@@ -75,3 +70,5 @@ echo
 uaac context rabbit_nosuper
 echo
 
+# Create queues
+ruby demo/declare_queues.rb uaa_vhost/some_queue uaa_vhost/other_queue other_vhost/some_queue other_vhost/other_queue
