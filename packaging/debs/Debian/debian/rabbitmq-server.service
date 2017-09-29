@@ -20,6 +20,7 @@ WorkingDirectory=/var/lib/rabbitmq
 ExecStart=/usr/lib/rabbitmq/bin/rabbitmq-server
 ExecStop=/usr/lib/rabbitmq/bin/rabbitmqctl stop
 ExecStop=/bin/sh -c "while ps -p $MAINPID >/dev/null 2>&1; do sleep 1; done"
+SuccessExitStatus=69 # rabbitmq/rabbitmq-server-release#51
 
 [Install]
 WantedBy=multi-user.target
