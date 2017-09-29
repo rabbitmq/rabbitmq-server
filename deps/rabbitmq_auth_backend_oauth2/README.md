@@ -104,8 +104,8 @@ If you are using a symmetric key, the configuration will look like this:
   {uaa_jwt, [
     {signing_keys, #{
         <<"a-key-ID">> => {map, #{<<"kty">> => <<"MAC">>,
-                                          <<"alg">> => <<"HS256">>,
-                                          <<"value">> => <<"my_signing_key">>}}
+                                  <<"alg">> => <<"HS256">>,
+                                  <<"value">> => <<"my_signing_key">>}}
         }}
     ]}
 ].
