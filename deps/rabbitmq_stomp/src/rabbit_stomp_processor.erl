@@ -663,7 +663,7 @@ do_subscribe(Destination, DestHdr, Frame,
             case dict:find(ConsumerTag, Subs) of
                 {ok, _} ->
                     Message = "Duplicated subscription identifier",
-                    Detail = "A subscription identified by '~s' alredy exists.",
+                    Detail = "A subscription identified by '~s' already exists.",
                     _ = error(Message, Detail, [ConsumerTag], State),
                     _ = send_error(Message, Detail, [ConsumerTag], State),
                     {stop, normal, close_connection(State)};
