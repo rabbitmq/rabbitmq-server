@@ -16,7 +16,7 @@ class TestErrorsAndCloseConnection(base.BaseTest):
         self.assertEquals(1, len(self.listener.errors))
         errorReceived = self.listener.errors[0]
         self.assertEquals("Duplicated subscription identifier", errorReceived['headers']['message'])
-        self.assertEquals("A subscription identified by 'T_1' alredy exists.", errorReceived['message'])
+        self.assertEquals("A subscription identified by 'T_1' already exists.", errorReceived['message'])
         time.sleep(2)
         self.assertFalse(self.conn.is_connected())
 
