@@ -1879,7 +1879,8 @@ send_confirms_and_nacks(State = #ch{tx = none, confirmed = C, rejected = R}) ->
                                  [MsgSeqNo | MSNs]
                          end, [], lists:append(C)),
                    State1 = send_confirms(ConfirmMsgSeqNos, State#ch{confirmed = []}),
-                   %% TODO: msg seq nos, same as for confirms.
+                   %% TODO: msg seq nos, same as for confirms. Need to implement
+                   %% nack rates first.
                    send_nacks(lists:append(R), State1#ch{rejected = []});
         pausing -> State
     end;

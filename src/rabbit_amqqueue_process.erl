@@ -428,8 +428,14 @@ init_max_bytes(MaxBytes, State) ->
 init_overflow(undefined, State) ->
     State;
 init_overflow(Overflow, State) ->
-    %% TODO maybe drop head
-    State#q{overflow = binary_to_existing_atom(Overflow, utf8)}.
+    OverflowVal = binary_to_existing_atom(Overflow, utf8),
+    case OverflowVal of
+        'drop-head' ->
+            {_Dropped, State1} = maybe_drop_head(State#q{overflow = OverflowVal}),
+            State1;
+        _ ->
+            State#q{overflow = OverflowVal}
+    end.
 
 init_queue_mode(undefined, State) ->
     State;
