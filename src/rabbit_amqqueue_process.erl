@@ -22,7 +22,6 @@
 
 -define(SYNC_INTERVAL,                 200). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL, 5000).
--define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
 
 -export([info_keys/0]).
 
@@ -1014,18 +1013,18 @@ emit_consumer_deleted(ChPid, ConsumerTag, QName, ActingUser) ->
 
 %%----------------------------------------------------------------------------
 
-prioritise_call(Msg, _From, _Len, State) ->
+prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         info                                       -> 9;
         {info, _Items}                             -> 9;
         consumers                                  -> 9;
         stat                                       -> 7;
-        {basic_consume, _, _, _, _, _, _, _, _, _, _} -> consumer_bias(State);
-        {basic_cancel, _, _, _}                    -> consumer_bias(State);
+        {basic_consume, _, _, _, _, _, _, _, _, _, _} -> 1;
+        {basic_cancel, _, _, _}                       -> 1;
         _                                          -> 0
     end.
 
-prioritise_cast(Msg, _Len, State) ->
+prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         delete_immediately                   -> 8;
         {delete_exclusive, _Pid}             -> 8;
@@ -1034,7 +1033,7 @@ prioritise_cast(Msg, _Len, State) ->
         {run_backing_queue, _Mod, _Fun}      -> 6;
         {ack, _AckTags, _ChPid}              -> 3; %% [1]
         {resume, _ChPid}                     -> 2;
-        {notify_sent, _ChPid, _Credit}       -> consumer_bias(State);
+        {notify_sent, _ChPid, _Credit}       -> 1;
         _                                    -> 0
     end.
 
@@ -1046,13 +1045,6 @@ prioritise_cast(Msg, _Len, State) ->
 %% stack are optimised for that) and to make things easier to reason
 %% about. Finally, we prioritise ack over resume since it should
 %% always reduce memory use.
-
-consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}) ->
-    case BQ:msg_rates(BQS) of
-        {0.0,          _} -> 0;
-        {Ingress, Egress} when Egress / Ingress < ?CONSUMER_BIAS_RATIO -> 1;
-        {_,            _} -> 0
-    end.
 
 prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
     case Msg of
