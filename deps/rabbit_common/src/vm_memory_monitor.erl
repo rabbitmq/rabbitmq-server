@@ -189,8 +189,9 @@ get_system_process_resident_memory({win32,_OSname}) ->
     %% WorkingSetSize value for the running erl.exe process. Unfortunately
     %% even with a moderate invocation rate of 1 ops/second that uses more
     %% CPU resources than some Windows users are willing to tolerate.
-    %% See rabbitmq/rabbitmq-server#1343 for details.
-    {ok, erlang:memory(total)};
+    %% See rabbitmq/rabbitmq-server#1343 and rabbitmq/rabbitmq-common#224
+    %% for details.
+    {ok, recon_alloc:memory(allocated)};
 
 get_system_process_resident_memory({unix, sunos}) ->
     get_ps_memory();
