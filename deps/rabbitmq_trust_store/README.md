@@ -80,11 +80,11 @@ HTTP provider loads certificates via HTTP(S) from remote server.
 
 The server should have following API:
 
-- `GET <root>` - list certificates in JSON format: `{"certificates": [{"id": <id>, "url": <url>}, ...]}`
-- `GET <root>/<url>` - download PEM encoded certificate.
+- `GET <root>` - list certificates in JSON format: `{"certificates": [{"id": <id>, "path": <url>}, ...]}`
+- `GET <root>/<path>` - download PEM encoded certificate.
 
 Where `<root>` is a configured certificate path, `<id>` - unique certificate identifier,
-`<url>` - relative certificate path to load it from server.
+`<path>` - relative certificate path to load it from server.
 
 Configuration of the HTTP provider:
 
