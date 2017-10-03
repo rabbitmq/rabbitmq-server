@@ -829,7 +829,7 @@ set_ram_duration_target(
           (TargetRamCount =/= infinity andalso
            TargetRamCount1 >= TargetRamCount) of
           true  -> State1;
-          false -> maybe_reduce_memory_use(State1)
+          false -> reduce_memory_use(State1)
       end).
 
 maybe_update_rates(State = #vqstate{ in_counter  = InCount,
@@ -911,7 +911,7 @@ timeout(State = #vqstate { index_state = IndexState }) ->
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
 
-resume(State) -> a(maybe_reduce_memory_use(State)).
+resume(State) -> a(reduce_memory_use(State)).
 
 msg_rates(#vqstate { rates = #rates { in  = AvgIngressRate,
                                       out = AvgEgressRate } }) ->
