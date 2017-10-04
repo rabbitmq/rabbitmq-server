@@ -27,12 +27,21 @@ boot() ->
             ok;
         Value ->
             Input = parse_value(Value),
-            rabbit_log:info("Enabling Looking Glass profiler, input value: ~p", [Input]),
+            rabbit_log:info(
+                "Enabling Looking Glass profiler, input value: ~p",
+                [Input]
+            ),
             {ok, _} = application:ensure_all_started(looking_glass),
-            lg:trace(Input, lg_file_tracer, "traces.lz4", #{
-                mode => profile,
-                running => true,
-                send => true})
+            lg:trace(
+                Input,
+                lg_file_tracer,
+                "traces.lz4",
+                maps:from_list([
+                    {mode, profile},
+                    {running, true},
+                    {send, true}]
+                )
+             )
     end.
 
 parse_value(Value) ->
