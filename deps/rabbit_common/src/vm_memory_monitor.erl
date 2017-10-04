@@ -164,53 +164,18 @@ get_memory_calculation_strategy() ->
             rss
     end.
 
+%% Win32 Note: 3.6.12 shipped with code that used wmic.exe to get the
+%% WorkingSetSize value for the running erl.exe process. Unfortunately
+%% even with a moderate invocation rate of 1 ops/second that uses more
+%% CPU resources than some Windows users are willing to tolerate.
+%% See rabbitmq/rabbitmq-server#1343 and rabbitmq/rabbitmq-common#224
+%% for details.
 -spec get_system_process_resident_memory() -> {ok, Bytes :: integer()} | {error, term()}.
 get_system_process_resident_memory() ->
     try
-        get_system_process_resident_memory(os:type())
+        {ok, recon_alloc:memory(allocated)}
     catch _:Error ->
             {error, {"Failed to get process resident memory", Error}}
-    end.
-
-get_system_process_resident_memory({unix,darwin}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix, linux}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix,freebsd}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix,openbsd}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({win32,_OSname}) ->
-    %% Note: 3.6.12 shipped with code that used wmic.exe to get the
-    %% WorkingSetSize value for the running erl.exe process. Unfortunately
-    %% even with a moderate invocation rate of 1 ops/second that uses more
-    %% CPU resources than some Windows users are willing to tolerate.
-    %% See rabbitmq/rabbitmq-server#1343 and rabbitmq/rabbitmq-common#224
-    %% for details.
-    {ok, recon_alloc:memory(allocated)};
-
-get_system_process_resident_memory({unix, sunos}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix, aix}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory(_OsType) ->
-    {error, not_implemented_for_os}.
-
-get_ps_memory() ->
-    OsPid = os:getpid(),
-    Cmd = "ps -p " ++ OsPid ++ " -o rss=",
-    CmdOutput = os:cmd(Cmd),
-    case re:run(CmdOutput, "[0-9]+", [{capture, first, list}]) of
-        {match, [Match]} ->
-            {ok, list_to_integer(Match) * 1024};
-        _ ->
-            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
     end.
 
 %%----------------------------------------------------------------------------
