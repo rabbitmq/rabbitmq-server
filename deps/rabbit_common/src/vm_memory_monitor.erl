@@ -130,35 +130,30 @@ get_memory_use(ratio) ->
 %% be equal to the total size of all pages mapped to the emulator,
 %% according to http://erlang.org/doc/man/erlang.html#memory-0
 %% erlang:memory(total) under-reports memory usage by around 20%
-%%
-%% Win32 Note: 3.6.12 shipped with code that used wmic.exe to get the
-%% WorkingSetSize value for the running erl.exe process. Unfortunately
-%% even with a moderate invocation rate of 1 ops/second that uses more
-%% CPU resources than some Windows users are willing to tolerate.
-%% See rabbitmq/rabbitmq-server#1343 and rabbitmq/rabbitmq-common#224
-%% for details.
 -spec get_process_memory() -> Bytes :: integer().
 get_process_memory() ->
-    get_process_memory_using_strategy(get_memory_calculation_strategy()).
-
-get_process_memory_using_strategy(allocated) ->
-    recon_alloc:memory(allocated);
-%% backwards compatibility
-get_process_memory_using_strategy(erlang) ->
-    erlang:memory(total);
-get_process_memory_using_strategy(legacy) ->
-    erlang:memory(total);
-%% backwards compatibility
-get_process_memory_using_strategy(rss) ->
-    recon_alloc:memory(allocated).
+    case get_memory_calculation_strategy() of
+        rss ->
+            case get_system_process_resident_memory() of
+                {ok, MemInBytes} ->
+                    MemInBytes;
+                {error, Reason}  ->
+                    rabbit_log:debug("Unable to get system memory used. Reason: ~p."
+                                     " Falling back to erlang memory reporting",
+                                     [Reason]),
+                    erlang:memory(total)
+            end;
+        erlang ->
+            erlang:memory(total)
+    end.
 
 -spec get_memory_calculation_strategy() -> rss | erlang.
 get_memory_calculation_strategy() ->
     case rabbit_misc:get_env(rabbit, vm_memory_calculation_strategy, rss) of
-        allocated -> allocated;
-        erlang -> erlang;
-        legacy -> legacy;
-        rss -> rss;
+        erlang ->
+            erlang;
+        rss ->
+            rss;
         UnsupportedValue ->
             rabbit_log:warning(
               "Unsupported value '~p' for vm_memory_calculation_strategy. "
@@ -167,6 +162,54 @@ get_memory_calculation_strategy() ->
               [UnsupportedValue]
             ),
             rss
+    end.
+
+-spec get_system_process_resident_memory() -> {ok, Bytes :: integer()} | {error, term()}.
+get_system_process_resident_memory() ->
+    try
+        get_system_process_resident_memory(os:type())
+    catch _:Error ->
+            {error, {"Failed to get process resident memory", Error}}
+    end.
+
+get_system_process_resident_memory({unix,darwin}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix, linux}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix,freebsd}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix,openbsd}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({win32,_OSname}) ->
+    %% Note: 3.6.12 shipped with code that used wmic.exe to get the
+    %% WorkingSetSize value for the running erl.exe process. Unfortunately
+    %% even with a moderate invocation rate of 1 ops/second that uses more
+    %% CPU resources than some Windows users are willing to tolerate.
+    %% See rabbitmq/rabbitmq-server#1343 for details.
+    {ok, erlang:memory(total)};
+
+get_system_process_resident_memory({unix, sunos}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory({unix, aix}) ->
+    get_ps_memory();
+
+get_system_process_resident_memory(_OsType) ->
+    {error, not_implemented_for_os}.
+
+get_ps_memory() ->
+    OsPid = os:getpid(),
+    Cmd = "ps -p " ++ OsPid ++ " -o rss=",
+    CmdOutput = os:cmd(Cmd),
+    case re:run(CmdOutput, "[0-9]+", [{capture, first, list}]) of
+        {match, [Match]} ->
+            {ok, list_to_integer(Match) * 1024};
+        _ ->
+            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
     end.
 
 %%----------------------------------------------------------------------------
@@ -381,18 +424,18 @@ cmd(Command) ->
 %% Windows and Freebsd code based on: memsup:get_memory_usage/1
 %% Original code was part of OTP and released under "Erlang Public License".
 
-get_total_memory({unix, darwin}) ->
+get_total_memory({unix,darwin}) ->
     sysctl("hw.memsize");
 
-get_total_memory({unix, freebsd}) ->
+get_total_memory({unix,freebsd}) ->
     PageSize  = sysctl("vm.stats.vm.v_page_size"),
     PageCount = sysctl("vm.stats.vm.v_page_count"),
     PageCount * PageSize;
 
-get_total_memory({unix, openbsd}) ->
+get_total_memory({unix,openbsd}) ->
     sysctl("hw.usermem");
 
-get_total_memory({win32, _OSname}) ->
+get_total_memory({win32,_OSname}) ->
     [Result|_] = os_mon_sysinfo:get_mem_info(),
     {ok, [_MemLoad, TotPhys, _AvailPhys, _TotPage, _AvailPage, _TotV, _AvailV],
      _RestStr} =
