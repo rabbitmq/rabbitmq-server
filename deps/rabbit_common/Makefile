@@ -19,7 +19,6 @@ define PROJECT_APP_EXTRA_KEYS
 	  ]}
 endef
 
-DEPS = recon
 LOCAL_DEPS = compiler syntax_tools xmerl
 DEPS = lager jsx ranch ranch_proxy_protocol
 
