@@ -143,10 +143,12 @@ get_process_memory() ->
 
 get_process_memory_using_strategy(allocated) ->
     recon_alloc:memory(allocated);
+%% backwards compatibility
 get_process_memory_using_strategy(erlang) ->
     erlang:memory(total);
 get_process_memory_using_strategy(legacy) ->
     erlang:memory(total);
+%% backwards compatibility
 get_process_memory_using_strategy(rss) ->
     recon_alloc:memory(allocated).
 
