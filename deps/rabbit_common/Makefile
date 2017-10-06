@@ -19,6 +19,7 @@ define PROJECT_APP_EXTRA_KEYS
 	  ]}
 endef
 
+DEPS = recon
 LOCAL_DEPS = compiler syntax_tools xmerl
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
