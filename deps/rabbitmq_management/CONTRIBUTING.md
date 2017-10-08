@@ -37,7 +37,7 @@ list][rmq-users].
 Please provide versions of the software used:
 
  * RabbitMQ server
- * Erlang 
+ * Erlang
  * Operating system version (and distribution, if applicable)
  * All client libraries used
  * RabbitMQ plugins (if applicable)
@@ -93,7 +93,7 @@ contribution.
 If something isn't clear, feel free to ask on our [mailing list][rmq-users].
 
 [rmq-collect-env]: https://github.com/rabbitmq/support-tools/blob/master/scripts/rabbitmq-collect-env
-[git-commit-msgs]: http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
+[git-commit-msgs]: https://goo.gl/xwWq
 [rmq-users]: https://groups.google.com/forum/#!forum/rabbitmq-users
 [ca-agreement]: https://cla.pivotal.io/sign/rabbitmq
 [github-fork]: https://help.github.com/articles/fork-a-repo/
