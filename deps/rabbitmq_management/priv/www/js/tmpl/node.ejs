@@ -36,26 +36,6 @@
 
   <%= format('paths', {node: node}) %>
   </div>
-
-  <h3>Plugins <span class="help" id="plugins"></span></h3>
-  <table class="list">
-    <tr>
-      <th>Name</th>
-      <th>Version</th>
-      <th>Description</th>
-    </tr>
-    <%
-       var plugins = get_plugins_list(node);
-       for (var j = 0; j < plugins.length; j++) {
-         var application = plugins[j];
-    %>
-           <tr<%= alt_rows(j)%>>
-             <td><%= application.name %></td>
-             <td><%= application.version %></td>
-             <td><%= application.description %></td>
-           </tr>
-    <% } %>
-  </table>
 </div>
 </div>
 
@@ -310,6 +290,26 @@
     <% } } %>
   </table>
 </div>
+
+<h3>Plugins <span class="help" id="plugins"></span></h3>
+<table class="list">
+  <tr>
+    <th>Name</th>
+    <th>Version</th>
+    <th>Description</th>
+  </tr>
+  <%
+     var plugins = get_plugins_list(node);
+     for (var j = 0; j < plugins.length; j++) {
+       var application = plugins[j];
+  %>
+         <tr<%= alt_rows(j)%>>
+           <td><%= application.name %></td>
+           <td><%= application.version %></td>
+           <td><%= application.description %></td>
+         </tr>
+  <% } %>
+</table>
 
 <h3>All applications</h3>
 <table class="list">
