@@ -36,26 +36,6 @@
 
   <%= format('paths', {node: node}) %>
   </div>
-
-  <h3>Plugins <span class="help" id="plugins"></span></h3>
-  <table class="list">
-    <tr>
-      <th>Name</th>
-      <th>Version</th>
-      <th>Description</th>
-    </tr>
-    <%
-       var plugins = get_plugins_list(node);
-       for (var j = 0; j < plugins.length; j++) {
-         var application = plugins[j];
-    %>
-           <tr<%= alt_rows(j)%>>
-             <td><%= application.name %></td>
-             <td><%= application.version %></td>
-             <td><%= application.description %></td>
-           </tr>
-    <% } %>
-  </table>
 </div>
 </div>
 
@@ -127,6 +107,32 @@
   </table>
 </div>
 </div>
+
+
+<% if (node.running && node.os_pid != undefined) { %>
+
+<div class="section">
+<h2>Memory breakdown</h2>
+<div class="hider">
+  <div id="memory-details"></div>
+  <button class="update-manual memory-button" for="memory-details" query="memory">Update</button>
+</div>
+</div>
+
+<div class="section-hidden">
+<h2>Binary references</h2>
+<div class="hider">
+  <p>
+    <b>Warning:</b> Calculating binary memory use can be expensive.
+  </p>
+  <div id="binary-details"></div>
+  <button class="update-manual memory-button" for="binary-details" query="binary">Update</button>
+</div>
+</div>
+
+<% } %>
+
+
 
 <div class="section-hidden">
 <h2>Persistence statistics</h2>
@@ -227,30 +233,6 @@
   as soon as we have drawn it.
  -->
 
-<% if (node.running && node.os_pid != undefined) { %>
-
-<div class="section">
-<h2>Memory details</h2>
-<div class="hider">
-  <div id="memory-details"></div>
-  <button class="update-manual memory-button" for="memory-details" query="memory">Update</button>
-</div>
-</div>
-
-<div class="section-hidden">
-<h2>Binary references</h2>
-<div class="hider">
-  <p>
-    <b>Warning:</b> Calculating binary memory use can be expensive if
-    there are many small binaries in the system.
-  </p>
-  <div id="binary-details"></div>
-  <button class="update-manual memory-button" for="binary-details" query="binary">Update</button>
-</div>
-</div>
-
-<% } %>
-
 <div class="updatable">
 <% if (node.running && node.os_pid != undefined) { %>
 
@@ -310,6 +292,26 @@
     <% } } %>
   </table>
 </div>
+
+<h3>Plugins <span class="help" id="plugins"></span></h3>
+<table class="list">
+  <tr>
+    <th>Name</th>
+    <th>Version</th>
+    <th>Description</th>
+  </tr>
+  <%
+     var plugins = get_plugins_list(node);
+     for (var j = 0; j < plugins.length; j++) {
+       var application = plugins[j];
+  %>
+         <tr<%= alt_rows(j)%>>
+           <td><%= application.name %></td>
+           <td><%= application.version %></td>
+           <td><%= application.description %></td>
+         </tr>
+  <% } %>
+</table>
 
 <h3>All applications</h3>
 <table class="list">
