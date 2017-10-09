@@ -131,7 +131,7 @@ var COLUMNS =
                      ['erlang_processes',   'Erlang processes',   true],
                      ['memory',             'Memory',             true],
                      ['disk_space',         'Disk space',         true]],
-      'General': [['uptime',     'Uptime',     false],
+      'General': [['uptime',     'Uptime',     true],
                   ['rates_mode', 'Rates mode', true],
                   ['info',       'Info',       true]]}};
 

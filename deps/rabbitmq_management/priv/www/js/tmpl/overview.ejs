@@ -81,7 +81,7 @@
 
 <div class="hider updatable">
 <% if (nodes.length == 1) { %>
-    <p>Node: <%= fmt_node(nodes[0].name) %> <a href="#/nodes/<%= esc(nodes[0].name) %>">(More about this node)</a></p>
+    <p>Node: <%= fmt_node(nodes[0].name) %> (<a href="#/nodes/<%= esc(nodes[0].name) %>">more node stats</a>)</p>
 <% } %>
 
 <table class="list">
@@ -128,7 +128,8 @@
    <tr<%= alt_rows(i)%>>
 <% if (nodes.length > 1) { %>
      <td>
-       <%= link_node(node.name) %>
+       <%= fmt_node(node.name) %>
+       <%= _link_to('more stats', '#/nodes/' + esc(node.name)) %>
        <% if (rabbit_versions_interesting) { %>
          <sub>RabbitMQ <%= fmt_rabbit_version(node.applications) %></sub>
        <% } %>
