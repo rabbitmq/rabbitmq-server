@@ -24,11 +24,11 @@
 <table class="list updatable">
  <thead>
   <tr>
-    <th><%= fmt_sort('Name', 'name') %></th>
-    <th><%= fmt_sort('Owner Name', 'owner_name') %></th>
-    <th><%= fmt_sort('Memory', 'memory') %></th>
-    <th><%= fmt_sort('Size', 'size') %></th>
-    <th><%= fmt_sort('Type', 'type') %></th>
+    <th><%= fmt_sort_desc_by_default('Name', 'name') %></th>
+    <th><%= fmt_sort_desc_by_default('Owner Name', 'owner_name') %></th>
+    <th><%= fmt_sort_desc_by_default('Memory', 'memory') %></th>
+    <th><%= fmt_sort_desc_by_default('Size', 'size') %></th>
+    <th><%= fmt_sort_desc_by_default('Type', 'type') %></th>
     <th>Protection</th>
     <th>Compressed</th>
   </tr>

@@ -54,6 +54,26 @@ function link_pid(name) {
     return _link_to(name, '#/process/' + esc(name));
 }
 
+// fmt_sort assumes ascending ordering by default and
+// relies on two global variables, current_sort and current_sort_reverse.
+// rabbitmq-top, however, wants to sort things in descending order by default
+// because otherwise it is useless on initial page load.
+//
+// Thsi discrepancy means that either in the management UI or in the top
+// tables the sorting indicator (a triangle) will be reversed.
+//
+// Changing the global variables has side effects, so we
+// copy fmt_sort here and flip the arrow to meet top's needs.
+function fmt_sort_desc_by_default(display, sort) {
+    var prefix = '';
+    if (current_sort == sort) {
+        prefix = '<span class="arrow">' +
+            (current_sort_reverse ? '&#9650; ' : '&#9660; ') +
+            '</span>';
+    }
+    return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
+}
+
 function fmt_process_name(process) {
     if (process == undefined) return '';
     var name = process.name;
