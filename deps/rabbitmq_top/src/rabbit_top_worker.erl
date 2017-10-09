@@ -167,7 +167,7 @@ bytes(Words) ->  try
 expand_gen_server2_info(Pid, Props) ->
     case rabbit_core_metrics:get_gen_server2_stats(Pid) of
         not_found ->
-            Props;
+            [{buffer_len, -1} | Props];
         BufferLength ->
             [{buffer_len, BufferLength} | Props]
     end.
