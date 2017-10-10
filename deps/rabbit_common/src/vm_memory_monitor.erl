@@ -152,7 +152,7 @@ get_process_memory() ->
 
 -spec get_memory_calculation_strategy() -> rss | erlang.
 get_memory_calculation_strategy() ->
-    case rabbit_misc:get_env(rabbit, vm_memory_calculation_strategy, rss) of
+    case rabbit_misc:get_env(rabbit, vm_memory_calculation_strategy, allocated) of
         allocated -> allocated;
         erlang -> erlang;
         legacy -> erlang; %% backwards compatibility
@@ -161,10 +161,10 @@ get_memory_calculation_strategy() ->
             rabbit_log:warning(
               "Unsupported value '~p' for vm_memory_calculation_strategy. "
               "Supported values: (allocated|erlang|legacy|rss). "
-              "Defaulting to 'rss'",
+              "Defaulting to 'allocated'",
               [UnsupportedValue]
             ),
-            rss
+            allocated
     end.
 
 %%----------------------------------------------------------------------------
