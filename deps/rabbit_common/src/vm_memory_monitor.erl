@@ -50,8 +50,11 @@
                 timeout,
                 timer,
                 alarmed,
-                alarm_funs
-               }).
+                alarm_funs,
+                os_type,
+                os_pid,
+                page_size,
+                proc_file}).
 
 -include("rabbit_memory.hrl").
 
@@ -139,12 +142,10 @@ get_memory_use(ratio) ->
 %% for details.
 -spec get_process_memory() -> Bytes :: integer().
 get_process_memory() ->
-    get_process_memory_using_strategy(get_memory_calculation_strategy()).
-
-get_process_memory_using_strategy(allocated) ->
-    recon_alloc:memory(allocated);
-get_process_memory_using_strategy(erlang) ->
-    erlang:memory(total).
+    %% TODO LRB rabbitmq/rabbitmq-common#227
+    %% This will cause a noproc unless this gen_server is started
+    {ProcessMemory, _} = get_memory_use(bytes),
+    ProcessMemory.
 
 -spec get_memory_calculation_strategy() -> rss | erlang.
 get_memory_calculation_strategy() ->
@@ -152,15 +153,15 @@ get_memory_calculation_strategy() ->
         allocated -> allocated;
         erlang -> erlang;
         legacy -> erlang; %% backwards compatibility
-        rss -> allocated; %% backwards compatibility
+        rss -> rss;
         UnsupportedValue ->
             rabbit_log:warning(
               "Unsupported value '~p' for vm_memory_calculation_strategy. "
               "Supported values: (allocated|erlang|legacy|rss). "
-              "Defaulting to 'allocated'",
+              "Defaulting to 'rss'",
               [UnsupportedValue]
             ),
-            allocated
+            rss
     end.
 
 %%----------------------------------------------------------------------------
@@ -177,11 +178,24 @@ start_link(MemFraction, AlarmSet, AlarmClear) ->
 
 init([MemFraction, AlarmFuns]) ->
     TRef = erlang:send_after(?DEFAULT_MEMORY_CHECK_INTERVAL, self(), update),
-    State = #state { timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
-                     timer      = TRef,
-                     alarmed    = false,
-                     alarm_funs = AlarmFuns },
-    {ok, set_mem_limits(State, MemFraction)}.
+    OsType = os:type(),
+    OsPid = os:getpid(),
+    State0 = #state{timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
+                    timer      = TRef,
+                    alarmed    = false,
+                    alarm_funs = AlarmFuns,
+                    os_type    = OsType,
+                    os_pid     = OsPid},
+    State1 = init_state_by_os(State0),
+    {ok, set_mem_limits(State1, MemFraction)}.
+
+init_state_by_os(State0 = #state{os_type = {unix, linux}, os_pid = OsPid}) ->
+    PageSize = get_linux_pagesize(),
+    ProcFile = io_lib:format("/proc/~s/statm", [OsPid]),
+    State1 = State0#state{page_size = PageSize, proc_file = ProcFile},
+    update_process_memory(State1);
+init_state_by_os(State) ->
+    update_process_memory(State).
 
 handle_call(get_vm_memory_high_watermark, _From,
             #state{memory_config_limit = MemLimit} = State) ->
@@ -233,6 +247,40 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% Server Internals
 %%----------------------------------------------------------------------------
+
+update_process_memory(State) ->
+    Strategy = get_memory_calculation_strategy(),
+    {ok, ProcMem} = get_process_memory_using_strategy(Strategy, State),
+    State#state{process_memory = ProcMem}.
+
+get_process_memory_using_strategy(rss, #state{os_type = {unix, linux},
+                                              page_size = PageSize,
+                                              proc_file = ProcFile}) ->
+    {ok, F} = file:open(ProcFile, [read, raw]),
+    {ok, Data} = file:read(F, 1024), %% {ok,"1028083 6510 1698 990 0 21103 0\n"}
+    eof = file:read(F, 1024),
+    ok = file:close(F),
+    [_|[RssPagesStr|_]] = string:split(Data, " ", all),
+    ProcMem = list_to_integer(RssPagesStr) * PageSize,
+    {ok, ProcMem};
+get_process_memory_using_strategy(rss, #state{os_type = {unix, _},
+                                              os_pid = OsPid}) ->
+    Cmd = "ps -p " ++ OsPid ++ " -o rss=",
+    CmdOutput = os:cmd(Cmd),
+    case re:run(CmdOutput, "[0-9]+", [{capture, first, list}]) of
+        {match, [Match]} ->
+            ProcMem = list_to_integer(Match) * 1024,
+            {ok, ProcMem};
+        _ ->
+            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
+    end;
+get_process_memory_using_strategy(rss, _State) ->
+    recon_alloc:memory(allocated);
+get_process_memory_using_strategy(allocated, _State) ->
+    recon_alloc:memory(allocated);
+get_process_memory_using_strategy(erlang, _State) ->
+    erlang:memory(total).
+
 get_total_memory_from_os() ->
     try
         get_total_memory(os:type())
@@ -325,11 +373,12 @@ parse_mem_limit(MemLimit) ->
     ),
     ?DEFAULT_VM_MEMORY_HIGH_WATERMARK.
 
-internal_update(State = #state { memory_limit = MemLimit,
-                                 alarmed      = Alarmed,
-                                 alarm_funs   = {AlarmSet, AlarmClear} }) ->
-    ProcMem = get_process_memory(),
-    NewAlarmed = ProcMem > MemLimit,
+internal_update(State0 = #state{memory_limit = MemLimit,
+                                alarmed      = Alarmed,
+                                alarm_funs   = {AlarmSet, AlarmClear}}) ->
+    State1 = update_process_memory(State0),
+    ProcMem = State1#state.process_memory,
+    NewAlarmed = ProcMem  > MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} -> emit_update_info(set, ProcMem, MemLimit),
                          AlarmSet({{resource_limit, memory, node()}, []});
@@ -337,7 +386,7 @@ internal_update(State = #state { memory_limit = MemLimit,
                          AlarmClear({resource_limit, memory, node()});
         _             -> ok
     end,
-    State #state {alarmed = NewAlarmed, process_memory = ProcMem}.
+    State1#state{alarmed = NewAlarmed}.
 
 emit_update_info(AlarmState, MemUsed, MemLimit) ->
     rabbit_log:info(
@@ -369,6 +418,17 @@ cmd(Command) ->
     case os:find_executable(Exec) of
         false -> throw({command_not_found, Exec});
         _     -> os:cmd(Command)
+    end.
+
+get_linux_pagesize() ->
+    CmdOutput = cmd("getconf PAGESIZE"),
+    case re:run(CmdOutput, "^[0-9]+", [{capture, first, list}]) of
+        {match, [Match]} -> list_to_integer(Match);
+        _ ->
+            rabbit_log:warning(
+                "Failed to get memory page size, using 4096:~n~p~n",
+                [CmdOutput]),
+            4096
     end.
 
 %% get_total_memory(OS) -> Total
