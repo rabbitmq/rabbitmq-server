@@ -79,9 +79,9 @@ HELP = {
     'channel-mode':
       'Channel guarantee mode. Can be one of the following, or neither:<br/> \
       <dl> \
-        <dt><acronym title="Confirm">C</acronym> &ndash; <a target="_blank" href="http://www.rabbitmq.com/confirms.html">confirm</a></dt> \
+        <dt><abbr title="Confirm">C</abbr> &ndash; <a target="_blank" href="http://www.rabbitmq.com/confirms.html">confirm</a></dt> \
         <dd>Channel will send streaming publish confirmations.</dd> \
-        <dt><acronym title="Transactional">T</acronym> &ndash; <a target="_blank" href="http://www.rabbitmq.com/amqp-0-9-1-reference.html#class.tx">transactional</a></dt> \
+        <dt><abbr title="Transactional">T</abbr> &ndash; <a target="_blank" href="http://www.rabbitmq.com/amqp-0-9-1-reference.html#class.tx">transactional</a></dt> \
         <dd>Channel is transactional.</dd> \
       </dl>',
 

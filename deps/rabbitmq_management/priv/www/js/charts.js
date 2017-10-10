@@ -70,8 +70,8 @@ function chart_h3(id, heading, heading_help) {
     var range = get_pref('chart-range');
     return '<h3>' + heading +
         ' <span class="popup-options-link" title="Click to change" ' +
-        'type="rate" for="' + id + '">(' + prefix_title(mode, range) +
-        ')</span>' + (heading_help == undefined ? '' :
+        'type="rate" for="' + id + '">' + prefix_title(mode, range) +
+        '</span>' + (heading_help == undefined ? '' :
          ' <span class="help" id="' + heading_help + '"></span>') +
         '</h3>';
 }
@@ -79,7 +79,7 @@ function chart_h3(id, heading, heading_help) {
 function prefix_title(mode, range) {
     var desc = CHART_PERIODS[range];
     if (mode == 'chart') {
-        return 'chart: ' + desc.toLowerCase();
+        return desc.toLowerCase();
     }
     else if (mode == 'curr') {
         return 'current value';

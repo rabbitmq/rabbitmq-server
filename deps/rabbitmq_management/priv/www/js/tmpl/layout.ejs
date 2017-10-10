@@ -1,14 +1,14 @@
 <div id="header">
   <div id="login-version">
-    <div id="login-details"></div>
     <form action="#/logout" method="put">
       <input type="submit" value="Log out"/>
     </form>
+    <div id="login-details"></div>
   </div>
   <div id="logo">
-    <a href="#/">
-      <img src="img/rabbitmqlogo.png" width="204" height="37"/>
-    </a>
+    <img src="img/rabbitmqlogo.png" width="204" height="37"/>
+    <a href="api/" target="_blank">API</a>
+    <a href="cli/" target="_blank">CLI</a>
   </div>
   <div id="menu">
     <p id="vhost-form">
@@ -24,12 +24,6 @@
 <div id="rhs"></div>
 <div id="main"></div>
 <div id="footer">
-  <div id="footer-nav">
-    <ul>
-      <li><a href="api/">HTTP API</a></li>
-      <li><a href="cli/">Command Line</a></li>
-    </ul>
-  </div>
   <div id="update-form">
     <label for="update-every">Update </label>
     <select id="update-every">
