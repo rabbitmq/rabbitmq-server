@@ -985,9 +985,9 @@ prioritise_cast(Msg, _Len, _State) ->
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
-        {ack, _AckTags, _ChPid}              -> 3; %% [1]
-        {resume, _ChPid}                     -> 2;
-        {notify_sent, _ChPid, _Credit}       -> 1;
+        {ack, _AckTags, _ChPid}              -> 4; %% [1]
+        {resume, _ChPid}                     -> 3;
+        {notify_sent, _ChPid, _Credit}       -> 2;
         _                                    -> 0
     end.
 
@@ -999,6 +999,9 @@ prioritise_cast(Msg, _Len, _State) ->
 %% stack are optimised for that) and to make things easier to reason
 %% about. Finally, we prioritise ack over resume since it should
 %% always reduce memory use.
+%% bump_reduce_memory_use is prioritised over publishes, because sending
+%% credit to self is hard to reason about. Consumers can continue while
+%% reduce_memory_use is in progress.
 
 prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
     case Msg of
@@ -1008,6 +1011,7 @@ prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
         {drop_expired, _Version}             -> 8;
         emit_stats                           -> 7;
         sync_timeout                         -> 6;
+        bump_reduce_memory_use               -> 1;
         _                                    -> 0
     end.
 
@@ -1381,6 +1385,10 @@ handle_info({bump_credit, Msg}, State = #q{backing_queue       = BQ,
     %% persist a message to disk. See:
     %% rabbit_variable_queue:msg_store_write/4.
     credit_flow:handle_bump_msg(Msg),
+    noreply(State#q{backing_queue_state = BQ:resume(BQS)});
+handle_info(bump_reduce_memory_use, State = #q{backing_queue       = BQ,
+                                               backing_queue_state = BQS}) ->
+    put(waiting_bump, false),
     noreply(State#q{backing_queue_state = BQ:resume(BQS)});
 
 handle_info(Info, State) ->

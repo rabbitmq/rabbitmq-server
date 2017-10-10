@@ -2363,45 +2363,79 @@ reduce_memory_use(State = #vqstate {
                                                 out     = AvgEgress,
                                                 ack_in  = AvgAckIngress,
                                                 ack_out = AvgAckEgress } }) ->
-    State1 = #vqstate { q2 = Q2, q3 = Q3 } =
+    {CreditDiscBound, _} =rabbit_misc:get_env(rabbit,
+                                              msg_store_credit_disc_bound,
+                                              ?CREDIT_DISC_BOUND),
+    {NeedResumeA2B, State1} = {_, #vqstate { q2 = Q2, q3 = Q3 }} =
         case chunk_size(RamMsgCount + gb_trees:size(RPA), TargetRamCount) of
-            0  -> State;
+            0  -> {false, State};
             %% Reduce memory of pending acks and alphas. The order is
             %% determined based on which is growing faster. Whichever
             %% comes second may very well get a quota of 0 if the
             %% first manages to push out the max number of messages.
-            S1 -> Funs = case ((AvgAckIngress - AvgAckEgress) >
+            A2BChunk ->
+                %% In case there are few messages to be sent to a message store
+                %% and many messages to be embedded to the queue index,
+                %% we should limit the number of messages to be flushed
+                %% to avoid blocking the process.
+                A2BChunkActual = case A2BChunk > CreditDiscBound * 2 of
+                    true  -> CreditDiscBound * 2;
+                    false -> A2BChunk
+                end,
+                Funs = case ((AvgAckIngress - AvgAckEgress) >
                                    (AvgIngress - AvgEgress)) of
                              true  -> [fun limit_ram_acks/2,
                                        fun push_alphas_to_betas/2];
                              false -> [fun push_alphas_to_betas/2,
                                        fun limit_ram_acks/2]
                          end,
-                  {_, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
+                {Quota, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
                                                     ReduceFun(QuotaN, StateN)
-                                            end, {S1, State}, Funs),
-                  State2
+                                              end, {A2BChunkActual, State}, Funs),
+                {(Quota == 0) andalso (A2BChunk > A2BChunkActual), State2}
         end,
-
-    State3 =
+    Permitted = permitted_beta_count(State1),
+    {NeedResumeB2D, State3} =
         %% If there are more messages with their queue position held in RAM,
         %% a.k.a. betas, in Q2 & Q3 than IoBatchSize,
         %% write their queue position to disk, a.k.a. push_betas_to_deltas
         case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
-                        permitted_beta_count(State1)) of
-            S2 when S2 >= IoBatchSize ->
-                %% There is an implicit, but subtle, upper bound here. We
-                %% may shuffle a lot of messages from Q2/3 into delta, but
-                %% the number of these that require any disk operation,
-                %% namely index writing, i.e. messages that are genuine
-                %% betas and not gammas, is bounded by the credit_flow
-                %% limiting of the alpha->beta conversion above.
-                push_betas_to_deltas(S2, State1);
+                        Permitted) of
+            B2DChunk when B2DChunk >= IoBatchSize ->
+                %% Same as for alphas to betas. Limit a number of messages
+                %% to be flushed to disk at once to avoid blocking the process.
+                B2DChunkActual = case B2DChunk > CreditDiscBound * 2 of
+                    true -> CreditDiscBound * 2;
+                    false -> B2DChunk
+                end,
+                StateBD = push_betas_to_deltas(B2DChunkActual, State1),
+                {B2DChunk > B2DChunkActual, StateBD};
             _  ->
-                State1
+                {false, State1}
         end,
-    %% See rabbitmq-server-290 for the reasons behind this GC call.
-    garbage_collect(),
+    %% We can be blocked by the credit flow, or limited by a batch size,
+    %% or finished with flushing.
+    %% If blocked by the credit flow - the credit grant will resume processing,
+    %% if limited by a batch - the batch continuation message should be sent.
+    %% The continuation message will be prioritised over publishes,
+    %% but not cinsumptions, so the queue can make progess.
+    Blocked = credit_flow:blocked(),
+    case {Blocked, NeedResumeA2B orelse NeedResumeB2D} of
+        %% Credit bump will continue paging
+        {true, _}      -> ok;
+        %% Finished with paging
+        {false, false} -> ok;
+        %% Planning next batch
+        {false, true}  ->
+            %% We don't want to use self-credit-flow, because it's harder to
+            %% reason about. So the process sends a (prioritised) message to
+            %% itself and sets a waiting_bump value to keep the message box clean
+            case get(waiting_bump) of
+                true -> ok;
+                _    -> self() ! bump_reduce_memory_use,
+                        put(waiting_bump, waiting)
+            end
+    end,
     State3;
 %% When using lazy queues, there are no alphas, so we don't need to
 %% call push_alphas_to_betas/2.
