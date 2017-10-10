@@ -51,10 +51,10 @@
                 timer,
                 alarmed,
                 alarm_funs,
-                os_type,
-                os_pid,
-                page_size,
-                proc_file}).
+                os_type = undefined,
+                os_pid  = undefined,
+                page_size = undefined,
+                proc_file = undefined}).
 
 -include("rabbit_memory.hrl").
 
@@ -142,10 +142,13 @@ get_memory_use(ratio) ->
 %% for details.
 -spec get_process_memory() -> Bytes :: integer().
 get_process_memory() ->
-    %% TODO LRB rabbitmq/rabbitmq-common#227
-    %% This will cause a noproc unless this gen_server is started
-    {ProcessMemory, _} = get_memory_use(bytes),
-    ProcessMemory.
+    try
+        {ProcMem, _} = get_memory_use(bytes),
+        ProcMem
+    catch exit:{noproc, Error} ->
+        rabbit_log:warning("Memory monitor process not yet started: ~p~n", [Error]),
+        get_process_memory_uncached()
+    end.
 
 -spec get_memory_calculation_strategy() -> rss | erlang.
 get_memory_calculation_strategy() ->
@@ -178,24 +181,12 @@ start_link(MemFraction, AlarmSet, AlarmClear) ->
 
 init([MemFraction, AlarmFuns]) ->
     TRef = erlang:send_after(?DEFAULT_MEMORY_CHECK_INTERVAL, self(), update),
-    OsType = os:type(),
-    OsPid = os:getpid(),
     State0 = #state{timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
                     timer      = TRef,
                     alarmed    = false,
-                    alarm_funs = AlarmFuns,
-                    os_type    = OsType,
-                    os_pid     = OsPid},
+                    alarm_funs = AlarmFuns},
     State1 = init_state_by_os(State0),
     {ok, set_mem_limits(State1, MemFraction)}.
-
-init_state_by_os(State0 = #state{os_type = {unix, linux}, os_pid = OsPid}) ->
-    PageSize = get_linux_pagesize(),
-    ProcFile = io_lib:format("/proc/~s/statm", [OsPid]),
-    State1 = State0#state{page_size = PageSize, proc_file = ProcFile},
-    update_process_memory(State1);
-init_state_by_os(State) ->
-    update_process_memory(State).
 
 handle_call(get_vm_memory_high_watermark, _From,
             #state{memory_config_limit = MemLimit} = State) ->
@@ -248,18 +239,31 @@ code_change(_OldVsn, State, _Extra) ->
 %% Server Internals
 %%----------------------------------------------------------------------------
 
+get_process_memory_uncached() ->
+    TmpState = init_state_by_os(#state{}),
+    TmpState#state.process_memory.
+
 update_process_memory(State) ->
     Strategy = get_memory_calculation_strategy(),
     {ok, ProcMem} = get_process_memory_using_strategy(Strategy, State),
     State#state{process_memory = ProcMem}.
 
+init_state_by_os(State = #state{os_type = undefined}) ->
+    OsType = os:type(),
+    OsPid = os:getpid(),
+    init_state_by_os(State#state{os_type = OsType, os_pid = OsPid});
+init_state_by_os(State0 = #state{os_type = {unix, linux}, os_pid = OsPid}) ->
+    PageSize = get_linux_pagesize(),
+    ProcFile = io_lib:format("/proc/~s/statm", [OsPid]),
+    State1 = State0#state{page_size = PageSize, proc_file = ProcFile},
+    update_process_memory(State1);
+init_state_by_os(State) ->
+    update_process_memory(State).
+
 get_process_memory_using_strategy(rss, #state{os_type = {unix, linux},
                                               page_size = PageSize,
                                               proc_file = ProcFile}) ->
-    {ok, F} = file:open(ProcFile, [read, raw]),
-    {ok, Data} = file:read(F, 1024), %% {ok,"1028083 6510 1698 990 0 21103 0\n"}
-    eof = file:read(F, 1024),
-    ok = file:close(F),
+    Data = read_proc_file(ProcFile),
     [_|[RssPagesStr|_]] = string:split(Data, " ", all),
     ProcMem = list_to_integer(RssPagesStr) * PageSize,
     {ok, ProcMem};
@@ -275,11 +279,11 @@ get_process_memory_using_strategy(rss, #state{os_type = {unix, _},
             {error, {unexpected_output_from_command, Cmd, CmdOutput}}
     end;
 get_process_memory_using_strategy(rss, _State) ->
-    recon_alloc:memory(allocated);
+    {ok, recon_alloc:memory(allocated)};
 get_process_memory_using_strategy(allocated, _State) ->
-    recon_alloc:memory(allocated);
+    {ok, recon_alloc:memory(allocated)};
 get_process_memory_using_strategy(erlang, _State) ->
-    erlang:memory(total).
+    {ok, erlang:memory(total)}.
 
 get_total_memory_from_os() ->
     try
