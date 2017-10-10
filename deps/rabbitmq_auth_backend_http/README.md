@@ -146,7 +146,7 @@ Check the RabbitMQ logs if things don't seem to be working
 properly. Look for log messages containing "rabbit_auth_backend_http
 failed".
 
-## Example Apps (Python and Spring Boot)
+## Example Apps (Python, Spring Boot and DotNet-WebApi)
 
 In `examples/rabbitmq_auth_backend_django` there's a very simple
 Django app that can be used for authentication. On Debian / Ubuntu you
@@ -158,6 +158,10 @@ In `examples/rabbitmq_auth_backend_spring_boot` there's a Spring Boot app
 that can be used for authentication. You'll need Java 1.8 and Maven
 to run it. It's really not designed to be anything other
 than an example.
+
+In `examples/rabbitmq_auth_backend_webapi_dotnet` is a very minimalistic DotNet WebApi application
+that rabbitmq-auth-backend-http can authenticate against.You'll need DotNet4.5 and Visual Studio
+to run it It's really not designed to be anything other than an example.
 
 See `examples/README` for slightly more information.
 
