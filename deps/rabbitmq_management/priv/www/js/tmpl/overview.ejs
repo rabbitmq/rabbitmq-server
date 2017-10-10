@@ -108,14 +108,11 @@
   <% if (show_column('overview', 'uptime')) { %>
     <th>Uptime</th>
   <% } %>
-  <% if (show_column('overview', 'rates_mode')) { %>
-    <th>Rates mode</th>
-  <% } %>
   <% if (show_column('overview', 'info')) { %>
     <th>Info</th>
   <% } %>
-  <% if (user_administrator) { %>
-    <th>Reset stats DB</th>
+  <% if (user_administrator && show_column('overview', 'reset_stats')) { %>
+    <th>Reset stats</th>
   <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="overview">+/-</span></th>
   </tr>
@@ -144,8 +141,8 @@
 <% } else if (node.os_pid == undefined) { %>
      <td colspan="<%= colspan %>">
        <div class="status-yellow">
-         <acronym title="The rabbitmq_management_agent plugin should be enabled on this node. If it is not, various statistics will be inaccurate.">
-           Node statistics not available</acronym>
+         <abbr title="The rabbitmq_management_agent plugin should be enabled on this node. If it is not, various statistics will be inaccurate.">
+           Node statistics not available</abbr>
        </div>
      </td>
 <% } else { %>
@@ -195,38 +192,33 @@
      </td>
   <% } %>
   <% if (show_column('overview', 'uptime')) { %>
-     <td class="r"><%= fmt_uptime(node.uptime) %></td>
-  <% } %>
-  <% if (show_column('overview', 'rates_mode')) { %>
-     <td class="c"><%= fmt_string(node.rates_mode) %></td>
+     <td><span><%= fmt_uptime(node.uptime) %></span></td>
   <% } %>
   <% if (show_column('overview', 'info')) { %>
-     <td class="c">
+     <td>
+         <abbr title="Message rates"><%= fmt_string(node.rates_mode) %></abbr>
        <% if (node.type == 'disc') { %>
-         <acronym title="Broker definitions are held on disc.">Disc</acronym>
+         <abbr title="Broker definitions are held on disc.">disc</abbr>
        <% } else { %>
-         <acronym title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
+         <abbr title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</abbr>
        <% } %>
        <%= fmt_plugins_small(node) %>
      </td>
   <% } %>
-  <% if(user_administrator) { %>
+  <% if(user_administrator && show_column('overview', 'reset_stats')) { %>
     <td>
-        <form action="#/reset_node" method="delete" class="confirm">
-            <input type="hidden" name="node" value="<%= node.name %>"/>
-            <input type="submit" value="Reset"/>
-        </form>
+      <form action="#/reset_node" method="delete" class="confirm inline-form">
+        <input type="hidden" name="node" value="<%= node.name %>"/>
+        <input type="submit" value="This node"/>
+      </form>
+      <form action="#/reset" method="delete" class="confirm inline-form-right">
+          <input type="submit" value="All nodes"/>
+      </form>
   <% } %>
 <% } %>
    </tr>
 <% } %>
 </table>
-
-<p>
-    <form action="#/reset" method="delete" class="confirm">
-        <input type="submit" value="Reset stats on all nodes"/>
-    </form>
-</p>
 
 <% if (nodes.length == 1 && nodes[0].os_pid != undefined) { %>
     <h3>Paths</h3>

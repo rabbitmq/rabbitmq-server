@@ -42,11 +42,11 @@ var NAVIGATION = {'Overview':    ['#/',            "management"],
                   'Exchanges':   ['#/exchanges',   "management"],
                   'Queues':      ['#/queues',      "management"],
                   'Admin':
-                    [{'Users':         ['#/users',    "administrator"],
-                      'Virtual Hosts': ['#/vhosts',   "administrator"],
-                      'Policies':      ['#/policies', "management"],
-                      'Limits':        ['#/limits',   "management"]
-                     },
+                    [{'Users':         ['#/users',              "administrator"],
+                      'Virtual Hosts': ['#/vhosts',             "administrator"],
+                      'Policies':      ['#/policies',           "management"],
+                      'Limits':        ['#/limits',   "management"],
+                      'Cluster':       ['#/cluster-name',       "administrator"]},
                      "management"]
                  };
 
@@ -131,9 +131,9 @@ var COLUMNS =
                      ['erlang_processes',   'Erlang processes',   true],
                      ['memory',             'Memory',             true],
                      ['disk_space',         'Disk space',         true]],
-      'General': [['uptime',     'Uptime',     true],
-                  ['rates_mode', 'Rates mode', true],
-                  ['info',       'Info',       true]]}};
+      'General': [['uptime',    'Uptime',       true],
+                  ['info',      'Info',         true],
+                  ['reset_stats',     'Reset stats',        true]]}};
 
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
@@ -174,15 +174,13 @@ function setup_global_vars() {
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
     is_user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
     user_monitor = jQuery.inArray("monitoring", user_tags) != -1;
+    cluster_name = fmt_escape_html(overview.cluster_name);
+    user_name = fmt_escape_html(user.name);
     replace_content('login-details',
-                    '<p>User: <b>' + fmt_escape_html(user.name) + '</b></p>' +
-                    '<p>Cluster: <b>' + fmt_escape_html(overview.cluster_name) + '</b> ' +
-                    (user_administrator ?
-                     '(<a href="#/cluster-name">change</a>)' : '') + '</p>' +
-                    '<p>RabbitMQ ' + fmt_escape_html(overview.rabbitmq_version) +
-                    ', <acronym class="normal" title="' +
-                    fmt_escape_html(overview.erlang_full_version) + '">Erlang ' +
-                    fmt_escape_html(overview.erlang_version) + '</acronym></p>');
+                    '<p>User ' + (user_administrator ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name) + '</p>' +
+                    '<p>Cluster ' + (user_administrator ?  '<a href="#/cluster-name">' + cluster_name + '</a>' : cluster_name) + '</p>' +
+                    '<p>RabbitMQ ' + fmt_escape_html(overview.rabbitmq_version) + '</p>' +
+                    '<p>Erlang <abbr title="' + fmt_escape_html(overview.erlang_full_version) + '">' + fmt_escape_html(overview.erlang_version) + '</abbr></p>');
     nodes_interesting = false;
     rabbit_versions_interesting = false;
     if (user_monitor) {

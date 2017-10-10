@@ -489,16 +489,9 @@ function apply_state(reqs) {
 function show_popup(type, text, mode) {
     var cssClass = '.form-popup-' + type;
     function hide() {
-        if (mode == 'fade') {
-            $(cssClass).fadeOut(200, function() {
-                $(this).remove();
-            });
-        }
-        else {
-            $(cssClass).slideUp(200, function() {
-                $(this).remove();
-            });
-        }
+        $(cssClass).fadeOut(100, function() {
+            $(this).remove();
+        });
     }
 
     hide();
@@ -507,12 +500,7 @@ function show_popup(type, text, mode) {
         return;
     }
     $('h1').after(format('error-popup', {'type': type, 'text': text}));
-    if (mode == 'fade') {
-        $(cssClass).fadeIn(200);
-    }
-    else {
-        $(cssClass).center().slideDown(200);
-    }
+    $(cssClass).fadeIn(100);
     $(cssClass + ' span').click(function () {
         $('.popup-owner').removeClass('popup-owner');
         hide();
@@ -622,7 +610,7 @@ function postprocess() {
                      $('.popup-owner').get(0) == $(this).get(0);
         $('.popup-owner').removeClass('popup-owner');
         if (remove) {
-            $('.form-popup-options').fadeOut(200, function() {
+            $('.form-popup-options').fadeOut(100, function() {
                 $(this).remove();
             });
         }
