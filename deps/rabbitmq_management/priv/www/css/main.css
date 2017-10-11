@@ -5,7 +5,7 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 
 #logo { margin-bottom: 20px; padding-top: 10px; }
 #logo img { margin: 0 0 -0.3em 1.3em; border: none; }
-#logo a { color: #F60; font-weight: bold; text-decoration: none; padding: 0 0.5em; }
+#logo a { color: #B4BAB8; font-weight: bold; text-decoration: none; padding: 0 0.5em; }
 #logo a:hover { text-decoration: underline; }
 
 #login-version { float: right; color: #444; }
@@ -53,7 +53,7 @@ table th .help,
 table th .popup-options-link { border: none; }
 .help:hover:hover,
 .popup-options-link:hover,
-.popup-owner { background-color: #F60; color: white; }
+.popup-owner { background-color: #444; color: white; }
 
 .rate-visibility-option { cursor: pointer; padding: 4px; background: #fafafa; border: 1px solid #f0f0f0; border-radius: 3px; display:block; }
 .rate-visibility-option:hover { background: #ddf;
@@ -215,7 +215,7 @@ div.form-popup-info span,
 div.form-popup-help span,
 div.form-popup-options span {
   color: white;
-  background-color: #444;
+  background-color: #F60;
   font-weight: bold;
   cursor: pointer;
   padding: 4px 8px;
@@ -226,7 +226,7 @@ div.form-popup-warn span:hover,
 div.form-popup-info span:hover,
 div.form-popup-help span:hover,
 div.form-popup-options span:hover {
-  background-color: #F60;
+  background-color: #444;
   font-weight: bold;
   cursor: pointer;
 }
@@ -291,12 +291,12 @@ input[type=submit], button { padding: 8px; border-radius: 5px; -moz-border-radiu
 table.list input[type=submit], table.list button { padding: 4px; }
 
 input[type=submit], button {
-    background: #444;
+    background: #F60;
     color: white;
     border: 0;
 }
 input[type=submit]:hover, button:hover {
-    background: #F60;
+    background: #444;
 }
 
 input[type=submit][disabled], button[disabled] { background: #aac; }
