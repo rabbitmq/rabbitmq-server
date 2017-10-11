@@ -258,11 +258,11 @@
    %%
    %% {vm_memory_high_watermark_paging_ratio, 0.5},
 
-   %% Selects Erlang VM memory consumption calculation strategy. Can be `rss` or `erlang`,
-   %% `rss` is the default. Introduced in 3.6.11.
-   %% See https://github.com/rabbitmq/rabbitmq-server/issues/1223 for background.
-   %% {vm_memory_calculation_strategy, rss},
-
+   %% Selects Erlang VM memory consumption calculation strategy. Can be `allocated`, `rss` or `legacy` (aliased as `erlang`),
+   %% Introduced in 3.6.11. `allocated` is the default as of 3.6.13.
+   %% See https://github.com/rabbitmq/rabbitmq-server/issues/1223 and rabbitmq/rabbitmq-common#224 for background.
+   %% {vm_memory_calculation_strategy, allocated},
+   
    %% Interval (in milliseconds) at which we perform the check of the memory
    %% levels against the watermarks.
    %%
