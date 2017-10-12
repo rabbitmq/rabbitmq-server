@@ -1,11 +1,12 @@
-body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
+body { font: 12px Verdana, sans-serif; color: #484848; padding: 8px 35px; }
+input, button { font: 12px Verdana, sans-serif; }
 
 #login table { margin: auto; }
 #login p { text-align: center; }
 
 #logo { margin-bottom: 20px; padding-top: 10px; }
-#logo img { margin: 0 0 -0.3em 1.3em; border: none; }
-#logo a { color: #B4BAB8; font-weight: bold; text-decoration: none; padding: 0 0.5em; }
+#logo img { margin: 0 0 -0.3em 1em; border: none; }
+#logo a { color: #B4BAB8; font-weight: bold; text-decoration: none; padding: 0 1em 0 0; }
 #logo a:hover { text-decoration: underline; }
 
 #login-version { float: right; color: #444; }
@@ -15,7 +16,7 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 #login-details a { color: #F60; text-decoration: none; }
 #login-details a:hover { text-decoration: underline; }
 #menu ul { float: left; padding: 0; margin: 0; }
-#menu li { float: left; list-style-type: none; padding: 0 0.5em 0 0; }
+#menu li { float: left; list-style-type: none; padding: 0 0.1em 0 0; }
 #menu li a { display: block; padding: 0.7em 1.3em; }
 #menu { border-bottom: 1px solid #FF8C00; overflow: auto; width: 100%; }
 #menu a { color: #444; font-weight: bold; text-decoration: none; padding: 5px; }
@@ -28,9 +29,9 @@ body { font: 12px Verdana,sans-serif; color: #484848; padding: 8px 35px; }
 #vhost-form { float: right; padding: 0; margin: 0; }
 
 #main.with-rhs { margin-right: 210px; }
-#rhs { float: right; width: 200px; padding-top: 10px; }
+#rhs { float: right; width: 200px; background-color: white; position: relative; }
 #rhs ul { padding: 0; margin: 0; }
-#rhs li { list-style-type: none; padding: 0; margin: 0.5em 0; }
+#rhs li { list-style-type: none; padding: 0; margin: 0.1em 0; }
 #rhs a { display: block; padding: 0.7em; color: #444; font-weight: bold; text-decoration: none; }
 #rhs a:hover { background-color: #444; color: white; -moz-border-radius: 8px 0 0 8px; border-radius: 8px 0 0 8px; }
 #rhs a.selected { background-color: #F60; color: white; -moz-border-radius: 8px 0 0 8px; border-radius: 8px 0 0 8px; }
@@ -84,7 +85,7 @@ input#truncate { width: 50px; text-align: right; }
 
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
-table th, table td { font: 12px Verdana,sans-serif; padding: 5px 4px; }
+table th, table td { font: 12px Verdana, sans-serif; padding: 5px 4px; }
 table.list th, table.list td { vertical-align: top; min-width: 5em; width: auto; }
 
 table.list { border-width: 1px; margin-bottom: 1em; }
@@ -160,8 +161,8 @@ tr.alt2>td {
 td span,
 td abbr {
   display: inline-block;
-  padding-top: 4px;
-  padding-bottom: 4px;
+  padding: 3px;
+  margin: 0 0 3px 0;
 }
 
 div.status-bar, div.status-red, div.status-yellow, div.status-green, div.status-grey { text-align: center; }
@@ -205,7 +206,16 @@ div.form-popup-options {
 }
 div.form-popup-warn,
 div.form-popup-info,
-div.form-popup-help { text-align: left; width: 500px; z-index: 1; }
+div.form-popup-help {
+  -moz-border-radius: 10px;
+  border-radius: 10px;
+  left: 50%;
+  margin-left: -250px;
+  text-align: left;
+  top: 25%;
+  width: 500px;
+  z-index: 1;
+}
 div.form-popup-info { background: #8F8; }
 div.form-popup-help { background: #F8F8F8; }
 div.form-popup-options { background: #F8F8F8; z-index: 2; }
@@ -287,8 +297,8 @@ label.radio, label.checkbox { padding: 5px; border: 1px solid #eee; cursor: poin
 table.two-col-layout { width: 100%; }
 table.two-col-layout > tbody > tr > td { width: 50%; vertical-align: top; }
 
-input[type=submit], button { padding: 8px; border-radius: 5px; -moz-border-radius: 5px; text-decoration: none; cursor: pointer; font-weight: bold; }
-table.list input[type=submit], table.list button { padding: 4px; }
+input[type=submit], button { padding: 8px; border-radius: 5px; -moz-border-radius: 5px; text-decoration: none; cursor: pointer; }
+table.list input[type=submit], table.list button { padding: 3px 7px; margin: 0 0 3px 0; }
 
 input[type=submit], button {
     background: #F60;
@@ -304,7 +314,7 @@ input[type=submit][disabled]:hover, button[disabled]:hover { background: #aac; }
 
 h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; font-weight: normal; }
 
-abbr { background: #99EBFF; padding: 2px 4px; border-radius: 2px; -moz-border-radius: 2px; border: none; cursor: default; text-decoration: none; }
+abbr { background: #99EBFF; padding: 3px 5px; border-radius: 5px; -moz-border-radius: 5px; border: none; cursor: default; text-decoration: none; }
 
 table.list td abbr a { display: inline; width: auto; }
 
