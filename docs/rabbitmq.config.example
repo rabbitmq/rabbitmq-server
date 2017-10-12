@@ -262,7 +262,7 @@
    %% Introduced in 3.6.11. `allocated` is the default as of 3.6.13.
    %% See https://github.com/rabbitmq/rabbitmq-server/issues/1223 and rabbitmq/rabbitmq-common#224 for background.
    %% {vm_memory_calculation_strategy, allocated},
-   
+
    %% Interval (in milliseconds) at which we perform the check of the memory
    %% levels against the watermarks.
    %%
