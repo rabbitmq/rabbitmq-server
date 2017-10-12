@@ -30,7 +30,9 @@ dispatcher_add(function(sammy) {
 NAVIGATION['Admin'][0]['Top Processes']  = ['#/top', 'administrator'];
 NAVIGATION['Admin'][0]['Top ETS Tables'] = ['#/top/ets', 'administrator'];
 
-HELP['process-internal-buffer'] = "Some processes drain their Erlang process mailbox (Erlang message queue) into a separate priority queue. \"Queue\" here refers to a data structure and should not be confused with RabbitMQ queues.";
+HELP['gen-server2-buffer'] = "The processes with a <strong>gen_server2 buffer</strong> value of <code>\>= 0</code> are of type gen_server2. " +
+"They drain their Erlang mailbox into an internal queue as an optimisation. " +
+"In this context, \"queue\" refers to an internal data structure and must not be confused with a RabbitMQ queue.";
 
 $('select#top-node').live('change', function() {
     var url='#/top/' + $(this).val() + "/" + $('select#row-count').val();
