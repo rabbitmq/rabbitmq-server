@@ -50,8 +50,11 @@
                 timeout,
                 timer,
                 alarmed,
-                alarm_funs
-               }).
+                alarm_funs,
+                os_type = undefined,
+                os_pid  = undefined,
+                page_size = undefined,
+                proc_file = undefined}).
 
 -include("rabbit_memory.hrl").
 
@@ -130,86 +133,38 @@ get_memory_use(ratio) ->
 %% be equal to the total size of all pages mapped to the emulator,
 %% according to http://erlang.org/doc/man/erlang.html#memory-0
 %% erlang:memory(total) under-reports memory usage by around 20%
+%%
+%% Win32 Note: 3.6.12 shipped with code that used wmic.exe to get the
+%% WorkingSetSize value for the running erl.exe process. Unfortunately
+%% even with a moderate invocation rate of 1 ops/second that uses more
+%% CPU resources than some Windows users are willing to tolerate.
+%% See rabbitmq/rabbitmq-server#1343 and rabbitmq/rabbitmq-common#224
+%% for details.
 -spec get_process_memory() -> Bytes :: integer().
 get_process_memory() ->
-    case get_memory_calculation_strategy() of
-        rss ->
-            case get_system_process_resident_memory() of
-                {ok, MemInBytes} ->
-                    MemInBytes;
-                {error, Reason}  ->
-                    rabbit_log:debug("Unable to get system memory used. Reason: ~p."
-                                     " Falling back to erlang memory reporting",
-                                     [Reason]),
-                    erlang:memory(total)
-            end;
-        erlang ->
-            erlang:memory(total)
+    try
+        {ProcMem, _} = get_memory_use(bytes),
+        ProcMem
+    catch exit:{noproc, Error} ->
+        rabbit_log:warning("Memory monitor process not yet started: ~p~n", [Error]),
+        get_process_memory_uncached()
     end.
 
 -spec get_memory_calculation_strategy() -> rss | erlang.
 get_memory_calculation_strategy() ->
-    case rabbit_misc:get_env(rabbit, vm_memory_calculation_strategy, rss) of
-        erlang ->
-            erlang;
-        rss ->
-            rss;
+    case rabbit_misc:get_env(rabbit, vm_memory_calculation_strategy, allocated) of
+        allocated -> allocated;
+        erlang -> erlang;
+        legacy -> erlang; %% backwards compatibility
+        rss -> rss;
         UnsupportedValue ->
             rabbit_log:warning(
               "Unsupported value '~p' for vm_memory_calculation_strategy. "
-              "Supported values: (rss|erlang). "
-              "Defaulting to 'rss'",
+              "Supported values: (allocated|erlang|legacy|rss). "
+              "Defaulting to 'allocated'",
               [UnsupportedValue]
             ),
-            rss
-    end.
-
--spec get_system_process_resident_memory() -> {ok, Bytes :: integer()} | {error, term()}.
-get_system_process_resident_memory() ->
-    try
-        get_system_process_resident_memory(os:type())
-    catch _:Error ->
-            {error, {"Failed to get process resident memory", Error}}
-    end.
-
-get_system_process_resident_memory({unix,darwin}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix, linux}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix,freebsd}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix,openbsd}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({win32,_OSname}) ->
-    %% Note: 3.6.12 shipped with code that used wmic.exe to get the
-    %% WorkingSetSize value for the running erl.exe process. Unfortunately
-    %% even with a moderate invocation rate of 1 ops/second that uses more
-    %% CPU resources than some Windows users are willing to tolerate.
-    %% See rabbitmq/rabbitmq-server#1343 for details.
-    {ok, erlang:memory(total)};
-
-get_system_process_resident_memory({unix, sunos}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory({unix, aix}) ->
-    get_ps_memory();
-
-get_system_process_resident_memory(_OsType) ->
-    {error, not_implemented_for_os}.
-
-get_ps_memory() ->
-    OsPid = os:getpid(),
-    Cmd = "ps -p " ++ OsPid ++ " -o rss=",
-    CmdOutput = os:cmd(Cmd),
-    case re:run(CmdOutput, "[0-9]+", [{capture, first, list}]) of
-        {match, [Match]} ->
-            {ok, list_to_integer(Match) * 1024};
-        _ ->
-            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
+            allocated
     end.
 
 %%----------------------------------------------------------------------------
@@ -226,11 +181,12 @@ start_link(MemFraction, AlarmSet, AlarmClear) ->
 
 init([MemFraction, AlarmFuns]) ->
     TRef = erlang:send_after(?DEFAULT_MEMORY_CHECK_INTERVAL, self(), update),
-    State = #state { timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
-                     timer      = TRef,
-                     alarmed    = false,
-                     alarm_funs = AlarmFuns },
-    {ok, set_mem_limits(State, MemFraction)}.
+    State0 = #state{timeout    = ?DEFAULT_MEMORY_CHECK_INTERVAL,
+                    timer      = TRef,
+                    alarmed    = false,
+                    alarm_funs = AlarmFuns},
+    State1 = init_state_by_os(State0),
+    {ok, set_mem_limits(State1, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From,
             #state{memory_config_limit = MemLimit} = State) ->
@@ -282,6 +238,53 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% Server Internals
 %%----------------------------------------------------------------------------
+
+get_process_memory_uncached() ->
+    TmpState = init_state_by_os(#state{}),
+    TmpState#state.process_memory.
+
+update_process_memory(State) ->
+    Strategy = get_memory_calculation_strategy(),
+    {ok, ProcMem} = get_process_memory_using_strategy(Strategy, State),
+    State#state{process_memory = ProcMem}.
+
+init_state_by_os(State = #state{os_type = undefined}) ->
+    OsType = os:type(),
+    OsPid = os:getpid(),
+    init_state_by_os(State#state{os_type = OsType, os_pid = OsPid});
+init_state_by_os(State0 = #state{os_type = {unix, linux}, os_pid = OsPid}) ->
+    PageSize = get_linux_pagesize(),
+    ProcFile = io_lib:format("/proc/~s/statm", [OsPid]),
+    State1 = State0#state{page_size = PageSize, proc_file = ProcFile},
+    update_process_memory(State1);
+init_state_by_os(State) ->
+    update_process_memory(State).
+
+get_process_memory_using_strategy(rss, #state{os_type = {unix, linux},
+                                              page_size = PageSize,
+                                              proc_file = ProcFile}) ->
+    Data = read_proc_file(ProcFile),
+    [_|[RssPagesStr|_]] = string:split(Data, " ", all),
+    ProcMem = list_to_integer(RssPagesStr) * PageSize,
+    {ok, ProcMem};
+get_process_memory_using_strategy(rss, #state{os_type = {unix, _},
+                                              os_pid = OsPid}) ->
+    Cmd = "ps -p " ++ OsPid ++ " -o rss=",
+    CmdOutput = os:cmd(Cmd),
+    case re:run(CmdOutput, "[0-9]+", [{capture, first, list}]) of
+        {match, [Match]} ->
+            ProcMem = list_to_integer(Match) * 1024,
+            {ok, ProcMem};
+        _ ->
+            {error, {unexpected_output_from_command, Cmd, CmdOutput}}
+    end;
+get_process_memory_using_strategy(rss, _State) ->
+    {ok, recon_alloc:memory(allocated)};
+get_process_memory_using_strategy(allocated, _State) ->
+    {ok, recon_alloc:memory(allocated)};
+get_process_memory_using_strategy(erlang, _State) ->
+    {ok, erlang:memory(total)}.
+
 get_total_memory_from_os() ->
     try
         get_total_memory(os:type())
@@ -374,11 +377,12 @@ parse_mem_limit(MemLimit) ->
     ),
     ?DEFAULT_VM_MEMORY_HIGH_WATERMARK.
 
-internal_update(State = #state { memory_limit = MemLimit,
-                                 alarmed      = Alarmed,
-                                 alarm_funs   = {AlarmSet, AlarmClear} }) ->
-    ProcMem = get_process_memory(),
-    NewAlarmed = ProcMem > MemLimit,
+internal_update(State0 = #state{memory_limit = MemLimit,
+                                alarmed      = Alarmed,
+                                alarm_funs   = {AlarmSet, AlarmClear}}) ->
+    State1 = update_process_memory(State0),
+    ProcMem = State1#state.process_memory,
+    NewAlarmed = ProcMem  > MemLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} -> emit_update_info(set, ProcMem, MemLimit),
                          AlarmSet({{resource_limit, memory, node()}, []});
@@ -386,7 +390,7 @@ internal_update(State = #state { memory_limit = MemLimit,
                          AlarmClear({resource_limit, memory, node()});
         _             -> ok
     end,
-    State #state {alarmed = NewAlarmed, process_memory = ProcMem}.
+    State1#state{alarmed = NewAlarmed}.
 
 emit_update_info(AlarmState, MemUsed, MemLimit) ->
     rabbit_log:info(
@@ -420,22 +424,33 @@ cmd(Command) ->
         _     -> os:cmd(Command)
     end.
 
+get_linux_pagesize() ->
+    CmdOutput = cmd("getconf PAGESIZE"),
+    case re:run(CmdOutput, "^[0-9]+", [{capture, first, list}]) of
+        {match, [Match]} -> list_to_integer(Match);
+        _ ->
+            rabbit_log:warning(
+                "Failed to get memory page size, using 4096:~n~p~n",
+                [CmdOutput]),
+            4096
+    end.
+
 %% get_total_memory(OS) -> Total
 %% Windows and Freebsd code based on: memsup:get_memory_usage/1
 %% Original code was part of OTP and released under "Erlang Public License".
 
-get_total_memory({unix,darwin}) ->
+get_total_memory({unix, darwin}) ->
     sysctl("hw.memsize");
 
-get_total_memory({unix,freebsd}) ->
+get_total_memory({unix, freebsd}) ->
     PageSize  = sysctl("vm.stats.vm.v_page_size"),
     PageCount = sysctl("vm.stats.vm.v_page_count"),
     PageCount * PageSize;
 
-get_total_memory({unix,openbsd}) ->
+get_total_memory({unix, openbsd}) ->
     sysctl("hw.usermem");
 
-get_total_memory({win32,_OSname}) ->
+get_total_memory({win32, _OSname}) ->
     [Result|_] = os_mon_sysinfo:get_mem_info(),
     {ok, [_MemLoad, TotPhys, _AvailPhys, _TotPage, _AvailPage, _TotV, _AvailV],
      _RestStr} =

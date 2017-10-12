@@ -50,7 +50,7 @@ stop_applications(Apps) ->
 
 start_applications(Apps, ErrorHandler) ->
     manage_applications(fun lists:foldl/3,
-                        fun application:start/1,
+                        fun application:ensure_all_started/1,
                         fun application:stop/1,
                         already_started,
                         ErrorHandler,
@@ -62,7 +62,7 @@ stop_applications(Apps, ErrorHandler) ->
                             rabbit_log:info("Stopping application '~s'", [App]),
                             application:stop(App)
                         end,
-                        fun application:start/1,
+                        fun application:ensure_all_started/1,
                         not_started,
                         ErrorHandler,
                         Apps).
@@ -116,6 +116,9 @@ manage_applications(Iterate, Do, Undo, SkipError, ErrorHandler, Apps) ->
     Iterate(fun (App, Acc) ->
                     case Do(App) of
                         ok -> [App | Acc];
+                        {ok, []} -> Acc;
+                        {ok, [App]} -> [App | Acc];
+                        {ok, StartedApps} -> StartedApps ++ Acc;
                         {error, {SkipError, _}} -> Acc;
                         {error, Reason} ->
                             lists:foreach(Undo, Acc),
