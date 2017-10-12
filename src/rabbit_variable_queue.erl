@@ -2433,7 +2433,7 @@ reduce_memory_use(State = #vqstate {
             case get(waiting_bump) of
                 true -> ok;
                 _    -> self() ! bump_reduce_memory_use,
-                        put(waiting_bump, waiting)
+                        put(waiting_bump, true)
             end
     end,
     State3;
