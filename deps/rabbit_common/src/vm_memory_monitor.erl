@@ -113,9 +113,6 @@ set_vm_memory_high_watermark(Fraction) ->
 get_memory_limit() ->
     gen_server:call(?MODULE, get_memory_limit, infinity).
 
-get_cached_process_memory_and_limit() ->
-    gen_server:call(?MODULE, get_cached_process_memory_and_limit, infinity).
-
 get_memory_use(bytes) ->
     {ProcessMemory, MemoryLimit} = get_cached_process_memory_and_limit(),
     {ProcessMemory, case MemoryLimit > 0.0 of
@@ -142,13 +139,8 @@ get_memory_use(ratio) ->
 %% for details.
 -spec get_process_memory() -> Bytes :: integer().
 get_process_memory() ->
-    try
-        {ProcMem, _} = get_memory_use(bytes),
-        ProcMem
-    catch exit:{noproc, Error} ->
-        rabbit_log:warning("Memory monitor process not yet started: ~p~n", [Error]),
-        get_process_memory_uncached()
-    end.
+    {ProcMem, _} = get_memory_use(bytes),
+    ProcMem.
 
 -spec get_memory_calculation_strategy() -> rss | erlang.
 get_memory_calculation_strategy() ->
@@ -239,6 +231,15 @@ code_change(_OldVsn, State, _Extra) ->
 %% Server Internals
 %%----------------------------------------------------------------------------
 
+get_cached_process_memory_and_limit() ->
+    try
+        gen_server:call(?MODULE, get_cached_process_memory_and_limit, infinity)
+    catch exit:{noproc, Error} ->
+        rabbit_log:warning("Memory monitor process not yet started: ~p~n", [Error]),
+        ProcessMemory = get_process_memory_uncached(),
+        {ProcessMemory, infinity}
+    end.
+
 get_process_memory_uncached() ->
     TmpState = init_state_by_os(#state{}),
     TmpState#state.process_memory.
@@ -264,7 +265,7 @@ get_process_memory_using_strategy(rss, #state{os_type = {unix, linux},
                                               page_size = PageSize,
                                               proc_file = ProcFile}) ->
     Data = read_proc_file(ProcFile),
-    [_|[RssPagesStr|_]] = string:split(Data, " ", all),
+    [_|[RssPagesStr|_]] = string:tokens(Data, " "),
     ProcMem = list_to_integer(RssPagesStr) * PageSize,
     {ok, ProcMem};
 get_process_memory_using_strategy(rss, #state{os_type = {unix, _},
