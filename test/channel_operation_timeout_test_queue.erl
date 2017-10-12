@@ -26,8 +26,7 @@
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
-         zip_msgs_and_acks/4]).
--export([start/2, stop/1]).
+         start/2, stop/1, zip_msgs_and_acks/4, handle_info/2]).
 
 %%----------------------------------------------------------------------------
 %% This test backing queue follows the variable queue implementation, with
@@ -91,7 +90,8 @@
           memory_reduction_run_count,
           %% Queue data is grouped by VHost. We need to store it
           %% to work with queue index.
-          virtual_host
+          virtual_host,
+          waiting_bump = false
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -284,6 +284,9 @@ timeout(State) ->
 
 handle_pre_hibernate(State) ->
     rabbit_variable_queue:handle_pre_hibernate(State).
+
+handle_info(Msg, State) ->
+    rabbit_variable_queue:handle_info(Msg, State).
 
 resume(State) -> rabbit_variable_queue:resume(State).
 
