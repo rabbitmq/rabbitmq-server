@@ -19,9 +19,8 @@ define PROJECT_APP_EXTRA_KEYS
 	  ]}
 endef
 
-DEPS = recon
 LOCAL_DEPS = compiler syntax_tools xmerl
-DEPS = lager jsx ranch ranch_proxy_protocol
+DEPS = lager jsx ranch ranch_proxy_protocol recon
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
