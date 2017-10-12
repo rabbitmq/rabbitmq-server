@@ -86,6 +86,7 @@ function fmt_policy_short(obj) {
         return '<abbr class="policy" title="Policy: ' +
             fmt_escape_html(obj.policy) + '">' +
             fmt_escape_html(obj.policy) + '</abbr> ';
+    }
 }
 
 function fmt_op_policy_short(obj) {
