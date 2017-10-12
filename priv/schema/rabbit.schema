@@ -686,13 +686,13 @@ end}.
 {mapping, "memory_monitor_interval", "rabbit.memory_monitor_interval",
     [{datatype, integer}]}.
 
-%% When set to rss, RabbitMQ will display the memory usage as reported
-%% by the operating system (RSS value), not by the Erlang VM.
+%% Selects Erlang VM memory consumption calculation strategy.
+%% Can be `allocated`, `rss` or `legacy` (aliased as `erlang`).
 %%
-%% {vm_memory_calculation_strategy, rss},
+%% {vm_memory_calculation_strategy, allocated},
 
 {mapping, "vm_memory_calculation_strategy", "rabbit.vm_memory_calculation_strategy",
-    [{datatype, {enum, [rss, erlang]}}]}.
+    [{datatype, {enum, [rss, erlang, allocated, legacy]}}]}.
 
 %% Set disk free limit (in bytes). Once free disk space reaches this
 %% lower bound, a disk alarm will be set - see the documentation
