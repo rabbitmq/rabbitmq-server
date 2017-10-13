@@ -15,7 +15,7 @@
 %%
 -module(rabbit_mgmt_wm_healthchecks).
 
--export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
 -export([variances/2]).
 
@@ -23,10 +23,8 @@
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
-rest_init(Req, _Config) ->
-    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+init(Req, _State) ->
+    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
@@ -43,8 +41,8 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     Node = node0(ReqData),
     Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
-                  {undefined, _} -> 70000;
-                  {Val, _}       -> list_to_integer(binary_to_list(Val))
+                  undefined -> 70000;
+                  Val       -> list_to_integer(binary_to_list(Val))
               end,
     case rabbit_health_check:node(Node, Timeout) of
         ok ->

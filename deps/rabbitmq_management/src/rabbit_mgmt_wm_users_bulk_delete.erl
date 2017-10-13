@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_wm_users_bulk_delete).
 
--export([init/3, rest_init/2,
+-export([init/2,
          content_types_accepted/2,
          content_types_provided/2,
          is_authorized/2,
@@ -28,10 +28,8 @@
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
-rest_init(Req, _Config) ->
-    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+init(Req, _State) ->
+    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
