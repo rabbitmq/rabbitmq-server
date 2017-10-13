@@ -2,10 +2,15 @@ This package, the RabbitMQ Management Plugin is licensed under the MPL. For the
 MPL, please see LICENSE-MPL-RabbitMQ.
 
 This package makes use of the following third party libraries:
-jQuery     - http://jquery.com/                       - MIT license, see LICENSE-MIT-jQuery164
-EJS        - http://embeddedjs.com/                   - MIT license, see LICENSE-MIT-EJS10
-Sammy      - http://code.quirkey.com/sammy/           - MIT license, see LICENSE-MIT-Sammy060
-Cowboy     - http://ninenines.eu/                     - ISC license
-base64.js  - http://code.google.com/p/stringencoders/ - BSD license, see LICENSE-BSD-base64js
-If you have any questions regarding licensing, please contact us at
-info@rabbitmq.com.
+
+| Name           | Website                                                | License type  | License file             |
+| -------------- | ------------------------------------------------------ | ------------- | ------------------------ |
+| ExplorerCanvas | https://github.com/arv/explorercanvas                  | APACHE 2      | LICENSE-APACHE2-excanvas |
+| base64.js      | http://code.google.com/p/stringencoders/               | BSD           | LICENSE-BSD-base64js     |
+| Cowboy         | http://ninenines.eu/                                   | ISC           | LICENSE-ISC-cowboy       |
+| EJS            | https://code.google.com/archive/p/embeddedjavascript/  | MIT           | LICENSE-MIT-EJS          |
+| Flot           | https://github.com/flot/flot                           | MIT           | LICENSE-MIT-Flot         |
+| Sammy          | http://code.quirkey.com/sammy/                         | MIT           | LICENSE-MIT-Sammy        |
+| jQuery         | http://jquery.com/                                     | MIT           | LICENSE-MIT-jQuery       |
+
+If you have any questions regarding licensing, please contact us at info@rabbitmq.com.
