@@ -27,21 +27,35 @@ define RABBITMQ_HEXPM_DEFAULT_FILES
 	    "src"
 endef
 
+ifeq ($(PROJECT),rabbit_common)
+RMQ_COMPONENTS_PREFIX = mk
+RMQ_COMPONENTS_HEXPM = mk/rabbitmq-components.hexpm.mk
+else
+RMQ_COMPONENTS_PREFIX = .
+RMQ_COMPONENTS_HEXPM = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.hexpm.mk
+endif
+
 hex-publish: $(HEXPM_CLI) app rebar.config
 	$(gen_verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" \
 		> git-revisions.txt
-ifneq ($(PROJECT),rabbit_common)
-	$(verbose) mv rabbitmq-components.mk rabbitmq-components.mk.not-hexpm
+	$(verbose) mv \
+		$(RMQ_COMPONENTS_PREFIX)/rabbitmq-components.mk \
+		rabbitmq-components.mk.not-hexpm
 	$(verbose) cp \
-		$(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.hexpm.mk \
-		rabbitmq-components.mk
-	$(verbose) touch -r rabbitmq-components.mk.not-hexpm \
-		rabbitmq-components.mk
-endif
+		$(RMQ_COMPONENTS_HEXPM) \
+		$(RMQ_COMPONENTS_PREFIX)/rabbitmq-components.mk
+	$(verbose) grep -E '^dep.* = hex' \
+		rabbitmq-components.mk.not-hexpm \
+		>> $(RMQ_COMPONENTS_PREFIX)/rabbitmq-components.mk
+	$(verbose) touch -r \
+		rabbitmq-components.mk.not-hexpm \
+		$(RMQ_COMPONENTS_PREFIX)/rabbitmq-components.mk
 	$(verbose) trap '\
 		rm -f git-revisions.txt rebar.lock; \
 		if test -f rabbitmq-components.mk.not-hexpm; then \
-		  mv rabbitmq-components.mk.not-hexpm rabbitmq-components.mk; \
+		  mv \
+		    rabbitmq-components.mk.not-hexpm \
+		    $(RMQ_COMPONENTS_PREFIX)/rabbitmq-components.mk; \
 		fi' EXIT INT; \
 		$(HEXPM_CLI) publish
 

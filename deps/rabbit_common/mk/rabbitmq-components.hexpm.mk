@@ -34,10 +34,3 @@ dep_amqp_client                       = hex $(PROJECT_VERSION)
 dep_rabbit_common                     = hex $(PROJECT_VERSION)
 
 # Third-party dependencies version pinning.
-#
-# We do that in this file, which is copied in all projects, to ensure
-# all projects use the same versions. It avoids conflicts and makes it
-# possible to work with rabbitmq-public-umbrella.
-
-dep_cowboy = hex 1.0.4
-dep_ranch = hex 1.3.0
