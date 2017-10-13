@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp1.1</TargetFramework>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,7 +12,7 @@
   <ItemGroup>
     <PackageReference Include="FSharp.Core" Version="4.1.*" />
     <PackageReference Include="FSharp.NET.Sdk" Version="1.0.*" PrivateAssets="All" />
-    <PackageReference Include="AmqpNetLite" Version="*" PrivateAssets="All" />
+    <PackageReference Include="AmqpNetLite" Version="1.2.3" PrivateAssets="All" />
     <PackageReference Include="System.Collections.NonGeneric" Version="*" PrivateAssets="All" />
     <PackageReference Include="System.Runtime.Serialization.Primitives" Version="*" PrivateAssets="All" />
   </ItemGroup>

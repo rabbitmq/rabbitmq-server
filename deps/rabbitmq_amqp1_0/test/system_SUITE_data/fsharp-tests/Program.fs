@@ -106,10 +106,10 @@ module Test =
         use c = connect uri
         let sender, receiver = senderReceiver c "test" "roundtrip-q"
         for body in sampleTypes do
-            Message(body, Header = Header(Ttl = 500u))
+            new Message(body, Header = Header(Ttl = 500u))
             |> sender.Send
             let rtd = receive receiver
-            assertEqual body (rtd.GetBody())
+            assertEqual body rtd.Body
             assertTrue (rtd.Header.Ttl <= 500u)
 
     let defaultOutcome uri =
@@ -152,10 +152,10 @@ module Test =
                            MaxFrameSize = frameSize)
             use c = connectWithOpen uri opn
             let sender, receiver = senderReceiver c "test" "framentation-q"
-            let m = Message(String.replicate size "a")
+            let m = new Message(String.replicate size "a")
             sender.Send m
             let m' = receive receiver
-            assertEqual (m.GetBody<string>()) (m'.GetBody<string>())
+            assertEqual (m.Body) (m'.Body)
 
     let messageAnnotations uri =
         use c = connect uri
@@ -165,11 +165,11 @@ module Test =
         let k2 = Symbol "key2"
         ann.[Symbol "key1"] <- "value1"
         ann.[Symbol "key2"] <- "value2"
-        let m = Message("testing annotations", MessageAnnotations = ann)
+        let m = new Message("testing annotations", MessageAnnotations = ann)
         sender.Send m
         let m' = receive receiver
 
-        assertEqual (m.GetBody<string>()) (m'.GetBody<string>())
+        assertEqual m.Body m'.Body
         assertEqual (m.MessageAnnotations.Descriptor) (m'.MessageAnnotations.Descriptor)
         assertEqual 2 (m'.MessageAnnotations.Map.Count)
         assertTrue (m.MessageAnnotations.[k1] = m'.MessageAnnotations.[k1])
@@ -183,11 +183,11 @@ module Test =
         let k2 = Symbol "key2"
         footer.[Symbol "key1"] <- "value1"
         footer.[Symbol "key2"] <- "value2"
-        let m = Message("testing annotations", Footer = footer)
+        let m = new Message("testing annotations", Footer = footer)
         sender.Send m
         let m' = receive receiver
 
-        assertEqual (m.GetBody<string>()) (m'.GetBody<string>())
+        assertEqual m.Body m'.Body
         assertEqual (m.Footer.Descriptor) (m'.Footer.Descriptor)
         assertEqual 2 (m'.Footer.Map.Count)
         assertTrue (m.Footer.[k1] = m'.Footer.[k1])
