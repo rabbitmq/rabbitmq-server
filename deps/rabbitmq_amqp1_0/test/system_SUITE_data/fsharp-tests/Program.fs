@@ -197,24 +197,24 @@ module Test =
         use c = connect uri
         let sender, receiver = senderReceiver c "test" "datatypes-q"
         let aSeq = amqpSequence sampleTypes
-        Message aSeq |> sender.Send
+        (new Message(aSeq)) |> sender.Send
         let rtd = receive receiver
-        let amqpSeq = rtd.GetBody<AmqpSequence>().List
-        for a in amqpSeq do
+        let amqpSeq = rtd.Body :?> AmqpSequence
+        for a in amqpSeq.List do
             List.exists ((=) a) sampleTypes |> assertTrue
 
     let reject uri =
         use c = connect uri
         let sender, receiver = senderReceiver c "test" "reject-q"
-        Message "testing reject" |> sender.Send
+        new Message "testing reject" |> sender.Send
         let m = receiver.Receive()
         receiver.Reject(m)
-        assertEqual null (receiver.Receive(100))
+        assertEqual null (receiver.Receive(TimeSpan.FromMilliseconds 100.))
 
     let redelivery uri =
         use c = connect uri
         let sender, receiver = senderReceiver c "test" "redelivery-q"
-        Message "testing redelivery" |> sender.Send
+        new Message "testing redelivery" |> sender.Send
         let m = receiver.Receive()
         assertTrue (m.Header.FirstAcquirer)
         receiver.Close()
@@ -223,10 +223,10 @@ module Test =
         let receiver = ReceiverLink(session, "test-receiver", "redelivery-q")
 
         let m' = receive receiver
-        session.Close()
-        assertEqual (m.GetBody<string>()) (m'.GetBody<string>())
+        assertEqual (m.Body :?> string) (m'.Body :?> string)
         assertTrue (not m'.Header.FirstAcquirer)
-        assertEqual null (receiver.Receive(100))
+        assertEqual null (receiver.Receive(TimeSpan.FromMilliseconds 100.))
+        session.Close()
 
     let routing uri =
         for target, source, routingKey, succeed in
@@ -261,16 +261,17 @@ module Test =
             let sender = SenderLink(c.Session, "test-sender", target)
             let receiver = ReceiverLink(c.Session, "test-receiver", source)
             receiver.SetCredit(100, true)
-            let m = Message(rnd.Next(10000), Properties = Properties(Subject = routingKey))
+            use m = new Message(rnd.Next(10000), Properties = Properties(Subject = routingKey))
             sender.Send m
+            (* printfn "%s %s %s %A" target source routingKey succeed *)
 
             if succeed then
-                let m' = receiver.Receive(3000)
+                let m' = receiver.Receive(TimeSpan.FromMilliseconds 3000.)
                 receiver.Accept m'
                 assertTrue (m' <> null)
-                assertEqual (m.GetBody<int>()) (m'.GetBody<int>())
+                assertEqual (m.Body :?> int) (m'.Body :?> int)
             else
-                let m' = receiver.Receive(100)
+                use m' = receiver.Receive(TimeSpan.FromMilliseconds 100.)
                 assertEqual null m'
 
 
