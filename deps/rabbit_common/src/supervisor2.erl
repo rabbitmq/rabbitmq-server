@@ -118,6 +118,7 @@
 
 -include("include/old_builtin_types.hrl").
 
+-ifndef(define_new_sup2_state).
 -record(state, {name,
 		strategy               :: strategy(),
 		children = []          :: [child_rec()],
@@ -127,6 +128,18 @@
 		restarts = [],
 	        module,
 	        args}).
+-else.
+-record(state, {name,
+		strategy               :: strategy(),
+		children = []          :: [child_rec()],
+		dynamics               :: ?DICT_TYPE() | ?SET_TYPE(),
+		intensity              :: non_neg_integer(),
+		period                 :: pos_integer(),
+		restarts = [],
+		dynamic_restarts = 0   :: non_neg_integer(),
+	        module,
+	        args}).
+-endif.
 -type state() :: #state{}.
 
 -define(is_simple(State), State#state.strategy =:= simple_one_for_one).

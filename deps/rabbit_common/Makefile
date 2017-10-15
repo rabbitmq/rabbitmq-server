@@ -58,6 +58,12 @@ ifeq ($(call compare_version,$(ERTS_VER),$(tls_atom_version_MAX_ERTS_VER),<),tru
 RMQ_ERLC_OPTS += -Ddefine_tls_atom_version
 endif
 
+# supervisor's state change from erts-7.0(18)
+new_sup2_state_MAX_ERTS_VER = 7.0
+ifeq ($(call compare_version,$(ERTS_VER),$(new_sup2_state_MAX_ERTS_VER),>),true)
+RMQ_ERLC_OPTS += -Ddefine_new_sup2_state
+endif
+
 # For src/*_compat.erl modules, we don't want to set -Werror because for
 # instance, warnings about removed functions (e.g. ssl:connection_info/1
 # in Erlang 20) can't be turned off.
