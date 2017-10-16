@@ -11,7 +11,7 @@
    %% Networking
    %% ====================
    %%
-   %% Related doc guide http://www.rabbitmq.com/networking.html to learn more.
+   %% Related doc guide: http://www.rabbitmq.com/networking.html.
 
    %% By default, RabbitMQ will listen on all interfaces, using
    %% the standard (reserved) AMQP port.
