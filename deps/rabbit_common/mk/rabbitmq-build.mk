@@ -2,23 +2,11 @@
 # Compiler flags.
 # --------------------------------------------------------------------
 
+ifeq ($(filter rabbitmq-macros.mk,$(notdir $(MAKEFILE_LIST))),)
+include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-macros.mk
+endif
+
 TEST_ERLC_OPTS += +nowarn_export_all
-
-define compare_version
-$(shell awk 'BEGIN {
-	split("$(1)", v1, ".");
-	version1 = v1[1] * 1000000 + v1[2] * 10000 + v1[3] * 100 + v1[4];
-
-	split("$(2)", v2, ".");
-	version2 = v2[1] * 1000000 + v2[2] * 10000 + v2[3] * 100 + v2[4];
-
-	if (version1 $(3) version2) {
-		print "true";
-	} else {
-		print "false";
-	}
-}')
-endef
 
 # Erlang R16B03 has no support for new types in Erlang 17.0, leading to
 # a build-time error.
