@@ -2,7 +2,7 @@
 %% ----------------------------------------------------------------------------
 %% RabbitMQ Sample Configuration File.
 %%
-%% Relevant doc guide: http://www.rabbitmq.com/configure.html. See
+%% Related doc guide: http://www.rabbitmq.com/configure.html. See
 %% http://rabbitmq.com/documentation.html for documentation ToC.
 %% ----------------------------------------------------------------------------
 [
@@ -73,7 +73,7 @@
 
    %% TLS configuration.
    %%
-   %% Relevant doc guide: http://www.rabbitmq.com/ssl.html.
+   %% Related doc guide: http://www.rabbitmq.com/ssl.html.
    %%
    %% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
    %%                {certfile,             "/path/to/server/cert.pem"},
@@ -86,7 +86,7 @@
    %% 'AMQPLAIN'. Additional mechanisms can be added via
    %% plugins.
    %%
-   %% Relevant doc guide: http://www.rabbitmq.com/authentication.html for more details.
+   %% Related doc guide: http://www.rabbitmq.com/authentication.html for more details.
    %%
    %% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
 
@@ -99,7 +99,7 @@
    %% rabbitmq_auth_backend_ldap plugins.
    %%
    %% NB: These options require that the relevant plugin is enabled.
-   %% Relevant doc guide: http://www.rabbitmq.com/plugins.html for further details.
+   %% Related doc guide: http://www.rabbitmq.com/plugins.html for further details.
 
    %% The RabbitMQ-auth-mechanism-ssl plugin makes it possible to
    %% authenticate a user based on the client's TLS certificate.
@@ -147,7 +147,7 @@
    %% {password_hashing_module, rabbit_password_hashing_sha256},
 
    %% Configuration entry encryption.
-   %% Relevant doc guide: http://www.rabbitmq.com/configure.html#configuration-encryption
+   %% Related doc guide: http://www.rabbitmq.com/configure.html#configuration-encryption
    %%
    %% To specify the passphrase in the configuration file:
    %%
@@ -184,7 +184,7 @@
 
    %% Tags for default user
    %%
-   %% Relevant doc guide: http://www.rabbitmq.com/management.html.
+   %% Related doc guide: http://www.rabbitmq.com/management.html.
    %%
    %% {default_user_tags, [administrator]},
 
@@ -197,7 +197,7 @@
    %% Values lower than 6 can produce false positives and are not
    %% recommended.
    %%
-   %% Relevant doc guides:
+   %% Related doc guides:
    %%
    %%  * http://www.rabbitmq.com/heartbeats.html
    %%  * http://www.rabbitmq.com/networking.html
@@ -220,7 +220,7 @@
 
    %% TCP socket options.
    %%
-   %% Relevant doc guide: http://www.rabbitmq.com/networking.html.
+   %% Related doc guide: http://www.rabbitmq.com/networking.html.
    %%
    %% {tcp_listen_options, [{backlog,       128},
    %%                       {nodelay,       true},
@@ -230,7 +230,7 @@
    %% Resource Limits & Flow Control
    %% ==============================
    %%
-   %% Relevant doc guide: http://www.rabbitmq.com/memory.html, http://www.rabbitmq.com/memory-use.html.
+   %% Related doc guide: http://www.rabbitmq.com/memory.html, http://www.rabbitmq.com/memory-use.html.
 
    %% Memory-based Flow Control threshold.
    %%
@@ -312,12 +312,12 @@
    %%   * <<"client-local">>
    %%   * <<"random">>
    %%
-   %% Relevant doc guide: https://www.rabbitmq.com/ha.html#queue-master-location
+   %% Related doc guide: https://www.rabbitmq.com/ha.html#queue-master-location
    %%
    %% {queue_master_locator, <<"client-local">>},
 
    %% Batch size (number of messages) used during eager queue mirror synchronisation.
-   %% Relevant doc guide: https://www.rabbitmq.com/ha.html#batch-sync. When average message size is relatively large
+   %% Related doc guide: https://www.rabbitmq.com/ha.html#batch-sync. When average message size is relatively large
    %% (say, 10s of kilobytes or greater), reducing this value will decrease peak amount
    %% of RAM used by newly joining nodes that need eager synchronisation.
    %%
@@ -335,13 +335,13 @@
    %% {server_properties, []},
 
    %% How to respond to cluster partitions.
-   %% Relevant doc guide: http://www.rabbitmq.com/partitions.html
+   %% Related doc guide: http://www.rabbitmq.com/partitions.html
    %%
    %% {cluster_partition_handling, ignore},
 
    %% Make clustering happen *automatically* at startup - only applied
    %% to nodes that have just been reset or started for the first time.
-   %% Relevant doc guide: http://www.rabbitmq.com/clustering.html#auto-config
+   %% Related doc guide: http://www.rabbitmq.com/clustering.html#auto-config
    %%
    %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
@@ -387,12 +387,12 @@
    %% {mnesia_table_loading_retry_timeout, 30000},
 
    %% Size in bytes below which to embed messages in the queue index.
-   %% Relevant doc guide: http://www.rabbitmq.com/persistence-conf.html
+   %% Related doc guide: http://www.rabbitmq.com/persistence-conf.html
    %%
    %% {queue_index_embed_msgs_below, 4096},
 
    %% Maximum number of queue index entries to keep in journal
-   %% Relevant doc guide: http://www.rabbitmq.com/persistence-conf.html.
+   %% Related doc guide: http://www.rabbitmq.com/persistence-conf.html.
    %%
    %% {queue_index_max_journal_entries, 32768},
 
@@ -417,7 +417,7 @@
    %% Increasing these values may help with throughput but also can be dangerous:
    %% high credit flow values are no different from not having flow control at all.
    %%
-   %% Relevant doc guide: https://www.rabbitmq.com/blog/2015/10/06/new-credit-flow-settings-on-rabbitmq-3-5-5/
+   %% Related doc guide: https://www.rabbitmq.com/blog/2015/10/06/new-credit-flow-settings-on-rabbitmq-3-5-5/
    %% and http://alvaro-videla.com/2013/09/rabbitmq-internals-credit-flow-for-erlang-processes.html.
    %%
    %% {credit_flow_default_credit, {400, 200}},
@@ -475,7 +475,7 @@
  %% ----------------------------------------------------------------------------
  %% Advanced Erlang Networking/Clustering Options.
  %%
- %% Relevant doc guide: http://www.rabbitmq.com/clustering.html
+ %% Related doc guide: http://www.rabbitmq.com/clustering.html
  %% ----------------------------------------------------------------------------
  {kernel,
   [%% Sets the net_kernel tick time.
@@ -488,7 +488,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ Management Plugin
  %%
- %% Relevant doc guide: http://www.rabbitmq.com/management.html
+ %% Related doc guide: http://www.rabbitmq.com/management.html
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_management,
@@ -530,7 +530,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ Shovel Plugin
  %%
- %% Relevant doc guide: http://www.rabbitmq.com/shovel.html
+ %% Related doc guide: http://www.rabbitmq.com/shovel.html
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_shovel,
@@ -598,7 +598,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ STOMP Plugin
  %%
- %% Relevant doc guide: http://www.rabbitmq.com/stomp.html
+ %% Related doc guide: http://www.rabbitmq.com/stomp.html
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_stomp,
@@ -645,7 +645,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ MQTT Plugin
  %%
- %% Relevant doc guide: https://github.com/rabbitmq/rabbitmq-mqtt/blob/stable/README.md
+ %% Related doc guide: https://github.com/rabbitmq/rabbitmq-mqtt/blob/stable/README.md
  %%
  %% ----------------------------------------------------------------------------
 
@@ -709,7 +709,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ AMQP 1.0 Support
  %%
- %% Relevant doc guide: https://github.com/rabbitmq/rabbitmq-amqp1.0/blob/stable/README.md
+ %% Related doc guide: https://github.com/rabbitmq/rabbitmq-amqp1.0/blob/stable/README.md
  %%
  %% ----------------------------------------------------------------------------
 
@@ -730,7 +730,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ LDAP Plugin
  %%
- %% Relevant doc guide: http://www.rabbitmq.com/ldap.html.
+ %% Related doc guide: http://www.rabbitmq.com/ldap.html.
  %%
  %% ----------------------------------------------------------------------------
 
