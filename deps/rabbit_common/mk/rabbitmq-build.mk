@@ -2,6 +2,10 @@
 # Compiler flags.
 # --------------------------------------------------------------------
 
+ifeq ($(filter rabbitmq-macros.mk,$(notdir $(MAKEFILE_LIST))),)
+include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-macros.mk
+endif
+
 # NOTE: This plugin is loaded twice because Erlang.mk recurses. That's
 # why ERL_LIBS may contain twice the path to Elixir libraries or
 # ERLC_OPTS may contain duplicated flags.
@@ -24,22 +28,6 @@ ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR)
 endif
 
 TEST_ERLC_OPTS += +nowarn_export_all
-
-define compare_version
-$(shell awk 'BEGIN {
-	split("$(1)", v1, ".");
-	version1 = v1[1] * 1000000 + v1[2] * 10000 + v1[3] * 100 + v1[4];
-
-	split("$(2)", v2, ".");
-	version2 = v2[1] * 1000000 + v2[2] * 10000 + v2[3] * 100 + v2[4];
-
-	if (version1 $(3) version2) {
-		print "true";
-	} else {
-		print "false";
-	}
-}')
-endef
 
 # Add the CLI ebin directory to the code path for the compiler: plugin
 # CLI extensions may access behaviour modules defined in this directory.
