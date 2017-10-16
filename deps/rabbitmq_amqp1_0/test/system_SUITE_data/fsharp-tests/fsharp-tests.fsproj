@@ -1,20 +1,12 @@
-﻿<Project Sdk="FSharp.NET.Sdk;Microsoft.NET.Sdk">
-
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp1.1</TargetFramework>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
   </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="Program.fs" />
   </ItemGroup>
-
   <ItemGroup>
-    <PackageReference Include="FSharp.Core" Version="4.1.*" />
-    <PackageReference Include="FSharp.NET.Sdk" Version="1.0.*" PrivateAssets="All" />
-    <PackageReference Include="AmqpNetLite" Version="*" PrivateAssets="All" />
-    <PackageReference Include="System.Collections.NonGeneric" Version="*" PrivateAssets="All" />
-    <PackageReference Include="System.Runtime.Serialization.Primitives" Version="*" PrivateAssets="All" />
+    <PackageReference Include="AmqpNetLite" Version="2.0.0" />
   </ItemGroup>
-
 </Project>
