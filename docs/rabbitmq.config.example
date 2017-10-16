@@ -2,14 +2,16 @@
 %% ----------------------------------------------------------------------------
 %% RabbitMQ Sample Configuration File.
 %%
-%% See http://www.rabbitmq.com/configure.html for details.
+%% Relevant doc guide: http://www.rabbitmq.com/configure.html. See
+%% http://rabbitmq.com/documentation.html for documentation ToC.
 %% ----------------------------------------------------------------------------
 [
  {rabbit,
   [%%
-   %% Network Connectivity
+   %% Networking
    %% ====================
    %%
+   %% Related doc guide http://www.rabbitmq.com/networking.html to learn more.
 
    %% By default, RabbitMQ will listen on all interfaces, using
    %% the standard (reserved) AMQP port.
@@ -22,19 +24,19 @@
    %% {tcp_listeners, [{"127.0.0.1", 5672},
    %%                  {"::1",       5672}]},
 
-   %% SSL listeners are configured in the same fashion as TCP listeners,
+   %% TLS listeners are configured in the same fashion as TCP listeners,
    %% including the option to control the choice of interface.
    %%
    %% {ssl_listeners, [5671]},
 
    %% Number of Erlang processes that will accept connections for the TCP
-   %% and SSL listeners.
+   %% and TLS listeners.
    %%
    %% {num_tcp_acceptors, 10},
    %% {num_ssl_acceptors, 1},
 
    %% Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
-   %% and SSL handshake), in milliseconds.
+   %% and TLS handshake), in milliseconds.
    %%
    %% {handshake_timeout, 10000},
 
@@ -55,9 +57,10 @@
    %% {reverse_dns_lookups, false},
 
    %%
-   %% Security / AAA
-   %% ==============
+   %% Security, Access Control
+   %% ========================
    %%
+   %% Related doc guide: http://www.rabbitmq.com/access-control.html.
 
    %% The default "guest" user is only permitted to access the server
    %% via a loopback interface (e.g. localhost).
@@ -67,8 +70,10 @@
    %% guest user from anywhere on the network.
    %% {loopback_users, []},
 
-   %% Configuring SSL.
-   %% See http://www.rabbitmq.com/ssl.html for full documentation.
+
+   %% TLS configuration.
+   %%
+   %% Relevant doc guide: http://www.rabbitmq.com/ssl.html.
    %%
    %% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
    %%                {certfile,             "/path/to/server/cert.pem"},
@@ -81,7 +86,7 @@
    %% 'AMQPLAIN'. Additional mechanisms can be added via
    %% plugins.
    %%
-   %% See http://www.rabbitmq.com/authentication.html for more details.
+   %% Relevant doc guide: http://www.rabbitmq.com/authentication.html for more details.
    %%
    %% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
 
@@ -94,10 +99,10 @@
    %% rabbitmq_auth_backend_ldap plugins.
    %%
    %% NB: These options require that the relevant plugin is enabled.
-   %% See http://www.rabbitmq.com/plugins.html for further details.
+   %% Relevant doc guide: http://www.rabbitmq.com/plugins.html for further details.
 
    %% The RabbitMQ-auth-mechanism-ssl plugin makes it possible to
-   %% authenticate a user based on the client's SSL certificate.
+   %% authenticate a user based on the client's TLS certificate.
    %%
    %% To use auth-mechanism-ssl, add to or replace the auth_mechanisms
    %% list with the entry 'EXTERNAL'.
@@ -122,11 +127,11 @@
    %% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
    %% details.
    %%
-   %% To use the SSL cert's CN instead of its DN as the username
+   %% To use the TLS cert's CN instead of its DN as the username
    %%
    %% {ssl_cert_login_from, distinguished_name},
 
-   %% SSL handshake timeout, in milliseconds.
+   %% TLS handshake timeout, in milliseconds.
    %%
    %% {ssl_handshake_timeout, 5000},
 
@@ -142,7 +147,7 @@
    %% {password_hashing_module, rabbit_password_hashing_sha256},
 
    %% Configuration entry encryption.
-   %% See http://www.rabbitmq.com/configure.html#configuration-encryption
+   %% Relevant doc guide: http://www.rabbitmq.com/configure.html#configuration-encryption
    %%
    %% To specify the passphrase in the configuration file:
    %%
@@ -179,8 +184,7 @@
 
    %% Tags for default user
    %%
-   %% For more details about tags, see the documentation for the
-   %% Management Plugin at http://www.rabbitmq.com/management.html.
+   %% Relevant doc guide: http://www.rabbitmq.com/management.html.
    %%
    %% {default_user_tags, [administrator]},
 
@@ -192,7 +196,11 @@
    %% Sets the default AMQP 0-9-1 heartbeat timeout in seconds.
    %% Values lower than 6 can produce false positives and are not
    %% recommended.
-   %% See http://www.rabbitmq.com/heartbeats.html.
+   %%
+   %% Relevant doc guides:
+   %%
+   %%  * http://www.rabbitmq.com/heartbeats.html
+   %%  * http://www.rabbitmq.com/networking.html
    %%
    %% {heartbeat, 60},
 
@@ -212,7 +220,7 @@
 
    %% TCP socket options.
    %%
-   %% See http://www.rabbitmq.com/networking.html.
+   %% Relevant doc guide: http://www.rabbitmq.com/networking.html.
    %%
    %% {tcp_listen_options, [{backlog,       128},
    %%                       {nodelay,       true},
@@ -222,7 +230,7 @@
    %% Resource Limits & Flow Control
    %% ==============================
    %%
-   %% See http://www.rabbitmq.com/memory.html for full details.
+   %% Relevant doc guide: http://www.rabbitmq.com/memory.html, http://www.rabbitmq.com/memory-use.html.
 
    %% Memory-based Flow Control threshold.
    %%
@@ -266,7 +274,7 @@
    %% Introduced in 3.6.11. `allocated` is the default as of 3.6.13.
    %% See https://github.com/rabbitmq/rabbitmq-server/issues/1223 and rabbitmq/rabbitmq-common#224 for background.
    %% {vm_memory_calculation_strategy, allocated},
-   
+
    %% Interval (in milliseconds) at which we perform the check of the memory
    %% levels against the watermarks.
    %%
@@ -303,12 +311,13 @@
    %%   * <<"min-masters">>
    %%   * <<"client-local">>
    %%   * <<"random">>
-   %% See https://www.rabbitmq.com/ha.html#queue-master-location
+   %%
+   %% Relevant doc guide: https://www.rabbitmq.com/ha.html#queue-master-location
    %%
    %% {queue_master_locator, <<"client-local">>},
 
    %% Batch size (number of messages) used during eager queue mirror synchronisation.
-   %% See https://www.rabbitmq.com/ha.html#batch-sync. When average message size is relatively large
+   %% Relevant doc guide: https://www.rabbitmq.com/ha.html#batch-sync. When average message size is relatively large
    %% (say, 10s of kilobytes or greater), reducing this value will decrease peak amount
    %% of RAM used by newly joining nodes that need eager synchronisation.
    %%
@@ -326,13 +335,13 @@
    %% {server_properties, []},
 
    %% How to respond to cluster partitions.
-   %% See http://www.rabbitmq.com/partitions.html
+   %% Relevant doc guide: http://www.rabbitmq.com/partitions.html
    %%
    %% {cluster_partition_handling, ignore},
 
    %% Make clustering happen *automatically* at startup - only applied
    %% to nodes that have just been reset or started for the first time.
-   %% See http://www.rabbitmq.com/clustering.html#auto-config
+   %% Relevant doc guide: http://www.rabbitmq.com/clustering.html#auto-config
    %%
    %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
@@ -378,12 +387,12 @@
    %% {mnesia_table_loading_retry_timeout, 30000},
 
    %% Size in bytes below which to embed messages in the queue index.
-   %% See http://www.rabbitmq.com/persistence-conf.html
+   %% Relevant doc guide: http://www.rabbitmq.com/persistence-conf.html
    %%
    %% {queue_index_embed_msgs_below, 4096},
 
    %% Maximum number of queue index entries to keep in journal
-   %% See http://www.rabbitmq.com/persistence-conf.html.
+   %% Relevant doc guide: http://www.rabbitmq.com/persistence-conf.html.
    %%
    %% {queue_index_max_journal_entries, 32768},
 
@@ -408,7 +417,7 @@
    %% Increasing these values may help with throughput but also can be dangerous:
    %% high credit flow values are no different from not having flow control at all.
    %%
-   %% See https://www.rabbitmq.com/blog/2015/10/06/new-credit-flow-settings-on-rabbitmq-3-5-5/
+   %% Relevant doc guide: https://www.rabbitmq.com/blog/2015/10/06/new-credit-flow-settings-on-rabbitmq-3-5-5/
    %% and http://alvaro-videla.com/2013/09/rabbitmq-internals-credit-flow-for-erlang-processes.html.
    %%
    %% {credit_flow_default_credit, {400, 200}},
@@ -466,7 +475,7 @@
  %% ----------------------------------------------------------------------------
  %% Advanced Erlang Networking/Clustering Options.
  %%
- %% See http://www.rabbitmq.com/clustering.html for details
+ %% Relevant doc guide: http://www.rabbitmq.com/clustering.html
  %% ----------------------------------------------------------------------------
  {kernel,
   [%% Sets the net_kernel tick time.
@@ -479,7 +488,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ Management Plugin
  %%
- %% See http://www.rabbitmq.com/management.html for details
+ %% Relevant doc guide: http://www.rabbitmq.com/management.html
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_management,
@@ -521,7 +530,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ Shovel Plugin
  %%
- %% See http://www.rabbitmq.com/shovel.html for details
+ %% Relevant doc guide: http://www.rabbitmq.com/shovel.html
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_shovel,
@@ -587,9 +596,9 @@
   ]},
 
  %% ----------------------------------------------------------------------------
- %% RabbitMQ Stomp Adapter
+ %% RabbitMQ STOMP Plugin
  %%
- %% See http://www.rabbitmq.com/stomp.html for details
+ %% Relevant doc guide: http://www.rabbitmq.com/stomp.html
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_stomp,
@@ -599,18 +608,18 @@
    %% {tcp_listeners, [{"127.0.0.1", 61613},
    %%                  {"::1",       61613}]},
 
-   %% Listen for SSL connections on a specific port.
+   %% Listen for TLS connections on a specific port.
    %% {ssl_listeners, [61614]},
 
    %% Number of Erlang processes that will accept connections for the TCP
-   %% and SSL listeners.
+   %% and TLS listeners.
    %%
    %% {num_tcp_acceptors, 10},
    %% {num_ssl_acceptors, 1},
 
-   %% Additional SSL options
+   %% Additional TLS options
 
-   %% Extract a name from the client's certificate when using SSL.
+   %% Extract a name from the client's certificate when using TLS.
    %%
    %% {ssl_cert_login, true},
 
@@ -623,21 +632,21 @@
    %% {default_user, [{login,    "guest"},
    %%                 {passcode, "guest"}]},
 
-   %% If a default user is configured, or you have configured use SSL client
+   %% If a default user is configured, or you have configured use TLS client
    %% certificate based authentication, you can choose to allow clients to
    %% omit the CONNECT frame entirely. If set to true, the client is
    %% automatically connected as the default user or user supplied in the
-   %% SSL certificate whenever the first frame sent on a session is not a
+   %% TLS certificate whenever the first frame sent on a session is not a
    %% CONNECT frame.
    %%
    %% {implicit_connect, true}
   ]},
 
  %% ----------------------------------------------------------------------------
- %% RabbitMQ MQTT Adapter
+ %% RabbitMQ MQTT Plugin
  %%
- %% See https://github.com/rabbitmq/rabbitmq-mqtt/blob/stable/README.md
- %% for details
+ %% Relevant doc guide: https://github.com/rabbitmq/rabbitmq-mqtt/blob/stable/README.md
+ %%
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_mqtt,
@@ -700,8 +709,8 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ AMQP 1.0 Support
  %%
- %% See https://github.com/rabbitmq/rabbitmq-amqp1.0/blob/stable/README.md
- %% for details
+ %% Relevant doc guide: https://github.com/rabbitmq/rabbitmq-amqp1.0/blob/stable/README.md
+ %%
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_amqp1_0,
@@ -721,7 +730,7 @@
  %% ----------------------------------------------------------------------------
  %% RabbitMQ LDAP Plugin
  %%
- %% See http://www.rabbitmq.com/ldap.html for details.
+ %% Relevant doc guide: http://www.rabbitmq.com/ldap.html.
  %%
  %% ----------------------------------------------------------------------------
 
@@ -736,7 +745,7 @@
    %%
    %% {servers, ["your-server-name-goes-here"]},
 
-   %% Connect to the LDAP server using SSL
+   %% Connect to the LDAP server using TLS
    %%
    %% {use_ssl, false},
 
