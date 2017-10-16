@@ -6,7 +6,7 @@
 ## ====================
 ##
 ## By default, RabbitMQ will listen on all interfaces, using
-## the standard (reserved) AMQP port.
+## the standard (reserved) AMQP 0-9-1 and 1.0 port.
 ##
 # listeners.tcp.default = 5672
 
@@ -24,20 +24,20 @@
 # listeners.tcp.other_ip   = 10.10.10.10:5672
 
 
-## SSL listeners are configured in the same fashion as TCP listeners,
+## TLS listeners are configured in the same fashion as TCP listeners,
 ## including the option to control the choice of interface.
 ##
 # listeners.ssl.default = 5671
 
 ## Number of Erlang processes that will accept connections for the TCP
-## and SSL listeners.
+## and TLS listeners.
 ##
 # num_acceptors.tcp = 10
 # num_acceptors.ssl = 1
 
 
 ## Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
-## and SSL handshake), in milliseconds.
+## and TLS handshake), in milliseconds.
 ##
 # handshake_timeout = 10000
 
@@ -62,7 +62,7 @@
 ## guest user from anywhere on the network.
 # loopback_users.guest = false
 
-## Configuring SSL.
+## Configuring TLS.
 ## See http://www.rabbitmq.com/ssl.html for full documentation.
 ##
 # ssl_options.verify               = verify_peer
@@ -137,11 +137,11 @@
 ## https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
 ## details.
 ##
-## To use the SSL cert's CN instead of its DN as the username
+## To use the TLS cert's CN instead of its DN as the username
 ##
 # ssl_cert_login_from   = common_name
 
-## SSL handshake timeout, in milliseconds.
+## TLS handshake timeout, in milliseconds.
 ##
 # ssl_handshake_timeout = 5000
 
@@ -442,10 +442,10 @@
 # Management section
 # =======================================
 
-## Pre-Load schema definitions from the following JSON file. See
+## Preload schema definitions from the following JSON file. See
 ## http://www.rabbitmq.com/management.html#load-definitions
 ##
-# management.load_definitions = /path/to/schema.json
+# management.load_definitions = /path/to/exported/definitions.json
 
 ## Log all requests to the management HTTP API to a file.
 ##
@@ -453,11 +453,10 @@
 
 ## Change the port on which the HTTP listener listens,
 ## specifying an interface for the web server to bind to.
-## Also set the listener to use SSL and provide SSL options.
+## Also set the listener to use TLS and provide TLS options.
 ##
 
-# QA: Maybe use IP type like in tcp_listener?
-# management.listener.port = 12345
+# management.listener.port = 15672
 # management.listener.ip   = 127.0.0.1
 # management.listener.ssl  = true
 
@@ -493,7 +492,7 @@
 
 
 ## ----------------------------------------------------------------------------
-## RabbitMQ Stomp Adapter
+## RabbitMQ STOMP Plugin
 ##
 ## See http://www.rabbitmq.com/stomp.html for details
 ## ----------------------------------------------------------------------------
