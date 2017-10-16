@@ -114,7 +114,7 @@ dep_cowboy = hex 2.0.0
 dep_cowlib = hex 2.0.0
 dep_jsx = hex 2.8.2
 dep_lager = hex 3.5.1
-dep_ranch = hex 1.3.2
+dep_ranch = hex 1.4.0
 dep_ranch_proxy_protocol = hex 1.4.2
 dep_recon = hex 2.3.2
 
