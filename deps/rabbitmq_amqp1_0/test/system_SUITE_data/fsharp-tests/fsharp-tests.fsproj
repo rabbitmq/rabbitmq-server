@@ -8,6 +8,5 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="AmqpNetLite" Version="2.0.0" />
-    <PackageReference Include="FSharp.Core" Version="4.1.*" />
   </ItemGroup>
 </Project>
