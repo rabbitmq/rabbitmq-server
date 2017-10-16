@@ -2,8 +2,10 @@
 # RabbbitMQ broker section
 # ======================================
 
-## Network Connectivity
+## Networking
 ## ====================
+##
+## Please see http://www.rabbitmq.com/networking.html to learn more.
 ##
 ## By default, RabbitMQ will listen on all interfaces, using
 ## the standard (reserved) AMQP 0-9-1 and 1.0 port.
