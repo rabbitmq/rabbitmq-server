@@ -119,10 +119,11 @@
 -record(state, {name,
 		strategy               :: strategy(),
 		children = []          :: [child_rec()],
-		dynamics               :: dict:dict() | sets:set(),
+		dynamics               :: dict:dict() | set:set() | 'undefined',
 		intensity              :: non_neg_integer(),
 		period                 :: pos_integer(),
 		restarts = [],
+		dynamic_restarts = 0   :: non_neg_integer(),
 	        module,
 	        args}).
 -type state() :: #state{}.
