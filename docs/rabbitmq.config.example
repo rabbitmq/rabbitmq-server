@@ -494,7 +494,7 @@
 
    %% Change the port on which the HTTP listener listens,
    %% specifying an interface for the web server to bind to.
-   %% Also set the listener to use SSL and provide SSL options.
+   %% Also set the listener to use TLS and provide TLS options.
    %%
    %% {listener, [{port,     12345},
    %%             {ip,       "127.0.0.1"},
