@@ -483,14 +483,14 @@
  %% ----------------------------------------------------------------------------
 
  {rabbitmq_management,
-  [%% Pre-Load schema definitions from the following JSON file. See
+  [%% Preload schema definitions from a previously exported definitions file. See
    %% http://www.rabbitmq.com/management.html#load-definitions
    %%
-   %% {load_definitions, "/path/to/schema.json"},
+   %% {load_definitions, "/path/to/exported/definitions.json"},
 
-   %% Log all requests to the management HTTP API to a file.
+   %% Log all requests to the management HTTP API to a directory.
    %%
-   %% {http_log_dir, "/path/to/access.log"},
+   %% {http_log_dir, "/path/to/rabbitmq/logs/http"},
 
    %% Change the port on which the HTTP listener listens,
    %% specifying an interface for the web server to bind to.
