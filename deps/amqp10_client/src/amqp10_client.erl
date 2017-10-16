@@ -19,6 +19,11 @@
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
+-ifdef(nowarn_deprecated_gen_fsm).
+-compile({nowarn_deprecated_function,
+          [{gen_fsm, send_event, 2}]}).
+-endif.
+
 -export([open_connection/1,
          open_connection/2,
          close_connection/1,

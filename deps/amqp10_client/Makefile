@@ -7,7 +7,15 @@ DEPS = amqp10_common
 TEST_DEPS = rabbit rabbitmq_amqp1_0 rabbitmq_ct_helpers
 LOCAL_DEPS = ssl inets crypto
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk elvis_mk
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
+	      rabbit_common/mk/rabbitmq-hexpm.mk \
+	      rabbit_common/mk/rabbitmq-dist.mk \
+	      rabbit_common/mk/rabbitmq-run.mk \
+	      rabbit_common/mk/rabbitmq-test.mk \
+	      rabbit_common/mk/rabbitmq-tools.mk
+
+DEP_PLUGINS += elvis_mk
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
@@ -19,7 +27,21 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 include rabbitmq-components.mk
 include erlang.mk
 
-# dialyze the tests
+# --------------------------------------------------------------------
+# Compiler flags.
+# --------------------------------------------------------------------
+
+# gen_fsm is deprecated starting from Erlang 20, but we want to support
+# Erlang 19 as well.
+
+ERTS_VER := $(shell erl -version 2>&1 | sed -E 's/.* version //')
+ERLANG_20_ERTS_VER := 9.0
+
+ifeq ($(call compare_version,$(ERTS_VER),$(ERLANG_20_ERTS_VER),>=),true)
+ERLC_OPTS += -Dnowarn_deprecated_gen_fsm
+endif
+
+# Dialyze the tests.
 DIALYZER_OPTS += --src -r test
 
 # --------------------------------------------------------------------

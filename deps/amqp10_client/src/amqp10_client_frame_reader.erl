@@ -24,6 +24,15 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+-ifdef(nowarn_deprecated_gen_fsm).
+-compile({nowarn_deprecated_function,
+          [{gen_fsm, reply, 2},
+           {gen_fsm, send_all_state_event, 2},
+           {gen_fsm, send_event, 2},
+           {gen_fsm, start_link, 3},
+           {gen_fsm, sync_send_all_state_event, 2}]}).
+-endif.
+
 %% Private API.
 -export([start_link/2,
          set_connection/2,

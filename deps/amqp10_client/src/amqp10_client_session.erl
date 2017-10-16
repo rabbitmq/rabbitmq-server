@@ -20,6 +20,17 @@
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
+-ifdef(nowarn_deprecated_gen_fsm).
+-compile({nowarn_deprecated_function,
+          [{gen_fsm, reply, 2},
+           {gen_fsm, send_all_state_event, 2},
+           {gen_fsm, send_event, 2},
+           {gen_fsm, start_link, 3},
+           {gen_fsm, sync_send_all_state_event, 2},
+           {gen_fsm, sync_send_event, 2},
+           {gen_fsm, sync_send_event, 3}]}).
+-endif.
+
 %% Public API.
 -export(['begin'/1,
          begin_sync/1,
