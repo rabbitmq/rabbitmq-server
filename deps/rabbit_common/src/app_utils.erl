@@ -52,9 +52,9 @@ stop_applications(Apps) ->
 start_applications(Apps, ErrorHandler) ->
     start_applications(Apps, ErrorHandler, #{}).
 
-start_applications(Apps, ErrorHandler, AppModes) ->
+start_applications(Apps, ErrorHandler, RestartTypes) ->
     manage_applications(fun lists:foldl/3,
-                        fun(App) -> start(App, AppModes) end,
+                        fun(App) -> ensure_all_started(App, RestartTypes) end,
                         fun application:stop/1,
                         already_started,
                         ErrorHandler,
@@ -66,7 +66,7 @@ stop_applications(Apps, ErrorHandler) ->
                             rabbit_log:info("Stopping application '~s'", [App]),
                             application:stop(App)
                         end,
-                        fun(App) -> start(App, #{}) end,
+                        fun(App) -> ensure_all_started(App, #{}) end,
                         not_started,
                         ErrorHandler,
                         Apps).
@@ -131,11 +131,39 @@ manage_applications(Iterate, Do, Undo, SkipError, ErrorHandler, Apps) ->
             end, [], Apps),
     ok.
 
-start(App, Modes) ->
-    Mode = maps:get(App, Modes, default_mode(App)),
-    application:start(App, Mode).
-
 %% Stops the Erlang VM when the rabbit application stops abnormally
 %% i.e. message store reaches its restart limit
-default_mode(rabbit) -> transient;
-default_mode(_)      -> temporary.
+default_restart_type(rabbit) -> transient;
+default_restart_type(_)      -> temporary.
+
+%% Copyright Ericsson AB 1996-2016. All Rights Reserved.
+%%
+%% Code orignially from Erlang/OTP source lib/kernel/src/application.erl
+%% and modified to use RestartTypes map
+%%
+ensure_all_started(Application, RestartTypes) ->
+    case ensure_all_started(Application, RestartTypes, []) of
+        {ok, Started} ->
+            {ok, lists:reverse(Started)};
+        {error, Reason, Started} ->
+            _ = [application:stop(App) || App <- Started],
+        {error, Reason}
+    end.
+
+ensure_all_started(Application, RestartTypes, Started) ->
+    RestartType = maps:get(Application, RestartTypes, default_restart_type(Application)),
+    case application:start(Application, RestartType) of
+        ok ->
+            {ok, [Application | Started]};
+        {error, {already_started, Application}} ->
+            {ok, Started};
+        {error, {not_started, Dependency}} ->
+            case ensure_all_started(Dependency, RestartTypes, Started) of
+                {ok, NewStarted} ->
+                    ensure_all_started(Application, RestartTypes, NewStarted);
+                Error ->
+                    Error
+            end;
+	{error, Reason} ->
+	    {error, {Application, Reason}, Started}
+    end.
