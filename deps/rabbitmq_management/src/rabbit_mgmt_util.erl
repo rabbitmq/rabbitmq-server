@@ -659,7 +659,7 @@ halt_response(Code, Type, Reason, ReqData, Context) ->
     ReasonFormatted = format_reason(Reason),
     Json = #{<<"error">>  => Type,
              <<"reason">> => ReasonFormatted},
-    {ok, ReqData1} = cowboy_req:reply(Code,
+    ReqData1 = cowboy_req:reply(Code,
         #{<<"content-type">> => <<"application/json">>},
         rabbit_json:encode(Json), ReqData),
     {halt, ReqData1, Context}.

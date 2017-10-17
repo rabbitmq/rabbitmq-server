@@ -21,7 +21,7 @@ init(_, Req, RedirectTo) ->
     {ok, Req, RedirectTo}.
 
 handle(Req0, RedirectTo) ->
-    {ok, Req} = cowboy_req:reply(301, #{<<"location">> => RedirectTo}, Req0),
+    Req = cowboy_req:reply(301, #{<<"location">> => RedirectTo}, Req0),
     {ok, Req, RedirectTo}.
 
 terminate(_, _) ->
