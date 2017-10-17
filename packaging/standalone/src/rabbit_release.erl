@@ -54,8 +54,10 @@ start() ->
               end,
 
     %% we need a list of ERTS apps we need to ship with rabbit
-    RabbitMQAppNames = [rabbit | [P#plugin.name ||
-                        P <- rabbit_plugins:list(PluginsDistDir, true)]]
+    RabbitMQAppNames = lists:umerge(
+                         lists:sort(sets:to_list(expand_dependencies([rabbit]))),
+                         [P#plugin.name ||
+                          P <- rabbit_plugins:list(PluginsDistDir, true)])
                        -- PluginAppNames,
     {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
 
