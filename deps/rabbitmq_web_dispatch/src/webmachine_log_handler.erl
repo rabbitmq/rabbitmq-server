@@ -86,25 +86,23 @@ code_change(_OldVsn, State, _Extra) ->
 %% since we are now using Cowboy, a few small parts had to change.
 %% This is one such part. The code is however equivalent to Webmachine's.
 
-format_req({Status0, Body, Req0}) ->
+format_req({Status0, Body, Req}) ->
     User = "-",
     Time = webmachine_log:fmtnow(),
     Status = integer_to_list(Status0),
     Length = integer_to_list(iolist_size(Body)),
-    {Method, Req1} = cowboy_req:method(Req0),
-    {Path, Req2} = cowboy_req:path(Req1),
-    {Peer, Req3} = case cowboy_req:peer(Req2) of
-                       {{Peer0, _Port}, R} ->
-                           {Peer0, R};
-                       {Other, R} ->
-                           {Other, R}
+    Method = cowboy_req:method(Req),
+    Path = cowboy_req:path(Req),
+    Peer = case cowboy_req:peer(Req) of
+                       {Peer0, _Port} -> Peer0;
+                       Other -> Other
                    end,
-    Version = case cowboy_req:version(Req3) of
-        {'HTTP/1.1', _} -> {1, 1};
-        {'HTTP/1.0', _} -> {1, 0}
+    Version = case cowboy_req:version(Req) of
+        'HTTP/1.1' -> {1, 1};
+        'HTTP/1.0' -> {1, 0}
     end,
-    {Referer, Req4} = cowboy_req:header(<<"referer">>, Req3, <<>>),
-    {UserAgent, _Req5} = cowboy_req:header(<<"user-agent">>, Req4, <<>>),
+    Referer = cowboy_req:header(<<"referer">>, Req, <<>>),
+    UserAgent = cowboy_req:header(<<"user-agent">>, Req, <<>>),
     fmt_alog(Time, Peer, User, Method, Path, Version,
              Status, Length, Referer, UserAgent).
 
