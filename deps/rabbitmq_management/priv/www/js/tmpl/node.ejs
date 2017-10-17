@@ -32,9 +32,38 @@
        <% } %>
       </td>
     </tr>
+    <tr>
+      <th>
+        <a href="http://www.rabbitmq.com/configure.html" target="_blank">Config file</a>
+      </th>
+      <td>
+  <%
+     for (var i = 0; i < node.config_files.length; i++) {
+       var config = node.config_files[i];
+  %>
+        <code><%= config %></code>
+  <% } %>
+      </td>
+    </tr>
+    <tr>
+      <th>Database directory</th>
+      <td>
+        <code><%= node.db_dir %></code>
+      </td>
+    </tr>
+    <tr>
+      <th>Log file</th>
+      <td>
+        <code><%= node.log_file %></code>
+      </td>
+    </tr>
+    <tr>
+      <th>SASL log file</th>
+      <td>
+        <code><%= node.sasl_log_file %></code>
+      </td>
+    </tr>
   </table>
-
-  <%= format('paths', {node: node}) %>
   </div>
 </div>
 </div>
