@@ -6,6 +6,8 @@
 # you need to update the server-release pipeline!
 
 PLUGINS := rabbitmq_amqp1_0 \
+	   rabbitmq_auth_backend_cache \
+	   rabbitmq_auth_backend_http \
 	   rabbitmq_auth_backend_ldap \
 	   rabbitmq_auth_mechanism_ssl \
 	   rabbitmq_consistent_hash_exchange \
@@ -16,6 +18,11 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_management \
 	   rabbitmq_management_agent \
 	   rabbitmq_mqtt \
+	   rabbitmq_peer_discovery_common \
+	   rabbitmq_peer_discovery_aws \
+	   rabbitmq_peer_discovery_k8s \
+	   rabbitmq_peer_discovery_consul \
+	   rabbitmq_peer_discovery_etcd \
 	   rabbitmq_recent_history_exchange \
 	   rabbitmq_sharding \
 	   rabbitmq_shovel \
