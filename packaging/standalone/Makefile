@@ -113,7 +113,7 @@ dist:
 	fi
 
 clean:
-	rm -rf rabbitmq-server-* rabbitmq_server-* manifest
+	rm -rf rabbitmq-server-* rabbitmq_server-* manifest src/rabbit_release.beam
 
 .PHONY : generate_release
 generate_release:
