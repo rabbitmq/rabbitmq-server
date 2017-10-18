@@ -333,8 +333,13 @@ div.bindings-wrapper span.exchange a, div.bindings-wrapper span.queue a { font-w
 div.bindings-wrapper p.arrow { font-size: 200%; }
 
 #footer { overflow: auto; width: 100%; }
-
-#update-form { float: right; margin: 0; padding: 0; }
+#footer #footer-nav { padding-top: 5px; }
+#footer #footer-nav ul { float: left; list-style-type: none; padding: 0; margin: 0;}
+#footer #footer-nav ul li { float: left; border-right: 1px solid #DDD; padding: 0 1em 0 0; margin: 0 1em 0 0; }
+#footer #footer-nav ul li:last-child { border-right: none; }
+#footer #footer-nav ul li a { color: #B4BAB8; text-decoration: none; font-weight: bold; }
+#footer #footer-nav ul li a:hover { text-decoration: underline; }
+#footer #update-form { float: right; margin: 0; padding: 0; }
 
 #status { clear: both; }
 #scratch { display: none; }
