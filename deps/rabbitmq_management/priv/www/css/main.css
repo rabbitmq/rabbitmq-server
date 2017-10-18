@@ -1,5 +1,5 @@
 body { font: 12px Verdana, sans-serif; color: #484848; padding: 8px 35px; }
-input, button { font: 12px Verdana, sans-serif; }
+input, button, a.button { font: 12px Verdana, sans-serif; }
 
 #login table { margin: auto; }
 #login p { text-align: center; }
@@ -22,10 +22,8 @@ input, button { font: 12px Verdana, sans-serif; }
 #menu a { color: #444; font-weight: bold; text-decoration: none; padding: 5px; }
 #menu a:hover { background-color: #444; color: white; -moz-border-radius: 8px 8px 0 0; border-radius: 8px 8px 0 0; }
 #menu a.selected { background-color: #F60; color: white; -moz-border-radius: 8px 8px 0 0; border-radius: 8px 8px 0 0; }
-#main a { color: #F60; font-weight: bold; text-decoration: none; }
-#main table th a { color: black; }
-#main table td a { font-weight: normal; }
-#main a:hover { text-decoration: underline; }
+a { color: #F60; text-decoration: none; }
+a:hover { text-decoration: underline; }
 #vhost-form { float: right; padding: 0; margin: 0; }
 
 #main.with-rhs { margin-right: 210px; }
@@ -92,8 +90,8 @@ table.list { border-width: 1px; margin-bottom: 1em; }
 table.list th, table.list td { border: 1px solid #ccc; }
 table.list th { text-align: left; }
 table.list th.plus-minus { border: none; min-width: 2em; }
-table.list td a { display: block; width: 100%; }
-table.list th a.sort { display: block; width: 100%; cursor: pointer; }
+table.list td a { display: block; }
+table.list th a.sort { display: block; width: 100%; cursor: pointer; color: black; font-weight: bold; }
 table.list th a.sort .arrow { color: #F60; }
 table.list td p { margin: 0; padding: 1px 0 0 0; }
 table.list td p.warning { margin: 0; padding: 5px; }
@@ -245,16 +243,15 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 
 .highlight { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
-.highlight, .micro-highlight { float: left; }
+.highlight { float: left; }
 
 .chart { margin: 0 20px 20px 0; float: left; }
 .chart-small  { width: 400px; height: 100px; }
 .chart-medium { width: 600px; height: 200px; }
 .chart-large  { width: 800px; height: 300px; }
 
-.micro-highlight { min-width: 120px; font-size: 100%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
-.micro-highlight a { font-weight: normal !important; color: #888 !important; }
-.micro-highlight strong { font-size: 120%; color: #444; font-weight: normal; }
+ul#global-counts { overflow: hidden; list-style-type: none; margin: 0; padding: 0; }
+ul#global-counts li { float: left; margin: 0 1em 0 0; }
 
 div.section, div.section-hidden { margin: 0 0 1em 0; }
 div.section-invisible div.hider { display: none; }
@@ -297,21 +294,22 @@ label.radio, label.checkbox { padding: 5px; border: 1px solid #eee; cursor: poin
 table.two-col-layout { width: 100%; }
 table.two-col-layout > tbody > tr > td { width: 50%; vertical-align: top; }
 
-input[type=submit], button { padding: 8px; border-radius: 5px; -moz-border-radius: 5px; text-decoration: none; cursor: pointer; }
+input[type=submit], button, a.button { padding: 8px; border-radius: 5px; -moz-border-radius: 5px; text-decoration: none; cursor: pointer; }
 table.list input[type=submit], table.list button { padding: 3px 7px; margin: 0 0 3px 0; }
-table.mini input[type=submit], table.mini button { padding: 3px 7px; margin: 0 0 3px 0; }
+table.list input[type=submit], table.list button, table.list a.button { padding: 3px 7px; margin: 0 0 3px 0; }
 
-input[type=submit], button {
+input[type=submit], button, a.button {
     background: #F60;
-    color: white;
+    color: white !important;
     border: 0;
 }
-input[type=submit]:hover, button:hover {
+input[type=submit]:hover, button:hover, a.button:hover {
     background: #444;
+    text-decoration: none !important;
 }
 
-input[type=submit][disabled], button[disabled] { background: #aac; }
-input[type=submit][disabled]:hover, button[disabled]:hover { background: #aac; }
+input[type=submit][disabled], button[disabled], a.button.disabled { pointer-events: none; background: #444; }
+input[type=submit][disabled]:hover, button[disabled]:hover, a.button.disabled { background: #444; }
 
 h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; font-weight: normal; }
 
@@ -335,8 +333,13 @@ div.bindings-wrapper span.exchange a, div.bindings-wrapper span.queue a { font-w
 div.bindings-wrapper p.arrow { font-size: 200%; }
 
 #footer { overflow: auto; width: 100%; }
-
-#update-form { float: right; margin: 0; padding: 0; }
+#footer #footer-nav { padding-top: 5px; }
+#footer #footer-nav ul { float: left; list-style-type: none; padding: 0; margin: 0;}
+#footer #footer-nav ul li { float: left; border-right: 1px solid #DDD; padding: 0 1em 0 0; margin: 0 1em 0 0; }
+#footer #footer-nav ul li:last-child { border-right: none; }
+#footer #footer-nav ul li a { color: #B4BAB8; text-decoration: none; font-weight: bold; }
+#footer #footer-nav ul li a:hover { text-decoration: underline; }
+#footer #update-form { float: right; margin: 0; padding: 0; }
 
 #status { clear: both; }
 #scratch { display: none; }

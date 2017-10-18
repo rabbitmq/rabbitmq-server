@@ -18,6 +18,7 @@
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 -compile(export_all).
+-compile({no_auto_import, [ceil/1]}).
 
 all() ->
     [

@@ -39,33 +39,25 @@
 <% if (overview.object_totals) { %>
   <h3>Global counts <span class="help" id="resource-counts"></span></h3>
 
-  <div class="box">
-    <div class="micro-highlight">
-      <a href="#/connections">
-        Connections: <strong><%= overview.object_totals.connections %></strong>
-      </a>
-    </div>
-    <div class="micro-highlight">
-      <a href="#/channels">
-        Channels: <strong><%= overview.object_totals.channels %></strong>
-      </a>
-    </div>
-    <div class="micro-highlight">
-      <a href="#/exchanges">
-        Exchanges: <strong><%= overview.object_totals.exchanges %></strong>
-      </a>
-    </div>
-    <div class="micro-highlight">
-      <a href="#/queues">
-        Queues: <strong><%= overview.object_totals.queues %></strong>
-      </a>
-    </div>
-<% if (overview.object_totals['consumers'] != undefined) { %>    <tr>
-    <div class="micro-highlight">
-      Consumers: <strong><%= overview.object_totals.consumers %></strong>
-    </div>
+  <ul id="global-counts">
+    <li>
+      <a href="#/connections" class="button">Connections: <strong><%= overview.object_totals.connections %></strong></a>
+    </li>
+    <li>
+      <a href="#/channels" class="button">Channels: <strong><%= overview.object_totals.channels %></strong></a>
+    </li>
+    <li>
+      <a href="#/exchanges" class="button">Exchanges: <strong><%= overview.object_totals.exchanges %></strong></a>
+    </li>
+    <li>
+      <a href="#/queues" class="button">Queues: <strong><%= overview.object_totals.queues %></strong></a>
+    </li>
+<% if (overview.object_totals['consumers'] != undefined) { %>
+    <li>
+      <a href="#" class="button disabled">Consumers: <strong><%= overview.object_totals.consumers %></strong></a>
+    </li>
 <% } %>
-  </div>
+  </ul>
 <% } %>
 
 </div>
@@ -73,23 +65,13 @@
 
 <% if (user_monitor) { %>
 <div class="section">
-<% if (nodes.length == 1) { %>
-<h2>Node</h2>
-<% } else { %>
 <h2>Nodes</h2>
-<% } %>
 
 <div class="hider updatable">
-<% if (nodes.length == 1) { %>
-    <p>Node: <%= fmt_node(nodes[0].name) %> (<a href="#/nodes/<%= esc(nodes[0].name) %>">more node stats</a>)</p>
-<% } %>
 
 <table class="list">
   <tr>
-<% if (nodes.length > 1) { %>
     <th>Name</th>
-<% } %>
-
   <% if (show_column('overview', 'file_descriptors')) { %>
     <th>File descriptors <span class="help" id="file-descriptors"></span></th>
   <% } %>
@@ -123,15 +105,12 @@
                    group_count('overview', 'General', []);
 %>
    <tr<%= alt_rows(i)%>>
-<% if (nodes.length > 1) { %>
      <td>
-       <%= fmt_node(node.name) %>
-       <%= _link_to('more stats', '#/nodes/' + esc(node.name)) %>
+       <a href="#/nodes/<%= esc(node.name) %>" class="button"><%= fmt_node(node.name) %></a>
        <% if (rabbit_versions_interesting) { %>
          <sub>RabbitMQ <%= fmt_rabbit_version(node.applications) %></sub>
        <% } %>
      </td>
-<% } %>
 <% if (!node.running) { %>
      <td colspan="<%= colspan %>">
        <div class="status-red">
@@ -219,11 +198,6 @@
    </tr>
 <% } %>
 </table>
-
-<% if (nodes.length == 1 && nodes[0].os_pid != undefined) { %>
-    <h3>Paths</h3>
-    <%= format('paths', {node: nodes[0]}) %>
-<% } %>
 
 </div>
 </div>

@@ -54,6 +54,7 @@ function login_route_with_path() {
 
 function start_app_login() {
     app = new Sammy.Application(function () {
+        this.get('#/', function() {});
         this.put('#/login', function() {
             username = this.params['username'];
             password = this.params['password'];
