@@ -90,7 +90,7 @@ table.list { border-width: 1px; margin-bottom: 1em; }
 table.list th, table.list td { border: 1px solid #ccc; }
 table.list th { text-align: left; }
 table.list th.plus-minus { border: none; min-width: 2em; }
-table.list td a { display: block; }
+table.list td a { display: block; color: black; }
 table.list th a.sort { display: block; width: 100%; cursor: pointer; color: black; font-weight: bold; }
 table.list th a.sort .arrow { color: #F60; }
 table.list td p { margin: 0; padding: 1px 0 0 0; }
