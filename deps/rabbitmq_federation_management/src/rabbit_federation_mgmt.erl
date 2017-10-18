@@ -19,7 +19,7 @@
 -behaviour(rabbit_mgmt_extension).
 
 -export([dispatcher/0, web_ui/0]).
--export([init/2, to_json/2, resource_exists/2, content_types_provided/2,
+-export([init/3, rest_init/2, to_json/2, resource_exists/2, content_types_provided/2,
          is_authorized/2, allowed_methods/2, delete_resource/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -36,10 +36,13 @@ web_ui()     -> [{javascript, <<"federation.js">>}].
 
 %%--------------------------------------------------------------------
 
-init(Req, [Filter]) ->
-    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), {Filter, #context{}}};
-init(Req, []) ->
-    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+init(_, _, _) ->
+    {upgrade, protocol, cowboy_rest}.
+
+rest_init(Req, [Filter]) ->
+    {ok, Req, {Filter, #context{}}};
+rest_init(Req, []) ->
+    {ok, Req, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
