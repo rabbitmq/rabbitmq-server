@@ -14,6 +14,7 @@
 /rebar.config
 /rebar.lock
 /test/ct.cover.spec
+/test/config_schema_SUITE_data/schema/
 /xrefr
 
 /rabbitmq_peer_discovery_common.d
