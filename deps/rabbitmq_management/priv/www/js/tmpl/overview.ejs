@@ -30,33 +30,25 @@
 <% if (overview.object_totals) { %>
   <h3>Global counts <span class="help" id="resource-counts"></span></h3>
 
-  <div class="box">
-    <div class="micro-highlight">
-      <a href="#/connections">
-        Connections: <strong><%= overview.object_totals.connections %></strong>
-      </a>
-    </div>
-    <div class="micro-highlight">
-      <a href="#/channels">
-        Channels: <strong><%= overview.object_totals.channels %></strong>
-      </a>
-    </div>
-    <div class="micro-highlight">
-      <a href="#/exchanges">
-        Exchanges: <strong><%= overview.object_totals.exchanges %></strong>
-      </a>
-    </div>
-    <div class="micro-highlight">
-      <a href="#/queues">
-        Queues: <strong><%= overview.object_totals.queues %></strong>
-      </a>
-    </div>
-<% if (overview.object_totals['consumers'] != undefined) { %>    <tr>
-    <div class="micro-highlight">
-      Consumers: <strong><%= overview.object_totals.consumers %></strong>
-    </div>
+  <ul id="global-counts">
+    <li>
+      <a href="#/connections" class="button">Connections: <strong><%= overview.object_totals.connections %></strong></a>
+    </li>
+    <li>
+      <a href="#/channels" class="button">Channels: <strong><%= overview.object_totals.channels %></strong></a>
+    </li>
+    <li>
+      <a href="#/exchanges" class="button">Exchanges: <strong><%= overview.object_totals.exchanges %></strong></a>
+    </li>
+    <li>
+      <a href="#/queues" class="button">Queues: <strong><%= overview.object_totals.queues %></strong></a>
+    </li>
+<% if (overview.object_totals['consumers'] != undefined) { %>
+    <li>
+      <a href="#" class="button disabled">Consumers: <strong><%= overview.object_totals.consumers %></strong></a>
+    </li>
 <% } %>
-  </div>
+  </ul>
 <% } %>
 
 </div>

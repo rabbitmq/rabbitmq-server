@@ -243,16 +243,15 @@ p.status-error, p.warning { margin: 20px; padding: 15px; border-radius: 10px; -m
 
 .highlight { min-width: 120px; font-size: 120%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
 .highlight strong { font-size: 2em; display: block; color: #444; font-weight: normal; }
-.highlight, .micro-highlight { float: left; }
+.highlight { float: left; }
 
 .chart { margin: 0 20px 20px 0; float: left; }
 .chart-small  { width: 400px; height: 100px; }
 .chart-medium { width: 600px; height: 200px; }
 .chart-large  { width: 800px; height: 300px; }
 
-.micro-highlight { min-width: 120px; font-size: 100%; text-align:center; padding:10px; background-color: #ddd; margin: 0 20px 0 0; color: #888; border-radius: 10px; -moz-border-radius: 10px; }
-.micro-highlight a { font-weight: normal !important; color: #888 !important; }
-.micro-highlight strong { font-size: 120%; color: #444; font-weight: normal; }
+ul#global-counts { overflow: hidden; list-style-type: none; margin: 0; padding: 0; }
+ul#global-counts li { float: left; margin: 0 1em 0 0; }
 
 div.section, div.section-hidden { margin: 0 0 1em 0; }
 div.section-invisible div.hider { display: none; }
@@ -295,7 +294,7 @@ label.radio, label.checkbox { padding: 5px; border: 1px solid #eee; cursor: poin
 table.two-col-layout { width: 100%; }
 table.two-col-layout > tbody > tr > td { width: 50%; vertical-align: top; }
 
-input[type=submit], button, a.button { padding: 8px; border-radius: 5px; -moz-border-radius: 5px; text-decoration: none; cursor: pointer; }
+input[type=submit], button, a.button { padding: 8px; border-radius: 5px; -moz-border-radius: 5px; text-decoration: none; cursor: pointer; display: block; }
 table.list input[type=submit], table.list button, table.list a.button { padding: 3px 7px; margin: 0 0 3px 0; }
 
 input[type=submit], button, a.button {
@@ -308,8 +307,8 @@ input[type=submit]:hover, button:hover, a.button:hover {
     text-decoration: none !important;
 }
 
-input[type=submit][disabled], button[disabled] { background: #444; }
-input[type=submit][disabled]:hover, button[disabled]:hover { background: #444; }
+input[type=submit][disabled], button[disabled], a.button.disabled { pointer-events: none; background: #444; }
+input[type=submit][disabled]:hover, button[disabled]:hover, a.button.disabled { background: #444; }
 
 h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; font-weight: normal; }
 
