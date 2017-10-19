@@ -453,7 +453,7 @@ stop_and_halt() ->
         stop()
     catch Type:Reason ->
         rabbit_log:error("Error trying to stop RabbitMQ: ~p:~p", [Type, Reason]),
-        error({Type, Reason})
+        erlang:error({Type, Reason})
     after
         %% Enclose all the logging in the try block.
         %% init:stop() will be called regardless of any errors.

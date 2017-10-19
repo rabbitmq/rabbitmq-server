@@ -93,6 +93,10 @@ main(ParseFun, DoFun, UsageMod) ->
         {'EXIT', {function_clause, [{?MODULE, action, _, _} | _]}} -> %% >= R15
             PrintInvalidCommandError(),
             usage(UsageMod);
+        {error, {error_during_shutdown, Err}} ->
+            print_error("Node ~w failed to shut down: ~p.",
+                        [Node, Err]),
+            rabbit_misc:quit(?EX_SHUTDOWN_ERROR);
         {error, {missing_dependencies, Missing, Blame}} ->
             print_error("dependent plugins ~p not found; used by ~p.",
                         [Missing, Blame]),

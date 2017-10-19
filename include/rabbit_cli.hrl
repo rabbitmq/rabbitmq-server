@@ -72,3 +72,8 @@
 -define(EX_SOFTWARE   , 70).  % Failed to execute command.
 -define(EX_TEMPFAIL   , 75).  % Temporary error (e.g. something has timed out).
 -define(EX_CONFIG     , 78).  % Misconfiguration detected
+
+% Non-standard code that indicates that node shutdown failed with an error
+% other than an unsuccessfull RPC call or a timeout. See rabbitmq/rabbitmq-server#1396
+% for context.
+-define(EX_SHUTDOWN_ERROR, 79).

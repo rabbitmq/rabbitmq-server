@@ -283,10 +283,13 @@ shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform) ->
             wait_for_process_death(Pid),
             Inform(
               "RabbitMQ node ~p running at PID ~s successfully shut down",
-              [Node, Pid]);
-        _  -> ok
-    end,
-    Res.
+              [Node, Pid]),
+            Res;
+        {error, Err} ->
+            {error, {error_during_shutdown, Err}};
+        _  ->
+            Res
+    end.
 
 action(shutdown, Node, [], _Opts, Inform) ->
     case rpc:call(Node, os, getpid, []) of
