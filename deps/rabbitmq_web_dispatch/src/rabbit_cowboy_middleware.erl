@@ -29,5 +29,5 @@ execute(Req, Env) ->
             Req2 = cowboy_req:reply(500,
                 #{<<"content-type">> => <<"text/plain">>},
                 "Registry Error: " ++ io_lib:format("~p", [Reason]), Req),
-            {halt, Req2}
+            {stop, Req2}
     end.
