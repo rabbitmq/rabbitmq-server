@@ -153,6 +153,43 @@ fun(Conf) ->
     [ V || {_, V} <- Settings ]
 end}.
 
+
+
+%% CORS
+
+{mapping, "management.cors.allow_origins", "rabbitmq_management.cors_allow_origins", [
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "management.cors.allow_origins.$name", "rabbitmq_management.cors_allow_origins", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_management.cors_allow_origins",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.cors.allow_origins", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("management.cors.allow_origins", Conf),
+            [V || {_, V} <- Settings]
+    end
+end}.
+
+
+{mapping, "management.cors.max_age", "rabbitmq_management.cors_max_age", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbitmq_management.cors_max_age",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.cors.max_age", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+
 %% ===========================================================================
 
 

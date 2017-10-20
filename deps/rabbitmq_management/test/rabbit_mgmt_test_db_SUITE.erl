@@ -28,6 +28,7 @@
 -import(rabbit_misc, [pget/2]).
 
 -compile(export_all).
+-compile({no_auto_import, [ceil/1]}).
 
 all() ->
     [
