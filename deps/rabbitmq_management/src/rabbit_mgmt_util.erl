@@ -246,7 +246,7 @@ responder_map(FunctionName) ->
       {<<"application/bert">>, FunctionName}
     ].
 
-reply({halt, _, _} = Reply, _ReqData, _Context) ->
+reply({stop, _, _} = Reply, _ReqData, _Context) ->
     Reply;
 reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
@@ -662,7 +662,7 @@ halt_response(Code, Type, Reason, ReqData, Context) ->
     ReqData1 = cowboy_req:reply(Code,
         #{<<"content-type">> => <<"application/json">>},
         rabbit_json:encode(Json), ReqData),
-    {halt, ReqData1, Context}.
+    {stop, ReqData1, Context}.
 
 format_reason(Tuple) when is_tuple(Tuple) ->
     rabbit_mgmt_format:tuple(Tuple);
@@ -944,8 +944,8 @@ args(L)  -> rabbit_mgmt_format:to_amqp_table(L).
 %% Make replying to a post look like anything else...
 post_respond({true, ReqData, Context}) ->
     {true, ReqData, Context};
-post_respond({halt, ReqData, Context}) ->
-    {halt, ReqData, Context};
+post_respond({stop, ReqData, Context}) ->
+    {stop, ReqData, Context};
 post_respond({JSON, ReqData, Context}) ->
     {true, set_resp_header(
              <<"Content-Type">>, "application/json",

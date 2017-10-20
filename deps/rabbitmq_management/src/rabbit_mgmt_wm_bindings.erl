@@ -90,7 +90,7 @@ accept_content(ReqData0, {_Mode, Context}) ->
             {routing_key, Key},
             {arguments, Args}],
            "Binding error: ~s", ReqData, Context) of
-        {halt, _, _} = Res ->
+        {stop, _, _} = Res ->
             Res;
         {true, ReqData, Context2} ->
             Loc = rabbit_web_dispatch_util:relativise(
