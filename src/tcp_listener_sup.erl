@@ -49,7 +49,7 @@ start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartu
 init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
       ConcurrentAcceptorCount, Label}) ->
     {ok, AckTimeout} = application:get_env(rabbit, ssl_handshake_timeout),
-    MaxConnections = application:get_env(rabbit, max_connections, infinity),
+    MaxConnections = rabbit_misc:get_env(rabbit, max_connections, infinity),
     {ok, {{one_for_all, 10, 10}, [
         ranch:child_spec({acceptor, IPAddress, Port}, ConcurrentAcceptorCount,
             Transport, [{port, Port}, {ip, IPAddress},
