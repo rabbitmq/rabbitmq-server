@@ -214,6 +214,25 @@
    %%
    %% {channel_max, 0},
 
+   %% Set the max permissible number of client connections to the node.
+   %% `infinity` means "no limit".
+   %%
+   %% This limit applies to client connections to all listeners (regardless of
+   %% the protocol, whether TLS is used and so on). CLI tools and inter-node
+   %% connections are exempt.
+   %%
+   %% When client connections are rapidly opened in succession, it is possible
+   %% for the total connection count to go slightly higher than the configured limit.
+   %% The limit works well as a general safety measure.
+   %%
+   %% Clients that are hitting the limit will see their TCP connections fail or time out.
+   %%
+   %% Introduced in 3.6.13.
+   %%
+   %% Related doc guide: http://www.rabbitmq.com/networking.html.
+   %%
+   %% {connection_max, infinity},
+
    %% TCP socket options.
    %%
    %% Related doc guide: http://www.rabbitmq.com/networking.html.

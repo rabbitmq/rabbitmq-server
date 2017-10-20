@@ -25,6 +25,7 @@ define PROJECT_ENV
 	    %% breaks the QPid Java client
 	    {frame_max, 131072},
 	    {channel_max, 0},
+	    {connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
 	    {fhc_write_buffering, true},
