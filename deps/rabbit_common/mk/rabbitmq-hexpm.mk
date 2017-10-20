@@ -12,8 +12,11 @@ $(HEXPM_CLI):
 	$(gen_verbose) $(call core_http_get,$@,$(HEXPM_URL))
 	$(verbose) chmod +x $@
 
-rebar.config: dep_rabbit_common = hex $(PROJECT_VERSION)
-rebar.config: dep_amqp_client = hex $(PROJECT_VERSION)
+RABBIT_COMMON_HEXPM_VERSION = $(PROJECT_VERSION)
+AMQP_CLIENT_HEXPM_VERSION = $(PROJECT_VERSION)
+
+rebar.config: dep_rabbit_common = hex $(RABBIT_COMMON_HEXPM_VERSION)
+rebar.config: dep_amqp_client = hex $(AMQP_CLIENT_HEXPM_VERSION)
 
 define RABBITMQ_HEXPM_DEFAULT_FILES
 	    "erlang.mk",
