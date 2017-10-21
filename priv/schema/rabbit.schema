@@ -523,9 +523,28 @@ end}.
 %% Set the max permissible number of channels per connection.
 %% 0 means "no limit".
 %%
-%% {channel_max, 128},
+%% {channel_max, 0},
 
 {mapping, "channel_max", "rabbit.channel_max", [{datatype, integer}]}.
+
+%% Set the max permissible number of client connections per node.
+%% `infinity` means "no limit".
+%%
+%% {connection_max, infinity},
+
+{mapping, "connection_max", "rabbit.connection_max",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.connection_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("connection_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
 
 %% Customising Socket Options.
 %%
