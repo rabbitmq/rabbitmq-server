@@ -18,6 +18,9 @@
 
 -export([modules/1, build_dispatcher/1]).
 
+%% TODO remove - testing only
+-export([build_routes/1]).
+
 -behaviour(rabbit_mgmt_extension).
 -export([dispatcher/0, web_ui/0]).
 
@@ -25,18 +28,25 @@ static_path(M) ->
     filename:join(module_path(M), "priv/www").
 
 build_dispatcher(Ignore) ->
+    Routes = build_routes(Ignore),
+    cowboy_router:compile(Routes).
+
+build_routes(Ignore) ->
     ThisLocalPath = static_path(?MODULE),
     LocalPaths = [static_path(M) || M <- modules(Ignore)],
-    cowboy_router:compile([{'_',
-        [{"/api" ++ Path, Mod, Args}
-            || {Path, Mod, Args} <- lists:append([Module:dispatcher()
-            || Module <- modules(Ignore)])]
-     ++ [{"/", cowboy_static, {file, ThisLocalPath ++ "/index.html"}},
-         {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
-         {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
-         {"/mgmt", rabbit_mgmt_wm_redirect, "/"}]
-     ++ [{"/[...]", rabbit_mgmt_wm_static, LocalPaths}]
-    }]).
+    RootIndexRte = {"/", cowboy_static, {file, ThisLocalPath ++ "/index.html"}},
+    ApiIndexRte = {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
+    CliIndexRte = {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
+    MgmtRedirectRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
+    LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
+    % NB: order is significant in the AllRoutes list
+    AllRoutes = build_module_routes(Ignore) ++
+        [RootIndexRte, ApiIndexRte, CliIndexRte, MgmtRedirectRte, LocalStaticRte],
+    [{'_', AllRoutes}].
+
+build_module_routes(Ignore) ->
+    Routes = [Module:dispatcher() || Module <- modules(Ignore)],
+    [{"/api" ++ Path, Mod, Args} || {Path, Mod, Args} <- lists:append(Routes)].
 
 modules(IgnoreApps) ->
     [Module || {App, Module, Behaviours} <-
