@@ -34,15 +34,24 @@ build_dispatcher(Ignore) ->
 build_routes(Ignore) ->
     ThisLocalPath = static_path(?MODULE),
     LocalPaths = [static_path(M) || M <- modules(Ignore)],
-    RootIndexRte = {"/", cowboy_static, {file, ThisLocalPath ++ "/index.html"}},
-    ApiIndexRte = {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
-    CliIndexRte = {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
-    MgmtRedirectRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
+    RootIdxRte = {"/", cowboy_static, {file, ThisLocalPath ++ "/index.html"}},
+    ApiIdxRte = {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
+    CliIdxRte = {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
+    MgmtRdrRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
     LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
     % NB: order is significant in the AllRoutes list
-    AllRoutes = build_module_routes(Ignore) ++
-        [RootIndexRte, ApiIndexRte, CliIndexRte, MgmtRedirectRte, LocalStaticRte],
-    [{'_', AllRoutes}].
+    Routes0 = build_module_routes(Ignore) ++
+        [RootIdxRte, ApiIdxRte, CliIdxRte, MgmtRdrRte, LocalStaticRte],
+    Routes1 = maybe_add_path_prefix(Routes0, get_path_prefix()),
+    [{'_', Routes1}].
+
+get_path_prefix() ->
+    rabbit_misc:get_env(rabbitmq_management, path_prefix, undefined).
+
+maybe_add_path_prefix(Routes, undefined) ->
+    Routes;
+maybe_add_path_prefix(Routes, Prefix) ->
+    [{Prefix ++ Path, Mod, Args} || {Path, Mod, Args} <- Routes].
 
 build_module_routes(Ignore) ->
     Routes = [Module:dispatcher() || Module <- modules(Ignore)],
