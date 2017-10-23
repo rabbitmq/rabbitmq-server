@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html><head>
   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
-  <script src="//cdn.jsdelivr.net/sockjs/1.0.3/sockjs.min.js"></script>
   <script src="stomp.js"></script>
   <style>
       .box {
@@ -80,13 +79,7 @@
         };
 
       // Stomp.js boilerplate
-      if (location.search == '?ws') {
-          var client = Stomp.client('ws://' + window.location.hostname + ':15674/ws');
-      } else {
-          var ws = new SockJS('http://' + window.location.hostname + ':15674/stomp');
-          var client = Stomp.over(ws);
-      }
-
+      var client = Stomp.client('ws://' + window.location.hostname + ':15674/ws');
       client.debug = pipe('#second');
 
       var print_first = pipe('#first', function(data) {
