@@ -97,18 +97,15 @@ format_req({Status0, Body, Req}) ->
                        {Peer0, _Port} -> Peer0;
                        Other -> Other
                    end,
-    Version = case cowboy_req:version(Req) of
-        'HTTP/1.1' -> {1, 1};
-        'HTTP/1.0' -> {1, 0}
-    end,
+    Version = cowboy_req:version(Req),
     Referer = cowboy_req:header(<<"referer">>, Req, <<>>),
     UserAgent = cowboy_req:header(<<"user-agent">>, Req, <<>>),
     fmt_alog(Time, Peer, User, Method, Path, Version,
              Status, Length, Referer, UserAgent).
 
-fmt_alog(Time, Ip, User, Method, Path, {VM,Vm},
+fmt_alog(Time, Ip, User, Method, Path, Version,
          Status,  Length, Referrer, UserAgent) ->
     [webmachine_log:fmt_ip(Ip), " - ", User, [$\s], Time, [$\s, $"], Method, " ", Path,
-     " HTTP/", integer_to_list(VM), ".", integer_to_list(Vm), [$",$\s],
+     " ", atom_to_list(Version), [$",$\s],
      Status, [$\s], Length, [$\s,$"], Referrer,
      [$",$\s,$"], UserAgent, [$",$\n]].
