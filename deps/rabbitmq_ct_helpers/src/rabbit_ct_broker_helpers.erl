@@ -153,7 +153,8 @@
     tcp_port_web_mqtt,
     tcp_port_stomp,
     tcp_port_stomp_tls,
-    tcp_port_web_stomp
+    tcp_port_web_stomp,
+    tcp_port_web_stomp_tls
   ]).
 
 %% -------------------------------------------------------------------
@@ -368,6 +369,9 @@ update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_web_stomp = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbitmq_web_stomp, [{tcp_config, [{port, ?config(Key, NodeConfig)}]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_web_stomp_tls | Rest]) ->
+    %% Skip this one, because we need more than just a port to configure
+    update_tcp_ports_in_rmq_config(NodeConfig, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_stomp = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbitmq_stomp, [{tcp_listeners, [?config(Key, NodeConfig)]}]}),

@@ -36,6 +36,7 @@
     make/3,
     get_config/2, set_config/2,
     merge_app_env/2, merge_app_env_in_erlconf/2,
+    get_app_env/4,
     cover_work_factor/2
   ]).
 
@@ -675,6 +676,11 @@ set_config(Config, [Tuple | Rest]) ->
     set_config(Config1, Rest);
 set_config(Config, []) ->
     Config.
+
+get_app_env(Config, App, Key, Default) ->
+    ErlangConfig = proplists:get_value(erlang_node_config, Config, []),
+    AppConfig = proplists:get_value(App, ErlangConfig, []),
+    proplists:get_value(Key, AppConfig, Default).
 
 merge_app_env(Config, Env) ->
     ErlangConfig = proplists:get_value(erlang_node_config, Config, []),
