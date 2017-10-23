@@ -22,17 +22,23 @@
 -include_lib("eunit/include/eunit.hrl").
 
 all() ->
+    [{group, tests}].
+
+groups() ->
     [
-    connection,
-    pubsub,
-    pubsub_binary,
-    disconnect,
-    http_auth
-    ].
+     {tests, [],
+        [
+            connection,
+            pubsub,
+            pubsub_binary,
+            disconnect,
+            http_auth
+    ]}].
 
 init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
-                                           [{rmq_nodename_suffix, ?MODULE}]),
+                                           [{rmq_nodename_suffix, ?MODULE},
+                                            {protocol, "ws"}]),
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps()).
@@ -60,7 +66,8 @@ end_per_testcase(_, Config) -> Config.
 
 connection(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     {close, _} = rfc6455_client:close(WS),
     ok.
@@ -79,7 +86,8 @@ raw_recv(WS) ->
 
 pubsub(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
 
@@ -123,7 +131,8 @@ raw_recv_binary(WS) ->
 
 pubsub_binary(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
 
@@ -144,7 +153,8 @@ pubsub_binary(Config) ->
 
 disconnect(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
 
@@ -160,7 +170,8 @@ http_auth(Config) ->
     %% and good credentials in the Authorization header, to
     %% confirm that the right credentials are picked.
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self(),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
         [{login, "guest"}, {passcode, "guest"}]),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
@@ -177,7 +188,8 @@ http_auth(Config) ->
                                         [{login, "bad-default"}, {passcode, "bad-default"}]
                                       ]),
 
-    WS2 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+Protocol = ?config(protocol, Config),
+    WS2 = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS2),
     ok = raw_send(WS2, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
     {<<"ERROR">>, _, _} = raw_recv(WS2),
@@ -191,7 +203,8 @@ http_auth(Config) ->
                                         [{login, "guest"}, {passcode, "guest"}]
                                       ]),
 
-    WS3 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+Protocol = ?config(protocol, Config),
+    WS3 = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS3),
     ok = raw_send(WS3, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
     {<<"CONNECTED">>, _, <<>>} = raw_recv(WS3),

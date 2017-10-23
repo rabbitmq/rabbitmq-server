@@ -18,7 +18,7 @@
 
 -export([new/2, new/3, new/4, open/1, recv/1, send/2, close/1, close/2]).
 
--record(state, {host, port, addr, path, ppid, socket, data, phase}).
+-record(state, {host, port, addr, path, ppid, socket, data, phase, transport}).
 
 %% --------------------------------------------------------------------------
 
@@ -30,9 +30,17 @@ new(WsUrl, PPid, AuthInfo) ->
 
 new(WsUrl, PPid, AuthInfo, Protocols) ->
     crypto:start(),
-    "ws://" ++ Rest = WsUrl,
-    [Addr, Path] = split("/", Rest, 1),
-    [Host, MaybePort] = split(":", Addr, 1, empty),
+    application:ensure_all_started(ssl),
+    {Transport, Url} = case WsUrl of
+        "ws://" ++ Rest -> {gen_tcp, Rest};
+        "wss://" ++ SslRest -> {ssl, SslRest}
+    end,
+    [Addr, Path] = split("/", Url, 1),
+    [Host0, MaybePort] = split(":", Addr, 1, empty),
+    Host = case inet:parse_ipv4_address(Host0) of
+        {ok, IP} -> IP;
+        _ -> Host0
+    end,
     Port = case MaybePort of
                empty -> 80;
                V     -> {I, ""} = string:to_integer(V), I
@@ -41,8 +49,9 @@ new(WsUrl, PPid, AuthInfo, Protocols) ->
                    port = Port,
                    addr = Addr,
                    path = "/" ++ Path,
-                   ppid = PPid},
-    spawn(fun () ->
+                   ppid = PPid,
+                   transport = Transport},
+    spawn_link(fun () ->
                   start_conn(State, AuthInfo, Protocols)
           end).
 
@@ -81,8 +90,8 @@ close(WS, WsReason) ->
 
 %% --------------------------------------------------------------------------
 
-start_conn(State, AuthInfo, Protocols) ->
-    {ok, Socket} = gen_tcp:connect(State#state.host, State#state.port,
+start_conn(State = #state{transport = Transport}, AuthInfo, Protocols) ->
+    {ok, Socket} = Transport:connect(State#state.host, State#state.port,
                                    [binary,
                                     {packet, 0}]),
 
@@ -102,7 +111,7 @@ start_conn(State, AuthInfo, Protocols) ->
     end,
 
     Key = base64:encode_to_string(crypto:strong_rand_bytes(16)),
-    gen_tcp:send(Socket,
+    Transport:send(Socket,
         "GET " ++ State#state.path ++ " HTTP/1.1\r\n" ++
         "Host: " ++ State#state.addr ++ "\r\n" ++
         "Upgrade: websocket\r\n" ++
@@ -126,7 +135,7 @@ do_recv(State = #state{phase = opening, ppid = PPid, data = Data}) ->
             State#state{phase = open,
                         data = Data1}
     end;
-do_recv(State = #state{phase = Phase, data = Data, socket = Socket, ppid = PPid})
+do_recv(State = #state{phase = Phase, data = Data, socket = Socket, transport = Transport, ppid = PPid})
   when Phase =:= open orelse Phase =:= closing ->
     R = case Data of
             <<F:1, _:3, O:4, 0:1, L:7, Payload:L/binary, Rest/binary>>
@@ -141,7 +150,7 @@ do_recv(State = #state{phase = Phase, data = Data, socket = Socket, ppid = PPid}
 
             <<_:1, _:3, _:4, 1:1, _/binary>> ->
                 %% According o rfc6455 5.1 the server must not mask any frames.
-                die(Socket, PPid, {1006, "Protocol error"}, normal);
+                die(Socket, Transport, PPid, {1006, "Protocol error"}, normal);
             _ ->
                 moredata
         end,
@@ -151,7 +160,7 @@ do_recv(State = #state{phase = Phase, data = Data, socket = Socket, ppid = PPid}
         _ -> do_recv2(State, R)
     end.
 
-do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid}, R) ->
+do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid, transport = Transport}, R) ->
     case R of
         {1, 1, Payload, Rest} ->
             PPid ! {rfc6455, recv, self(), Payload},
@@ -167,14 +176,14 @@ do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid}, R) ->
             case Phase of
                 open -> %% echo
                     do_close(State, WsReason),
-                    gen_tcp:close(Socket);
+                    Transport:close(Socket);
                 closing ->
                     ok
             end,
-            die(Socket, PPid, WsReason, normal);
+            die(Socket, Transport, PPid, WsReason, normal);
         {_, _, _, _Rest} ->
             io:format("Unknown frame type~n"),
-            die(Socket, PPid, {1006, "Unknown frame type"}, normal)
+            die(Socket, Transport, PPid, {1006, "Unknown frame type"}, normal)
     end.
 
 encode_frame(F, O, Payload) ->
@@ -192,33 +201,37 @@ encode_frame(F, O, Payload) ->
            end,
     iolist_to_binary(IoData).
 
-do_send(State = #state{socket = Socket}, Payload) ->
-    gen_tcp:send(Socket, encode_frame(1, 1, Payload)),
+do_send(State = #state{socket = Socket, transport = Transport}, Payload) ->
+    Transport:send(Socket, encode_frame(1, 1, Payload)),
     State.
 
-do_close(State = #state{socket = Socket}, {Code, Reason}) ->
+do_close(State = #state{socket = Socket, transport = Transport}, {Code, Reason}) ->
     Payload = iolist_to_binary([<<Code:16>>, Reason]),
-    gen_tcp:send(Socket, encode_frame(1, 8, Payload)),
+    Transport:send(Socket, encode_frame(1, 8, Payload)),
     State#state{phase = closing}.
 
 
-loop(State = #state{socket = Socket, ppid = PPid, data = Data,
+loop(State = #state{socket = Socket, transport = Transport, ppid = PPid, data = Data,
                     phase = Phase}) ->
     receive
-        {tcp, Socket, Bin} ->
+        {In, Socket, Bin} when In =:= tcp; In =:= ssl ->
             State1 = State#state{data = iolist_to_binary([Data, Bin])},
             loop(do_recv(State1));
         {send, Payload} when Phase == open ->
             loop(do_send(State, Payload));
-        {tcp_closed, Socket} ->
-            die(Socket, PPid, {1006, "Connection closed abnormally"}, normal);
+        {Closed, Socket} when Closed =:= tcp_closed; Closed =:= ssl_closed ->
+            die(Socket, Transport, PPid, {1006, "Connection closed abnormally"}, normal);
         {close, WsReason} when Phase == open ->
-            loop(do_close(State, WsReason))
+            loop(do_close(State, WsReason));
+        {Error, Socket, Reason} when Error =:= tcp_error; Error =:= ssl_error ->
+            die(Socket, Transport, PPid, {1006, "Connection closed abnormally"}, Reason);
+        Other ->
+            error({unknown_message, Other, Socket})
     end.
 
 
-die(Socket, PPid, WsReason, Reason) ->
-    gen_tcp:shutdown(Socket, read_write),
+die(Socket, Transport, PPid, WsReason, Reason) ->
+    Transport:shutdown(Socket, read_write),
     PPid ! {rfc6455, close, self(), WsReason},
     exit(Reason).
 

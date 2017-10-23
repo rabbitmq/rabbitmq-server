@@ -10,7 +10,6 @@ define PROJECT_ENV
 	    {ssl_config, []},
 	    {num_ssl_acceptors, 1},
 	    {cowboy_opts, []},
-	    {sockjs_opts, []},
 	    {ws_frame, text},
 	    {use_http_auth, false}
 	  ]
@@ -20,7 +19,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-DEPS = cowboy sockjs rabbit_common rabbit rabbitmq_stomp
+DEPS = cowboy rabbit_common rabbit rabbitmq_stomp
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk

@@ -21,7 +21,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -export([start_link/1]).
--export([sockjs_msg/2, sockjs_closed/1]).
+-export([msg/2, closed/1]).
 
 -export([init/1, handle_call/3, handle_info/2, terminate/2,
          code_change/3, handle_cast/2]).
@@ -33,15 +33,15 @@
 start_link(Params) ->
     gen_server:start_link(?MODULE, Params, []).
 
-sockjs_msg(Pid, Data) ->
-    gen_server:cast(Pid, {sockjs_msg, Data}).
+msg(Pid, Data) ->
+    gen_server:cast(Pid, {msg, Data}).
 
-sockjs_closed(Pid) ->
-    gen_server:cast(Pid, sockjs_closed).
+closed(Pid) ->
+    gen_server:cast(Pid, closed).
 
 %%----------------------------------------------------------------------------
 
-init({SupPid, Conn, Heartbeat, Conn}) ->
+init({SupPid, Conn, Heartbeat}) ->
     ok = file_handle_cache:obtain(),
     process_flag(trap_exit, true),
     {ok, ProcessorState} = init_processor_state(Conn),
@@ -75,9 +75,8 @@ init_processor_state(Conn) ->
                     StompConfig1 = rabbit_stomp:parse_default_user(UserConfig, StompConfig0),
                     StompConfig1#stomp_configuration{force_default_creds = true};
                 {_, AuthHd} ->
-                    {<<"basic">>, {HTTPLogin, HTTPPassCode}}
-                        = cowboy_http:token_ci(list_to_binary(AuthHd),
-                                               fun cowboy_http:authorization/2),
+                    {basic, HTTPLogin, HTTPPassCode}
+                        = cow_http_hd:parse_authorization(rabbit_data_coercion:to_binary(AuthHd)),
                     StompConfig0#stomp_configuration{
                       default_login = HTTPLogin,
                       default_passcode = HTTPPassCode,
@@ -100,7 +99,7 @@ init_processor_state(Conn) ->
         {SendFun, AdapterInfo, none, PeerAddr}),
     {ok, ProcessorState}.
 
-handle_cast({sockjs_msg, Data}, State = #state{proc_state  = ProcessorState,
+handle_cast({msg, Data}, State = #state{proc_state  = ProcessorState,
                                                parse_state = ParseState,
                                                connection  = ConnPid}) ->
     case process_received_bytes(Data, ProcessorState, ParseState, ConnPid) of
@@ -115,7 +114,7 @@ handle_cast({sockjs_msg, Data}, State = #state{proc_state  = ProcessorState,
                                 proc_state  = NewProcState}}
     end;
 
-handle_cast(sockjs_closed, State) ->
+handle_cast(closed, State) ->
     {stop, normal, State};
 
 handle_cast(client_timeout, State) ->

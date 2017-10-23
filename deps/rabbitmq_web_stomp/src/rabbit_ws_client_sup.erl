@@ -28,12 +28,12 @@
 start_client({Conn, Heartbeat}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, Client} = supervisor2:start_child(
-                     SupPid, client_spec(SupPid, Conn, Heartbeat, Conn)),
+                     SupPid, client_spec(SupPid, Conn, Heartbeat)),
     {ok, SupPid, Client}.
 
 
-client_spec(SupPid, Conn, Heartbeat, Conn) ->
-    {rabbit_ws_client, {rabbit_ws_client, start_link, [{SupPid, Conn, Heartbeat, Conn}]},
+client_spec(SupPid, Conn, Heartbeat) ->
+    {rabbit_ws_client, {rabbit_ws_client, start_link, [{SupPid, Conn, Heartbeat}]},
      intrinsic, ?WORKER_WAIT, worker, [rabbit_ws_client]}.
 
 init(_Any) ->

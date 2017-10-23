@@ -25,11 +25,4 @@
  {cowboy_max_keepalive,
   "web_stomp.cowboy_opts.max_keepalive = 10",
   [{rabbitmq_web_stomp,[{cowboy_opts,[{max_keepalive,10}]}]}],
-  [rabbitmq_web_stomp]},
- {sockjs_opts,
-  "web_stomp.sockjs_opts.url = https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js",
-  [{rabbitmq_web_stomp,
-       [{sockjs_opts,
-            [{sockjs_url,
-                 "https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js"}]}]}],
   [rabbitmq_web_stomp]}].

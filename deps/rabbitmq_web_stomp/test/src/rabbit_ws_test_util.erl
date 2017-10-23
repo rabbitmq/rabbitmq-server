@@ -26,13 +26,18 @@ update_app_env(Config, Key, Val) ->
                                       application, stop,
                                       [rabbitmq_web_stomp]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-                                      cowboy, stop_listener,
+                                      ranch, stop_listener,
                                       [http]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ranch, stop_listener, [https]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
                                       application, start,
                                       [rabbitmq_web_stomp]).
 
 get_web_stomp_port_str(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0,
-                                                    tcp_port_web_stomp),
+    Port = case rabbit_ct_helpers:get_config(Config, protocol) of
+        "ws" ->
+            rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_stomp);
+        "wss" ->
+            rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_stomp_tls)
+    end,
     integer_to_list(Port).
