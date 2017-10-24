@@ -15,12 +15,13 @@
 %%
 
 -module(rabbit_web_mqtt_handler).
+-behaviour(cowboy_websocket).
 
--export([init/3]).
--export([websocket_init/3]).
--export([websocket_handle/3]).
--export([websocket_info/3]).
--export([websocket_terminate/3]).
+-export([init/2]).
+-export([websocket_init/1]).
+-export([websocket_handle/2]).
+-export([websocket_info/2]).
+-export([terminate/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -35,145 +36,145 @@
     connection
 }).
 
-init(_, _, _) ->
-    {upgrade, protocol, cowboy_websocket}.
-
-websocket_init(_, Req, Opts) ->
-    process_flag(trap_exit, true),
+init(Req, Opts) ->
     {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
-    Sock = cowboy_req:get(socket, Req),
+    {_, Sock} = lists:keyfind(socket, 1, Opts),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
-            rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
-            AdapterInfo0 = #amqp_adapter_info{additional_info=Extra}
-                = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
-            %% Flow control is not supported for Web-MQTT connections.
-            AdapterInfo = AdapterInfo0#amqp_adapter_info{
-                additional_info=[{state, running}|Extra]},
-            ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
-                rabbit_mqtt_reader:ssl_login_name(Sock),
-                AdapterInfo,
-                fun send_reply/2),
             Req2 = case cowboy_req:header(<<"sec-websocket-protocol">>, Req) of
-                {undefined, Req1} ->
-                    Req1;
-                {SecWsProtocol, Req1} ->
-                    cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req1)
+                undefined -> Req;
+                SecWsProtocol ->
+                    cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req)
             end,
-            Req3 = cowboy_req:compact(Req2),
-            {ok, Req3, rabbit_event:init_stats_timer(#state{
+            {cowboy_websocket, Req2, #state{
                 conn_name     = ConnStr,
                 keepalive     = {none, none},
                 keepalive_sup = KeepaliveSup,
                 parse_state   = rabbit_mqtt_frame:initial_state(),
-                proc_state    = ProcessorState,
                 socket        = Sock
-            }, #state.stats_timer), hibernate};
+            }};
         _ ->
-            {shutdown, Req}
+            {stop, Req}
     end.
 
-websocket_handle({binary, Data}, Req, State) ->
-    handle_data(Data, Req, State);
-websocket_handle(Frame, Req, State) ->
+websocket_init(State = #state{conn_name = ConnStr, socket = Sock}) ->
+    rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
+    AdapterInfo0 = #amqp_adapter_info{additional_info=Extra}
+        = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
+    %% Flow control is not supported for Web-MQTT connections.
+    AdapterInfo = AdapterInfo0#amqp_adapter_info{
+        additional_info=[{state, running}|Extra]},
+    ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
+        rabbit_mqtt_reader:ssl_login_name(Sock),
+        AdapterInfo,
+        fun send_reply/2),
+    process_flag(trap_exit, true),
+    {ok,
+     rabbit_event:init_stats_timer(
+         State#state{proc_state = ProcessorState},
+         #state.stats_timer),
+     hibernate}.
+
+websocket_handle({binary, Data}, State) ->
+    handle_data(Data, State);
+websocket_handle(Frame, State) ->
     rabbit_log_connection:info("Web MQTT: unexpected WebSocket frame ~p~n",
                     [Frame]),
-    {ok, Req, State, hibernate}.
+    {ok, State, hibernate}.
 
 websocket_info({#'basic.deliver'{}, #amqp_msg{}, _DeliveryCtx} = Delivery,
-            Req, State = #state{ proc_state = ProcState0 }) ->
+            State = #state{ proc_state = ProcState0 }) ->
     case rabbit_mqtt_processor:amqp_callback(Delivery, ProcState0) of
         {ok, ProcState} ->
-            {ok, Req, State #state { proc_state = ProcState }, hibernate};
+            {ok, State #state { proc_state = ProcState }, hibernate};
         {error, _, _} ->
-            {shutdown, Req, State}
+            {stop, State}
     end;
-websocket_info(#'basic.ack'{} = Ack, Req, State = #state{ proc_state = ProcState0 }) ->
+websocket_info(#'basic.ack'{} = Ack, State = #state{ proc_state = ProcState0 }) ->
     case rabbit_mqtt_processor:amqp_callback(Ack, ProcState0) of
         {ok, ProcState} ->
-            {ok, Req, State #state { proc_state = ProcState }, hibernate};
+            {ok, State #state { proc_state = ProcState }, hibernate};
         {error, _, _} ->
-            {shutdown, Req, State}
+            {stop, State}
     end;
-websocket_info(#'basic.consume_ok'{}, Req, State) ->
-    {ok, Req, State, hibernate};
-websocket_info(#'basic.cancel'{}, Req, State) ->
-    {shutdown, Req, State};
-websocket_info({reply, Data}, Req, State) ->
-    {reply, {binary, Data}, Req, State, hibernate};
-websocket_info({'EXIT', _, _}, Req, State) ->
-    {shutdown, Req, State};
-websocket_info({'$gen_cast', duplicate_id}, Req, State = #state{ proc_state = ProcState,
+websocket_info(#'basic.consume_ok'{}, State) ->
+    {ok, State, hibernate};
+websocket_info(#'basic.cancel'{}, State) ->
+    {stop, State};
+websocket_info({reply, Data}, State) ->
+    {reply, {binary, Data}, State, hibernate};
+websocket_info({'EXIT', _, _}, State) ->
+    {stop, State};
+websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcState,
                                                                  conn_name = ConnName }) ->
     rabbit_log_connection:warning("WEB-MQTT disconnecting duplicate client id ~p (~p)~n",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
-    {shutdown, Req, State};
-websocket_info({start_keepalives, Keepalive}, Req,
-               State = #state{ keepalive_sup = KeepaliveSup }) ->
-    Sock = cowboy_req:get(socket, Req),
+    {stop, State};
+websocket_info({start_keepalives, Keepalive},
+               State = #state{ socket = Sock, keepalive_sup = KeepaliveSup }) ->
     %% Only the client has the responsibility for sending keepalives
     SendFun = fun() -> ok end,
     Parent = self(),
     ReceiveFun = fun() -> Parent ! keepalive_timeout end,
     Heartbeater = rabbit_heartbeat:start(
                     KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
-    {ok, Req, State #state { keepalive = Heartbeater }};
-websocket_info(keepalive_timeout, Req, State = #state {conn_name = ConnStr,
+    {ok, State #state { keepalive = Heartbeater }};
+websocket_info(keepalive_timeout, State = #state {conn_name = ConnStr,
                                                        proc_state = PState}) ->
     rabbit_log_connection:error("closing WEB-MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
     rabbit_mqtt_processor:send_will(PState),
-    {shutdown, Req, State};
-websocket_info(emit_stats, Req, State) ->
-    {ok, Req, emit_stats(State)};
-websocket_info(Msg, Req, State) ->
+    {stop, State};
+websocket_info(emit_stats, State) ->
+    {ok, emit_stats(State)};
+websocket_info(Msg, State) ->
     rabbit_log_connection:info("WEB-MQTT: unexpected message ~p~n",
                     [Msg]),
-    {ok, Req, State, hibernate}.
+    {ok, State, hibernate}.
 
-websocket_terminate(_, _, State = #state{ proc_state = ProcState,
-                                          conn_name  = ConnName }) ->
+terminate(_, _, State = #state{ proc_state = ProcState,
+                                conn_name  = ConnName }) ->
     maybe_emit_stats(State),
     rabbit_log_connection:info("closing WEB-MQTT connection ~p (~s)~n", [self(), ConnName]),
     rabbit_mqtt_processor:close_connection(ProcState),
     ok;
-websocket_terminate(_, _, State) ->
+terminate(_, _, State) ->
     maybe_emit_stats(State),
     ok.
 
 %% Internal.
 
-handle_data(<<>>, Req, State) ->
-    {ok, Req, ensure_stats_timer(State), hibernate};
-handle_data(Data, Req, State = #state{ parse_state = ParseState,
+handle_data(<<>>, State) ->
+    {ok, ensure_stats_timer(State), hibernate};
+handle_data(Data, State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
                                        conn_name   = ConnStr }) ->
     case rabbit_mqtt_frame:parse(Data, ParseState) of
         {more, ParseState1} ->
-            {ok, Req, ensure_stats_timer(State #state{ parse_state = ParseState1 }), hibernate};
+            {ok, ensure_stats_timer(State #state{ parse_state = ParseState1 }), hibernate};
         {ok, Frame, Rest} ->
             case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
                 {ok, ProcState1, ConnPid} ->
                     PS = rabbit_mqtt_frame:initial_state(),
                     handle_data(
-                      Rest, Req,
+                      Rest,
                       State #state{ parse_state = PS,
                                     proc_state = ProcState1,
                                     connection = ConnPid });
                 {error, Reason, _} ->
                     rabbit_log_connection:info("MQTT protocol error ~p for connection ~p~n",
                         [Reason, ConnStr]),
-                    {shutdown, Req, State};
+                    {stop, State};
                 {error, Error} ->
                     rabbit_log_connection:error("MQTT detected framing error '~p' for connection ~p~n",
                         [Error, ConnStr]),
-                    {shutdown, Req, State};
+                    {stop, State};
                 {stop, _} ->
-                    {shutdown, Req, State}
+                    {stop, State}
             end;
         {error, Error} ->
             rabbit_log_connection:error("MQTT detected framing error '~p' for connection ~p~n",
                 [ConnStr, Error]),
-            {shutdown, Req, State}
+            {stop, State}
     end.
 
 send_reply(Frame, _) ->

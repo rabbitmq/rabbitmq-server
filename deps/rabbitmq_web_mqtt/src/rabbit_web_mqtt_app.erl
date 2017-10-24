@@ -50,10 +50,10 @@ mqtt_init() ->
     Routes = cowboy_router:compile([{'_', [
         {"/ws", rabbit_web_mqtt_handler, []}
     ]}]),
-    CowboyOpts = [
-        {env, [{dispatch, Routes}]},
+    CowboyOpts = maps:from_list([
+        {env, #{dispatch => Routes}},
         {middlewares, [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler]}
-    |CowboyOpts0],
+    |CowboyOpts0]),
 
     TCPConf0 = [{connection_type, supervisor}|get_env(tcp_config, [])],
     TCPConf = case proplists:get_value(port, TCPConf0) of

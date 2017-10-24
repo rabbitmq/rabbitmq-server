@@ -39,15 +39,18 @@ start_link(Ref, Sock, Transport, CowboyOpts0) ->
     %% variable, we need to pass it first through the environment and
     %% then have the middleware rabbit_web_mqtt_middleware place it
     %% in the initial handler state.
-    {env, Env} = lists:keyfind(env, 1, CowboyOpts0),
-    CowboyOpts = lists:keyreplace(env, 1, CowboyOpts0,
-        {env, [{keepalive_sup, KeepaliveSup}|Env]}),
-
+    Env = maps:get(env, CowboyOpts0),
+    CowboyOpts = CowboyOpts0#{env => Env#{keepalive_sup => KeepaliveSup,
+                                          socket => Sock}},
+    Protocol = case Transport of
+        ranch_tcp -> cowboy_clear;
+        ranch_ssl -> cowboy_tls
+    end,
     {ok, ReaderPid} = supervisor2:start_child(
                         SupPid,
-                        {cowboy_protocol,
-                         {cowboy_protocol, start_link, [Ref, Sock, Transport, CowboyOpts]},
-                         intrinsic, ?WORKER_WAIT, worker, [cowboy_protocol]}),
+                        {Protocol,
+                         {Protocol, start_link, [Ref, Sock, Transport, CowboyOpts]},
+                         intrinsic, ?WORKER_WAIT, worker, [Protocol]}),
     {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->

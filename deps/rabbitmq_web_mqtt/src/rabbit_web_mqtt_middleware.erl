@@ -19,11 +19,12 @@
 -export([execute/2]).
 
 execute(Req, Env) ->
-    {keepalive_sup, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Env),
-    case lists:keyfind(handler_opts, 1, Env) of
-        {_, Opts} when is_list(Opts) ->
-            {ok, Req, lists:keyreplace(handler_opts, 1, Env,
-                {handler_opts, [{keepalive_sup, KeepaliveSup}|Opts]})};
-        _ ->
-            {ok, Req, Env}
+    #{keepalive_sup := KeepaliveSup} = Env,
+    Sock = maps:get(socket, Env),
+    case maps:get(handler_opts, Env, undefined) of
+        undefined -> {ok, Req, Env};
+        Opts when is_list(Opts) ->
+            {ok, Req, Env#{handler_opts => [{keepalive_sup, KeepaliveSup},
+                                            {socket, Sock}
+                                            |Opts]}}
     end.
