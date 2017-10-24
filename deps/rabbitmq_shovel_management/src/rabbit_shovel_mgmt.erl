@@ -19,7 +19,7 @@
 -behaviour(rabbit_mgmt_extension).
 
 -export([dispatcher/0, web_ui/0]).
--export([init/3, rest_init/2, to_json/2, resource_exists/2, content_types_provided/2,
+-export([init/2, to_json/2, resource_exists/2, content_types_provided/2,
          is_authorized/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -33,11 +33,8 @@ web_ui()     -> [{javascript, <<"shovel.js">>}].
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) ->
-    {upgrade, protocol, cowboy_rest}.
-
-rest_init(Req, _Opts) ->
-    {ok, Req, #context{}}.
+init(Req, _Opts) ->
+    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
