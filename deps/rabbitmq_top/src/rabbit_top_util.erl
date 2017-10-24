@@ -32,21 +32,21 @@ toplist(Key, Info) ->
     {Val, Info}.
 
 sort_by_param(ReqData, Default) ->
-    case cowboy_req:qs_val(<<"sort">>, ReqData) of
-        {undefined, _} -> Default;
-        {Bin, _}       -> rabbit_data_coercion:to_atom(Bin)
+    case rabbit_mgmt_util:qs_val(<<"sort">>, ReqData) of
+        undefined -> Default;
+        Bin       -> rabbit_data_coercion:to_atom(Bin)
     end.
 
 sort_order_param(ReqData) ->
-    case cowboy_req:qs_val(<<"sort_reverse">>, ReqData) of
-        {<<"true">>, _} -> asc;
-        _               -> desc
+    case rabbit_mgmt_util:qs_val(<<"sort_reverse">>, ReqData) of
+        <<"true">> -> asc;
+        _          -> desc
     end.
 
 row_count_param(ReqData, Default) ->
-    case cowboy_req:qs_val(<<"row_count">>, ReqData) of
-        {undefined, _} -> Default;
-        {Bin, _}       -> rabbit_data_coercion:to_integer(Bin)
+    case rabbit_mgmt_util:qs_val(<<"row_count">>, ReqData) of
+        undefined -> Default;
+        Bin       -> rabbit_data_coercion:to_integer(Bin)
     end.
 
 add_name(Info) ->
