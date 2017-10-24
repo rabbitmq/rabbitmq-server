@@ -77,7 +77,7 @@ init([Table]) ->
                             proplists:get_value(detailed, Policies),
                             proplists:get_value(global, Policies)},
                 rates_mode = RatesMode,
-                old_aggr_stats = dict:new(),
+                old_aggr_stats = #{},
                 lookup_queue = fun queue_exists/1,
                 lookup_exchange = fun exchange_exists/1}}.
 
@@ -93,7 +93,7 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(reset, State) ->
-    {noreply, State#state{old_aggr_stats = dict:new()}};
+    {noreply, State#state{old_aggr_stats = #{}}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -104,7 +104,7 @@ handle_info(collect_metrics, #state{interval = Interval} = State0) ->
     erlang:send_after(Interval, self(), collect_metrics),
     {noreply, State};
 handle_info(purge_old_stats, State) ->
-    {noreply, State#state{old_aggr_stats = dict:new()}};
+    {noreply, State#state{old_aggr_stats = #{}}};
 handle_info(_Msg, State) ->
     {noreply, State}.
 
@@ -139,7 +139,7 @@ take_smaller(Policies) ->
     end.
 
 insert_old_aggr_stats(NextStats, Id, Stat) ->
-    dict:store(Id, Stat, NextStats).
+    NextStats#{Id => Stat}.
 
 handle_deleted_queues(queue_coarse_metrics, Remainders,
                       #state{policies = {BPolicies, _, GPolicies}}) ->
@@ -157,8 +157,7 @@ handle_deleted_queues(queue_coarse_metrics, Remainders,
                              || {Size, Interval} <- BPolicies],
                             ets:delete(queue_stats, Queue),
                             ets:delete(queue_process_stats, Queue)
-                  end,
-                  dict:to_list(Remainders));
+                  end, maps:to_list(Remainders));
 handle_deleted_queues(_T, _R, _P) -> ok.
 
 aggregate_metrics(Timestamp, #state{table = Table,
@@ -167,8 +166,8 @@ aggregate_metrics(Timestamp, #state{table = Table,
     {Next, Ops, #state{old_aggr_stats = Remainders}} =
         ets:foldl(fun(R, {NextStats, O, State}) ->
                           aggregate_entry(R, NextStats, O, State)
-                  end, {dict:new(), dict:new(), State0}, Table),
-    dict:fold(fun(Tbl, TblOps, Acc) ->
+                  end, {#{}, #{}, State0}, Table),
+    maps:fold(fun(Tbl, TblOps, Acc) ->
                       _ = exec_table_ops(Tbl, Timestamp, TblOps),
                       Acc
               end, no_acc, Ops),
@@ -177,7 +176,7 @@ aggregate_metrics(Timestamp, #state{table = Table,
     State0#state{old_aggr_stats = Next}.
 
 exec_table_ops(Table, Timestamp, TableOps) ->
-    dict:fold(fun(_Id, {insert, Entry}, A) ->
+    maps:fold(fun(_Id, {insert, Entry}, A) ->
                       ets:insert(Table, Entry),
                       A;
                  (Id, {insert_with_index, Entry}, A) ->
@@ -450,7 +449,7 @@ aggregate_entry({Name, Ready, Unack, Msgs, Red}, NextStats, Ops0,
                _ ->
                    Ops1
            end,
-    State1 = State#state{old_aggr_stats = dict:erase(Name, Old)},
+    State1 = State#state{old_aggr_stats = maps:remove(Name, Old)},
     {insert_old_aggr_stats(NextStats, Name, Stats), Ops2, State1};
 aggregate_entry({Id, Metrics}, NextStats, Ops0,
                 #state{table = node_metrics} = State) ->
@@ -518,14 +517,14 @@ insert_entry(Table, Id, TS, Entry, Size, Interval0, Incremental) ->
                                                                    Slide)}).
 
 update_op(Table, Key, Op, Ops) ->
-    TableOps = case dict:find(Table, Ops) of
+    TableOps = case maps:find(Table, Ops) of
                    {ok, Inner} ->
-                       dict:store(Key, Op, Inner);
+                       maps:put(Key, Op, Inner);
                    error ->
-                       Inner = dict:new(),
-                       dict:store(Key, Op, Inner)
+                       Inner = #{},
+                       maps:put(Key, Op, Inner)
                end,
-    dict:store(Table, TableOps, Ops).
+    maps:put(Table, TableOps, Ops).
 
 insert_with_index_op(Table, Key, Entry, Ops) ->
     update_op(Table, Key, {insert_with_index, Entry}, Ops).
@@ -534,14 +533,14 @@ insert_op(Table, Key, Entry, Ops) ->
     update_op(Table, Key, {insert, Entry}, Ops).
 
 insert_entry_op(Table, Key, Entry, Ops) ->
-    TableOps0 = case dict:find(Table, Ops) of
+    TableOps0 = case maps:find(Table, Ops) of
                     {ok, Inner} -> Inner;
-                    error -> dict:new()
+                    error -> #{}
                 end,
-    TableOps = dict:update(Key, fun({insert_entry, Entry0}) ->
-                                        {insert_entry, sum_entry(Entry0, Entry)}
-                                end, {insert_entry, Entry}, TableOps0),
-    dict:store(Table, TableOps, Ops).
+    TableOps = maps:update_with(Key, fun({insert_entry, Entry0}) ->
+                                             {insert_entry, sum_entry(Entry0, Entry)}
+                                     end, {insert_entry, Entry}, TableOps0),
+    maps:put(Table, TableOps, Ops).
 
 insert_entry_ops(Table, Id, Incr, Entry, Ops, Policies) ->
     lists:foldl(fun({Size, Interval}, Acc) ->
@@ -550,7 +549,7 @@ insert_entry_ops(Table, Id, Incr, Entry, Ops, Policies) ->
                 end, Ops, Policies).
 
 get_difference(Id, Stats, #state{old_aggr_stats = OldStats}) ->
-    case dict:find(Id, OldStats) of
+    case maps:find(Id, OldStats) of
         error ->
             Stats;
         {ok, OldStat} ->
