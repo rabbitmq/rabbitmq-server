@@ -58,7 +58,7 @@ context_selector("") ->
 context_selector(Prefix) ->
     Prefix1 = list_to_binary("/" ++ Prefix),
     fun(Req) ->
-            {Path, _} = cowboy_req:path(Req),
+            Path = cowboy_req:path(Req),
             (Path == Prefix1) orelse (binary:match(Path, << Prefix1/binary, $/ >>) =/= nomatch)
     end.
 

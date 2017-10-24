@@ -18,38 +18,16 @@
 -behavior(cowboy_middleware).
 
 -export([execute/2]).
--export([onresponse/4]).
 
 execute(Req, Env) ->
-    %% Pre-parse the query string.
-    {_, Req1} = cowboy_req:qs_vals(Req),
-
     %% Find the correct dispatch list for this path.
-    {_, Listener} = lists:keyfind(rabbit_listener, 1, Env),
-    case rabbit_web_dispatch_registry:lookup(Listener, Req1) of
+    Listener = maps:get(rabbit_listener, Env),
+    case rabbit_web_dispatch_registry:lookup(Listener, Req) of
         {ok, Dispatch} ->
-            {ok, Req1, [{dispatch, Dispatch}|Env]};
+            {ok, Req, maps:put(dispatch, Dispatch, Env)};
         {error, Reason} ->
-            {ok, Req2} = cowboy_req:reply(500,
-                [{<<"content-type">>, <<"text/plain">>}],
-                "Registry Error: " ++ io_lib:format("~p", [Reason]), Req1),
-            {halt, Req2}
+            Req2 = cowboy_req:reply(500,
+                #{<<"content-type">> => <<"text/plain">>},
+                "Registry Error: " ++ io_lib:format("~p", [Reason]), Req),
+            {stop, Req2}
     end.
-
-onresponse(Status = 404, Headers0, Body = <<>>, Req0) ->
-    log_access(Status, Body, Req0),
-    Json = rabbit_json:encode(#{
-        error  => list_to_binary(httpd_util:reason_phrase(Status)),
-        reason => <<"Not Found">>}),
-    Headers1 = lists:keystore(<<"content-length">>, 1, Headers0,
-        {<<"content-length">>, integer_to_list(iolist_size(Json))}),
-    Headers = lists:keystore(<<"content-type">>, 1, Headers1,
-        {<<"content-type">>, <<"application/json">>}),
-    {ok, Req} = cowboy_req:reply(Status, Headers, Json, Req0),
-    Req;
-onresponse(Status, _, Body, Req) ->
-    log_access(Status, Body, Req),
-    Req.
-
-log_access(Status, Body, Req) ->
-    webmachine_log:log_access({Status, Body, Req}).

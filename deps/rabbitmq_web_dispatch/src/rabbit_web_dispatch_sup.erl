@@ -37,13 +37,18 @@ ensure_listener(Listener) ->
             {error, {no_port_given, Listener}};
         _ ->
             {Transport, TransportOpts, ProtoOpts} = preprocess_config(Listener),
+            ProtoOptsMap = maps:from_list(ProtoOpts),
+            CowboyOptsMap =
+                maps:merge(#{env =>
+                                #{rabbit_listener => Listener},
+                             middlewares =>
+                                [rabbit_cowboy_middleware, cowboy_router, cowboy_handler],
+                             stream_handlers =>
+                                [rabbit_cowboy_stream_h, cowboy_stream_h]},
+                           ProtoOptsMap),
             Child = ranch:child_spec(name(Listener), 100,
                 Transport, TransportOpts,
-                cowboy_protocol, [
-                    {env, [{rabbit_listener, Listener}]},
-                    {middlewares, [rabbit_cowboy_middleware, cowboy_router, cowboy_handler]},
-                    {onresponse, fun rabbit_cowboy_middleware:onresponse/4}
-                    | ProtoOpts]),
+                cowboy_clear, CowboyOptsMap),
             case supervisor:start_child(?SUP, Child) of
                 {ok,                      _}  -> new;
                 {error, {already_started, _}} -> existing;

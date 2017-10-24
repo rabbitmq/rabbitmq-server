@@ -16,14 +16,10 @@
 
 -module(rabbit_web_dispatch_listing_handler).
 
--export([init/3]).
--export([handle/2]).
+-export([init/2]).
 -export([terminate/3]).
 
-init(_, Req, Listener) ->
-    {ok, Req, Listener}.
-
-handle(Req0, Listener) ->
+init(Req0, Listener) ->
     HTMLPrefix =
         "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">"
         "<head><title>RabbitMQ Web Server</title></head>"
@@ -37,7 +33,7 @@ handle(Req0, Listener) ->
                 [["<li><a href=\"/", Path, "/\">", Desc, "</a></li>"]
                  || {Path, Desc} <- Contexts]
         end,
-    {ok, Req} = cowboy_req:reply(200, [], [HTMLPrefix, List, HTMLSuffix], Req0),
+    Req = cowboy_req:reply(200, #{}, [HTMLPrefix, List, HTMLSuffix], Req0),
     {ok, Req, Listener}.
 
 terminate(_, _, _) ->

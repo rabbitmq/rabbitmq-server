@@ -164,13 +164,10 @@ table() ->
     cowboy_router:compile([{source(), [{"/" ++ string(path()), ?MODULE, []}]}]).
 
 %% Cowboy handler callbacks.
-init(_, Request, _) ->
-    {ok, Request, no_state}.
-
-handle(Request, St) ->
-    {ok, Response} = cowboy_req:reply(status(), [{<<"content-type">>,
-        <<"text/plain">>}], reason(), Request),
-    {ok, Response, St}.
+init(Req, State) ->
+    Response = cowboy_req:reply(
+        status(), #{<<"content-type">> => <<"text/plain">>}, reason(), Req),
+    {ok, Req, State}.
 
 terminate(_, _, _) ->
     ok.
