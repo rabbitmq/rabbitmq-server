@@ -48,17 +48,3 @@
     [{datatype, integer}]}.
 {mapping, "web_stomp.cowboy_opts.timeout", "rabbitmq_web_stomp.cowboy_opts.timeout",
     [{datatype, integer}]}.
-
-
-{mapping, "web_stomp.sockjs_opts.url", "rabbitmq_web_stomp.sockjs_opts.sockjs_url",
-    [{datatype, string}]}.
-{mapping, "web_stomp.sockjs_opts.websocket", "rabbitmq_web_stomp.sockjs_opts.websocket",
-    [{datatype, {enum, [true, false]}}]}.
-{mapping, "web_stomp.sockjs_opts.cookie_needed", "rabbitmq_web_stomp.sockjs_opts.cookie_needed",
-    [{datatype, {enum, [true, false]}}]}.
-{mapping, "web_stomp.sockjs_opts.heartbeat_delay", "rabbitmq_web_stomp.sockjs_opts.heartbeat_delay",
-    [{datatype, integer}]}.
-{mapping, "web_stomp.sockjs_opts.disconnect_delay", "rabbitmq_web_stomp.sockjs_opts.disconnect_delay",
-    [{datatype, integer}]}.
-{mapping, "web_stomp.sockjs_opts.response_limit", "rabbitmq_web_stomp.sockjs_opts.response_limit",
-    [{datatype, integer}]}.

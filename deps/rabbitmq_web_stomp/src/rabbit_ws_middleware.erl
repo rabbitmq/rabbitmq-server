@@ -10,22 +10,17 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2012-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_ws_app).
+-module(rabbit_ws_middleware).
+-behavior(cowboy_middleware).
 
--behaviour(application).
--export([start/2, stop/1]).
+-export([execute/2]).
 
-%%----------------------------------------------------------------------------
+execute(Req, Env) ->
+    Sock = maps:get(socket, Env),
+    {ok, Req#{socket => Sock}, Env}.
 
--spec start(_, _) -> {ok, pid()}.
-start(_Type, _StartArgs) ->
-    ok = rabbit_ws_listener:init(),
-    rabbit_ws_sup:start_link().
 
--spec stop(_) -> ok.
-stop(_State) ->
-    ok.
+

@@ -23,23 +23,58 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-all() ->
+suite() ->
     [
-    connection,
-    connection_with_protocols,
-    pubsub,
-    disconnect,
-    http_auth
+      %% If a test hangs, no need to wait for 30 minutes.
+      {timetrap, {minutes, 2}}
     ].
 
+all() ->
+    [{group, http_tests},
+     {group, https_tests}].
+
+groups() ->
+    Tests = [
+        connection,
+        connection_with_protocols,
+        pubsub,
+        disconnect,
+        http_auth
+    ],
+    [{https_tests, [], Tests},
+     {http_tests, [], Tests}].
+
 init_per_suite(Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config,
-                                           [{rmq_nodename_suffix, ?MODULE}]),
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps()).
+    Config.
 
 end_per_suite(Config) ->
+    Config.
+
+init_per_group(Group, Config) ->
+    Protocol = case Group of
+        http_tests -> "ws";
+        https_tests -> "wss"
+    end,
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [{rmq_nodename_suffix, ?MODULE},
+                                            {protocol, Protocol},
+                                            {rabbitmq_ct_tls_verify, verify_none},
+                                            {rabbitmq_ct_tls_fail_if_no_peer_cert, false}]),
+
+    rabbit_ct_helpers:run_setup_steps(
+        Config1,
+        rabbit_ct_broker_helpers:setup_steps() ++ [fun configure_ssl/1]).
+
+configure_ssl(Config) ->
+    ErlangConfig = proplists:get_value(erlang_node_config, Config, []),
+    RabbitAppConfig = proplists:get_value(rabbit, ErlangConfig, []),
+    RabbitSslConfig = proplists:get_value(ssl_options, RabbitAppConfig, []),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_stomp_tls),
+    rabbit_ws_test_util:update_app_env(Config, ssl_config, [{port, Port} | lists:keydelete(port, 1, RabbitSslConfig)]),
+    Config.
+
+end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_broker_helpers:teardown_steps()).
 
@@ -55,14 +90,16 @@ end_per_testcase(_, Config) -> Config.
 
 connection(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self()),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     {close, _} = rfc6455_client:close(WS),
     ok.
 
 connection_with_protocols(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self(),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
         undefined, ["v11.stomp", "v10.stomp", "v12.stomp"]),
     {ok, _} = rfc6455_client:open(WS),
     {close, _} = rfc6455_client:close(WS),
@@ -82,7 +119,8 @@ raw_recv(WS) ->
 
 pubsub(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self()),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
 
@@ -115,7 +153,8 @@ pubsub(Config) ->
 
 disconnect(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self()),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
 
@@ -131,7 +170,8 @@ http_auth(Config) ->
     %% and good credentials in the Authorization header, to
     %% confirm that the right credentials are picked.
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self(),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
         [{login, "guest"}, {passcode, "guest"}]),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
@@ -147,7 +187,7 @@ http_auth(Config) ->
                                         [{login, "bad-default"}, {passcode, "bad-default"}]
                                       ]),
 
-    WS2 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self()),
+    WS2 = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS2),
     ok = raw_send(WS2, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
     {<<"ERROR">>, _, _} = raw_recv(WS2),
@@ -161,7 +201,7 @@ http_auth(Config) ->
                                         [{login, "guest"}, {passcode, "guest"}]
                                       ]),
 
-    WS3 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self()),
+    WS3 = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS3),
     ok = raw_send(WS3, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
     {<<"CONNECTED">>, _, <<>>} = raw_recv(WS3),

@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_ws_sockjs).
+-module(rabbit_ws_listener).
 
 -export([init/0]).
 
@@ -33,14 +33,9 @@ init() ->
     TcpConf = get_tcp_conf(get_env(tcp_config, []), Port),
 
     WsFrame = get_env(ws_frame, text),
-    CowboyOpts = get_env(cowboy_opts, []),
+    CowboyOpts = maps:from_list(get_env(cowboy_opts, [])),
 
-    SockjsOpts = get_env(sockjs_opts, []) ++ [{logger, fun logger/3}],
-
-    SockjsState = sockjs_handler:init_state(
-                    <<"/stomp">>, fun service_stomp/3, {}, SockjsOpts),
     VhostRoutes = [
-        {"/stomp/[...]", sockjs_cowboy_handler, SockjsState},
         {"/ws", rabbit_ws_handler, [{type, WsFrame}]}
     ],
     Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
@@ -48,14 +43,19 @@ init() ->
         undefined -> get_env(num_acceptors, 10);
         {ok, NumTcp}  -> NumTcp
     end,
-    case cowboy:start_http(http, NumTcpAcceptors,
-                           TcpConf,
-                           [{env, [{dispatch, Routes}]}|CowboyOpts]) of
+    case ranch:start_listener(
+            http, NumTcpAcceptors,
+            ranch_tcp, TcpConf,
+            rabbit_ws_protocol,
+            CowboyOpts#{env => #{dispatch => Routes},
+                        middlewares => [cowboy_router,
+                                        rabbit_ws_middleware,
+                                        cowboy_handler]}) of
         {ok, _}                       -> ok;
         {error, {already_started, _}} -> ok;
         {error, Err}                  ->
             rabbit_log_connection:error(
-                "Failed to start an HTTP listener for SockJS. Error: ~p,"
+                "Failed to start an HTTP listener. Error: ~p,"
                 " listener settings: ~p~n",
                 [Err, TcpConf]),
             throw(Err)
@@ -75,9 +75,14 @@ init() ->
                 undefined     -> get_env(num_acceptors, 1);
                 {ok, NumSsl}  -> NumSsl
             end,
-            {ok, _} = cowboy:start_https(https, NumSslAcceptors,
-                                         TLSConf,
-                                         [{env, [{dispatch, Routes}]} | CowboyOpts]),
+             {ok, _} = ranch:start_listener(
+                            https, NumSslAcceptors,
+                            ranch_ssl, TLSConf,
+                            rabbit_ws_protocol,
+                            CowboyOpts#{env => #{dispatch => Routes},
+                                        middlewares => [cowboy_router,
+                                                        rabbit_ws_middleware,
+                                                        cowboy_handler]}),
             listener_started('https/web-stomp', TLSConf),
             rabbit_log_connection:info(
                 "rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
@@ -136,21 +141,3 @@ get_binding_address(Configuration) ->
         IP when is_list(IP) ->
             IP
     end.
-
-%% Don't print sockjs logs
-logger(_Service, Req, _Type) ->
-    Req.
-
-%% --------------------------------------------------------------------------
-
-service_stomp(Conn, init, _State) ->
-    {ok, _Sup, Pid} = rabbit_ws_sup:start_client({Conn, no_heartbeat}),
-    {ok, Pid};
-
-service_stomp(_Conn, {recv, Data}, Pid) ->
-    rabbit_ws_client:sockjs_msg(Pid, Data),
-    {ok, Pid};
-
-service_stomp(_Conn, closed, Pid) ->
-    rabbit_ws_client:sockjs_closed(Pid),
-    ok.
