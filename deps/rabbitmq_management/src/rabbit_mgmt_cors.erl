@@ -30,8 +30,8 @@ set_headers(ReqData, Module) ->
             ReqData1;
         Origin ->
             ReqData2 = case cowboy_req:method(ReqData1) of
-                {<<"OPTIONS">>, _} -> handle_options(ReqData1, Module);
-                _                  -> ReqData1
+                <<"OPTIONS">> -> handle_options(ReqData1, Module);
+                _             -> ReqData1
             end,
             ReqData3 = cowboy_req:set_resp_header(<<"access-control-allow-origin">>,
                                                   Origin,
@@ -51,7 +51,7 @@ handle_options(ReqData0, Module) ->
         true  -> element(1, Module:allowed_methods(undefined, undefined))
     end,
     AllowMethods = string:join([binary_to_list(M) || M <- Methods], ", "),
-    {ReqHeaders, _} = cowboy_req:header(<<"access-control-request-headers">>, ReqData0),
+    ReqHeaders = cowboy_req:header(<<"access-control-request-headers">>, ReqData0),
 
     ReqData1 = case MaxAge of
         undefined -> ReqData0;
@@ -75,9 +75,9 @@ handle_options(ReqData0, Module) ->
 %% allows all origins).
 match_origin(ReqData) ->
     case cowboy_req:header(<<"origin">>, ReqData) of
-        {undefined,  _} -> false;
-        {<<"null">>, _} -> false;
-        {Origin,     _} ->
+        undefined -> false;
+        <<"null">> -> false;
+        Origin     ->
             AllowedOrigins = application:get_env(rabbitmq_management,
                 cors_allow_origins, []),
             case lists:member(binary_to_list(Origin), AllowedOrigins) of

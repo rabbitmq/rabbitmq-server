@@ -47,6 +47,7 @@
          augment_resources/6
         ]).
 -export([direct_request/6]).
+-export([qs_val/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -107,15 +108,26 @@ user_matches_vhost(ReqData, User) ->
     case vhost(ReqData) of
         not_found -> true;
         none      -> true;
-        V         -> lists:member(V, list_login_vhosts(User, cowboy_req:get(socket, ReqData)))
+        V         ->
+            SocketInfo = authz_socket_info(ReqData),
+            lists:member(V, list_login_vhosts(User, SocketInfo))
     end.
 
 user_matches_vhost_visible(ReqData, User) ->
     case vhost(ReqData) of
         not_found -> true;
         none      -> true;
-        V         -> lists:member(V, list_visible_vhosts(User, cowboy_req:get(socket, ReqData)))
+        V         ->
+            SocketInfo = authz_socket_info(ReqData),
+            lists:member(V, list_visible_vhosts(User, SocketInfo))
     end.
+
+authz_socket_info(ReqData) ->
+    Host = cowboy_req:host(ReqData),
+    Port = cowboy_req:port(ReqData),
+    Peer = cowboy_req:peer(ReqData),
+    #authz_socket_info{ sockname = {Host, Port},
+                        peername = Peer}.
 
 %% Used for connections / channels. A normal user can only see / delete
 %% their own stuff. Monitors can see other users' and delete their
@@ -124,7 +136,7 @@ is_authorized_user(ReqData, Context, Item) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access object">>,
                   fun(#user{username = Username, tags = Tags}) ->
-                          case element(1, cowboy_req:method(ReqData)) of
+                          case cowboy_req:method(ReqData) of
                               <<"DELETE">> -> is_admin(Tags);
                               _            -> is_monitor(Tags)
                           end orelse Username == pget(user, Item)
@@ -151,13 +163,13 @@ is_authorized_global_parameters(ReqData, Context) ->
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:method(ReqData) of
-        {<<"OPTIONS">>, _} -> {true, ReqData, Context};
-        _ -> is_authorized1(ReqData, Context, ErrorMsg, Fun)
+        <<"OPTIONS">> -> {true, ReqData, Context};
+        _             -> is_authorized1(ReqData, Context, ErrorMsg, Fun)
     end.
 
 is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:parse_header(<<"authorization">>, ReqData) of
-        {ok, {<<"basic">>, {Username, Password}}, _} ->
+        {basic, Username, Password} ->
             is_authorized(ReqData, Context,
                 Username, Password,
                 ErrorMsg, Fun);
@@ -177,7 +189,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
     end,
     case rabbit_access_control:check_user_login(Username, AuthProps) of
         {ok, User = #user{tags = Tags}} ->
-            {{IP, _}, _} = cowboy_req:peer(ReqData),
+            {IP, _} = cowboy_req:peer(ReqData),
             case rabbit_access_control:check_user_loopback(Username, IP) of
                 ok ->
                     case is_mgmt_user(Tags) of
@@ -202,10 +214,10 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
 
 vhost_from_headers(ReqData) ->
     case cowboy_req:header(<<"x-vhost">>, ReqData) of
-        {undefined, _} -> none;
+        undefined -> none;
         %% blank x-vhost means "All hosts" is selected in the UI
-        {<<>>, _}        -> none;
-        {VHost, _}     -> VHost
+        <<>>      -> none;
+        VHost     -> VHost
     end.
 
 vhost(ReqData) ->
@@ -234,7 +246,7 @@ responder_map(FunctionName) ->
       {<<"application/bert">>, FunctionName}
     ].
 
-reply({halt, _, _} = Reply, _ReqData, _Context) ->
+reply({stop, _, _} = Reply, _ReqData, _Context) ->
     Reply;
 reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
@@ -242,8 +254,8 @@ reply(Facts, ReqData, Context) ->
 reply0(Facts, ReqData, Context) ->
     ReqData1 = set_resp_header(<<"Cache-Control">>, "no-cache", ReqData),
     try
-        case cowboy_req:meta(media_type, ReqData1) of
-            {{<<"application">>, <<"bert">>, _}, _} ->
+        case maps:get(media_type, ReqData1, undefined) of
+            {<<"application">>, <<"bert">>, _} ->
                 {term_to_binary(Facts), ReqData1, Context};
             _ ->
                 {rabbit_json:encode(rabbit_mgmt_format:format_nulls(Facts)),
@@ -264,9 +276,9 @@ reply_list(Facts, DefaultSorts, ReqData, Context) ->
     reply_list(Facts, DefaultSorts, ReqData, Context, undefined).
 
 get_value_param(Name, ReqData) ->
-    case cowboy_req:qs_val(Name, ReqData) of
-        {undefined, _} -> undefined;
-        {Bin, _} -> binary_to_list(Bin)
+    case qs_val(Name, ReqData) of
+        undefined -> undefined;
+        Bin       -> binary_to_list(Bin)
     end.
 
 reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
@@ -478,9 +490,9 @@ maybe_filter_by_keyword(_, _, _, _) ->
     true.
 
 check_request_param(V, ReqData) ->
-    case cowboy_req:qs_val(V, ReqData) of
-	{undefined, _} -> undefined;
-	{Str, _}       -> list_to_integer(binary_to_list(Str))
+    case qs_val(V, ReqData) of
+	undefined -> undefined;
+	Str       -> list_to_integer(binary_to_list(Str))
     end.
 
 %% Validates and returns pagination parameters:
@@ -600,9 +612,9 @@ extract_columns_list(Items, ReqData) ->
     [extract_column_items(Item, Cols) || Item <- Items].
 
 columns(ReqData) ->
-    case cowboy_req:qs_val(<<"columns">>, ReqData) of
-        {undefined, _} -> all;
-        {Bin, _}       -> [[list_to_binary(T) || T <- string:tokens(C, ".")]
+    case qs_val(<<"columns">>, ReqData) of
+        undefined -> all;
+        Bin       -> [[list_to_binary(T) || T <- string:tokens(C, ".")]
                       || C <- string:tokens(binary_to_list(Bin), ",")]
     end.
 
@@ -647,10 +659,10 @@ halt_response(Code, Type, Reason, ReqData, Context) ->
     ReasonFormatted = format_reason(Reason),
     Json = #{<<"error">>  => Type,
              <<"reason">> => ReasonFormatted},
-    {ok, ReqData1} = cowboy_req:reply(Code,
-        [{<<"content-type">>, <<"application/json">>}],
+    ReqData1 = cowboy_req:reply(Code,
+        #{<<"content-type">> => <<"application/json">>},
         rabbit_json:encode(Json), ReqData),
-    {halt, ReqData1, Context}.
+    {stop, ReqData1, Context}.
 
 format_reason(Tuple) when is_tuple(Tuple) ->
     rabbit_mgmt_format:tuple(Tuple);
@@ -680,12 +692,12 @@ id(Key, ReqData) ->
 
 id0(Key, ReqData) ->
     case cowboy_req:binding(Key, ReqData) of
-        {undefined, _} -> none;
-        {Id, _}        -> Id
+        undefined -> none;
+        Id        -> Id
     end.
 
 with_decode(Keys, ReqData, Context, Fun) ->
-    {ok, Body, ReqData1} = cowboy_req:body(ReqData),
+    {ok, Body, ReqData1} = cowboy_req:read_body(ReqData),
     with_decode(Keys, Body, ReqData1, Context, Fun).
 
 with_decode(Keys, Body, ReqData, Context, Fun) ->
@@ -781,7 +793,7 @@ with_vhost_and_props(Fun, ReqData, Context) ->
             not_found(rabbit_data_coercion:to_binary("vhost_not_found"),
                       ReqData, Context);
         VHost ->
-            {ok, Body, ReqData1} = cowboy_req:body(ReqData),
+            {ok, Body, ReqData1} = cowboy_req:read_body(ReqData),
             case decode(Body) of
                 {ok, Props} ->
                     try
@@ -900,7 +912,8 @@ filter_vhost(List, ReqData, Context) ->
                true  -> fun list_visible_vhosts/2;
                false -> fun list_login_vhosts/2
            end,
-    VHosts = Fn(User, cowboy_req:get(socket, ReqData)),
+    SocketInfo = authz_socket_info(ReqData),
+    VHosts = Fn(User, SocketInfo),
     [I || I <- List, lists:member(pget(vhost, I), VHosts)].
 
 filter_user(List, _ReqData, #context{user = User}) ->
@@ -931,8 +944,8 @@ args(L)  -> rabbit_mgmt_format:to_amqp_table(L).
 %% Make replying to a post look like anything else...
 post_respond({true, ReqData, Context}) ->
     {true, ReqData, Context};
-post_respond({halt, ReqData, Context}) ->
-    {halt, ReqData, Context};
+post_respond({stop, ReqData, Context}) ->
+    {stop, ReqData, Context};
 post_respond({JSON, ReqData, Context}) ->
     {true, set_resp_header(
              <<"Content-Type">>, "application/json",
@@ -1043,9 +1056,9 @@ ceil(X) ->
     end.
 
 int(Name, ReqData) ->
-    case cowboy_req:qs_val(list_to_binary(Name), ReqData) of
-        {undefined, _} -> undefined;
-        {Bin, _}       -> case catch list_to_integer(binary_to_list(Bin)) of
+    case qs_val(list_to_binary(Name), ReqData) of
+        undefined -> undefined;
+        Bin       -> case catch list_to_integer(binary_to_list(Bin)) of
                          {'EXIT', _} -> undefined;
                          Integer     -> Integer
                      end
@@ -1053,3 +1066,8 @@ int(Name, ReqData) ->
 
 def(undefined, Def) -> Def;
 def(V, _) -> V.
+
+-spec qs_val(binary(), cowboy:req()) -> any() | undefined.
+qs_val(Name, ReqData) ->
+    Qs = cowboy_req:parse_qs(ReqData),
+    proplists:get_value(Name, Qs, undefined).

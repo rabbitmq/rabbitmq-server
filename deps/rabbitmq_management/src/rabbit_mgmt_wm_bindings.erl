@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_wm_bindings).
 
--export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([allowed_methods/2]).
 -export([content_types_accepted/2, accept_content/2, resource_exists/2]).
 -export([basic/1, augmented/2]).
@@ -27,10 +27,8 @@
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
-rest_init(Req, [Mode]) ->
-    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), {Mode, #context{}}}.
+init(Req, [Mode]) ->
+    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), {Mode, #context{}}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
@@ -44,7 +42,7 @@ content_types_provided(ReqData, Context) ->
 %% https://github.com/ninenines/cowboy/issues/723#issuecomment-161319576
 resource_exists(ReqData, {Mode, Context}) ->
     case cowboy_req:method(ReqData) of
-        {<<"POST">>, _} ->
+        <<"POST">> ->
             {false, ReqData, {Mode, Context}};
         _ ->
             {case list_bindings(Mode, ReqData) of
@@ -71,7 +69,7 @@ to_json(ReqData, {Mode, Context}) ->
       ReqData, {Mode, Context}).
 
 accept_content(ReqData0, {_Mode, Context}) ->
-    {ok, Body, ReqData} = cowboy_req:body(ReqData0),
+    {ok, Body, ReqData} = cowboy_req:read_body(ReqData0),
     Source = rabbit_mgmt_util:id(source, ReqData),
     Dest = rabbit_mgmt_util:id(destination, ReqData),
     DestType = rabbit_mgmt_util:id(dtype, ReqData),
@@ -92,11 +90,11 @@ accept_content(ReqData0, {_Mode, Context}) ->
             {routing_key, Key},
             {arguments, Args}],
            "Binding error: ~s", ReqData, Context) of
-        {halt, _, _} = Res ->
+        {stop, _, _} = Res ->
             Res;
         {true, ReqData, Context2} ->
             Loc = rabbit_web_dispatch_util:relativise(
-                    binary_to_list(element(1, cowboy_req:path(ReqData))),
+                    binary_to_list(cowboy_req:path(ReqData)),
                     binary_to_list(
                       rabbit_mgmt_format:url(
                         "/api/bindings/~s/e/~s/~s/~s/~s",
