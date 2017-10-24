@@ -165,7 +165,7 @@ table() ->
 
 %% Cowboy handler callbacks.
 init(Req, State) ->
-    Response = cowboy_req:reply(
+    cowboy_req:reply(
         status(), #{<<"content-type">> => <<"text/plain">>}, reason(), Req),
     {ok, Req, State}.
 
