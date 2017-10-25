@@ -331,20 +331,14 @@ call(Name, Request, Timeout) ->
 %% Make a cast to a generic server.
 %% -----------------------------------------------------------------
 cast({global,Name}, Request) ->
-    catch global:send(Name, cast_msg(Request)),
+    catch global:send(Name, {'$gen_cast', Request}),
     ok;
 cast({Name,Node}=Dest, Request) when is_atom(Name), is_atom(Node) ->
-    do_cast(Dest, Request);
-cast(Dest, Request) when is_atom(Dest) ->
-    do_cast(Dest, Request);
-cast(Dest, Request) when is_pid(Dest) ->
-    do_cast(Dest, Request).
-
-do_cast(Dest, Request) ->
-    do_send(Dest, cast_msg(Request)),
+    catch (Dest ! {'$gen_cast', Request}),
+    ok;
+cast(Dest, Request) when is_atom(Dest); is_pid(Dest) ->
+    catch (Dest ! {'$gen_cast', Request}),
     ok.
-
-cast_msg(Request) -> {'$gen_cast',Request}.
 
 %% -----------------------------------------------------------------
 %% Send a reply to the client.
@@ -356,13 +350,13 @@ reply({To, Tag}, Reply) ->
 %% Asyncronous broadcast, returns nothing, it's just send'n pray
 %% -----------------------------------------------------------------
 abcast(Name, Request) when is_atom(Name) ->
-    do_abcast([node() | nodes()], Name, cast_msg(Request)).
+    do_abcast([node() | nodes()], Name, {'$gen_cast', Request}).
 
 abcast(Nodes, Name, Request) when is_list(Nodes), is_atom(Name) ->
-    do_abcast(Nodes, Name, cast_msg(Request)).
+    do_abcast(Nodes, Name, {'$gen_cast', Request}).
 
 do_abcast([Node|Nodes], Name, Msg) when is_atom(Node) ->
-    do_send({Name,Node},Msg),
+    catch ({Name, Node} ! Msg),
     do_abcast(Nodes, Name, Msg);
 do_abcast([], _,_) -> abcast.
 
@@ -820,9 +814,6 @@ process_msg(Msg, GS2State = #gs2_state { name = Name, debug  = Debug }) ->
 %%% ---------------------------------------------------
 %%% Send/recive functions
 %%% ---------------------------------------------------
-do_send(Dest, Msg) ->
-    catch erlang:send(Dest, Msg).
-
 do_multi_call(Nodes, Name, Req, infinity) ->
     Tag = make_ref(),
     Monitors = send_nodes(Nodes, Name, Tag, Req),
