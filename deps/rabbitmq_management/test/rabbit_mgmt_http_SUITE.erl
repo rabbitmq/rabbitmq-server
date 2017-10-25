@@ -37,94 +37,98 @@
 -import(rabbit_misc, [pget/2, pget/3]).
 
 -define(COLLECT_INTERVAL, 1000).
+-define(PATH_PREFIX, "/custom-prefix").
 
 -compile(export_all).
 
 all() ->
     [
-     {group, non_parallel_tests}
+     {group, all_tests_with_prefix},
+     {group, all_tests_without_prefix}
     ].
 
 groups() ->
     [
-     {non_parallel_tests, [], [
-                               overview_test,
-                               auth_test,
-                               cluster_name_test,
-                               nodes_test,
-                               memory_test,
-                               ets_tables_memory_test,
-                               vhosts_test,
-                               vhosts_trace_test,
-                               users_test,
-                               users_legacy_administrator_test,
-                               adding_a_user_with_password_test,
-                               adding_a_user_with_password_hash_test,
-                               adding_a_user_with_permissions_in_single_operation_test,
-                               adding_a_user_without_tags_fails_test,
-                               adding_a_user_without_password_or_hash_test,
-                               adding_a_user_with_both_password_and_hash_fails_test,
-                               updating_a_user_without_password_or_hash_clears_password_test,
-                               user_credential_validation_accept_everything_succeeds_test,
-                               user_credential_validation_min_length_succeeds_test,
-                               user_credential_validation_min_length_fails_test,
-                               permissions_validation_test,
-                               permissions_list_test,
-                               permissions_test,
-                               connections_test,
-                               multiple_invalid_connections_test,
-                               exchanges_test,
-                               queues_test,
-                               queues_well_formed_json_test,
-                               bindings_test,
-                               bindings_post_test,
-                               bindings_e2e_test,
-                               permissions_administrator_test,
-                               permissions_vhost_test,
-                               permissions_amqp_test,
-                               permissions_connection_channel_consumer_test,
-                               consumers_test,
-                               definitions_test,
-                               definitions_vhost_test,
-                               definitions_password_test,
-                               definitions_remove_things_test,
-                               definitions_server_named_queue_test,
-                               aliveness_test,
-                               healthchecks_test,
-                               arguments_test,
-                               arguments_table_test,
-                               queue_purge_test,
-                               queue_actions_test,
-                               exclusive_consumer_test,
-                               exclusive_queue_test,
-                               connections_channels_pagination_test,
-                               exchanges_pagination_test,
-                               exchanges_pagination_permissions_test,
-                               queue_pagination_test,
-                               queue_pagination_columns_test,
-                               queues_pagination_permissions_test,
-                               samples_range_test,
-                               sorting_test,
-                               format_output_test,
-                               columns_test,
-                               get_test,
-                               get_fail_test,
-                               publish_test,
-                               publish_accept_json_test,
-                               publish_fail_test,
-                               publish_base64_test,
-                               publish_unrouted_test,
-                               if_empty_unused_test,
-                               parameters_test,
-                               global_parameters_test,
-                               policy_test,
-                               policy_permissions_test,
-                               issue67_test,
-                               extensions_test,
-                               cors_test,
-                   rates_test
-                              ]}
+     {all_tests_with_prefix, [], all_tests()},
+     {all_tests_without_prefix, [], all_tests()}
     ].
+
+all_tests() -> [
+    overview_test,
+    auth_test,
+    cluster_name_test,
+    nodes_test,
+    memory_test,
+    ets_tables_memory_test,
+    vhosts_test,
+    vhosts_trace_test,
+    users_test,
+    users_legacy_administrator_test,
+    adding_a_user_with_password_test,
+    adding_a_user_with_password_hash_test,
+    adding_a_user_with_permissions_in_single_operation_test,
+    adding_a_user_without_tags_fails_test,
+    adding_a_user_without_password_or_hash_test,
+    adding_a_user_with_both_password_and_hash_fails_test,
+    updating_a_user_without_password_or_hash_clears_password_test,
+    user_credential_validation_accept_everything_succeeds_test,
+    user_credential_validation_min_length_succeeds_test,
+    user_credential_validation_min_length_fails_test,
+    permissions_validation_test,
+    permissions_list_test,
+    permissions_test,
+    connections_test,
+    multiple_invalid_connections_test,
+    exchanges_test,
+    queues_test,
+    queues_well_formed_json_test,
+    bindings_test,
+    bindings_post_test,
+    bindings_e2e_test,
+    permissions_administrator_test,
+    permissions_vhost_test,
+    permissions_amqp_test,
+    permissions_connection_channel_consumer_test,
+    consumers_test,
+    definitions_test,
+    definitions_vhost_test,
+    definitions_password_test,
+    definitions_remove_things_test,
+    definitions_server_named_queue_test,
+    aliveness_test,
+    healthchecks_test,
+    arguments_test,
+    arguments_table_test,
+    queue_purge_test,
+    queue_actions_test,
+    exclusive_consumer_test,
+    exclusive_queue_test,
+    connections_channels_pagination_test,
+    exchanges_pagination_test,
+    exchanges_pagination_permissions_test,
+    queue_pagination_test,
+    queue_pagination_columns_test,
+    queues_pagination_permissions_test,
+    samples_range_test,
+    sorting_test,
+    format_output_test,
+    columns_test,
+    get_test,
+    get_fail_test,
+    publish_test,
+    publish_accept_json_test,
+    publish_fail_test,
+    publish_base64_test,
+    publish_unrouted_test,
+    if_empty_unused_test,
+    parameters_test,
+    global_parameters_test,
+    policy_test,
+    policy_permissions_test,
+    issue67_test,
+    extensions_test,
+    cors_test,
+    rates_test].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -139,28 +143,37 @@ merge_app_env(Config) ->
                                      {sample_retention_policies,
                                           [{global,   [{605, 1}]},
                                            {basic,    [{605, 1}]},
-                                           {detailed, [{10, 1}]}] }]}).
+                                           {detailed, [{10, 1}]}]
+                                     }]}).
 
-init_per_suite(Config) ->
+start_broker(Config) ->
+    Setup0 = rabbit_ct_broker_helpers:setup_steps(),
+    Setup1 = rabbit_ct_client_helpers:setup_steps(),
+    Steps = Setup0 ++ Setup1,
+    rabbit_ct_helpers:run_setup_steps(Config, Steps).
+
+finish_init(Group, Config) ->
     rabbit_ct_helpers:log_environment(),
     inets:start(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-                                                    {rmq_nodename_suffix, ?MODULE}
-                                                   ]),
-    Config2 = merge_app_env(Config1),
-    rabbit_ct_helpers:run_setup_steps(Config2,
-                      rabbit_ct_broker_helpers:setup_steps() ++
-                      rabbit_ct_client_helpers:setup_steps()).
-end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-                                         rabbit_ct_client_helpers:teardown_steps() ++
-                                             rabbit_ct_broker_helpers:teardown_steps()).
+    NodeConf = [{rmq_nodename_suffix, Group}],
+    Config1 = rabbit_ct_helpers:set_config(Config, NodeConf),
+    merge_app_env(Config1).
 
-init_per_group(_, Config) ->
-    Config.
+init_per_group(all_tests_with_prefix=Group, Config0) ->
+    PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
+    Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
+    Config2 = finish_init(Group, Config1),
+    start_broker(Config2);
+init_per_group(Group, Config0) ->
+    Config1 = finish_init(Group, Config0),
+    start_broker(Config1).
 
 end_per_group(_, Config) ->
-    Config.
+    inets:stop(),
+    Teardown0 = rabbit_ct_client_helpers:teardown_steps(),
+    Teardown1 = rabbit_ct_broker_helpers:teardown_steps(),
+    Steps = Teardown0 ++ Teardown1,
+    rabbit_ct_helpers:run_teardown_steps(Config, Steps).
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -172,7 +185,6 @@ end_per_testcase(Testcase, Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 
-
 overview_test(Config) ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.
@@ -181,7 +193,6 @@ overview_test(Config) ->
                                        {tags,     <<"management">>}], [?CREATED, ?NO_CONTENT]),
     http_get(Config, "/overview", "myuser", "myuser", ?OK),
     http_delete(Config, "/users/myuser", ?NO_CONTENT),
-
     passed.
 
 cluster_name_test(Config) ->
