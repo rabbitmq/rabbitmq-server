@@ -285,8 +285,16 @@ shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform) ->
               "RabbitMQ node ~p running at PID ~s successfully shut down",
               [Node, Pid]),
             Res;
-        {badrpc, {'EXIT', RpcErr}} ->
-            {error, {error_during_shutdown, RpcErr}};
+        % NB: this is the return value for any errors raised by
+        % an RPC call to rabbit:stop_and_halt. We return error_during_shutdown
+        % so that rabbit_cli:main can differentiate this error from
+        % other badrpc errors
+        {badrpc, {'EXIT', RpcErr0}} ->
+            {error, {error_during_shutdown, RpcErr0}};
+        % NB: rabbit_cli:main pretty-prints other badrpc errors using
+        % rabbit_nodes:diagnostics, so don't modify the error here
+        {badrpc, _}=RpcErr1 ->
+            RpcErr1;
         Error ->
             {error, {error_during_shutdown, Error}}
     end.
@@ -295,8 +303,16 @@ action(shutdown, Node, [], _Opts, Inform) ->
     case rpc:call(Node, os, getpid, []) of
         Pid when is_list(Pid) ->
             shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform);
-        {badrpc, {'EXIT', RpcErr}} ->
-            {error, {error_during_shutdown, RpcErr}};
+        % NB: this is the rpc return value for any errors raised by
+        % rpc:call. We return error_during_shutdown so that
+        % rabbit_cli:main can differentiate this error from other badrpc
+        % errors
+        {badrpc, {'EXIT', RpcErr0}} ->
+            {error, {error_during_shutdown, RpcErr0}};
+        % NB: rabbit_cli:main pretty-prints other badrpc errors using
+        % rabbit_nodes:diagnostics, so don't modify the error here
+        {badrpc, _}=RpcErr1 ->
+            RpcErr1;
         Error ->
             {error, {error_during_shutdown, Error}}
     end;
