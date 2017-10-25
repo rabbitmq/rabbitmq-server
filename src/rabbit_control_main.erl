@@ -285,8 +285,8 @@ shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform) ->
               "RabbitMQ node ~p running at PID ~s successfully shut down",
               [Node, Pid]),
             Res;
-        {error, Err} ->
-            {error, {error_during_shutdown, Err}};
+        {badrpc, {'EXIT', RpcErr}} ->
+            {error, {error_during_shutdown, RpcErr}};
         _  ->
             Res
     end.
@@ -295,6 +295,8 @@ action(shutdown, Node, [], _Opts, Inform) ->
     case rpc:call(Node, os, getpid, []) of
         Pid when is_list(Pid) ->
             shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform);
+        {badrpc, {'EXIT', RpcErr}} ->
+            {error, {error_during_shutdown, RpcErr}};
         Error -> Error
     end;
 
