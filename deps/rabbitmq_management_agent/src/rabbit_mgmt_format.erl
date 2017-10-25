@@ -76,10 +76,10 @@ format_queue_stats({disk_writes, _}) ->
 format_queue_stats(Stat) ->
     [Stat].
 
-format_channel_stats({idle_since, Value}) ->
-    {idle_since, now_to_str(Value)};
-format_channel_stats(Stat) ->
-    Stat.
+format_channel_stats([{idle_since, Value} | Rest]) ->
+    [{idle_since, now_to_str(Value)} | Rest];
+format_channel_stats(Stats) ->
+    Stats.
 
 format_arguments({arguments, Value}) ->
     {arguments, amqp_table(Value)};

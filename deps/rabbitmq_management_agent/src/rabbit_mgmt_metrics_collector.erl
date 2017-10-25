@@ -193,12 +193,17 @@ exec_table_ops(Table, Timestamp, TableOps) ->
 
 aggregate_entry({Id, Metrics}, NextStats, Ops0,
                 #state{table = connection_created} = State) ->
-    Ftd = rabbit_mgmt_format:format(
-        Metrics,
-        {fun rabbit_mgmt_format:format_connection_created/1, true}),
-    Entry = ?connection_created_stats(Id, pget(name, Ftd, unknown), Ftd),
-    Ops = insert_op(connection_created_stats, Id, Entry, Ops0),
-    {NextStats, Ops, State};
+    case ets:lookup(connection_created_stats, Id) of
+        [] ->
+            Ftd = rabbit_mgmt_format:format(
+                    Metrics,
+                    {fun rabbit_mgmt_format:format_connection_created/1, true}),
+            Entry = ?connection_created_stats(Id, pget(name, Ftd, unknown), Ftd),
+            Ops = insert_op(connection_created_stats, Id, Entry, Ops0),
+            {NextStats, Ops, State};
+        _ ->
+            {NextStats, Ops0, State}
+    end;
 aggregate_entry({Id, Metrics}, NextStats, Ops0,
                 #state{table = connection_metrics} = State) ->
     Entry = ?connection_stats(Id, Metrics),
@@ -230,15 +235,22 @@ aggregate_entry({Id, RecvOct, SendOct, _Reductions, 1}, NextStats, Ops0,
     {NextStats, Ops1, State};
 aggregate_entry({Id, Metrics}, NextStats, Ops0,
                 #state{table = channel_created} = State) ->
-    Ftd = rabbit_mgmt_format:format(Metrics, {[], false}),
-    Entry = ?channel_created_stats(Id, pget(name, Ftd, unknown), Ftd),
-    Ops = insert_op(channel_created_stats, Id, Entry, Ops0),
-    {NextStats, Ops, State};
+    case ets:lookup(channel_created_stats, Id) of
+        [] ->
+            Ftd = rabbit_mgmt_format:format(Metrics, {[], false}),
+            Entry = ?channel_created_stats(Id, pget(name, Ftd, unknown), Ftd),
+            Ops = insert_op(channel_created_stats, Id, Entry, Ops0),
+            {NextStats, Ops, State};
+        _ ->
+            {NextStats, Ops0, State}
+    end;
 aggregate_entry({Id, Metrics}, NextStats, Ops0,
                 #state{table = channel_metrics} = State) ->
-    Ftd = rabbit_mgmt_format:format(Metrics,
-                    {fun rabbit_mgmt_format:format_channel_stats/1, true}),
-
+    %% First metric must be `idle_since` (if available), as expected by
+    %% `rabbit_mgmt_format:format_channel_stats`. This is a performance
+    %% optimisation that avoids traversing the whole list when only
+    %% one element has to be formatted.
+    Ftd = rabbit_mgmt_format:format_channel_stats(Metrics),
     Entry = ?channel_stats(Id, Ftd),
     Ops = insert_op(channel_stats, Id, Entry, Ops0),
     {NextStats, Ops, State};
@@ -392,13 +404,18 @@ aggregate_entry({Id, Reductions}, NextStats, Ops0,
 aggregate_entry({Id, Exclusive, AckRequired, PrefetchCount, Args},
                 NextStats, Ops0,
                 #state{table = consumer_created} = State) ->
-    Fmt = rabbit_mgmt_format:format([{exclusive, Exclusive},
-                                     {ack_required, AckRequired},
-                                     {prefetch_count, PrefetchCount},
-                                     {arguments, Args}], {[], false}),
-    Entry = ?consumer_stats(Id, Fmt),
-    Ops = insert_with_index_op(consumer_stats, Id, Entry, Ops0),
-    {NextStats, Ops ,State};
+    case ets:lookup(consumer_stats, Id) of
+        [] ->
+            Fmt = rabbit_mgmt_format:format([{exclusive, Exclusive},
+                                             {ack_required, AckRequired},
+                                             {prefetch_count, PrefetchCount},
+                                             {arguments, Args}], {[], false}),
+            Entry = ?consumer_stats(Id, Fmt),
+            Ops = insert_with_index_op(consumer_stats, Id, Entry, Ops0),
+            {NextStats, Ops ,State};
+        _ ->
+            {NextStats, Ops0, State}
+    end;
 aggregate_entry({Id, Metrics, 0}, NextStats, Ops0,
                 #state{table = queue_metrics,
                        policies = {BPolicies, _, GPolicies},
