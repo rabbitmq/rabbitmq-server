@@ -100,7 +100,8 @@
 %% API
 %%----------------------------------------------------------------------------
 init() ->
-    [ets:new(Table, [Type, public, named_table, {write_concurrency, true}])
+    [ets:new(Table, [Type, public, named_table, {write_concurrency, true},
+                     {read_concurrency, true}])
      || {Table, Type} <- ?CORE_TABLES ++ ?CORE_EXTRA_TABLES],
     ok.
 
