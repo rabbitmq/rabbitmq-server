@@ -246,9 +246,11 @@ aggregate_entry({Id, Metrics}, NextStats, Ops0,
     end;
 aggregate_entry({Id, Metrics}, NextStats, Ops0,
                 #state{table = channel_metrics} = State) ->
-    Ftd = rabbit_mgmt_format:format(Metrics,
-                    {fun rabbit_mgmt_format:format_channel_stats/1, true}),
-
+    %% First metric must be `idle_since` (if available), as expected by
+    %% `rabbit_mgmt_format:format_channel_stats`. This is a performance
+    %% optimisation that avoids traversing the whole list when only
+    %% one element has to be formatted.
+    Ftd = rabbit_mgmt_format:format_channel_stats(Metrics),
     Entry = ?channel_stats(Id, Ftd),
     Ops = insert_op(channel_stats, Id, Entry, Ops0),
     {NextStats, Ops, State};
