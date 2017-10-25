@@ -289,14 +289,11 @@ shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform) ->
         % an RPC call to rabbit:stop_and_halt. We return error_during_shutdown
         % so that rabbit_cli:main can differentiate this error from
         % other badrpc errors
-        {badrpc, {'EXIT', RpcErr0}} ->
-            {error, {error_during_shutdown, RpcErr0}};
+        {badrpc, {'EXIT', RpcErr}} ->
+            {error, {error_during_shutdown, RpcErr}};
         % NB: rabbit_cli:main pretty-prints other badrpc errors using
-        % rabbit_nodes:diagnostics, so don't modify the error here
-        {badrpc, _}=RpcErr1 ->
-            RpcErr1;
-        Error ->
-            {error, {error_during_shutdown, Error}}
+        % rabbit_nodes:diagnostics, so don't modify the error here.
+        Error -> Error
     end.
 
 action(shutdown, Node, [], _Opts, Inform) ->
@@ -307,14 +304,11 @@ action(shutdown, Node, [], _Opts, Inform) ->
         % rpc:call. We return error_during_shutdown so that
         % rabbit_cli:main can differentiate this error from other badrpc
         % errors
-        {badrpc, {'EXIT', RpcErr0}} ->
-            {error, {error_during_shutdown, RpcErr0}};
+        {badrpc, {'EXIT', RpcErr}} ->
+            {error, {error_during_shutdown, RpcErr}};
         % NB: rabbit_cli:main pretty-prints other badrpc errors using
-        % rabbit_nodes:diagnostics, so don't modify the error here
-        {badrpc, _}=RpcErr1 ->
-            RpcErr1;
-        Error ->
-            {error, {error_during_shutdown, Error}}
+        % rabbit_nodes:diagnostics, so don't modify the error here.
+        Error -> Error
     end;
 
 action(stop, Node, Args, _Opts, Inform) ->
