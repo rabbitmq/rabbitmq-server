@@ -450,8 +450,7 @@ stop() ->
 
 stop_and_halt() ->
     try
-        stop(),
-        exit(whoops_something_went_wrong) %% TODO REMOVE THIS QA ONLY
+        stop()
     catch Type:Reason ->
         rabbit_log:error("Error trying to stop RabbitMQ: ~p:~p", [Type, Reason]),
         erlang:error({Type, Reason})

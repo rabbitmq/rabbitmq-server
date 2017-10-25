@@ -287,8 +287,8 @@ shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform) ->
             Res;
         {badrpc, {'EXIT', RpcErr}} ->
             {error, {error_during_shutdown, RpcErr}};
-        _  ->
-            Res
+        Error ->
+            {error, {error_during_shutdown, Error}}
     end.
 
 action(shutdown, Node, [], _Opts, Inform) ->
@@ -297,7 +297,8 @@ action(shutdown, Node, [], _Opts, Inform) ->
             shutdown_node_and_wait_pid_to_stop(Node, Pid, Inform);
         {badrpc, {'EXIT', RpcErr}} ->
             {error, {error_during_shutdown, RpcErr}};
-        Error -> Error
+        Error ->
+            {error, {error_during_shutdown, Error}}
     end;
 
 action(stop, Node, Args, _Opts, Inform) ->
