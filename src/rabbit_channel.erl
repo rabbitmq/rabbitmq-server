@@ -2008,6 +2008,10 @@ emit_stats(State) -> emit_stats(State, []).
 
 emit_stats(State, Extra) ->
     [{reductions, Red} | Coarse0] = infos(?STATISTICS_KEYS, State),
+    %% First metric must be `idle_since` (if available), as expected by
+    %% `rabbit_mgmt_format:format_channel_stats`. This is a performance
+    %% optimisation that avoids traversing the whole list when only
+    %% one element has to be formatted.
     rabbit_core_metrics:channel_stats(self(), Extra ++ Coarse0),
     rabbit_core_metrics:channel_stats(reductions, self(), Red).
 
