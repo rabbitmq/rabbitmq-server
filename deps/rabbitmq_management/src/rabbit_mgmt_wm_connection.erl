@@ -50,15 +50,14 @@ to_json(ReqData, Context) ->
       {struct, rabbit_mgmt_format:strip_pids(conn(ReqData))}, ReqData, Context).
 
 delete_resource(ReqData, Context) ->
-    Conn = conn(ReqData),
-    Pid = proplists:get_value(pid, Conn),
-    Reason = case cowboy_req:header(<<"x-reason">>, ReqData) of
-                 {undefined, _} -> "Closed via management plugin";
-                 {V, _}         -> binary_to_list(V)
-             end,
-    case proplists:get_value(type, Conn) of
-        direct  -> amqp_direct_connection:server_close(Pid, 320, Reason);
-        network -> rabbit_networking:close_connection(Pid, Reason)
+    case conn(ReqData) of
+        not_found -> ok;
+        Conn      ->
+            case proplists:get_value(pid, Conn) of
+                undefined -> ok;
+                Pid when is_pid(Pid) ->
+                    force_close_connection(ReqData, Conn, Pid)
+            end
     end,
     {true, ReqData, Context}.
 
@@ -75,3 +74,14 @@ is_authorized(ReqData, Context) ->
 conn(ReqData) ->
     rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData),
                                   rabbit_mgmt_util:range_ceil(ReqData)).
+
+force_close_connection(ReqData, Conn, Pid) ->
+    Reason = case cowboy_req:header(<<"x-reason">>, ReqData) of
+                 {undefined, _} -> "Closed via management plugin";
+                 {V, _}         -> binary_to_list(V)
+             end,
+            case proplists:get_value(type, Conn) of
+                direct  -> amqp_direct_connection:server_close(Pid, 320, Reason);
+                network -> rabbit_networking:close_connection(Pid, Reason)
+            end,
+    ok.
