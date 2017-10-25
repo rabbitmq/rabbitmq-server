@@ -21,7 +21,9 @@
                   'other_proc'          : ['proc',   'Other process memory'],
                   'code'                : ['system', 'Code'],
                   'atom'                : ['system', 'Atoms'],
-                  'other_system'        : ['system', 'Other system']};
+                  'other_system'        : ['system', 'Other system'],
+                  'allocated_unused'    : ['unused', 'Allocated unused'],
+                  'reserved_unallocated': ['unused', 'Unallocated reserved by the OS']};
 %>
 <%= format('memory-bar', {sections: sections, memory: memory, total_out: []}) %>
 <span class="clear">&nbsp;</span>
@@ -51,7 +53,12 @@ var key = [[{name: 'Queues', colour: 'queue',
             {name: 'System', colour: 'system',
              keys: [['code',                'code'],
                     ['atom',                'atoms'],
-                    ['other_system',        'other']]}]];
+                    ['other_system',        'other']
+                    ]}],
+
+            [{name: 'Unused memory', colour: 'unused',
+              keys: [['allocated_unused',     'allocated unused'],
+                     ['reserved_unallocated', 'unallocated reserved by the OS']]}]];
 %>
 <%= format('memory-table', {key: key, memory: memory}) %>
 </div>
