@@ -35,8 +35,12 @@
 -export([get_total_memory/0, get_vm_limit/0,
          get_check_interval/0, set_check_interval/1,
          get_vm_memory_high_watermark/0, set_vm_memory_high_watermark/1,
-         get_memory_limit/0, get_memory_use/1,
-         get_process_memory/0, get_memory_calculation_strategy/0]).
+         get_memory_limit/0,
+         %% TODO: refactor in master
+         get_memory_use/1,
+         get_process_memory/0,
+         get_process_memory/1,
+         get_memory_calculation_strategy/0]).
 
 %% for tests
 -export([parse_line_linux/1, parse_mem_limit/1]).
@@ -60,6 +64,7 @@
 
 %%----------------------------------------------------------------------------
 
+-type memory_calculation_strategy() :: rss | erlang | allocated.
 -type vm_memory_high_watermark() :: (float() | {'absolute', integer() | string()}).
 -spec start_link(float()) -> rabbit_types:ok_pid_or_error().
 -spec start_link(float(), fun ((any()) -> 'ok'),
@@ -74,6 +79,8 @@
 -spec get_memory_use(bytes) -> {non_neg_integer(),  float() | infinity};
                     (ratio) -> float() | infinity.
 -spec get_cached_process_memory_and_limit() -> {non_neg_integer(), non_neg_integer()}.
+
+-export_type([memory_calculation_strategy/0]).
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
@@ -142,7 +149,14 @@ get_process_memory() ->
     {ProcMem, _} = get_memory_use(bytes),
     ProcMem.
 
--spec get_memory_calculation_strategy() -> rss | erlang.
+-spec get_process_memory(cached | current) -> Bytes :: integer().
+get_process_memory(cached) ->
+    {ProcMem, _} = get_memory_use(bytes),
+    ProcMem;
+get_process_memory(current) ->
+    get_process_memory_uncached().
+
+-spec get_memory_calculation_strategy() -> memory_calculation_strategy().
 get_memory_calculation_strategy() ->
     case rabbit_misc:get_env(rabbit, vm_memory_calculation_strategy, rss) of
         allocated -> allocated;
