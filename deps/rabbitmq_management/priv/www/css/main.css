@@ -18,8 +18,6 @@ a:hover { color: #F60; }
 .status-error { color: #F00; }
 .status-timeout { color: #99EBFF; }
 
-/* #vhost { display: none; } */
-
 #debug { position: fixed; bottom: 0; z-index: 9; width: 100%; text-align: center; padding: 0; margin: 0; }
 #debug p { background: #F60; color: white; margin: 0; padding: 1em; font-size: 2em; }
 
