@@ -22,7 +22,7 @@
 
 -define(SYNC_INTERVAL,                 200). %% milliseconds
 -define(RAM_DURATION_UPDATE_INTERVAL, 5000).
--define(CONSUMER_BIAS_RATIO,           1.1). %% i.e. consume 10% faster
+-define(CONSUMER_BIAS_RATIO,           2.0). %% i.e. consume 100% faster
 
 -export([info_keys/0]).
 
