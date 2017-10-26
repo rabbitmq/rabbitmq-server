@@ -32,10 +32,10 @@ build_routes(Ignore) ->
     ThisLocalPath = static_path(?MODULE),
     Prefix = rabbit_mgmt_util:get_path_prefix(),
     RootIdxRtes = build_root_index_routes(Prefix, ThisLocalPath),
-    LocalPaths = [static_path(M) || M <- modules(Ignore)],
     ApiIdxRte = {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
     CliIdxRte = {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
     MgmtRdrRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
+    LocalPaths = [static_path(M) || M <- modules(Ignore)],
     LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
     % NB: order is significant in the routing list
     Routes0 = build_module_routes(Ignore) ++
