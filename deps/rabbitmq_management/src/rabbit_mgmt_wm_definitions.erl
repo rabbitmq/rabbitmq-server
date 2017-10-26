@@ -242,13 +242,13 @@ get_all_parts(ReqData) ->
     get_all_parts(ReqData, []).
 
 get_all_parts(ReqData0, Acc) ->
-    case cowboy_req:read_part_body(ReqData0) of
+    case cowboy_req:read_part(ReqData0) of
         {done, ReqData} ->
             {Acc, ReqData};
         {ok, Headers, ReqData1} ->
             Name = case cow_multipart:form_data(Headers) of
                 {data, N} -> N;
-                {file, N, _, _, _} -> N
+                {file, N, _, _} -> N
             end,
             {ok, Body, ReqData} = cowboy_req:read_part_body(ReqData1),
             get_all_parts(ReqData, [{Name, Body}|Acc])
