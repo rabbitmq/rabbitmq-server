@@ -247,7 +247,7 @@ memory_test(Config) ->
     Keys = [total, connection_readers, connection_writers, connection_channels,
             connection_other, queue_procs, queue_slave_procs, plugins,
             other_proc, mnesia, mgmt_db, msg_index, other_ets, binary, code,
-            atom, other_system],
+            atom, other_system, allocated_unused, reserved_unallocated],
     assert_keys(Keys, maps:get(memory, Result)),
     http_get(Config, "/nodes/nonode/memory", ?NOT_FOUND),
     %% Relative memory as a percentage of the total

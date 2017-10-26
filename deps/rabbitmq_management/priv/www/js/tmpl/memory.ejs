@@ -21,7 +21,9 @@
                   'other_proc'          : ['proc',   'Other process memory'],
                   'code'                : ['system', 'Code'],
                   'atom'                : ['system', 'Atoms'],
-                  'other_system'        : ['system', 'Other system']};
+                  'other_system'        : ['system', 'Other system'],
+                  'allocated_unused'    : ['unused', 'Allocated unused'],
+                  'reserved_unallocated': ['unused', 'Unallocated reserved by the OS']};
 %>
 <%= format('memory-bar', {sections: sections, memory: memory, total_out: []}) %>
 <span class="clear">&nbsp;</span>
@@ -40,7 +42,7 @@ var key = [[{name: 'Queues', colour: 'queue',
                     ['connection_other',    'other']]}],
 
            [{name: 'Tables', colour: 'table',
-             keys: [['mnesia',              'mnesia'],
+             keys: [['mnesia',              'internal database tables'],
                     ['msg_index',           'message store index'],
                     ['mgmt_db',             'management database'],
                     ['other_ets',           'other']]}],
@@ -51,7 +53,12 @@ var key = [[{name: 'Queues', colour: 'queue',
             {name: 'System', colour: 'system',
              keys: [['code',                'code'],
                     ['atom',                'atoms'],
-                    ['other_system',        'other']]}]];
+                    ['other_system',        'other']
+                    ]}],
+
+            [{name: 'Preallocated memory', colour: 'unused',
+              keys: [['allocated_unused',     'preallocated by runtime, unused'],
+                     ['reserved_unallocated', 'unallocated, reserved by the OS']]}]];
 %>
 <%= format('memory-table', {key: key, memory: memory}) %>
 </div>
