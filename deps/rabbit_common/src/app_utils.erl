@@ -15,16 +15,19 @@
 %%
 -module(app_utils).
 
--export([load_applications/1, start_applications/1, start_applications/2,
+-export([load_applications/1,
+         start_applications/1, start_applications/2, start_applications/3,
          stop_applications/1, stop_applications/2, app_dependency_order/2,
          app_dependencies/1]).
 
 -type error_handler() :: fun((atom(), any()) -> 'ok').
+-type restart_type() :: 'permanent' | 'transient' | 'temporary'.
 
 -spec load_applications([atom()])                   -> 'ok'.
 -spec start_applications([atom()])                  -> 'ok'.
 -spec stop_applications([atom()])                   -> 'ok'.
 -spec start_applications([atom()], error_handler()) -> 'ok'.
+-spec start_applications([atom()], error_handler(), [{atom(), restart_type()}]) -> 'ok'.
 -spec stop_applications([atom()], error_handler())  -> 'ok'.
 -spec app_dependency_order([atom()], boolean())     -> [digraph:vertex()].
 -spec app_dependencies(atom())                      -> [atom()].
@@ -49,8 +52,11 @@ stop_applications(Apps) ->
             end).
 
 start_applications(Apps, ErrorHandler) ->
+    start_applications(Apps, ErrorHandler, []).
+
+start_applications(Apps, ErrorHandler, RestartTypes) ->
     manage_applications(fun lists:foldl/3,
-                        fun application:ensure_all_started/1,
+                        fun(App) -> ensure_all_started(App, RestartTypes) end,
                         fun application:stop/1,
                         already_started,
                         ErrorHandler,
@@ -127,3 +133,39 @@ manage_applications(Iterate, Do, Undo, SkipError, ErrorHandler, Apps) ->
             end, [], Apps),
     ok.
 
+%% Stops the Erlang VM when the rabbit application stops abnormally
+%% i.e. message store reaches its restart limit
+default_restart_type(rabbit) -> transient;
+default_restart_type(_)      -> temporary.
+
+%% Copyright Ericsson AB 1996-2016. All Rights Reserved.
+%%
+%% Code orignially from Erlang/OTP source lib/kernel/src/application.erl
+%% and modified to use RestartTypes
+%%
+ensure_all_started(Application, RestartTypes) ->
+    case ensure_all_started(Application, RestartTypes, []) of
+        {ok, Started} ->
+            {ok, lists:reverse(Started)};
+        {error, Reason, Started} ->
+            _ = [application:stop(App) || App <- Started],
+        {error, Reason}
+    end.
+
+ensure_all_started(Application, RestartTypes, Started) ->
+    RestartType = proplists:get_value(Application, RestartTypes, default_restart_type(Application)),
+    case application:start(Application, RestartType) of
+        ok ->
+            {ok, [Application | Started]};
+        {error, {already_started, Application}} ->
+            {ok, Started};
+        {error, {not_started, Dependency}} ->
+            case ensure_all_started(Dependency, RestartTypes, Started) of
+                {ok, NewStarted} ->
+                    ensure_all_started(Application, RestartTypes, NewStarted);
+                Error ->
+                    Error
+            end;
+    {error, Reason} ->
+        {error, {Application, Reason}, Started}
+    end.
