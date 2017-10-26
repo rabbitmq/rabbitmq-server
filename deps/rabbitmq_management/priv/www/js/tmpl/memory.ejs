@@ -42,7 +42,7 @@ var key = [[{name: 'Queues', colour: 'queue',
                     ['connection_other',    'other']]}],
 
            [{name: 'Tables', colour: 'table',
-             keys: [['mnesia',              'mnesia'],
+             keys: [['mnesia',              'internal database tables'],
                     ['msg_index',           'message store index'],
                     ['mgmt_db',             'management database'],
                     ['other_ets',           'other']]}],
@@ -56,9 +56,9 @@ var key = [[{name: 'Queues', colour: 'queue',
                     ['other_system',        'other']
                     ]}],
 
-            [{name: 'Unused memory', colour: 'unused',
-              keys: [['allocated_unused',     'allocated unused'],
-                     ['reserved_unallocated', 'unallocated reserved by the OS']]}]];
+            [{name: 'Preallocated memory', colour: 'unused',
+              keys: [['allocated_unused',     'preallocated by runtime, unused'],
+                     ['reserved_unallocated', 'unallocated, reserved by the OS']]}]];
 %>
 <%= format('memory-table', {key: key, memory: memory}) %>
 </div>
