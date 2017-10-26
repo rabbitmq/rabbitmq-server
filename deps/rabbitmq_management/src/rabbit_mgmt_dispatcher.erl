@@ -30,18 +30,29 @@ build_dispatcher(Ignore) ->
 
 build_routes(Ignore) ->
     ThisLocalPath = static_path(?MODULE),
+    Prefix = rabbit_mgmt_util:get_path_prefix(),
+    RootIdxRtes = build_root_index_routes(Prefix, ThisLocalPath),
     LocalPaths = [static_path(M) || M <- modules(Ignore)],
-    RootIdxRte = {"/", cowboy_static, {file, ThisLocalPath ++ "/index.html"}},
     ApiIdxRte = {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
     CliIdxRte = {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
     MgmtRdrRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
     LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
-    % NB: order is significant in the AllRoutes list
+    % NB: order is significant in the routing list
     Routes0 = build_module_routes(Ignore) ++
-        [RootIdxRte, ApiIdxRte, CliIdxRte, MgmtRdrRte, LocalStaticRte],
-    Prefix = rabbit_mgmt_util:get_path_prefix(),
+        [ApiIdxRte, CliIdxRte, MgmtRdrRte, LocalStaticRte],
     Routes1 = maybe_add_path_prefix(Routes0, Prefix),
-    [{'_', Routes1}].
+    % NB: ensure the root routes are first
+    Routes2 = RootIdxRtes ++ Routes1,
+    [{'_', Routes2}].
+
+build_root_index_routes("", ThisLocalPath) ->
+    [{"/", cowboy_static, root_idx_file(ThisLocalPath)}];
+build_root_index_routes(Prefix, ThisLocalPath) ->
+    [{"/", rabbit_mgmt_wm_redirect, Prefix ++ "/"},
+     {Prefix, cowboy_static, root_idx_file(ThisLocalPath)}].
+
+root_idx_file(ThisLocalPath) ->
+    {file, ThisLocalPath ++ "/index.html"}.
 
 maybe_add_path_prefix(Routes, "") ->
     Routes;
