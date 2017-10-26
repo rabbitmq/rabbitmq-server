@@ -18,9 +18,6 @@
 
 -export([modules/1, build_dispatcher/1]).
 
-%% TODO remove - testing only
--export([build_routes/1]).
-
 -behaviour(rabbit_mgmt_extension).
 -export([dispatcher/0, web_ui/0]).
 
@@ -42,13 +39,11 @@ build_routes(Ignore) ->
     % NB: order is significant in the AllRoutes list
     Routes0 = build_module_routes(Ignore) ++
         [RootIdxRte, ApiIdxRte, CliIdxRte, MgmtRdrRte, LocalStaticRte],
-    Routes1 = maybe_add_path_prefix(Routes0, get_path_prefix()),
+    Prefix = rabbit_mgmt_util:get_path_prefix(),
+    Routes1 = maybe_add_path_prefix(Routes0, Prefix),
     [{'_', Routes1}].
 
-get_path_prefix() ->
-    rabbit_misc:get_env(rabbitmq_management, path_prefix, undefined).
-
-maybe_add_path_prefix(Routes, undefined) ->
+maybe_add_path_prefix(Routes, "") ->
     Routes;
 maybe_add_path_prefix(Routes, Prefix) ->
     [{Prefix ++ Path, Mod, Args} || {Path, Mod, Args} <- Routes].

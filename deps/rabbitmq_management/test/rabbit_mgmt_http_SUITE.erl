@@ -775,22 +775,29 @@ bindings_post_test(Config) ->
     http_post(Config, "/bindings/%2f/e/myexchange/q/badqueue", BArgs, ?NOT_FOUND),
     http_post(Config, "/bindings/%2f/e/badexchange/q/myqueue", BArgs, ?NOT_FOUND),
     Headers1 = http_post(Config, "/bindings/%2f/e/myexchange/q/myqueue", [], [?CREATED, ?NO_CONTENT]),
-    "../../../../%2F/e/myexchange/q/myqueue/~" = pget("location", Headers1),
+
+    Want0 = "../../../../%2F/e/myexchange/q/myqueue/~",
+    ?assertEqual(Want0, pget("location", Headers1)),
+
     Headers2 = http_post(Config, "/bindings/%2f/e/myexchange/q/myqueue", BArgs, [?CREATED, ?NO_CONTENT]),
     %% Args hash is calculated from a table, generated from args.
     Hash = table_hash([{<<"foo">>,longstr,<<"bar">>}]),
     PropertiesKey = "routing~" ++ Hash,
     PropertiesKeyBin = list_to_binary(PropertiesKey),
-    "../../../../%2F/e/myexchange/q/myqueue/" ++ PropertiesKey =
-        pget("location", Headers2),
-    URI = "/bindings/%2F/e/myexchange/q/myqueue/" ++ PropertiesKey,
-    [{source,<<"myexchange">>},
+
+    Want1 = "../../../../%2F/e/myexchange/q/myqueue/" ++ PropertiesKey,
+    ?assertEqual(Want1, pget("location", Headers2)),
+
+    Want2 = [{source,<<"myexchange">>},
      {vhost,<<"/">>},
      {destination,<<"myqueue">>},
      {destination_type,<<"queue">>},
      {routing_key,<<"routing">>},
      {arguments,[{foo,<<"bar">>}]},
-     {properties_key,PropertiesKeyBin}] = http_get(Config, URI, ?OK),
+     {properties_key,PropertiesKeyBin}],
+    URI = "/bindings/%2F/e/myexchange/q/myqueue/" ++ PropertiesKey,
+    ?assertEqual(Want2, http_get(Config, URI, ?OK)),
+
     http_get(Config, URI ++ "x", ?NOT_FOUND),
     http_delete(Config, URI, ?NO_CONTENT),
     http_delete(Config, "/exchanges/%2f/myexchange", ?NO_CONTENT),
