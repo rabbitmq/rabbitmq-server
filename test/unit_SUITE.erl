@@ -332,10 +332,11 @@ do_decrypt_start_app(Config, Passphrase) ->
     %%
     %% We expect a failure *after* the decrypting has been done.
     try
-        rabbit:start_apps([rabbit_shovel_test])
+        rabbit:start_apps([rabbit_shovel_test], [{rabbit, temporary}])
     catch _:_ ->
         ok
-    end,
+    end
+    ,
     %% Check if the values have been decrypted.
     {ok, Shovels} = application:get_env(rabbit_shovel_test, shovels),
     {_, FirstShovel} = lists:keyfind(my_first_shovel, 1, Shovels),
@@ -359,7 +360,7 @@ decrypt_start_app_undefined(Config) ->
     %%
     %% We expect a failure during decryption because the passphrase is missing.
     try
-        rabbit:start_apps([rabbit_shovel_test])
+        rabbit:start_apps([rabbit_shovel_test], [{rabbit, temporary}])
     catch
         exit:{bad_configuration, config_entry_decoder} -> ok;
         _:_ -> exit(unexpected_exception)
@@ -379,7 +380,7 @@ decrypt_start_app_wrong_passphrase(Config) ->
     %%
     %% We expect a failure during decryption because the passphrase is wrong.
     try
-        rabbit:start_apps([rabbit_shovel_test])
+        rabbit:start_apps([rabbit_shovel_test], [{rabbit, temporary}])
     catch
         exit:{decryption_error,_,_} -> ok;
         _:_ -> exit(unexpected_exception)
