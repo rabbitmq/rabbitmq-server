@@ -725,7 +725,7 @@ function filter_ui_pg(items, truncate, appendselect) {
         fmt_escape_html(current_filter) + '"/>' +
         '<input type="checkbox" name="filter-regex-mode" id="filter-regex-mode"' +
         (current_filter_regex_on ? ' checked' : '') +
-        '/><label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span>' +
+        '/><label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex"></span>' +
         '</td></tr></table>';
 
     function items_desc(l) {
@@ -799,7 +799,7 @@ function pagiante_ui(pages, context){
 
     res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class pagination_class_checkbox" id="'+ context +'-filter-regex-mode"' ;
 
-    res += fmt_regex_request(context, "") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>' ;
+    res += fmt_regex_request(context, "") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex"></span></th>' ;
 
     res +=' </table>' ;
     res += '<p id="filter-truncate"><span class="updatable">';
