@@ -534,8 +534,8 @@ function setup_global_vars() {
     );
 
     $('#versions').html(
-      '<abbr title="Available exchange types: ' + exchange_types.join(", ") + '">RMQ ' + fmt_escape_html(overview.rabbitmq_version) + '</abbr>' +
-      '<abbr title="' + fmt_escape_html(overview.erlang_full_version) + '">OTP ' + fmt_escape_html(overview.erlang_version) + '</abbr>'
+      '<abbr title="Available exchange types: ' + exchange_types.join(", ") + '">' + fmt_escape_html(overview.rabbitmq_version) + '</abbr>' +
+      '<abbr title="' + fmt_escape_html(overview.erlang_full_version) + '">Erlang ' + fmt_escape_html(overview.erlang_version) + '</abbr>'
     );
     nodes_interesting = false;
     rabbit_versions_interesting = false;
