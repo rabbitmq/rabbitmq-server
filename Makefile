@@ -124,7 +124,9 @@ define PROJECT_ENV
 	    %% either "stop_node" or "continue".
 	    %% by default we choose to not terminate the entire node if one
 	    %% vhost had to shut down, see server#1158 and server#1280
-	    {vhost_restart_strategy, continue}
+	    {vhost_restart_strategy, continue},
+	    %% {global, prefetch count}
+	    {default_consumer_prefetch, {false, 0}}
 	  ]
 endef
 
