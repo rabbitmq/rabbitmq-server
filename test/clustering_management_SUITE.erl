@@ -534,7 +534,7 @@ erlang_config(Config) ->
 
     %% If we use an invalid node type, the node fails to start.
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
@@ -545,7 +545,7 @@ erlang_config(Config) ->
 
     %% If we use an invalid node type, the node fails to start.
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
@@ -556,7 +556,7 @@ erlang_config(Config) ->
 
     %% If we use an invalid cluster_nodes conf, the node fails to start.
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
@@ -566,7 +566,7 @@ erlang_config(Config) ->
     assert_not_clustered(Rabbit),
 
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
