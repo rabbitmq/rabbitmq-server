@@ -85,7 +85,7 @@ function fmt_policy_short(obj) {
     if (obj.policy != undefined && obj.policy != '') {
         return '<abbr class="policy" title="Policy: ' +
             fmt_escape_html(obj.policy) + '">' +
-            fmt_escape_html(obj.policy) + '</abbr> ';
+            link_policy(obj.vhost, obj.policy) + '</abbr> ';
     } else {
         return '';
     }
