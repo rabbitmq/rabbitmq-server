@@ -390,7 +390,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     Limiter0 = rabbit_limiter:new(LimiterPid),
     Limiter = case {Global, Prefetch} of
                   {true, 0} ->
-                      Limiter1 = rabbit_limiter:unlimit_prefetch(Limiter0);
+                      rabbit_limiter:unlimit_prefetch(Limiter0);
                   {true, _} ->
                       rabbit_limiter:limit_prefetch(Limiter0, Prefetch, 0);
                   _ ->
