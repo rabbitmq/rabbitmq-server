@@ -1190,7 +1190,7 @@ function check_bad_response(req, full_page_404) {
         update_status('error');
     }
     else {
-        debug("Management API returned status code " + req.status + ": <strong>" + fmt_escape_html_one_line(req.responseText) + "</strong>");
+        debug("Management API returned status code " + req.status + " - <strong>" + fmt_escape_html_one_line(req.responseText) + "</strong>");
         clearInterval(timer);
     }
 
