@@ -21,11 +21,13 @@
          app_dependencies/1]).
 
 -type error_handler() :: fun((atom(), any()) -> 'ok').
+-type restart_type() :: 'permanent' | 'transient' | 'temporary'.
 
 -spec load_applications([atom()])                   -> 'ok'.
 -spec start_applications([atom()])                  -> 'ok'.
 -spec stop_applications([atom()])                   -> 'ok'.
 -spec start_applications([atom()], error_handler()) -> 'ok'.
+-spec start_applications([atom()], error_handler(), [{atom(), restart_type()}]) -> 'ok'.
 -spec stop_applications([atom()], error_handler())  -> 'ok'.
 -spec app_dependency_order([atom()], boolean())     -> [digraph:vertex()].
 -spec app_dependencies(atom())                      -> [atom()].
@@ -164,6 +166,6 @@ ensure_all_started(Application, RestartTypes, Started) ->
                 Error ->
                     Error
             end;
-	{error, Reason} ->
-	    {error, {Application, Reason}, Started}
+    {error, Reason} ->
+        {error, {Application, Reason}, Started}
     end.
