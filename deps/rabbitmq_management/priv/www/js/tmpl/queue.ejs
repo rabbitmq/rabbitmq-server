@@ -16,7 +16,7 @@
       </tr>
       <tr>
         <th>Policy</th>
-        <td><%= fmt_string(queue.policy, '') %></td>
+        <td><%= link_policy(queue.vhost, queue.policy) %></td>
       </tr>
 <% if (nodes_interesting) { %>
       <tr>
