@@ -58,7 +58,7 @@
 <% } %>
 <% if (show_column('exchanges', 'policy')) { %>
    <td class="c">
-     <%= fmt_string(exchange.policy) %>
+     <%= link_policy(exchange.vhost, exchange.policy) %>
    </td>
 <% } %>
 <% if (rates_mode != 'none') { %>
