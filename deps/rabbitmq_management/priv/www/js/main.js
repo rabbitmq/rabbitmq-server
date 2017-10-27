@@ -486,20 +486,15 @@ function apply_state(reqs) {
     return reqs2;
 }
 
-function show_popup(type, text, mode) {
+function show_popup(type, text, _mode) {
     var cssClass = '.form-popup-' + type;
     function hide() {
         $(cssClass).fadeOut(100, function() {
             $(this).remove();
         });
     }
-
     hide();
-    if ($(cssClass).length && type === 'help' &&
-        $(cssClass).text().indexOf(text.replace(/<[^>]*>/g, '')) != -1 ) {
-        return;
-    }
-    $('h1').after(format('error-popup', {'type': type, 'text': text}));
+    $('#outer').after(format('popup', {'type': type, 'text': text}));
     $(cssClass).fadeIn(100);
     $(cssClass + ' span').click(function () {
         $('.popup-owner').removeClass('popup-owner');
@@ -540,7 +535,7 @@ function postprocess() {
             return confirm("Are you sure? This object cannot be recovered " +
                            "after deletion.");
         });
-    $('div.section h2, div.section-hidden h2').die().live('click', function() {
+    $('div.section h2, div.section-hidden h2').on('click', function() {
             toggle_visibility($(this));
         });
     $('label').map(function() {
@@ -568,11 +563,10 @@ function postprocess() {
     $('.update-manual').click(function() {
             update_manual($(this).attr('for'), $(this).attr('query'));
         });
-    $('input, select').die();
-    $('.multifield input').live('keyup', function() {
+    $('.multifield input').on('keyup', function() {
             update_multifields();
         });
-    $('.multifield select').live('change', function() {
+    $('.multifield select').on('change', function() {
             update_multifields();
         });
     $('.controls-appearance').change(function() {
@@ -588,32 +582,22 @@ function postprocess() {
             }
         }
     });
-    $('.help').die().live('click', function() {
-        help($(this).attr('id'));
+    $(document).on('click', '.help', function() {
+      show_popup('help', HELP[$(this).attr('id')]);
     });
-    $('.popup-options-link').die().live('click', function() {
-        var remove = $('.popup-owner').length == 1 &&
-                     $('.popup-owner').get(0) == $(this).get(0);
+    $(document).on('click', '.popup-options-link', function() {
         $('.popup-owner').removeClass('popup-owner');
-        if (remove) {
-            $('.form-popup-options').fadeOut(100, function() {
-                $(this).remove();
-            });
-        }
-        else {
-            $(this).addClass('popup-owner');
-            var template = $(this).attr('type') + '-options';
-            show_popup('options', format(template, {span: $(this)}),
-                       'fade');
-        }
+        $(this).addClass('popup-owner');
+        var template = $(this).attr('type') + '-options';
+        show_popup('options', format(template, {span: $(this)}), 'fade');
     });
-    $('.rate-visibility-option').die().live('click', function() {
+    $(document).on('click', '.rate-visibility-option', function() {
         var k = $(this).attr('data-pref');
         var show = get_pref(k) !== 'true';
         store_pref(k, '' + show);
         partial_update();
     });
-    $('input, select').live('focus', function() {
+    $(document).on('focus', 'input, select', function() {
         update_counter = 0; // If there's interaction, reset the counter.
     });
     $('.tag-link').click(function() {
@@ -630,12 +614,12 @@ function postprocess() {
         type.val($(this).attr('type'));
         update_multifields();
     });
-    $('form.auto-submit select, form.auto-submit input').live('click', function(){
+    $(document).on('click', 'form.auto-submit select, form.auto-submit input', function(){
         $(this).parents('form').submit();
     });
-    $('#filter').die().live('keyup', debounce(update_filter, 500));
+    $('#filter').on('keyup', debounce(update_filter, 500));
     $('#filter-regex-mode').change(update_filter_regex_mode);
-    $('#truncate').die().live('keyup', debounce(update_truncate, 500));
+    $('#truncate').on('keyup', debounce(update_truncate, 500));
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
@@ -715,7 +699,6 @@ function renderChannels() {
                         options: {sort:true}}},
                         'channels', '#/channels');
 }
-
 
 function update_pages_from_ui(sender) {
     var val = $(sender).val();
@@ -1039,11 +1022,11 @@ function format(template, json) {
 function update_status(status) {
     var text;
     if (status == 'ok')
-        text = "Last update: " + fmt_date(new Date());
+        text = "Refreshed " + fmt_date(new Date());
     else if (status == 'error') {
         var next_try = new Date(new Date().getTime() + timer_interval);
         text = "Error: could not connect to server since " +
-            fmt_date(last_successful_connect) + ".<br/>Will retry at " +
+            fmt_date(last_successful_connect) + ". Will retry at " +
             fmt_date(next_try) + ".";
     }
     else
@@ -1207,8 +1190,7 @@ function check_bad_response(req, full_page_404) {
         update_status('error');
     }
     else {
-        debug("Got response code " + req.status + " with body " +
-              req.responseText);
+        debug("Management API returned status code " + req.status + ": <strong>" + fmt_escape_html_one_line(req.responseText) + "</strong>");
         clearInterval(timer);
     }
 
