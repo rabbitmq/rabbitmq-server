@@ -153,7 +153,15 @@ handle_info({'EXIT', InboundConn, Reason},
 
 handle_info({'EXIT', OutboundConn, Reason},
             State = #state{outbound_conn = OutboundConn}) ->
-    {stop, {outbound_conn_died, Reason}, State}.
+    {stop, {outbound_conn_died, Reason}, State};
+
+handle_info({'EXIT', InboundCh, Reason},
+            State = #state{inbound_ch = InboundCh}) ->
+    {stop, {inbound_ch_died, Reason}, State};
+
+handle_info({'EXIT', OutboundCh, Reason},
+            State = #state{outbound_ch = OutboundCh}) ->
+    {stop, {outbound_ch_died, Reason}, State}.
 
 terminate(Reason, #state{inbound_conn = undefined, inbound_ch = undefined,
                          outbound_conn = undefined, outbound_ch = undefined,
@@ -235,10 +243,23 @@ make_conn_and_chan(URIs, ShovelName) ->
     URI = lists:nth(rand_compat:uniform(length(URIs)), URIs),
     {ok, AmqpParam} = amqp_uri:parse(URI),
     ConnName = get_connection_name(ShovelName),
-    {ok, Conn} = amqp_connection:start(AmqpParam, ConnName),
-    link(Conn),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
-    {Conn, Chan, list_to_binary(amqp_uri:remove_credentials(URI))}.
+    case amqp_connection:start(AmqpParam, ConnName) of
+        {ok, Conn} ->
+            link(Conn),
+            {ok, Ch} = amqp_connection:open_channel(Conn),
+            link(Ch),
+            {Conn, Ch, list_to_binary(amqp_uri:remove_credentials(URI))};
+        {error, not_allowed} ->
+            rabbit_log:error(
+              "Shovel '~p' failed to connect using URI ~s: authentication or vhost access authorization failed~n",
+              [ShovelName, amqp_uri:remove_credentials(URI)]),
+            erlang:error(not_allowed);
+        {error, Reason} ->
+            rabbit_log:error(
+              "Shovel '~s' failed to connect using URI ~s, error: ~p~n",
+              [ShovelName, amqp_uri:remove_credentials(URI), Reason]),
+            erlang:error(Reason)
+    end.
 
 %% for static shovels, name is an atom from the configuration file
 get_connection_name(ShovelName) when is_atom(ShovelName) ->
