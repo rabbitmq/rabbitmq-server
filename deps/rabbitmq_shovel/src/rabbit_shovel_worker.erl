@@ -22,7 +22,7 @@
          code_change/3]).
 
 %% for testing purposes
--export([get_connection_name/1, make_conn_and_chan/2]).
+-export([get_connection_name/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").

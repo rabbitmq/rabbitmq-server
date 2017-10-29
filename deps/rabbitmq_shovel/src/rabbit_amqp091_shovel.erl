@@ -343,7 +343,7 @@ do_make_conn_and_chane(URIs, ShovelName) ->
 
 log_connection_failure(Reason, URI, ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' failed to connect (URI: ~s): ~p~n",
+          "Shovel '~s' failed to connect (URI: ~s): ~s~n",
           [ShovelName, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]).
 
 human_readable_connection_error({auth_failure, Msg}) ->
@@ -354,6 +354,8 @@ human_readable_connection_error(unknown_host) ->
     "unknown host (failed to resolve hostname)";
 human_readable_connection_error(econnrefused) ->
     "connection to target host was refused (ECONNREFUSED)";
+human_readable_connection_error(etimedout) ->
+    "connection to target host timed out (ETIMEDOUT)";
 human_readable_connection_error(eacces) ->
     "connection to target host failed with EACCES. "
     "This may be due to insufficient RabbitMQ process permissions or "
