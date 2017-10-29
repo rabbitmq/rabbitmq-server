@@ -22,7 +22,7 @@
          code_change/3]).
 
 %% for testing purposes
--export([get_connection_name/1]).
+-export([get_connection_name/1, make_conn_and_chan/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
@@ -239,7 +239,37 @@ publish(Tag, Method, Msg,
                         decr_remaining(1, State)
       end).
 
+make_conn_and_chan([], ShovelName) ->
+    rabbit_log:error(
+          "Shovel '~s' has no more URIs to try for connection and will terminate~n",
+          [ShovelName]),
+    erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan(URIs, ShovelName) ->
+    try do_make_conn_and_chane(URIs, ShovelName) of
+        Val -> Val
+    catch throw:{error, Reason, URI} ->
+        log_connection_failure(Reason, URI, ShovelName),
+        make_conn_and_chan(lists:usort(URIs -- [URI]), ShovelName)
+    end.
+
+log_connection_failure(not_allowed, URI, ShovelName) ->
+    rabbit_log:error(
+          "Shovel '~s' failed to connect using URI ~s: authentication or vhost access authorization failed~n",
+          [ShovelName, amqp_uri:remove_credentials(URI)]);
+log_connection_failure(econnrefused, URI, ShovelName) ->
+    rabbit_log:error(
+          "Shovel '~s' failed to connect using URI ~s: TCP connection failed~n",
+          [ShovelName, amqp_uri:remove_credentials(URI)]);
+log_connection_failure(unknown_host, URI, ShovelName) ->
+    rabbit_log:error(
+          "Shovel '~s' failed to connect using URI ~s: hostname did not resolve~n",
+          [ShovelName, amqp_uri:remove_credentials(URI)]);
+log_connection_failure(Reason, URI, ShovelName) ->
+    rabbit_log:error(
+          "Shovel '~s' failed to connect using URI ~s, error: ~p~n",
+          [ShovelName, amqp_uri:remove_credentials(URI), Reason]).
+
+do_make_conn_and_chane(URIs, ShovelName) ->
     URI = lists:nth(rand_compat:uniform(length(URIs)), URIs),
     {ok, AmqpParam} = amqp_uri:parse(URI),
     ConnName = get_connection_name(ShovelName),
@@ -250,15 +280,9 @@ make_conn_and_chan(URIs, ShovelName) ->
             link(Ch),
             {Conn, Ch, list_to_binary(amqp_uri:remove_credentials(URI))};
         {error, not_allowed} ->
-            rabbit_log:error(
-              "Shovel '~p' failed to connect using URI ~s: authentication or vhost access authorization failed~n",
-              [ShovelName, amqp_uri:remove_credentials(URI)]),
-            erlang:error(not_allowed);
+            throw({error, not_allowed, URI});
         {error, Reason} ->
-            rabbit_log:error(
-              "Shovel '~s' failed to connect using URI ~s, error: ~p~n",
-              [ShovelName, amqp_uri:remove_credentials(URI), Reason]),
-            erlang:error(Reason)
+            throw({error, Reason, URI})
     end.
 
 %% for static shovels, name is an atom from the configuration file
