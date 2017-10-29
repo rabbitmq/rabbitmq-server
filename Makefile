@@ -12,7 +12,7 @@ define PROJECT_ENV
 	    {tcp_listeners, [5672]},
 	    {num_tcp_acceptors, 10},
 	    {ssl_listeners, []},
-	    {num_ssl_acceptors, 1},
+	    {num_ssl_acceptors, 10},
 	    {ssl_options, []},
 	    {vm_memory_high_watermark, 0.4},
 	    {vm_memory_high_watermark_paging_ratio, 0.5},
