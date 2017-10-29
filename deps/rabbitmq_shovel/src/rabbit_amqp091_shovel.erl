@@ -312,22 +312,39 @@ publish(IncomingTag, Method, Msg,
               rabbit_shovel_behaviour:decr_remaining(1, State1)
       end).
 
+make_conn_and_chan([], ShovelName) ->
+    rabbit_log:error(
+          "Shovel '~s' has no more URIs to try for connection and will terminate~n",
+          [ShovelName]),
+    erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan(URIs, ShovelName) ->
+    try do_make_conn_and_chane(URIs, ShovelName) of
+        Val -> Val
+    catch throw:{error, Reason, URI} ->
+        log_connection_failure(Reason, URI, ShovelName),
+        make_conn_and_chan(lists:usort(URIs -- [URI]), ShovelName)
+    end.
+
+do_make_conn_and_chane(URIs, ShovelName) ->
     URI = lists:nth(rand:uniform(length(URIs)), URIs),
     {ok, AmqpParam} = amqp_uri:parse(URI),
     ConnName = get_connection_name(ShovelName),
     case amqp_connection:start(AmqpParam, ConnName) of
         {ok, Conn} ->
             link(Conn),
-            {ok, Chan} = amqp_connection:open_channel(Conn),
-            {Conn, Chan, list_to_binary(amqp_uri:remove_credentials(URI))};
+            {ok, Ch} = amqp_connection:open_channel(Conn),
+            link(Ch),
+            {Conn, Ch, list_to_binary(amqp_uri:remove_credentials(URI))};
+        {error, not_allowed} ->
+            throw({error, not_allowed, URI});
         {error, Reason} ->
-            ErrMsg = rabbit_misc:format("Shovel failed to connect (URI: '~s'): ~s",
-                                        [amqp_uri:remove_credentials(URI),
-                                         human_readable_connection_error(Reason)]),
-            rabbit_log:error(ErrMsg),
-            exit(ErrMsg)
+            throw({error, Reason, URI})
     end.
+
+log_connection_failure(Reason, URI, ShovelName) ->
+    rabbit_log:error(
+          "Shovel '~s' failed to connect (URI: ~s): ~p~n",
+          [ShovelName, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]).
 
 human_readable_connection_error({auth_failure, Msg}) ->
     Msg;
@@ -343,8 +360,6 @@ human_readable_connection_error(eacces) ->
     "a reserved IP address used as destination";
 human_readable_connection_error(Other) ->
     rabbit_misc:format("~p", [Other]).
-
-
 
 get_connection_name(ShovelName) when is_atom(ShovelName) ->
     Prefix = <<"Shovel ">>,
