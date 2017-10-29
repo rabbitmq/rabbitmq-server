@@ -252,22 +252,27 @@ make_conn_and_chan(URIs, ShovelName) ->
         make_conn_and_chan(lists:usort(URIs -- [URI]), ShovelName)
     end.
 
-log_connection_failure(not_allowed, URI, ShovelName) ->
-    rabbit_log:error(
-          "Shovel '~s' failed to connect using URI ~s: authentication or vhost access authorization failed~n",
-          [ShovelName, amqp_uri:remove_credentials(URI)]);
-log_connection_failure(econnrefused, URI, ShovelName) ->
-    rabbit_log:error(
-          "Shovel '~s' failed to connect using URI ~s: TCP connection failed~n",
-          [ShovelName, amqp_uri:remove_credentials(URI)]);
-log_connection_failure(unknown_host, URI, ShovelName) ->
-    rabbit_log:error(
-          "Shovel '~s' failed to connect using URI ~s: hostname did not resolve~n",
-          [ShovelName, amqp_uri:remove_credentials(URI)]);
 log_connection_failure(Reason, URI, ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' failed to connect using URI ~s, error: ~p~n",
-          [ShovelName, amqp_uri:remove_credentials(URI), Reason]).
+          "Shovel '~s' failed to connect (URI: ~s): ~s~n",
+          [ShovelName, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]).
+
+human_readable_connection_error({auth_failure, Msg}) ->
+    Msg;
+human_readable_connection_error(not_allowed) ->
+    "access to target virtual host was refused";
+human_readable_connection_error(unknown_host) ->
+    "unknown host (failed to resolve hostname)";
+human_readable_connection_error(econnrefused) ->
+    "connection to target host was refused (ECONNREFUSED)";
+human_readable_connection_error(etimedout) ->
+    "connection to target host timed out (ETIMEDOUT)";
+human_readable_connection_error(eacces) ->
+    "connection to target host failed with EACCES. "
+    "This may be due to insufficient RabbitMQ process permissions or "
+    "a reserved IP address used as destination";
+human_readable_connection_error(Other) ->
+    rabbit_misc:format("~p", [Other]).
 
 do_make_conn_and_chane(URIs, ShovelName) ->
     URI = lists:nth(rand_compat:uniform(length(URIs)), URIs),
