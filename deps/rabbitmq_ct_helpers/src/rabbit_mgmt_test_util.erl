@@ -18,7 +18,7 @@
 
 -include("rabbit_mgmt_test.hrl").
 
--compile(export_all).
+-compile([nowarn_export_all, export_all]).
 
 reset_management_settings(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
@@ -82,10 +82,15 @@ req(Config, Node, Type, Path, Headers, Body) ->
                   ?HTTPC_OPTS, []).
 
 uri_base_from(Config, Node) ->
-    binary_to_list(
-      rabbit_mgmt_format:print(
-        "http://localhost:~w/api",
-        [mgmt_port(Config, Node)])).
+    Port = mgmt_port(Config, Node),
+    Prefix = get_uri_prefix(Config),
+    Uri = rabbit_mgmt_format:print("http://localhost:~w~s/api", [Port, Prefix]),
+    binary_to_list(Uri).
+
+get_uri_prefix(Config) ->
+    ErlNodeCnf = proplists:get_value(erlang_node_config, Config, []),
+    MgmtCnf = proplists:get_value(rabbitmq_management, ErlNodeCnf, []),
+    proplists:get_value(path_prefix, MgmtCnf, "").
 
 auth_header(Username, Password) ->
     {"Authorization",
