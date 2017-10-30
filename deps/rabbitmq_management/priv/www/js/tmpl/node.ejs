@@ -108,10 +108,7 @@
       </th>
       <td>
 <% if (node.mem_limit != 'memory_monitoring_disabled') { %>
-   <%= node_stat_memory(
-                 'mem_used', 'Used', 
-                 'erlang_mem_total', 'Erlang total',
-                 'mem_limit', 'high watermark', node,
+   <%= node_stat('mem_used', 'Used', 'mem_limit', 'high watermark', node,
                  fmt_bytes, fmt_bytes_axis,
                  node.mem_alarm ? 'red' : 'green',
                  node.mem_alarm ? 'memory-alarm' : null) %>
