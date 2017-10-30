@@ -54,7 +54,6 @@ module(#amqqueue{} = Q) ->
         undefined -> no_location_strategy;
         Mode      -> module(Mode)
     end;
-
 module(Strategy) when is_binary(Strategy) ->
     case rabbit_registry:binary_to_type(Strategy) of
         {error, not_found} -> no_location_strategy;
@@ -68,4 +67,6 @@ module(Strategy) when is_binary(Strategy) ->
                 _            ->
                     no_location_strategy
             end
-    end.
+    end;
+module(Strategy) ->
+    module(rabbit_data_coercion:to_binary(Strategy)).
