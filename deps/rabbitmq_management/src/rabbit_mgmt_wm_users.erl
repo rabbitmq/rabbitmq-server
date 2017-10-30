@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_wm_users).
 
--export([init/3, rest_init/2, to_json/2,
+-export([init/2, to_json/2,
          content_types_provided/2,
          is_authorized/2, allowed_methods/2]).
 -export([variances/2]).
@@ -29,10 +29,8 @@
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
-rest_init(Req, [Mode]) ->
-    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), {Mode, #context{}}}.
+init(Req, [Mode]) ->
+    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), {Mode, #context{}}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.

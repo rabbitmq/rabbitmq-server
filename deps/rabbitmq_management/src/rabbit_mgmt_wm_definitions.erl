@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_wm_definitions).
 
--export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([content_types_accepted/2, allowed_methods/2, accept_json/2]).
 -export([accept_multipart/2]).
 -export([variances/2]).
@@ -31,10 +31,8 @@
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
-rest_init(Req, _Config) ->
-    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+init(Req, _State) ->
+    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
@@ -82,9 +80,9 @@ all_definitions(ReqData, Context) ->
          {queues,            Qs},
          {exchanges,         Xs},
          {bindings,          Bs}]),
-      case cowboy_req:qs_val(<<"download">>, ReqData) of
-          {undefined, _} -> ReqData;
-          {Filename, _}  -> rabbit_mgmt_util:set_resp_header(
+      case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
+          undefined -> ReqData;
+          Filename  -> rabbit_mgmt_util:set_resp_header(
                          <<"Content-Disposition">>,
                          "attachment; filename=" ++
                              binary_to_list(Filename), ReqData)
@@ -92,7 +90,7 @@ all_definitions(ReqData, Context) ->
       Context).
 
 accept_json(ReqData0, Context) ->
-    {ok, Body, ReqData} = cowboy_req:body(ReqData0),
+    {ok, Body, ReqData} = cowboy_req:read_body(ReqData0),
     accept(Body, ReqData, Context).
 
 vhost_definitions(ReqData, Context) ->
@@ -112,9 +110,9 @@ vhost_definitions(ReqData, Context) ->
              {queues,      Qs},
              {exchanges,   Xs},
              {bindings,    Bs}]),
-      case cowboy_req:qs_val(<<"download">>, ReqData) of
-          {undefined, _} -> ReqData;
-          {Filename, _}  -> rabbit_mgmt_util:set_resp_header(
+      case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
+          undefined -> ReqData;
+          Filename  -> rabbit_mgmt_util:set_resp_header(
                          "Content-Disposition",
                          "attachment; filename=" ++
                              binary_to_list(Filename), ReqData)
@@ -133,9 +131,9 @@ accept_multipart(ReqData0, Context) ->
     end.
 
 is_authorized(ReqData, Context) ->
-    case cowboy_req:qs_val(<<"auth">>, ReqData) of
-        {undefined, _} -> rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
-        {Auth, _}      -> is_authorized_qs(ReqData, Context, Auth)
+    case rabbit_mgmt_util:qs_val(<<"auth">>, ReqData) of
+        undefined -> rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
+        Auth      -> is_authorized_qs(ReqData, Context, Auth)
     end.
 
 %% Support for the web UI - it can't add a normal "authorization"
@@ -244,15 +242,15 @@ get_all_parts(ReqData) ->
     get_all_parts(ReqData, []).
 
 get_all_parts(ReqData0, Acc) ->
-    case cowboy_req:part(ReqData0) of
+    case cowboy_req:read_part(ReqData0) of
         {done, ReqData} ->
             {Acc, ReqData};
         {ok, Headers, ReqData1} ->
             Name = case cow_multipart:form_data(Headers) of
                 {data, N} -> N;
-                {file, N, _, _, _} -> N
+                {file, N, _, _} -> N
             end,
-            {ok, Body, ReqData} = cowboy_req:part_body(ReqData1),
+            {ok, Body, ReqData} = cowboy_req:read_part_body(ReqData1),
             get_all_parts(ReqData, [{Name, Body}|Acc])
     end.
 

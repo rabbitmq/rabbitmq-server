@@ -39,33 +39,25 @@
 <% if (overview.object_totals) { %>
   <h3>Global counts <span class="help" id="resource-counts"></span></h3>
 
-  <div class="box">
-    <div class="micro-highlight">
-      <a href="#/connections">
-        Connections: <strong><%= overview.object_totals.connections %></strong>
-      </a>
-    </div>
-    <div class="micro-highlight">
-      <a href="#/channels">
-        Channels: <strong><%= overview.object_totals.channels %></strong>
-      </a>
-    </div>
-    <div class="micro-highlight">
-      <a href="#/exchanges">
-        Exchanges: <strong><%= overview.object_totals.exchanges %></strong>
-      </a>
-    </div>
-    <div class="micro-highlight">
-      <a href="#/queues">
-        Queues: <strong><%= overview.object_totals.queues %></strong>
-      </a>
-    </div>
-<% if (overview.object_totals['consumers'] != undefined) { %>    <tr>
-    <div class="micro-highlight">
-      Consumers: <strong><%= overview.object_totals.consumers %></strong>
-    </div>
+  <ul id="global-counts">
+    <li>
+      <a href="#/connections" class="button">Connections: <strong><%= overview.object_totals.connections %></strong></a>
+    </li>
+    <li>
+      <a href="#/channels" class="button">Channels: <strong><%= overview.object_totals.channels %></strong></a>
+    </li>
+    <li>
+      <a href="#/exchanges" class="button">Exchanges: <strong><%= overview.object_totals.exchanges %></strong></a>
+    </li>
+    <li>
+      <a href="#/queues" class="button">Queues: <strong><%= overview.object_totals.queues %></strong></a>
+    </li>
+<% if (overview.object_totals['consumers'] != undefined) { %>
+    <li>
+      <a href="#" class="button disabled">Consumers: <strong><%= overview.object_totals.consumers %></strong></a>
+    </li>
 <% } %>
-  </div>
+  </ul>
 <% } %>
 
 </div>
@@ -73,23 +65,13 @@
 
 <% if (user_monitor) { %>
 <div class="section">
-<% if (nodes.length == 1) { %>
-<h2>Node</h2>
-<% } else { %>
 <h2>Nodes</h2>
-<% } %>
 
 <div class="hider updatable">
-<% if (nodes.length == 1) { %>
-    <p>Node: <%= fmt_node(nodes[0].name) %> <a href="#/nodes/<%= esc(nodes[0].name) %>">(More about this node)</a></p>
-<% } %>
 
 <table class="list">
   <tr>
-<% if (nodes.length > 1) { %>
     <th>Name</th>
-<% } %>
-
   <% if (show_column('overview', 'file_descriptors')) { %>
     <th>File descriptors <span class="help" id="file-descriptors"></span></th>
   <% } %>
@@ -108,14 +90,11 @@
   <% if (show_column('overview', 'uptime')) { %>
     <th>Uptime</th>
   <% } %>
-  <% if (show_column('overview', 'rates_mode')) { %>
-    <th>Rates mode</th>
-  <% } %>
   <% if (show_column('overview', 'info')) { %>
     <th>Info</th>
   <% } %>
-  <% if (user_administrator) { %>
-    <th>Reset stats DB</th>
+  <% if (user_administrator && show_column('overview', 'reset_stats')) { %>
+    <th>Reset stats</th>
   <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="overview">+/-</span></th>
   </tr>
@@ -126,14 +105,12 @@
                    group_count('overview', 'General', []);
 %>
    <tr<%= alt_rows(i)%>>
-<% if (nodes.length > 1) { %>
      <td>
-       <%= link_node(node.name) %>
+       <a href="#/nodes/<%= esc(node.name) %>" class="button"><%= fmt_node(node.name) %></a>
        <% if (rabbit_versions_interesting) { %>
          <sub>RabbitMQ <%= fmt_rabbit_version(node.applications) %></sub>
        <% } %>
      </td>
-<% } %>
 <% if (!node.running) { %>
      <td colspan="<%= colspan %>">
        <div class="status-red">
@@ -143,8 +120,8 @@
 <% } else if (node.os_pid == undefined) { %>
      <td colspan="<%= colspan %>">
        <div class="status-yellow">
-         <acronym title="The rabbitmq_management_agent plugin should be enabled on this node. If it is not, various statistics will be inaccurate.">
-           Node statistics not available</acronym>
+         <abbr title="The rabbitmq_management_agent plugin should be enabled on this node. If it is not, various statistics will be inaccurate.">
+           Node statistics not available</abbr>
        </div>
      </td>
 <% } else { %>
@@ -194,43 +171,33 @@
      </td>
   <% } %>
   <% if (show_column('overview', 'uptime')) { %>
-     <td class="r"><%= fmt_uptime(node.uptime) %></td>
-  <% } %>
-  <% if (show_column('overview', 'rates_mode')) { %>
-     <td class="c"><%= fmt_string(node.rates_mode) %></td>
+     <td><span><%= fmt_uptime(node.uptime) %></span></td>
   <% } %>
   <% if (show_column('overview', 'info')) { %>
-     <td class="c">
+     <td>
+         <abbr title="Message rates"><%= fmt_string(node.rates_mode) %></abbr>
        <% if (node.type == 'disc') { %>
-         <acronym title="Broker definitions are held on disc.">Disc</acronym>
+         <abbr title="Broker definitions are held on disc.">disc</abbr>
        <% } else { %>
-         <acronym title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
+         <abbr title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</abbr>
        <% } %>
        <%= fmt_plugins_small(node) %>
      </td>
   <% } %>
-  <% if(user_administrator) { %>
+  <% if(user_administrator && show_column('overview', 'reset_stats')) { %>
     <td>
-        <form action="#/reset_node" method="delete" class="confirm">
-            <input type="hidden" name="node" value="<%= node.name %>"/>
-            <input type="submit" value="Reset"/>
-        </form>
+      <form action="#/reset_node" method="delete" class="confirm inline-form">
+        <input type="hidden" name="node" value="<%= node.name %>"/>
+        <input type="submit" value="This node"/>
+      </form>
+      <form action="#/reset" method="delete" class="confirm inline-form-right">
+          <input type="submit" value="All nodes"/>
+      </form>
   <% } %>
 <% } %>
    </tr>
 <% } %>
 </table>
-
-<p>
-    <form action="#/reset" method="delete" class="confirm">
-        <input type="submit" value="Reset stats on all nodes"/>
-    </form>
-</p>
-
-<% if (nodes.length == 1 && nodes[0].os_pid != undefined) { %>
-    <h3>Paths</h3>
-    <%= format('paths', {node: nodes[0]}) %>
-<% } %>
 
 </div>
 </div>

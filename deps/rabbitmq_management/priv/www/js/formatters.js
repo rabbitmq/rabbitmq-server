@@ -82,22 +82,20 @@ function fmt_features(obj) {
 }
 
 function fmt_policy_short(obj) {
-    var policy = obj.policy;
-    if (policy != undefined && policy != '') {
-        return '<acronym class="policy" title="Policy: ' +
-            fmt_escape_html(policy) + '">' +
-            fmt_escape_html(policy) + '</acronym> ';
+    if (obj.policy != undefined && obj.policy != '') {
+        return '<abbr class="policy" title="Policy: ' +
+            fmt_escape_html(obj.policy) + '">' +
+            link_policy(obj.vhost, obj.policy) + '</abbr> ';
     } else {
         return '';
     }
 }
 
 function fmt_op_policy_short(obj) {
-    var op_policy = obj.operator_policy;
-    if (op_policy != undefined && op_policy != '') {
-        return '<acronym class="policy" title="Operator policy: ' +
-            fmt_escape_html(op_policy) + '">' +
-            fmt_escape_html(op_policy) + '</acronym> ';
+    if (obj.operator_policy != undefined && obj.operator_policy != '') {
+        return '<abbr class="policy" title="Operator policy: ' +
+            fmt_escape_html(obj.operator_policy) + '">' +
+            fmt_escape_html(obj.operator_policy) + '</abbr> ';
     } else {
         return '';
     }
@@ -109,14 +107,14 @@ function fmt_features_short(obj) {
 
     for (var k in ALL_ARGS) {
         if (features[k] != undefined) {
-            res += '<acronym title="' + k + ': ' + fmt_string(features[k]) +
-                '">' + ALL_ARGS[k].short + '</acronym> ';
+            res += '<abbr title="' + k + ': ' + fmt_string(features[k]) +
+                '">' + ALL_ARGS[k].short + '</abbr> ';
         }
     }
 
     if (features.arguments) {
-        res += '<acronym title="' + fmt_table_flat(features.arguments) +
-        '">Args</acronym> ';
+        res += '<abbr title="' + fmt_table_flat(features.arguments) +
+        '">Args</abbr> ';
     }
     return res;
 }
@@ -171,15 +169,15 @@ function fmt_mirrors(queue) {
                            });
     var res = '';
     if (synced.length > 0) {
-        res += ' <acronym title="Synchronised mirrors: ' + synced + '">+' +
-            synced.length + '</acronym>';
+        res += ' <abbr title="Synchronised mirrors: ' + synced + '">+' +
+            synced.length + '</abbr>';
     }
     if (synced.length == 0 && unsynced.length > 0) {
-        res += ' <acronym title="There are no synchronised mirrors">+0</acronym>';
+        res += ' <abbr title="There are no synchronised mirrors">+0</abbr>';
     }
     if (unsynced.length > 0) {
-        res += ' <acronym class="warning" title="Unsynchronised mirrors: ' +
-            unsynced + '">+' + unsynced.length + '</acronym>';
+        res += ' <abbr class="warning" title="Unsynchronised mirrors: ' +
+            unsynced + '">+' + unsynced.length + '</abbr>';
     }
     return res;
 }
@@ -194,10 +192,10 @@ function fmt_sync_state(queue) {
 
 function fmt_channel_mode(ch) {
     if (ch.transactional) {
-        return '<acronym title="Transactional">T</acronym>';
+        return '<abbr title="Transactional">T</abbr>';
     }
     else if (ch.confirm) {
-        return '<acronym title="Confirm">C</acronym>';
+        return '<abbr title="Confirm">C</abbr>';
     }
     else {
         return '';
@@ -332,9 +330,9 @@ function fmt_exchange_type(type) {
             return fmt_escape_html(type);
         }
     }
-    return '<div class="status-red"><acronym title="Exchange type not found. ' +
+    return '<div class="status-red"><abbr title="Exchange type not found. ' +
         'Publishing to this exchange will fail.">' + fmt_escape_html(type) +
-        '</acronym></div>';
+        '</abbr></div>';
 }
 
 function fmt_exchange_url(name) {
@@ -377,10 +375,10 @@ function fmt_amqp_value(val) {
     } else {
         var t = typeof(val);
         if (t == 'string') {
-            return '<acronym class="type" title="string">' +
-                fmt_escape_html(val) + '</acronym>';
+            return '<abbr class="type" title="string">' +
+                fmt_escape_html(val) + '</abbr>';
         } else {
-            return '<acronym class="type" title="' + t + '">' + val + '</acronym>';
+            return '<abbr class="type" title="' + t + '">' + val + '</abbr>';
         }
     }
 }
@@ -433,8 +431,8 @@ function fmt_plugins_small(node) {
             plugins.push(application.name);
         }
     }
-    return '<acronym title="Plugins: ' + plugins.join(", ") + '">' +
-        plugins.length + '</acronym>';
+    return '<abbr title="Enabled plugins: ' + plugins.join(", ") + '">' +
+        plugins.length + '</abbr>';
 }
 
 function get_plugins_list(node) {
@@ -559,8 +557,8 @@ function fmt_object_state(obj) {
 function fmt_state(colour, text, explanation) {
     var key;
     if (explanation) {
-        key = '<acronym class="normal" title="' + explanation + '">' +
-            text + '</acronym>';
+        key = '<abbr class="normal" title="' + explanation + '">' +
+            text + '</abbr>';
     }
     else {
         key = text;
@@ -582,8 +580,8 @@ function fmt_shortened_uri(uri) {
         return uri;
     }
     else {
-        return '<acronym title="' + uri + '">' +
-            uri.substr(0, uri.indexOf('?')) + '?...</acronym>';
+        return '<abbr title="' + uri + '">' +
+            uri.substr(0, uri.indexOf('?')) + '?...</abbr>';
     }
 }
 
@@ -615,8 +613,8 @@ function fmt_client_name(properties) {
 
 function fmt_trunc(str, max_length) {
     return str.length > max_length ?
-        ('<acronym class="normal" title="' + fmt_escape_html(str) + '">' +
-         fmt_escape_html(str.substring(0, max_length)) + '...</acronym>') :
+        ('<abbr class="normal" title="' + fmt_escape_html(str) + '">' +
+         fmt_escape_html(str.substring(0, max_length)) + '...</abbr>') :
         fmt_escape_html(str);
 }
 
@@ -731,7 +729,7 @@ function filter_ui_pg(items, truncate, appendselect) {
         fmt_escape_html(current_filter) + '"/>' +
         '<input type="checkbox" name="filter-regex-mode" id="filter-regex-mode"' +
         (current_filter_regex_on ? ' checked' : '') +
-        '/><label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span>' +
+        '/><label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex"></span>' +
         '</td></tr></table>';
 
     function items_desc(l) {
@@ -805,7 +803,7 @@ function pagiante_ui(pages, context){
 
     res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class pagination_class_checkbox" id="'+ context +'-filter-regex-mode"' ;
 
-    res += fmt_regex_request(context, "") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>' ;
+    res += fmt_regex_request(context, "") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex"></span></th>' ;
 
     res +=' </table>' ;
     res += '<p id="filter-truncate"><span class="updatable">';

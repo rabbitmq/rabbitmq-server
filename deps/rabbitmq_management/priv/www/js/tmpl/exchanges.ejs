@@ -58,7 +58,7 @@
 <% } %>
 <% if (show_column('exchanges', 'policy')) { %>
    <td class="c">
-     <%= fmt_string(exchange.policy) %>
+     <%= link_policy(exchange.vhost, exchange.policy) %>
    </td>
 <% } %>
 <% if (rates_mode != 'none') { %>
@@ -151,7 +151,8 @@
               <tr>
                 <td>Add</td>
                 <td>
-                  <span class="argument-link" field="arguments" key="alternate-exchange" type="string">Alternate exchange <span class="help" id="exchange-alternate"></span>
+                  <span class="argument-link" field="arguments" key="alternate-exchange" type="string">Alternate exchange</span>
+                  <span class="help" id="exchange-alternate"></span>
                 </td>
               </tr>
             </table>

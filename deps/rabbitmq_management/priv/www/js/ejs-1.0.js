@@ -1,5 +1,5 @@
 (function(){
-    
+
 
 var rsplit = function(string, regex) {
 	var result = regex.exec(string),retArr = new Array(), first_idx, last_idx, first_bit;
@@ -11,10 +11,10 @@ var rsplit = function(string, regex) {
 			first_bit = string.substring(0,first_idx);
 			retArr.push(string.substring(0,first_idx));
 			string = string.slice(first_idx);
-		}		
+		}
 		retArr.push(result[0]);
 		string = string.slice(result[0].length);
-		result = regex.exec(string);	
+		result = regex.exec(string);
 	}
 	if (! string == '')
 	{
@@ -76,7 +76,7 @@ EJS = function( options ){
 
 	template.compile(options, this.name);
 
-	
+
 	EJS.update(this.name, this);
 	this.template = template;
 };
@@ -145,7 +145,7 @@ EJS.endExt = function(path, match){
 
 /* @Static*/
 EJS.Scanner = function(source, left, right) {
-	
+
     extend(this,
         {left_delimiter: 	left +'%',
          right_delimiter: 	'%'+right,
@@ -155,7 +155,7 @@ EJS.Scanner = function(source, left, right) {
          left_comment: 	left+'%#'})
 
 	this.SplitRegexp = left=='[' ? /(\[%%)|(%%\])|(\[%=)|(\[%#)|(\[%)|(%\]\n)|(%\])|(\n)/ : new RegExp('('+this.double_left+')|(%%'+this.double_right+')|('+this.left_equal+')|('+this.left_comment+')|('+this.left_delimiter+')|('+this.right_delimiter+'\n)|('+this.right_delimiter+')|(\n)') ;
-	
+
 	this.source = source;
 	this.stag = null;
 	this.lines = 0;
@@ -166,7 +166,7 @@ EJS.Scanner.to_text = function(input){
         return '';
     if(input instanceof Date)
 		return input.toDateString();
-	if(input.toString) 
+	if(input.toString)
         return input.toString();
 	return '';
 };
@@ -177,9 +177,9 @@ EJS.Scanner.prototype = {
 	 regex = this.SplitRegexp;
 	 if (! this.source == '')
 	 {
-	 	 var source_split = rsplit(this.source, /\n/);
-	 	 for(var i=0; i<source_split.length; i++) {
-		 	 var item = source_split[i];
+		 var source_split = rsplit(this.source, /\n/);
+		 for(var i=0; i<source_split.length; i++) {
+			 var item = source_split[i];
 			 this.scanline(item, regex, block);
 		 }
 	 }
@@ -187,12 +187,12 @@ EJS.Scanner.prototype = {
   scanline: function(line, regex, block) {
 	 this.lines++;
 	 var line_split = rsplit(line, regex);
- 	 for(var i=0; i<line_split.length; i++) {
+	 for(var i=0; i<line_split.length; i++) {
 	   var token = line_split[i];
        if (token != null) {
-		   	try{
-	         	block(token, this);
-		 	}catch(e){
+			try{
+			block(token, this);
+			}catch(e){
 				throw {type: 'EJS.Scanner', line: this.lines};
 			}
        }
@@ -212,7 +212,7 @@ EJS.Buffer = function(pre_cmd, post_cmd) {
 	}
 };
 EJS.Buffer.prototype = {
-	
+
   push: function(cmd) {
 	this.line.push(cmd);
   },
@@ -233,14 +233,14 @@ EJS.Buffer.prototype = {
 		line = null;
 	}
   }
- 	
+
 };
 
 
 EJS.Compiler = function(source, left) {
     this.pre_cmd = ['var ___ViewO = [];'];
 	this.post_cmd = new Array();
-	this.source = ' ';	
+	this.source = ' ';
 	if (source != null)
 	{
 		if (typeof source == 'string')
@@ -250,7 +250,7 @@ EJS.Compiler = function(source, left) {
 			this.source = source;
 		}else if (source.innerHTML){
 			this.source = source.innerHTML;
-		} 
+		}
 		if (typeof this.source != 'string'){
 			this.source = "";
 		}
@@ -272,11 +272,11 @@ EJS.Compiler = function(source, left) {
 };
 EJS.Compiler.prototype = {
   compile: function(options, name) {
-  	options = options || {};
+	options = options || {};
 	this.out = '';
 	var put_cmd = "___ViewO.push(";
 	var insert_cmd = put_cmd;
-	var buff = new EJS.Buffer(this.pre_cmd, this.post_cmd);		
+	var buff = new EJS.Buffer(this.pre_cmd, this.post_cmd);
 	var content = '';
 	var clean = function(content)
 	{
@@ -352,7 +352,7 @@ EJS.Compiler.prototype = {
 	buff.close();
 	this.out = buff.script + ";";
 	var to_be_evaled = '/*'+name+'*/this.process = function(_CONTEXT,_VIEW) { try { with(_VIEW) { with (_CONTEXT) {'+this.out+" return ___ViewO.join('');}}}catch(e){e.lineNumber=null;throw e;}};";
-	
+
 	try{
 		eval(to_be_evaled);
 	}catch(e){
@@ -397,26 +397,26 @@ EJS.Compiler.prototype = {
 					</td>
 				</tr>
 	</tbody></table>
- * 
+ *
  */
 EJS.config = function(options){
 	EJS.cache = options.cache != null ? options.cache : EJS.cache;
 	EJS.type = options.type != null ? options.type : EJS.type;
 	EJS.ext = options.ext != null ? options.ext : EJS.ext;
-	
+
 	var templates_directory = EJS.templates_directory || {}; //nice and private container
 	EJS.templates_directory = templates_directory;
 	EJS.get = function(path, cache){
 		if(cache == false) return null;
 		if(templates_directory[path]) return templates_directory[path];
-  		return null;
+		return null;
 	};
-	
-	EJS.update = function(path, template) { 
+
+	EJS.update = function(path, template) {
 		if(path == null) return;
 		templates_directory[path] = template ;
 	};
-	
+
 	EJS.INVALID_PATH =  -1;
 };
 EJS.config( {cache: true, type: '<', ext: '.ejs' } );
@@ -425,7 +425,7 @@ EJS.config( {cache: true, type: '<', ext: '.ejs' } );
 
 /**
  * @constructor
- * By adding functions to EJS.Helpers.prototype, those functions will be available in the 
+ * By adding functions to EJS.Helpers.prototype, those functions will be available in the
  * views.
  * @init Creates a view helper.  This function is called internally.  You should never call it.
  * @param {Object} data The data passed to the view.  Helpers have access to it through this._data
@@ -452,7 +452,7 @@ EJS.Helpers.prototype = {
      * For a given value, tries to create a human representation.
      * @param {Object} input the value being converted.
      * @param {Object} null_text what text should be present if input == null or undefined, defaults to ''
-     * @return {String} 
+     * @return {String}
      */
 	to_text: function(input, null_text) {
 	    if(input == null || input === undefined) return null_text || '';
@@ -471,21 +471,21 @@ EJS.Helpers.prototype = {
 	        catch(e) { continue;}
 	   }
 	}
-	
+
 	EJS.request = function(path){
 	   var request = new EJS.newRequest()
 	   request.open("GET", path, false);
-	   
+
 	   try{request.send(null);}
 	   catch(e){return null;}
-	   
+
 	   if ( request.status == 404 || request.status == 2 ||(request.status == 0 && request.responseText == '') ) return null;
-	   
+
 	   return request.responseText
 	}
 	EJS.ajax_request = function(params){
 		params.method = ( params.method ? params.method : 'GET')
-		
+
 		var request = new EJS.newRequest();
 		request.onreadystatechange = function(){
 			if(request.readyState == 4){

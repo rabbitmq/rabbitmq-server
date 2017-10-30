@@ -1,0 +1,5 @@
+:2015
+log stdout
+errors stderr
+root priv/www
+proxy /api localhost:15672

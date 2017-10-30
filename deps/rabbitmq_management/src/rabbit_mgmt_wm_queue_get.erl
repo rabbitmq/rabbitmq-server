@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_wm_queue_get).
 
--export([init/3, rest_init/2, resource_exists/2, is_authorized/2,
+-export([init/2, resource_exists/2, is_authorized/2,
   allowed_methods/2, accept_content/2, content_types_provided/2,
   content_types_accepted/2]).
 -export([variances/2]).
@@ -26,10 +26,8 @@
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
-rest_init(Req, _Config) ->
-    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+init(Req, _State) ->
+    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
@@ -73,10 +71,10 @@ do_it(ReqData0, Context) ->
                                     TruncBin  -> rabbit_mgmt_util:parse_int(
                                                    TruncBin)
                                 end,
-                        
-                        Reply = basic_gets(Count, Ch, Q, AckMode, Enc, Trunc),  
+
+                        Reply = basic_gets(Count, Ch, Q, AckMode, Enc, Trunc),
                         maybe_rejects(Reply, Ch, AckMode),
-                        rabbit_mgmt_util:reply(remove_delivery_tag(Reply), 
+                        rabbit_mgmt_util:reply(remove_delivery_tag(Reply),
 					       ReqData, Context)
                 end)
       end).
@@ -104,11 +102,11 @@ parse_ackmode(reject_requeue_false) -> false;
 parse_ackmode(reject_requeue_true) -> false.
 
 
-% the messages must rejects later, 
-% because we get always the same message if the  
-% messages are requeued inside basic_get/5 
-maybe_rejects(R, Ch, AckMode) -> 
-    lists:foreach(fun(X) -> 
+% the messages must rejects later,
+% because we get always the same message if the
+% messages are requeued inside basic_get/5
+maybe_rejects(R, Ch, AckMode) ->
+    lists:foreach(fun(X) ->
 			  maybe_reject(Ch, AckMode,
 				       proplists:get_value(delivery_tag, X))
 		  end, R).
@@ -116,20 +114,20 @@ maybe_rejects(R, Ch, AckMode) ->
 % removes the delivery_tag from the reply.
 % it is not necessary
 remove_delivery_tag([])    -> [];
-remove_delivery_tag([H|T]) -> 
-    [proplists:delete(delivery_tag, H) | [X || X <- remove_delivery_tag(T)]]. 
+remove_delivery_tag([H|T]) ->
+    [proplists:delete(delivery_tag, H) | [X || X <- remove_delivery_tag(T)]].
 
 
 maybe_reject(Ch, AckMode, DeliveryTag) when AckMode == reject_requeue_true;
-					    AckMode == reject_requeue_false -> 
-    amqp_channel:call(Ch, 
+					    AckMode == reject_requeue_false ->
+    amqp_channel:call(Ch,
 		      #'basic.reject'{delivery_tag = DeliveryTag,
 				      requeue = ackmode_to_requeue(AckMode)});
 maybe_reject(_Ch, _AckMode, _DeliveryTag) -> ok.
 
 
-basic_get(Ch, Q, AckMode, Enc, Trunc) -> 
-    case amqp_channel:call(Ch, 
+basic_get(Ch, Q, AckMode, Enc, Trunc) ->
+    case amqp_channel:call(Ch,
 			   #'basic.get'{queue = Q,
 					no_ack = parse_ackmode(AckMode)}) of
         {#'basic.get_ok'{redelivered   = Redelivered,
