@@ -126,6 +126,22 @@ function node_stat(used_key, used_name, limit_key, suffix, stats, fmt,
     }
 }
 
+function node_stat_memory(used_key, used_name, erlang_total_key, erlang_total_name,
+                   limit_key, suffix, stats, fmt,
+                   axis_fmt, colour, help, invert) {
+    if (get_pref('rate-mode-node-stats') == 'chart') {
+        var items = [[used_name, used_key],
+                     [erlang_total_name, erlang_total_key],
+                     ['Limit', limit_key]];
+        add_fake_limit_details(used_key, limit_key, stats);
+        return rates_chart('node-stats', 'node-stats-' + used_key, items, stats,
+                           fmt, axis_fmt, 'node_memory', false);
+    } else {
+        return node_stat_bar(used_key, limit_key, suffix, stats, axis_fmt,
+                             colour, help, invert);
+    }
+}
+
 function add_fake_limit_details(used_key, limit_key, stats) {
     var source = stats[used_key + '_details'].samples;
     var limit = stats[limit_key];
@@ -252,7 +268,8 @@ function render_charts() {
 
 var chart_colors = {full: ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666666', '#aaaaaa', 
                            '#7c79c3', '#8e6767', '#67808e', '#e5e4ae', '#4b4a55', '#bba0c1'],
-                    node: ['#6ae26a', '#e24545']};
+                    node: ['#6ae26a', '#e24545'],
+                    node_memory: ['#6ae26a', '#9440ed', '#e24545']};
 
 var chart_chrome = {
     series: { lines: { show: true } },
@@ -273,7 +290,7 @@ function render_chart(div) {
     var data = chart_data[id]['data'];
     var fmt = chart_data[id]['fmt'];
 
-    var mode = div.hasClass('chart-full') ? 'full': 'node';
+    var mode = div.hasClass('chart-full') ? 'full' : div.hasClass('chart-node_memory') ? 'node_memory' : 'node';
     var colors = chart_colors[mode];
 
     for (var name in data) {

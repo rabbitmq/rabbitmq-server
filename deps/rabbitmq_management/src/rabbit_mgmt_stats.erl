@@ -128,14 +128,16 @@ append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
 append_full_sample(TS, {V1}, {S1}, {T1}) ->
     {{append_sample(V1, TS, S1)}, {V1 + T1}};
 %% node_coarse_stats
-append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7, V8},
-           {S1, S2, S3, S4, S5, S6, S7, S8},
-           {T1, T2, T3, T4, T5, T6, T7, T8}) ->
+append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7, V8, V9},
+           {S1, S2, S3, S4, S5, S6, S7, S8, S9},
+           {T1, T2, T3, T4, T5, T6, T7, T8, T9}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2),
       append_sample(V3, TS, S3), append_sample(V4, TS, S4),
       append_sample(V5, TS, S5), append_sample(V6, TS, S6),
-      append_sample(V7, TS, S7), append_sample(V8, TS, S8)},
-     {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7, V8 + T8}};
+      append_sample(V7, TS, S7), append_sample(V8, TS, S8),
+      append_sample(V9, TS, S9)},
+     {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5,
+      V6 + T6, V7 + T7, V8 + T8, V9 + T9}};
 %% node_persister_stats
 append_full_sample(TS,
            {V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14,
@@ -254,11 +256,13 @@ format_rate(Type, {TR, TU, TM}, {RR, RU, RM}) when Type =:= queue_msg_stats;
      {messages, TM},
      {messages_details, [{rate, RM}]}
     ];
-format_rate(node_coarse_stats, {TF, TS, TM, TD, TP, TGC, TGCW, TCS},
-            {RF, RS, RM, RD, RP, RGC, RGCW, RCS}) ->
+format_rate(node_coarse_stats, {TF, TS, TM, TEMT, TD, TP, TGC, TGCW, TCS},
+            {RF, RS, RM, REMT, RD, RP, RGC, RGCW, RCS}) ->
     [
      {mem_used, TM},
      {mem_used_details, [{rate, RM}]},
+     {erlang_mem_total, TEMT},
+     {erlang_mem_total_details, [{rate, REMT}]},
      {fd_used, TF},
      {fd_used_details, [{rate, RF}]},
      {sockets_used, TS},
@@ -458,14 +462,17 @@ format_rate(Type, {TR, TU, TM}, {RR, RU, RM}, {SR, SU, SM}, {STR, STU, STM},
      {messages_details, [{rate, RM},
              {samples, SM}] ++ average(SM, STM, Length)}
     ];
-format_rate(node_coarse_stats, {TF, TS, TM, TD, TP, TGC, TGCW, TCS},
-            {RF, RS, RM, RD, RP, RGC, RGCW, RCS},
-        {SF, SS, SM, SD, SP, SGC, SGCW, SCS},
-        {STF, STS, STM, STD, STP, STGC, STGCW, STCS}, Length) ->
+format_rate(node_coarse_stats, {TF, TS, TM, TEMT, TD, TP, TGC, TGCW, TCS},
+            {RF, RS, RM, REMT, RD, RP, RGC, RGCW, RCS},
+        {SF, SS, SM, SEMT, SD, SP, SGC, SGCW, SCS},
+        {STF, STS, STM, STEMT, STD, STP, STGC, STGCW, STCS}, Length) ->
     [
      {mem_used, TM},
      {mem_used_details, [{rate, RM},
              {samples, SM}] ++ average(SM, STM, Length)},
+     {erlang_mem_total, TEMT},
+     {erlang_mem_total_details, [{rate, REMT},
+             {samples, SEMT}] ++ average(SEMT, STEMT, Length)},
      {fd_used, TF},
      {fd_used_details, [{rate, RF},
             {samples, SF}] ++ average(SF, STF, Length)},
@@ -623,12 +630,12 @@ rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6}},
     {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval),
      rate(A3, B3, Interval), rate(A4, B4, Interval), rate(A5, B5, Interval),
      rate(A6, B6, Interval)};
-rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6, A7}},
-             {TS1, {B0, B1, B2, B3, B4, B5, B6, B7}}) ->
+rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6, A7, A8}},
+             {TS1, {B0, B1, B2, B3, B4, B5, B6, B7, B8}}) ->
     Interval = TS0 - TS1,
     {rate(A0, B0, Interval), rate(A1, B1, Interval), rate(A2, B2, Interval),
      rate(A3, B3, Interval), rate(A4, B4, Interval), rate(A5, B5, Interval),
-     rate(A6, B6, Interval), rate(A7, B7, Interval)};
+     rate(A6, B6, Interval), rate(A7, B7, Interval), rate(A8, B8, Interval)};
 rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13,
                 A14, A15, A16, A17, A18, A19}},
              {TS1, {B0, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13,
