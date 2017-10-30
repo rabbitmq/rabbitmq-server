@@ -312,6 +312,11 @@ publish(IncomingTag, Method, Msg,
               rabbit_shovel_behaviour:decr_remaining(1, State1)
       end).
 
+make_conn_and_chan([], {VHost, Name} = _ShovelName) ->
+    rabbit_log:error(
+          "Shovel '~s' in vhost '~s' has no more URIs to try for connection and will terminate~n",
+          [Name, VHost]),
+    erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan([], ShovelName) ->
     rabbit_log:error(
           "Shovel '~s' has no more URIs to try for connection and will terminate~n",
