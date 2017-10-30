@@ -57,7 +57,7 @@
          pid_change_node/2, node_to_fake_pid/1]).
 -export([version_compare/2, version_compare/3]).
 -export([version_minor_equivalent/2]).
--export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
+-export([dict_cons/3, orddict_cons/3, maps_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
 -export([const/1]).
@@ -788,6 +788,9 @@ dict_cons(Key, Value, Dict) ->
 orddict_cons(Key, Value, Dict) ->
     orddict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
 
+maps_cons(Key, Value, Map) ->
+    maps:update_with(Key, fun (List) -> [Value | List] end, [Value], Map).
+
 gb_trees_cons(Key, Value, Tree) ->
     case gb_trees:lookup(Key, Tree) of
         {value, Values} -> gb_trees:update(Key, [Value | Values], Tree);
@@ -942,12 +945,13 @@ format_message_queue(_Opt, MQ) ->
      case Len > 100 of
          false -> priority_queue:to_list(MQ);
          true  -> {summary,
-                   orddict:to_list(
+                   maps:to_list(
                      lists:foldl(
                        fun ({P, V}, Counts) ->
-                               orddict:update_counter(
-                                 {P, format_message_queue_entry(V)}, 1, Counts)
-                       end, orddict:new(), priority_queue:to_list(MQ)))}
+                               maps:update_with(
+                                 {P, format_message_queue_entry(V)},
+                                 fun(Old) -> Old + 1 end, 1, Counts)
+                       end, maps:new(), priority_queue:to_list(MQ)))}
      end}.
 
 format_message_queue_entry(V) when is_atom(V) ->

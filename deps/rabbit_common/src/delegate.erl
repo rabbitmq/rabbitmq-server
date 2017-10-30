@@ -112,7 +112,7 @@ invoke(Pids, Name, FunOrMFA) when is_list(Pids) ->
     %% infinity, and thus there is no process spawned in order to do
     %% the sending. Thus calls can't overtake preceding calls/casts.
     {Replies, BadNodes} =
-        case orddict:fetch_keys(Grouped) of
+        case maps:keys(Grouped) of
             []          -> {[], []};
             RemoteNodes -> gen_server2:multi_call(
                              RemoteNodes, delegate(self(), Name, RemoteNodes),
@@ -120,7 +120,7 @@ invoke(Pids, Name, FunOrMFA) when is_list(Pids) ->
         end,
     BadPids = [{Pid, {exit, {nodedown, BadNode}, []}} ||
                   BadNode <- BadNodes,
-                  Pid     <- orddict:fetch(BadNode, Grouped)],
+                  Pid     <- maps:get(BadNode, Grouped)],
     ResultsNoNode = lists:append([safe_invoke(LocalPids, FunOrMFA) |
                                   [Results || {_Node, Results} <- Replies]]),
     lists:foldl(
@@ -159,7 +159,7 @@ invoke_no_result(Pid, FunOrMFA) when is_pid(Pid) ->
     RemoteNode  = node(Pid),
     gen_server2:abcast([RemoteNode], delegate(self(), ?DEFAULT_NAME, [RemoteNode]),
                        {invoke, FunOrMFA,
-                        orddict:from_list([{RemoteNode, [Pid]}])}),
+                        maps:from_list([{RemoteNode, [Pid]}])}),
     ok;
 invoke_no_result([], _FunOrMFA) -> %% optimisation
     ok;
@@ -170,11 +170,11 @@ invoke_no_result([Pid], FunOrMFA) ->
     RemoteNode  = node(Pid),
     gen_server2:abcast([RemoteNode], delegate(self(), ?DEFAULT_NAME, [RemoteNode]),
                        {invoke, FunOrMFA,
-                        orddict:from_list([{RemoteNode, [Pid]}])}),
+                        maps:from_list([{RemoteNode, [Pid]}])}),
     ok;
 invoke_no_result(Pids, FunOrMFA) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
-    case orddict:fetch_keys(Grouped) of
+    case maps:keys(Grouped) of
         []          -> ok;
         RemoteNodes -> gen_server2:abcast(
                          RemoteNodes, delegate(self(), ?DEFAULT_NAME, RemoteNodes),
@@ -192,9 +192,9 @@ group_pids_by_node(Pids) ->
               {[Pid | Local], Remote};
           (Pid, {Local, Remote}) ->
               {Local,
-               orddict:update(
+               maps:update_with(
                  node(Pid), fun (List) -> [Pid | List] end, [Pid], Remote)}
-      end, {[], orddict:new()}, Pids).
+      end, {[], maps:new()}, Pids).
 
 delegate_name(Name, Hash) ->
     list_to_atom(Name ++ integer_to_list(Hash)).
@@ -228,7 +228,7 @@ init([Name]) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call({invoke, FunOrMFA, Grouped}, _From, State = #state{node = Node}) ->
-    {reply, safe_invoke(orddict:fetch(Node, Grouped), FunOrMFA), State,
+    {reply, safe_invoke(maps:get(Node, Grouped), FunOrMFA), State,
      hibernate}.
 
 handle_cast({monitor, MonitoringPid, Pid},
@@ -260,7 +260,7 @@ handle_cast({demonitor, MonitoringPid, Pid},
     {noreply, State#state{monitors = Monitors1}, hibernate};
 
 handle_cast({invoke, FunOrMFA, Grouped}, State = #state{node = Node}) ->
-    _ = safe_invoke(orddict:fetch(Node, Grouped), FunOrMFA),
+    _ = safe_invoke(maps:get(Node, Grouped), FunOrMFA),
     {noreply, State, hibernate}.
 
 handle_info({'DOWN', Ref, process, Pid, Info},
