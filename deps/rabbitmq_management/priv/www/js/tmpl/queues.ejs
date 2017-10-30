@@ -116,7 +116,7 @@
    <td class="c"><%= fmt_features_short(queue) %></td>
 <% } %>
 <% if (show_column('queues', 'policy')) { %>
-   <td class="c"><%= fmt_string(queue.policy) %></td>
+   <td class="c"><%= link_policy(queue.vhost, queue.policy) %></td>
 <% } %>
 <% if (show_column('queues', 'consumers')) { %>
    <td class="c"><%= fmt_string(queue.consumers) %></td>
