@@ -1776,7 +1776,7 @@ remove_queue_entries(Q, DelsAndAcksFun,
                      State = #vqstate{msg_store_clients = MSCState}) ->
     {MsgIdsByStore, Delivers, Acks, State1} =
         ?QUEUE:foldl(fun remove_queue_entries1/2,
-                     {orddict:new(), [], [], State}, Q),
+                     {maps:new(), [], [], State}, Q),
     remove_msgs_by_id(MsgIdsByStore, MSCState),
     DelsAndAcksFun(Delivers, Acks, State1).
 
@@ -1786,7 +1786,7 @@ remove_queue_entries1(
                 is_persistent = IsPersistent} = MsgStatus,
   {MsgIdsByStore, Delivers, Acks, State}) ->
     {case MsgInStore of
-         true  -> rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore);
+         true  -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
          false -> MsgIdsByStore
      end,
      cons_if(IndexOnDisk andalso not IsDelivered, SeqId, Delivers),
@@ -2143,27 +2143,27 @@ purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
                               qi_pending_ack   = gb_trees:empty()},
     {IndexOnDiskSeqIds, MsgIdsByStore, State1}.
 
-%% MsgIdsByStore is an orddict with two keys:
+%% MsgIdsByStore is an map with two keys:
 %%
 %% true: holds a list of Persistent Message Ids.
 %% false: holds a list of Transient Message Ids.
 %%
-%% When we call orddict:to_list/1 we get two sets of msg ids, where
+%% When we call maps:to_list/1 we get two sets of msg ids, where
 %% IsPersistent is either true for persistent messages or false for
 %% transient ones. The msg_store_remove/3 function takes this boolean
 %% flag to determine from which store the messages should be removed
 %% from.
 remove_msgs_by_id(MsgIdsByStore, MSCState) ->
     [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
-     || {IsPersistent, MsgIds} <- orddict:to_list(MsgIdsByStore)].
+     || {IsPersistent, MsgIds} <- maps:to_list(MsgIdsByStore)].
 
 remove_transient_msgs_by_id(MsgIdsByStore, MSCState) ->
-    case orddict:find(false, MsgIdsByStore) of
+    case maps:find(false, MsgIdsByStore) of
         error        -> ok;
         {ok, MsgIds} -> ok = msg_store_remove(MSCState, false, MsgIds)
     end.
 
-accumulate_ack_init() -> {[], orddict:new(), []}.
+accumulate_ack_init() -> {[], maps:new(), []}.
 
 accumulate_ack(#msg_status { seq_id        = SeqId,
                              msg_id        = MsgId,
@@ -2173,7 +2173,7 @@ accumulate_ack(#msg_status { seq_id        = SeqId,
                {IndexOnDiskSeqIdsAcc, MsgIdsByStore, AllMsgIds}) ->
     {cons_if(IndexOnDisk, SeqId, IndexOnDiskSeqIdsAcc),
      case MsgInStore of
-         true  -> rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore);
+         true  -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
          false -> MsgIdsByStore
      end,
      [MsgId | AllMsgIds]}.

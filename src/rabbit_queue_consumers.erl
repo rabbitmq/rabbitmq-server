@@ -254,9 +254,9 @@ subtract_acks(ChPid, AckTags, State) ->
             not_found;
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
             {CTagCounts, AckTags2} = subtract_acks(
-                                       AckTags, [], orddict:new(), ChAckTags),
+                                       AckTags, [], maps:new(), ChAckTags),
             {Unblocked, Lim2} =
-                orddict:fold(
+                maps:fold(
                   fun (CTag, Count, {UnblockedN, LimN}) ->
                           {Unblocked1, LimN1} =
                               rabbit_limiter:ack_from_queue(LimN, CTag, Count),
@@ -278,7 +278,7 @@ subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
     case queue:out(AckQ) of
         {{value, {T, CTag}}, QTail} ->
             subtract_acks(TL, Prefix,
-                          orddict:update_counter(CTag, 1, CTagCounts), QTail);
+                          maps:update_with(CTag, fun (Old) -> Old + 1 end, 1, CTagCounts), QTail);
         {{value, V}, QTail} ->
             subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail);
         {empty, _} ->
