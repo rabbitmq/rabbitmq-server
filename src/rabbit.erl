@@ -23,6 +23,7 @@
          status/0, is_running/0, alarms/0,
          is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
+
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
@@ -230,6 +231,7 @@
 
 %%----------------------------------------------------------------------------
 
+-type restart_type() :: 'permanent' | 'transient' | 'temporary'.
 %% this really should be an abstract type
 -type log_location() :: string().
 -type param() :: atom().
@@ -267,7 +269,7 @@
 -spec recover() -> 'ok'.
 -spec start_apps([app_name()]) -> 'ok'.
 -spec start_apps([app_name()],
-                 #{app_name() => permanent|transient|temporary}) -> 'ok'.
+                 #{app_name() => restart_type()}) -> 'ok'.
 -spec stop_apps([app_name()]) -> 'ok'.
 
 %%----------------------------------------------------------------------------
@@ -506,7 +508,7 @@ stop_and_halt() ->
 start_apps(Apps) ->
     start_apps(Apps, #{}).
 
-start_apps(Apps, AppModes) ->
+start_apps(Apps, RestartTypes) ->
     app_utils:load_applications(Apps),
 
     ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
@@ -547,7 +549,7 @@ start_apps(Apps, AppModes) ->
     end,
     ok = app_utils:start_applications(OrderedApps,
                                       handle_app_error(could_not_start),
-                                      AppModes).
+                                      RestartTypes).
 
 %% This function retrieves the correct IoDevice for requesting
 %% input. The problem with using the default IoDevice is that

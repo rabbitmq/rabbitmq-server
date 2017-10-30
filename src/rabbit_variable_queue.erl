@@ -829,7 +829,7 @@ set_ram_duration_target(
           (TargetRamCount =/= infinity andalso
            TargetRamCount1 >= TargetRamCount) of
           true  -> State1;
-          false -> maybe_reduce_memory_use(State1)
+          false -> reduce_memory_use(State1)
       end).
 
 maybe_update_rates(State = #vqstate{ in_counter  = InCount,
@@ -911,7 +911,7 @@ timeout(State = #vqstate { index_state = IndexState }) ->
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
 
-resume(State) -> a(maybe_reduce_memory_use(State)).
+resume(State) -> a(reduce_memory_use(State)).
 
 msg_rates(#vqstate { rates = #rates { in  = AvgIngressRate,
                                       out = AvgEgressRate } }) ->
@@ -1776,7 +1776,7 @@ remove_queue_entries(Q, DelsAndAcksFun,
                      State = #vqstate{msg_store_clients = MSCState}) ->
     {MsgIdsByStore, Delivers, Acks, State1} =
         ?QUEUE:foldl(fun remove_queue_entries1/2,
-                     {orddict:new(), [], [], State}, Q),
+                     {maps:new(), [], [], State}, Q),
     remove_msgs_by_id(MsgIdsByStore, MSCState),
     DelsAndAcksFun(Delivers, Acks, State1).
 
@@ -1786,7 +1786,7 @@ remove_queue_entries1(
                 is_persistent = IsPersistent} = MsgStatus,
   {MsgIdsByStore, Delivers, Acks, State}) ->
     {case MsgInStore of
-         true  -> rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore);
+         true  -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
          false -> MsgIdsByStore
      end,
      cons_if(IndexOnDisk andalso not IsDelivered, SeqId, Delivers),
@@ -2143,27 +2143,27 @@ purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
                               qi_pending_ack   = gb_trees:empty()},
     {IndexOnDiskSeqIds, MsgIdsByStore, State1}.
 
-%% MsgIdsByStore is an orddict with two keys:
+%% MsgIdsByStore is an map with two keys:
 %%
 %% true: holds a list of Persistent Message Ids.
 %% false: holds a list of Transient Message Ids.
 %%
-%% When we call orddict:to_list/1 we get two sets of msg ids, where
+%% When we call maps:to_list/1 we get two sets of msg ids, where
 %% IsPersistent is either true for persistent messages or false for
 %% transient ones. The msg_store_remove/3 function takes this boolean
 %% flag to determine from which store the messages should be removed
 %% from.
 remove_msgs_by_id(MsgIdsByStore, MSCState) ->
     [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
-     || {IsPersistent, MsgIds} <- orddict:to_list(MsgIdsByStore)].
+     || {IsPersistent, MsgIds} <- maps:to_list(MsgIdsByStore)].
 
 remove_transient_msgs_by_id(MsgIdsByStore, MSCState) ->
-    case orddict:find(false, MsgIdsByStore) of
+    case maps:find(false, MsgIdsByStore) of
         error        -> ok;
         {ok, MsgIds} -> ok = msg_store_remove(MSCState, false, MsgIds)
     end.
 
-accumulate_ack_init() -> {[], orddict:new(), []}.
+accumulate_ack_init() -> {[], maps:new(), []}.
 
 accumulate_ack(#msg_status { seq_id        = SeqId,
                              msg_id        = MsgId,
@@ -2173,7 +2173,7 @@ accumulate_ack(#msg_status { seq_id        = SeqId,
                {IndexOnDiskSeqIdsAcc, MsgIdsByStore, AllMsgIds}) ->
     {cons_if(IndexOnDisk, SeqId, IndexOnDiskSeqIdsAcc),
      case MsgInStore of
-         true  -> rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore);
+         true  -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
          false -> MsgIdsByStore
      end,
      [MsgId | AllMsgIds]}.
@@ -2407,45 +2407,79 @@ reduce_memory_use(State = #vqstate {
                                                 out     = AvgEgress,
                                                 ack_in  = AvgAckIngress,
                                                 ack_out = AvgAckEgress } }) ->
-    State1 = #vqstate { q2 = Q2, q3 = Q3 } =
+    {CreditDiscBound, _} =rabbit_misc:get_env(rabbit,
+                                              msg_store_credit_disc_bound,
+                                              ?CREDIT_DISC_BOUND),
+    {NeedResumeA2B, State1} = {_, #vqstate { q2 = Q2, q3 = Q3 }} =
         case chunk_size(RamMsgCount + gb_trees:size(RPA), TargetRamCount) of
-            0  -> State;
+            0  -> {false, State};
             %% Reduce memory of pending acks and alphas. The order is
             %% determined based on which is growing faster. Whichever
             %% comes second may very well get a quota of 0 if the
             %% first manages to push out the max number of messages.
-            S1 -> Funs = case ((AvgAckIngress - AvgAckEgress) >
+            A2BChunk ->
+                %% In case there are few messages to be sent to a message store
+                %% and many messages to be embedded to the queue index,
+                %% we should limit the number of messages to be flushed
+                %% to avoid blocking the process.
+                A2BChunkActual = case A2BChunk > CreditDiscBound * 2 of
+                    true  -> CreditDiscBound * 2;
+                    false -> A2BChunk
+                end,
+                Funs = case ((AvgAckIngress - AvgAckEgress) >
                                    (AvgIngress - AvgEgress)) of
                              true  -> [fun limit_ram_acks/2,
                                        fun push_alphas_to_betas/2];
                              false -> [fun push_alphas_to_betas/2,
                                        fun limit_ram_acks/2]
                          end,
-                  {_, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
+                {Quota, State2} = lists:foldl(fun (ReduceFun, {QuotaN, StateN}) ->
                                                     ReduceFun(QuotaN, StateN)
-                                            end, {S1, State}, Funs),
-                  State2
+                                              end, {A2BChunkActual, State}, Funs),
+                {(Quota == 0) andalso (A2BChunk > A2BChunkActual), State2}
         end,
-
-    State3 =
+    Permitted = permitted_beta_count(State1),
+    {NeedResumeB2D, State3} =
         %% If there are more messages with their queue position held in RAM,
         %% a.k.a. betas, in Q2 & Q3 than IoBatchSize,
         %% write their queue position to disk, a.k.a. push_betas_to_deltas
         case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
-                        permitted_beta_count(State1)) of
-            S2 when S2 >= IoBatchSize ->
-                %% There is an implicit, but subtle, upper bound here. We
-                %% may shuffle a lot of messages from Q2/3 into delta, but
-                %% the number of these that require any disk operation,
-                %% namely index writing, i.e. messages that are genuine
-                %% betas and not gammas, is bounded by the credit_flow
-                %% limiting of the alpha->beta conversion above.
-                push_betas_to_deltas(S2, State1);
+                        Permitted) of
+            B2DChunk when B2DChunk >= IoBatchSize ->
+                %% Same as for alphas to betas. Limit a number of messages
+                %% to be flushed to disk at once to avoid blocking the process.
+                B2DChunkActual = case B2DChunk > CreditDiscBound * 2 of
+                    true -> CreditDiscBound * 2;
+                    false -> B2DChunk
+                end,
+                StateBD = push_betas_to_deltas(B2DChunkActual, State1),
+                {B2DChunk > B2DChunkActual, StateBD};
             _  ->
-                State1
+                {false, State1}
         end,
-    %% See rabbitmq-server-290 for the reasons behind this GC call.
-    garbage_collect(),
+    %% We can be blocked by the credit flow, or limited by a batch size,
+    %% or finished with flushing.
+    %% If blocked by the credit flow - the credit grant will resume processing,
+    %% if limited by a batch - the batch continuation message should be sent.
+    %% The continuation message will be prioritised over publishes,
+    %% but not cinsumptions, so the queue can make progess.
+    Blocked = credit_flow:blocked(),
+    case {Blocked, NeedResumeA2B orelse NeedResumeB2D} of
+        %% Credit bump will continue paging
+        {true, _}      -> ok;
+        %% Finished with paging
+        {false, false} -> ok;
+        %% Planning next batch
+        {false, true}  ->
+            %% We don't want to use self-credit-flow, because it's harder to
+            %% reason about. So the process sends a (prioritised) message to
+            %% itself and sets a waiting_bump value to keep the message box clean
+            case get(waiting_bump) of
+                true -> ok;
+                _    -> self() ! bump_reduce_memory_use,
+                        put(waiting_bump, true)
+            end
+    end,
     State3;
 %% When using lazy queues, there are no alphas, so we don't need to
 %% call push_alphas_to_betas/2.

@@ -780,7 +780,7 @@ init([Type, BaseDir, ClientRefs, StartupFunState]) ->
                        sync_timer_ref         = undefined,
                        sum_valid_data         = 0,
                        sum_file_size          = 0,
-                       pending_gc_completion  = orddict:new(),
+                       pending_gc_completion  = maps:new(),
                        gc_pid                 = GCPid,
                        file_handles_ets       = FileHandlesEts,
                        file_summary_ets       = FileSummaryEts,
@@ -1269,7 +1269,7 @@ contains_message(MsgId, From,
             gen_server2:reply(From, false),
             State;
         #msg_location { file = File } ->
-            case orddict:is_key(File, Pending) of
+            case maps:is_key(File, Pending) of
                 true  -> add_to_pending_gc_completion(
                            {contains, MsgId, From}, File, State);
                 false -> gen_server2:reply(From, true),
@@ -1280,16 +1280,16 @@ contains_message(MsgId, From,
 add_to_pending_gc_completion(
   Op, File, State = #msstate { pending_gc_completion = Pending }) ->
     State #msstate { pending_gc_completion =
-                         rabbit_misc:orddict_cons(File, Op, Pending) }.
+                         rabbit_misc:maps_cons(File, Op, Pending) }.
 
 run_pending(Files, State) ->
     lists:foldl(
       fun (File, State1 = #msstate { pending_gc_completion = Pending }) ->
-              Pending1 = orddict:erase(File, Pending),
+              Pending1 = maps:remove(File, Pending),
               lists:foldl(
                 fun run_pending_action/2,
                 State1 #msstate { pending_gc_completion = Pending1 },
-                lists:reverse(orddict:fetch(File, Pending)))
+                lists:reverse(maps:get(File, Pending)))
       end, State, Files).
 
 run_pending_action({read, MsgId, From}, State) ->
@@ -1320,9 +1320,9 @@ adjust_valid_total_size(File, Delta, State = #msstate {
                              [{#file_summary.valid_total_size, Delta}]),
     State #msstate { sum_valid_data = SumValid + Delta }.
 
-orddict_store(Key, Val, Dict) ->
-    false = orddict:is_key(Key, Dict),
-    orddict:store(Key, Val, Dict).
+maps_store(Key, Val, Dict) ->
+    false = maps:is_key(Key, Dict),
+    maps:put(Key, Val, Dict).
 
 update_pending_confirms(Fun, CRef,
                         State = #msstate { clients         = Clients,
@@ -1860,7 +1860,7 @@ maybe_compact(State = #msstate { sum_valid_data        = SumValid,
     %% complete traversal of FileSummaryEts.
     First = ets:first(FileSummaryEts),
     case First =:= '$end_of_table' orelse
-        orddict:size(Pending) >= ?MAXIMUM_SIMULTANEOUS_GC_FILES of
+        maps:size(Pending) >= ?MAXIMUM_SIMULTANEOUS_GC_FILES of
         true ->
             State;
         false ->
@@ -1869,8 +1869,8 @@ maybe_compact(State = #msstate { sum_valid_data        = SumValid,
                 not_found ->
                     State;
                 {Src, Dst} ->
-                    Pending1 = orddict_store(Dst, [],
-                                             orddict_store(Src, [], Pending)),
+                    Pending1 = maps_store(Dst, [],
+                                             maps_store(Src, [], Pending)),
                     State1 = close_handle(Src, close_handle(Dst, State)),
                     true = ets:update_element(FileSummaryEts, Src,
                                               {#file_summary.locked, true}),
@@ -1926,7 +1926,7 @@ delete_file_if_empty(File, State = #msstate {
         0 -> true = ets:update_element(FileSummaryEts, File,
                                        {#file_summary.locked, true}),
              ok = rabbit_msg_store_gc:delete(GCPid, File),
-             Pending1 = orddict_store(File, [], Pending),
+             Pending1 = maps_store(File, [], Pending),
              close_handle(File,
                           State #msstate { pending_gc_completion = Pending1 });
         _ -> State

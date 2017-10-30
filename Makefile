@@ -12,7 +12,7 @@ define PROJECT_ENV
 	    {tcp_listeners, [5672]},
 	    {num_tcp_acceptors, 10},
 	    {ssl_listeners, []},
-	    {num_ssl_acceptors, 1},
+	    {num_ssl_acceptors, 10},
 	    {ssl_options, []},
 	    {vm_memory_high_watermark, 0.4},
 	    {vm_memory_high_watermark_paging_ratio, 0.5},
@@ -25,6 +25,7 @@ define PROJECT_ENV
 	    %% breaks the QPid Java client
 	    {frame_max, 131072},
 	    {channel_max, 0},
+	    {connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
 	    {fhc_write_buffering, true},
@@ -123,7 +124,9 @@ define PROJECT_ENV
 	    %% either "stop_node" or "continue".
 	    %% by default we choose to not terminate the entire node if one
 	    %% vhost had to shut down, see server#1158 and server#1280
-	    {vhost_restart_strategy, continue}
+	    {vhost_restart_strategy, continue},
+	    %% {global, prefetch count}
+	    {default_consumer_prefetch, {false, 0}}
 	  ]
 endef
 

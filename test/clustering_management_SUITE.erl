@@ -532,7 +532,9 @@ erlang_config(Config) ->
     ok = start_app(Hare),
     assert_clustered([Rabbit, Hare]),
 
-    %% If we use an invalid node name, the node fails to start.
+    %% If we use an invalid node type, the node fails to start.
+    %% The Erlang VM has stopped after previous rabbit app failure
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
@@ -543,7 +545,7 @@ erlang_config(Config) ->
 
     %% If we use an invalid node type, the node fails to start.
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
@@ -554,7 +556,7 @@ erlang_config(Config) ->
 
     %% If we use an invalid cluster_nodes conf, the node fails to start.
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
@@ -564,7 +566,7 @@ erlang_config(Config) ->
     assert_not_clustered(Rabbit),
 
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
@@ -703,6 +705,8 @@ assert_failure(Fun) ->
         {error, Reason}                -> Reason;
         {error_string, Reason}         -> Reason;
         {badrpc, {'EXIT', Reason}}     -> Reason;
+        %% Failure to start an app result in node shutdown
+        {badrpc, nodedown}             -> nodedown;
         {badrpc_multi, Reason, _Nodes} -> Reason;
         Other                          -> error({expected_failure, Other})
     end.

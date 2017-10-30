@@ -197,10 +197,10 @@ categorise_by_scope(Version) when is_list(Version) ->
                               rabbit_misc:all_module_attributes(rabbit_upgrade),
                           {Name, Scope, _Requires} <- Attributes,
                           lists:member(Name, Version)],
-    orddict:to_list(
+    maps:to_list(
       lists:foldl(fun ({Scope, Name}, CatVersion) ->
-                          rabbit_misc:orddict_cons(Scope, Name, CatVersion)
-                  end, orddict:new(), Categorised)).
+                          rabbit_misc:maps_cons(Scope, Name, CatVersion)
+                  end, maps:new(), Categorised)).
 
 dir() -> rabbit_mnesia:dir().
 

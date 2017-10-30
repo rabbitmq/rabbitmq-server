@@ -523,9 +523,28 @@ end}.
 %% Set the max permissible number of channels per connection.
 %% 0 means "no limit".
 %%
-%% {channel_max, 128},
+%% {channel_max, 0},
 
 {mapping, "channel_max", "rabbit.channel_max", [{datatype, integer}]}.
+
+%% Set the max permissible number of client connections per node.
+%% `infinity` means "no limit".
+%%
+%% {connection_max, infinity},
+
+{mapping, "connection_max", "rabbit.connection_max",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.connection_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("connection_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
 
 %% Customising Socket Options.
 %%
@@ -686,13 +705,13 @@ end}.
 {mapping, "memory_monitor_interval", "rabbit.memory_monitor_interval",
     [{datatype, integer}]}.
 
-%% When set to rss, RabbitMQ will display the memory usage as reported
-%% by the operating system (RSS value), not by the Erlang VM.
+%% Selects Erlang VM memory consumption calculation strategy.
+%% Can be `allocated`, `rss` or `legacy` (aliased as `erlang`).
 %%
 %% {vm_memory_calculation_strategy, rss},
 
 {mapping, "vm_memory_calculation_strategy", "rabbit.vm_memory_calculation_strategy",
-    [{datatype, {enum, [rss, erlang]}}]}.
+    [{datatype, {enum, [rss, erlang, allocated, legacy]}}]}.
 
 %% Set disk free limit (in bytes). Once free disk space reaches this
 %% lower bound, a disk alarm will be set - see the documentation
