@@ -83,13 +83,14 @@ accept_content(ReqData0, {_Mode, Context}) ->
         {halt, _, _} = Res ->
             Res;
         {true, ReqData, Context2} ->
-            Loc = rabbit_web_dispatch_util:relativise(
-                    binary_to_list(element(1, cowboy_req:path(ReqData))),
-                    binary_to_list(
-                      rabbit_mgmt_format:url(
-                        "/api/bindings/~s/e/~s/~s/~s/~s",
-                        [VHost, Source, DestType, Dest,
-                         rabbit_mgmt_format:pack_binding_props(Key, Args)]))),
+            From = binary_to_list(element(1, cowboy_req:path(ReqData))),
+            Prefix = rabbit_mgmt_util:get_path_prefix(),
+            BindingProps = rabbit_mgmt_format:pack_binding_props(Key, Args),
+            UrlWithBindings = rabbit_mgmt_format:url("/api/bindings/~s/e/~s/~s/~s/~s",
+                                                     [VHost, Source, DestType,
+                                                      Dest, BindingProps]),
+            To = Prefix ++ binary_to_list(UrlWithBindings),
+            Loc = rabbit_web_dispatch_util:relativise(From, To),
             {{true, Loc}, ReqData, Context2}
     end.
 

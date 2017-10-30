@@ -25,18 +25,43 @@ static_path(M) ->
     filename:join(module_path(M), "priv/www").
 
 build_dispatcher(Ignore) ->
+    Routes = build_routes(Ignore),
+    cowboy_router:compile(Routes).
+
+build_routes(Ignore) ->
     ThisLocalPath = static_path(?MODULE),
+    Prefix = rabbit_mgmt_util:get_path_prefix(),
+    RootIdxRtes = build_root_index_routes(Prefix, ThisLocalPath),
+    ApiIdxRte = {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
+    CliIdxRte = {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
+    MgmtRdrRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
     LocalPaths = [static_path(M) || M <- modules(Ignore)],
-    cowboy_router:compile([{'_',
-        [{"/api" ++ Path, Mod, Args}
-            || {Path, Mod, Args} <- lists:append([Module:dispatcher()
-            || Module <- modules(Ignore)])]
-     ++ [{"/", cowboy_static, {file, ThisLocalPath ++ "/index.html"}},
-         {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
-         {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
-         {"/mgmt", rabbit_mgmt_wm_redirect, "/"}]
-     ++ [{"/[...]", rabbit_mgmt_wm_static, LocalPaths}]
-    }]).
+    LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
+    % NB: order is significant in the routing list
+    Routes0 = build_module_routes(Ignore) ++
+        [ApiIdxRte, CliIdxRte, MgmtRdrRte, LocalStaticRte],
+    Routes1 = maybe_add_path_prefix(Routes0, Prefix),
+    % NB: ensure the root routes are first
+    Routes2 = RootIdxRtes ++ Routes1,
+    [{'_', Routes2}].
+
+build_root_index_routes("", ThisLocalPath) ->
+    [{"/", cowboy_static, root_idx_file(ThisLocalPath)}];
+build_root_index_routes(Prefix, ThisLocalPath) ->
+    [{"/", rabbit_mgmt_wm_redirect, Prefix ++ "/"},
+     {Prefix, cowboy_static, root_idx_file(ThisLocalPath)}].
+
+root_idx_file(ThisLocalPath) ->
+    {file, ThisLocalPath ++ "/index.html"}.
+
+maybe_add_path_prefix(Routes, "") ->
+    Routes;
+maybe_add_path_prefix(Routes, Prefix) ->
+    [{Prefix ++ Path, Mod, Args} || {Path, Mod, Args} <- Routes].
+
+build_module_routes(Ignore) ->
+    Routes = [Module:dispatcher() || Module <- modules(Ignore)],
+    [{"/api" ++ Path, Mod, Args} || {Path, Mod, Args} <- lists:append(Routes)].
 
 modules(IgnoreApps) ->
     [Module || {App, Module, Behaviours} <-
