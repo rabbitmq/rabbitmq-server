@@ -18,7 +18,7 @@
 
 -include("rabbit_mgmt_test.hrl").
 
--compile(export_all).
+-compile([nowarn_export_all, export_all]).
 
 reset_management_settings(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
