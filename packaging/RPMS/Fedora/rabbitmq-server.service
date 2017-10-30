@@ -16,8 +16,7 @@ Restart=on-failure # https://www.freedesktop.org/software/systemd/man/systemd.se
 RestartSec=10      # https://www.freedesktop.org/software/systemd/man/systemd.service.html#RestartSec=
 WorkingDirectory=/var/lib/rabbitmq
 ExecStart=/usr/sbin/rabbitmq-server
-ExecStop=/usr/sbin/rabbitmqctl stop
-ExecStop=/bin/sh -c "while ps -p $MAINPID >/dev/null 2>&1; do sleep 1; done"
+ExecStop=/usr/sbin/rabbitmqctl shutdown
 SuccessExitStatus=69 # rabbitmq/rabbitmq-server-release#51
 
 [Install]
