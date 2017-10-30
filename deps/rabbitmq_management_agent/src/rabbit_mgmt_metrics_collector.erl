@@ -477,7 +477,8 @@ aggregate_entry({Id, Metrics}, NextStats, Ops0,
                        policies = {_, _, GPolicies}} = State) ->
     Stats = ?node_coarse_stats(
                pget(fd_used, Metrics, 0), pget(sockets_used, Metrics, 0),
-               pget(mem_used, Metrics, 0), pget(disk_free, Metrics, 0),
+               pget(mem_used, Metrics, 0), pget(erlang_mem_total, Metrics, 0),
+               pget(disk_free, Metrics, 0),
                pget(proc_used, Metrics, 0), pget(gc_num, Metrics, 0),
                pget(gc_bytes_reclaimed, Metrics, 0),
                pget(context_switches, Metrics, 0)),

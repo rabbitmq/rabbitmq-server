@@ -215,8 +215,8 @@ add_to_total({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 + A0, B1 + A1, B2 + A2};
 add_to_total({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6};
-add_to_total({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
-    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6, B7 + A7};
+add_to_total({A0, A1, A2, A3, A4, A5, A6, A7, A8}, {B0, B1, B2, B3, B4, B5, B6, B7, B8}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6, B7 + A7, B8 + A8};
 add_to_total({A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14,
           A15, A16, A17, A18, A19},
          {B0, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14,
@@ -233,7 +233,7 @@ is_zeros({0, 0, 0}) ->
     true;
 is_zeros({0, 0, 0, 0, 0, 0, 0}) ->
     true;
-is_zeros({0, 0, 0, 0, 0, 0, 0, 0}) ->
+is_zeros({0, 0, 0, 0, 0, 0, 0, 0, 0}) ->
     true;
 is_zeros({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) ->
     true;
