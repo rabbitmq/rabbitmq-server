@@ -341,6 +341,10 @@ do_make_conn_and_chane(URIs, ShovelName) ->
             throw({error, Reason, URI})
     end.
 
+log_connection_failure(Reason, URI, {VHost, Name} = _ShovelName) ->
+    rabbit_log:error(
+          "Shovel '~s' in vhost '~s' failed to connect (URI: ~s): ~s~n",
+      [Name, VHost, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]);
 log_connection_failure(Reason, URI, ShovelName) ->
     rabbit_log:error(
           "Shovel '~s' failed to connect (URI: ~s): ~s~n",
