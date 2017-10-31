@@ -61,8 +61,8 @@ defmodule CloseConnectionCommandTest do
     end)
   end
 
-  test "run: a close connection request on for a non existing connection returns error", context do
-    assert match?({:error, {:not_a_connection_pid, _}},
+  test "run: a close connection request on for a non existing connection returns successfully", context do
+    assert match?(:ok,
       @command.run(["<#{node()}.2.121.12>", "test"], %{node: @helpers.parse_node(context[:node])}))
   end
 
