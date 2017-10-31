@@ -37,7 +37,9 @@
   validate_binding/2,
   route/2,
   serialise_events/0,
-  validate/1
+  validate/1,
+  info/1,
+  info/2
 ]).
 
 description() ->
@@ -52,6 +54,8 @@ route(_X=#exchange{name = Name}, _Delivery) ->
         [lists:nth(Rand, Matches)]
     end.
 
+info(_X) -> [].
+info(_X, _) -> [].
 serialise_events() -> false.
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
