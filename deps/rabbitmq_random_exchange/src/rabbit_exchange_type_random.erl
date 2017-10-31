@@ -48,7 +48,7 @@ route(_X=#exchange{name = Name}, _Delivery) ->
     case length(Matches) of
       Len when Len < 2 -> Matches;
       Len ->
-        Rand = rand_compat:uniform(Len),
+        Rand = rand:uniform(Len),
         [lists:nth(Rand, Matches)]
     end.
 
