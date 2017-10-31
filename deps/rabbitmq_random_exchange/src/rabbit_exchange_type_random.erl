@@ -48,7 +48,7 @@ route(_X=#exchange{name = Name}, _Delivery) ->
     case length(Matches) of
       Len when Len < 2 -> Matches;
       Len ->
-        Rand = crypto:rand_uniform(1, Len + 1),
+        Rand = rand_compat:uniform(Len),
         [lists:nth(Rand, Matches)]
     end.
 
