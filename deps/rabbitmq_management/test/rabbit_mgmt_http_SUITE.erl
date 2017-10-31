@@ -977,9 +977,13 @@ bindings_post_test(Config) ->
     ?assertEqual(Want1, pget("location", Headers2)),
 
     PropertiesKeyBin = list_to_binary(PropertiesKey),
-    Want2 = #{arguments => #{foo => <<"bar">>}, destination => <<"myqueue">>,
-              destination_type => <<"queue">>, properties_key => PropertiesKeyBin,
-              routing_key => <<"routing">>, source => <<"myexchange">>,vhost => <<"/">>},
+    Want2 = #{source := <<"myexchange">>,
+              vhost := <<"/">>,
+              destination := <<"myqueue">>,
+              destination_type := <<"queue">>,
+              routing_key := <<"routing">>,
+              arguments := #{foo := <<"bar">>},
+              properties_key := PropertiesKeyBin},
     URI = "/bindings/%2F/e/myexchange/q/myqueue/" ++ PropertiesKey,
     ?assertEqual(Want2, http_get(Config, URI, ?OK)),
 
