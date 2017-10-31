@@ -328,10 +328,16 @@ emit_connection_info_local(Items, Ref, AggregatorPid) ->
       connections_local()).
 
 close_connection(Pid, Explanation) ->
-    rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),
     case lists:member(Pid, connections()) of
-        true  -> rabbit_reader:shutdown(Pid, Explanation);
-        false -> throw({error, {not_a_connection_pid, Pid}})
+        true  ->
+            Res = rabbit_reader:shutdown(Pid, Explanation),
+            rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),
+            Res;
+        false ->
+            rabbit_log:warning("Asked to close connection ~p (reason: ~p) "
+                               "but no running cluster node reported it as an active connection. Was it already closed? ~n",
+                               [Pid, Explanation]),
+            ok
     end.
 
 force_connection_event_refresh(Ref) ->
