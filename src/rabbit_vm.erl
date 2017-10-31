@@ -105,7 +105,7 @@ memory() ->
      {allocated_unused,     AllocatedUnused},
      {reserved_unallocated, OSReserved},
      {strategy,             Strategy},
-     {total,                [{erlang_total, ErlangTotal},
+     {total,                [{erlang, ErlangTotal},
                              {rss, Rss},
                              {allocated, Allocated}]}
     ].
