@@ -114,11 +114,9 @@
         {Messages_ready, Messages_unacknowledged, Messages}).
 -define(queue_process_stats(Reductions), {Reductions}).
 -define(node_stats(Id, Props), {Id, Props}).
--define(node_coarse_stats(Fd_used, Sockets_used, Mem_used, Erlang_mem_total,
-                          Disk_free, Proc_used,
+-define(node_coarse_stats(Fd_used, Sockets_used, Mem_used, Disk_free, Proc_used,
                           Gc_num, Gc_bytes_reclaimed, Context_switches),
-        {Fd_used, Sockets_used, Mem_used, Erlang_mem_total,
-         Disk_free, Proc_used, Gc_num,
+        {Fd_used, Sockets_used, Mem_used, Disk_free, Proc_used, Gc_num,
          Gc_bytes_reclaimed, Context_switches}).
 -define(node_persister_stats(Io_read_count, Io_read_bytes, Io_read_avg_time, Io_write_count,
                              Io_write_bytes, Io_write_avg_time, Io_sync_count, Io_sync_avg_time,
@@ -169,8 +167,7 @@
                    T =:= vhost_msg_stats ->
                 [messages_ready, messages_unacknowledged, messages];
             node_coarse_stats ->
-                [fd_used, sockets_used, mem_used, erlang_mem_total,
-                 disk_free, proc_used, gc_num,
+                [fd_used, sockets_used, mem_used, disk_free, proc_used, gc_num,
                  gc_bytes_reclaimed, context_switches];
             node_persister_stats ->
                 [io_read_count, io_read_bytes, io_read_avg_time, io_write_count,

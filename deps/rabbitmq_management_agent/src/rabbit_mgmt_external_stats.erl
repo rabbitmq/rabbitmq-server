@@ -28,8 +28,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(METRICS_KEYS, [fd_used, sockets_used, mem_used, erlang_mem_total,
-                       disk_free, proc_used, gc_num,
+-define(METRICS_KEYS, [fd_used, sockets_used, mem_used, disk_free, proc_used, gc_num,
                        gc_bytes_reclaimed, context_switches]).
 
 -define(PERSISTER_KEYS, [persister_stats]).
@@ -187,7 +186,6 @@ i(os_pid,          _State) -> list_to_binary(os:getpid());
 
 i(mem_used,        _State) -> vm_memory_monitor:get_process_memory();
 i(mem_calculation_strategy, _State) -> vm_memory_monitor:get_memory_calculation_strategy();
-i(erlang_mem_total, _State) -> erlang:memory(total);
 i(mem_limit,       _State) -> vm_memory_monitor:get_memory_limit();
 i(mem_alarm,       _State) -> resource_alarm_set(memory);
 i(proc_used,       _State) -> erlang:system_info(process_count);

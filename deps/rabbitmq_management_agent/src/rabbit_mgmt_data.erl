@@ -463,7 +463,7 @@ empty(Type, V) when Type =:= channel_process_stats;
             Type =:= exchange_stats_publish_in ->
     {V};
 empty(node_coarse_stats, V) ->
-    {V, V, V, V, V, V, V, V, V};
+    {V, V, V, V, V, V, V, V};
 empty(node_persister_stats, V) ->
     {V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V};
 empty(Type, V) when Type =:= node_node_coarse_stats;
