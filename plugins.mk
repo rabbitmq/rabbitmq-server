@@ -17,6 +17,7 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_management_agent \
 	   rabbitmq_management_visualiser \
 	   rabbitmq_mqtt \
+	   rabbitmq_random_exchange \
 	   rabbitmq_recent_history_exchange \
 	   rabbitmq_sharding \
 	   rabbitmq_shovel \
