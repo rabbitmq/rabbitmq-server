@@ -31,7 +31,8 @@ groups() ->
      {parallel_tests, [parallel], [
                                    tokenise_test,
                                    pack_binding_test,
-                                   amqp_table_test
+                                   amqp_table_test,
+                                   path_prefix_test
                                   ]}
     ].
 
@@ -80,6 +81,25 @@ amqp_table_test(_Config) ->
 assert_table(JSON, AMQP) ->
     ?assertEqual(JSON, rabbit_mgmt_format:amqp_table(AMQP)),
     ?assertEqual(AMQP, rabbit_mgmt_format:to_amqp_table(JSON)).
+
+path_prefix_test(_Config) ->
+    Got0 = rabbit_mgmt_util:get_path_prefix(),
+    ?assertEqual("", Got0),
+
+    Pfx0 = "/custom-prefix",
+    application:set_env(rabbitmq_management, path_prefix, Pfx0),
+    Got1 = rabbit_mgmt_util:get_path_prefix(),
+    ?assertEqual(Pfx0, Got1),
+
+    Pfx1 = "custom-prefix",
+    application:set_env(rabbitmq_management, path_prefix, Pfx1),
+    Got2 = rabbit_mgmt_util:get_path_prefix(),
+    ?assertEqual(Pfx0, Got2),
+
+    Pfx2 = <<"custom-prefix">>,
+    application:set_env(rabbitmq_management, path_prefix, Pfx2),
+    Got3 = rabbit_mgmt_util:get_path_prefix(),
+    ?assertEqual(Pfx0, Got3).
 
 %%--------------------------------------------------------------------
 

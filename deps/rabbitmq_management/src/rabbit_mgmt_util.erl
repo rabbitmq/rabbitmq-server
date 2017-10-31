@@ -48,6 +48,7 @@
         ]).
 -export([direct_request/6]).
 -export([qs_val/2]).
+-export([get_path_prefix/0]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -426,6 +427,19 @@ get_data({paged, Data}) ->
     rabbit_misc:pget(items, Data);
 get_data({_, Data}) ->
     Data.
+
+get_path_prefix() ->
+    EnvPrefix = rabbit_misc:get_env(rabbitmq_management, path_prefix, ""),
+    fixup_prefix(EnvPrefix).
+
+fixup_prefix("") ->
+    "";
+fixup_prefix([Char|_Rest]=EnvPrefix) when is_list(EnvPrefix), Char =:= $/ ->
+    EnvPrefix;
+fixup_prefix(EnvPrefix) when is_list(EnvPrefix) ->
+    "/" ++ EnvPrefix;
+fixup_prefix(EnvPrefix) when is_binary(EnvPrefix) ->
+    fixup_prefix(rabbit_data_coercion:to_list(EnvPrefix)).
 
 %% XXX sort_list_and_paginate/2 is a more proper name for this function, keeping it
 %% with this name for backwards compatibility
