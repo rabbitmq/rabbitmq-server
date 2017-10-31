@@ -82,7 +82,7 @@
     <th>Erlang processes</th>
   <% } %>
   <% if (show_column('overview', 'memory')) { %>
-    <th>Memory</th>
+    <th>Memory <span class="help" id="memory-calculation-strategy"></span></th>
   <% } %>
   <% if (show_column('overview', 'disk_space')) { %>
     <th>Disk space</th>
@@ -182,6 +182,7 @@
          <abbr title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</abbr>
        <% } %>
        <%= fmt_plugins_small(node) %>
+        <abbr title="Memory calculation strategy"><%= fmt_string(node.mem_calculation_strategy) %></abbr>
      </td>
   <% } %>
   <% if(user_administrator && show_column('overview', 'reset_stats')) { %>
