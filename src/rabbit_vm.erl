@@ -61,19 +61,11 @@ memory() ->
         erlang:memory([total, processes, ets, atom, binary, code, system]),
 
     Strategy = vm_memory_monitor:get_memory_calculation_strategy(),
-    {Allocated, VMTotal} = case Strategy of
-        erlang    -> {ErlangTotal, ErlangTotal};
-        allocated ->
-            Alloc = recon_alloc:memory(allocated),
-            {Alloc, Alloc};
-        rss ->
-            Alloc = recon_alloc:memory(allocated),
-            Vm = vm_memory_monitor:get_process_memory(current),
-            {Alloc, Vm}
-    end,
+    Allocated = recon_alloc:memory(allocated),
+    Rss = vm_memory_monitor:get_rss_memory(),
 
     AllocatedUnused = max(Allocated - ErlangTotal, 0),
-    OSReserved = max(VMTotal - Allocated, 0),
+    OSReserved = max(Rss - Allocated, 0),
 
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
@@ -112,7 +104,10 @@ memory() ->
      {other_system,         System - ETS - Bin - Code - Atom},
      {allocated_unused,     AllocatedUnused},
      {reserved_unallocated, OSReserved},
-     {total,                VMTotal}
+     {strategy,             Strategy},
+     {total,                [{erlang, ErlangTotal},
+                             {rss, Rss},
+                             {allocated, Allocated}]}
     ].
 %% [1] - erlang:memory(processes) can be less than the sum of its
 %% parts. Rather than display something nonsensical, just silence any
