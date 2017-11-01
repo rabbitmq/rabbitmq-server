@@ -70,7 +70,9 @@ augment(Mode, ReqData) ->
 format(absolute, Result) ->
     Result;
 format(relative, Result) ->
-    {value, {total, Total}, Rest} = lists:keytake(total, 1, Result),
+    {value, {strategy, Strategy}, Rest0} = lists:keytake(strategy, 1, Result),
+    {value, {total, Totals}, Rest} = lists:keytake(total, 1, Rest0),
+    Total = proplists:get_value(Strategy, Totals),
     [{total, 100} | [{K, percentage(V, Total)} || {K, V} <- Rest]].
 
 percentage(Part, Total) ->
