@@ -66,19 +66,21 @@ var key = [[{name: 'Queues', colour: 'queue',
 <div class="memory-info">
   Last updated: <b><%= fmt_date(new Date()) %></b>.<br/>
   Memory calculation strategy: <b><%= memory.strategy %></b>. <span class="help" id="memory-calculation-strategy-breakdown"></span><br/><br/>
-  Total memory used at last update: <span class="help" id="memory-use"></span><br/>
-  <table class="facts"> <tr> <th> Erlang Total </th>
-                                                               <td><%= fmt_bytes(memory.total.erlang) %></td>
-                                                          </tr>
-                                                          <tr>
-                                                             <th> Allocated </th>
-                                                             <td><%= fmt_bytes(memory.total.allocated) %></td>
-                                                          </tr>
-                                                          <tr>
-                                                             <th> Rss       </th>
-                                                            <td><%= fmt_bytes(memory.total.rss) %></td>
-                                                         </tr>
-                                    </table>
+  Amount of memory used vs. allocated during last update: <span class="help" id="memory-use"></span><br/>
+  <table class="facts">
+      <tr>
+        <th>Runtime Used</th>
+        <td><%= fmt_bytes(memory.total.erlang) %></td>
+      </tr>
+      <tr>
+        <th>Runtime Allocated</th>
+        <td><%= fmt_bytes(memory.total.allocated) %></td>
+      </tr>
+      <tr>
+        <th>Resident Set Size (RSS) reported by the OS</th>
+        <td><%= fmt_bytes(memory.total.rss) %></td>
+      </tr>
+    </table>
 </div>
 
 <% } %>
