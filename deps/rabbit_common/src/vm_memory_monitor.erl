@@ -40,7 +40,8 @@
          get_memory_use/1,
          get_process_memory/0,
          get_process_memory/1,
-         get_memory_calculation_strategy/0]).
+         get_memory_calculation_strategy/0,
+         get_rss_memory/0]).
 
 %% for tests
 -export([parse_line_linux/1, parse_mem_limit/1]).
@@ -79,6 +80,7 @@
 -spec get_memory_use(bytes) -> {non_neg_integer(),  float() | infinity};
                     (ratio) -> float() | infinity.
 -spec get_cached_process_memory_and_limit() -> {non_neg_integer(), non_neg_integer()}.
+-spec get_rss_memory() -> non_neg_integer().
 
 -export_type([memory_calculation_strategy/0]).
 %%----------------------------------------------------------------------------
@@ -191,7 +193,7 @@ init([MemFraction, AlarmFuns]) ->
                     timer      = TRef,
                     alarmed    = false,
                     alarm_funs = AlarmFuns},
-    State1 = init_state_by_os(State0),
+    State1 = update_process_memory(init_state_by_os(State0)),
     {ok, set_mem_limits(State1, MemFraction)}.
 
 handle_call(get_vm_memory_high_watermark, _From,
@@ -244,6 +246,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% Server Internals
 %%----------------------------------------------------------------------------
+get_rss_memory() ->
+    TmpState = init_state_by_os(#state{}),
+    {ok, ProcMem} = get_process_memory_using_strategy(rss, TmpState),
+    ProcMem.
 
 get_cached_process_memory_and_limit() ->
     try
@@ -255,7 +261,7 @@ get_cached_process_memory_and_limit() ->
     end.
 
 get_process_memory_uncached() ->
-    TmpState = init_state_by_os(#state{}),
+    TmpState = update_process_memory(init_state_by_os(#state{})),
     TmpState#state.process_memory.
 
 update_process_memory(State) ->
@@ -270,10 +276,9 @@ init_state_by_os(State = #state{os_type = undefined}) ->
 init_state_by_os(State0 = #state{os_type = {unix, linux}, os_pid = OsPid}) ->
     PageSize = get_linux_pagesize(),
     ProcFile = io_lib:format("/proc/~s/statm", [OsPid]),
-    State1 = State0#state{page_size = PageSize, proc_file = ProcFile},
-    update_process_memory(State1);
+    State0#state{page_size = PageSize, proc_file = ProcFile};
 init_state_by_os(State) ->
-    update_process_memory(State).
+    State.
 
 get_process_memory_using_strategy(rss, #state{os_type = {unix, linux},
                                               page_size = PageSize,
