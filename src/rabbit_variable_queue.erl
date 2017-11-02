@@ -26,7 +26,7 @@
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
-         zip_msgs_and_acks/4,  multiple_routing_keys/0]).
+         zip_msgs_and_acks/4,  multiple_routing_keys/0, handle_info/2]).
 
 -export([start/2, stop/1]).
 
@@ -325,7 +325,8 @@
           memory_reduction_run_count,
           %% Queue data is grouped by VHost. We need to store it
           %% to work with queue index.
-          virtual_host
+          virtual_host,
+          waiting_bump = false
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -910,6 +911,9 @@ timeout(State = #vqstate { index_state = IndexState }) ->
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
+
+handle_info(bump_reduce_memory_use, State = #vqstate{ waiting_bump = true }) ->
+    State#vqstate{ waiting_bump = false }.
 
 resume(State) -> a(reduce_memory_use(State)).
 
@@ -2466,21 +2470,16 @@ reduce_memory_use(State = #vqstate {
     Blocked = credit_flow:blocked(),
     case {Blocked, NeedResumeA2B orelse NeedResumeB2D} of
         %% Credit bump will continue paging
-        {true, _}      -> ok;
+        {true, _}      -> State3;
         %% Finished with paging
-        {false, false} -> ok;
+        {false, false} -> State3;
         %% Planning next batch
         {false, true}  ->
             %% We don't want to use self-credit-flow, because it's harder to
             %% reason about. So the process sends a (prioritised) message to
             %% itself and sets a waiting_bump value to keep the message box clean
-            case get(waiting_bump) of
-                true -> ok;
-                _    -> self() ! bump_reduce_memory_use,
-                        put(waiting_bump, true)
-            end
-    end,
-    State3;
+            maybe_bump_reduce_memory_use(State3)
+    end;
 %% When using lazy queues, there are no alphas, so we don't need to
 %% call push_alphas_to_betas/2.
 reduce_memory_use(State = #vqstate {
@@ -2505,6 +2504,12 @@ reduce_memory_use(State = #vqstate {
         end,
     garbage_collect(),
     State3.
+
+maybe_bump_reduce_memory_use(State = #vqstate{ waiting_bump = true }) ->
+    State;
+maybe_bump_reduce_memory_use(State) ->
+    self() ! bump_reduce_memory_use,
+    State#vqstate{ waiting_bump = true }.
 
 limit_ram_acks(0, State) ->
     {0, ui(State)};
