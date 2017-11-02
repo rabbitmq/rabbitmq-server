@@ -107,12 +107,6 @@ end_per_group(max_length_mirrored, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{is_mirrored, false}]),
     Config1;
 end_per_group(queue_max_length, Config) ->
-    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_reject_queue">>}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_drop_publish_queue">>}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_drop_head_queue">>}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_default_drop_head_queue">>}),
-    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
     Config;
 end_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
@@ -127,6 +121,27 @@ end_per_group(Group, Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(max_length_drop_head = Testcase, Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_drop_head_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_default_drop_head_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_bytes_drop_head_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_bytes_default_drop_head_queue">>}),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+
+end_per_testcase(max_length_reject_confirm = Testcase, Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_reject_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_bytes_reject_queue">>}),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(max_length_drop_publish = Testcase, Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_drop_publish_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_bytes_drop_publish_queue">>}),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -1051,10 +1066,6 @@ max_length_drop_head(Config) ->
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
     OverflowArgs = [{<<"x-overflow">>, longstr, <<"drop-head">>}],
-    amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = QNameDefault}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = QNameBytes}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = QNameDefaultBytes}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameDefault, arguments = MaxLengthArgs}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs}),
@@ -1077,8 +1088,6 @@ max_length_reject_confirm(Config) ->
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
     OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
-    amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = QNameBytes}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs}),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
@@ -1100,8 +1109,6 @@ max_length_drop_publish(Config) ->
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
     OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
-    amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = QNameBytes}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs}),
     %% If confirms are not enable, publishes will still be dropped in reject-publish mode.
