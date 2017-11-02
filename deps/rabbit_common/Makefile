@@ -45,6 +45,8 @@ DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
 	      $(PROJECT)/mk/rabbitmq-test.mk \
 	      $(PROJECT)/mk/rabbitmq-tools.mk
 
+WITHOUT = plugins/proper
+
 include mk/rabbitmq-components.mk
 include erlang.mk
 
