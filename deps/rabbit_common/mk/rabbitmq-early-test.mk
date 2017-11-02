@@ -43,8 +43,8 @@ TEST_DEPS += cth_styledout
 
 RMQ_CI_CT_HOOKS = cth_fail_fast
 ifdef TRAVIS
-CT_HOOKS += $(RMQ_CI_CT_HOOKS)
-TEST_DEPS += $(RMQ_CI_CT_HOOKS)
+CT_HOOKS = $(RMQ_CI_CT_HOOKS)
+TEST_DEPS = $(RMQ_CI_CT_HOOKS)
 endif
 ifdef CONCOURSE
 CT_HOOKS += $(RMQ_CI_CT_HOOKS)
