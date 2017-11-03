@@ -31,6 +31,29 @@ update-contributor-code-of-conduct:
 		cp $(DEPS_DIR)/rabbit_common/CONTRIBUTING.md $$repo/CONTRIBUTING.md; \
 	done
 
+ifeq ($(PROJECT),rabbit_common)
+travis-yml:
+	@:
+else
+travis-yml:
+	$(gen_verbose) cp -a $(DEPS_DIR)/rabbit_common/.travis.yml .
+	$(verbose) set -e; \
+	if test -f .travis.yml.patch; then \
+		patch -p0 < .travis.yml.patch; \
+		rm -f .travis.yml.orig; \
+	fi
+ifeq ($(DO_COMMIT),yes)
+	$(verbose) git diff --quiet .travis.yml \
+	|| git commit -m 'Travis CI: Update config from rabbitmq-common' .travis.yml
+endif
+endif
+
+update-travis-yml: travis-yml
+	$(verbose) for repo in $(READY_DEPS:%=$(DEPS_DIR)/%); do \
+		! test -f $$repo/rabbitmq-components.mk \
+		|| $(MAKE) -C $$repo travis-yml; \
+	done
+
 ifneq ($(wildcard .git),)
 
 .PHONY: sync-gitremote sync-gituser

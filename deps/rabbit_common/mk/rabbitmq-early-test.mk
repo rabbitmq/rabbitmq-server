@@ -38,8 +38,10 @@ endif
 # from its UI. Furthermore, it displays a graph showing evolution of the
 # results over time.
 
+ifndef TRAVIS
 CT_HOOKS ?= cth_styledout
 TEST_DEPS += cth_styledout
+endif
 
 RMQ_CI_CT_HOOKS = cth_fail_fast
 ifdef TRAVIS
