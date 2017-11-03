@@ -1,11 +1,6 @@
 # vim:sw=2:et:
 
-# Use a real VM so we can install all the packages we want.
-sudo: required
-
-# Use Ubuntu Trusty to install .NET Core.
-dist: trusty
-
+sudo: false
 language: erlang
 notifications:
   email:
@@ -13,31 +8,33 @@ notifications:
 addons:
   apt:
     sources:
-      - sourceline: deb https://apt-mo.trafficmanager.net/repos/dotnet-release trusty main
-        key_url: http://keyserver.ubuntu.com/pks/lookup?op=get&fingerprint=on&search=0xB02C46DF417A0893
+      - sourceline: deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-trusty-prod trusty main
+        key_url: https://packages.microsoft.com/keys/microsoft.asc
     packages:
-      - dotnet-dev-1.0.0-preview2-003156
+      - dotnet-sdk-2.0.0
+      - maven
       - xsltproc
+cache:
+  apt: true
+
 otp_release:
   - "R16B03-1"
-  - "17.5"
-  - "18.0"
-  - "19.0"
+  - "19.3"
+  - "20.1"
 
-# The checkout made by Travis is a "detached HEAD" and branches
-# information is missing. Our Erlang.mk's git_rmq fetch method relies on
-# it, so we need to restore it.
-#
-# We simply fetch master and, if it exists, stable branches. A branch is
-# created, pointing to the detached HEAD.
 before_script:
+  # The checkout made by Travis is a "detached HEAD" and branches
+  # information is missing. Our Erlang.mk's git_rmq fetch method relies
+  # on it, so we need to restore it.
+  #
+  # We simply fetch master and, if it exists, stable branches. A branch
+  # is created, pointing to the detached HEAD.
   - |
     git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
 
-script: make tests
-
-cache:
-  apt: true
+script:
+  - make xref
+  - make tests
