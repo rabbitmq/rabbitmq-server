@@ -1516,9 +1516,9 @@ handle_info({bump_credit, Msg}, State = #q{backing_queue       = BQ,
     credit_flow:handle_bump_msg(Msg),
     noreply(State#q{backing_queue_state = BQ:resume(BQS)});
 handle_info(bump_reduce_memory_use, State = #q{backing_queue       = BQ,
-                                               backing_queue_state = BQS}) ->
-    put(waiting_bump, false),
-    noreply(State#q{backing_queue_state = BQ:resume(BQS)});
+                                               backing_queue_state = BQS0}) ->
+    BQS1 = BQ:handle_info(bump_reduce_memory_use, BQS0),
+    noreply(State#q{backing_queue_state = BQ:resume(BQS1)});
 
 handle_info(Info, State) ->
     {stop, {unhandled_info, Info}, State}.
