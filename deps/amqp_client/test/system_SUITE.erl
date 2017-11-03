@@ -275,8 +275,9 @@ basic_get(Config) ->
             get_and_assert_equals(Channel, Q, Payload),
             get_and_assert_empty(Channel, Q),
             teardown(Connection, Channel);
-        {error, enetunreach} ->
-            {skip, inet:format_error(enetunreach)}
+        {error, Posix}
+          when Posix =:= eaddrnotavail orelse Posix =:= enetunreach ->
+            {skip, inet:format_error(Posix)}
     end.
 
 named_connection(Config) ->

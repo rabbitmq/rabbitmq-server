@@ -49,6 +49,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
+WITHOUT = plugins/proper
+
 include rabbitmq-components.mk
 include erlang.mk
 
