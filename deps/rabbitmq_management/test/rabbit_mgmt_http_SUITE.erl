@@ -239,7 +239,9 @@ memory_test(Config) ->
     Breakdown = pget(memory, Result1),
     assert_keys(Keys, Breakdown),
     assert_item([{total, 100}], Breakdown),
-    assert_percentage(Breakdown),
+    %% allocated_unused and reserved_unallocated
+    %% make this test pretty unpredictable
+    assert_percentage(Breakdown, 10),
     http_get(Config, "/nodes/nonode/memory/relative", ?NOT_FOUND),
     passed.
 
@@ -280,11 +282,14 @@ ets_tables_memory_test(Config) ->
     passed.
 
 assert_percentage(Breakdown) ->
+    assert_percentage(Breakdown, 0).
+
+assert_percentage(Breakdown, ExtraMargin) ->
     Total = lists:sum([P || {K, P} <- Breakdown, K =/= total]),
-    Count = length(Breakdown) - 1,
+    AcceptableMargin = (length(Breakdown) - 1) + ExtraMargin,
     %% Rounding up and down can lose some digits. Never more than the number
     %% of items in the breakdown.
-    case ((Total =< 100 + Count) andalso (Total >= 100 - Count)) of
+    case ((Total =< 100 + AcceptableMargin) andalso (Total >= 100 - AcceptableMargin)) of
         false ->
             throw({bad_percentage, Total, Breakdown});
         true ->
