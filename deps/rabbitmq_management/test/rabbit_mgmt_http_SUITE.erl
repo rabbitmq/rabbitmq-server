@@ -266,7 +266,7 @@ memory_test(Config) ->
     assert_item(#{total => 100}, Breakdown),
     %% allocated_unused and reserved_unallocated
     %% make this test pretty unpredictable
-    assert_percentage(Breakdown, 10),
+    assert_percentage(Breakdown, 20),
     http_get(Config, "/nodes/nonode/memory/relative", ?NOT_FOUND),
     passed.
 
