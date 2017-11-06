@@ -1,6 +1,6 @@
---- .travis.yml.orig	2017-11-03 16:53:12.945174000 +0100
-+++ .travis.yml	2017-11-03 16:54:28.566777000 +0100
-@@ -7,7 +7,12 @@
+--- .travis.yml.orig	2017-11-06 19:22:19.544851000 +0100
++++ .travis.yml	2017-11-06 19:26:26.097256000 +0100
+@@ -7,8 +7,13 @@
      - alerts@rabbitmq.com
  addons:
    apt:
@@ -8,6 +8,7 @@
 +      - sourceline: deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-trusty-prod trusty main
 +        key_url: https://packages.microsoft.com/keys/microsoft.asc
      packages:
+       - awscli
 +      - dotnet-sdk-2.0.0
 +      - maven
        - xsltproc
