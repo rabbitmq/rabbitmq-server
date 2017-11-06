@@ -1,8 +1,6 @@
 # vim:sw=2:et:
 
-# Use a real VM so we can install all the packages we want.
-sudo: required
-
+sudo: false
 language: erlang
 notifications:
   email:
@@ -10,18 +8,19 @@ notifications:
 addons:
   apt:
     sources:
-      - sourceline: deb https://packages.erlang-solutions.com/ubuntu precise contrib
+      - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
         key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
       # Use Elixir from Erlang Solutions. The provided Elixir is
-      # installed with kiex but is old. By using an prebuilt Debian
-      # package, we save the compilation time.
-      - elixir
-      - xsltproc
+      # installed with kiex but is old. We also can't use kiex to
+      # install a newer one because of GitHub API rate limiting.
+      - elixir=1.4.5-1
+cache:
+  apt: true
+
 otp_release:
-  - "19.2"
   - "19.3"
-  - "20.0"
+  - "20.1"
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
@@ -35,11 +34,12 @@ before_script:
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
-  # Remove all kiex installations. This makes sure that the Erlang
-  # Solutions one is picked: it's after the kiex installations in $PATH.
-  - echo YES | kiex implode
+  # Make sure we use Elixir from Erlang Solutions and not kiex.
+  - |
+    echo YES | kiex implode
+    elixir --version
+    elixir --version | grep -q 'Elixir 1.4.5'
 
-script: make tests
-
-cache:
-  apt: true
+script:
+  - make xref
+  - make tests
