@@ -1,0 +1,8 @@
+--- .travis.yml.orig	2017-11-06 14:17:55.355074000 +0100
++++ .travis.yml	2017-11-06 14:18:19.294123000 +0100
+@@ -32,4 +32,4 @@
+ 
+ script:
+   - make xref
+-  - make tests
++  - test "$TRAVIS_OTP_RELEASE" = "R16B03-1" || make tests
