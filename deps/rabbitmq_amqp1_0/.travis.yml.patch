@@ -1,18 +1,19 @@
---- .travis.yml.orig	2017-11-03 17:46:47.187552000 +0100
-+++ .travis.yml	2017-11-03 18:07:51.344308000 +0100
-@@ -10,11 +10,15 @@
+--- .travis.yml.orig	2017-11-06 19:32:08.729349000 +0100
++++ .travis.yml	2017-11-06 19:32:33.427487000 +0100
+@@ -10,12 +10,16 @@
      sources:
        - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
          key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
 +      - sourceline: deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-trusty-prod trusty main
 +        key_url: https://packages.microsoft.com/keys/microsoft.asc
      packages:
+       - awscli
++      - dotnet-sdk-2.0.0
        # Use Elixir from Erlang Solutions. The provided Elixir is
        # installed with kiex but is old. We also can't use kiex to
        # install a newer one because of GitHub API rate limiting.
        - elixir=1.4.5-1
-+      - dotnet-sdk-2.0.0
 +      - maven
  cache:
    apt: true
- 
+ env:
