@@ -31,9 +31,38 @@ update-contributor-code-of-conduct:
 		cp $(DEPS_DIR)/rabbit_common/CONTRIBUTING.md $$repo/CONTRIBUTING.md; \
 	done
 
+ifdef CREDS
+define replace_aws_creds
+	set -ex; \
+	if test -f "$(CREDS)"; then \
+	  key_id=$(shell travis encrypt --no-interactive \
+	    "AWS_ACCESS_KEY_ID=$$(awk '/^rabbitmq-s3-access-key-id/ { print $$2; }' < "$(CREDS)")"); \
+	  access_key=$(shell travis encrypt --no-interactive \
+	    "AWS_SECRET_ACCESS_KEY=$$(awk '/^rabbitmq-s3-secret-access-key/ { print $$2; }' < "$(CREDS)")"); \
+	  mv .travis.yml .travis.yml.orig; \
+	  awk "\
+	  /^  global:/ { \
+	    print; \
+	    print \"    - secure: $$key_id\"; \
+	    print \"    - secure: $$access_key\"; \
+	    next; \
+	  } \
+	  /- secure/ { next; } \
+	  { print; }" < .travis.yml.orig > .travis.yml; \
+	  rm -f .travis.yml.orig; \
+	else \
+	  echo "        INFO: CREDS file missing; not setting/updating AWS credentials"; \
+	fi
+endef
+else
+define replace_aws_creds
+	echo "        INFO: CREDS not set; not setting/updating AWS credentials"
+endef
+endif
+
 ifeq ($(PROJECT),rabbit_common)
 travis-yml:
-	@:
+	$(gen_verbose) $(replace_aws_creds)
 else
 travis-yml:
 	$(gen_verbose) cp -a $(DEPS_DIR)/rabbit_common/.travis.yml .
@@ -42,6 +71,7 @@ travis-yml:
 		patch -p0 < .travis.yml.patch; \
 		rm -f .travis.yml.orig; \
 	fi
+	$(verbose) $(replace_aws_creds)
 ifeq ($(DO_COMMIT),yes)
 	$(verbose) git diff --quiet .travis.yml \
 	|| git commit -m 'Travis CI: Update config from rabbitmq-common' .travis.yml
