@@ -47,7 +47,7 @@ define replace_aws_creds
 	    print \"    - secure: $$access_key\"; \
 	    next; \
 	  } \
-	  /- secure/ { next; } \
+	  /- secure:/ { next; } \
 	  { print; }" < .travis.yml.orig > .travis.yml; \
 	  rm -f .travis.yml.orig; \
 	else \
@@ -65,7 +65,19 @@ travis-yml:
 	$(gen_verbose) $(replace_aws_creds)
 else
 travis-yml:
-	$(gen_verbose) cp -a $(DEPS_DIR)/rabbit_common/.travis.yml .
+	$(gen_verbose) ! test -f .travis.yml || \
+	grep -E -- '- secure:' .travis.yml > .travis.yml.creds
+	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/.travis.yml .travis.yml.orig
+	$(verbose) awk ' \
+	/^  global:/ { \
+	  print; \
+	  system("test -f .travis.yml.creds && cat .travis.yml.creds"); \
+	  next; \
+	} \
+	/- secure:/ { next; } \
+	{ print; } \
+	' < .travis.yml.orig > .travis.yml
+	$(verbose) rm -f .travis.yml.orig .travis.yml.creds
 	$(verbose) set -e; \
 	if test -f .travis.yml.patch; then \
 		patch -p0 < .travis.yml.patch; \
