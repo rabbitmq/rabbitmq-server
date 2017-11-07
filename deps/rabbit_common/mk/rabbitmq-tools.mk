@@ -66,7 +66,7 @@ travis-yml:
 else
 travis-yml:
 	$(gen_verbose) ! test -f .travis.yml || \
-	grep -E -- '- secure:' .travis.yml > .travis.yml.creds
+	(grep -E -- '- secure:' .travis.yml || :) > .travis.yml.creds
 	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/.travis.yml .travis.yml.orig
 	$(verbose) awk ' \
 	/^  global:/ { \
