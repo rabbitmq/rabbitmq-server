@@ -16,15 +16,12 @@ TimeoutStartSec=3600
 # in the event of a failure. systemd service restarts are not a
 # replacement for service monitoring. Please see
 # http://www.rabbitmq.com/monitoring.html
-# Restart docs: https://www.freedesktop.org/software/systemd/man/systemd.service.html#Restart=
-# RestartSec docs: https://www.freedesktop.org/software/systemd/man/systemd.service.html#RestartSec=
-#
-# SuccessExitStatus: rabbitmq/rabbitmq-server-release#51
 Restart=on-failure
 RestartSec=10
 WorkingDirectory=/var/lib/rabbitmq
 ExecStart=/usr/sbin/rabbitmq-server
 ExecStop=/usr/sbin/rabbitmqctl shutdown
+# See rabbitmq/rabbitmq-server-release#51
 SuccessExitStatus=69
 
 [Install]
