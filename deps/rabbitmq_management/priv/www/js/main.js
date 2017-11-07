@@ -213,7 +213,7 @@ function set_timer_interval(interval) {
 function reset_timer() {
     clearInterval(timer);
     if (timer_interval != null) {
-        timer = setInterval('partial_update()', timer_interval);
+        timer = setInterval(partial_update, timer_interval);
     }
 }
 
@@ -281,7 +281,7 @@ function partial_update() {
                 render_charts();
             });
         }
-  }
+    }
 }
 
 function update_navigation() {
@@ -537,16 +537,20 @@ function postprocess() {
         return confirm("Are you sure? The queue is going to be deleted. " +
                        "Messages cannot be recovered after deletion.");
         });
+
     $('form.confirm-purge-queue').submit(function() {
         return confirm("Are you sure? Messages cannot be recovered after purging.");
         });
+
     $('form.confirm').submit(function() {
             return confirm("Are you sure? This object cannot be recovered " +
                            "after deletion.");
         });
+
     $('div.section h2, div.section-hidden h2').on('click', function() {
             toggle_visibility($(this));
         });
+
     $('label').map(function() {
             if ($(this).attr('for') == '') {
                 var id = 'auto-label-' + Math.floor(Math.random()*1000000000);
@@ -557,6 +561,7 @@ function postprocess() {
                 }
             }
         });
+
     $('#download-definitions').click(function() {
             var idx = $("select[name='vhost-download'] option:selected").index();
             var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
@@ -568,16 +573,18 @@ function postprocess() {
             return false;
         });
 
-
     $('.update-manual').click(function() {
             update_manual($(this).attr('for'), $(this).attr('query'));
         });
+
     $('.multifield input').on('keyup', function() {
             update_multifields();
         });
+
     $('.multifield select').on('change', function() {
             update_multifields();
         });
+
     $('.controls-appearance').change(function() {
         var params = $(this).get(0).options;
         var selected = $(this).val();
@@ -591,27 +598,33 @@ function postprocess() {
             }
         }
     });
+
     $(document).on('click', '.help', function() {
       show_popup('help', HELP[$(this).attr('id')]);
     });
+
     $(document).on('click', '.popup-options-link', function() {
         $('.popup-owner').removeClass('popup-owner');
         $(this).addClass('popup-owner');
         var template = $(this).attr('type') + '-options';
         show_popup('options', format(template, {span: $(this)}), 'fade');
     });
+
     $(document).on('click', '.rate-visibility-option', function() {
         var k = $(this).attr('data-pref');
         var show = get_pref(k) !== 'true';
         store_pref(k, '' + show);
         partial_update();
     });
+
     $(document).on('focus', 'input, select', function() {
         update_counter = 0; // If there's interaction, reset the counter.
     });
+
     $('.tag-link').click(function() {
         $('#tags').val($(this).attr('tag'));
     });
+
     $('.argument-link').click(function() {
         var field = $(this).attr('field');
         var row = $('#' + field).find('.mf').last();
@@ -623,19 +636,23 @@ function postprocess() {
         type.val($(this).attr('type'));
         update_multifields();
     });
+
     $(document).on('click', 'form.auto-submit select, form.auto-submit input', function(){
         $(this).parents('form').submit();
     });
+
     $('#filter').on('keyup', debounce(update_filter, 500));
+
     $('#filter-regex-mode').change(update_filter_regex_mode);
+
     $('#truncate').on('keyup', debounce(update_truncate, 500));
+
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
 
     update_multifields();
 }
-
 
 function url_pagination_template(template, defaultPage, defaultPageSize){
     var page_number_request = fmt_page_number_request(template, defaultPage);
@@ -652,7 +669,6 @@ function url_pagination_template(template, defaultPage, defaultPageSize){
         '&use_regex=' + use_regex;
 }
 
-
 function stored_page_info(template, page_start){
     var pageSize = fmt_strip_tags($('#' + template+'-pagesize').val());
     var filterName = fmt_strip_tags($('#' + template+'-name').val());
@@ -667,11 +683,9 @@ function stored_page_info(template, page_start){
         store_pref(template + '_current_regex', regex_on ? "checked" : " " );
     }
 
-
     if (pageSize != null && pageSize != undefined) {
         store_pref(template + '_current_page_size', pageSize);
     }
-
 }
 
 function update_pages(template, page_start){
@@ -683,7 +697,6 @@ function update_pages(template, page_start){
          case 'channels' : renderChannels(); break;
      }
 }
-
 
 function renderQueues() {
     render({'queues':  {path: url_pagination_template('queues', 1, 100),
@@ -732,6 +745,11 @@ function postprocess_partial() {
     });
 
     setup_visibility();
+
+    $('.updatable div.section h2, .updatable div.section-hidden h2').on('click', function() {
+            toggle_visibility($(this));
+        });
+
     $('.sort').click(function() {
             var sort = $(this).attr('sort');
             if (current_sort == sort) {
@@ -743,6 +761,7 @@ function postprocess_partial() {
             }
             update();
         });
+
     // TODO remove this hack when we get rid of "updatable"
     if ($('#filter-warning-show').length > 0) {
         $('#filter-truncate').addClass('filter-warning');
@@ -917,10 +936,11 @@ function toggle_visibility(item) {
         all.addClass('section-invisible');
     }
     else {
-        if (all.hasClass('section-hidden'))
+        if (all.hasClass('section-hidden')) {
             store_pref(pref, 't');
-        else
+        } else {
             clear_pref(pref);
+        }
         all.removeClass('section-invisible');
         all.addClass('section-visible');
     }
@@ -1117,11 +1137,11 @@ function sync_req(type, params0, path_template, options) {
     req.setRequestHeader('authorization', auth_header());
 
     if (options != undefined || options != null) {
-	if (options.headers != undefined || options.headers != null) {
-	    jQuery.each(options.headers, function (k, v) {
-		req.setRequestHeader(k, v);
-	    });
-	}
+        if (options.headers != undefined || options.headers != null) {
+            jQuery.each(options.headers, function (k, v) {
+            req.setRequestHeader(k, v);
+            });
+        }
     }
 
     try {
