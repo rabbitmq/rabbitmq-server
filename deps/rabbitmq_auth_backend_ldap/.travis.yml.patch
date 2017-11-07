@@ -1,0 +1,10 @@
+--- .travis.yml.orig	2017-11-07 16:55:19.382911000 +0100
++++ .travis.yml	2017-11-07 16:55:32.539698000 +0100
+@@ -37,7 +37,6 @@
+ 
+ script:
+   - make xref
+-  - make tests
+ 
+ after_failure:
+   - |
