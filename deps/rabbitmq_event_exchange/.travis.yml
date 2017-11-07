@@ -1,8 +1,6 @@
 # vim:sw=2:et:
 
-# Use a real VM so we can install all the packages we want.
-sudo: required
-
+sudo: false
 language: erlang
 notifications:
   email:
@@ -10,19 +8,24 @@ notifications:
 addons:
   apt:
     sources:
-      - sourceline: deb https://packages.erlang-solutions.com/ubuntu precise contrib
+      - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
         key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
+      - awscli
       # Use Elixir from Erlang Solutions. The provided Elixir is
-      # installed with kiex but is old. By using an prebuilt Debian
-      # package, we save the compilation time.
-      - elixir
-      - xsltproc
+      # installed with kiex but is old. We also can't use kiex to
+      # install a newer one because of GitHub API rate limiting.
+      - elixir=1.4.5-1
+cache:
+  apt: true
+env:
+  global:
+    - secure: i3JOb6jEw0a4DbGi9y+MaG34u1BY7cXKYGrI209VDLX23iD28Aa/9BkI9R0Brd2g+RxNZR5DPpYTtewO+zFBXOqFNpoeP7QVvVATQVZl7cMtSDmlcul3QwuKfng3wfZ417BgioSqkm+gVN6eS8mvn0ngt35Jfq0eIPledLlAY3Y=
+    - secure: jWod/Y/C/Eaj0u9hqLm98YrheE3ttm0LyqzNVpdLrkyIYrFpZOSfpvl3CKfZdIESZ8H3OAX8YP40wxwn7EBmTnFR03mwKRCu8zKvDgdiIc0+MaCXq7c1RNkwcGUlj2jlZ4XnxMPvimCeozPGyPuO4XMZAuOyhekHKDcg+hQD6Ko=
 
 otp_release:
-  - "19.2"
   - "19.3"
-  - "20.0"
+  - "20.1"
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
@@ -36,11 +39,26 @@ before_script:
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
-  # Remove all kiex installations. This makes sure that the Erlang
-  # Solutions one is picked: it's after the kiex installations in $PATH.
-  - echo YES | kiex implode
+  # Make sure we use Elixir from Erlang Solutions and not kiex.
+  - |
+    echo YES | kiex implode
+    elixir --version
+    elixir --version | grep -q 'Elixir 1.4.5'
 
-script: make tests
+script:
+  - make xref
+  - make tests
 
-cache:
-  apt: true
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi
