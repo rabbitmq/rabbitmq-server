@@ -20,6 +20,8 @@ cache:
   apt: true
 env:
   global:
+    - secure: IRKRVDsvD0owEKM2GDKvuk5zSQJa+Z0Iu4JQuK78BBLTcmjVmWhHsaE1H9hwzCpWwC2yaMz/2C5GEEaK/ET1XnY48UvuihGWxpMnzbzhYuEx6CRSa9Ka7ik2LCP1lZ+t6OxBXT07PdJ2Ib3hPXcxgRHgOEAHfJ9gmMHgG9vrbiI=
+    - secure: SffTvt5GWsNq/Nc5epFn5ODIbnn17AkEUsrf3LQc8huKdN92x2v5rSrGgJAPN7WCRW1VPmlgwMF0tj6uY+oSKI+sotWb+dPdCyuXh/z4JhxX+S/ui4ItgbfD6DAui+eLXZxkvzGyv4NJ85aKhj5y8ztSqD7Fgeg0jErZwbNg6y0=
 
 otp_release:
   - "19.3"
