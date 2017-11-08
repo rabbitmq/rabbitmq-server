@@ -27,6 +27,10 @@ object's management view.
 Click on the process ID (e.g. "&lt;0.3423.0&gt;") to see some more
 Erlang process details.
 
+See [Memory Use Analysis guide](http://www.rabbitmq.com/memory-use.html) on RabbitMQ website
+for more information.
+
+
 ## HTTP API
 
 You can drive the HTTP API yourself. It installs into the management plugin's API; you should understand that first. Once you do, the additional paths look like:
