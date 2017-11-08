@@ -33,7 +33,7 @@ update-contributor-code-of-conduct:
 
 ifdef CREDS
 define replace_aws_creds
-	set -ex; \
+	set -e; \
 	if test -f "$(CREDS)"; then \
 	  key_id=$(shell travis encrypt --no-interactive \
 	    "AWS_ACCESS_KEY_ID=$$(awk '/^rabbitmq-s3-access-key-id/ { print $$2; }' < "$(CREDS)")"); \
