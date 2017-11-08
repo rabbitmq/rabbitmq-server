@@ -1,10 +1,10 @@
---- .travis.yml.orig	2017-11-08 10:18:44.330536000 +0100
-+++ .travis.yml	2017-11-08 10:18:52.003362000 +0100
-@@ -9,6 +9,7 @@
-   apt:
-     packages:
-       - awscli
+--- .travis.yml.orig	2017-11-08 10:20:57.880076430 +0100
++++ .travis.yml	2017-11-08 10:21:09.331099192 +0100
+@@ -16,6 +16,7 @@
+       # installed with kiex but is old. We also can't use kiex to
+       # install a newer one because of GitHub API rate limiting.
+       - elixir=1.4.5-1
 +      - maven
-       - xsltproc
  cache:
    apt: true
+ env:
