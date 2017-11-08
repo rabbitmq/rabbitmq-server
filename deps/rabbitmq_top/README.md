@@ -6,7 +6,9 @@ Screenshots: http://imgur.com/a/BjVOP
 
 ## Installation
 
-This plugin ships with RabbitMQ as of `3.6.3`. Enable it like any other plugin.
+This plugin ships with RabbitMQ as of `3.6.3`. Enable it with
+
+    [sudo] rabbitmq-plugins enable rabbitmq_top
 
 ### RabbitMQ 3.5.x
 
@@ -22,7 +24,10 @@ Click on the process description (e.g. "my queue") to see that
 object's management view.
 
 Click on the process ID (e.g. "&lt;0.3423.0&gt;") to see some more
-Erlang-ish process details, including the current stacktrace.
+Erlang process details.
+
+See [Memory Use Analysis guide](http://www.rabbitmq.com/memory-use.html) on RabbitMQ website
+for more information.
 
 ## HTTP API
 
@@ -45,6 +50,6 @@ You can build and install it like any other plugin (see
 
 ## License and Copyright
 
-(c) Pivotal Software Inc, 2007—2016
+(c) Pivotal Software Inc, 2007—2017
 
 Released under the same license as RabbitMQ.
