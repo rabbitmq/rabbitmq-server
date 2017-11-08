@@ -1,3 +1,5 @@
+# vim:sw=2:et:
+
 sudo: false
 language: erlang
 notifications:
@@ -6,27 +8,47 @@ notifications:
 addons:
   apt:
     packages:
+      - awscli
       - xsltproc
+cache:
+  apt: true
+env:
+  global:
+    - secure: eNEronx0EQn3IEGVeZIf/PPNo/yvGH8Owvg+NWxzQrj+/Ji5GdNR0GoGPfFYVf4I1BwUZsmnkApubyCvuNXnuyy84TGN26LqFo6WtksbV35r2GkBvGXiU6PFn2G9Rs8Zau93BrpHrN/HW/B02NEvo9OSVEgzdKBCLN+PTimFoQ0=
+    - secure: eyKZmtqVqufQNBowji0nVRzPwc53GuJgQ2tI8AQiZ+w49j34jMuW4uJC8lpPh03nYGvN4ANoUgu6uJBRmI2DnevYo4kXAK1tNsHXmR2WRdMSPMdTbrucKJsLwwkvSYdmuPXr5AnckZZYRkXr4zB08esSI5P8rieaB5r+3/bJD4M=
+
 otp_release:
   - "R16B03-1"
-  - "17.5"
-  - "18.0"
-  - "19.0"
+  - "19.3"
+  - "20.1"
 
-# The checkout made by Travis is a "detached HEAD" and branches
-# information is missing. Our Erlang.mk's git_rmq fetch method relies on
-# it, so we need to restore it.
-#
-# We simply fetch master and, if it exists, stable branches. A branch is
-# created, pointing to the detached HEAD.
 before_script:
+  # The checkout made by Travis is a "detached HEAD" and branches
+  # information is missing. Our Erlang.mk's git_rmq fetch method relies
+  # on it, so we need to restore it.
+  #
+  # We simply fetch master and, if it exists, stable branches. A branch
+  # is created, pointing to the detached HEAD.
   - |
     git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
 
-script: make tests
+script:
+  - make xref
+  - make tests
 
-cache:
-  apt: true
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi
