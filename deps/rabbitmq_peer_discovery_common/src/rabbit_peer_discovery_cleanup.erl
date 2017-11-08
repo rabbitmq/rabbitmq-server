@@ -18,7 +18,7 @@
 
 -behaviour(gen_server).
 
--include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
+-include("include/rabbit_peer_discovery.hrl").
 
 -export([start_link/0,
          check_cluster/0]).

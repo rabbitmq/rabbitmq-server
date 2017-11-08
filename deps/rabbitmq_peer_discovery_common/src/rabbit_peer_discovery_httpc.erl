@@ -17,7 +17,7 @@
 
 -module(rabbit_peer_discovery_httpc).
 
--include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
+-include("include/rabbit_peer_discovery.hrl").
 
 %%
 %% API
