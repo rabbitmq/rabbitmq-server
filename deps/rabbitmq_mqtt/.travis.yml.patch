@@ -1,0 +1,10 @@
+--- .travis.yml.orig	2017-11-08 10:18:44.330536000 +0100
++++ .travis.yml	2017-11-08 10:18:52.003362000 +0100
+@@ -9,6 +9,7 @@
+   apt:
+     packages:
+       - awscli
++      - maven
+       - xsltproc
+ cache:
+   apt: true
