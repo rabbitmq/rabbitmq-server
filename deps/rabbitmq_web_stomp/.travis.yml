@@ -1,3 +1,5 @@
+# vim:sw=2:et:
+
 sudo: false
 language: erlang
 notifications:
@@ -6,29 +8,47 @@ notifications:
 addons:
   apt:
     packages:
+      - awscli
       - xsltproc
-otp_release:
-  # sockjs doesn't build with R16B03
-  - "17.5"
-  - "18.3"
-  - "19.0"
-  - "19.1"
-  - "19.2"
+cache:
+  apt: true
+env:
+  global:
+    - secure: LrAVcUvjHu8z39bPQS0T97eX5BZzm1MeFXbuLeT0S1gPPP0NemVXT5LkETFIHR7gvrjBF/vWYJ4E8U/xCLeJ5HAsfjOVt6QSdnDpcLK1UTj/l+Ah3kKNRy6gab65LKhdCRqgUDbrToDGmYAgTbDB9Cp923kLXntxk3BhdM0xGT4=
+    - secure: bScIefD2DCmaqjtbORF+WA/JG6NpyirAPE9hJxeahamIE9LGQQN4UiTiUzmfaJLTZD3KtyGaVXTl5Dlg7Ru508J9OfRmzJ4lq+GZSKDIHWV2I0z59j+HySELIsBeEflXzi7PUlW2IvCr3qHbY+YGZLAGdxD5Yadcig3LbkLShac=
 
-# The checkout made by Travis is a "detached HEAD" and branches
-# information is missing. Our Erlang.mk's git_rmq fetch method relies on
-# it, so we need to restore it.
-#
-# We simply fetch master and, if it exists, stable branches. A branch is
-# created, pointing to the detached HEAD.
+otp_release:
+  - "R16B03-1"
+  - "19.3"
+  - "20.1"
+
 before_script:
+  # The checkout made by Travis is a "detached HEAD" and branches
+  # information is missing. Our Erlang.mk's git_rmq fetch method relies
+  # on it, so we need to restore it.
+  #
+  # We simply fetch master and, if it exists, stable branches. A branch
+  # is created, pointing to the detached HEAD.
   - |
     git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
 
-script: make tests
+script:
+  - make xref
+  - make tests
 
-cache:
-  apt: true
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi
