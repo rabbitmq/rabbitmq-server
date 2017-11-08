@@ -1,3 +1,5 @@
+# vim:sw=2:et:
+
 sudo: false
 language: erlang
 notifications:
@@ -6,27 +8,47 @@ notifications:
 addons:
   apt:
     packages:
+      - awscli
       - xsltproc
+cache:
+  apt: true
+env:
+  global:
+    - secure: 2NPpbwPwvq4udbGl7LVlOPSTxHwDIsxDmU3q+71fV70pTkwM718GWSj5Rv6k3blYY4efMuup7zN90DG+NJHrVV3r2FQsgU2pMZZmGKYja8z8ttuR/u8AaclzOHyLzbRlJDX3Vy1GnVLPDUqb72kcoYKhZNyhuqc/eOFSnqxwS6avjR+Ry0M3conozmYnFE3CEbkHWvu5kPU6WdSLhhwT+kbNFfGlM57t2rxueF95Rm4jmk40RW9o9dY0aPC3NEegDK4FVqb/iqVkyDVaxoTI+SzJzvV0MWLkt+2ix+2zYASQKcC2TUzhU0A6Fu/dNzbr06n1m3YErA4TM4oqHZ3bx3shORZ9vR/CYXsEY0j6++3okz7h1t7b/czwUw0PAIz6/M4n79UKaJ9xz2TjXn2ZEiar4PiCOjhh4gaFRThW2VOVk11L0hy0BE3yxIt4cVlWZU30OwkXEQ6WCACx0m4cv/fr/eAN/EQZGuFFGDnigtVJCb/K7kBwHU+mLcLsJc5qVT8a0TEc41Rfa5gclR8KgCTkmgXhdU0X9tp18ZsSoGkC5kzariFeQ4VopN0ITDmg87NRSIR6V3VtVZB7M8VjKbG9TToqMkgSUO29R0HQCZIh7m0w/pck33lJATmVaGSV2qm5BXBTq9pMki4MvarIazZbuVIJ+FsdtTVOUFFxsJw=
+    - secure: kFROPP5jDYk6CcO/9BDwA9X1dDc8VmsMLydscVc5l6iGpez4UbDuVKzPAqV5iFy/XeM8UH/DQFzBuEfU96pfy3qIKuP+7VRuFYuY1NE2ZZFa9wLfZqlQ//G1Pzh3eypK76Gi2iBtVDR2A5PeEliJpdCeqDNjp5ZYjsPmtA5mAPhnaSFaUiQHKSUA3JtYrdrEPZVU3L3hmxn+Dg6KIdRI9gA6yipulvEbnjBkhZMaLTM9H7fVjnzoFME7554GNvenU9vGQ8GAQSwZkmBTNRcN78QTFbCon4PVpJBZovYSyOoimkaIKW6nI1XR6LR02rHcdGb4TmI6c3SJsciu5qrd7oUVhK+sNEoonqKZjCGiqH2Z9OfWESKxf4CVHWocbBkMoATFgbjdj95SRVc0gcW6/6tU6s1f9veZG0SFYmTE+wVMAsPtVpL3iw3h6mgrnSYcdNAzqwh4EAssq/8WgpE7QlqSj7zifq1fAGlrGOktm+8Rn/STYiN3JVy+gx+keCginwg9o+dqxz9EjlJGIuTOEkrjnCSJstOD+ii782Ucw2leU8yQQrF4slqwan5AbuDkS4Jz5b9/gJbn8OC7+XBKWEqdwLN6DhVDlDgQqRZX3HqdtyaMTFJUN3H4ygohh5hWNBb+6E/R1VsCLLpvaWp/6DUvpwkYO0VokDkF0WWKc/0=
+
 otp_release:
   - "R16B03-1"
-  - "17.5"
-  - "18.0"
-  - "19.0"
+  - "19.3"
+  - "20.1"
 
-# The checkout made by Travis is a "detached HEAD" and branches
-# information is missing. Our Erlang.mk's git_rmq fetch method relies on
-# it, so we need to restore it.
-#
-# We simply fetch master and, if it exists, stable branches. A branch is
-# created, pointing to the detached HEAD.
 before_script:
+  # The checkout made by Travis is a "detached HEAD" and branches
+  # information is missing. Our Erlang.mk's git_rmq fetch method relies
+  # on it, so we need to restore it.
+  #
+  # We simply fetch master and, if it exists, stable branches. A branch
+  # is created, pointing to the detached HEAD.
   - |
     git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
 
-script: make tests
+script:
+  - make xref
+  - make tests
 
-cache:
-  apt: true
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi
