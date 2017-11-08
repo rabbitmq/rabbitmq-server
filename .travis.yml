@@ -1,6 +1,6 @@
+# vim:sw=2:et:
+
 sudo: false
-services:
-  - docker
 language: erlang
 notifications:
   email:
@@ -8,24 +8,27 @@ notifications:
 addons:
   apt:
     packages:
+      - awscli
       - xsltproc
+cache:
+  apt: true
+env:
+  global:
+    - secure: cz1CEq0NSXAbpLHjORlf/nG+9vrlJUSbtYF9fBO1OSw3E96c1Sp9sbMC2m6cqizxzZCOnsUSwXE4Tdxn73+v3d3ebl+V3PwJ2YbvOZvMURZ/SLwrycsgPZZNsefEMOQs0zLfP7ocI9UgrioN1/QwmMKSKeWxgdh+56CW9xVDgMA=
+    - secure: kCzu0qlzKNJSUcN+Uwe65Zf2oK2T7ImxIW8BdA/7cwPihfSyRQFRJ2vzi/RSxwSDjuOlxchu8w2KuPxC55MDfq1QIbdFmqRU4Bo0mIYWAvkh25y0mBPYf2wIkt4TAu2F+hftfwjAB6zMWeAdCu3/41dnU/duoG7nROM41ie3Xio=
+
 otp_release:
   - "R16B03-1"
-  - "17.5"
-  - "18.3"
-  - "19.0"
-env:
-  matrix:
-  - GROUP=1
-  - GROUP=2
+  - "19.3"
+  - "20.1"
 
-# The checkout made by Travis is a "detached HEAD" and branches
-# information is missing. Our Erlang.mk's git_rmq fetch method relies on
-# it, so we need to restore it.
-#
-# We simply fetch master and, if it exists, stable branches. A branch is
-# created, pointing to the detached HEAD.
 before_script:
+  # The checkout made by Travis is a "detached HEAD" and branches
+  # information is missing. Our Erlang.mk's git_rmq fetch method relies
+  # on it, so we need to restore it.
+  #
+  # We simply fetch master and, if it exists, stable branches. A branch
+  # is created, pointing to the detached HEAD.
   - |
     git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
@@ -33,8 +36,19 @@ before_script:
     git fetch upstream master:master || :
 
 script:
-  - if test "${GROUP}" = '1'; then make tests; fi
-  - if test "${GROUP}" = '2'; then sh ./scripts/travis_test_ocf_ra.sh; fi
+  - make xref
+  - make tests
 
-cache:
-  apt: true
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi
