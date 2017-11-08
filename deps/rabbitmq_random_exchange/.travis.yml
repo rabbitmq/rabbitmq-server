@@ -1,0 +1,54 @@
+# vim:sw=2:et:
+
+sudo: false
+language: erlang
+notifications:
+  email:
+    - alerts@rabbitmq.com
+addons:
+  apt:
+    packages:
+      - awscli
+      - xsltproc
+cache:
+  apt: true
+env:
+  global:
+    - secure: AhsOICJKpXJtnsUiNXOXWbmvqeh9OfzneuFVprCAmEqAxqinHphxIFohCQAEn5mOfweJ88J8UMN0ZCZfYVslkRNqcv1KkuilBoHIJU58RjHx5HUFX7IBa7SzxLsdGpc357mp86trs9tlAUJzOpKRXOZgNLXE+OZfm8jXJ91UTlutORNMTggDsbGDKd4UHIo/Q59P48a2HyjKpYWXmdckCaF0jILXNKgESimSZirAFUvCbPu75madlFW8t4fi4QfcB4+usfBb5QLJZ9O6OIK3gSmJW/zX7++Vz/jf7P5CgR9rRwyrupg2lrteG+GvbsPE//RaB+Uvmwrdo8OoyStqscg1zL61/nQl/Fhr599zgKTiMncbI/JnQYw8J4scT7SfcRTCE5pG1OiEFN5L5kBz3nYAiNwp7iZn+pIpxUpshkXyxXE1COWG/tvPtI9W6YnrNX5L60RGdeCXtCpzM8FdR0RpnV9e1d84gIuQJBWwFKtxOLpkXj7gIiIMMU533J9sHknWe3D9LsrqawsaZukDBrhlEhbB46ba0gXCN1hxp8E2H38aT5Pl8tdCqJn9OKykG3XjASHjb2+zqg4jQuz0iYpORGOUo+fTLlyMFId/1NTfkJphvZjFXpgGB3ZWp9GlPZtVlrkKrk3lOJ7CvIkJyjS8Tax6ml6oXKMIKGiBfBE=
+    - secure: AGXqoV7PuMW2U/huEenq0llArPYKcNmycmrqzBdltzvemB3u7MKDVZWcRmarQxb+LZ8tI6SbZ62ARBIfg5kpCHd9LYbrUw6NGi5G6N0uo4pUMWhhch6yDE3IUAkZG8NXeKOH2t1JtelyTFWYNW8nBWQ5j8i8o3RW/io+9JNBV7DcIDePDcApCOzOxP4DY2+0t0gz/vrNm9nJSIAh+NuTwFL6V01C8MvVYvt+HIIDpyY4GI+rN6WrLLpcmGEu2y56a2AF35bK2sSb5s2wTBmjmsjr/hKM5Kt4Tt648FUKa0LjksucMA5TEImRga1UdkzyFtA/81GONpbu0RIVa1VjuTosFLKZ7UIxlUfMLqwkwrLGlelrh3CX3MuLuuj7LLwvriWG+27m7gVy+qBG4Q7nKVpdDz9fYt/imDxFRiXX/V+wDtcEzrUBs02k22pSoBCTypooIvDZ0i8mHwW34OxFdoLeIfMvHfMb1VjAn1NjoYfDgpvQO38erTQWgfR7MAhnEXnZ8POq0yBV7ElX9KULo52uNlE0bmTny/OkEP7l4lf9/jvZlU8L/lKLpRlTXPt3GXQMZGu85nQwAKCbAgvdpw1uPpv4SwabLvhYKFhA7Bcf79ItJ/O5/nS6+8cZeomHRZiRRrQWyJnfhuaDlWK3KStrx3/t/OnucVkw+FK9lkk=
+
+otp_release:
+  - "R16B03-1"
+  - "19.3"
+  - "20.1"
+
+before_script:
+  # The checkout made by Travis is a "detached HEAD" and branches
+  # information is missing. Our Erlang.mk's git_rmq fetch method relies
+  # on it, so we need to restore it.
+  #
+  # We simply fetch master and, if it exists, stable branches. A branch
+  # is created, pointing to the detached HEAD.
+  - |
+    git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
+    git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
+    git fetch upstream stable:stable || :
+    git fetch upstream master:master || :
+
+script:
+  - make xref
+  - make tests
+
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi
