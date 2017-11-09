@@ -38,7 +38,7 @@ before_script:
 
 script:
   - make xref
-  - make tests
+  - test "$TRAVIS_OTP_RELEASE" = "R16B03-1" || make tests
 
 after_failure:
   - |
