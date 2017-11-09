@@ -1,5 +1,5 @@
---- .travis.yml.orig	2017-11-08 10:18:44.330536000 +0100
-+++ .travis.yml	2017-11-08 10:18:52.003362000 +0100
+--- .travis.yml.orig	2017-11-09 09:00:02.841796000 +0100
++++ .travis.yml	2017-11-09 09:00:47.693016000 +0100
 @@ -9,6 +9,7 @@
    apt:
      packages:
@@ -8,3 +8,12 @@
        - xsltproc
  cache:
    apt: true
+@@ -37,7 +38,7 @@
+ 
+ script:
+   - make xref
+-  - make tests
++  - test "$TRAVIS_OTP_RELEASE" = "R16B03-1" || make tests
+ 
+ after_failure:
+   - |
