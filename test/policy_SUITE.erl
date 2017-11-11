@@ -30,7 +30,9 @@ groups() ->
     [
      {cluster_size_2, [], [
                            policy_ttl,
-                           operator_policy_ttl
+                           operator_policy_ttl,
+                           operator_retroactive_policy_ttl,
+                           operator_retroactive_policy_publish_ttl
                           ]}
     ].
 
@@ -112,6 +114,49 @@ operator_policy_ttl(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+operator_retroactive_policy_ttl(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"policy_ttl-queue">>,
+    declare(Ch, Q),
+    publish(Ch, Q, lists:seq(1, 50)),
+    % Operator policy will override
+    rabbit_ct_broker_helpers:set_operator_policy(Config, 0, <<"ttl-policy-op">>,
+        <<"policy_ttl-queue">>, <<"all">>, [{<<"message-ttl">>, 1}]),
+
+    %% Old messages are not expired
+    timer:sleep(50),
+    get_messages(50, Ch, Q),
+    delete(Ch, Q),
+
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"ttl-policy-op">>),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+operator_retroactive_policy_publish_ttl(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"policy_ttl-queue">>,
+    declare(Ch, Q),
+    publish(Ch, Q, lists:seq(1, 50)),
+    % Operator policy will override
+    rabbit_ct_broker_helpers:set_operator_policy(Config, 0, <<"ttl-policy-op">>,
+        <<"policy_ttl-queue">>, <<"all">>, [{<<"message-ttl">>, 1}]),
+
+    %% Old messages are not expired, new ones only expire when they get to the head of
+    %% the queue
+    publish(Ch, Q, lists:seq(1, 25)),
+    timer:sleep(50),
+    [[<<"policy_ttl-queue">>, <<"75">>]] = rabbit_ct_broker_helpers:rabbitmqctl_list(Config, 0, ["list_queues"]),
+    get_messages(50, Ch, Q),
+    delete(Ch, Q),
+
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"ttl-policy-op">>),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
 %%----------------------------------------------------------------------------
 
 
@@ -153,5 +198,15 @@ consume(Ch, Q, Ack) ->
 
 get_empty(Ch, Q) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = Q}).
+
+get_messages(0, Ch, Q) ->
+    get_empty(Ch, Q);
+get_messages(Number, Ch, Q) ->
+    case amqp_channel:call(Ch, #'basic.get'{queue = Q}) of
+        {#'basic.get_ok'{}, _} ->
+            get_messages(Number - 1, Ch, Q);
+        #'basic.get_empty'{} ->
+            exit(failed)
+    end.
 
 %%----------------------------------------------------------------------------
