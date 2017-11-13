@@ -80,7 +80,7 @@ mqtt_init() ->
             {ok, _} = ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 1),
                 ranch_ssl, TLSConf,
                 rabbit_web_mqtt_connection_sup, CowboyOpts),
-            listener_started('https/web-mqtt', TCPConf),
+            listener_started('https/web-mqtt', TLSConf),
             rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
                             ["0.0.0.0", TLSPort])
     end,
