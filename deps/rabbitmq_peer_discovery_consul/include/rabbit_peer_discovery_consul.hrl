@@ -68,7 +68,7 @@
           consul_svc_ttl                     => #peer_discovery_config_entry_meta{
                                                    type          = integer,
                                                    env_variable  = "CONSUL_SVC_TTL",
-                                                   default_value = 30
+                                                   default_value = 30000
                                                   },
           consul_svc_tags                    => #peer_discovery_config_entry_meta{
                                                    type          = list,
