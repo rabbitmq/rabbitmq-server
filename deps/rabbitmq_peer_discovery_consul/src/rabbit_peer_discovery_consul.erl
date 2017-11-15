@@ -551,7 +551,7 @@ start_session_ttl_updater(SessionId) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     Interval = get_config_key(consul_svc_ttl, M),
     rabbit_log:debug("Starting session renewal"),
-    {ok, TRef} = timer:apply_interval(Interval * 100, ?MODULE,
+    {ok, TRef} = timer:apply_interval(Interval * 500, ?MODULE,
                                       session_ttl_update_callback, [SessionId]),
     TRef.
 
