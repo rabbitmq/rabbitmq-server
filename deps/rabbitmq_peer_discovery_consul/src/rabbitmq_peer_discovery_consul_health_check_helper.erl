@@ -64,8 +64,10 @@ init([]) ->
                     %% The value is 1/2 of what's configured to avoid a race
                     %% condition between check TTL expiration and in flight
                     %% notifications
-                    rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [Interval]),
-                    {ok, TRef} = timer:apply_interval(Interval, rabbit_peer_discovery_consul,
+
+                    IntervalInMs = Interval * 500, % note this is 1/2
+                    rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [IntervalInMs]),
+                    {ok, TRef} = timer:apply_interval(IntervalInMs, rabbit_peer_discovery_consul,
                                                       send_health_check_pass, []),
                     {ok, #state{timer_ref = TRef}}
             end;
