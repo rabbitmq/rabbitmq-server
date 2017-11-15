@@ -302,6 +302,8 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender, flow = Flow}, true},
     %% We are acking messages to the channel process that sent us
     %% the message delivery. See
     %% rabbit_amqqueue_process:handle_ch_down for more info.
+    %% If message is rejected by the master, the publish will be nacked
+    %% even if slaves confirm it. No need to check for length here.
     maybe_flow_ack(Sender, Flow),
     noreply(maybe_enqueue_message(Delivery, State));
 

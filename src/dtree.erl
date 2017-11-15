@@ -32,7 +32,7 @@
 
 -module(dtree).
 
--export([empty/0, insert/4, take/3, take/2, take_all/2, drop/2,
+-export([empty/0, insert/4, take/3, take/2, take_one/2, take_all/2, drop/2,
          is_defined/2, is_empty/1, smallest/1, size/1]).
 
 %%----------------------------------------------------------------------------
@@ -50,6 +50,7 @@
 -spec insert(pk(), [sk()], val(), ?MODULE()) -> ?MODULE().
 -spec take([pk()], sk(), ?MODULE()) -> {[kv()], ?MODULE()}.
 -spec take(sk(), ?MODULE()) -> {[kv()], ?MODULE()}.
+-spec take_one(pk(), ?MODULE()) -> {[{pk(), val()}], ?MODULE()}.
 -spec take_all(sk(), ?MODULE()) -> {[kv()], ?MODULE()}.
 -spec drop(pk(), ?MODULE()) -> ?MODULE().
 -spec is_defined(sk(), ?MODULE()) -> boolean().
@@ -105,6 +106,26 @@ take(SK, {P, S}) ->
         none         -> {[], {P, S}};
         {value, PKS} -> {KVs, P1} = take2(PKS, SK, P),
                         {KVs, {P1, gb_trees:delete(SK, S)}}
+    end.
+
+%% Drop an entry with the primary key and clears secondary keys for this key,
+%% returning a list with a key-value pair as a result.
+%% If the primary key does not exist, returns an empty list.
+take_one(PK, {P, S}) ->
+    case gb_trees:lookup(PK, P) of
+        {value, {SKS, Value}} ->
+            P1 = gb_trees:delete(PK, P),
+            S1 = gb_sets:fold(
+                    fun(SK, Acc) ->
+                        {value, PKS} = gb_trees:lookup(SK, Acc),
+                        PKS1 = gb_sets:delete(PK, PKS),
+                        case gb_sets:is_empty(PKS1) of
+                            true  -> gb_trees:delete(SK, Acc);
+                            false -> gb_trees:update(SK, PKS1, Acc)
+                        end
+                    end, S, SKS),
+            {[{PK, Value}], {P1, S1}};
+        none -> {[], {P, S}}
     end.
 
 %% Drop all entries which contain the given secondary key, returning

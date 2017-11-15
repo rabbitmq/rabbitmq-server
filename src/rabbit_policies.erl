@@ -42,6 +42,7 @@ register() ->
                           {policy_validator, <<"max-length">>},
                           {policy_validator, <<"max-length-bytes">>},
                           {policy_validator, <<"queue-mode">>},
+                          {policy_validator, <<"overflow">>},
                           {operator_policy_validator, <<"expires">>},
                           {operator_policy_validator, <<"message-ttl">>},
                           {operator_policy_validator, <<"max-length">>},
@@ -104,7 +105,13 @@ validate_policy0(<<"queue-mode">>, <<"default">>) ->
 validate_policy0(<<"queue-mode">>, <<"lazy">>) ->
     ok;
 validate_policy0(<<"queue-mode">>, Value) ->
-    {error, "~p is not a valid queue-mode value", [Value]}.
+    {error, "~p is not a valid queue-mode value", [Value]};
+validate_policy0(<<"overflow">>, <<"drop-head">>) ->
+    ok;
+validate_policy0(<<"overflow">>, <<"reject-publish">>) ->
+    ok;
+validate_policy0(<<"overflow">>, Value) ->
+    {error, "~p is not a valid overflow value", [Value]}.
 
 merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
 merge_policy_value(<<"max-length">>, Val, OpVal)       -> min(Val, OpVal);

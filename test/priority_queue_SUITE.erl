@@ -32,6 +32,7 @@ groups() ->
      {cluster_size_2, [], [
                            ackfold,
                            drop,
+                           reject,
                            dropwhile_fetchwhile,
                            info_head_message_timestamp,
                            matching,
@@ -301,6 +302,20 @@ drop(Config) ->
     %% We drop from the head, so this is according to the "spec" even
     %% if not likely to be what the user wants.
     get_all(Ch, Q, do_ack, [2, 1, 1, 1]),
+    delete(Ch, Q),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+reject(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"reject-queue">>,
+    declare(Ch, Q, [{<<"x-max-length">>, long, 4},
+                    {<<"x-overflow">>, longstr, <<"reject-publish">>}
+                    | arguments(3)]),
+    publish(Ch, Q, [1, 2, 3, 1, 2, 3, 1, 2, 3]),
+    %% First 4 messages are published, all others are discarded.
+    get_all(Ch, Q, do_ack, [3, 2, 1, 1]),
     delete(Ch, Q),
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),

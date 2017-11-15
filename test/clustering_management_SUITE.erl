@@ -708,7 +708,7 @@ assert_failure(Fun) ->
         %% Failure to start an app result in node shutdown
         {badrpc, nodedown}             -> nodedown;
         {badrpc_multi, Reason, _Nodes} -> Reason;
-        Other                          -> exit({expected_failure, Other})
+        Other                          -> error({expected_failure, Other})
     end.
 
 stop_app(Node) ->

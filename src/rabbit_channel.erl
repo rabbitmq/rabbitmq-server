@@ -136,6 +136,9 @@
   %% a list of tags for published messages that were
   %% delivered but are yet to be confirmed to the client
   confirmed,
+  %% a list of tags for published messages that were
+  %% rejected but are yet to be sent to the client
+  rejected,
   %% a dtree used to track oustanding notifications
   %% for messages published as mandatory
   mandatory,
@@ -419,6 +422,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
                 unconfirmed             = dtree:empty(),
+                rejected                = [],
                 confirmed               = [],
                 mandatory               = dtree:empty(),
                 capabilities            = Capabilities,
@@ -449,6 +453,7 @@ prioritise_call(Msg, _From, _Len, _State) ->
 prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {confirm,            _MsgSeqNos, _QPid} -> 5;
+        {reject_publish,     _MsgSeqNos, _QPid} -> 5;
         {mandatory_received, _MsgSeqNo,  _QPid} -> 5;
         _                                       -> 0
     end.
@@ -598,6 +603,13 @@ handle_cast({mandatory_received, MsgSeqNo}, State = #ch{mandatory = Mand}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
     noreply_coalesce(State#ch{mandatory = dtree:drop(MsgSeqNo, Mand)});
 
+handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
+    %% It does not matter which queue rejected the message,
+    %% if any queue rejected it - it should not be confirmed.
+    {MXs, UC1} = dtree:take_one(MsgSeqNo, UC),
+    %% NB: don't call noreply/1 since we don't want to send confirms.
+    noreply_coalesce(record_rejects(MXs, State#ch{unconfirmed = UC1}));
+
 handle_cast({confirm, MsgSeqNos, QPid}, State = #ch{unconfirmed = UC}) ->
     {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
@@ -621,7 +633,7 @@ handle_info(emit_stats, State) ->
     State1 = rabbit_event:reset_stats_timer(State, #ch.stats_timer),
     %% NB: don't call noreply/1 since we don't want to kick off the
     %% stats timer.
-    {noreply, send_confirms(State1), hibernate};
+    {noreply, send_confirms_and_nacks(State1), hibernate};
 
 handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
@@ -681,10 +693,10 @@ reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
 
 noreply(NewState) -> {noreply, next_state(NewState), hibernate}.
 
-next_state(State) -> ensure_stats_timer(send_confirms(State)).
+next_state(State) -> ensure_stats_timer(send_confirms_and_nacks(State)).
 
-noreply_coalesce(State = #ch{confirmed = C}) ->
-    Timeout = case C of [] -> hibernate; _ -> 0 end,
+noreply_coalesce(State = #ch{confirmed = C, rejected = R}) ->
+    Timeout = case {C, R} of {[], []} -> hibernate; _ -> 0 end,
     {noreply, ensure_stats_timer(State), Timeout}.
 
 ensure_stats_timer(State) ->
@@ -818,7 +830,7 @@ check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost
                           RoutingKey,
                           Permission) ->
     Resource = Name#resource{kind = topic},
-    Timeout = get_operation_timeout(),   
+    Timeout = get_operation_timeout(),
     AmqpParams = case ConnPid of
                      none ->
                          %% Called from outside the channel by mgmt API
@@ -961,6 +973,15 @@ maybe_set_fast_reply_to(
     end;
 maybe_set_fast_reply_to(C, _State) ->
     C.
+
+record_rejects([], State) ->
+    State;
+record_rejects(MXs, State = #ch{rejected = R, tx = Tx}) ->
+    Tx1 = case Tx of
+        none -> none;
+        _    -> failed
+    end,
+    State#ch{rejected = [MXs | R], tx = Tx1}.
 
 record_confirms([], State) ->
     State;
@@ -1874,21 +1895,24 @@ send_nacks(_MXs, State = #ch{state = closing}) -> %% optimisation
 send_nacks(_, State) ->
     maybe_complete_tx(State#ch{tx = failed}).
 
-send_confirms(State = #ch{tx = none, confirmed = []}) ->
+send_confirms_and_nacks(State = #ch{tx = none, confirmed = [], rejected = []}) ->
     State;
-send_confirms(State = #ch{tx = none, confirmed = C}) ->
+send_confirms_and_nacks(State = #ch{tx = none, confirmed = C, rejected = R}) ->
     case rabbit_node_monitor:pause_partition_guard() of
-        ok      -> MsgSeqNos =
+        ok      -> ConfirmMsgSeqNos =
                        lists:foldl(
                          fun ({MsgSeqNo, XName}, MSNs) ->
                                  ?INCR_STATS(exchange_stats, XName, 1,
                                              confirm, State),
                                  [MsgSeqNo | MSNs]
                          end, [], lists:append(C)),
-                   send_confirms(MsgSeqNos, State#ch{confirmed = []});
+                   State1 = send_confirms(ConfirmMsgSeqNos, State#ch{confirmed = []}),
+                   %% TODO: msg seq nos, same as for confirms. Need to implement
+                   %% nack rates first.
+                   send_nacks(lists:append(R), State1#ch{rejected = []});
         pausing -> State
     end;
-send_confirms(State) ->
+send_confirms_and_nacks(State) ->
     case rabbit_node_monitor:pause_partition_guard() of
         ok      -> maybe_complete_tx(State);
         pausing -> State
