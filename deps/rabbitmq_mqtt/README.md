@@ -5,7 +5,7 @@
 This is an MQTT plugin for RabbitMQ.
 
 The plugin is included in the RabbitMQ distribution.  To enable
-it, use <href="http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html">rabbitmq-plugins</a>:
+it, use [rabbitmq-plugins](http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html):
 
     rabbitmq-plugins enable rabbitmq_mqtt
 
