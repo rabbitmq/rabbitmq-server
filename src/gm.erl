@@ -1354,9 +1354,12 @@ find_common(A, B, Common) ->
             find_common(A1, B1, queue:in(Val, Common));
         {{empty, _A}, _} ->
             {Common, B};
-        {_, {_, B1}} ->
+        %% Drop value from B.
+        %% Match value to avoid infinite loop, since {empty, B} = queue:out(B).
+        {_, {{value, _}, B1}} ->
             find_common(A, B1, Common);
-        {{_, A1}, _} ->
+        %% Drop value from A. Empty A should be matched by second close.
+        {{{value, _}, A1}, _} ->
             find_common(A1, B, Common)
     end.
 
