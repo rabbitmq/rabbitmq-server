@@ -1559,9 +1559,10 @@ has_pending_messages(#state{ broadcast_buffer = Buffer })
   when Buffer =/= [] ->
     true;
 has_pending_messages(#state{ members_state = MembersState }) ->
-    [] =/= [M || {_, #member{last_pub = LP, last_ack = LA} = M}
-                 <- MembersState,
-                 LP =/= LA].
+    MembersWithPubAckMismatches = maps:filter(fun(_Id, #member{last_pub = LP, last_ack = LA}) ->
+                                                      LP =/= LA
+                                              end, MembersState),
+    0 =/= maps:size(MembersWithPubAckMismatches).
 
 maybe_confirm(_Self, _Id, Confirms, []) ->
     Confirms;
