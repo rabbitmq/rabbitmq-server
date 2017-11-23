@@ -72,6 +72,7 @@ path_contains_existing_directory() {
 }
 
 RABBITMQ_HOME="$(rmq_realpath "${RABBITMQ_SCRIPTS_DIR}/..")"
+ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 
 ## Set defaults
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
@@ -200,6 +201,9 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH=${SERVER_CODE_PATH}
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${MNESIA_DIR}
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
+[ "x" = "x$RABBITMQ_GENERATED_CONFIG_DIR" ] && RABBITMQ_GENERATED_CONFIG_DIR=${GENERATED_CONFIG_DIR}
+[ "x" = "x$RABBITMQ_ADVANCED_CONFIG_FILE" ] && RABBITMQ_ADVANCED_CONFIG_FILE=${ADVANCED_CONFIG_FILE}
+[ "x" = "x$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR=${SCHEMA_DIR}
 [ "x" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT="true"
 [ "xtrue" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
 
@@ -229,13 +233,14 @@ rmq_normalize_path_var RABBITMQ_PLUGINS_DIR
 
 ## Log rotation
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
+[ "x" != "x$RABBITMQ_LOGS" ] && export RABBITMQ_LOGS_source=environment
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
-[ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS=${SASL_LOGS}
-[ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}-sasl.log"
+[ "x" = "x$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log"
+[ "x" = "x$ERL_CRASH_DUMP" ] && ERL_CRASH_DUMP="${RABBITMQ_LOG_BASE}/erl_crash.dump"
 
-rmq_normalize_path_var \
-    RABBITMQ_LOGS \
-    RABBITMQ_SASL_LOGS
+rmq_normalize_path_var RABBITMQ_LOGS
+
+rmq_normalize_path_var RABBITMQ_UPGRADE_LOG
 
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
@@ -252,24 +257,27 @@ rmq_check_if_shared_with_mnesia \
     RABBITMQ_ENABLED_PLUGINS_FILE \
     RABBITMQ_PLUGINS_DIR \
     RABBITMQ_LOGS \
-    RABBITMQ_SASL_LOGS
+    RABBITMQ_UPGRADE_LOG
 
 ##--- End of overridden <var_name> variables
 
 ## Development-specific environment.
 if [ "${RABBITMQ_DEV_ENV}" ]; then
-    if [ "$(basename "$0")" = 'rabbitmq-plugins' -a \( \
-         "$RABBITMQ_PLUGINS_DIR_source" != 'environment' -o \
-         "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' \) ]; then
+    if [ "$RABBITMQ_PLUGINS_DIR_source" != 'environment' -o \
+         "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
         # We need to query the running node for the plugins directory
         # and the "enabled plugins" file.
         eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl eval \
             '{ok, P} = application:get_env(rabbit, plugins_dir),
              {ok, E} = application:get_env(rabbit, enabled_plugins_file),
+             B = os:getenv("RABBITMQ_MNESIA_BASE"),
+             M = os:getenv("RABBITMQ_MNESIA_DIR"),
              io:format(
                "plugins_dir=\"~s\"~n"
-               "enabled_plugins_file=\"~s\"~n", [P, E]).' \
-            2>/dev/null | head -n 2) || :)
+               "enabled_plugins_file=\"~s\"~n"
+               "mnesia_base=\"~s\"~n"
+               "mnesia_dir=\"~s\"~n", [P, E, B, M]).' \
+            2>/dev/null | head -n 4) || :)
         if [ "${plugins_dir}" -a \
              "$RABBITMQ_PLUGINS_DIR_source" != 'environment' ]; then
             RABBITMQ_PLUGINS_DIR="${plugins_dir}"
@@ -277,6 +285,14 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
         if [ "${enabled_plugins_file}" -a \
              "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
             RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
+        fi
+        if [ "${mnesia_base}" -a \
+             "$RABBITMQ_MNESIA_BASE_source" != 'environment' ]; then
+            RABBITMQ_MNESIA_BASE="${mnesia_base}"
+        fi
+        if [ "${mnesia_dir}" -a \
+             "$RABBITMQ_MNESIA_DIR_source" != 'environment' ]; then
+            RABBITMQ_MNESIA_DIR="${mnesia_dir}"
         fi
     fi
 

@@ -104,7 +104,7 @@ master_batch_go0(Args, BatchSize, BQ, BQS) ->
                     false -> {cont, Acc1}
                 end
         end,
-    FoldAcc = {[], 0, {0, BQ:depth(BQS)}, time_compat:monotonic_time()},
+    FoldAcc = {[], 0, {0, BQ:depth(BQS)}, erlang:monotonic_time()},
     bq_fold(FoldFun, FoldAcc, Args, BQ, BQS).
 
 master_batch_send({Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
@@ -164,12 +164,12 @@ stop_syncer(Syncer, Msg) ->
     end.
 
 maybe_emit_stats(Last, I, EmitStats, Log) ->
-    Interval = time_compat:convert_time_unit(
-                 time_compat:monotonic_time() - Last, native, micro_seconds),
+    Interval = erlang:convert_time_unit(
+                 erlang:monotonic_time() - Last, native, micro_seconds),
     case Interval > ?SYNC_PROGRESS_INTERVAL of
         true  -> EmitStats({syncing, I}),
                  Log("~p messages", [I]),
-                 time_compat:monotonic_time();
+                 erlang:monotonic_time();
         false -> Last
     end.
 

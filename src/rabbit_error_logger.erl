@@ -27,7 +27,6 @@
 -export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2,
          handle_info/2]).
 
--import(rabbit_error_logger_file_h, [safe_handle_event/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -59,7 +58,7 @@ stop() ->
 init([DefaultVHost]) ->
     #exchange{} = rabbit_exchange:declare(
                     rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
-                    topic, true, false, true, []),
+                    topic, true, false, true, [], ?INTERNAL_USER),
     {ok, #resource{virtual_host = DefaultVHost,
                    kind = exchange,
                    name = ?LOG_EXCH_NAME}}.
@@ -97,7 +96,7 @@ publish(_Other, _Format, _Data, _State) ->
 publish1(RoutingKey, Format, Data, LogExch) ->
     %% 0-9-1 says the timestamp is a "64 bit POSIX timestamp". That's
     %% second resolution, not millisecond.
-    Timestamp = time_compat:os_system_time(seconds),
+    Timestamp = os:system_time(seconds),
 
     Args = [truncate:term(A, ?LOG_TRUNC) || A <- Data],
     Headers = [{<<"node">>, longstr, list_to_binary(atom_to_list(node()))}],
@@ -106,6 +105,19 @@ publish1(RoutingKey, Format, Data, LogExch) ->
                                          timestamp    = Timestamp,
                                          headers      = Headers},
                               list_to_binary(io_lib:format(Format, Args))) of
-        {ok, _QPids}  -> ok;
-        {error, _Err} -> ok
+        {ok, _DeliveredQPids} -> ok;
+        {error, not_found}    -> ok
+    end.
+
+
+safe_handle_event(HandleEvent, Event, State) ->
+    try
+        HandleEvent(Event, State)
+    catch
+        _:Error ->
+            io:format(
+              "Error in log handler~n====================~n"
+              "Event: ~P~nError: ~P~nStack trace: ~p~n~n",
+              [Event, 30, Error, 30, erlang:get_stacktrace()]),
+            {ok, State}
     end.

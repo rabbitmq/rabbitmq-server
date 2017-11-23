@@ -64,6 +64,11 @@ RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 
 set +e
 
+RABBITMQ_ADVANCED_CONFIG_FILE_NOEX="${RABBITMQ_ADVANCED_CONFIG_FILE%.*}"
+if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
+    RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}"
+fi
+
 # `net_kernel:start/1` will fail in `longnames` mode when erlang is
 # unable to determine FQDN of a node (with a dot in it). But `erl`
 # itself has some magic that still allow it to start when you
@@ -79,6 +84,7 @@ RABBITMQ_PRELAUNCH_NODENAME="rabbitmqprelaunch${$}@localhost"
 # success of our startup sequence to systemd.
 NOTIFY_SOCKET= \
 RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
+ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
 RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
     -boot "${CLEAN_BOOT_FILE}" \
@@ -86,6 +92,9 @@ RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     -hidden \
     -s rabbit_prelaunch \
     ${RABBITMQ_NAME_TYPE} ${RABBITMQ_PRELAUNCH_NODENAME} \
+    -conf_advanced "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
+    -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
+    -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
     -extra "${RABBITMQ_NODENAME}"
 
 PRELAUNCH_RESULT=$?
@@ -99,30 +108,66 @@ else
     exit ${PRELAUNCH_RESULT}
 fi
 
+if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
+    mkdir -p "${RABBITMQ_SCHEMA_DIR}"
+fi
+
+if [ ! -d ${RABBITMQ_GENERATED_CONFIG_DIR} ]; then
+    mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
+fi
+
+if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbit.schema" ]; then
+    cp "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
+fi
+
 set -e
 
-RABBITMQ_CONFIG_ARG=
-[ -f "${RABBITMQ_CONFIG_FILE}.config" ] && RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
+RABBITMQ_CONFIG_FILE_NOEX="${RABBITMQ_CONFIG_FILE%.*}"
+
+if [ "${RABBITMQ_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_CONFIG_FILE}" ]; then
+    if [ -f "${RABBITMQ_CONFIG_FILE}" ]; then
+        RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE_NOEX}"
+    fi
+elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
+    RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE_NOEX} \
+                         -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
+                         -conf_script_dir `dirname $0` \
+                         -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}"
+    if [ -f "${RABBITMQ_ADVANCED_CONFIG_FILE}.config" ]; then
+        RABBITMQ_CONFIG_ARG="${RABBITMQ_CONFIG_ARG} \
+                             -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE} \
+                             -config ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+    fi
+else
+    if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
+        RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
+    elif [ -f "${RABBITMQ_CONFIG_FILE}.conf" ]; then
+        RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
+                             -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
+                             -conf_script_dir `dirname $0` \
+                             -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}"
+        if [ -f "${RABBITMQ_ADVANCED_CONFIG_FILE}.config" ]; then
+            RABBITMQ_CONFIG_ARG="${RABBITMQ_CONFIG_ARG} \
+                                 -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE} \
+                                 -config ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+        fi
+    fi
+fi
 
 RABBITMQ_LISTEN_ARG=
 [ "x" != "x$RABBITMQ_NODE_PORT" ] && [ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_LISTEN_ARG="-rabbit tcp_listeners [{\""${RABBITMQ_NODE_IP_ADDRESS}"\","${RABBITMQ_NODE_PORT}"}]"
 
-# If $RABBITMQ_LOGS is '-', send all log messages to stdout. Likewise
-# for RABBITMQ_SASL_LOGS. This is particularly useful for Docker
-# images.
+# If $RABBITMQ_LOGS is '-', send all log messages to stdout. This is
+# particularly useful for Docker images.
 
 if [ "$RABBITMQ_LOGS" = '-' ]; then
-    RABBIT_ERROR_LOGGER='tty'
-else
-    RABBIT_ERROR_LOGGER='{file,"'${RABBITMQ_LOGS}'"}'
-fi
-
-if [ "$RABBITMQ_SASL_LOGS" = '-' ]; then
     SASL_ERROR_LOGGER=tty
-    RABBIT_SASL_ERROR_LOGGER='tty'
+    RABBIT_LAGER_HANDLER=tty
+    RABBITMQ_LAGER_HANDLER_UPGRADE=tty
 else
     SASL_ERROR_LOGGER=false
-    RABBIT_SASL_ERROR_LOGGER='{file,"'${RABBITMQ_SASL_LOGS}'"}'
+    RABBIT_LAGER_HANDLER='"'${RABBITMQ_LOGS}'"'
+    RABBITMQ_LAGER_HANDLER_UPGRADE='"'${RABBITMQ_UPGRADE_LOG}'"'
 fi
 
 # Bump ETS table limit to 50000
@@ -159,6 +204,7 @@ start_rabbitmq_server() {
     check_start_params &&
     RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
     ERL_MAX_ETS_TABLES=$ERL_MAX_ETS_TABLES \
+    ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
     exec ${ERL_DIR}erl \
         -pa ${RABBITMQ_SERVER_CODE_PATH} ${RABBITMQ_EBIN_ROOT} \
         ${RABBITMQ_START_RABBIT} \
@@ -174,8 +220,9 @@ start_rabbitmq_server() {
         ${RABBITMQ_LISTEN_ARG} \
         -sasl errlog_type error \
         -sasl sasl_error_logger "$SASL_ERROR_LOGGER" \
-        -rabbit error_logger "$RABBIT_ERROR_LOGGER" \
-        -rabbit sasl_error_logger "$RABBIT_SASL_ERROR_LOGGER" \
+        -rabbit lager_log_root "\"$RABBITMQ_LOG_BASE\"" \
+        -rabbit lager_default_file "$RABBIT_LAGER_HANDLER" \
+        -rabbit lager_upgrade_file "$RABBITMQ_LAGER_HANDLER_UPGRADE" \
         -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
         -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
         -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \

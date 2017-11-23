@@ -49,7 +49,7 @@ make_msg(Msg = #basic_message{content       = Content,
             _         -> {[RK], fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
-    TimeSec = time_compat:os_system_time(seconds),
+    TimeSec = os:system_time(seconds),
     PerMsgTTL = per_msg_ttl_header(Content#content.properties),
     HeadersFun2 =
         fun (Headers) ->
@@ -112,14 +112,25 @@ group_by_queue_and_reason(Tables) ->
           end, {sets:new(), []}, Tables),
     Grouped.
 
+update_x_death_header(Info, undefined) ->
+    update_x_death_header(Info, []);
 update_x_death_header(Info, Headers) ->
+    X = x_death_event_key(Info, <<"exchange">>),
     Q = x_death_event_key(Info, <<"queue">>),
     R = x_death_event_key(Info, <<"reason">>),
     case rabbit_basic:header(<<"x-death">>, Headers) of
         undefined ->
+            %% First x-death event gets its own top-level headers.
+            %% See rabbitmq/rabbitmq-server#1332.
+            Headers2 = rabbit_misc:set_table_value(Headers, <<"x-first-death-reason">>,
+                                                   longstr, R),
+            Headers3 = rabbit_misc:set_table_value(Headers2, <<"x-first-death-queue">>,
+                                                   longstr, Q),
+            Headers4 = rabbit_misc:set_table_value(Headers3, <<"x-first-death-exchange">>,
+                                                   longstr, X),
             rabbit_basic:prepend_table_header(
               <<"x-death">>,
-              [{<<"count">>, long, 1} | Info], Headers);
+              [{<<"count">>, long, 1} | Info], Headers4);
         {<<"x-death">>, array, Tables} ->
             %% group existing x-death headers in case we have some from
             %% before rabbitmq-server#78

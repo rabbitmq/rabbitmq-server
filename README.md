@@ -20,7 +20,7 @@
  * [Documentation Source Code](https://github.com/rabbitmq/rabbitmq-website/)
  * [Client libraries and tools](http://www.rabbitmq.com/devtools.html)
  * [Tutorials Source Code](https://github.com/rabbitmq/rabbitmq-tutorials/)
-
+ 
 ## Getting Help
 
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)

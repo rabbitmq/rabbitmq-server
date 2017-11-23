@@ -1,0 +1,86 @@
+.\" vim:ft=nroff:
+.\" The contents of this file are subject to the Mozilla Public License
+.\" Version 1.1 (the "License"); you may not use this file except in
+.\" compliance with the License. You may obtain a copy of the License
+.\" at http://www.mozilla.org/MPL/
+.\"
+.\" Software distributed under the License is distributed on an "AS IS"
+.\" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+.\" the License for the specific language governing rights and
+.\" limitations under the License.
+.\"
+.\" The Original Code is RabbitMQ.
+.\"
+.\" The Initial Developer of the Original Code is Pivotal Software, Inc.
+.\" Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+.\"
+.Dd April 25, 2017
+.Dt RABBITMQ-ENV.CONF 5
+.Os "RabbitMQ Server"
+.Sh NAME
+.Nm rabbitmq-env.conf
+.Nd default settings for RabbitMQ AMQP server
+.\" ------------------------------------------------------------------
+.Sh DESCRIPTION
+.\" ------------------------------------------------------------------
+.Nm
+contains variable settings that override the defaults built in to the
+RabbitMQ startup scripts.
+.Pp
+The file is interpreted by the system shell, and so should consist of a
+sequence of shell environment variable definitions.
+Normal shell syntax is permitted (since the file is sourced using the
+shell "." operator), including line comments starting with "#".
+.Pp
+In order of preference, the startup scripts get their values from the
+environment, from
+.Nm
+and finally from the built-in default values.
+For example, for the
+.Ev RABBITMQ_NODENAME
+setting,
+.Ev RABBITMQ_NODENAME
+from the environment is checked first.
+If it is absent or equal to the empty string, then
+.Ev NODENAME
+from
+.Nm
+is checked.
+If it is also absent or set equal to the empty string then the default
+value from the startup script is used.
+.Pp
+The variable names in
+.Nm
+are always equal to the environment variable names, with the
+.Qq RABBITMQ_
+prefix removed:
+.Ev RABBITMQ_NODE_PORT
+from the environment becomes
+.Ev NODE_PORT
+in
+.Nm ,
+etc.
+.\" ------------------------------------------------------------------
+.Sh EXAMPLES
+.\" ------------------------------------------------------------------
+Here is an example of a complete
+.Nm
+file that overrides the default Erlang node name from "rabbit" to
+"hare".
+.sp
+.Dl # I am a complete rabbitmq-env.conf file.
+.Dl # Comment lines start with a hash character.
+.Dl # This is a /bin/sh script file - use ordinary envt var syntax
+.Dl NODENAME=hare
+.\" ------------------------------------------------------------------
+.Sh SEE ALSO
+.\" ------------------------------------------------------------------
+.Xr rabbitmq-echopid 8 ,
+.Xr rabbitmq-plugins 8 ,
+.Xr rabbitmq-server 8 ,
+.Xr rabbitmq-service 8 ,
+.Xr rabbitmqctl 8
+.\" ------------------------------------------------------------------
+.Sh AUTHOR
+.\" ------------------------------------------------------------------
+.An The RabbitMQ Team Aq Mt info@rabbitmq.com

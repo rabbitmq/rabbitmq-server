@@ -45,16 +45,17 @@ if not defined ERL_CRASH_DUMP_SECONDS (
     set ERL_CRASH_DUMP_SECONDS=0
 )
 
-"!ERLANG_HOME!\bin\erl.exe" ^
--pa "!RABBITMQ_HOME!\ebin" ^
--noinput ^
--hidden ^
-!RABBITMQ_CTL_ERL_ARGS! ^
--s rabbit_plugins_main ^
--enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
--plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" ^
--nodename !RABBITMQ_NODENAME! ^
--extra !STAR!
+"!ERLANG_HOME!\bin\escript.exe" ^
+"%RABBITMQ_HOME%\escript\rabbitmq-plugins" --formatter=plugins !STAR!
+rem -pa "!RABBITMQ_HOME!\ebin" ^
+rem -noinput ^
+rem -hidden ^
+rem !RABBITMQ_CTL_ERL_ARGS! ^
+rem -s rabbit_plugins_main ^
+rem -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+rem -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" ^
+rem -nodename !RABBITMQ_NODENAME! ^
+rem -extra !STAR!
 
 endlocal
 endlocal

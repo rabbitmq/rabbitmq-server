@@ -31,7 +31,7 @@ all() ->
 groups() ->
     [
       {parallel_tests, [parallel], [
-          arguments_parser,
+          auth_backend_internal_expand_topic_permission,
           {basic_header_handling, [parallel], [
               write_table_with_invalid_existing_type,
               invalid_existing_headers,
@@ -43,12 +43,12 @@ groups() ->
           content_transcoding,
           decrypt_config,
           listing_plugins_from_multiple_directories,
-          mutually_exclusive_flags_parsing,
           rabbitmqctl_encode,
           pg_local,
           pmerge,
           plmerge,
           priority_queue,
+          rabbit_direct_extract_extra_auth_props,
           {resource_monitor, [parallel], [
               parse_information_unit
             ]},
@@ -83,7 +83,7 @@ init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
                                    TC =:= decrypt_start_app_undefined ->
     application:load(rabbit),
     Config;
-init_per_testcase(_, Config) ->
+init_per_testcase(_Testcase, Config) ->
     Config.
 
 end_per_testcase(TC, _Config) when TC =:= decrypt_start_app;
@@ -95,104 +95,6 @@ end_per_testcase(decrypt_config, _Config) ->
     application:unload(rabbit);
 end_per_testcase(_TC, _Config) ->
     ok.
-
-%% -------------------------------------------------------------------
-%% Argument parsing.
-%% -------------------------------------------------------------------
-
-arguments_parser(_Config) ->
-    GlobalOpts1 = [{"-f1", flag}, {"-o1", {option, "foo"}}],
-    Commands1 = [command1, {command2, [{"-f2", flag}, {"-o2", {option, "bar"}}]}],
-
-    GetOptions =
-        fun (Args) ->
-                rabbit_cli:parse_arguments(Commands1, GlobalOpts1, "-n", Args)
-        end,
-
-    check_parse_arguments(no_command, GetOptions, []),
-    check_parse_arguments(no_command, GetOptions, ["foo", "bar"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "foo"}], []}},
-      GetOptions, ["command1"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
-      GetOptions, ["command1", "-o1", "blah"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", true}, {"-o1", "foo"}], []}},
-      GetOptions, ["command1", "-f1"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], []}},
-      GetOptions, ["-o1", "blah", "command1"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "blah"}], ["quux"]}},
-      GetOptions, ["-o1", "blah", "command1", "quux"]),
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", true}, {"-o1", "blah"}], ["quux", "baz"]}},
-      GetOptions, ["command1", "quux", "-f1", "-o1", "blah", "baz"]),
-    %% For duplicate flags, the last one counts
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "second"}], []}},
-      GetOptions, ["-o1", "first", "command1", "-o1", "second"]),
-    %% If the flag "eats" the command, the command won't be recognised
-    check_parse_arguments(no_command, GetOptions,
-                          ["-o1", "command1", "quux"]),
-    %% If a flag eats another flag, the eaten flag won't be recognised
-    check_parse_arguments(
-      {ok, {command1, [{"-f1", false}, {"-o1", "-f1"}], []}},
-      GetOptions, ["command1", "-o1", "-f1"]),
-
-    %% Now for some command-specific flags...
-    check_parse_arguments(
-      {ok, {command2, [{"-f1", false}, {"-f2", false},
-                       {"-o1", "foo"}, {"-o2", "bar"}], []}},
-      GetOptions, ["command2"]),
-
-    check_parse_arguments(
-      {ok, {command2, [{"-f1", false}, {"-f2", true},
-                       {"-o1", "baz"}, {"-o2", "bar"}], ["quux", "foo"]}},
-      GetOptions, ["-f2", "command2", "quux", "-o1", "baz", "foo"]),
-
-    passed.
-
-check_parse_arguments(ExpRes, Fun, As) ->
-    SortRes =
-        fun (no_command)          -> no_command;
-            ({ok, {C, KVs, As1}}) -> {ok, {C, lists:sort(KVs), As1}}
-        end,
-
-    true = SortRes(ExpRes) =:= SortRes(Fun(As)).
-
-mutually_exclusive_flags_parsing(_Config) ->
-    Matcher = fun ({ok, Value}, {ok, Value}) -> true;
-                  ({error, Value}, {error, Pattern}) ->
-                      case re:run(Value, Pattern) of
-                          {match, _} -> true;
-                          _ -> false
-                      end;
-                  (_, _) -> false
-              end,
-    Spec = [{"--online", online}
-           ,{"--offline", offline}
-           ,{"--local", local}],
-    Default = all,
-    Cases =[{["--online"], {ok, online}}
-           ,{[], {ok, Default}}
-           ,{["--offline"], {ok, offline}}
-           ,{["--local"], {ok, local}}
-           ,{["--offline", "--local"], {error, "mutually exclusive"}}
-           ,{["--offline", "--online"], {error, "mutually exclusive"}}
-           ,{["--offline", "--local", "--online"], {error, "mutually exclusive"}}
-           ],
-    lists:foreach(fun({Opts, Expected}) ->
-                          ExpandedOpts = [ {Opt, true} || Opt <- Opts ],
-                          Got = rabbit_cli:mutually_exclusive_flags(ExpandedOpts, all, Spec),
-                          case Matcher(Got, Expected) of
-                              true ->
-                                  ok;
-                              false ->
-                                  exit({no_match, Got, Expected, {opts, Opts}})
-                          end
-                  end, Cases).
 
 %% -------------------------------------------------------------------
 %% basic_header_handling.
@@ -332,11 +234,10 @@ do_decrypt_start_app(Config, Passphrase) ->
     %%
     %% We expect a failure *after* the decrypting has been done.
     try
-        rabbit:start_apps([rabbit_shovel_test], [{rabbit, temporary}])
+        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch _:_ ->
         ok
-    end
-    ,
+    end,
     %% Check if the values have been decrypted.
     {ok, Shovels} = application:get_env(rabbit_shovel_test, shovels),
     {_, FirstShovel} = lists:keyfind(my_first_shovel, 1, Shovels),
@@ -360,7 +261,7 @@ decrypt_start_app_undefined(Config) ->
     %%
     %% We expect a failure during decryption because the passphrase is missing.
     try
-        rabbit:start_apps([rabbit_shovel_test], [{rabbit, temporary}])
+        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch
         exit:{bad_configuration, config_entry_decoder} -> ok;
         _:_ -> exit(unexpected_exception)
@@ -380,7 +281,7 @@ decrypt_start_app_wrong_passphrase(Config) ->
     %%
     %% We expect a failure during decryption because the passphrase is wrong.
     try
-        rabbit:start_apps([rabbit_shovel_test], [{rabbit, temporary}])
+        rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch
         exit:{decryption_error,_,_} -> ok;
         _:_ -> exit(unexpected_exception)
@@ -448,6 +349,26 @@ rabbitmqctl_encode_encrypt_decrypt(Secret) ->
         [lists:flatten(io_lib:format("~p", [{encrypted, Encrypted}])), PassPhrase ++ " "]
     )
     .
+
+rabbit_direct_extract_extra_auth_props(_Config) ->
+    % no protocol to extract
+    [] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
+        [{name,<<"127.0.0.1:52366 -> 127.0.0.1:1883">>}]),
+    % protocol to extract, but no module to call
+    [] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
+        [{protocol, {'PROTOCOL_WITHOUT_MODULE', "1.0"}}]),
+    % see rabbit_dummy_protocol_connection_info module
+    % protocol to extract, module that returns a client ID
+    [{client_id, <<"DummyClientId">>}] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
+        [{protocol, {'DUMMY_PROTOCOL', "1.0"}}]),
+    % protocol to extract, but error thrown in module
+    [] = rabbit_direct:extract_extra_auth_props(
+        {<<"guest">>, <<"guest">>}, <<"/">>, -1,
+        [{protocol, {'DUMMY_PROTOCOL', "1.0"}}]),
+    ok.
 
 %% -------------------------------------------------------------------
 %% pg_local.
@@ -984,4 +905,38 @@ listing_plugins_from_multiple_directories(Config) ->
             ct:pal("Got ~p~nExpected: ~p", [Got, Expected]),
             exit({wrong_plugins_list, Got})
     end,
+    ok.
+
+auth_backend_internal_expand_topic_permission(_Config) ->
+    ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},
+    %% simple case
+    <<"services/default/accounts/guest/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            ExpandMap
+        ),
+    %% replace variable twice
+    <<"services/default/accounts/default/guest/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{vhost}/{username}/notifications">>,
+            ExpandMap
+        ),
+    %% nothing to replace
+    <<"services/accounts/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/accounts/notifications">>,
+            ExpandMap
+        ),
+    %% the expand map isn't defined
+    <<"services/{vhost}/accounts/{username}/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            undefined
+        ),
+    %% the expand map is empty
+    <<"services/{vhost}/accounts/{username}/notifications">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"services/{vhost}/accounts/{username}/notifications">>,
+            #{}
+        ),
     ok.

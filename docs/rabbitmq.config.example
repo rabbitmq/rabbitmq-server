@@ -40,16 +40,6 @@
    %%
    %% {handshake_timeout, 10000},
 
-   %% Log levels in decreasing order of verbosity:
-   %%   * 'debug'
-   %%   * 'info'
-   %%   * 'warning'
-   %%   * 'error'
-   %%   * 'none'
-   %%  Defaults to '{connection, info}'
-   %%
-   %% {log_levels, [{channel, info}, {connection, info}, {federation, info}, {mirroring, info}]},
-
    %% Set to 'true' to perform reverse DNS lookups when accepting a
    %% connection. Hostnames will then be shown instead of IP addresses
    %% in rabbitmqctl and the management plugin.
@@ -143,6 +133,12 @@
    %% Password hashing implementation. Will only affect newly
    %% created users. To recalculate hash for an existing user
    %% it's necessary to update her password.
+   %%
+   %% When importing definitions exported from versions earlier
+   %% than 3.6.0, it is possible to go back to MD5 (only do this
+   %% as a temporary measure!) by setting this to rabbit_password_hashing_md5.
+   %%
+   %% To use SHA-512, set to rabbit_password_hashing_sha512.
    %%
    %% {password_hashing_module, rabbit_password_hashing_sha256},
 
@@ -259,7 +255,7 @@
    %%
    %% {vm_memory_high_watermark, {absolute, 1073741824}},
    %%
-   %% Or you can set absolute value using memory units.
+   %% Or you can set absolute value using memory units (with RabbitMQ 3.6.0+).
    %%
    %% {vm_memory_high_watermark, {absolute, "1024M"}},
    %%
@@ -310,6 +306,7 @@
    %% {disk_free_limit, 50000000},
    %%
    %% Or you can set it using memory units (same as in vm_memory_high_watermark)
+   %% with RabbitMQ 3.6.0+.
    %% {disk_free_limit, "50MB"},
    %% {disk_free_limit, "50000kB"},
    %% {disk_free_limit, "2GB"},
@@ -320,10 +317,8 @@
    %% {disk_free_limit, {mem_relative, 2.0}},
 
    %%
-   %% Misc/Advanced Options
+   %% Clustering
    %% =====================
-   %%
-   %% NB: Change these only if you understand what you are doing!
    %%
 
    %% Queue master location strategy:
@@ -358,6 +353,12 @@
    %%
    %% {cluster_partition_handling, ignore},
 
+   %% Mirror sync batch size, in messages. Increasing this will speed
+   %% up syncing but total batch size in bytes must not exceed 2 GiB.
+   %% Available in RabbitMQ 3.6.0 or later.
+   %%
+   %% {mirroring_sync_batch_size, 4096},
+
    %% Make clustering happen *automatically* at startup - only applied
    %% to nodes that have just been reset or started for the first time.
    %% Related doc guide: http://www.rabbitmq.com/clustering.html#auto-config
@@ -371,11 +372,17 @@
    %%
    %% {cluster_keepalive_interval, 10000},
 
+   %%
+   %% Statistics Collection
+   %% =====================
+   %%
+
    %% Set (internal) statistics collection granularity.
    %%
    %% {collect_statistics, none},
 
-   %% Statistics collection interval (in milliseconds).
+   %% Statistics collection interval (in milliseconds). Increasing
+   %% this will reduce the load on management database.
    %%
    %% {collect_statistics_interval, 5000},
 
@@ -658,7 +665,17 @@
    %% TLS certificate whenever the first frame sent on a session is not a
    %% CONNECT frame.
    %%
-   %% {implicit_connect, true}
+   %% {implicit_connect, true},
+
+   %% Whether or not to enable proxy protocol support.
+   %% Once enabled, clients cannot directly connect to the broker
+   %% anymore. They must connect through a load balancer that sends the
+   %% proxy protocol header to the broker at connection time.
+   %% This setting applies only to STOMP clients, other protocols
+   %% like MQTT or AMQP have their own setting to enable proxy protocol.
+   %% See the plugins or broker documentation for more information.
+   %%
+   %% {proxy_protocol, false}
   ]},
 
  %% ----------------------------------------------------------------------------
@@ -723,6 +740,16 @@
    %%                         {linger,        {true, 0}},
    %%                         {exit_on_close, false}
    %%                      ]},
+
+   %% Whether or not to enable proxy protocol support.
+   %% Once enabled, clients cannot directly connect to the broker
+   %% anymore. They must connect through a load balancer that sends the
+   %% proxy protocol header to the broker at connection time.
+   %% This setting applies only to MQTT clients, other protocols
+   %% like STOMP or AMQP have their own setting to enable proxy protocol.
+   %% See the plugins or broker documentation for more information.
+   %%
+   %% {proxy_protocol, false}
   ]},
 
  %% ----------------------------------------------------------------------------
@@ -841,5 +868,45 @@
    %% Set queries to determine which tags a user has
    %%
    %% {tag_queries, []}
+  ]},
+
+  %% Lager controls logging.
+  %% See https://github.com/basho/lager for more documentation
+  {lager, [
+   %%
+   %% Log directory, taken from the RABBITMQ_LOG_BASE env variable by default.
+   %% {log_root, "/var/log/rabbitmq"},
+   %%
+   %% All log messages go to the default "sink" configured with
+   %% the `handlers` parameter. By default, it has a single
+   %% lager_file_backend handler writing messages to "$nodename.log"
+   %% (ie. the value of $RABBIT_LOGS).
+   %% {handlers, [
+   %%   {lager_file_backend, [{file, "rabbit.log"},
+   %%                         {level, info},
+   %%                         {date, ""},
+   %%                         {size, 0}]}
+   %% ]},
+   %%
+   %% Extra sinks are used in RabbitMQ to categorize messages. By
+   %% default, those extra sinks are configured to forward messages
+   %% to the default sink (see above). "rabbit_log_lager_event"
+   %% is the default category where all RabbitMQ messages without
+   %% a category go. Messages in the "channel" category go to the
+   %% "rabbit_channel_lager_event" Lager extra sink, and so on.
+   %% {extra_sinks, [
+   %%   {rabbit_log_lager_event, [{handlers, [
+   %%                               {lager_forwarder_backend,
+   %%                                [lager_event, info]}]}]},
+   %%   {rabbit_channel_lager_event, [{handlers, [
+   %%                                   {lager_forwarder_backend,
+   %%                                    [lager_event, info]}]}]},
+   %%   {rabbit_conection_lager_event, [{handlers, [
+   %%                                     {lager_forwarder_backend,
+   %%                                      [lager_event, info]}]}]},
+   %%   {rabbit_mirroring_lager_event, [{handlers, [
+   %%                                     {lager_forwarder_backend,
+   %%                                      [lager_event, info]}]}]}
+   %% ]}
   ]}
 ].

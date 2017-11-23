@@ -1,0 +1,109 @@
+[
+
+
+ %% ----------------------------------------------------------------------------
+ %% Advanced Erlang Networking/Clustering Options.
+ %%
+ %% See http://www.rabbitmq.com/clustering.html for details
+ %% ----------------------------------------------------------------------------
+ %% Sets the net_kernel tick time.
+ %% Please see http://erlang.org/doc/man/kernel_app.html and
+ %% http://www.rabbitmq.com/nettick.html for further details.
+ %%
+ %% {kernel, [{net_ticktime, 60}]},
+ %% ----------------------------------------------------------------------------
+ %% RabbitMQ Shovel Plugin
+ %%
+ %% See http://www.rabbitmq.com/shovel.html for details
+ %% ----------------------------------------------------------------------------
+
+ {rabbitmq_shovel,
+  [{shovels,
+    [%% A named shovel worker.
+     %% {my_first_shovel,
+     %%  [
+
+     %% List the source broker(s) from which to consume.
+     %%
+     %%   {sources,
+     %%    [%% URI(s) and pre-declarations for all source broker(s).
+     %%     {brokers, ["amqp://user:password@host.domain/my_vhost"]},
+     %%     {declarations, []}
+     %%    ]},
+
+     %% List the destination broker(s) to publish to.
+     %%   {destinations,
+     %%    [%% A singular version of the 'brokers' element.
+     %%     {broker, "amqp://"},
+     %%     {declarations, []}
+     %%    ]},
+
+     %% Name of the queue to shovel messages from.
+     %%
+     %% {queue, <<"your-queue-name-goes-here">>},
+
+     %% Optional prefetch count.
+     %%
+     %% {prefetch_count, 10},
+
+     %% when to acknowledge messages:
+     %% - no_ack: never (auto)
+     %% - on_publish: after each message is republished
+     %% - on_confirm: when the destination broker confirms receipt
+     %%
+     %% {ack_mode, on_confirm},
+
+     %% Overwrite fields of the outbound basic.publish.
+     %%
+     %% {publish_fields, [{exchange,    <<"my_exchange">>},
+     %%                   {routing_key, <<"from_shovel">>}]},
+
+     %% Static list of basic.properties to set on re-publication.
+     %%
+     %% {publish_properties, [{delivery_mode, 2}]},
+
+     %% The number of seconds to wait before attempting to
+     %% reconnect in the event of a connection failure.
+     %%
+     %% {reconnect_delay, 2.5}
+
+     %% ]} %% End of my_first_shovel
+    ]}
+   %% Rather than specifying some values per-shovel, you can specify
+   %% them for all shovels here.
+   %%
+   %% {defaults, [{prefetch_count,     0},
+   %%             {ack_mode,           on_confirm},
+   %%             {publish_fields,     []},
+   %%             {publish_properties, [{delivery_mode, 2}]},
+   %%             {reconnect_delay,    2.5}]}
+  ]},
+
+  {rabbitmq_auth_backend_ldap, [
+    %%
+    %% Authorisation
+    %% =============
+    %%
+
+    %% The LDAP plugin can perform a variety of queries against your
+    %% LDAP server to determine questions of authorisation. See
+    %% http://www.rabbitmq.com/ldap.html#authorisation for more
+    %% information.
+
+    %% Set the query to use when determining vhost access
+    %%
+    %% {vhost_access_query, {in_group,
+    %%                       "ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
+
+    %% Set the query to use when determining resource (e.g., queue) access
+    %%
+    %% {resource_access_query, {constant, true}},
+
+    %% Set queries to determine which tags a user has
+    %%
+    %% {tag_queries, []}
+  ]}
+].
+
+
+

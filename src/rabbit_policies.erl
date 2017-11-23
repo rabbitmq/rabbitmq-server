@@ -20,10 +20,11 @@
 %% validation functions.
 
 -behaviour(rabbit_policy_validator).
+-behaviour(rabbit_policy_merge_strategy).
 
 -include("rabbit.hrl").
 
--export([register/0, validate_policy/1]).
+-export([register/0, validate_policy/1, merge_policy_value/3]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "internal policies"},
@@ -40,7 +41,16 @@ register() ->
                           {policy_validator, <<"expires">>},
                           {policy_validator, <<"max-length">>},
                           {policy_validator, <<"max-length-bytes">>},
-                          {policy_validator, <<"queue-mode">>}]],
+                          {policy_validator, <<"queue-mode">>},
+                          {policy_validator, <<"overflow">>},
+                          {operator_policy_validator, <<"expires">>},
+                          {operator_policy_validator, <<"message-ttl">>},
+                          {operator_policy_validator, <<"max-length">>},
+                          {operator_policy_validator, <<"max-length-bytes">>},
+                          {policy_merge_strategy, <<"expires">>},
+                          {policy_merge_strategy, <<"message-ttl">>},
+                          {policy_merge_strategy, <<"max-length">>},
+                          {policy_merge_strategy, <<"max-length-bytes">>}]],
     ok.
 
 validate_policy(Terms) ->
@@ -95,4 +105,16 @@ validate_policy0(<<"queue-mode">>, <<"default">>) ->
 validate_policy0(<<"queue-mode">>, <<"lazy">>) ->
     ok;
 validate_policy0(<<"queue-mode">>, Value) ->
-    {error, "~p is not a valid queue-mode value", [Value]}.
+    {error, "~p is not a valid queue-mode value", [Value]};
+validate_policy0(<<"overflow">>, <<"drop-head">>) ->
+    ok;
+validate_policy0(<<"overflow">>, <<"reject-publish">>) ->
+    ok;
+validate_policy0(<<"overflow">>, Value) ->
+    {error, "~p is not a valid overflow value", [Value]}.
+
+merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
+merge_policy_value(<<"max-length">>, Val, OpVal)       -> min(Val, OpVal);
+merge_policy_value(<<"max-length-bytes">>, Val, OpVal) -> min(Val, OpVal);
+merge_policy_value(<<"expires">>, Val, OpVal)          -> min(Val, OpVal).
+

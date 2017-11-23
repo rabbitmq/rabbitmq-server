@@ -184,7 +184,7 @@
               %% 'Notify' is a boolean that indicates whether a queue should be
               %% notified of a change in the limit or volume that may allow it to
               %% deliver more messages via the limiter's channel.
-              queues = orddict:new(), % QPid -> {MonitorRef, Notify}
+              queues = maps:new(), % QPid -> {MonitorRef, Notify}
               volume = 0}).
 
 %% mode is of type credit_mode()
@@ -402,28 +402,28 @@ prefetch_limit_reached(#lim{prefetch_count = Limit, volume = Volume}) ->
     Limit =/= 0 andalso Volume >= Limit.
 
 remember_queue(QPid, State = #lim{queues = Queues}) ->
-    case orddict:is_key(QPid, Queues) of
+    case maps:is_key(QPid, Queues) of
         false -> MRef = erlang:monitor(process, QPid),
-                 State#lim{queues = orddict:store(QPid, {MRef, false}, Queues)};
+                 State#lim{queues = maps:put(QPid, {MRef, false}, Queues)};
         true  -> State
     end.
 
 forget_queue(QPid, State = #lim{queues = Queues}) ->
-    case orddict:find(QPid, Queues) of
+    case maps:find(QPid, Queues) of
         {ok, {MRef, _}} -> true = erlang:demonitor(MRef),
-                           State#lim{queues = orddict:erase(QPid, Queues)};
+                           State#lim{queues = maps:remove(QPid, Queues)};
         error           -> State
     end.
 
 limit_queue(QPid, State = #lim{queues = Queues}) ->
     UpdateFun = fun ({MRef, _}) -> {MRef, true} end,
-    State#lim{queues = orddict:update(QPid, UpdateFun, Queues)}.
+    State#lim{queues = maps:update_with(QPid, UpdateFun, Queues)}.
 
 notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
     {QList, NewQueues} =
-        orddict:fold(fun (_QPid, {_, false}, Acc) -> Acc;
+        maps:fold(fun (_QPid, {_, false}, Acc) -> Acc;
                          (QPid, {MRef, true}, {L, D}) ->
-                             {[QPid | L], orddict:store(QPid, {MRef, false}, D)}
+                             {[QPid | L], maps:put(QPid, {MRef, false}, D)}
                      end, {[], Queues}, Queues),
     case length(QList) of
         0 -> ok;
@@ -432,7 +432,7 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
             %% We randomly vary the position of queues in the list,
             %% thus ensuring that each queue has an equal chance of
             %% being notified first.
-            {L1, L2} = lists:split(rand_compat:uniform(L), QList),
+            {L1, L2} = lists:split(rand:uniform(L), QList),
             [[ok = rabbit_amqqueue:resume(Q, ChPid) || Q <- L3]
              || L3 <- [L2, L1]],
             ok

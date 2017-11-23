@@ -17,7 +17,7 @@
 -module(rabbit_queue_consumers).
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
-         unacknowledged_message_count/0, add/9, remove/3, erase_ch/2,
+         unacknowledged_message_count/0, add/10, remove/3, erase_ch/2,
          send_drained/0, deliver/3, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
@@ -32,7 +32,7 @@
 
 -record(state, {consumers, use}).
 
--record(consumer, {tag, ack_required, prefetch, args}).
+-record(consumer, {tag, ack_required, prefetch, args, user}).
 
 %% These are held in our process dictionary
 -record(cr, {ch_pid,
@@ -64,11 +64,13 @@
 -spec max_active_priority(state()) -> integer() | 'infinity' | 'empty'.
 -spec inactive(state()) -> boolean().
 -spec all(state()) -> [{ch(), rabbit_types:ctag(), boolean(),
-                        non_neg_integer(), rabbit_framing:amqp_table()}].
+                        non_neg_integer(), rabbit_framing:amqp_table(),
+                        rabbit_types:username()}].
 -spec count() -> non_neg_integer().
 -spec unacknowledged_message_count() -> non_neg_integer().
 -spec add(ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
-          non_neg_integer(), rabbit_framing:amqp_table(), boolean(), state())
+          non_neg_integer(), rabbit_framing:amqp_table(), boolean(),
+          rabbit_types:username(), state())
          -> state().
 -spec remove(ch(), rabbit_types:ctag(), state()) ->
                     'not_found' | state().
@@ -96,7 +98,7 @@
 
 new() -> #state{consumers = priority_queue:new(),
                 use       = {active,
-                             time_compat:monotonic_time(micro_seconds),
+                             erlang:monotonic_time(micro_seconds),
                              1.0}}.
 
 max_active_priority(#state{consumers = Consumers}) ->
@@ -113,8 +115,8 @@ consumers(Consumers, Acc) ->
     priority_queue:fold(
       fun ({ChPid, Consumer}, _P, Acc1) ->
               #consumer{tag = CTag, ack_required = Ack, prefetch = Prefetch,
-                        args = Args} = Consumer,
-              [{ChPid, CTag, Ack, Prefetch, Args} | Acc1]
+                        args = Args, user = Username} = Consumer,
+              [{ChPid, CTag, Ack, Prefetch, Args, Username} | Acc1]
       end, Acc, Consumers).
 
 count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
@@ -123,8 +125,8 @@ unacknowledged_message_count() ->
     lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]).
 
 add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
-    State = #state{consumers = Consumers,
-                   use       = CUInfo}) ->
+    Username, State = #state{consumers = Consumers,
+                             use       = CUInfo}) ->
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
     Limiter1 = case LimiterActive of
@@ -142,7 +144,8 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     Consumer = #consumer{tag          = CTag,
                          ack_required = not NoAck,
                          prefetch     = Prefetch,
-                         args         = Args},
+                         args         = Args,
+                         user          = Username},
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers),
                 use       = update_use(CUInfo, active)}.
 
@@ -251,9 +254,9 @@ subtract_acks(ChPid, AckTags, State) ->
             not_found;
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
             {CTagCounts, AckTags2} = subtract_acks(
-                                       AckTags, [], orddict:new(), ChAckTags),
+                                       AckTags, [], maps:new(), ChAckTags),
             {Unblocked, Lim2} =
-                orddict:fold(
+                maps:fold(
                   fun (CTag, Count, {UnblockedN, LimN}) ->
                           {Unblocked1, LimN1} =
                               rabbit_limiter:ack_from_queue(LimN, CTag, Count),
@@ -275,10 +278,10 @@ subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
     case queue:out(AckQ) of
         {{value, {T, CTag}}, QTail} ->
             subtract_acks(TL, Prefix,
-                          orddict:update_counter(CTag, 1, CTagCounts), QTail);
+                          maps:update_with(CTag, fun (Old) -> Old + 1 end, 1, CTagCounts), QTail);
         {{value, V}, QTail} ->
             subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail);
-        {empty, _} -> 
+        {empty, _} ->
             subtract_acks([], Prefix, CTagCounts, AckQ)
     end.
 
@@ -346,9 +349,9 @@ drain_mode(true)  -> drain;
 drain_mode(false) -> manual.
 
 utilisation(#state{use = {active, Since, Avg}}) ->
-    use_avg(time_compat:monotonic_time(micro_seconds) - Since, 0, Avg);
+    use_avg(erlang:monotonic_time(micro_seconds) - Since, 0, Avg);
 utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
-    use_avg(Active, time_compat:monotonic_time(micro_seconds) - Since, Avg).
+    use_avg(Active, erlang:monotonic_time(micro_seconds) - Since, Avg).
 
 %%----------------------------------------------------------------------------
 
@@ -455,10 +458,10 @@ update_use({inactive, _, _, _}   = CUInfo, inactive) ->
 update_use({active,   _, _}      = CUInfo,   active) ->
     CUInfo;
 update_use({active,   Since,         Avg}, inactive) ->
-    Now = time_compat:monotonic_time(micro_seconds),
+    Now = erlang:monotonic_time(micro_seconds),
     {inactive, Now, Now - Since, Avg};
 update_use({inactive, Since, Active, Avg},   active) ->
-    Now = time_compat:monotonic_time(micro_seconds),
+    Now = erlang:monotonic_time(micro_seconds),
     {active, Now, use_avg(Active, Now - Since, Avg)}.
 
 use_avg(0, 0, Avg) ->

@@ -350,7 +350,7 @@ init([]) ->
                                        subscribers = pmon:new(),
                                        partitions  = [],
                                        guid        = rabbit_guid:gen(),
-                                       node_guids  = orddict:new(),
+                                       node_guids  = maps:new(),
                                        autoheal    = rabbit_autoheal:init()})}.
 
 handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
@@ -405,17 +405,17 @@ handle_cast({node_up, Node, NodeType, GUID},
             State = #state{guid       = MyGUID,
                            node_guids = GUIDs}) ->
     cast(Node, {announce_guid, node(), MyGUID}),
-    GUIDs1 = orddict:store(Node, GUID, GUIDs),
+    GUIDs1 = maps:put(Node, GUID, GUIDs),
     handle_cast({node_up, Node, NodeType}, State#state{node_guids = GUIDs1});
 
 handle_cast({announce_guid, Node, GUID}, State = #state{node_guids = GUIDs}) ->
-    {noreply, State#state{node_guids = orddict:store(Node, GUID, GUIDs)}};
+    {noreply, State#state{node_guids = maps:put(Node, GUID, GUIDs)}};
 
 handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
             State = #state{guid       = MyGUID,
                            node_guids = GUIDs}) ->
     case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) andalso
-        orddict:find(Node, GUIDs) =:= {ok, NodeGUID} of
+        maps:find(Node, GUIDs) =:= {ok, NodeGUID} of
         true  -> spawn_link( %%[1]
                    fun () ->
                            case rpc:call(Node, rabbit, is_running, []) of
@@ -560,10 +560,10 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
                     cast(N, {check_partial_partition,
                              Node, node(), DownGUID, CheckGUID, MyGUID})
             end,
-    case orddict:find(Node, GUIDs) of
+    case maps:find(Node, GUIDs) of
         {ok, DownGUID} -> Alive = rabbit_mnesia:cluster_nodes(running)
                               -- [node(), Node],
-                          [case orddict:find(N, GUIDs) of
+                          [case maps:find(N, GUIDs) of
                                {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
                                error           -> ok
                            end || N <- Alive];

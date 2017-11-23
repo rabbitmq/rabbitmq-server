@@ -33,7 +33,8 @@
          node_listeners/1, register_connection/1, unregister_connection/1,
          connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
-         connection_info_all/0, connection_info_all/1, connection_info_all/3,
+         connection_info_all/0, connection_info_all/1,
+         emit_connection_info_all/4, emit_connection_info_local/3,
          close_connection/2, force_connection_event_refresh/1, accept_ack/2,
          tcp_host/1]).
 
@@ -84,8 +85,6 @@
 -spec connection_info_all() -> [rabbit_types:infos()].
 -spec connection_info_all(rabbit_types:info_keys()) ->
           [rabbit_types:infos()].
--spec connection_info_all(rabbit_types:info_keys(), reference(), pid()) ->
-          'ok'.
 -spec close_connection(pid(), string()) -> 'ok'.
 -spec force_connection_event_refresh(reference()) -> 'ok'.
 -spec accept_ack(any(), rabbit_net:socket()) -> ok.
@@ -120,7 +119,9 @@ boot() ->
     ok = record_distribution_listener(),
     _ = application:start(ranch),
     ok = boot_tcp(application:get_env(rabbit, num_tcp_acceptors, 10)),
-    ok = boot_ssl(application:get_env(rabbit, num_ssl_acceptors, 1)).
+    ok = boot_ssl(application:get_env(rabbit, num_ssl_acceptors, 1)),
+    _ = maybe_start_proxy_protocol(),
+    ok.
 
 boot_tcp(NumAcceptors) ->
     {ok, TcpListeners} = application:get_env(tcp_listeners),
@@ -171,6 +172,12 @@ log_poodle_fail(Context) ->
       "'rabbit' section of your configuration file.~n",
       [rabbit_misc:otp_release(), Context]).
 
+maybe_start_proxy_protocol() ->
+    case application:get_env(rabbit, proxy_protocol, false) of
+        false -> ok;
+        true  -> application:start(ranch_proxy_protocol)
+    end.
+
 fix_ssl_options(Config) ->
     rabbit_ssl_options:fix(Config).
 
@@ -216,10 +223,7 @@ start_listener(Listener, NumAcceptors, Protocol, Label, Opts) ->
     ok.
 
 start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
-    Transport = case Protocol of
-        amqp -> ranch_tcp;
-        'amqp/ssl' -> ranch_ssl
-    end,
+    Transport = transport(Protocol),
     Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, Opts,
                              Transport, rabbit_connection_sup, [], Protocol,
                              NumAcceptors, Label),
@@ -229,6 +233,16 @@ start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
                                   exit({could_not_start_tcp_listener,
                                         {rabbit_misc:ntoa(IPAddress), Port}})
     end.
+
+transport(Protocol) ->
+    ProxyProtocol = application:get_env(rabbit, proxy_protocol, false),
+    case {Protocol, ProxyProtocol} of
+        {amqp, false}       -> ranch_tcp;
+        {amqp, true}        -> ranch_proxy;
+        {'amqp/ssl', false} -> ranch_ssl;
+        {'amqp/ssl', true}  -> ranch_proxy_ssl
+    end.
+
 
 stop_tcp_listener(Listener) ->
     [stop_tcp_listener0(Address) ||
@@ -276,9 +290,13 @@ node_listeners(Node) ->
 
 on_node_down(Node) ->
     case lists:member(Node, nodes()) of
-        false -> ok = mnesia:dirty_delete(rabbit_listener, Node);
-        true  -> rabbit_log:info(
-                   "Keep ~s listeners: the node is already back~n", [Node])
+        false ->
+            rabbit_log:info(
+                   "Node ~s is down, deleting its listeners~n", [Node]),
+            ok = mnesia:dirty_delete(rabbit_listener, Node);
+        true  ->
+            rabbit_log:info(
+                   "Keeping ~s listeners: the node is already back~n", [Node])
     end.
 
 register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
@@ -299,10 +317,15 @@ connection_info(Pid, Items) -> rabbit_reader:info(Pid, Items).
 connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
-connection_info_all(Items, Ref, AggregatorPid) ->
+emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
+    Pids = [ spawn_link(Node, rabbit_networking, emit_connection_info_local, [Items, Ref, AggregatorPid]) || Node <- Nodes ],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    ok.
+
+emit_connection_info_local(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
       AggregatorPid, Ref, fun(Q) -> connection_info(Q, Items) end,
-      connections()).
+      connections_local()).
 
 close_connection(Pid, Explanation) ->
     case lists:member(Pid, connections()) of

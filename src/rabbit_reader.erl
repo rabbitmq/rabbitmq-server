@@ -101,58 +101,23 @@
           channel_count,
           %% throttling state, for both
           %% credit- and resource-driven flow control
-          throttle}).
-
--record(connection, {
-          %% e.g. <<"127.0.0.1:55054 -> 127.0.0.1:5672">>
-          name,
-          %% used for logging: same as `name`, but optionally
-          %% augmented with user-supplied name
-          log_name,
-          %% server host
-          host,
-          %% client host
-          peer_host,
-          %% server port
-          port,
-          %% client port
-          peer_port,
-          %% protocol framing implementation module,
-          %% e.g. rabbit_framing_amqp_0_9_1
-          protocol,
-          user,
-          %% heartbeat timeout value used, 0 means
-          %% heartbeats are disabled
-          timeout_sec,
-          %% maximum allowed frame size,
-          %% see frame_max in the AMQP 0-9-1 spec
-          frame_max,
-          %% greatest channel number allowed,
-          %% see channel_max in the AMQP 0-9-1 spec
-          channel_max,
-          vhost,
-          %% client name, version, platform, etc
-          client_properties,
-          %% what lists protocol extensions
-          %% does this client support?
-          capabilities,
-          %% authentication mechanism used
-          %% as a pair of {Name, Module}
-          auth_mechanism,
-          %% authentication mechanism state,
-          %% initialised by rabbit_auth_mechanism:init/1
-          %% implementations
-          auth_state,
-          %% time of connection
-          connected_at}).
+          throttle,
+          proxy_socket}).
 
 -record(throttle, {
-  %% list of active alarms
-  alarmed_by,
-  %% flow | resource
-  last_blocked_by,
   %% never | timestamp()
-  last_blocked_at
+  last_blocked_at,
+  %% a set of the reasons why we are
+  %% blocked: {resource, memory}, {resource, disk}.
+  %% More reasons can be added in the future.
+  blocked_by,
+  %% true if received any publishes, false otherwise
+  %% note that this will also be true when connection is
+  %% already blocked
+  should_block,
+  %% true if we had we sent a connection.blocked,
+  %% false otherwise
+  connection_blocked_message_sent
 }).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
@@ -168,7 +133,8 @@
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
         peer_cert_validity, auth_mechanism, ssl_protocol,
         ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
-        timeout, frame_max, channel_max, client_properties, connected_at]).
+        timeout, frame_max, channel_max, client_properties, connected_at,
+        node, user_who_performed_action]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
@@ -179,7 +145,6 @@
 
 -define(IS_RUNNING(State),
         (State#v1.connection_state =:= running orelse
-         State#v1.connection_state =:= blocking orelse
          State#v1.connection_state =:= blocked)).
 
 -define(IS_STOPPING(State),
@@ -231,7 +196,8 @@ shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
 init(Parent, HelperSup, Ref, Sock) ->
-    rabbit_networking:accept_ack(Ref, Sock),
+    RealSocket = rabbit_net:unwrap_socket(Sock),
+    rabbit_networking:accept_ack(Ref, RealSocket),
     Deb = sys:debug_options([]),
     start_connection(Parent, HelperSup, Deb, Sock).
 
@@ -309,42 +275,45 @@ server_capabilities(_) ->
 
 %%--------------------------------------------------------------------------
 
-log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
-
 socket_error(Reason) when is_atom(Reason) ->
-    log(error, "Error on AMQP connection ~p: ~s~n",
+    rabbit_log_connection:error("Error on AMQP connection ~p: ~s~n",
         [self(), rabbit_misc:format_inet_error(Reason)]);
 socket_error(Reason) ->
-    Level =
-        case Reason of
-            {ssl_upgrade_error, closed} ->
-                %% The socket was closed while upgrading to SSL.
-                %% This is presumably a TCP healthcheck, so don't log
-                %% it unless specified otherwise.
-                debug;
-            _ ->
-                error
-        end,
-    log(Level, "Error on AMQP connection ~p:~n~p~n", [self(), Reason]).
+    Fmt = "Error on AMQP connection ~p:~n~p~n",
+    Args = [self(), Reason],
+    case Reason of
+        %% The socket was closed while upgrading to SSL.
+        %% This is presumably a TCP healthcheck, so don't log
+        %% it unless specified otherwise.
+        {ssl_upgrade_error, closed} ->
+            %% Lager sinks (rabbit_log_connection)
+            %% are handled by the lager parse_transform.
+            %% Hence have to define the loglevel as a function call.
+            rabbit_log_connection:debug(Fmt, Args);
+        _ ->
+            rabbit_log_connection:error(Fmt, Args)
+    end.
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 socket_op(Sock, Fun) ->
+    RealSocket = rabbit_net:unwrap_socket(Sock),
     case Fun(Sock) of
         {ok, Res}       -> Res;
         {error, Reason} -> socket_error(Reason),
-                           rabbit_net:fast_close(Sock),
+                           rabbit_net:fast_close(RealSocket),
                            exit(normal)
     end.
 
 start_connection(Parent, HelperSup, Deb, Sock) ->
     process_flag(trap_exit, true),
+    RealSocket = rabbit_net:unwrap_socket(Sock),
     Name = case rabbit_net:connection_string(Sock, inbound) of
                {ok, Str}         -> list_to_binary(Str);
-               {error, enotconn} -> rabbit_net:fast_close(Sock),
+               {error, enotconn} -> rabbit_net:fast_close(RealSocket),
                                     exit(normal);
                {error, Reason}   -> socket_error(Reason),
-                                    rabbit_net:fast_close(Sock),
+                                    rabbit_net:fast_close(RealSocket),
                                     exit(normal)
            end,
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
@@ -354,7 +323,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     ?store_proc_name(Name),
     State = #v1{parent              = Parent,
-                sock                = Sock,
+                sock                = RealSocket,
                 connection          = #connection{
                   name               = Name,
                   log_name           = Name,
@@ -371,7 +340,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
                   capabilities       = [],
                   auth_mechanism     = none,
                   auth_state         = none,
-                  connected_at       = time_compat:os_system_time(
+                  connected_at       = os:system_time(
                                          milli_seconds)},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
@@ -383,9 +352,12 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
                 channel_sup_sup_pid = none,
                 channel_count       = 0,
                 throttle            = #throttle{
-                                         alarmed_by      = [],
-                                         last_blocked_by = none,
-                                         last_blocked_at = never}},
+                                         last_blocked_at = never,
+                                         should_block = false,
+                                         blocked_by = sets:new(),
+                                         connection_blocked_message_sent = false
+                                         },
+                proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock)},
     try
         case run({?MODULE, recvloop,
                   [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
@@ -394,11 +366,11 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
             %% connection was closed cleanly by the client
             #v1{connection = #connection{user  = #user{username = Username},
                                          vhost = VHost}} ->
-                log(info, "closing AMQP connection ~p (~s, vhost: '~s', user: '~s')~n",
+                rabbit_log_connection:info("closing AMQP connection ~p (~s, vhost: '~s', user: '~s')~n",
                     [self(), dynamic_connection_name(Name), VHost, Username]);
             %% just to be more defensive
             _ ->
-                log(info, "closing AMQP connection ~p (~s)~n",
+                rabbit_log_connection:info("closing AMQP connection ~p (~s)~n",
                     [self(), dynamic_connection_name(Name)])
             end
     catch
@@ -412,10 +384,12 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         %% the socket. However, to keep the file_handle_cache
         %% accounting as accurate as possible we ought to close the
         %% socket w/o delay before termination.
-        rabbit_net:fast_close(Sock),
+        rabbit_net:fast_close(RealSocket),
         rabbit_networking:unregister_connection(self()),
 	rabbit_core_metrics:connection_closed(self()),
-        rabbit_event:notify(connection_closed, [{pid, self()}])
+        rabbit_event:notify(connection_closed, [{name, Name},
+                                                {pid, self()},
+                                                {node, node()}])
     end,
     done.
 
@@ -430,25 +404,40 @@ log_connection_exception(Name, Ex) ->
 
 log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
     %% Long line to avoid extra spaces and line breaks in log
-    log(Severity, "closing AMQP connection ~p (~s):~nmissed heartbeats from client, timeout: ~ps~n",
+    log_connection_exception_with_severity(Severity,
+        "closing AMQP connection ~p (~s):~n"
+        "missed heartbeats from client, timeout: ~ps~n",
         [self(), Name, TimeoutSec]);
 log_connection_exception(Severity, Name, {connection_closed_abruptly,
                                           #v1{connection = #connection{user  = #user{username = Username},
                                                                        vhost = VHost}}}) ->
-    log(Severity, "closing AMQP connection ~p (~s, vhost: '~s', user: '~s'):~nclient unexpectedly closed TCP connection~n",
+    log_connection_exception_with_severity(Severity,
+        "closing AMQP connection ~p (~s, vhost: '~s', user: '~s'):~nclient unexpectedly closed TCP connection~n",
         [self(), Name, VHost, Username]);
 %% when client abruptly closes connection before connection.open/authentication/authorization
 %% succeeded, don't log username and vhost as 'none'
 log_connection_exception(Severity, Name, {connection_closed_abruptly, _}) ->
-    log(Severity, "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
+    log_connection_exception_with_severity(Severity,
+        "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
         [self(), Name]);
 %% old exception structure
 log_connection_exception(Severity, Name, connection_closed_abruptly) ->
-    log(Severity, "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
+    log_connection_exception_with_severity(Severity,
+        "closing AMQP connection ~p (~s):~n"
+        "client unexpectedly closed TCP connection~n",
         [self(), Name]);
 log_connection_exception(Severity, Name, Ex) ->
-    log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
+    log_connection_exception_with_severity(Severity,
+        "closing AMQP connection ~p (~s):~n~p~n",
         [self(), Name, Ex]).
+
+log_connection_exception_with_severity(Severity, Fmt, Args) ->
+    case Severity of
+        debug   -> rabbit_log_connection:debug(Fmt, Args);
+        info    -> rabbit_log_connection:info(Fmt, Args);
+        warning -> rabbit_log_connection:warning(Fmt, Args);
+        error   -> rabbit_log_connection:warning(Fmt, Args)
+    end.
 
 run({M, F, A}) ->
     try apply(M, F, A)
@@ -498,11 +487,12 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             %%
             %% The goal is to not log TCP healthchecks (a connection
             %% with no data received) unless specified otherwise.
-            log(case Recv of
-                  closed -> debug;
-                  _      -> info
-                end, "accepting AMQP connection ~p (~s)~n",
-                [self(), ConnName]);
+            Fmt = "accepting AMQP connection ~p (~s)~n",
+            Args = [self(), ConnName],
+            case Recv of
+                closed -> rabbit_log_connection:debug(Fmt, Args);
+                _      -> rabbit_log_connection:info(Fmt, Args)
+            end;
         _ ->
             ok
     end,
@@ -546,19 +536,13 @@ stop(Reason, State) ->
     throw({inet_error, Reason}).
 
 handle_other({conserve_resources, Source, Conserve},
-             State = #v1{throttle = Throttle = #throttle{alarmed_by = CR}}) ->
-    CR1 = case Conserve of
-              true  -> lists:usort([Source | CR]);
-              false -> CR -- [Source]
+             State = #v1{throttle = Throttle = #throttle{blocked_by = Blockers}}) ->
+  Resource  = {resource, Source},
+  Blockers1 = case Conserve of
+              true  -> sets:add_element(Resource, Blockers);
+              false -> sets:del_element(Resource, Blockers)
           end,
-    State1 = control_throttle(
-               State#v1{throttle = Throttle#throttle{alarmed_by = CR1}}),
-    case {blocked_by_alarm(State), blocked_by_alarm(State1)} of
-        {false, true} -> ok = send_blocked(State1);
-        {true, false} -> ok = send_unblocked(State1);
-        {_,        _} -> ok
-    end,
-    State1;
+    control_throttle(State#v1{throttle = Throttle#throttle{blocked_by = Blockers1}});
 handle_other({channel_closing, ChPid}, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     {_, State1} = channel_cleanup(ChPid, State),
@@ -594,7 +578,7 @@ handle_other(handshake_timeout, State) ->
     throw({handshake_timeout, State#v1.callback});
 handle_other(heartbeat_timeout, State = #v1{connection_state = closed}) ->
     State;
-handle_other(heartbeat_timeout, 
+handle_other(heartbeat_timeout,
              State = #v1{connection = #connection{timeout_sec = T}}) ->
     maybe_emit_stats(State),
     throw({heartbeat_timeout, T});
@@ -645,52 +629,12 @@ terminate(Explanation, State) when ?IS_RUNNING(State) ->
 terminate(_Explanation, State) ->
     {force, State}.
 
-control_throttle(State = #v1{connection_state = CS, throttle = Throttle}) ->
-    IsThrottled = ((Throttle#throttle.alarmed_by =/= []) orelse
-               credit_flow:blocked()),
-    case {CS, IsThrottled} of
-        {running,   true} -> State#v1{connection_state = blocking};
-        {blocking, false} -> State#v1{connection_state = running};
-        {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
-                                    State#v1.heartbeater),
-                             State#v1{connection_state = running};
-        {blocked,   true} -> State#v1{throttle = update_last_blocked_by(
-                                                   Throttle)};
-        {_,            _} -> State
-    end.
-
-maybe_block(State = #v1{connection_state = blocking,
-                        throttle         = Throttle}) ->
-    ok = rabbit_heartbeat:pause_monitor(State#v1.heartbeater),
-    State1 = State#v1{connection_state = blocked,
-                      throttle = update_last_blocked_by(
-                                   Throttle#throttle{
-                                     last_blocked_at =
-                                       time_compat:monotonic_time()})},
-    case {blocked_by_alarm(State), blocked_by_alarm(State1)} of
-        {false, true} -> ok = send_blocked(State1);
-        {_,        _} -> ok
-    end,
-    State1;
-maybe_block(State) ->
-    State.
-
-
-blocked_by_alarm(#v1{connection_state = blocked,
-                     throttle         = #throttle{alarmed_by = CR}})
-  when CR =/= [] ->
-    true;
-blocked_by_alarm(#v1{}) ->
-    false.
-
-send_blocked(#v1{throttle   = #throttle{alarmed_by = CR},
-                 connection = #connection{protocol     = Protocol,
+send_blocked(#v1{connection = #connection{protocol     = Protocol,
                                           capabilities = Capabilities},
-                 sock       = Sock}) ->
+                 sock       = Sock}, Reason) ->
     case rabbit_misc:table_lookup(Capabilities, <<"connection.blocked">>) of
         {bool, true} ->
-            RStr = string:join([atom_to_list(A) || A <- CR], " & "),
-            Reason = list_to_binary(rabbit_misc:format("low on ~s", [RStr])),
+
             ok = send_on_channel0(Sock, #'connection.blocked'{reason = Reason},
                                   Protocol);
         _ ->
@@ -706,11 +650,6 @@ send_unblocked(#v1{connection = #connection{protocol     = Protocol,
         _ ->
             ok
     end.
-
-update_last_blocked_by(Throttle = #throttle{alarmed_by = []}) ->
-    Throttle#throttle{last_blocked_by = flow};
-update_last_blocked_by(Throttle) ->
-    Throttle#throttle{last_blocked_by = resource}.
 
 %%--------------------------------------------------------------------------
 %% error handling / termination
@@ -785,9 +724,10 @@ wait_for_channel_termination(N, TimerRef,
                 {_,   controlled} ->
                     wait_for_channel_termination(N-1, TimerRef, State1);
                 {_, uncontrolled} ->
-                    log(error, "Error on AMQP connection ~p (~s, vhost: '~s',"
-                               " user: '~s', state: ~p), channel ~p:"
-                               "error while terminating:~n~p~n",
+                    rabbit_log_connection:error(
+                        "Error on AMQP connection ~p (~s, vhost: '~s',"
+                        " user: '~s', state: ~p), channel ~p:"
+                        "error while terminating:~n~p~n",
                         [self(), ConnName, VHost, User#user.username,
                          CS, Channel, Reason]),
                     handle_uncontrolled_channel_close(ChPid),
@@ -824,11 +764,11 @@ format_hard_error(Reason) ->
 log_hard_error(#v1{connection_state = CS,
                    connection = #connection{
                                    log_name  = ConnName,
-                                   user      = User,
-                                   vhost     = VHost}}, Channel, Reason) ->
-    log(error,
+                                   user  = User,
+                                   vhost = VHost}}, Channel, Reason) ->
+    rabbit_log_connection:error(
         "Error on AMQP connection ~p (~s, vhost: '~s',"
-        " user: '~s', state: ~p), channel ~p:~n~s~n",
+        " user: '~s', state: ~p), channel ~p:~n ~s~n",
         [self(), ConnName, VHost, User#user.username, CS, Channel, format_hard_error(Reason)]).
 
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
@@ -846,7 +786,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                              connection_state = starting},
                  Channel, Reason = #amqp_error{name = access_refused,
                                                explanation = ErrMsg}) ->
-    log(error,
+    rabbit_log_connection:error(
         "Error on AMQP connection ~p (~s, state: ~p):~n~s~n",
         [self(), ConnName, starting, ErrMsg]),
     %% respect authentication failure notification capability
@@ -865,7 +805,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                              connection_state = opening},
                  Channel, Reason = #amqp_error{name = not_allowed,
                                                explanation = ErrMsg}) ->
-    log(error,
+    rabbit_log_connection:error(
         "Error on AMQP connection ~p (~s, user: '~s', state: ~p):~n~s~n",
         [self(), ConnName, User#user.username, opening, ErrMsg]),
     send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
@@ -882,7 +822,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                              connection_state = tuning},
                  Channel, Reason = #amqp_error{name = not_allowed,
                                                explanation = ErrMsg}) ->
-    log(error,
+    rabbit_log_connection:error(
         "Error on AMQP connection ~p (~s,"
         " user: '~s', state: ~p):~n~s~n",
         [self(), ConnName, User#user.username, tuning, ErrMsg]),
@@ -1028,9 +968,9 @@ post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
     %% since we cannot possibly be in the 'closing' state.
     control_throttle(State1);
 post_process_frame({content_header, _, _, _, _}, _ChPid, State) ->
-    maybe_block(State);
+    publish_received(State);
 post_process_frame({content_body, _}, _ChPid, State) ->
-    maybe_block(State);
+    publish_received(State);
 post_process_frame(_Frame, _ChPid, State) ->
     State.
 
@@ -1232,11 +1172,17 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
+
+    ok = is_over_connection_limit(VHost, User),
     ok = rabbit_access_control:check_vhost_access(User, VHost, Sock),
+    ok = is_vhost_alive(VHost, User),
     NewConnection = Connection#connection{vhost = VHost},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
-    Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-    Throttle1 = Throttle#throttle{alarmed_by = Conserve},
+
+    Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    BlockedBy = sets:from_list([{resource, Alarm} || Alarm <- Alarms]),
+    Throttle1 = Throttle#throttle{blocked_by = BlockedBy},
+
     {ok, ChannelSupSupPid} =
         rabbit_connection_helper_sup:start_channel_sup_sup(SupPid),
     State1 = control_throttle(
@@ -1249,8 +1195,10 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                                            Infos),
     rabbit_event:notify(connection_created, Infos),
     maybe_emit_stats(State1),
-    log(info, "connection ~p (~s): user '~s' authenticated and granted access to vhost '~s'~n",
-        [self(), ConnName, Username, VHost]),
+    rabbit_log_connection:info(
+        "connection ~p (~s): "
+        "user '~s' authenticated and granted access to vhost '~s'~n",
+        [self(), dynamic_connection_name(ConnName), Username, VHost]),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
@@ -1272,6 +1220,29 @@ handle_method0(_Method, State) when ?IS_STOPPING(State) ->
 handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
+
+is_vhost_alive(VHostPath, User) ->
+    case rabbit_vhost_sup_sup:is_vhost_alive(VHostPath) of
+        true  -> ok;
+        false ->
+            rabbit_misc:protocol_error(internal_error,
+                            "access to vhost '~s' refused for user '~s': "
+                            "vhost '~s' is down",
+                            [VHostPath, User#user.username, VHostPath])
+    end.
+
+is_over_connection_limit(VHostPath, User) ->
+    try rabbit_vhost_limit:is_over_connection_limit(VHostPath) of
+        false         -> ok;
+        {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
+                            "access to vhost '~s' refused for user '~s': "
+                            "connection limit (~p) is reached",
+                            [VHostPath, User#user.username, Limit])
+    catch
+        throw:{error, {no_such_vhost, VHostPath}} ->
+            rabbit_misc:protocol_error(not_allowed, "vhost ~s not found", [VHostPath])
+    end.
+
 
 validate_negotiated_integer_value(Field, Min, ClientValue) ->
     ServerValue = get_env(Field),
@@ -1409,6 +1380,7 @@ notify_auth_result(Username, AuthResult, ExtraProps, State) ->
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,                #v1{}) -> self();
+i(node,               #v1{}) -> node();
 i(SockStat,           S) when SockStat =:= recv_oct;
                               SockStat =:= recv_cnt;
                               SockStat =:= send_oct;
@@ -1426,18 +1398,29 @@ i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
 i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
 i(channels,           #v1{channel_count = ChannelCount}) -> ChannelCount;
 i(state, #v1{connection_state = ConnectionState,
-             throttle         = #throttle{alarmed_by      = Alarms,
-                                          last_blocked_by = WasBlockedBy,
-                                          last_blocked_at = T}}) ->
-    case Alarms =:= [] andalso %% not throttled by resource alarms
-        (credit_flow:blocked() %% throttled by flow now
-         orelse                %% throttled by flow recently
-           (WasBlockedBy =:= flow andalso T =/= never andalso
-            time_compat:convert_time_unit(time_compat:monotonic_time() - T,
+             throttle         = #throttle{blocked_by = Reasons,
+                                          last_blocked_at = T} = Throttle}) ->
+    %% not throttled by resource or other longer-term reasons
+    %% TODO: come up with a sensible function name
+    case sets:size(sets:del_element(flow, Reasons)) =:= 0 andalso
+        (credit_flow:blocked()        %% throttled by flow now
+         orelse                       %% throttled by flow recently
+           (is_blocked_by_flow(Throttle) andalso T =/= never andalso
+            erlang:convert_time_unit(erlang:monotonic_time() - T,
                                           native,
                                           micro_seconds) < 5000000)) of
         true  -> flow;
-        false -> ConnectionState
+        false ->
+          case {has_reasons_to_block(Throttle), ConnectionState} of
+            %% blocked
+            {_,    blocked} -> blocked;
+            %% not yet blocked (there were no publishes)
+            {true, running} -> blocking;
+            %% not blocked
+            {false,      _} -> ConnectionState;
+            %% catch all to be defensive
+            _               -> ConnectionState
+          end
     end;
 i(garbage_collection, _State) ->
     rabbit_misc:get_gc_info(self());
@@ -1455,6 +1438,7 @@ ic(protocol,          #connection{protocol    = none})     -> none;
 ic(protocol,          #connection{protocol    = P})        -> P:version();
 ic(user,              #connection{user        = none})     -> '';
 ic(user,              #connection{user        = U})        -> U#user.username;
+ic(user_who_performed_action, C) -> ic(user, C);
 ic(vhost,             #connection{vhost       = VHost})    -> VHost;
 ic(timeout,           #connection{timeout_sec = Timeout})  -> Timeout;
 ic(frame_max,         #connection{frame_max   = FrameMax}) -> FrameMax;
@@ -1535,8 +1519,9 @@ pack_for_1_0(Buf, BufLen, #v1{parent       = Parent,
                               sock         = Sock,
                               recv_len     = RecvLen,
                               pending_recv = PendingRecv,
-                              helper_sup   = SupPid}) ->
-    {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen}.
+                              helper_sup   = SupPid,
+                              proxy_socket = ProxySocket}) ->
+    {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen, ProxySocket}.
 
 respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),
@@ -1549,12 +1534,127 @@ send_error_on_channel0_and_close(Channel, Protocol, Reason, State) ->
     ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
     State1.
 
+%%
+%% Publisher throttling
+%%
+
+blocked_by_message(#throttle{blocked_by = Reasons}) ->
+  %% we don't want to report internal flow as a reason here since
+  %% it is entirely transient
+  Reasons1 = sets:del_element(flow, Reasons),
+  RStr = string:join([format_blocked_by(R) || R <- sets:to_list(Reasons1)], " & "),
+  list_to_binary(rabbit_misc:format("low on ~s", [RStr])).
+
+format_blocked_by({resource, memory}) -> "memory";
+format_blocked_by({resource, disk})   -> "disk";
+format_blocked_by({resource, disc})   -> "disk".
+
+update_last_blocked_at(Throttle) ->
+    Throttle#throttle{last_blocked_at = erlang:monotonic_time()}.
+
+connection_blocked_message_sent(
+    #throttle{connection_blocked_message_sent = BS}) -> BS.
+
+should_send_blocked(Throttle = #throttle{blocked_by = Reasons}) ->
+    should_block(Throttle)
+    andalso
+    sets:size(sets:del_element(flow, Reasons)) =/= 0
+    andalso
+    not connection_blocked_message_sent(Throttle).
+
+should_send_unblocked(Throttle = #throttle{blocked_by = Reasons}) ->
+    connection_blocked_message_sent(Throttle)
+    andalso
+    sets:size(sets:del_element(flow, Reasons)) == 0.
+
+%% Returns true if we have a reason to block
+%% this connection.
+has_reasons_to_block(#throttle{blocked_by = Reasons}) ->
+    sets:size(Reasons) > 0.
+
+is_blocked_by_flow(#throttle{blocked_by = Reasons}) ->
+    sets:is_element(flow, Reasons).
+
+should_block(#throttle{should_block = Val}) -> Val.
+
+should_block_connection(Throttle) ->
+    should_block(Throttle) andalso has_reasons_to_block(Throttle).
+
+should_unblock_connection(Throttle) ->
+    not should_block_connection(Throttle).
+
+maybe_block(State = #v1{connection_state = CS, throttle = Throttle}) ->
+    case should_block_connection(Throttle) of
+        true ->
+            State1 = State#v1{connection_state = blocked,
+                              throttle = update_last_blocked_at(Throttle)},
+            case CS of
+                running ->
+                    ok = rabbit_heartbeat:pause_monitor(State#v1.heartbeater);
+                _       -> ok
+            end,
+            maybe_send_blocked_or_unblocked(State1);
+        false -> State
+    end.
+
+maybe_unblock(State = #v1{throttle = Throttle}) ->
+    case should_unblock_connection(Throttle) of
+        true ->
+            ok = rabbit_heartbeat:resume_monitor(State#v1.heartbeater),
+            State1 = State#v1{connection_state = running,
+                              throttle = Throttle#throttle{should_block = false}},
+            maybe_send_unblocked(State1);
+        false -> State
+    end.
+
+maybe_send_unblocked(State = #v1{throttle = Throttle}) ->
+    case should_send_unblocked(Throttle) of
+        true ->
+            ok = send_unblocked(State),
+            State#v1{throttle =
+                Throttle#throttle{connection_blocked_message_sent = false}};
+        false -> State
+    end.
+
+maybe_send_blocked_or_unblocked(State = #v1{throttle = Throttle}) ->
+    case should_send_blocked(Throttle) of
+        true ->
+            ok = send_blocked(State, blocked_by_message(Throttle)),
+            State#v1{throttle =
+                Throttle#throttle{connection_blocked_message_sent = true}};
+        false -> maybe_send_unblocked(State)
+    end.
+
+publish_received(State = #v1{throttle = Throttle}) ->
+    case has_reasons_to_block(Throttle) of
+      false -> State;
+      true  ->
+        Throttle1 = Throttle#throttle{should_block = true},
+        maybe_block(State#v1{throttle = Throttle1})
+    end.
+
+control_throttle(State = #v1{connection_state = CS,
+                             throttle = #throttle{blocked_by = Reasons} = Throttle}) ->
+    Throttle1 = case credit_flow:blocked() of
+                  true  ->
+                    Throttle#throttle{blocked_by = sets:add_element(flow, Reasons)};
+                  false ->
+                    Throttle#throttle{blocked_by = sets:del_element(flow, Reasons)}
+             end,
+    State1 = State#v1{throttle = Throttle1},
+    case CS of
+        running -> maybe_block(State1);
+        %% unblock or re-enable blocking
+        blocked -> maybe_block(maybe_unblock(State1));
+        _       -> State1
+    end.
+
 augment_connection_log_name(#connection{client_properties = ClientProperties,
                                         name = Name} = Connection) ->
     case rabbit_misc:table_lookup(ClientProperties, <<"connection_name">>) of
         {longstr, UserSpecifiedName} ->
             LogName = <<Name/binary, " - ", UserSpecifiedName/binary>>,
-            log(info, "Connection ~p (~s) has a client-provided name: ~s~n", [self(), Name, UserSpecifiedName]),
+            rabbit_log_connection:info("Connection ~p (~s) has a client-provided name: ~s~n", [self(), Name, UserSpecifiedName]),
             ?store_proc_name(LogName),
             Connection#connection{log_name = LogName};
         _ ->

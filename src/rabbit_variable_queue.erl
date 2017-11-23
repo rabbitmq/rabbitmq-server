@@ -26,12 +26,23 @@
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
-         zip_msgs_and_acks/4,  multiple_routing_keys/0]).
+         zip_msgs_and_acks/4,  multiple_routing_keys/0, handle_info/2]).
 
--export([start/1, stop/0]).
+-export([start/2, stop/1]).
 
 %% exported for testing only
--export([start_msg_store/2, stop_msg_store/0, init/6]).
+-export([start_msg_store/3, stop_msg_store/1, init/6]).
+
+-export([move_messages_to_vhost_store/0]).
+
+-export([migrate_queue/3, migrate_message/3, get_per_vhost_store_client/2,
+         get_global_store_client/1, log_upgrade_verbose/1,
+         log_upgrade_verbose/2]).
+
+-include_lib("stdlib/include/qlc.hrl").
+
+-define(QUEUE_MIGRATION_BATCH_SIZE, 100).
+-define(EMPTY_START_FUN_STATE, {fun (ok) -> finished end, ok}).
 
 %%----------------------------------------------------------------------------
 %% Messages, and their position in the queue, can be in memory or on
@@ -311,7 +322,11 @@
           %% number of reduce_memory_usage executions, once it
           %% reaches a threshold the queue will manually trigger a runtime GC
 	        %% see: maybe_execute_gc/1
-          memory_reduction_run_count
+          memory_reduction_run_count,
+          %% Queue data is grouped by VHost. We need to store it
+          %% to work with queue index.
+          virtual_host,
+          waiting_bump = false
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -338,6 +353,7 @@
 -define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
+
 -define(QUEUE, lqueue).
 
 -include("rabbit.hrl").
@@ -346,6 +362,7 @@
 %%----------------------------------------------------------------------------
 
 -rabbit_upgrade({multiple_routing_keys, local, []}).
+-rabbit_upgrade({move_messages_to_vhost_store, message_store, []}).
 
 -type seq_id()  :: non_neg_integer().
 
@@ -398,10 +415,10 @@
              out_counter           :: non_neg_integer(),
              in_counter            :: non_neg_integer(),
              rates                 :: rates(),
-             msgs_on_disk          :: ?GB_SET_TYPE(),
-             msg_indices_on_disk   :: ?GB_SET_TYPE(),
-             unconfirmed           :: ?GB_SET_TYPE(),
-             confirmed             :: ?GB_SET_TYPE(),
+             msgs_on_disk          :: gb_sets:set(),
+             msg_indices_on_disk   :: gb_sets:set(),
+             unconfirmed           :: gb_sets:set(),
+             confirmed             :: gb_sets:set(),
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              disk_read_count       :: non_neg_integer(),
@@ -462,33 +479,49 @@ explicit_gc_run_operation_threshold_for_mode(Mode) ->
 %% Public API
 %%----------------------------------------------------------------------------
 
-start(DurableQueues) ->
-    {AllTerms, StartFunState} = rabbit_queue_index:start(DurableQueues),
-    start_msg_store(
-      [Ref || Terms <- AllTerms,
-              Terms /= non_clean_shutdown,
-              begin
-                  Ref = proplists:get_value(persistent_ref, Terms),
-                  Ref =/= undefined
-              end],
-      StartFunState),
+start(VHost, DurableQueues) ->
+    {AllTerms, StartFunState} = rabbit_queue_index:start(VHost, DurableQueues),
+    %% Group recovery terms by vhost.
+    ClientRefs = [Ref || Terms <- AllTerms,
+                      Terms /= non_clean_shutdown,
+                      begin
+                          Ref = proplists:get_value(persistent_ref, Terms),
+                          Ref =/= undefined
+                      end],
+    start_msg_store(VHost, ClientRefs, StartFunState),
     {ok, AllTerms}.
 
-stop() ->
-    ok = stop_msg_store(),
-    ok = rabbit_queue_index:stop().
+stop(VHost) ->
+    ok = stop_msg_store(VHost),
+    ok = rabbit_queue_index:stop(VHost).
 
-start_msg_store(Refs, StartFunState) ->
-    ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
-                                [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 undefined,  {fun (ok) -> finished end, ok}]),
-    ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store,
-                                [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 Refs, StartFunState]).
+start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
+    rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
+    do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE),
+    do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState),
+    ok.
 
-stop_msg_store() ->
-    ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
-    ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE).
+do_start_msg_store(VHost, Type, Refs, StartFunState) ->
+    case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
+        {ok, _} ->
+            rabbit_log:info("Started message store of type ~s for vhost '~s'~n", [abbreviated_type(Type), VHost]);
+        {error, {no_such_vhost, VHost}} = Err ->
+            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': the vhost no longer exists!~n",
+                             [Type, VHost]),
+            exit(Err);
+        {error, Error} ->
+            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': ~p~n",
+                             [Type, VHost, Error]),
+            exit({error, Error})
+    end.
+
+abbreviated_type(?TRANSIENT_MSG_STORE)  -> transient;
+abbreviated_type(?PERSISTENT_MSG_STORE) -> persistent.
+
+stop_msg_store(VHost) ->
+    rabbit_vhost_msg_store:stop(VHost, ?TRANSIENT_MSG_STORE),
+    rabbit_vhost_msg_store:stop(VHost, ?PERSISTENT_MSG_STORE),
+    ok.
 
 init(Queue, Recover, Callback) ->
     init(
@@ -503,22 +536,26 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, new,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName,
                                          MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
+    VHost = QueueName#resource.virtual_host,
     init(IsDurable, IndexState, 0, 0, [],
          case IsDurable of
              true  -> msg_store_client_init(?PERSISTENT_MSG_STORE,
-                                            MsgOnDiskFun, AsyncCallback);
+                                            MsgOnDiskFun, AsyncCallback, VHost);
              false -> undefined
          end,
-         msg_store_client_init(?TRANSIENT_MSG_STORE, undefined, AsyncCallback));
+         msg_store_client_init(?TRANSIENT_MSG_STORE, undefined,
+                               AsyncCallback, VHost), VHost);
 
 %% We can be recovering a transient queue if it crashed
 init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) ->
     {PRef, RecoveryTerms} = process_recovery_terms(Terms),
+    VHost = QueueName#resource.virtual_host,
     {PersistentClient, ContainsCheckFun} =
         case IsDurable of
             true  -> C = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
-                                               MsgOnDiskFun, AsyncCallback),
+                                               MsgOnDiskFun, AsyncCallback,
+                                               VHost),
                      {C, fun (MsgId) when is_binary(MsgId) ->
                                  rabbit_msg_store:contains(MsgId, C);
                              (#basic_message{is_persistent = Persistent}) ->
@@ -527,14 +564,17 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
             false -> {undefined, fun(_MsgId) -> false end}
         end,
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
-                                             undefined, AsyncCallback),
+                                             undefined, AsyncCallback,
+                                             VHost),
     {DeltaCount, DeltaBytes, IndexState} =
         rabbit_queue_index:recover(
           QueueName, RecoveryTerms,
-          rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
+          rabbit_vhost_msg_store:successfully_recovered_state(
+              VHost,
+              ?PERSISTENT_MSG_STORE),
           ContainsCheckFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     init(IsDurable, IndexState, DeltaCount, DeltaBytes, RecoveryTerms,
-         PersistentClient, TransientClient).
+         PersistentClient, TransientClient, VHost).
 
 process_recovery_terms(Terms=non_clean_shutdown) ->
     {rabbit_guid:gen(), Terms};
@@ -545,23 +585,24 @@ process_recovery_terms(Terms) ->
     end.
 
 terminate(_Reason, State) ->
-    State1 = #vqstate { persistent_count  = PCount,
+    State1 = #vqstate { virtual_host      = VHost,
+                        persistent_count  = PCount,
                         persistent_bytes  = PBytes,
                         index_state       = IndexState,
                         msg_store_clients = {MSCStateP, MSCStateT} } =
         purge_pending_ack(true, State),
     PRef = case MSCStateP of
                undefined -> undefined;
-               _         -> ok = rabbit_msg_store:client_terminate(MSCStateP),
+               _         -> ok = maybe_client_terminate(MSCStateP),
                             rabbit_msg_store:client_ref(MSCStateP)
            end,
     ok = rabbit_msg_store:client_delete_and_terminate(MSCStateT),
     Terms = [{persistent_ref,   PRef},
              {persistent_count, PCount},
              {persistent_bytes, PBytes}],
-    a(State1 #vqstate { index_state       = rabbit_queue_index:terminate(
-                                              Terms, IndexState),
-                        msg_store_clients = undefined }).
+    a(State1#vqstate {
+        index_state = rabbit_queue_index:terminate(VHost, Terms, IndexState),
+        msg_store_clients = undefined }).
 
 %% the only difference between purge and delete is that delete also
 %% needs to delete everything that's been delivered and not ack'd.
@@ -808,7 +849,7 @@ update_rates(State = #vqstate{ in_counter      =     InCount,
                                                ack_in    =  AckInRate,
                                                ack_out   = AckOutRate,
                                                timestamp = TS }}) ->
-    Now = time_compat:monotonic_time(),
+    Now = erlang:monotonic_time(),
 
     Rates = #rates { in        = update_rate(Now, TS,     InCount,     InRate),
                      out       = update_rate(Now, TS,    OutCount,    OutRate),
@@ -823,7 +864,7 @@ update_rates(State = #vqstate{ in_counter      =     InCount,
                    rates           = Rates }.
 
 update_rate(Now, TS, Count, Rate) ->
-    Time = time_compat:convert_time_unit(Now - TS, native, micro_seconds) /
+    Time = erlang:convert_time_unit(Now - TS, native, micro_seconds) /
         ?MICROS_PER_SECOND,
     if
         Time == 0 -> Rate;
@@ -870,6 +911,9 @@ timeout(State = #vqstate { index_state = IndexState }) ->
 
 handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
+
+handle_info(bump_reduce_memory_use, State = #vqstate{ waiting_bump = true }) ->
+    State#vqstate{ waiting_bump = false }.
 
 resume(State) -> a(reduce_memory_use(State)).
 
@@ -1210,14 +1254,17 @@ with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
                                            end),
     Res.
 
-msg_store_client_init(MsgStore, MsgOnDiskFun, Callback) ->
+msg_store_client_init(MsgStore, MsgOnDiskFun, Callback, VHost) ->
     msg_store_client_init(MsgStore, rabbit_guid:gen(), MsgOnDiskFun,
-                          Callback).
+                          Callback, VHost).
 
-msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback) ->
+msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback, VHost) ->
     CloseFDsFun = msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE),
-    rabbit_msg_store:client_init(MsgStore, Ref, MsgOnDiskFun,
-                                 fun () -> Callback(?MODULE, CloseFDsFun) end).
+    rabbit_vhost_msg_store:client_init(VHost, MsgStore,
+                                       Ref, MsgOnDiskFun,
+                                       fun () ->
+                                           Callback(?MODULE, CloseFDsFun)
+                                       end).
 
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(
@@ -1321,7 +1368,7 @@ expand_delta(_SeqId, #delta { count       = Count,
 %%----------------------------------------------------------------------------
 
 init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
-     PersistentClient, TransientClient) ->
+     PersistentClient, TransientClient, VHost) ->
     {LowSeqId, NextSeqId, IndexState1} = rabbit_queue_index:bounds(IndexState),
 
     {DeltaCount1, DeltaBytes1} =
@@ -1339,7 +1386,7 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
                                     transient    = 0,
                                     end_seq_id   = NextSeqId })
             end,
-    Now = time_compat:monotonic_time(),
+    Now = erlang:monotonic_time(),
     IoBatchSize = rabbit_misc:get_env(rabbit, msg_store_io_batch_size,
                                       ?IO_BATCH_SIZE),
 
@@ -1388,7 +1435,8 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
       io_batch_size       = IoBatchSize,
 
       mode                = default,
-      memory_reduction_run_count = 0},
+      memory_reduction_run_count = 0,
+      virtual_host        = VHost},
     a(maybe_deltas_to_betas(State)).
 
 blank_rates(Now) ->
@@ -1732,7 +1780,7 @@ remove_queue_entries(Q, DelsAndAcksFun,
                      State = #vqstate{msg_store_clients = MSCState}) ->
     {MsgIdsByStore, Delivers, Acks, State1} =
         ?QUEUE:foldl(fun remove_queue_entries1/2,
-                     {orddict:new(), [], [], State}, Q),
+                     {maps:new(), [], [], State}, Q),
     remove_msgs_by_id(MsgIdsByStore, MSCState),
     DelsAndAcksFun(Delivers, Acks, State1).
 
@@ -1742,7 +1790,7 @@ remove_queue_entries1(
                 is_persistent = IsPersistent} = MsgStatus,
   {MsgIdsByStore, Delivers, Acks, State}) ->
     {case MsgInStore of
-         true  -> rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore);
+         true  -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
          false -> MsgIdsByStore
      end,
      cons_if(IndexOnDisk andalso not IsDelivered, SeqId, Delivers),
@@ -2099,27 +2147,27 @@ purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
                               qi_pending_ack   = gb_trees:empty()},
     {IndexOnDiskSeqIds, MsgIdsByStore, State1}.
 
-%% MsgIdsByStore is an orddict with two keys:
+%% MsgIdsByStore is an map with two keys:
 %%
 %% true: holds a list of Persistent Message Ids.
 %% false: holds a list of Transient Message Ids.
 %%
-%% When we call orddict:to_list/1 we get two sets of msg ids, where
+%% When we call maps:to_list/1 we get two sets of msg ids, where
 %% IsPersistent is either true for persistent messages or false for
 %% transient ones. The msg_store_remove/3 function takes this boolean
 %% flag to determine from which store the messages should be removed
 %% from.
 remove_msgs_by_id(MsgIdsByStore, MSCState) ->
     [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
-     || {IsPersistent, MsgIds} <- orddict:to_list(MsgIdsByStore)].
+     || {IsPersistent, MsgIds} <- maps:to_list(MsgIdsByStore)].
 
 remove_transient_msgs_by_id(MsgIdsByStore, MSCState) ->
-    case orddict:find(false, MsgIdsByStore) of
+    case maps:find(false, MsgIdsByStore) of
         error        -> ok;
         {ok, MsgIds} -> ok = msg_store_remove(MSCState, false, MsgIds)
     end.
 
-accumulate_ack_init() -> {[], orddict:new(), []}.
+accumulate_ack_init() -> {[], maps:new(), []}.
 
 accumulate_ack(#msg_status { seq_id        = SeqId,
                              msg_id        = MsgId,
@@ -2129,7 +2177,7 @@ accumulate_ack(#msg_status { seq_id        = SeqId,
                {IndexOnDiskSeqIdsAcc, MsgIdsByStore, AllMsgIds}) ->
     {cons_if(IndexOnDisk, SeqId, IndexOnDiskSeqIdsAcc),
      case MsgInStore of
-         true  -> rabbit_misc:orddict_cons(IsPersistent, MsgId, MsgIdsByStore);
+         true  -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
          false -> MsgIdsByStore
      end,
      [MsgId | AllMsgIds]}.
@@ -2422,21 +2470,16 @@ reduce_memory_use(State = #vqstate {
     Blocked = credit_flow:blocked(),
     case {Blocked, NeedResumeA2B orelse NeedResumeB2D} of
         %% Credit bump will continue paging
-        {true, _}      -> ok;
+        {true, _}      -> State3;
         %% Finished with paging
-        {false, false} -> ok;
+        {false, false} -> State3;
         %% Planning next batch
         {false, true}  ->
             %% We don't want to use self-credit-flow, because it's harder to
             %% reason about. So the process sends a (prioritised) message to
             %% itself and sets a waiting_bump value to keep the message box clean
-            case get(waiting_bump) of
-                true -> ok;
-                _    -> self() ! bump_reduce_memory_use,
-                        put(waiting_bump, true)
-            end
-    end,
-    State3;
+            maybe_bump_reduce_memory_use(State3)
+    end;
 %% When using lazy queues, there are no alphas, so we don't need to
 %% call push_alphas_to_betas/2.
 reduce_memory_use(State = #vqstate {
@@ -2461,6 +2504,12 @@ reduce_memory_use(State = #vqstate {
         end,
     garbage_collect(),
     State3.
+
+maybe_bump_reduce_memory_use(State = #vqstate{ waiting_bump = true }) ->
+    State;
+maybe_bump_reduce_memory_use(State) ->
+    self() ! bump_reduce_memory_use,
+    State#vqstate{ waiting_bump = true }.
 
 limit_ram_acks(0, State) ->
     {0, ui(State)};
@@ -2756,3 +2805,212 @@ transform_storage(TransformFun) ->
 transform_store(Store, TransformFun) ->
     rabbit_msg_store:force_recovery(rabbit_mnesia:dir(), Store),
     rabbit_msg_store:transform_dir(rabbit_mnesia:dir(), Store, TransformFun).
+
+move_messages_to_vhost_store() ->
+    case list_persistent_queues() of
+        []     ->
+            log_upgrade("No durable queues found."
+                        " Skipping message store migration"),
+            ok;
+        Queues ->
+            move_messages_to_vhost_store(Queues)
+    end,
+    ok = delete_old_store(),
+    ok = rabbit_queue_index:cleanup_global_recovery_terms().
+
+move_messages_to_vhost_store(Queues) ->
+    log_upgrade("Moving messages to per-vhost message store"),
+    %% Move the queue index for each persistent queue to the new store
+    lists:foreach(
+        fun(Queue) ->
+            #amqqueue{name = QueueName} = Queue,
+            rabbit_queue_index:move_to_per_vhost_stores(QueueName)
+        end,
+        Queues),
+    %% Legacy (global) msg_store may require recovery.
+    %% This upgrade step should only be started
+    %% if we are upgrading from a pre-3.7.0 version.
+    {QueuesWithTerms, RecoveryRefs, StartFunState} = read_old_recovery_terms(Queues),
+
+    OldStore = run_old_persistent_store(RecoveryRefs, StartFunState),
+
+    VHosts = rabbit_vhost:list(),
+
+    %% New store should not be recovered.
+    NewMsgStore = start_new_store(VHosts),
+    %% Recovery terms should be started for all vhosts for new store.
+    [{ok, _} = rabbit_recovery_terms:open_table(VHost) || VHost <- VHosts],
+
+    MigrationBatchSize = application:get_env(rabbit, queue_migration_batch_size,
+                                             ?QUEUE_MIGRATION_BATCH_SIZE),
+    in_batches(MigrationBatchSize,
+        {rabbit_variable_queue, migrate_queue, [OldStore, NewMsgStore]},
+        QueuesWithTerms,
+        "message_store upgrades: Migrating batch ~p of ~p queues. Out of total ~p ~n",
+        "message_store upgrades: Batch ~p of ~p queues migrated ~n. ~p total left"),
+
+    log_upgrade("Message store migration finished"),
+    ok = rabbit_sup:stop_child(OldStore),
+    [ok= rabbit_recovery_terms:close_table(VHost) || VHost <- VHosts],
+    ok = stop_new_store(NewMsgStore).
+
+in_batches(Size, MFA, List, MessageStart, MessageEnd) ->
+    in_batches(Size, 1, MFA, List, MessageStart, MessageEnd).
+
+in_batches(_, _, _, [], _, _) -> ok;
+in_batches(Size, BatchNum, MFA, List, MessageStart, MessageEnd) ->
+    Length = length(List),
+    {Batch, Tail} = case Size > Length of
+        true  -> {List, []};
+        false -> lists:split(Size, List)
+    end,
+    ProcessedLength = (BatchNum - 1) * Size,
+    rabbit_log:info(MessageStart, [BatchNum, Size, ProcessedLength + Length]),
+    {M, F, A} = MFA,
+    Keys = [ rpc:async_call(node(), M, F, [El | A]) || El <- Batch ],
+    lists:foreach(fun(Key) ->
+        case rpc:yield(Key) of
+            {badrpc, Err} -> throw(Err);
+            _             -> ok
+        end
+    end,
+    Keys),
+    rabbit_log:info(MessageEnd, [BatchNum, Size, length(Tail)]),
+    in_batches(Size, BatchNum + 1, MFA, Tail, MessageStart, MessageEnd).
+
+migrate_queue({QueueName = #resource{virtual_host = VHost, name = Name},
+               RecoveryTerm},
+              OldStore, NewStore) ->
+    log_upgrade_verbose(
+        "Migrating messages in queue ~s in vhost ~s to per-vhost message store~n",
+        [Name, VHost]),
+    OldStoreClient = get_global_store_client(OldStore),
+    NewStoreClient = get_per_vhost_store_client(QueueName, NewStore),
+    %% WARNING: During scan_queue_segments queue index state is being recovered
+    %% and terminated. This can cause side effects!
+    rabbit_queue_index:scan_queue_segments(
+        %% We migrate only persistent messages which are found in message store
+        %% and are not acked yet
+        fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, OldC)
+            when is_binary(MsgId) ->
+                migrate_message(MsgId, OldC, NewStoreClient);
+            (_SeqId, _MsgId, _MsgProps,
+             _IsPersistent, _IsDelivered, _IsAcked, OldC) ->
+                OldC
+        end,
+        OldStoreClient,
+        QueueName),
+    rabbit_msg_store:client_terminate(OldStoreClient),
+    rabbit_msg_store:client_terminate(NewStoreClient),
+    NewClientRef = rabbit_msg_store:client_ref(NewStoreClient),
+    case RecoveryTerm of
+        non_clean_shutdown -> ok;
+        Term when is_list(Term) ->
+            NewRecoveryTerm = lists:keyreplace(persistent_ref, 1, RecoveryTerm,
+                                               {persistent_ref, NewClientRef}),
+            rabbit_queue_index:update_recovery_term(QueueName, NewRecoveryTerm)
+    end,
+    log_upgrade_verbose("Finished migrating queue ~s in vhost ~s", [Name, VHost]),
+    {QueueName, NewClientRef}.
+
+migrate_message(MsgId, OldC, NewC) ->
+    case rabbit_msg_store:read(MsgId, OldC) of
+        {{ok, Msg}, OldC1} ->
+            ok = rabbit_msg_store:write(MsgId, Msg, NewC),
+            OldC1;
+        _ -> OldC
+    end.
+
+get_per_vhost_store_client(#resource{virtual_host = VHost}, NewStore) ->
+    {VHost, StorePid} = lists:keyfind(VHost, 1, NewStore),
+    rabbit_msg_store:client_init(StorePid, rabbit_guid:gen(),
+                                 fun(_,_) -> ok end, fun() -> ok end).
+
+get_global_store_client(OldStore) ->
+    rabbit_msg_store:client_init(OldStore,
+                                 rabbit_guid:gen(),
+                                 fun(_,_) -> ok end,
+                                 fun() -> ok end).
+
+list_persistent_queues() ->
+    Node = node(),
+    mnesia:async_dirty(
+      fun () ->
+              qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
+                                              pid  = Pid}
+                                    <- mnesia:table(rabbit_durable_queue),
+                                node(Pid) == Node,
+                                mnesia:read(rabbit_queue, Name, read) =:= []]))
+      end).
+
+read_old_recovery_terms([]) ->
+    {[], [], ?EMPTY_START_FUN_STATE};
+read_old_recovery_terms(Queues) ->
+    QueueNames = [Name || #amqqueue{name = Name} <- Queues],
+    {AllTerms, StartFunState} = rabbit_queue_index:read_global_recovery_terms(QueueNames),
+    Refs = [Ref || Terms <- AllTerms,
+                   Terms /= non_clean_shutdown,
+                   begin
+                       Ref = proplists:get_value(persistent_ref, Terms),
+                       Ref =/= undefined
+                   end],
+    {lists:zip(QueueNames, AllTerms), Refs, StartFunState}.
+
+run_old_persistent_store(Refs, StartFunState) ->
+    OldStoreName = ?PERSISTENT_MSG_STORE,
+    ok = rabbit_sup:start_child(OldStoreName, rabbit_msg_store, start_global_store_link,
+                                [OldStoreName, rabbit_mnesia:dir(),
+                                 Refs, StartFunState]),
+    OldStoreName.
+
+start_new_store(VHosts) ->
+    %% Ensure vhost supervisor is started, so we can add vhosts to it.
+    lists:map(fun(VHost) ->
+        VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+        {ok, Pid} = rabbit_msg_store:start_link(?PERSISTENT_MSG_STORE,
+                                                VHostDir,
+                                                undefined,
+                                                ?EMPTY_START_FUN_STATE),
+        {VHost, Pid}
+    end,
+    VHosts).
+
+stop_new_store(NewStore) ->
+    lists:foreach(fun({_VHost, StorePid}) ->
+        unlink(StorePid),
+        exit(StorePid, shutdown)
+    end,
+    NewStore),
+    ok.
+
+delete_old_store() ->
+    log_upgrade("Removing the old message store data"),
+    rabbit_file:recursive_delete(
+        [filename:join([rabbit_mnesia:dir(), ?PERSISTENT_MSG_STORE])]),
+    %% Delete old transient store as well
+    rabbit_file:recursive_delete(
+        [filename:join([rabbit_mnesia:dir(), ?TRANSIENT_MSG_STORE])]),
+    ok.
+
+log_upgrade(Msg) ->
+    log_upgrade(Msg, []).
+
+log_upgrade(Msg, Args) ->
+    rabbit_log:info("message_store upgrades: " ++ Msg, Args).
+
+log_upgrade_verbose(Msg) ->
+    log_upgrade_verbose(Msg, []).
+
+log_upgrade_verbose(Msg, Args) ->
+    rabbit_log_upgrade:info(Msg, Args).
+
+maybe_client_terminate(MSCStateP) ->
+    %% Queue might have been asked to stop by the supervisor, it needs a clean
+    %% shutdown in order for the supervising strategy to work - if it reaches max
+    %% restarts might bring the vhost down.
+    try
+        rabbit_msg_store:client_terminate(MSCStateP)
+    catch
+        _:_ ->
+            ok
+    end.

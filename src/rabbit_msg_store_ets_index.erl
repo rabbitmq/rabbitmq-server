@@ -22,7 +22,7 @@
 
 -export([new/1, recover/1,
          lookup/2, insert/2, update/2, update_fields/3, delete/2,
-         delete_object/2, delete_by_file/2, terminate/1]).
+         delete_object/2, clean_up_temporary_reference_count_entries_without_file/1, terminate/1]).
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
 -define(FILENAME, "msg_store_index.ets").
@@ -68,12 +68,18 @@ delete_object(Obj, State) ->
     true = ets:delete_object(State #state.table, Obj),
     ok.
 
-delete_by_file(File, State) ->
-    MatchHead = #msg_location { file = File, _ = '_' },
+clean_up_temporary_reference_count_entries_without_file(State) ->
+    MatchHead = #msg_location { file = undefined, _ = '_' },
     ets:select_delete(State #state.table, [{MatchHead, [], [true]}]),
     ok.
 
 terminate(#state { table = MsgLocations, dir = Dir }) ->
-    ok = ets:tab2file(MsgLocations, filename:join(Dir, ?FILENAME),
-                      [{extended_info, [object_count]}]),
+    case ets:tab2file(MsgLocations, filename:join(Dir, ?FILENAME),
+                      [{extended_info, [object_count]}]) of
+        ok           -> ok;
+        {error, Err} ->
+            rabbit_log:error("Unable to save message store index"
+                             " for directory ~p.~nError: ~p~n",
+                             [Dir, Err])
+    end,
     ets:delete(MsgLocations).

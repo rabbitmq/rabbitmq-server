@@ -399,7 +399,6 @@
 -define(FORCE_GC_TIMER, 250).
 -define(VERSION_START, 0).
 -define(SETS, ordsets).
--define(DICT, orddict).
 
 -record(state,
         { self,
@@ -824,8 +823,8 @@ handle_msg({catchup, Left, MembersStateLeft},
                             members_state = MembersState })
   when MembersState =/= undefined ->
     MembersStateLeft1 = build_members_state(MembersStateLeft),
-    AllMembers = lists:usort(?DICT:fetch_keys(MembersState) ++
-                                 ?DICT:fetch_keys(MembersStateLeft1)),
+    AllMembers = lists:usort(maps:keys(MembersState) ++
+                                 maps:keys(MembersStateLeft1)),
     {MembersState1, Activity} =
         lists:foldl(
           fun (Id, MembersStateActivity) ->
@@ -995,21 +994,21 @@ is_member_alias(Member, Self, View) ->
 dead_member_id({dead, Member}) -> Member.
 
 store_view_member(VMember = #view_member { id = Id }, {Ver, View}) ->
-    {Ver, ?DICT:store(Id, VMember, View)}.
+    {Ver, maps:put(Id, VMember, View)}.
 
 with_view_member(Fun, View, Id) ->
     store_view_member(Fun(fetch_view_member(Id, View)), View).
 
-fetch_view_member(Id, {_Ver, View}) -> ?DICT:fetch(Id, View).
+fetch_view_member(Id, {_Ver, View}) -> maps:get(Id, View).
 
-find_view_member(Id, {_Ver, View}) -> ?DICT:find(Id, View).
+find_view_member(Id, {_Ver, View}) -> maps:find(Id, View).
 
-blank_view(Ver) -> {Ver, ?DICT:new()}.
+blank_view(Ver) -> {Ver, maps:new()}.
 
-alive_view_members({_Ver, View}) -> ?DICT:fetch_keys(View).
+alive_view_members({_Ver, View}) -> maps:keys(View).
 
 all_known_members({_Ver, View}) ->
-    ?DICT:fold(
+    maps:fold(
        fun (Member, #view_member { aliases = Aliases }, Acc) ->
                ?SETS:to_list(Aliases) ++ [Member | Acc]
        end, [], View).
@@ -1090,7 +1089,7 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                                prune_or_create_group(Self, GroupName, TxnFun),
                                TxnFun);
                 Alive ->
-                    Left = lists:nth(rand_compat:uniform(length(Alive)), Alive),
+                    Left = lists:nth(rand:uniform(length(Alive)), Alive),
                     Handler =
                         fun () ->
                                 join_group(
@@ -1354,9 +1353,12 @@ find_common(A, B, Common) ->
             find_common(A1, B1, queue:in(Val, Common));
         {{empty, _A}, _} ->
             {Common, B};
-        {_, {_, B1}} ->
+        %% Drop value from B.
+        %% Match value to avoid infinite loop, since {empty, B} = queue:out(B).
+        {_, {{value, _}, B1}} ->
             find_common(A, B1, Common);
-        {{_, A1}, _} ->
+        %% Drop value from A. Empty A should be matched by second close.
+        {{{value, _}, A1}, _} ->
             find_common(A1, B, Common)
     end.
 
@@ -1374,24 +1376,24 @@ with_member_acc(Fun, Id, {MembersState, Acc}) ->
     {store_member(Id, MemberState, MembersState), Acc1}.
 
 find_member_or_blank(Id, MembersState) ->
-    case ?DICT:find(Id, MembersState) of
+    case maps:find(Id, MembersState) of
         {ok, Result} -> Result;
         error        -> blank_member()
     end.
 
-erase_member(Id, MembersState) -> ?DICT:erase(Id, MembersState).
+erase_member(Id, MembersState) -> maps:remove(Id, MembersState).
 
 blank_member() ->
     #member { pending_ack = queue:new(), last_pub = -1, last_ack = -1 }.
 
-blank_member_state() -> ?DICT:new().
+blank_member_state() -> maps:new().
 
 store_member(Id, MemberState, MembersState) ->
-    ?DICT:store(Id, MemberState, MembersState).
+    maps:put(Id, MemberState, MembersState).
 
-prepare_members_state(MembersState) -> ?DICT:to_list(MembersState).
+prepare_members_state(MembersState) -> maps:to_list(MembersState).
 
-build_members_state(MembersStateList) -> ?DICT:from_list(MembersStateList).
+build_members_state(MembersStateList) -> maps:from_list(MembersStateList).
 
 make_member(GroupName) ->
    {case dirty_read_group(GroupName) of
@@ -1560,9 +1562,10 @@ has_pending_messages(#state{ broadcast_buffer = Buffer })
   when Buffer =/= [] ->
     true;
 has_pending_messages(#state{ members_state = MembersState }) ->
-    [] =/= [M || {_, #member{last_pub = LP, last_ack = LA} = M}
-                 <- MembersState,
-                 LP =/= LA].
+    MembersWithPubAckMismatches = maps:filter(fun(_Id, #member{last_pub = LP, last_ack = LA}) ->
+                                                      LP =/= LA
+                                              end, MembersState),
+    0 =/= maps:size(MembersWithPubAckMismatches).
 
 maybe_confirm(_Self, _Id, Confirms, []) ->
     Confirms;

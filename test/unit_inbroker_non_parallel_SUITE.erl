@@ -40,9 +40,7 @@ groups() ->
           head_message_timestamp_statistics, %% Expect specific statistics.
           log_management, %% Check log files.
           log_management_during_startup, %% Check log files.
-          memory_high_watermark, %% Trigger alarm.
-          rotate_logs_without_suffix, %% Check log files.
-          server_status %% Trigger alarm.
+          externally_rotated_logs_are_automatically_reopened %% Check log files.
         ]}
     ].
 
@@ -99,24 +97,40 @@ app_management(Config) ->
       ?MODULE, app_management1, [Config]).
 
 app_management1(_Config) ->
-    control_action(wait, [os:getenv("RABBITMQ_PID_FILE")]),
+    wait_for_application(rabbit),
     %% Starting, stopping and diagnostics.  Note that we don't try
     %% 'report' when the rabbit app is stopped and that we enable
     %% tracing for the duration of this function.
-    ok = control_action(trace_on, []),
-    ok = control_action(stop_app, []),
-    ok = control_action(stop_app, []),
-    ok = control_action(status, []),
-    ok = control_action(cluster_status, []),
-    ok = control_action(environment, []),
-    ok = control_action(start_app, []),
-    ok = control_action(start_app, []),
-    ok = control_action(status, []),
-    ok = control_action(report, []),
-    ok = control_action(cluster_status, []),
-    ok = control_action(environment, []),
-    ok = control_action(trace_off, []),
+    ok = rabbit_trace:start(<<"/">>),
+    ok = rabbit:stop(),
+    ok = rabbit:stop(),
+    ok = no_exceptions(rabbit, status, []),
+    ok = no_exceptions(rabbit, environment, []),
+    ok = rabbit:start(),
+    ok = rabbit:start(),
+    ok = no_exceptions(rabbit, status, []),
+    ok = no_exceptions(rabbit, environment, []),
+    ok = rabbit_trace:stop(<<"/">>),
     passed.
+
+no_exceptions(Mod, Fun, Args) ->
+    try erlang:apply(Mod, Fun, Args) of _ -> ok
+    catch Type:Ex -> {Type, Ex}
+    end.
+
+wait_for_application(Application) ->
+    wait_for_application(Application, 5000).
+
+wait_for_application(_, Time) when Time =< 0 ->
+    {error, timeout};
+wait_for_application(Application, Time) ->
+    Interval = 100,
+    case lists:keyfind(Application, 1, application:which_applications()) of
+        false ->
+            timer:sleep(Interval),
+            wait_for_application(Application, Time - Interval);
+        _ -> ok
+    end.
 
 %% ---------------------------------------------------------------------------
 %% file_handle_cache.
@@ -184,69 +198,77 @@ log_management(Config) ->
       ?MODULE, log_management1, [Config]).
 
 log_management1(_Config) ->
-    override_group_leader(),
+    [LogFile|_] = rabbit:log_locations(),
+    Suffix = ".0",
 
-    MainLog = rabbit:log_location(kernel),
-    SaslLog = rabbit:log_location(sasl),
-    Suffix = ".1",
-
-    ok = test_logs_working(MainLog, SaslLog),
+    ok = test_logs_working([LogFile]),
 
     %% prepare basic logs
-    file:delete([MainLog, Suffix]),
-    file:delete([SaslLog, Suffix]),
-
-    %% simple logs reopening
-    ok = control_action(rotate_logs, []),
-    ok = test_logs_working(MainLog, SaslLog),
+    file:delete(LogFile ++ Suffix),
+    ok = test_logs_working([LogFile]),
 
     %% simple log rotation
-    ok = control_action(rotate_logs, [Suffix]),
-    [true, true] = non_empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
-    [true, true] = empty_files([MainLog, SaslLog]),
-    ok = test_logs_working(MainLog, SaslLog),
+    ok = rabbit:rotate_logs(),
+    %% FIXME: rabbit:rotate_logs/0 is asynchronous due to a limitation
+    %% in Lager. Therefore, we have no choice but to wait an arbitrary
+    %% amount of time.
+    timer:sleep(2000),
+    [true, true] = non_empty_files([LogFile ++ Suffix, LogFile]),
+    ok = test_logs_working([LogFile]),
 
-    %% reopening logs with log rotation performed first
-    ok = clean_logs([MainLog, SaslLog], Suffix),
-    ok = control_action(rotate_logs, []),
-    ok = file:rename(MainLog, [MainLog, Suffix]),
-    ok = file:rename(SaslLog, [SaslLog, Suffix]),
-    ok = test_logs_working([MainLog, Suffix], [SaslLog, Suffix]),
-    ok = control_action(rotate_logs, []),
-    ok = test_logs_working(MainLog, SaslLog),
-
-    %% log rotation on empty files (the main log will have a ctl action logged)
-    ok = clean_logs([MainLog, SaslLog], Suffix),
-    ok = control_action(rotate_logs, []),
-    ok = control_action(rotate_logs, [Suffix]),
-    [false, true] = empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
+    %% log rotation on empty files
+    ok = clean_logs([LogFile], Suffix),
+    ok = rabbit:rotate_logs(),
+    timer:sleep(2000),
+    [{error, enoent}, true] = non_empty_files([LogFile ++ Suffix, LogFile]),
 
     %% logs with suffix are not writable
-    ok = control_action(rotate_logs, [Suffix]),
-    ok = make_files_non_writable([[MainLog, Suffix], [SaslLog, Suffix]]),
-    ok = control_action(rotate_logs, [Suffix]),
-    ok = test_logs_working(MainLog, SaslLog),
+    ok = rabbit:rotate_logs(),
+    timer:sleep(2000),
+    ok = make_files_non_writable([LogFile ++ Suffix]),
+    ok = rabbit:rotate_logs(),
+    timer:sleep(2000),
+    ok = test_logs_working([LogFile]),
+
+    %% rotate when original log files are not writable
+    ok = make_files_non_writable([LogFile]),
+    ok = rabbit:rotate_logs(),
+    timer:sleep(2000),
 
     %% logging directed to tty (first, remove handlers)
-    ok = delete_log_handlers([rabbit_sasl_report_file_h,
-                              rabbit_error_logger_file_h]),
-    ok = clean_logs([MainLog, SaslLog], Suffix),
-    ok = application:set_env(rabbit, sasl_error_logger, tty),
-    ok = application:set_env(rabbit, error_logger, tty),
-    ok = control_action(rotate_logs, []),
-    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
+    ok = rabbit:stop(),
+    ok = clean_logs([LogFile], Suffix),
+    ok = application:set_env(rabbit, lager_default_file, tty),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = rabbit:start(),
+    timer:sleep(200),
+    rabbit_log:info("test info"),
+    [{error, enoent}] = non_empty_files([LogFile]),
 
     %% rotate logs when logging is turned off
-    ok = application:set_env(rabbit, sasl_error_logger, false),
-    ok = application:set_env(rabbit, error_logger, silent),
-    ok = control_action(rotate_logs, []),
-    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
+    ok = rabbit:stop(),
+    ok = clean_logs([LogFile], Suffix),
+    ok = application:set_env(rabbit, lager_default_file, false),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = rabbit:start(),
+    timer:sleep(200),
+    rabbit_log:error("test error"),
+    timer:sleep(200),
+    [{error, enoent}] = empty_files([LogFile]),
 
     %% cleanup
-    ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
-    ok = application:set_env(rabbit, error_logger, {file, MainLog}),
-    ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog},
-                           {rabbit_sasl_report_file_h, SaslLog}]),
+    ok = rabbit:stop(),
+    ok = clean_logs([LogFile], Suffix),
+    ok = application:set_env(rabbit, lager_default_file, LogFile),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = rabbit:start(),
+    ok = test_logs_working([LogFile]),
     passed.
 
 log_management_during_startup(Config) ->
@@ -254,137 +276,112 @@ log_management_during_startup(Config) ->
       ?MODULE, log_management_during_startup1, [Config]).
 
 log_management_during_startup1(_Config) ->
-    MainLog = rabbit:log_location(kernel),
-    SaslLog = rabbit:log_location(sasl),
+    [LogFile|_] = rabbit:log_locations(),
+    Suffix = ".0",
 
     %% start application with simple tty logging
-    ok = control_action(stop_app, []),
-    ok = application:set_env(rabbit, error_logger, tty),
-    ok = application:set_env(rabbit, sasl_error_logger, tty),
-    ok = add_log_handlers([{error_logger_tty_h, []},
-                           {sasl_report_tty_h, []}]),
-    ok = control_action(start_app, []),
-
-    %% start application with tty logging and
-    %% proper handlers not installed
-    ok = control_action(stop_app, []),
-    ok = error_logger:tty(false),
-    ok = delete_log_handlers([sasl_report_tty_h]),
-    ok = case catch control_action(start_app, []) of
-             ok -> exit({got_success_but_expected_failure,
-                         log_rotation_tty_no_handlers_test});
-             {badrpc, {'EXIT', {error,
-                                {cannot_log_to_tty, _, not_installed}}}} -> ok
-         end,
-
-    %% fix sasl logging
-    ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
+    ok = rabbit:stop(),
+    ok = clean_logs([LogFile], Suffix),
+    ok = application:set_env(rabbit, lager_default_file, tty),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = rabbit:start(),
 
     %% start application with logging to non-existing directory
-    TmpLog = "/tmp/rabbit-tests/test.log",
-    delete_file(TmpLog),
-    ok = control_action(stop_app, []),
-    ok = application:set_env(rabbit, error_logger, {file, TmpLog}),
-
-    ok = delete_log_handlers([rabbit_error_logger_file_h]),
-    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
-    ok = control_action(start_app, []),
+    NonExistent = "/tmp/non-existent/test.log",
+    delete_file(NonExistent),
+    delete_file(filename:dirname(NonExistent)),
+    ok = rabbit:stop(),
+    ok = application:set_env(rabbit, lager_default_file, NonExistent),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = rabbit:start(),
 
     %% start application with logging to directory with no
     %% write permissions
-    ok = control_action(stop_app, []),
-    TmpDir = "/tmp/rabbit-tests",
-    ok = set_permissions(TmpDir, 8#00400),
-    ok = delete_log_handlers([rabbit_error_logger_file_h]),
-    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
-    ok = case control_action(start_app, []) of
-             ok -> exit({got_success_but_expected_failure,
-                         log_rotation_no_write_permission_dir_test});
-             {badrpc, {'EXIT',
-                       {error, {cannot_log_to_file, _, _}}}} -> ok
-         end,
+    ok = rabbit:stop(),
+    NoPermission1 = "/var/empty/test.log",
+    delete_file(NoPermission1),
+    delete_file(filename:dirname(NoPermission1)),
+    ok = rabbit:stop(),
+    ok = application:set_env(rabbit, lager_default_file, NoPermission1),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = try rabbit:start() of
+        ok -> exit({got_success_but_expected_failure,
+                    log_rotation_no_write_permission_dir_test})
+    catch
+        _:{error, {cannot_log_to_file, _, Reason1}}
+            when Reason1 =:= enoent orelse Reason1 =:= eacces -> ok;
+        _:{error, {cannot_log_to_file, _,
+                  {cannot_create_parent_dirs, _, Reason1}}}
+            when Reason1 =:= eperm orelse
+                 Reason1 =:= eacces orelse
+                 Reason1 =:= enoent-> ok
+    end,
 
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
-    ok = control_action(stop_app, []),
-    TmpTestDir = "/tmp/rabbit-tests/no-permission/test/log",
-    ok = application:set_env(rabbit, error_logger, {file, TmpTestDir}),
-    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
-    ok = case control_action(start_app, []) of
-             ok -> exit({got_success_but_expected_failure,
-                         log_rotatation_parent_dirs_test});
-             {badrpc,
-              {'EXIT',
-               {error, {cannot_log_to_file, _,
-                        {error,
-                         {cannot_create_parent_dirs, _, eacces}}}}}} -> ok
-         end,
-    ok = set_permissions(TmpDir, 8#00700),
-    ok = set_permissions(TmpLog, 8#00600),
-    ok = delete_file(TmpLog),
-    ok = file:del_dir(TmpDir),
+    NoPermission2 = "/var/empty/non-existent/test.log",
+    delete_file(NoPermission2),
+    delete_file(filename:dirname(NoPermission2)),
+    case rabbit:stop() of
+        ok                         -> ok;
+        {error, lager_not_running} -> ok
+    end,
+    ok = application:set_env(rabbit, lager_default_file, NoPermission2),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = try rabbit:start() of
+        ok -> exit({got_success_but_expected_failure,
+                    log_rotatation_parent_dirs_test})
+    catch
+        _:{error, {cannot_log_to_file, _, Reason2}}
+            when Reason2 =:= enoent orelse Reason2 =:= eacces -> ok;
+        _:{error, {cannot_log_to_file, _,
+                   {cannot_create_parent_dirs, _, Reason2}}}
+            when Reason2 =:= eperm orelse
+                 Reason2 =:= eacces orelse
+                 Reason2 =:= enoent-> ok
+    end,
 
-    %% start application with standard error_logger_file_h
-    %% handler not installed
-    ok = control_action(stop_app, []),
-    ok = application:set_env(rabbit, error_logger, {file, MainLog}),
-    ok = control_action(start_app, []),
-
-    %% start application with standard sasl handler not installed
-    %% and rabbit main log handler installed correctly
-    ok = control_action(stop_app, []),
-    ok = delete_log_handlers([rabbit_sasl_report_file_h]),
-    ok = control_action(start_app, []),
+    %% cleanup
+    ok = application:set_env(rabbit, lager_default_file, LogFile),
+    application:unset_env(rabbit, log),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = rabbit:start(),
     passed.
 
-%% "rabbitmqctl rotate_logs" without additional parameters
-%% shouldn't truncate files.
-rotate_logs_without_suffix(Config) ->
+externally_rotated_logs_are_automatically_reopened(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, rotate_logs_without_suffix1, [Config]).
+      ?MODULE, externally_rotated_logs_are_automatically_reopened1, [Config]).
 
-rotate_logs_without_suffix1(_Config) ->
-    override_group_leader(),
+externally_rotated_logs_are_automatically_reopened1(_Config) ->
+    [LogFile|_] = rabbit:log_locations(),
 
-    MainLog = rabbit:log_location(kernel),
-    SaslLog = rabbit:log_location(sasl),
-    Suffix = ".1",
-    file:delete(MainLog),
-    file:delete(SaslLog),
+    %% Make sure log file is opened
+    ok = test_logs_working([LogFile]),
 
-    %% Empty log-files should be created
-    ok = control_action(rotate_logs, []),
-    [true, true] = empty_files([MainLog, SaslLog]),
+    %% Move it away - i.e. external log rotation happened
+    file:rename(LogFile, [LogFile, ".rotation_test"]),
 
-    %% Write something to log files and simulate external log rotation
-    ok = test_logs_working(MainLog, SaslLog),
-    ok = file:rename(MainLog, [MainLog, Suffix]),
-    ok = file:rename(SaslLog, [SaslLog, Suffix]),
-
-    %% Create non-empty files
-    TestData = "test-data\n",
-    file:write_file(MainLog, TestData),
-    file:write_file(SaslLog, TestData),
-
-    %% Nothing should be truncated - neither moved files which are still
-    %% opened by server, nor new log files that should be just reopened.
-    ok = control_action(rotate_logs, []),
-    [true, true, true, true] =
-        non_empty_files([MainLog, SaslLog, [MainLog, Suffix],
-            [SaslLog, Suffix]]),
-
-    %% And log files should be re-opened - new log records should go to
-    %% new files.
-    ok = test_logs_working(MainLog, SaslLog),
-    true = (rabbit_file:file_size(MainLog) > length(TestData)),
-    true = (rabbit_file:file_size(SaslLog) > length(TestData)),
+    %% New files should be created - test_logs_working/1 will check that
+    %% LogFile is not empty after doing some logging. And it's exactly
+    %% what we need to check here.
+    ok = test_logs_working([LogFile]),
     passed.
 
-override_group_leader() ->
-    %% Override group leader, otherwise SASL fake events are ignored by
-    %% the error_logger local to RabbitMQ.
-    {group_leader, Leader} = erlang:process_info(whereis(rabbit), group_leader),
-    erlang:group_leader(Leader, self()).
+empty_or_nonexist_files(Files) ->
+    [case file:read_file_info(File) of
+         {ok, FInfo}     -> FInfo#file_info.size == 0;
+         {error, enoent} -> true;
+         Error           -> Error
+     end || File <- Files].
 
 empty_files(Files) ->
     [case file:read_file_info(File) of
@@ -398,12 +395,11 @@ non_empty_files(Files) ->
          _               -> not(EmptyFile)
      end || EmptyFile <- empty_files(Files)].
 
-test_logs_working(MainLogFile, SaslLogFile) ->
-    ok = rabbit_log:error("Log a test message~n"),
-    ok = error_logger:error_report(crash_report, [[?MODULE, 1], []]),
+test_logs_working(LogFiles) ->
+    ok = rabbit_log:error("Log a test message"),
     %% give the error loggers some time to catch up
-    timer:sleep(100),
-    [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
+    timer:sleep(200),
+    lists:all(fun(LogFile) -> [true] =:= non_empty_files([LogFile]) end, LogFiles),
     ok.
 
 set_permissions(Path, Mode) ->
@@ -452,90 +448,6 @@ ok_or_empty_list([]) ->
     [];
 ok_or_empty_list(ok) ->
     ok.
-
-server_status(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, server_status1, [Config]).
-
-server_status1(Config) ->
-    %% create a few things so there is some useful information to list
-    {_Writer, Limiter, Ch} = rabbit_ct_broker_helpers:test_channel(),
-    [Q, Q2] = [Queue || {Name, Owner} <- [{<<"server_status-q1">>, none},
-                                          {<<"server_status-q2">>, self()}],
-                        {new, Queue = #amqqueue{}} <-
-                            [rabbit_amqqueue:declare(
-                               rabbit_misc:r(<<"/">>, queue, Name),
-                               false, false, [], Owner)]],
-    ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch, Limiter, false, 0, <<"ctag">>, true, [], undefined),
-
-    %% list queues
-    ok = info_action(list_queues,
-      rabbit_amqqueue:info_keys(), true),
-
-    %% as we have no way to collect output of
-    %% info_action/3 call, the only way we
-    %% can test individual queueinfoitems is by directly calling
-    %% rabbit_amqqueue:info/2
-    [{exclusive, false}] = rabbit_amqqueue:info(Q, [exclusive]),
-    [{exclusive, true}] = rabbit_amqqueue:info(Q2, [exclusive]),
-
-    %% list exchanges
-    ok = info_action(list_exchanges,
-      rabbit_exchange:info_keys(), true),
-
-    %% list bindings
-    ok = info_action(list_bindings,
-      rabbit_binding:info_keys(), true),
-    %% misc binding listing APIs
-    [_|_] = rabbit_binding:list_for_source(
-              rabbit_misc:r(<<"/">>, exchange, <<"">>)),
-    [_] = rabbit_binding:list_for_destination(
-            rabbit_misc:r(<<"/">>, queue, <<"server_status-q1">>)),
-    [_] = rabbit_binding:list_for_source_and_destination(
-            rabbit_misc:r(<<"/">>, exchange, <<"">>),
-            rabbit_misc:r(<<"/">>, queue, <<"server_status-q1">>)),
-
-    %% list connections
-    H = ?config(rmq_hostname, Config),
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    {ok, C} = gen_tcp:connect(H, P, []),
-    gen_tcp:send(C, <<"AMQP", 0, 0, 9, 1>>),
-    timer:sleep(100),
-    ok = info_action(list_connections,
-      rabbit_networking:connection_info_keys(), false),
-    %% close_connection
-    [ConnPid] = rabbit_ct_broker_helpers:get_connection_pids([C]),
-    ok = control_action(close_connection,
-      [rabbit_misc:pid_to_string(ConnPid), "go away"]),
-
-    %% list channels
-    ok = info_action(list_channels, rabbit_channel:info_keys(), false),
-
-    %% list consumers
-    ok = control_action(list_consumers, []),
-
-    %% set vm memory high watermark
-    HWM = vm_memory_monitor:get_vm_memory_high_watermark(),
-    ok = control_action(set_vm_memory_high_watermark, ["1"]),
-    ok = control_action(set_vm_memory_high_watermark, ["1.0"]),
-    %% this will trigger an alarm
-    ok = control_action(set_vm_memory_high_watermark, ["0.0"]),
-    %% reset
-    ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
-
-    %% eval
-    {error_string, _} = control_action(eval, ["\""]),
-    {error_string, _} = control_action(eval, ["a("]),
-    ok = control_action(eval, ["a."]),
-
-    %% cleanup
-    [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
-
-    unlink(Ch),
-    ok = rabbit_channel:shutdown(Ch),
-
-    passed.
 
 %% -------------------------------------------------------------------
 %% Statistics.
@@ -713,23 +625,6 @@ test_spawn() ->
     end,
     {Writer, Ch}.
 
-memory_high_watermark(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, memory_high_watermark1, [Config]).
-
-memory_high_watermark1(_Config) ->
-    %% set vm memory high watermark
-    HWM = vm_memory_monitor:get_vm_memory_high_watermark(),
-    %% this will trigger an alarm
-    ok = control_action(set_vm_memory_high_watermark,
-      ["absolute", "2000"]),
-    [{{resource_limit,memory,_},[]}] = rabbit_alarm:get_alarms(),
-    %% reset
-    ok = control_action(set_vm_memory_high_watermark,
-      [float_to_list(HWM)]),
-
-    passed.
-
 disk_monitor(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, disk_monitor1, [Config]).
@@ -779,39 +674,6 @@ disk_monitor_enable1() ->
 %% ---------------------------------------------------------------------------
 %% rabbitmqctl helpers.
 %% ---------------------------------------------------------------------------
-
-control_action(Command, Args) ->
-    control_action(Command, node(), Args, default_options()).
-
-control_action(Command, Args, NewOpts) ->
-    control_action(Command, node(), Args,
-                   expand_options(default_options(), NewOpts)).
-
-control_action(Command, Node, Args, Opts) ->
-    case catch rabbit_control_main:action(
-                 Command, Node, Args, Opts,
-                 fun (Format, Args1) ->
-                         io:format(Format ++ " ...~n", Args1)
-                 end) of
-        ok ->
-            io:format("done.~n"),
-            ok;
-        {ok, Result} ->
-            rabbit_control_misc:print_cmd_result(Command, Result),
-            ok;
-        Other ->
-            io:format("failed: ~p~n", [Other]),
-            Other
-    end.
-
-info_action(Command, Args, CheckVHost) ->
-    ok = control_action(Command, []),
-    if CheckVHost -> ok = control_action(Command, [], ["-p", "/"]);
-       true       -> ok
-    end,
-    ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
-    {bad_argument, dummy} = control_action(Command, ["dummy"]),
-    ok.
 
 default_options() -> [{"-p", "/"}, {"-q", "false"}].
 

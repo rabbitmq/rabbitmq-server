@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
-         check_vhost_access/3, check_resource_access/3]).
+         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -161,22 +161,31 @@ check_resource_access(User = #user{username       = Username,
          (_, Else) -> Else
       end, ok, Modules).
 
+check_topic_access(User = #user{username = Username,
+                                authz_backends = Modules},
+                            Resource, Permission, Context) ->
+    lists:foldl(
+        fun({Module, Impl}, ok) ->
+            check_access(
+                fun() -> Module:check_topic_access(
+                    auth_user(User, Impl), Resource, Permission, Context) end,
+                Module, "access to topic '~s' in exchange ~s refused for user '~s'",
+                [maps:get(routing_key, Context), rabbit_misc:rs(Resource), Username]);
+            (_, Else) -> Else
+        end, ok, Modules).
 
 check_access(Fun, Module, ErrStr, ErrArgs) ->
     check_access(Fun, Module, ErrStr, ErrArgs, access_refused).
 
 check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
-    Allow = case Fun() of
-                {error, E}  ->
-                    rabbit_log:error(ErrStr ++ " by ~s: ~p~n",
-                                     ErrArgs ++ [Module, E]),
-                    false;
-                Else ->
-                    Else
-            end,
-    case Allow of
+    case Fun() of
         true ->
             ok;
         false ->
-            rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs)
+            rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs);
+        {error, E}  ->
+            FullErrStr = ErrStr ++ ", backend ~s returned an error: ~p~n",
+            FullErrArgs = ErrArgs ++ [Module, E],
+            rabbit_log:error(FullErrStr, FullErrArgs),
+            rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)
     end.

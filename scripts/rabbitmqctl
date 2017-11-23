@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh
 ##  The contents of this file are subject to the Mozilla Public License
 ##  Version 1.1 (the "License"); you may not use this file except in
 ##  compliance with the License. You may obtain a copy of the License
@@ -12,30 +12,21 @@
 ##  The Original Code is RabbitMQ.
 ##
 ##  The Initial Developer of the Original Code is GoPivotal, Inc.
-##  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
+##  Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 ##
 
-# Get default settings with user overrides for (RABBITMQ_)<var_name>
-# Non-empty defaults should be set in rabbitmq-env
-. `dirname $0`/rabbitmq-env
+# Exit immediately if a pipeline, which may consist of a single simple command,
+# a list, or a compound command returns a non-zero status
+set -e
 
-# Disable erl_crash.dump by default for control scripts.
-if [ -z "$ERL_CRASH_DUMP_SECONDS" ]; then
-    export ERL_CRASH_DUMP_SECONDS=0
-fi
+# Each variable or function that is created or modified is given the export
+# attribute and marked for export to the environment of subsequent commands.
+set -a
 
-# We specify Mnesia dir and sasl error logger since some actions
-# (e.g. forget_cluster_node --offline) require us to impersonate the
-# real node.
-RABBITMQ_USE_LONGNAME=${RABBITMQ_USE_LONGNAME} \
-exec ${ERL_DIR}erl \
-    -pa "${RABBITMQ_HOME}/ebin" \
-    -noinput +B \
-    -hidden \
-    ${RABBITMQ_CTL_ERL_ARGS} \
-    -boot "${CLEAN_BOOT_FILE}" \
-    -sasl errlog_type error \
-    -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
-    -s rabbit_control_main \
-    -nodename $RABBITMQ_NODENAME \
-    -extra "$@"
+# shellcheck source=/dev/null
+#
+# TODO: when shellcheck adds support for relative paths, change to
+# shellcheck source=./rabbitmq-env
+. "${0%/*}"/rabbitmq-env
+
+exec "${ERL_DIR}escript" "${ESCRIPT_DIR:?must be defined}"/rabbitmqctl "$@"

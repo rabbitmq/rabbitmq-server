@@ -17,12 +17,19 @@
 -module(rabbit_queue_index).
 
 -export([erase/1, init/3, reset_state/1, recover/6,
-         terminate/2, delete_and_terminate/1,
+         terminate/3, delete_and_terminate/1,
          pre_publish/7, flush_pre_publish_cache/2,
          publish/6, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
-         read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
+         read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
+-export([scan_queue_segments/3]).
+
+%% Migrates from global to per-vhost message stores
+-export([move_to_per_vhost_stores/1,
+         update_recovery_term/2,
+         read_global_recovery_terms/1,
+         cleanup_global_recovery_terms/0]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -76,7 +83,7 @@
 %% contains a mapping from segment numbers to state-per-segment (this
 %% state is held for all segments which have been "seen": thus a
 %% segment which has been read but has no pending entries in the
-%% journal is still held in this mapping. Also note that a dict is
+%% journal is still held in this mapping. Also note that a map is
 %% used for this mapping, not an array because with an array, you will
 %% always have entries from 0). Actions are stored directly in this
 %% state. Thus at the point of flushing the journal, firstly no
@@ -109,6 +116,7 @@
 %% ---- Journal details ----
 
 -define(JOURNAL_FILENAME, "journal.jif").
+-define(QUEUE_NAME_STUB_FILE, ".queue_name").
 
 -define(PUB_PERSIST_JPREFIX, 2#00).
 -define(PUB_TRANS_JPREFIX,   2#01).
@@ -197,7 +205,9 @@
   %% optimisation
   pre_publish_cache,
   %% optimisation
-  delivered_cache}).
+  delivered_cache,
+  %% queue name resource record
+  queue_name}).
 
 -record(segment, {
   %% segment ID (an integer)
@@ -224,22 +234,22 @@
 -type segment() :: ('undefined' |
                     #segment { num                :: non_neg_integer(),
                                path               :: file:filename(),
-                               journal_entries    :: ?ARRAY_TYPE(),
-                               entries_to_segment :: ?ARRAY_TYPE(),
+                               journal_entries    :: array:array(),
+                               entries_to_segment :: array:array(),
                                unacked            :: non_neg_integer()
                              }).
 -type seq_id() :: integer().
--type seg_dict() :: {?DICT_TYPE(), [segment()]}.
--type on_sync_fun() :: fun ((?GB_SET_TYPE()) -> ok).
+-type seg_map() :: {map(), [segment()]}.
+-type on_sync_fun() :: fun ((gb_sets:set()) -> ok).
 -type qistate() :: #qistate { dir                 :: file:filename(),
-                              segments            :: 'undefined' | seg_dict(),
+                              segments            :: 'undefined' | seg_map(),
                               journal_handle      :: hdl(),
                               dirty_count         :: integer(),
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
                               on_sync_msg         :: on_sync_fun(),
-                              unconfirmed         :: ?GB_SET_TYPE(),
-                              unconfirmed_msg     :: ?GB_SET_TYPE(),
+                              unconfirmed         :: gb_sets:set(),
+                              unconfirmed_msg     :: gb_sets:set(),
                               pre_publish_cache   :: list(),
                               delivered_cache     :: list()
                             }.
@@ -257,7 +267,7 @@
                     on_sync_fun(), on_sync_fun()) ->
                         {'undefined' | non_neg_integer(),
                          'undefined' | non_neg_integer(), qistate()}.
--spec terminate([any()], qistate()) -> qistate().
+-spec terminate(rabbit_types:vhost(), [any()], qistate()) -> qistate().
 -spec delete_and_terminate(qistate()) -> qistate().
 -spec publish(rabbit_types:msg_id(), seq_id(),
                     rabbit_types:message_properties(), boolean(),
@@ -274,7 +284,7 @@
 -spec next_segment_boundary(seq_id()) -> seq_id().
 -spec bounds(qistate()) ->
                        {non_neg_integer(), non_neg_integer(), qistate()}.
--spec start([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
+-spec start(rabbit_types:vhost(), [rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
 
 -spec add_queue_ttl() -> 'ok'.
 
@@ -288,7 +298,8 @@ erase(Name) ->
     erase_index_dir(Dir).
 
 %% used during variable queue purge when there are no pending acks
-reset_state(#qistate{ dir            = Dir,
+reset_state(#qistate{ queue_name     = Name,
+                      dir            = Dir,
                       on_sync        = OnSyncFun,
                       on_sync_msg    = OnSyncMsgFun,
                       journal_handle = JournalHdl }) ->
@@ -297,7 +308,7 @@ reset_state(#qistate{ dir            = Dir,
              _         -> file_handle_cache:close(JournalHdl)
          end,
     ok = erase_index_dir(Dir),
-    blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun).
+    blank_state_name_dir_funs(Name, Dir, OnSyncFun, OnSyncMsgFun).
 
 init(Name, OnSyncFun, OnSyncMsgFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
@@ -317,9 +328,9 @@ recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun,
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
-terminate(Terms, State = #qistate { dir = Dir }) ->
+terminate(VHost, Terms, State = #qistate { dir = Dir }) ->
     {SegmentCounts, State1} = terminate(State),
-    rabbit_recovery_terms:store(filename:basename(Dir),
+    rabbit_recovery_terms:store(VHost, filename:basename(Dir),
                                 [{segments, SegmentCounts} | Terms]),
     State1.
 
@@ -487,42 +498,41 @@ bounds(State = #qistate { segments = Segments }) ->
         end,
     {LowSeqId, NextSeqId, State}.
 
-start(DurableQueueNames) ->
-    ok = rabbit_recovery_terms:start(),
+start(VHost, DurableQueueNames) ->
+    ok = rabbit_recovery_terms:start(VHost),
     {DurableTerms, DurableDirectories} =
         lists:foldl(
           fun(QName, {RecoveryTerms, ValidDirectories}) ->
                   DirName = queue_name_to_dir_name(QName),
-                  RecoveryInfo = case rabbit_recovery_terms:read(DirName) of
+                  RecoveryInfo = case rabbit_recovery_terms:read(VHost, DirName) of
                                      {error, _}  -> non_clean_shutdown;
                                      {ok, Terms} -> Terms
                                  end,
                   {[RecoveryInfo | RecoveryTerms],
                    sets:add_element(DirName, ValidDirectories)}
           end, {[], sets:new()}, DurableQueueNames),
-
     %% Any queue directory we've not been asked to recover is considered garbage
-    QueuesDir = queues_dir(),
     rabbit_file:recursive_delete(
-      [filename:join(QueuesDir, DirName) ||
-          DirName <- all_queue_directory_names(QueuesDir),
-          not sets:is_element(DirName, DurableDirectories)]),
-
-    rabbit_recovery_terms:clear(),
+      [DirName ||
+        DirName <- all_queue_directory_names(VHost),
+        not sets:is_element(filename:basename(DirName), DurableDirectories)]),
+    rabbit_recovery_terms:clear(VHost),
 
     %% The backing queue interface requires that the queue recovery terms
     %% which come back from start/1 are in the same order as DurableQueueNames
     OrderedTerms = lists:reverse(DurableTerms),
     {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
 
-stop() -> rabbit_recovery_terms:stop().
 
-all_queue_directory_names(Dir) ->
-    case rabbit_file:list_dir(Dir) of
-        {ok, Entries}   -> [E || E <- Entries,
-                                 rabbit_file:is_dir(filename:join(Dir, E))];
-        {error, enoent} -> []
-    end.
+stop(VHost) -> rabbit_recovery_terms:stop(VHost).
+
+all_queue_directory_names(VHost) ->
+    filelib:wildcard(filename:join([rabbit_vhost:msg_store_dir_path(VHost),
+                                    "queues", "*"])).
+
+all_queue_directory_names() ->
+    filelib:wildcard(filename:join([rabbit_vhost:msg_store_dir_wildcard(),
+                                    "queues", "*"])).
 
 %%----------------------------------------------------------------------------
 %% startup and shutdown
@@ -535,15 +545,33 @@ erase_index_dir(Dir) ->
     end.
 
 blank_state(QueueName) ->
-    blank_state_dir(
-      filename:join(queues_dir(), queue_name_to_dir_name(QueueName))).
-
-blank_state_dir(Dir) ->
-    blank_state_dir_funs(Dir,
+    Dir = queue_dir(QueueName),
+    blank_state_name_dir_funs(QueueName,
+                         Dir,
                          fun (_) -> ok end,
                          fun (_) -> ok end).
 
-blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun) ->
+queue_dir(#resource{ virtual_host = VHost } = QueueName) ->
+    %% Queue directory is
+    %% {node_database_dir}/msg_stores/vhosts/{vhost}/queues/{queue}
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    QueueDir = queue_name_to_dir_name(QueueName),
+    filename:join([VHostDir, "queues", QueueDir]).
+
+queue_name_to_dir_name(#resource { kind = queue,
+                                   virtual_host = VHost,
+                                   name = QName }) ->
+    <<Num:128>> = erlang:md5(<<"queue", VHost/binary, QName/binary>>),
+    rabbit_misc:format("~.36B", [Num]).
+
+queue_name_to_dir_name_legacy(Name = #resource { kind = queue }) ->
+    <<Num:128>> = erlang:md5(term_to_binary_compat:term_to_binary_1(Name)),
+    rabbit_misc:format("~.36B", [Num]).
+
+queues_base_dir() ->
+    rabbit_mnesia:dir().
+
+blank_state_name_dir_funs(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
     {ok, MaxJournal} =
         application:get_env(rabbit, queue_index_max_journal_entries),
     #qistate { dir                 = Dir,
@@ -556,7 +584,8 @@ blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun) ->
                unconfirmed         = gb_sets:new(),
                unconfirmed_msg     = gb_sets:new(),
                pre_publish_cache   = [],
-               delivered_cache     = [] }.
+               delivered_cache     = [],
+               queue_name          = Name }.
 
 init_clean(RecoveredCounts, State) ->
     %% Load the journal. Since this is a clean recovery this (almost)
@@ -652,13 +681,6 @@ recover_message(false,     _, no_del,  RelSeq, {Segment, DirtyCount}) ->
                     add_to_journal(RelSeq, del, Segment)),
      DirtyCount + 2}.
 
-queue_name_to_dir_name(Name = #resource { kind = queue }) ->
-    <<Num:128>> = erlang:md5(term_to_binary_compat:term_to_binary_1(Name)),
-    rabbit_misc:format("~.36B", [Num]).
-
-queues_dir() ->
-    filename:join(rabbit_mnesia:dir(), "queues").
-
 %%----------------------------------------------------------------------------
 %% msg store startup delta function
 %%----------------------------------------------------------------------------
@@ -687,20 +709,19 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
     end.
 
 queue_index_walker_reader(QueueName, Gatherer) ->
-    State = blank_state(QueueName),
-    ok = scan_segments(
+    ok = scan_queue_segments(
            fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, ok)
                  when is_binary(MsgId) ->
                    gatherer:sync_in(Gatherer, {MsgId, 1});
                (_SeqId, _MsgId, _MsgProps, _IsPersistent, _IsDelivered,
                 _IsAcked, Acc) ->
                    Acc
-           end, ok, State),
+           end, ok, QueueName),
     ok = gatherer:finish(Gatherer).
 
-scan_segments(Fun, Acc, State) ->
-    State1 = #qistate { segments = Segments, dir = Dir } =
-        recover_journal(State),
+scan_queue_segments(Fun, Acc, QueueName) ->
+    State = #qistate { segments = Segments, dir = Dir } =
+        recover_journal(blank_state(QueueName)),
     Result = lists:foldr(
       fun (Seg, AccN) ->
               segment_entries_foldr(
@@ -709,8 +730,8 @@ scan_segments(Fun, Acc, State) ->
                         Fun(reconstruct_seq_id(Seg, RelSeq), MsgOrId, MsgProps,
                             IsPersistent, IsDelivered, IsAcked, AccM)
                 end, AccN, segment_find_or_new(Seg, Dir, Segments))
-      end, Acc, all_segment_nums(State1)),
-    {_SegmentCounts, _State} = terminate(State1),
+      end, Acc, all_segment_nums(State)),
+    {_SegmentCounts, _State} = terminate(State),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -853,9 +874,11 @@ append_journal_to_segment(#segment { journal_entries = JEntries,
     end.
 
 get_journal_handle(State = #qistate { journal_handle = undefined,
-                                      dir = Dir }) ->
+                                      dir = Dir,
+                                      queue_name = Name }) ->
     Path = filename:join(Dir, ?JOURNAL_FILENAME),
     ok = rabbit_file:ensure_dir(Path),
+    ok = ensure_queue_name_stub_file(Dir, Name),
     {ok, Hdl} = file_handle_cache:open_with_absolute_path(
                   Path, ?WRITE_MODE, [{write_buffer, infinity}]),
     {Hdl, State #qistate { journal_handle = Hdl }};
@@ -990,7 +1013,7 @@ segment_find(Seg, {_Segments, [Segment = #segment { num = Seg } |_]}) ->
 segment_find(Seg, {_Segments, [_, Segment = #segment { num = Seg }]}) ->
     {ok, Segment}; %% 2, matches tail
 segment_find(Seg, {Segments, _}) -> %% no match
-    dict:find(Seg, Segments).
+    maps:find(Seg, Segments).
 
 segment_store(Segment = #segment { num = Seg }, %% 1 or (2, matches head)
               {Segments, [#segment { num = Seg } | Tail]}) ->
@@ -999,28 +1022,28 @@ segment_store(Segment = #segment { num = Seg }, %% 2, matches tail
               {Segments, [SegmentA, #segment { num = Seg }]}) ->
     {Segments, [Segment, SegmentA]};
 segment_store(Segment = #segment { num = Seg }, {Segments, []}) ->
-    {dict:erase(Seg, Segments), [Segment]};
+    {maps:remove(Seg, Segments), [Segment]};
 segment_store(Segment = #segment { num = Seg }, {Segments, [SegmentA]}) ->
-    {dict:erase(Seg, Segments), [Segment, SegmentA]};
+    {maps:remove(Seg, Segments), [Segment, SegmentA]};
 segment_store(Segment = #segment { num = Seg },
               {Segments, [SegmentA, SegmentB]}) ->
-    {dict:store(SegmentB#segment.num, SegmentB, dict:erase(Seg, Segments)),
+    {maps:put(SegmentB#segment.num, SegmentB, maps:remove(Seg, Segments)),
      [Segment, SegmentA]}.
 
 segment_fold(Fun, Acc, {Segments, CachedSegments}) ->
-    dict:fold(fun (_Seg, Segment, Acc1) -> Fun(Segment, Acc1) end,
+    maps:fold(fun (_Seg, Segment, Acc1) -> Fun(Segment, Acc1) end,
               lists:foldl(Fun, Acc, CachedSegments), Segments).
 
 segment_map(Fun, {Segments, CachedSegments}) ->
-    {dict:map(fun (_Seg, Segment) -> Fun(Segment) end, Segments),
+    {maps:map(fun (_Seg, Segment) -> Fun(Segment) end, Segments),
      lists:map(Fun, CachedSegments)}.
 
 segment_nums({Segments, CachedSegments}) ->
     lists:map(fun (#segment { num = Num }) -> Num end, CachedSegments) ++
-        dict:fetch_keys(Segments).
+        maps:keys(Segments).
 
 segments_new() ->
-    {dict:new(), []}.
+    {#{}, []}.
 
 entry_to_segment(_RelSeq, {?PUB, del, ack}, Initial) ->
     Initial;
@@ -1376,19 +1399,18 @@ store_msg_segment(_) ->
 
 
 
-
+%%----------------------------------------------------------------------------
+%% Migration functions
 %%----------------------------------------------------------------------------
 
 foreach_queue_index(Funs) ->
-    QueuesDir = queues_dir(),
-    QueueDirNames = all_queue_directory_names(QueuesDir),
+    QueueDirNames = all_queue_directory_names(),
     {ok, Gatherer} = gatherer:start_link(),
     [begin
          ok = gatherer:fork(Gatherer),
          ok = worker_pool:submit_async(
                 fun () ->
-                        transform_queue(filename:join(QueuesDir, QueueDirName),
-                                        Gatherer, Funs)
+                        transform_queue(QueueDirName, Gatherer, Funs)
                 end)
      end || QueueDirName <- QueueDirNames],
     empty = gatherer:out(Gatherer),
@@ -1429,3 +1451,53 @@ drive_transform_fun(Fun, Hdl, Contents) ->
         {Output, Contents1} -> ok = file_handle_cache:append(Hdl, Output),
                                drive_transform_fun(Fun, Hdl, Contents1)
     end.
+
+move_to_per_vhost_stores(#resource{} = QueueName) ->
+    OldQueueDir = filename:join([queues_base_dir(), "queues",
+                                 queue_name_to_dir_name_legacy(QueueName)]),
+    NewQueueDir = queue_dir(QueueName),
+    case rabbit_file:is_dir(OldQueueDir) of
+        true  ->
+            ok = rabbit_file:ensure_dir(NewQueueDir),
+            ok = rabbit_file:rename(OldQueueDir, NewQueueDir),
+            ok = ensure_queue_name_stub_file(NewQueueDir, QueueName);
+        false ->
+            rabbit_log:info("Queue index directory not found for queue ~p~n",
+                            [QueueName])
+    end,
+    ok.
+
+ensure_queue_name_stub_file(Dir, #resource{virtual_host = VHost, name = QName}) ->
+    QueueNameFile = filename:join(Dir, ?QUEUE_NAME_STUB_FILE),
+    file:write_file(QueueNameFile, <<"VHOST: ", VHost/binary, "\n",
+                                     "QUEUE: ", QName/binary, "\n">>).
+
+read_global_recovery_terms(DurableQueueNames) ->
+    ok = rabbit_recovery_terms:open_global_table(),
+
+    DurableTerms =
+        lists:foldl(
+          fun(QName, RecoveryTerms) ->
+                  DirName = queue_name_to_dir_name_legacy(QName),
+                  RecoveryInfo = case rabbit_recovery_terms:read_global(DirName) of
+                                     {error, _}  -> non_clean_shutdown;
+                                     {ok, Terms} -> Terms
+                                 end,
+                  [RecoveryInfo | RecoveryTerms]
+          end, [], DurableQueueNames),
+
+    ok = rabbit_recovery_terms:close_global_table(),
+    %% The backing queue interface requires that the queue recovery terms
+    %% which come back from start/1 are in the same order as DurableQueueNames
+    OrderedTerms = lists:reverse(DurableTerms),
+    {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
+
+cleanup_global_recovery_terms() ->
+    rabbit_file:recursive_delete([filename:join([queues_base_dir(), "queues"])]),
+    rabbit_recovery_terms:delete_global_table(),
+    ok.
+
+
+update_recovery_term(#resource{virtual_host = VHost} = QueueName, Term) ->
+    Key = queue_name_to_dir_name(QueueName),
+    rabbit_recovery_terms:store(VHost, Key, Term).

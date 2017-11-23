@@ -92,8 +92,8 @@ if "!RABBITMQ_NODENAME!"=="" (
     if "!NODENAME!"=="" (
         REM We use Erlang to query the local hostname because
         REM !COMPUTERNAME! and Erlang may return different results.
-	REM Start erl with -sname to make sure epmd is started.
-	call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -sname rabbit-prelaunch-epmd -eval "init:stop()." >nul 2>&1
+        REM Start erl with -sname to make sure epmd is started.
+        call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -sname rabbit-prelaunch-epmd -eval "init:stop()." >nul 2>&1
         for /f "delims=" %%F in ('call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -eval "net_kernel:start([list_to_atom(""rabbit-gethostname-"" ++ os:getpid()), %NAMETYPE%]), [_, H] = string:tokens(atom_to_list(node()), ""@""), io:format(""~s~n"", [H]), init:stop()."') do @set HOSTNAME=%%F
         set RABBITMQ_NODENAME=rabbit@!HOSTNAME!
         set HOSTNAME=
@@ -167,11 +167,38 @@ if "!RABBITMQ_SERVER_ERL_ARGS!"=="" (
 )
 
 REM [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
+
+CALL :unquote RABBITMQ_CONFIG_FILE %RABBITMQ_CONFIG_FILE%
 if "!RABBITMQ_CONFIG_FILE!"=="" (
     if "!CONFIG_FILE!"=="" (
         set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
     ) else (
         set RABBITMQ_CONFIG_FILE=!CONFIG_FILE!
+    )
+)
+
+if "!RABBITMQ_GENERATED_CONFIG_DIR!"=="" (
+    if "!GENERATED_CONFIG_DIR!"=="" (
+        set RABBITMQ_GENERATED_CONFIG_DIR=!RABBITMQ_BASE!\config
+    ) else (
+        set RABBITMQ_GENERATED_CONFIG_DIR=!GENERATED_CONFIG_DIR!
+    )
+)
+
+CALL :unquote RABBITMQ_ADVANCED_CONFIG_FILE %RABBITMQ_ADVANCED_CONFIG_FILE%
+if "!RABBITMQ_ADVANCED_CONFIG_FILE!"=="" (
+    if "!ADVANCED_CONFIG_FILE!"=="" (
+        set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_BASE!\advanced
+    ) else (
+        set RABBITMQ_ADVANCED_CONFIG_FILE=!ADVANCED_CONFIG_FILE!
+    )
+)
+
+if "!RABBITMQ_SCHEMA_DIR!" == "" (
+    if "!SCHEMA_DIR!"=="" (
+        set RABBITMQ_SCHEMA_DIR=!RABBITMQ_HOME!\priv\schema
+    ) else (
+        set RABBITMQ_SCHEMA_DIR=!SCHEMA_DIR!
     )
 )
 
@@ -296,22 +323,13 @@ if not "!RABBITMQ_LOGS!" == "-" (
     )
     for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do set RABBITMQ_LOGS=%%~sF
 )
-
-REM [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS=${SASL_LOGS}
-REM [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}-sasl.log"
-if "!RABBITMQ_SASL_LOGS!"=="" (
-    if "!SASL_LOGS!"=="" (
-        set RABBITMQ_SASL_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!-sasl.log
-    ) else (
-        set RABBITMQ_SASL_LOGS=!SASL_LOGS!
-    )
+rem [ "x" = "x$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log"
+if "!RABBITMQ_UPGRADE_LOG!" == "" (
+    set RABBITMQ_UPGRADE_LOG=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!_upgrade.log
 )
-if not "!RABBITMQ_SASL_LOGS!" == "-" (
-    if not exist "!RABBITMQ_SASL_LOGS!" (
-        for /f "delims=" %%F in ("!RABBITMQ_SASL_LOGS!") do mkdir %%~dpF 2>NUL
-        copy /y NUL "!RABBITMQ_SASL_LOGS!" >NUL
-    )
-    for /f "delims=" %%F in ("!RABBITMQ_SASL_LOGS!") do set RABBITMQ_SASL_LOGS=%%~sF
+REM [ "x" = "x$ERL_CRASH_DUMP"] && ERL_CRASH_DUMP="${RABBITMQ_LOG_BASE}/erl_crash.dump"
+if "!ERL_CRASH_DUMP!"=="" (
+    set ERL_CRASH_DUMP=!RABBITMQ_LOG_BASE!\erl_crash.dump
 )
 
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
@@ -431,3 +449,7 @@ REM ##--- End of overridden <var_name> variables
 REM
 REM # Since we source this elsewhere, don't accidentally stop execution
 REM true
+
+:unquote
+set %1=%~2
+EXIT /B 0

@@ -18,7 +18,7 @@
 
 -export([memory/0, binary/0, ets_tables_memory/1]).
 
--define(MAGIC_PLUGINS, ["cowboy", "sockjs", "rfc4627_jsonrpc"]).
+-define(MAGIC_PLUGINS, ["cowboy", "ranch", "sockjs"]).
 
 %%----------------------------------------------------------------------------
 
@@ -41,7 +41,7 @@ memory() ->
          || Names <- distinguished_interesting_sups()],
 
     MnesiaETS           = mnesia_memory(),
-    MsgIndexETS         = ets_memory([msg_store_persistent, msg_store_transient]),
+    MsgIndexETS         = ets_memory(msg_stores()),
     MetricsETS          = ets_memory([rabbit_metrics]),
     MetricsProc  = try
                        [{_, M}] = process_info(whereis(rabbit_metrics), [memory]),
@@ -61,19 +61,11 @@ memory() ->
         erlang:memory([total, processes, ets, atom, binary, code, system]),
 
     Strategy = vm_memory_monitor:get_memory_calculation_strategy(),
-    {Allocated, VMTotal} = case Strategy of
-        erlang    -> {ErlangTotal, ErlangTotal};
-        allocated ->
-            Alloc = recon_alloc:memory(allocated),
-            {Alloc, Alloc};
-        rss ->
-            Alloc = recon_alloc:memory(allocated),
-            Vm = vm_memory_monitor:get_process_memory(current),
-            {Alloc, Vm}
-    end,
+    Allocated = recon_alloc:memory(allocated),
+    Rss = vm_memory_monitor:get_rss_memory(),
 
     AllocatedUnused = max(Allocated - ErlangTotal, 0),
-    OSReserved = max(VMTotal - Allocated, 0),
+    OSReserved = max(Rss - Allocated, 0),
 
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
@@ -112,7 +104,10 @@ memory() ->
      {other_system,         System - ETS - Bin - Code - Atom},
      {allocated_unused,     AllocatedUnused},
      {reserved_unallocated, OSReserved},
-     {total,                VMTotal}
+     {strategy,             Strategy},
+     {total,                [{erlang, ErlangTotal},
+                             {rss, Rss},
+                             {allocated, Allocated}]}
     ].
 %% [1] - erlang:memory(processes) can be less than the sum of its
 %% parts. Rather than display something nonsensical, just silence any
@@ -153,8 +148,8 @@ mnesia_memory() ->
         _   -> 0
     end.
 
-ets_memory(OwnerNames) ->
-    lists:sum([V || {_K, V} <- ets_tables_memory(OwnerNames)]).
+ets_memory(Owners) ->
+    lists:sum([V || {_K, V} <- ets_tables_memory(Owners)]).
 
 ets_tables_memory(all) ->
     [{ets:info(T, name), bytes(ets:info(T, memory))}
@@ -162,11 +157,14 @@ ets_tables_memory(all) ->
         is_atom(T)];
 ets_tables_memory(OwnerName) when is_atom(OwnerName) ->
     ets_tables_memory([OwnerName]);
-ets_tables_memory(OwnerNames) when is_list(OwnerNames) ->
-    Owners = [whereis(N) || N <- OwnerNames],
+ets_tables_memory(Owners) when is_list(Owners) ->
+    OwnerPids = lists:map(fun(O) when is_pid(O) -> O;
+                             (O) when is_atom(O) -> whereis(O)
+                          end,
+                          Owners),
     [{ets:info(T, name), bytes(ets:info(T, memory))}
      || T <- ets:all(),
-        lists:member(ets:info(T, owner), Owners)].
+        lists:member(ets:info(T, owner), OwnerPids)].
 
 bytes(Words) ->  try
                      Words * erlang:system_info(wordsize)
@@ -175,10 +173,37 @@ bytes(Words) ->  try
                  end.
 
 interesting_sups() ->
-    [[rabbit_amqqueue_sup_sup], conn_sups() | interesting_sups0()].
+    [queue_sups(), conn_sups() | interesting_sups0()].
+
+queue_sups() ->
+    all_vhosts_children(rabbit_amqqueue_sup_sup).
+
+msg_stores() ->
+    all_vhosts_children(msg_store_transient)
+    ++
+    all_vhosts_children(msg_store_persistent).
+
+all_vhosts_children(Name) ->
+    case whereis(rabbit_vhost_sup_sup) of
+        undefined -> [];
+        Pid when is_pid(Pid) ->
+            lists:filtermap(
+                fun({_, VHostSupWrapper, _, _}) ->
+                    case supervisor2:find_child(VHostSupWrapper,
+                                                rabbit_vhost_sup) of
+                        []         -> false;
+                        [VHostSup] ->
+                            case supervisor2:find_child(VHostSup, Name) of
+                                [QSup] -> {true, QSup};
+                                []     -> false
+                            end
+                    end
+                end,
+                supervisor:which_children(rabbit_vhost_sup_sup))
+    end.
 
 interesting_sups0() ->
-    MsgIndexProcs = [msg_store_transient, msg_store_persistent],
+    MsgIndexProcs = msg_stores(),
     MgmtDbProcs   = [rabbit_mgmt_sup_sup],
     PluginProcs   = plugin_sups(),
     [MsgIndexProcs, MgmtDbProcs, PluginProcs].
@@ -195,18 +220,19 @@ ranch_server_sups() ->
         error:badarg  -> []
     end.
 
-conn_sups(With) -> [{Sup, With} || Sup <- conn_sups()].
+with(Sups, With) -> [{Sup, With} || Sup <- Sups].
 
-distinguishers() -> [{rabbit_amqqueue_sup_sup, fun queue_type/1} |
-                     conn_sups(fun conn_type/1)].
+distinguishers() -> with(queue_sups(), fun queue_type/1) ++
+                    with(conn_sups(), fun conn_type/1).
 
 distinguished_interesting_sups() ->
-    [[{rabbit_amqqueue_sup_sup, master}],
-     [{rabbit_amqqueue_sup_sup, slave}],
-     conn_sups(reader),
-     conn_sups(writer),
-     conn_sups(channel),
-     conn_sups(other)]
+    [
+     with(queue_sups(), master),
+     with(queue_sups(), slave),
+     with(conn_sups(), reader),
+     with(conn_sups(), writer),
+     with(conn_sups(), channel),
+     with(conn_sups(), other)]
         ++ interesting_sups0().
 
 plugin_sups() ->

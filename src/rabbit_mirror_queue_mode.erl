@@ -16,6 +16,10 @@
 
 -module(rabbit_mirror_queue_mode).
 
+-behaviour(rabbit_registry_class).
+
+-export([added_to_rabbit_registry/2, removed_from_rabbit_registry/1]).
+
 -type master() :: node().
 -type slave() :: node().
 -type params() :: any().
@@ -42,3 +46,6 @@
 %% Are the parameters valid for this mode?
 -callback validate_policy(params()) ->
     rabbit_policy_validator:validate_results().
+
+added_to_rabbit_registry(_Type, _ModuleName) -> ok.
+removed_from_rabbit_registry(_Type) -> ok.

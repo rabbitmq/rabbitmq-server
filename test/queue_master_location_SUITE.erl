@@ -310,7 +310,7 @@ unset_location_config(Config) ->
     ok.
 
 declare(Config, QueueName, Durable, AutoDelete, Args0, Owner) ->
-    Args1 = [QueueName, Durable, AutoDelete, Args0, Owner],
+    Args1 = [QueueName, Durable, AutoDelete, Args0, Owner, <<"acting-user">>],
     {new, Queue} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, declare, Args1),
     Queue.
 

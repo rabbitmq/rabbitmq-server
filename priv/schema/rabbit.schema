@@ -1,0 +1,1179 @@
+% ==============================
+% Rabbit app section
+% ==============================
+
+%%
+%% Network Connectivity
+%% ====================
+%%
+
+%% By default, RabbitMQ will listen on all interfaces, using
+%% the standard (reserved) AMQP port.
+%%
+%% {tcp_listeners, [5672]},
+%% To listen on a specific interface, provide a tuple of {IpAddress, Port}.
+%% For example, to listen only on localhost for both IPv4 and IPv6:
+%%
+%% {tcp_listeners, [{"127.0.0.1", 5672},
+%%                  {"[::1]",     5672}]},
+
+{mapping, "listeners.tcp", "rabbit.tcp_listeners",[
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "listeners.tcp.$name", "rabbit.tcp_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbit.tcp_listeners",
+fun(Conf) ->
+    case cuttlefish:conf_get("listeners.tcp", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("listeners.tcp", Conf),
+            [ V || {_, V} <- Settings ]
+    end
+end}.
+
+%% SSL listeners are configured in the same fashion as TCP listeners,
+%% including the option to control the choice of interface.
+%%
+%% {ssl_listeners, [5671]},
+
+{mapping, "listeners.ssl", "rabbit.ssl_listeners",[
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "listeners.ssl.$name", "rabbit.ssl_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbit.ssl_listeners",
+fun(Conf) ->
+    case cuttlefish:conf_get("listeners.ssl", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("listeners.ssl", Conf),
+            [ V || {_, V} <- Settings ]
+    end
+end}.
+
+%% Number of Erlang processes that will accept connections for the TCP
+%% and SSL listeners.
+%%
+%% {num_tcp_acceptors, 10},
+%% {num_ssl_acceptors, 1},
+
+{mapping, "num_acceptors.ssl", "rabbit.num_ssl_acceptors", [
+    {datatype, integer}
+]}.
+
+{mapping, "num_acceptors.tcp", "rabbit.num_tcp_acceptors", [
+    {datatype, integer}
+]}.
+
+
+%% Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
+%% and SSL handshake), in milliseconds.
+%%
+%% {handshake_timeout, 10000},
+
+{mapping, "handshake_timeout", "rabbit.handshake_timeout", [
+    {datatype, integer}
+]}.
+
+%% Set to 'true' to perform reverse DNS lookups when accepting a
+%% connection. Hostnames will then be shown instead of IP addresses
+%% in rabbitmqctl and the management plugin.
+%%
+%% {reverse_dns_lookups, true},
+
+{mapping, "reverse_dns_lookups", "rabbit.reverse_dns_lookups", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "erlang.K", "vm_args.+K", [
+  {default, "true"},
+  {level, advanced}
+]}.
+
+%%
+%% Security / AAA
+%% ==============
+%%
+
+%% The default "guest" user is only permitted to access the server
+%% via a loopback interface (e.g. localhost).
+%% {loopback_users, [<<"guest">>]},
+%%
+%% Uncomment the following line if you want to allow access to the
+%% guest user from anywhere on the network.
+%% {loopback_users, []},
+
+{mapping, "loopback_users", "rabbit.loopback_users", [
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "loopback_users.$user", "rabbit.loopback_users", [
+    {datatype, atom}
+]}.
+
+{translation, "rabbit.loopback_users",
+fun(Conf) ->
+    None = cuttlefish:conf_get("loopback_users", Conf, undefined),
+    case None of
+        none -> [];
+        _    ->
+            Settings = cuttlefish_variable:filter_by_prefix("loopback_users", Conf),
+            [ list_to_binary(U) || {["loopback_users", U], V} <- Settings, V == true ]
+    end
+end}.
+
+%% Configuring SSL.
+%% See http://www.rabbitmq.com/ssl.html for full documentation.
+%%
+%% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
+%%                {certfile,             "/path/to/server/cert.pem"},
+%%                {keyfile,              "/path/to/server/key.pem"},
+%%                {verify,               verify_peer},
+%%                {fail_if_no_peer_cert, false}]},
+
+%% SSL options section ========================================================
+
+{mapping, "ssl_allow_poodle_attack", "rabbit.ssl_allow_poodle_attack",
+[{datatype, {enum, [true, false]}}]}.
+
+{mapping, "ssl_options", "rabbit.ssl_options", [
+    {datatype, {enum, [none]}}
+]}.
+
+{translation, "rabbit.ssl_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("ssl_options", Conf, undefined) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid ssl_options")
+    end
+end}.
+
+{mapping, "ssl_options.verify", "rabbit.ssl_options.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "ssl_options.fail_if_no_peer_cert", "rabbit.ssl_options.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "ssl_options.cacertfile", "rabbit.ssl_options.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "ssl_options.certfile", "rabbit.ssl_options.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "ssl_options.cacerts.$name", "rabbit.ssl_options.cacerts",
+    [{datatype, string}]}.
+
+{translation, "rabbit.ssl_options.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("ssl_options.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "ssl_options.cert", "rabbit.ssl_options.cert",
+    [{datatype, string}]}.
+
+{translation, "rabbit.ssl_options.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("ssl_options.cert", Conf))
+end}.
+
+{mapping, "ssl_options.client_renegotiation", "rabbit.ssl_options.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "ssl_options.crl_check", "rabbit.ssl_options.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "ssl_options.depth", "rabbit.ssl_options.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "ssl_options.dh", "rabbit.ssl_options.dh",
+    [{datatype, string}]}.
+
+{translation, "rabbit.ssl_options.dh",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("ssl_options.dh", Conf))
+end}.
+
+{mapping, "ssl_options.dhfile", "rabbit.ssl_options.dhfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "ssl_options.honor_cipher_order", "rabbit.ssl_options.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "ssl_options.honor_ecc_order", "rabbit.ssl_options.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "ssl_options.key.RSAPrivateKey", "rabbit.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "ssl_options.key.DSAPrivateKey", "rabbit.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "ssl_options.key.PrivateKeyInfo", "rabbit.ssl_options.key",
+    [{datatype, string}]}.
+
+{translation, "rabbit.ssl_options.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("ssl_options.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> undefined
+    end
+end}.
+
+{mapping, "ssl_options.keyfile", "rabbit.ssl_options.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "ssl_options.log_alert", "rabbit.ssl_options.log_alert",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "ssl_options.password", "rabbit.ssl_options.password",
+    [{datatype, string}]}.
+
+{mapping, "ssl_options.psk_identity", "rabbit.ssl_options.psk_identity",
+    [{datatype, string}]}.
+
+{mapping, "ssl_options.reuse_sessions", "rabbit.ssl_options.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "ssl_options.secure_renegotiate", "rabbit.ssl_options.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "ssl_options.versions.$version", "rabbit.ssl_options.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbit.ssl_options.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("ssl_options.versions", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+%% ===========================================================================
+
+%% Choose the available SASL mechanism(s) to expose.
+%% The two default (built in) mechanisms are 'PLAIN' and
+%% 'AMQPLAIN'. Additional mechanisms can be added via
+%% plugins.
+%%
+%% See http://www.rabbitmq.com/authentication.html for more details.
+%%
+%% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
+
+{mapping, "auth_mechanisms.$name", "rabbit.auth_mechanisms", [
+    {datatype, atom}]}.
+
+{translation, "rabbit.auth_mechanisms",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_mechanisms", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+
+%% Select an authentication backend to use. RabbitMQ provides an
+%% internal backend in the core.
+%%
+%% {auth_backends, [rabbit_auth_backend_internal]},
+
+{translation, "rabbit.auth_backends",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_backends", Conf),
+    BackendModule = fun
+        (internal) -> rabbit_auth_backend_internal;
+        (ldap)     -> rabbit_auth_backend_ldap;
+        (http)     -> rabbit_auth_backend_http;
+        (cache)    -> rabbit_auth_backend_cache;
+        (amqp)     -> rabbit_auth_backend_amqp;
+        (dummy)    -> rabbit_auth_backend_dummy;
+        (Other) when is_atom(Other) -> Other;
+        (_) -> cuttlefish:invalid("Unknown/unsupported auth backend")
+    end,
+    AuthBackends  = [{Num, {default, BackendModule(V)}} || {["auth_backends", Num], V}          <- Settings],
+    AuthNBackends = [{Num, {authn, BackendModule(V)}}   || {["auth_backends", Num, "authn"], V} <- Settings],
+    AuthZBackends = [{Num, {authz, BackendModule(V)}}   || {["auth_backends", Num, "authz"], V} <- Settings],
+    Backends = lists:foldl(
+        fun({NumStr, {Type, V}}, Acc) ->
+            Num = case catch list_to_integer(NumStr) of
+                N when is_integer(N) -> N;
+                Err ->
+                    cuttlefish:invalid(
+                        iolist_to_binary(io_lib:format(
+                            "Auth backend position in the chain should be an integer ~p", [Err])))
+            end,
+            NewVal = case dict:find(Num, Acc) of
+                {ok, {AuthN, AuthZ}} ->
+                    case {Type, AuthN, AuthZ} of
+                        {authn, undefined, _} ->
+                            {V, AuthZ};
+                        {authz, _, undefined} ->
+                            {AuthN, V};
+                        _ ->
+                            cuttlefish:invalid(
+                                iolist_to_binary(
+                                    io_lib:format(
+                                        "Auth backend already defined for the ~pth ~p backend",
+                                        [Num, Type])))
+                    end;
+                error ->
+                    case Type of
+                        authn   -> {V, undefined};
+                        authz   -> {undefined, V};
+                        default -> {V, V}
+                    end
+            end,
+            dict:store(Num, NewVal, Acc)
+        end,
+        dict:new(),
+        AuthBackends ++ AuthNBackends ++ AuthZBackends),
+    lists:map(
+        fun
+            ({Num, {undefined, AuthZ}}) ->
+                cuttlefish:warn(
+                    io_lib:format(
+                        "Auth backend undefined for the ~pth authz backend. Using ~p",
+                        [Num, AuthZ])),
+                {AuthZ, AuthZ};
+            ({Num, {AuthN, undefined}}) ->
+                cuttlefish:warn(
+                    io_lib:format(
+                        "Authz backend undefined for the ~pth authn backend. Using ~p",
+                        [Num, AuthN])),
+                {AuthN, AuthN};
+            ({_Num, {Auth, Auth}})   -> Auth;
+            ({_Num, {AuthN, AuthZ}}) -> {AuthN, AuthZ}
+        end,
+        lists:keysort(1, dict:to_list(Backends)))
+end}.
+
+{mapping, "auth_backends.$num", "rabbit.auth_backends", [
+    {datatype, atom}
+]}.
+
+{mapping, "auth_backends.$num.authn", "rabbit.auth_backends",[
+    {datatype, atom}
+]}.
+
+{mapping, "auth_backends.$num.authz", "rabbit.auth_backends",[
+    {datatype, atom}
+]}.
+
+%% This pertains to both the rabbitmq_auth_mechanism_ssl plugin and
+%% STOMP ssl_cert_login configurations. See the rabbitmq_stomp
+%% configuration section later in this file and the README in
+%% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
+%% details.
+%%
+%% To use the SSL cert's CN instead of its DN as the username
+%%
+%% {ssl_cert_login_from, common_name},
+
+{mapping, "ssl_cert_login_from", "rabbit.ssl_cert_login_from", [
+    {datatype, {enum, [distinguished_name, common_name]}}
+]}.
+
+%% SSL handshake timeout, in milliseconds.
+%%
+%% {ssl_handshake_timeout, 5000},
+
+{mapping, "ssl_handshake_timeout", "rabbit.ssl_handshake_timeout", [
+    {datatype, integer}
+]}.
+
+%% Password hashing implementation. Will only affect newly
+%% created users. To recalculate hash for an existing user
+%% it's necessary to update her password.
+%%
+%% When importing definitions exported from versions earlier
+%% than 3.6.0, it is possible to go back to MD5 (only do this
+%% as a temporary measure!) by setting this to rabbit_password_hashing_md5.
+%%
+%% To use SHA-512, set to rabbit_password_hashing_sha512.
+%%
+%% {password_hashing_module, rabbit_password_hashing_sha256},
+
+{mapping, "password_hashing_module", "rabbit.password_hashing_module", [
+    {datatype, atom}
+]}.
+
+%% Credential validation.
+%%
+
+{mapping, "credential_validator.validation_backend", "rabbit.credential_validator.validation_backend", [
+    {datatype, atom}
+]}.
+
+{mapping, "credential_validator.min_length", "rabbit.credential_validator.min_length", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{mapping, "credential_validator.regexp", "rabbit.credential_validator.regexp", [
+    {datatype, string}
+]}.
+
+
+
+%%
+%% Default User / VHost
+%% ====================
+%%
+
+%% On first start RabbitMQ will create a vhost and a user. These
+%% config items control what gets created. See
+%% http://www.rabbitmq.com/access-control.html for further
+%% information about vhosts and access control.
+%%
+%% {default_vhost,       <<"/">>},
+%% {default_user,        <<"guest">>},
+%% {default_pass,        <<"guest">>},
+%% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
+
+{mapping, "default_vhost", "rabbit.default_vhost", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.default_vhost",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("default_vhost", Conf))
+end}.
+
+{mapping, "default_user", "rabbit.default_user", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.default_user",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("default_user", Conf))
+end}.
+
+{mapping, "default_pass", "rabbit.default_pass", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.default_pass",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("default_pass", Conf))
+end}.
+
+{mapping, "default_permissions.configure", "rabbit.default_permissions", [
+    {datatype, string}
+]}.
+
+{mapping, "default_permissions.read", "rabbit.default_permissions", [
+    {datatype, string}
+]}.
+
+{mapping, "default_permissions.write", "rabbit.default_permissions", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.default_permissions",
+fun(Conf) ->
+    Settings  = cuttlefish_variable:filter_by_prefix("default_permissions", Conf),
+    Configure = proplists:get_value(["default_permissions", "configure"], Settings),
+    Read      = proplists:get_value(["default_permissions", "read"], Settings),
+    Write     = proplists:get_value(["default_permissions", "write"], Settings),
+    [list_to_binary(Configure), list_to_binary(Read), list_to_binary(Write)]
+end}.
+
+%% Tags for default user
+%%
+%% For more details about tags, see the documentation for the
+%% Management Plugin at http://www.rabbitmq.com/management.html.
+%%
+%% {default_user_tags, [administrator]},
+
+{mapping, "default_user_tags.$tag", "rabbit.default_user_tags",
+    [{datatype, {enum, [true, false]}}]}.
+
+{translation, "rabbit.default_user_tags",
+fun(Conf) ->
+    Settings  = cuttlefish_variable:filter_by_prefix("default_user_tags", Conf),
+    [ list_to_atom(Key) || {[_,Key], Val} <- Settings, Val == true ]
+end}.
+
+%%
+%% Additional network and protocol related configuration
+%% =====================================================
+%%
+
+%% Set the default AMQP heartbeat delay (in seconds).
+%%
+%% {heartbeat, 600},
+
+{mapping, "heartbeat", "rabbit.heartbeat", [{datatype, integer}]}.
+
+%% Set the max permissible size of an AMQP frame (in bytes).
+%%
+%% {frame_max, 131072},
+
+{mapping, "frame_max", "rabbit.frame_max", [{datatype, bytesize}]}.
+
+%% Set the max frame size the server will accept before connection
+%% tuning occurs
+%%
+%% {initial_frame_max, 4096},
+
+{mapping, "initial_frame_max", "rabbit.initial_frame_max", [{datatype, bytesize}]}.
+
+%% Set the max permissible number of channels per connection.
+%% 0 means "no limit".
+%%
+%% {channel_max, 0},
+
+{mapping, "channel_max", "rabbit.channel_max", [{datatype, integer}]}.
+
+%% Set the max permissible number of client connections per node.
+%% `infinity` means "no limit".
+%%
+%% {connection_max, infinity},
+
+{mapping, "connection_max", "rabbit.connection_max",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.connection_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("connection_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
+
+%% Customising Socket Options.
+%%
+%% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
+%% further documentation.
+%%
+%% {tcp_listen_options, [{backlog,       128},
+%%                       {nodelay,       true},
+%%                       {exit_on_close, false}]},
+
+%% TCP listener section ======================================================
+
+{mapping, "tcp_listen_options", "rabbit.tcp_listen_options", [
+    {datatype, {enum, [none]}}]}.
+
+{translation, "rabbit.tcp_listen_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("tcp_listen_options", Conf, undefined) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid tcp_listen_options")
+    end
+end}.
+
+{mapping, "tcp_listen_options.backlog", "rabbit.tcp_listen_options.backlog", [
+    {datatype, integer}
+]}.
+
+{mapping, "tcp_listen_options.nodelay", "rabbit.tcp_listen_options.nodelay", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "tcp_listen_options.buffer", "rabbit.tcp_listen_options.buffer",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.delay_send", "rabbit.tcp_listen_options.delay_send",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "tcp_listen_options.dontroute", "rabbit.tcp_listen_options.dontroute",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "tcp_listen_options.exit_on_close", "rabbit.tcp_listen_options.exit_on_close",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "tcp_listen_options.fd", "rabbit.tcp_listen_options.fd",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.high_msgq_watermark", "rabbit.tcp_listen_options.high_msgq_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.high_watermark", "rabbit.tcp_listen_options.high_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.keepalive", "rabbit.tcp_listen_options.keepalive",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "tcp_listen_options.low_msgq_watermark", "rabbit.tcp_listen_options.low_msgq_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.low_watermark", "rabbit.tcp_listen_options.low_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.port", "rabbit.tcp_listen_options.port",
+    [{datatype, integer}, {validators, ["port"]}]}.
+
+{mapping, "tcp_listen_options.priority", "rabbit.tcp_listen_options.priority",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.recbuf", "rabbit.tcp_listen_options.recbuf",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.send_timeout", "rabbit.tcp_listen_options.send_timeout",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.send_timeout_close", "rabbit.tcp_listen_options.send_timeout_close",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "tcp_listen_options.sndbuf", "rabbit.tcp_listen_options.sndbuf",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.tos", "rabbit.tcp_listen_options.tos",
+    [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.linger.on", "rabbit.tcp_listen_options.linger",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "tcp_listen_options.linger.timeout", "rabbit.tcp_listen_options.linger",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbit.tcp_listen_options.linger",
+fun(Conf) ->
+    LingerOn = cuttlefish:conf_get("tcp_listen_options.linger.on", Conf, false),
+    LingerTimeout = cuttlefish:conf_get("tcp_listen_options.linger.timeout", Conf, 0),
+    {LingerOn, LingerTimeout}
+end}.
+
+
+%% ==========================================================================
+
+%%
+%% Resource Limits & Flow Control
+%% ==============================
+%%
+%% See http://www.rabbitmq.com/memory.html for full details.
+
+%% Memory-based Flow Control threshold.
+%%
+%% {vm_memory_high_watermark, 0.4},
+
+%% Alternatively, we can set a limit (in bytes) of RAM used by the node.
+%%
+%% {vm_memory_high_watermark, {absolute, 1073741824}},
+%%
+%% Or you can set absolute value using memory units (with RabbitMQ 3.6.0+).
+%%
+%% {vm_memory_high_watermark, {absolute, "1024M"}},
+%%
+%% Supported units suffixes:
+%%
+%% kb, KB: kibibytes (2^10 bytes)
+%% mb, MB: mebibytes (2^20)
+%% gb, GB: gibibytes (2^30)
+
+{mapping, "vm_memory_high_watermark.relative", "rabbit.vm_memory_high_watermark", [
+    {datatype, float}]}.
+
+{mapping, "vm_memory_high_watermark.absolute", "rabbit.vm_memory_high_watermark", [
+    {datatype, [integer, string]}]}.
+
+
+{translation, "rabbit.vm_memory_high_watermark",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("vm_memory_high_watermark", Conf),
+    Absolute = proplists:get_value(["vm_memory_high_watermark", "absolute"], Settings),
+    Relative = proplists:get_value(["vm_memory_high_watermark", "relative"], Settings),
+    case {Absolute, Relative} of
+        {undefined, undefined} -> cuttlefish:invalid("No vm watermark defined");
+        {_,         undefined} -> {absolute, Absolute};
+        _                      -> Relative
+    end
+end}.
+
+%% Fraction of the high watermark limit at which queues start to
+%% page message out to disc in order to free up memory.
+%%
+%% Values greater than 0.9 can be dangerous and should be used carefully.
+%%
+%% {vm_memory_high_watermark_paging_ratio, 0.5},
+
+{mapping, "vm_memory_high_watermark_paging_ratio",
+          "rabbit.vm_memory_high_watermark_paging_ratio",
+          [{datatype, float}, {validators, ["less_than_1"]}]}.
+
+%% Interval (in milliseconds) at which we perform the check of the memory
+%% levels against the watermarks.
+%%
+%% {memory_monitor_interval, 2500},
+
+{mapping, "memory_monitor_interval", "rabbit.memory_monitor_interval",
+    [{datatype, integer}]}.
+
+%% Selects Erlang VM memory consumption calculation strategy.
+%% Can be `allocated`, `rss` or `legacy` (aliased as `erlang`).
+%%
+%% {vm_memory_calculation_strategy, rss},
+
+{mapping, "vm_memory_calculation_strategy", "rabbit.vm_memory_calculation_strategy",
+    [{datatype, {enum, [rss, erlang, allocated, legacy]}}]}.
+
+%% Set disk free limit (in bytes). Once free disk space reaches this
+%% lower bound, a disk alarm will be set - see the documentation
+%% listed above for more details.
+%%
+%% {disk_free_limit, 50000000},
+%%
+%% Or you can set it using memory units (same as in vm_memory_high_watermark)
+%% with RabbitMQ 3.6.0+.
+%% {disk_free_limit, "50MB"},
+%% {disk_free_limit, "50000kB"},
+%% {disk_free_limit, "2GB"},
+
+%% Alternatively, we can set a limit relative to total available RAM.
+%%
+%% Values lower than 1.0 can be dangerous and should be used carefully.
+%% {disk_free_limit, {mem_relative, 2.0}},
+
+{mapping, "disk_free_limit.relative", "rabbit.disk_free_limit", [
+    {datatype, float}]}.
+
+{mapping, "disk_free_limit.absolute", "rabbit.disk_free_limit", [
+    {datatype, [integer, string]}]}.
+
+
+{translation, "rabbit.disk_free_limit",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("disk_free_limit", Conf),
+    Absolute = proplists:get_value(["disk_free_limit", "absolute"], Settings),
+    Relative = proplists:get_value(["disk_free_limit", "relative"], Settings),
+    case {Absolute, Relative} of
+        {undefined, undefined} -> cuttlefish:invalid("No disk limit defined");
+        {_,         undefined} -> Absolute;
+        _                      -> {mem_relative, Relative}
+    end
+end}.
+
+%%
+%% Clustering
+%% =====================
+%%
+
+%% How to respond to cluster partitions.
+%% See http://www.rabbitmq.com/partitions.html for further details.
+%%
+%% {cluster_partition_handling, ignore},
+
+{mapping, "cluster_partition_handling", "rabbit.cluster_partition_handling",
+    [{datatype, {enum, [ignore, pause_minority, autoheal, pause_if_all_down]}}]}.
+
+{mapping, "cluster_partition_handling.pause_if_all_down.recover",
+          "rabbit.cluster_partition_handling",
+          [{datatype, {enum, [ignore, autoheal]}}]}.
+
+{mapping, "cluster_partition_handling.pause_if_all_down.nodes.$name",
+          "rabbit.cluster_partition_handling",
+          [{datatype, atom}]}.
+
+{translation, "rabbit.cluster_partition_handling",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_partition_handling", Conf) of
+        pause_if_all_down ->
+            PauseIfAllDownNodes = cuttlefish_variable:filter_by_prefix(
+                "cluster_partition_handling.pause_if_all_down.nodes",
+                Conf),
+            case PauseIfAllDownNodes of
+                [] ->
+                    cuttlefish:invalid("Nodes required for pause_if_all_down");
+                _  ->
+                    Nodes = [ V || {K,V} <- PauseIfAllDownNodes ],
+                    PauseIfAllDownRecover = cuttlefish:conf_get(
+                        "cluster_partition_handling.pause_if_all_down.recover",
+                        Conf),
+                    case PauseIfAllDownRecover of
+                        Recover when Recover == ignore; Recover == autoheal ->
+                            {pause_if_all_down, Nodes, Recover};
+                        Invalid ->
+                            cuttlefish:invalid("Recover strategy required for pause_if_all_down")
+                    end
+            end;
+        Other -> Other
+    end
+end}.
+
+%% Mirror sync batch size, in messages. Increasing this will speed
+%% up syncing but total batch size in bytes must not exceed 2 GiB.
+%% Available in RabbitMQ 3.6.0 or later.
+%%
+%% {mirroring_sync_batch_size, 4096},
+
+{mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size",
+    [{datatype, bytesize}, {validators, ["size_less_than_2G"]}]}.
+
+%% Peer discovery backend used by cluster formation.
+%%
+
+{mapping, "cluster_formation.peer_discovery_backend", "rabbit.cluster_formation.peer_discovery_backend", [
+    {datatype, atom}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_backend",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.peer_discovery_backend", Conf, rabbit_peer_discovery_classic_config) of
+        classic_config -> rabbit_peer_discovery_classic_config;
+        classic        -> rabbit_peer_discovery_classic_config;
+        config         -> rabbit_peer_discovery_classic_config;
+        dns            -> rabbit_peer_discovery_dns;
+        aws            -> rabbit_peer_discovery_aws;
+        consul         -> rabbit_peer_discovery_consul;
+        etcd           -> rabbit_peer_discovery_etcd;
+        kubernetes     -> rabbit_peer_discovery_k8s;
+        k8s            -> rabbit_peer_discovery_k8s;
+        Module         -> Module
+    end
+end}.
+
+%% Own node type, used by cluster formation.
+%%
+
+{mapping, "cluster_formation.node_type", "rabbit.cluster_formation.node_type", [
+    {datatype, {enum, [disc, disk, ram]}}
+]}.
+
+{translation, "rabbit.cluster_formation.node_type",
+fun(Conf) ->
+    %% if peer discovery backend isn't configured, don't generate
+    %% node type
+    case cuttlefish:conf_get("cluster_formation.peer_discovery_backend", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        _Backend  ->
+            case cuttlefish:conf_get("cluster_formation.node_type", Conf) of
+                disc      -> disc;
+                %% always cast to `disc`
+                disk      -> disc;
+                ram       -> ram;
+                _Other    -> disc
+            end
+    end
+end}.
+
+%% Cluster formation: Randomized startup delay
+
+{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_delay_range",
+    [{datatype, integer}]}.
+{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_delay_range",
+    [{datatype, integer}]}.
+
+{translation, "rabbit.cluster_formation.randomized_delay_range",
+fun(Conf) ->
+    Min = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.min", Conf, undefined),
+    Max = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.max", Conf, undefined),
+
+    case {Min, Max} of
+        {undefined, undefined} ->
+            cuttlefish:unset();
+        {undefined, Max}       ->
+            %% fallback default
+            {5, Max};
+        {Min, undefined}       ->
+            %% fallback default
+            {Min, 60};
+        {Min, Max}             ->
+            {Min, Max}
+    end
+end}.
+
+%% Classic config-driven peer discuvery backend.
+%%
+%% Make clustering happen *automatically* at startup - only applied
+%% to nodes that have just been reset or started for the first time.
+%% See http://www.rabbitmq.com/clustering.html#auto-config for
+%% further details.
+%%
+%% {cluster_nodes, {['rabbit@my.host.com'], disc}},
+
+{mapping, "cluster_formation.classic_config.nodes.$node", "rabbit.cluster_nodes",
+    [{datatype, atom}]}.
+
+{translation, "rabbit.cluster_nodes",
+fun(Conf) ->
+    Nodes = [V || {_, V} <- cuttlefish_variable:filter_by_prefix("cluster_formation.classic_config.nodes", Conf)],
+
+    case Nodes of
+        []    -> cuttlefish:unset();
+        Other ->
+            case cuttlefish:conf_get("cluster_formation.node_type", Conf, disc) of
+                disc -> {Other, disc};
+                %% Always cast to `disc`
+                disk -> {Other, disc};
+                ram  -> {Other, ram}
+            end
+    end
+end}.
+
+%% DNS (A records and reverse lookups)-based peer discovery.
+%%
+
+{mapping, "cluster_formation.dns.hostname", "rabbit.cluster_formation.peer_discovery_dns.hostname",
+    [{datatype, string}]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_dns.hostname",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.dns.hostname", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> list_to_binary(Value)
+    end
+end}.
+
+
+%% Interval (in milliseconds) at which we send keepalive messages
+%% to other cluster members. Note that this is not the same thing
+%% as net_ticktime; missed keepalive messages will not cause nodes
+%% to be considered down.
+%%
+%% {cluster_keepalive_interval, 10000},
+
+{mapping, "cluster_keepalive_interval", "rabbit.cluster_keepalive_interval",
+    [{datatype, integer}]}.
+
+%% Queue master locator
+%%
+
+{mapping, "queue_master_locator", "rabbit.queue_master_locator",
+    [{datatype, string}]}.
+
+{translation, "rabbit.queue_master_locator",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("queue_master_locator", Conf))
+end}.
+
+%%
+%% Statistics Collection
+%% =====================
+%%
+
+%% Set (internal) statistics collection granularity.
+%%
+%% {collect_statistics, none},
+
+{mapping, "collect_statistics", "rabbit.collect_statistics",
+    [{datatype, {enum, [none, coarse, fine]}}]}.
+
+%% Statistics collection interval (in milliseconds). Increasing
+%% this will reduce the load on management database.
+%%
+%% {collect_statistics_interval, 5000},
+
+{mapping, "collect_statistics_interval", "rabbit.collect_statistics_interval",
+    [{datatype, integer}]}.
+
+%%
+%% Misc/Advanced Options
+%% =====================
+%%
+%% NB: Change these only if you understand what you are doing!
+%%
+
+%% Explicitly enable/disable hipe compilation.
+%%
+%% {hipe_compile, true},
+
+{mapping, "hipe_compile", "rabbit.hipe_compile",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Timeout used when waiting for Mnesia tables in a cluster to
+%% become available.
+%%
+%% {mnesia_table_loading_retry_timeout, 30000},
+
+{mapping, "mnesia_table_loading_retry_timeout", "rabbit.mnesia_table_loading_retry_timeout",
+    [{datatype, integer}]}.
+
+%% Retries when waiting for Mnesia tables in the cluster startup. Note that
+%% this setting is not applied to Mnesia upgrades or node deletions.
+%%
+%% {mnesia_table_loading_retry_limit, 10},
+
+{mapping, "mnesia_table_loading_retry_limit", "rabbit.mnesia_table_loading_retry_limit",
+    [{datatype, integer}]}.
+
+%% Size in bytes below which to embed messages in the queue index. See
+%% http://www.rabbitmq.com/persistence-conf.html
+%%
+%% {queue_index_embed_msgs_below, 4096}
+
+{mapping, "queue_index_embed_msgs_below", "rabbit.queue_index_embed_msgs_below",
+    [{datatype, bytesize}]}.
+
+%% Whether or not to enable background GC.
+%%
+%% {background_gc_enabled, true}
+
+{mapping, "background_gc_enabled", "rabbit.background_gc_enabled",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Interval (in milliseconds) at which we run background GC.
+%%
+%% {background_gc_target_interval, 60000}
+
+{mapping, "background_gc_target_interval", "rabbit.background_gc_target_interval",
+    [{datatype, integer}]}.
+
+%% Whether or not to enable proxy protocol support.
+%%
+%% {proxy_protocol, false}
+
+{mapping, "proxy_protocol", "rabbit.proxy_protocol",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Whether to stop the rabbit application if a vhost has
+%% to terminate for any reason.
+
+{mapping, "vhost_restart_strategy", "rabbit.vhost_restart_strategy",
+    [{datatype, {enum, [stop_node, continue, transient, persistent]}}]}.
+
+% ==========================
+% Lager section
+% ==========================
+
+{mapping, "log.dir", "lager.log_root", [
+    {datatype, string},
+    {validators, ["dir_writable"]}]}.
+
+{mapping, "log.console", "rabbit.log.console.enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.console.level", "rabbit.log.console.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+
+{mapping, "log.syslog", "rabbit.log.syslog.enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.syslog.level", "rabbit.log.syslog.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.syslog.identity", "rabbit.log.syslog.identity", [
+    {datatype, string}
+]}.
+{mapping, "log.syslog.facility", "rabbit.log.syslog.facility", [
+    {datatype, atom}
+]}.
+
+{mapping, "log.file", "rabbit.log.file.file", [
+    {datatype, [{enum, [false]}, string]}
+]}.
+{mapping, "log.file.level", "rabbit.log.file.level", [
+    {datatype,
+        {enum, ['=debug', debug,
+                info, '!=info',
+                notice, '<=notice',
+                '<warning', warning,
+                error,
+                critical,
+                alert,
+                emergency,
+                none]}}
+]}.
+{mapping, "log.file.rotation.date", "rabbit.log.file.date", [
+    {datatype, string}
+]}.
+{mapping, "log.file.rotation.size", "rabbit.log.file.size", [
+    {datatype, integer}
+]}.
+{mapping, "log.file.rotation.count", "rabbit.log.file.count", [
+    {datatype, integer}
+]}.
+
+%% Log categories
+
+{mapping, "log.connection.level", "rabbit.log.categories.connection.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.connection.file", "rabbit.log.categories.connection.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.channel.level", "rabbit.log.categories.channel.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.channel.file", "rabbit.log.categories.channel.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.mirroring.level", "rabbit.log.categories.mirroring.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.mirroring.file", "rabbit.log.categories.mirroring.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.queue.level", "rabbit.log.categories.queue.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.queue.file", "rabbit.log.categories.queue.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.federation.level", "rabbit.log.categories.federation.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.federation.file", "rabbit.log.categories.federation.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.upgrade.level", "rabbit.log.categories.upgrade.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.upgrade.file", "rabbit.log.categories.upgrade.file", [
+    {datatype, string}
+]}.
+
+{mapping, "log.default.level", "rabbit.log.categories.default.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+
+% ===============================
+% Validators
+% ===============================
+
+{validator, "size_less_than_2G", "Byte size should be less than 2G and greater than 0",
+fun(Size) when is_integer(Size) ->
+    Size > 0 andalso Size < 2147483648
+end}.
+
+{validator, "less_than_1", "Flooat is not beetween 0 and 1",
+fun(Float) when is_float(Float) ->
+    Float > 0 andalso Float < 1
+end}.
+
+{validator, "port", "Invalid port number",
+fun(Port) when is_integer(Port) ->
+    Port > 0 andalso Port < 65535
+end}.
+
+{validator, "byte", "Integer is not 0<i<255",
+fun(Int) when is_integer(Int) ->
+    Int > 0 andalso Int < 255
+end}.
+
+{validator, "dir_writable", "Cannot create file in dir",
+fun(Dir) ->
+    TestFile = filename:join(Dir, "test_file"),
+    file:delete(TestFile),
+    Res = ok == file:write_file(TestFile, <<"test">>),
+    file:delete(TestFile),
+    Res
+end}.
+
+{validator, "file_accessible", "file doesn/t exist or isn't readable",
+fun(File) ->
+    ReadFile = file:read_file_info(File),
+    element(1, ReadFile) == ok
+end}.
+
+{validator, "is_ip", "string is a valid IP address",
+fun(IpStr) ->
+    Res = inet:parse_address(IpStr),
+    element(1, Res) == ok
+end}.
+
+{validator, "non_negative_integer", "number should be greater or equal to zero",
+fun(Int) when is_integer(Int) ->
+    Int >= 0
+end}.

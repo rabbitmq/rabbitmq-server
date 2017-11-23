@@ -1,0 +1,196 @@
+.\" vim:ft=nroff:
+.\" The contents of this file are subject to the Mozilla Public License
+.\" Version 1.1 (the "License"); you may not use this file except in
+.\" compliance with the License. You may obtain a copy of the License
+.\" at http://www.mozilla.org/MPL/
+.\"
+.\" Software distributed under the License is distributed on an "AS IS"
+.\" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+.\" the License for the specific language governing rights and
+.\" limitations under the License.
+.\"
+.\" The Original Code is RabbitMQ.
+.\"
+.\" The Initial Developer of the Original Code is Pivotal Software, Inc.
+.\" Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+.\"
+.Dd April 25, 2017
+.Dt RABBITMQ-PLUGINS 8
+.Os "RabbitMQ Server"
+.Sh NAME
+.Nm rabbitmq-plugins
+.Nd command line for managing RabbitMQ broker plugins
+.\" ------------------------------------------------------------------
+.Sh SYNOPSIS
+.\" ------------------------------------------------------------------
+.Nm
+.Op Fl n Ar node
+.Ar command
+.Op Ar command_options
+.\" ------------------------------------------------------------------
+.Sh DESCRIPTION
+.\" ------------------------------------------------------------------
+.Nm
+is a command line tool for managing RabbitMQ broker plugins.
+It allows one to enable, disable and browse plugins.
+It must be run by a user with write permissions to the RabbitMQ
+configuration directory.
+.Pp
+Some plugins depend on others to work correctly.
+.Nm
+traverses these dependencies and enables all required plugins.
+Plugins listed on the
+.Nm
+command line are marked as explicitly enabled; dependent plugins are
+marked as implicitly enabled.
+Implicitly enabled plugins are automatically disabled again when they
+are no longer required.
+.Pp
+The
+.Cm enable ,
+.Cm disable ,
+and
+.Cm set
+commands will update the plugins file and then attempt to connect to the
+broker and ensure it is running all enabled plugins.
+By default if it is not possible to connect to the running broker (for
+example if it is stopped) then a warning is displayed.
+Specify
+.Fl -online
+or
+.Fl -offline
+to change this behaviour.
+.\" ------------------------------------------------------------------
+.Sh COMMANDS
+.\" ------------------------------------------------------------------
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm list Oo Fl Eemv Oc Op Ar pattern
+.Bl -tag -width Ds
+.It Fl E
+Show only explicitly enabled plugins.
+.It Fl e
+Show only explicitly or implicitly enabled plugins.
+.It Fl m
+Show only plugin names (minimal).
+.It Fl v
+Show all plugin details (verbose).
+.It Ar pattern
+Pattern to filter the plugin names by.
+.El
+.Pp
+Lists all plugins, their versions, dependencies and descriptions.
+Each plugin is prefixed with two status indicator characters inside [ ].
+The first indicator can be:
+.Bl -tag -width <space> -compact
+.It Sy <space>
+to indicate that the plugin is not enabled
+.It Sy E
+to indicate that it is explicitly enabled
+.It Sy e
+to indicate that it is implicitly enabled
+.It Sy \!
+to indicate that it is enabled but missing and thus not operational
+.El
+.Pp
+The second indicator can be:
+.Bl -tag -width <space> -compact
+.It Sy <space>
+to show that the plugin is not running
+.It Sy *
+to show that it is
+.El
+.Pp
+If the optional pattern is given, only plugins whose name matches
+.Ar pattern
+are shown.
+.Pp
+For example, this command lists all plugins, on one line each
+.sp
+.Dl rabbitmq-plugins list
+.Pp
+This command lists all plugins:
+.sp
+.Dl rabbitmq-plugins list -v
+.Pp
+This command lists all plugins whose name contains "management".
+.sp
+.Dl rabbitmq-plugins list -v management
+.Pp
+This command lists all implicitly or explicitly enabled RabbitMQ plugins.
+.sp
+.Dl rabbitmq-plugins list -e rabbit
+.\" ------------------------------------
+.It Cm enable Oo Fl -offline Oc Oo Fl -online Oc Ar plugin ...
+.Bl -tag -width Ds
+.It Fl -offline
+Just modify the enabled plugins file.
+.It Fl -online
+Treat failure to connect to the running broker as fatal.
+.It Ar plugin
+One or more plugins to enable.
+.El
+.Pp
+Enables the specified plugins and all their dependencies.
+.Pp
+For example, this command enables the
+.Qq shovel
+and
+.Qq management
+plugins and all their dependencies:
+.sp
+.Dl rabbitmq\-plugins enable rabbitmq_shovel rabbitmq_management
+.\" ------------------------------------
+.It Cm disable Oo Fl -offline Oc Oo Fl -online Oc Ar plugin ...
+.Bl -tag -width Ds
+.It Fl -offline
+Just modify the enabled plugins file.
+.It Fl -online
+Treat failure to connect to the running broker as fatal.
+.It Ar plugin
+One or more plugins to disable.
+.El
+.Pp
+Disables the specified plugins and all their dependencies.
+.Pp
+For example, this command disables
+.Qq amqp_client
+and all plugins that depend on it:
+.sp
+.Dl rabbitmq-plugins disable amqp_client
+.\" ------------------------------------
+.It Cm set Oo Fl -offline Oc Oo Fl -online Oc Op Ar plugin ...
+.Bl -tag -width Ds
+.It Fl -offline
+Just modify the enabled plugins file.
+.It Fl -online
+Treat failure to connect to the running broker as fatal.
+.It Ar plugin
+Zero or more plugins to enable.
+.El
+.Pp
+Enables the specified plugins and all their dependencies.
+Unlike
+.Cm enable ,
+this command ignores and overwrites any existing enabled plugins.
+.Cm set
+with no plugin arguments is a legal command meaning "disable all plugins".
+.Pp
+For example, this command enables the
+.Qq management
+plugin and its dependencies and disables everything else:
+.sp
+.Dl rabbitmq-plugins set rabbitmq_management
+.El
+.\" ------------------------------------------------------------------
+.Sh SEE ALSO
+.\" ------------------------------------------------------------------
+.Xr rabbitmq-env.conf 5 ,
+.Xr rabbitmq-echopid 8 ,
+.Xr rabbitmq-server 8 ,
+.Xr rabbitmq-service 8 ,
+.Xr rabbitmqctl 8
+.\" ------------------------------------------------------------------
+.Sh AUTHOR
+.\" ------------------------------------------------------------------
+.An The RabbitMQ Team Aq Mt info@rabbitmq.com

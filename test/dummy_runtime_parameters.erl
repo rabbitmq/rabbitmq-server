@@ -20,7 +20,7 @@
 
 -include("rabbit.hrl").
 
--export([validate/5, notify/4, notify_clear/3]).
+-export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0]).
 -export([validate_policy/1]).
 -export([register_policy_validator/0, unregister_policy_validator/0]).
@@ -43,8 +43,8 @@ validate(_, <<"test">>, <<"admin">>, _Term, User) ->
     end;
 validate(_, <<"test">>, _, _, _)                        -> {error, "meh", []}.
 
-notify(_, _, _, _) -> ok.
-notify_clear(_, _, _) -> ok.
+notify(_, _, _, _, _) -> ok.
+notify_clear(_, _, _, _) -> ok.
 
 %----------------------------------------------------------------------------
 

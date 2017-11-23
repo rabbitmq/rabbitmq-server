@@ -24,9 +24,9 @@
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, resume/1,
          msg_rates/1, info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
-         zip_msgs_and_acks/4]).
+         zip_msgs_and_acks/4, handle_info/2]).
 
--export([start/1, stop/0, delete_crashed/1]).
+-export([start/2, stop/1, delete_crashed/1]).
 
 -export([promote_backing_queue_state/8, sender_death_fun/0, depth_fun/0]).
 
@@ -57,13 +57,13 @@
                                  coordinator         :: pid(),
                                  backing_queue       :: atom(),
                                  backing_queue_state :: any(),
-                                 seen_status         :: ?DICT_TYPE(),
+                                 seen_status         :: map(),
                                  confirmed           :: [rabbit_guid:guid()],
-                                 known_senders       :: ?SET_TYPE()
+                                 known_senders       :: sets:set()
                                }.
 -spec promote_backing_queue_state
         (rabbit_amqqueue:name(), pid(), atom(), any(), pid(), [any()],
-         ?DICT_TYPE(), [pid()]) ->
+         map(), [pid()]) ->
             master_state().
 
 -spec sender_death_fun() -> death_fun().
@@ -81,12 +81,12 @@
 %% Backing queue
 %% ---------------------------------------------------------------------------
 
-start(_DurableQueues) ->
+start(_Vhost, _DurableQueues) ->
     %% This will never get called as this module will never be
     %% installed as the default BQ implementation.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
-stop() ->
+stop(_Vhost) ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
@@ -127,7 +127,7 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
 		     coordinator         = CPid,
 		     backing_queue       = BQ,
 		     backing_queue_state = BQS,
-		     seen_status         = dict:new(),
+		     seen_status         = #{},
 		     confirmed           = [],
 		     known_senders       = sets:new(),
 		     wait_timeout        = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000) };
@@ -219,16 +219,24 @@ stop_all_slaves(Reason, #state{name = QName, gm = GM, wait_timeout = WT}) ->
     %% monitor them but they would not have received the GM
     %% message. So only wait for slaves which are still
     %% not-partitioned.
-    [receive
-         {'DOWN', MRef, process, _Pid, _Info} ->
-             ok
-     after WT ->
-             rabbit_mirror_queue_misc:log_warning(
-               QName, "Missing 'DOWN' message from ~p in node ~p~n",
-               [Pid, node(Pid)]),
-             ok
-     end
-     || {Pid, MRef} <- PidsMRefs, rabbit_mnesia:on_running_node(Pid)],
+    PendingSlavePids =
+        lists:foldl(
+          fun({Pid, MRef}, Acc) ->
+                  case rabbit_mnesia:on_running_node(Pid) of
+                      true ->
+                          receive
+                              {'DOWN', MRef, process, _Pid, _Info} ->
+                                  Acc
+                          after WT ->
+                                  rabbit_mirror_queue_misc:log_warning(
+                                    QName, "Missing 'DOWN' message from ~p in"
+                                    " node ~p~n", [Pid, node(Pid)]),
+                                  [Pid | Acc]
+                          end;
+                      false ->
+                          Acc
+                  end
+          end, [], PidsMRefs),
     %% Normally when we remove a slave another slave or master will
     %% notice and update Mnesia. But we just removed them all, and
     %% have stopped listening ourselves. So manually clean up.
@@ -236,7 +244,11 @@ stop_all_slaves(Reason, #state{name = QName, gm = GM, wait_timeout = WT}) ->
       fun () ->
               [Q] = mnesia:read({rabbit_queue, QName}),
               rabbit_mirror_queue_misc:store_updated_slaves(
-                Q #amqqueue { gm_pids = [], slave_pids = [] })
+                Q #amqqueue { gm_pids = [], slave_pids = [],
+                              %% Restarted slaves on running nodes can
+                              %% ensure old incarnations are stopped using
+                              %% the pending slave pids.
+                              slave_pids_pending_shutdown = PendingSlavePids})
       end),
     ok = gm:forget_group(QName).
 
@@ -254,7 +266,7 @@ publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid, Flow,
                          seen_status         = SS,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
-    false = dict:is_key(MsgId, SS), %% ASSERTION
+    false = maps:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {publish, ChPid, Flow, MsgProps, Msg},
                       rabbit_basic:msg_size(Msg)),
     BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS),
@@ -269,7 +281,7 @@ batch_publish(Publishes, ChPid, Flow,
         lists:foldl(fun ({Msg = #basic_message { id = MsgId },
                           MsgProps, _IsDelivered}, {Pubs, false, Sizes}) ->
                             {[{Msg, MsgProps, true} | Pubs], %% [0]
-                             false = dict:is_key(MsgId, SS), %% ASSERTION
+                             false = maps:is_key(MsgId, SS), %% ASSERTION
                              Sizes + rabbit_basic:msg_size(Msg)}
                     end, {[], false, 0}, Publishes),
     Publishes2 = lists:reverse(Publishes1),
@@ -286,7 +298,7 @@ publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                                                 seen_status         = SS,
                                                 backing_queue       = BQ,
                                                 backing_queue_state = BQS }) ->
-    false = dict:is_key(MsgId, SS), %% ASSERTION
+    false = maps:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {publish_delivered, ChPid, Flow, MsgProps, Msg},
                       rabbit_basic:msg_size(Msg)),
     {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, Flow, BQS),
@@ -301,7 +313,7 @@ batch_publish_delivered(Publishes, ChPid, Flow,
     {false, MsgSizes} =
         lists:foldl(fun ({Msg = #basic_message { id = MsgId }, _MsgProps},
                          {false, Sizes}) ->
-                            {false = dict:is_key(MsgId, SS), %% ASSERTION
+                            {false = maps:is_key(MsgId, SS), %% ASSERTION
                              Sizes + rabbit_basic:msg_size(Msg)}
                     end, {false, 0}, Publishes),
     ok = gm:broadcast(GM, {batch_publish_delivered, ChPid, Flow, Publishes},
@@ -314,7 +326,7 @@ discard(MsgId, ChPid, Flow, State = #state { gm                  = GM,
                                              backing_queue       = BQ,
                                              backing_queue_state = BQS,
                                              seen_status         = SS }) ->
-    false = dict:is_key(MsgId, SS), %% ASSERTION
+    false = maps:is_key(MsgId, SS), %% ASSERTION
     ok = gm:broadcast(GM, {discard, ChPid, Flow, MsgId}),
     ensure_monitoring(ChPid,
                       State #state { backing_queue_state =
@@ -341,7 +353,7 @@ drain_confirmed(State = #state { backing_queue       = BQ,
         lists:foldl(
           fun (MsgId, {MsgIdsN, SSN}) ->
                   %% We will never see 'discarded' here
-                  case dict:find(MsgId, SSN) of
+                  case maps:find(MsgId, SSN) of
                       error ->
                           {[MsgId | MsgIdsN], SSN};
                       {ok, published} ->
@@ -352,7 +364,7 @@ drain_confirmed(State = #state { backing_queue       = BQ,
                           %% consequently we need to filter out the
                           %% confirm here. We will issue the confirm
                           %% when we see the publish from the channel.
-                          {MsgIdsN, dict:store(MsgId, confirmed, SSN)};
+                          {MsgIdsN, maps:put(MsgId, confirmed, SSN)};
                       {ok, confirmed} ->
                           %% Well, confirms are racy by definition.
                           {[MsgId | MsgIdsN], SSN}
@@ -435,6 +447,10 @@ handle_pre_hibernate(State = #state { backing_queue       = BQ,
                                       backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:handle_pre_hibernate(BQS) }.
 
+handle_info(Msg, State = #state { backing_queue       = BQ,
+                                  backing_queue_state = BQS }) ->
+    State #state { backing_queue_state = BQ:handle_info(Msg, BQS) }.
+
 resume(State = #state { backing_queue       = BQ,
                         backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:resume(BQS) }.
@@ -445,7 +461,7 @@ msg_rates(#state { backing_queue = BQ, backing_queue_state = BQS }) ->
 info(backing_queue_status,
      State = #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:info(backing_queue_status, BQS) ++
-        [ {mirror_seen,    dict:size(State #state.seen_status)},
+        [ {mirror_seen,    maps:size(State #state.seen_status)},
           {mirror_senders, sets:size(State #state.known_senders)} ];
 info(Item, #state { backing_queue = BQ, backing_queue_state = BQS }) ->
     BQ:info(Item, BQS).
@@ -468,7 +484,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
     %% it.
 
     %% We will never see {published, ChPid, MsgSeqNo} here.
-    case dict:find(MsgId, SS) of
+    case maps:find(MsgId, SS) of
         error ->
             %% We permit the underlying BQ to have a peek at it, but
             %% only if we ourselves are not filtering out the msg.
@@ -482,7 +498,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% immediately after calling is_duplicate). The msg is
             %% invalid. We will not see this again, nor will we be
             %% further involved in confirming this message, so erase.
-            {true, State #state { seen_status = dict:erase(MsgId, SS) }};
+            {true, State #state { seen_status = maps:remove(MsgId, SS) }};
         {ok, Disposition}
           when Disposition =:= confirmed
             %% It got published when we were a slave via gm, and
@@ -497,7 +513,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% Message was discarded while we were a slave. Confirm now.
             %% As above, amqqueue_process will have the entry for the
             %% msg_id_to_channel mapping.
-            {true, State #state { seen_status = dict:erase(MsgId, SS),
+            {true, State #state { seen_status = maps:remove(MsgId, SS),
                                   confirmed = [MsgId | Confirmed] }}
     end.
 

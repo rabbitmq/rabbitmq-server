@@ -123,11 +123,6 @@ delegates_async1(_Config, SecondaryNode) ->
     ok = delegate:invoke_no_result(spawn(SecondaryNode, Responder), Sender),
     await_response(2),
 
-    LocalPids = spawn_responders(node(), Responder, 10),
-    RemotePids = spawn_responders(SecondaryNode, Responder, 10),
-    ok = delegate:invoke_no_result(LocalPids ++ RemotePids, Sender),
-    await_response(20),
-
     passed.
 
 delegates_sync(Config) ->
@@ -233,14 +228,14 @@ declare_on_dead_queue1(_Config, SecondaryNode) ->
                 fun () ->
                         {new, #amqqueue{name = QueueName, pid = QPid}} =
                             rabbit_amqqueue:declare(QueueName, false, false, [],
-                                                    none),
+                                                    none, <<"acting-user">>),
                         exit(QPid, kill),
                         Self ! {self(), killed, QPid}
                 end),
     receive
         {Pid, killed, OldPid} ->
             Q = dead_queue_loop(QueueName, OldPid),
-            {ok, 0} = rabbit_amqqueue:delete(Q, false, false),
+            {ok, 0} = rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
             passed
     after ?TIMEOUT -> throw(failed_to_create_and_kill_queue)
     end.
@@ -267,9 +262,9 @@ refresh_events1(Config, SecondaryNode) ->
 
     {new, #amqqueue{name = QName} = Q} =
         rabbit_amqqueue:declare(queue_name(Config, <<"refresh_events-q">>),
-                                false, false, [], none),
+                                false, false, [], none, <<"acting-user">>),
     expect_events(name, QName, queue_created),
-    rabbit_amqqueue:delete(Q, false, false),
+    rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
 
     dummy_event_receiver:stop(),
     passed.
@@ -303,7 +298,8 @@ must_exit(Fun) ->
     end.
 
 dead_queue_loop(QueueName, OldPid) ->
-    {existing, Q} = rabbit_amqqueue:declare(QueueName, false, false, [], none),
+    {existing, Q} = rabbit_amqqueue:declare(QueueName, false, false, [], none,
+                                            <<"acting-user">>),
     case Q#amqqueue.pid of
         OldPid -> timer:sleep(25),
                   dead_queue_loop(QueueName, OldPid);

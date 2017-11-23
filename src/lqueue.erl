@@ -27,9 +27,7 @@
 
 -export_type([?MODULE/0]).
 
--include_lib("rabbit_common/include/old_builtin_types.hrl").
-
--opaque ?MODULE() :: {non_neg_integer(), ?QUEUE_TYPE()}.
+-opaque ?MODULE() :: {non_neg_integer(), queue:queue()}.
 -type value()     :: any().
 -type result()    :: 'empty' | {'value', value()}.
 

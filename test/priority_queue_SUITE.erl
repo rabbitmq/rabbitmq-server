@@ -32,6 +32,7 @@ groups() ->
      {cluster_size_2, [], [
                            ackfold,
                            drop,
+                           reject,
                            dropwhile_fetchwhile,
                            info_head_message_timestamp,
                            matching,
@@ -50,7 +51,8 @@ groups() ->
      {cluster_size_3, [], [
                            mirror_queue_auto_ack,
                            mirror_fast_reset_policy,
-                           mirror_reset_policy
+                           mirror_reset_policy,
+                           mirror_stop_pending_slaves
                           ]}
     ].
 
@@ -305,6 +307,20 @@ drop(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+reject(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"reject-queue">>,
+    declare(Ch, Q, [{<<"x-max-length">>, long, 4},
+                    {<<"x-overflow">>, longstr, <<"reject-publish">>}
+                    | arguments(3)]),
+    publish(Ch, Q, [1, 2, 3, 1, 2, 3, 1, 2, 3]),
+    %% First 4 messages are published, all others are discarded.
+    get_all(Ch, Q, do_ack, [3, 2, 1, 1]),
+    delete(Ch, Q),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
 purge(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Q = <<"purge-queue">>,
@@ -547,6 +563,36 @@ mirror_reset_policy(Config, Wait) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+mirror_stop_pending_slaves(Config) ->
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    B = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    C = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
+
+    [ok = rabbit_ct_broker_helpers:rpc(
+           Config, Nodename, application, set_env, [rabbit, slave_wait_timeout, 0]) || Nodename <- [A, B, C]],
+
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
+    Q = <<"mirror_stop_pending_slaves-queue">>,
+    declare(Ch, Q, 5),
+    publish_many(Ch, Q, 20000),
+
+    [begin
+         rabbit_ct_broker_helpers:set_ha_policy(
+           Config, A, <<"^mirror_stop_pending_slaves-queue$">>, <<"all">>,
+           [{<<"ha-sync-mode">>, <<"automatic">>}]),
+         wait_for_sync(Config, A, rabbit_misc:r(<<"/">>, queue, Q), 2),
+         rabbit_ct_broker_helpers:clear_policy(
+           Config, A, <<"^mirror_stop_pending_slaves-queue$">>)
+     end || _ <- lists:seq(1, 15)],
+
+    delete(Ch, Q),
+
+    [ok = rabbit_ct_broker_helpers:rpc(
+           Config, Nodename, application, set_env, [rabbit, slave_wait_timeout, 15000]) || Nodename <- [A, B, C]],
+
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q, Args) when is_list(Args) ->
@@ -570,7 +616,7 @@ publish_payload(Ch, Q, PPds) ->
     amqp_channel:wait_for_confirms(Ch).
 
 publish_many(_Ch, _Q, 0) -> ok;
-publish_many( Ch,  Q, N) -> publish1(Ch, Q, rand_compat:uniform(5)),
+publish_many( Ch,  Q, N) -> publish1(Ch, Q, rand:uniform(5)),
                             publish_many(Ch, Q, N - 1).
 
 publish1(Ch, Q, P) ->

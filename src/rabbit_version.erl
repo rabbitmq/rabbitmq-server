@@ -18,7 +18,8 @@
 
 -export([recorded/0, matches/2, desired/0, desired_for_scope/1,
          record_desired/0, record_desired_for_scope/1,
-         upgrades_required/1, check_version_consistency/3,
+         upgrades_required/1, all_upgrades_required/1,
+         check_version_consistency/3,
          check_version_consistency/4, check_otp_consistency/1,
          version_error/3]).
 
@@ -117,6 +118,30 @@ upgrades_required(Scope) ->
               end, Scope)
     end.
 
+all_upgrades_required(Scopes) ->
+    case recorded() of
+        {error, enoent} ->
+            case filelib:is_file(rabbit_guid:filename()) of
+                false -> {error, starting_from_scratch};
+                true  -> {error, version_not_available}
+            end;
+        {ok, _} ->
+            lists:foldl(
+                fun
+                (_, {error, Err}) -> {error, Err};
+                (Scope, {ok, Acc}) ->
+                    case upgrades_required(Scope) of
+                        %% Lift errors from any scope.
+                        {error, Err}   -> {error, Err};
+                        %% Filter non-upgradable scopes
+                        {ok, []}       -> {ok, Acc};
+                        {ok, Upgrades} -> {ok, [{Scope, Upgrades} | Acc]}
+                    end
+                end,
+                {ok, []},
+                Scopes)
+    end.
+
 %% -------------------------------------------------------------------
 
 with_upgrade_graph(Fun, Scope) ->
@@ -172,10 +197,10 @@ categorise_by_scope(Version) when is_list(Version) ->
                               rabbit_misc:all_module_attributes(rabbit_upgrade),
                           {Name, Scope, _Requires} <- Attributes,
                           lists:member(Name, Version)],
-    orddict:to_list(
+    maps:to_list(
       lists:foldl(fun ({Scope, Name}, CatVersion) ->
-                          rabbit_misc:orddict_cons(Scope, Name, CatVersion)
-                  end, orddict:new(), Categorised)).
+                          rabbit_misc:maps_cons(Scope, Name, CatVersion)
+                  end, maps:new(), Categorised)).
 
 dir() -> rabbit_mnesia:dir().
 

@@ -1,0 +1,82 @@
+.\" vim:ft=nroff:
+.\" The contents of this file are subject to the Mozilla Public License
+.\" Version 1.1 (the "License"); you may not use this file except in
+.\" compliance with the License. You may obtain a copy of the License
+.\" at http://www.mozilla.org/MPL/
+.\"
+.\" Software distributed under the License is distributed on an "AS IS"
+.\" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+.\" the License for the specific language governing rights and
+.\" limitations under the License.
+.\"
+.\" The Original Code is RabbitMQ.
+.\"
+.\" The Initial Developer of the Original Code is Pivotal Software, Inc.
+.\" Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+.\"
+.Dd April 25, 2017
+.Dt RABBITMQ-ECHOPID.BAT 8
+.Os "RabbitMQ Server"
+.Sh NAME
+.Nm rabbitmq-echopid.bat
+.Nd return the Windows process id of the Erlang runtime hosting RabbitMQ
+.\" ------------------------------------------------------------------
+.Sh SYNOPSIS
+.\" ------------------------------------------------------------------
+.Nm
+.Ar sname
+.\" ------------------------------------------------------------------
+.Sh DESCRIPTION
+.\" ------------------------------------------------------------------
+RabbitMQ is an implementation of AMQP, the emerging standard for high
+performance enterprise messaging.
+The RabbitMQ server is a robust and scalable implementation of an AMQP
+broker.
+.Pp
+Running
+.Nm
+will attempt to discover and echo the process id (PID) of the Erlang
+runtime process
+.Pq Pa erl.exe
+that is hosting RabbitMQ.
+To allow
+.Pa erl.exe
+time to start up and load RabbitMQ, the script will wait for ten seconds
+before timing out if a suitable PID cannot be found.
+.Pp
+If a PID is discovered, the script will echo it to stdout
+before exiting with a
+.Ev ERRORLEVEL
+of 0.
+If no PID is discovered before the timeout, nothing is written to stdout
+and the script exits setting
+.Ev ERRORLEVEL
+to 1.
+.Pp
+Note that this script only exists on Windows due to the need to wait for
+.Pa erl.exe
+and possibly time-out.
+To obtain the PID on Unix set
+.Ev RABBITMQ_PID_FILE
+before starting
+.Xr rabbitmq-server 8
+and do not use
+.Fl detached .
+.\" ------------------------------------------------------------------
+.Sh OPTIONS
+.\" ------------------------------------------------------------------
+.Bl -tag -width Ds
+.It Ar sname
+The short-name form of the RabbitMQ node name.
+.El
+.\" ------------------------------------------------------------------
+.Sh SEE ALSO
+.\" ------------------------------------------------------------------
+.Xr rabbitmq-plugins 8 ,
+.Xr rabbitmq-server 8 ,
+.Xr rabbitmq-service 8 ,
+.Xr rabbitmqctl 8
+.\" ------------------------------------------------------------------
+.Sh AUTHOR
+.\" ------------------------------------------------------------------
+.An The RabbitMQ Team Aq Mt info@rabbitmq.com

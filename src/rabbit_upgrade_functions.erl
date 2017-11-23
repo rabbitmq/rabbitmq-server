@@ -53,7 +53,14 @@
 -rabbit_upgrade({queue_state,           mnesia, [down_slave_nodes]}).
 -rabbit_upgrade({recoverable_slaves,    mnesia, [queue_state]}).
 -rabbit_upgrade({policy_version,        mnesia, [recoverable_slaves]}).
+-rabbit_upgrade({slave_pids_pending_shutdown, mnesia, [policy_version]}).
 -rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
+-rabbit_upgrade({operator_policies,     mnesia, [slave_pids_pending_shutdown, internal_system_x]}).
+-rabbit_upgrade({vhost_limits,          mnesia, []}).
+-rabbit_upgrade({queue_vhost_field,     mnesia, [operator_policies]}).
+-rabbit_upgrade({topic_permission,      mnesia,  []}).
+-rabbit_upgrade({queue_options,         mnesia, [queue_vhost_field]}).
+-rabbit_upgrade({exchange_options,      mnesia, [operator_policies]}).
 
 %% -------------------------------------------------------------------
 
@@ -87,8 +94,25 @@
 -spec queue_state() -> 'ok'.
 -spec recoverable_slaves() -> 'ok'.
 -spec user_password_hashing() -> 'ok'.
+-spec vhost_limits() -> 'ok'.
+-spec operator_policies() -> 'ok'.
+-spec queue_vhost_field() -> 'ok'.
+-spec queue_options() -> 'ok'.
+-spec exchange_options() -> 'ok'.
+
 
 %%--------------------------------------------------------------------
+
+%% replaces vhost.dummy (used to avoid having a single-field record
+%% which Mnesia doesn't like) with vhost.limits (which is actually
+%% used)
+vhost_limits() ->
+    transform(
+      rabbit_vhost,
+      fun ({vhost, VHost, _Dummy}) ->
+              {vhost, VHost, undefined}
+      end,
+      [virtual_host, limits]).
 
 %% It's a bad idea to use records or record_info here, even for the
 %% destination form. Because in the future, the destination form of
@@ -462,6 +486,96 @@ policy_version(Table) ->
        sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators, state,
        policy_version]).
 
+slave_pids_pending_shutdown() ->
+    ok = slave_pids_pending_shutdown(rabbit_queue),
+    ok = slave_pids_pending_shutdown(rabbit_durable_queue).
+
+slave_pids_pending_shutdown(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+            Pid, SlavePids, SyncSlavePids, DSN, Policy, GmPids, Decorators,
+            State, PolicyVersion}) ->
+              {amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+               Pid, SlavePids, SyncSlavePids, DSN, Policy, GmPids, Decorators,
+               State, PolicyVersion, []}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators, state,
+       policy_version, slave_pids_pending_shutdown]).
+
+operator_policies() ->
+    ok = exchange_operator_policies(rabbit_exchange),
+    ok = exchange_operator_policies(rabbit_durable_exchange),
+    ok = queue_operator_policies(rabbit_queue),
+    ok = queue_operator_policies(rabbit_durable_queue).
+
+exchange_operator_policies(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Internal,
+                      Args, Scratches, Policy, Decorators}) ->
+              {exchange, Name, Type, Dur, AutoDel, Internal,
+                         Args, Scratches, Policy, undefined, Decorators}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches, policy,
+       operator_policy, decorators]).
+
+queue_operator_policies(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+            Pid, SlavePids, SyncSlavePids, DSN, Policy, GmPids, Decorators,
+            State, PolicyVersion, SlavePidsPendingShutdown}) ->
+              {amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+               Pid, SlavePids, SyncSlavePids, DSN, Policy, undefined, GmPids,
+               Decorators, State, PolicyVersion, SlavePidsPendingShutdown}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, recoverable_slaves, policy, operator_policy,
+       gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown]).
+
+
+queue_vhost_field() ->
+    ok = queue_vhost_field(rabbit_queue),
+    ok = queue_vhost_field(rabbit_durable_queue),
+    {atomic, ok} = mnesia:add_table_index(rabbit_queue, vhost),
+    {atomic, ok} = mnesia:add_table_index(rabbit_durable_queue, vhost),
+    ok.
+
+queue_vhost_field(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name = {resource, VHost, queue, _QName}, Durable, AutoDelete, ExclusiveOwner, Arguments,
+            Pid, SlavePids, SyncSlavePids, DSN, Policy, OperatorPolicy, GmPids, Decorators,
+            State, PolicyVersion, SlavePidsPendingShutdown}) ->
+              {amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+               Pid, SlavePids, SyncSlavePids, DSN, Policy, OperatorPolicy, GmPids, Decorators,
+               State, PolicyVersion, SlavePidsPendingShutdown, VHost}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, recoverable_slaves, policy, operator_policy,
+       gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown, vhost]).
+
+queue_options() ->
+    ok = queue_options(rabbit_queue),
+    ok = queue_options(rabbit_durable_queue),
+    ok.
+
+queue_options(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+            Pid, SlavePids, SyncSlavePids, DSN, Policy, OperatorPolicy, GmPids, Decorators,
+            State, PolicyVersion, SlavePidsPendingShutdown, VHost}) ->
+              {amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+               Pid, SlavePids, SyncSlavePids, DSN, Policy, OperatorPolicy, GmPids, Decorators,
+               State, PolicyVersion, SlavePidsPendingShutdown, VHost, #{}}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, recoverable_slaves, policy, operator_policy,
+       gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown, vhost, options]).
+
 %% Prior to 3.6.0, passwords were hashed using MD5, this populates
 %% existing records with said default.  Users created with 3.6.0+ will
 %% have internal_user.hashing_algorithm populated by the internal
@@ -473,6 +587,27 @@ user_password_hashing() ->
               {internal_user, Username, Hash, Tags, rabbit_password_hashing_md5}
       end,
       [username, password_hash, tags, hashing_algorithm]).
+
+topic_permission() ->
+    create(rabbit_topic_permission,
+        [{record_name, topic_permission},
+         {attributes, [topic_permission_key, permission]},
+         {disc_copies, [node()]}]).
+
+exchange_options() ->
+    ok = exchange_options(rabbit_exchange),
+    ok = exchange_options(rabbit_durable_exchange).
+
+exchange_options(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Internal,
+            Args, Scratches, Policy, OperatorPolicy, Decorators}) ->
+              {exchange, Name, Type, Dur, AutoDel, Internal,
+               Args, Scratches, Policy, OperatorPolicy, Decorators, #{}}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches, policy,
+       operator_policy, decorators, options]).
 
 %%--------------------------------------------------------------------
 

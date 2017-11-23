@@ -21,7 +21,14 @@ rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
 set TDP0=%~dp0
 set STAR=%*
+set CONF_SCRIPT_DIR="%~dp0"
 setlocal enabledelayedexpansion
+setlocal enableextensions
+
+if ERRORLEVEL 1 (
+    echo "Failed to enable command extensions!"
+    exit /B 1
+)
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
@@ -41,11 +48,19 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
+CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
+if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config" (
+    set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!
+)
+
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9! ^
+        -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!"  ^
+        -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+        -rabbit plugins_dir "!$RABBITMQ_PLUGINS_DIR!" ^
         -extra "!RABBITMQ_NODENAME!"
 
 if ERRORLEVEL 2 (
@@ -56,12 +71,50 @@ if ERRORLEVEL 2 (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
+if not exist "!RABBITMQ_SCHEMA_DIR!" (
+    mkdir "!RABBITMQ_SCHEMA_DIR!"
+)
+
+if not exist "!RABBITMQ_GENERATED_CONFIG_DIR!" (
+    mkdir "!RABBITMQ_GENERATED_CONFIG_DIR!"
+)
+
+if not exist "!RABBITMQ_SCHEMA_DIR!\rabbit.schema" (
+    copy "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
+)
+
 set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
 
-if exist "!RABBITMQ_CONFIG_FILE!.config" (
-    set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
+CALL :get_noex !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE_NOEX
+
+if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
+    if exist "!RABBITMQ_CONFIG_FILE!" (
+        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE_NOEX!"
+    )
+) else if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.conf" (
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE_NOEX!" ^
+                            -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
+                            -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
+                            -conf_schema_dir "!RABBITMQ_SCHEMA_DIR!"
+    if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+        set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
+                                -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+                                -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
+    )
 ) else (
-    set RABBITMQ_CONFIG_ARG=
+    if exist "!RABBITMQ_CONFIG_FILE!.config" (
+        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
+    ) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
+        set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
+                                -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
+                                -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
+                                -conf_schema_dir "!RABBITMQ_SCHEMA_DIR!"
+        if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+            set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
+                                    -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+                                    -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
+        )
+    )
 )
 
 set RABBITMQ_LISTEN_ARG=
@@ -71,22 +124,17 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
    )
 )
 
-REM If $RABBITMQ_LOGS is '-', send all log messages to stdout. Likewise
-REM for RABBITMQ_SASL_LOGS. This is particularly useful for Docker
-REM images.
+REM If $RABBITMQ_LOGS is '-', send all log messages to stdout. This is
+REM particularly useful for Docker images.
 
 if "!RABBITMQ_LOGS!" == "-" (
-    set RABBIT_ERROR_LOGGER=tty
-) else (
-    set RABBIT_ERROR_LOGGER={file,\""!RABBITMQ_LOGS:\=/!"\"}
-)
-
-if "!RABBITMQ_SASL_LOGS!" == "-" (
     set SASL_ERROR_LOGGER=tty
-    set RABBIT_SASL_ERROR_LOGGER=tty
+    set RABBIT_LAGER_HANDLER=tty
+    set RABBITMQ_LAGER_HANDLER_UPGRADE=tty
 ) else (
     set SASL_ERROR_LOGGER=false
-    set RABBIT_SASL_ERROR_LOGGER={file,\""!RABBITMQ_SASL_LOGS:\=/!"\"}
+    set RABBIT_LAGER_HANDLER=\""!RABBITMQ_LOGS:\=/!"\"
+    set RABBITMQ_LAGER_HANDLER_UPGRADE=\""!RABBITMQ_UPGRADE_LOG:\=/!"\"
 )
 
 set RABBITMQ_START_RABBIT=
@@ -130,8 +178,9 @@ if "!ENV_OK!"=="false" (
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger !SASL_ERROR_LOGGER! ^
--rabbit error_logger !RABBIT_ERROR_LOGGER! ^
--rabbit sasl_error_logger !RABBIT_SASL_ERROR_LOGGER! ^
+-rabbit lager_log_root \""!RABBITMQ_LOG_BASE:\=/!"\" ^
+-rabbit lager_handler !RABBIT_LAGER_HANDLER! ^
+-rabbit lager_handler_upgrade !RABBITMQ_LAGER_HANDLER_UPGRADE! ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
 -rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
@@ -153,6 +202,11 @@ if "%~2"=="" (
     )
 EXIT /B 0
 
+:get_noex
+set "%~2=%~dpn1"
+EXIT /B 0
+
+endlocal
 endlocal
 endlocal
 

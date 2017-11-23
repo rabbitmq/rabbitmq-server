@@ -17,6 +17,7 @@
 -module(rabbit_upgrade).
 
 -export([maybe_upgrade_mnesia/0, maybe_upgrade_local/0,
+         maybe_migrate_queues_to_per_vhost_storage/0,
          nodes_running/1, secondary_upgrade/1]).
 
 -include("rabbit.hrl").
@@ -98,7 +99,7 @@ ensure_backup_taken() ->
                      _     -> ok
                  end;
         true  ->
-          error("Found lock file at ~s.
+          rabbit_log:error("Found lock file at ~s.
             Either previous upgrade is in progress or has failed.
             Database backup path: ~s",
             [lock_filename(), backup_dir()]),
@@ -107,6 +108,7 @@ ensure_backup_taken() ->
 
 take_backup() ->
     BackupDir = backup_dir(),
+    info("upgrades: Backing up mnesia dir to ~p~n", [BackupDir]),
     case rabbit_mnesia:copy_db(BackupDir) of
         ok         -> info("upgrades: Mnesia dir backed up to ~p~n",
                            [BackupDir]);
@@ -126,7 +128,9 @@ remove_backup() ->
 maybe_upgrade_mnesia() ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
     ok = rabbit_mnesia_rename:maybe_finish(AllNodes),
-    case rabbit_version:upgrades_required(mnesia) of
+    %% Mnesia upgrade is the first upgrade scope,
+    %% so we should create a backup here if there are any upgrades
+    case rabbit_version:all_upgrades_required([mnesia, local, message_store]) of
         {error, starting_from_scratch} ->
             ok;
         {error, version_not_available} ->
@@ -142,10 +146,15 @@ maybe_upgrade_mnesia() ->
             ok;
         {ok, Upgrades} ->
             ensure_backup_taken(),
-            ok = case upgrade_mode(AllNodes) of
-                     primary   -> primary_upgrade(Upgrades, AllNodes);
-                     secondary -> secondary_upgrade(AllNodes)
-                 end
+            run_mnesia_upgrades(proplists:get_value(mnesia, Upgrades, []),
+                                AllNodes)
+    end.
+
+run_mnesia_upgrades([], _) -> ok;
+run_mnesia_upgrades(Upgrades, AllNodes) ->
+    case upgrade_mode(AllNodes) of
+        primary   -> primary_upgrade(Upgrades, AllNodes);
+        secondary -> secondary_upgrade(AllNodes)
     end.
 
 upgrade_mode(AllNodes) ->
@@ -243,12 +252,30 @@ maybe_upgrade_local() ->
         {ok, []}                       -> ensure_backup_removed(),
                                           ok;
         {ok, Upgrades}                 -> mnesia:stop(),
-                                          ensure_backup_taken(),
                                           ok = apply_upgrades(local, Upgrades,
                                                               fun () -> ok end),
-                                          ensure_backup_removed(),
                                           ok
     end.
+
+%% -------------------------------------------------------------------
+
+maybe_migrate_queues_to_per_vhost_storage() ->
+    Result = case rabbit_version:upgrades_required(message_store) of
+        {error, version_not_available} -> version_not_available;
+        {error, starting_from_scratch} ->
+        starting_from_scratch;
+        {error, _} = Err               -> throw(Err);
+        {ok, []}                       -> ok;
+        {ok, Upgrades}                 -> apply_upgrades(message_store,
+                                                         Upgrades,
+                                                         fun() -> ok end),
+                                          ok
+    end,
+    %% Message store upgrades should be
+    %% the last group.
+    %% Backup can be deleted here.
+    ensure_backup_removed(),
+    Result.
 
 %% -------------------------------------------------------------------
 

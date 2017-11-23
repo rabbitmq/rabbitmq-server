@@ -23,7 +23,7 @@
 
 -define(QNAME, <<"ha.two.test">>).
 -define(QNAME_AUTO, <<"ha.auto.test">>).
--define(MESSAGE_COUNT, 2000).
+-define(MESSAGE_COUNT, 200000).
 
 all() ->
     [
@@ -135,9 +135,11 @@ eager_sync_cancel(Config) ->
     amqp_channel:call(ACh, #'queue.declare'{queue   = ?QNAME,
                                             durable = true}),
     {ok, not_syncing} = sync_cancel(C, ?QNAME), %% Idempotence
-    eager_sync_cancel_test2(Config, A, B, C, Ch).
+    eager_sync_cancel_test2(Config, A, B, C, Ch, 100).
 
-eager_sync_cancel_test2(Config, A, B, C, Ch) ->
+eager_sync_cancel_test2(_, _, _, _, _, 0) ->
+    error(no_more_attempts_left);
+eager_sync_cancel_test2(Config, A, B, C, Ch, Attempts) ->
     %% Sync then cancel
     rabbit_ct_client_helpers:publish(Ch, ?QNAME, ?MESSAGE_COUNT),
     restart(Config, A),
@@ -158,12 +160,12 @@ eager_sync_cancel_test2(Config, A, B, C, Ch) ->
                     %% Damn. Syncing finished between wait_for_syncing/3 and
                     %% sync_cancel/2 above. Start again.
                     amqp_channel:call(Ch, #'queue.purge'{queue = ?QNAME}),
-                    eager_sync_cancel_test2(Config, A, B, C, Ch)
+                    eager_sync_cancel_test2(Config, A, B, C, Ch, Attempts - 1)
             end;
         synced_already ->
             %% Damn. Syncing finished before wait_for_syncing/3. Start again.
             amqp_channel:call(Ch, #'queue.purge'{queue = ?QNAME}),
-            eager_sync_cancel_test2(Config, A, B, C, Ch)
+            eager_sync_cancel_test2(Config, A, B, C, Ch, Attempts - 1)
     end.
 
 eager_sync_auto(Config) ->
@@ -240,8 +242,8 @@ wait_for_sync(Node, QName) ->
     sync_detection_SUITE:wait_for_sync_status(true, Node, QName).
 
 action(Node, Action, QName) ->
-    rabbit_ct_broker_helpers:control_action(
-      Action, Node, [binary_to_list(QName)], [{"-p", "/"}]).
+    rabbit_control_helper:command_with_output(
+        Action, Node, [binary_to_list(QName)], [{"-p", "/"}]).
 
 queue(Node, QName) ->
     QNameRes = rabbit_misc:r(<<"/">>, queue, QName),
@@ -273,6 +275,6 @@ state(Node, QName) ->
 %% in order to pass, because a SyncBatchSize >= ?MESSAGE_COUNT will
 %% always finish before the test is able to cancel the sync.
 set_app_sync_batch_size(Node) ->
-    rabbit_ct_broker_helpers:control_action(
+    rabbit_control_helper:command(
       eval, Node,
       ["application:set_env(rabbit, mirroring_sync_batch_size, 1)."]).

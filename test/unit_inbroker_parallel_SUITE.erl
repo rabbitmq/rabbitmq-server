@@ -33,6 +33,9 @@ all() ->
     ].
 
 groups() ->
+    MaxLengthTests = [max_length_drop_head,
+                      max_length_reject_confirm,
+                      max_length_drop_publish],
     [
       {parallel_tests, [parallel], [
           amqp_connection_refusal,
@@ -41,25 +44,17 @@ groups() ->
           credit_flow_settings,
           dynamic_mirroring,
           gen_server2_with_state,
-          list_operations_timeout_pass,
           mcall,
           {password_hashing, [], [
               password_hashing,
               change_password
             ]},
-          {policy_validation, [parallel, {repeat, 20}], [
-              ha_policy_validation,
-              policy_validation,
-              policy_opts_validation,
-              queue_master_location_policy_validation,
-              queue_modes_policy_validation,
-              vhost_removed_while_updating_policy
-            ]},
-          runtime_parameters,
           set_disk_free_limit_command,
           set_vm_memory_high_watermark_command,
           topic_matching,
-          user_management
+          {queue_max_length, [], [
+            {max_length_simple, [], MaxLengthTests},
+            {max_length_mirrored, [], MaxLengthTests}]}
         ]}
     ].
 
@@ -74,6 +69,11 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(max_length_mirrored, Config) ->
+    rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
+        <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
+    Config1 = rabbit_ct_helpers:set_config(Config, [{is_mirrored, true}]),
+    rabbit_ct_helpers:run_steps(Config1, []);
 init_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
@@ -102,6 +102,12 @@ setup_file_handle_cache1() ->
     ok = file_handle_cache:set_limit(10),
     ok.
 
+end_per_group(max_length_mirrored, Config) ->
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"^max_length.*queue">>),
+    Config1 = rabbit_ct_helpers:set_config(Config, [{is_mirrored, false}]),
+    Config1;
+end_per_group(queue_max_length, Config) ->
+    Config;
 end_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
@@ -115,6 +121,27 @@ end_per_group(Group, Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(max_length_drop_head = Testcase, Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_drop_head_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_default_drop_head_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_bytes_drop_head_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_bytes_default_drop_head_queue">>}),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+
+end_per_testcase(max_length_reject_confirm = Testcase, Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_reject_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_bytes_reject_queue">>}),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(max_length_drop_publish = Testcase, Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_drop_publish_queue">>}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"max_length_bytes_drop_publish_queue">>}),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -463,12 +490,12 @@ change_password1(_Config) ->
     UserName = <<"test_user">>,
     Password = <<"test_password">>,
     case rabbit_auth_backend_internal:lookup_user(UserName) of
-        {ok, _} -> rabbit_auth_backend_internal:delete_user(UserName);
+        {ok, _} -> rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>);
         _       -> ok
     end,
     ok = application:set_env(rabbit, password_hashing_module,
                              rabbit_password_hashing_md5),
-    ok = rabbit_auth_backend_internal:add_user(UserName, Password),
+    ok = rabbit_auth_backend_internal:add_user(UserName, Password, <<"acting-user">>),
     {ok, #auth_user{username = UserName}} =
         rabbit_auth_backend_internal:user_login_authentication(
             UserName, [{password, Password}]),
@@ -479,7 +506,8 @@ change_password1(_Config) ->
             UserName, [{password, Password}]),
 
     NewPassword = <<"test_password1">>,
-    ok = rabbit_auth_backend_internal:change_password(UserName, NewPassword),
+    ok = rabbit_auth_backend_internal:change_password(UserName, NewPassword,
+                                                      <<"acting-user">>),
     {ok, #auth_user{username = UserName}} =
         rabbit_auth_backend_internal:user_login_authentication(
             UserName, [{password, NewPassword}]),
@@ -492,516 +520,6 @@ change_password1(_Config) ->
 %% -------------------------------------------------------------------
 %% rabbitmqctl.
 %% -------------------------------------------------------------------
-
-list_operations_timeout_pass(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, list_operations_timeout_pass1, [Config]).
-
-list_operations_timeout_pass1(Config) ->
-    %% create a few things so there is some useful information to list
-    {_Writer1, Limiter1, Ch1} = rabbit_ct_broker_helpers:test_channel(),
-    {_Writer2, Limiter2, Ch2} = rabbit_ct_broker_helpers:test_channel(),
-
-    [Q, Q2] = [Queue || Name <- [<<"list_operations_timeout_pass-q1">>,
-                                 <<"list_operations_timeout_pass-q2">>],
-                        {new, Queue = #amqqueue{}} <-
-                            [rabbit_amqqueue:declare(
-                               rabbit_misc:r(<<"/">>, queue, Name),
-                               false, false, [], none)]],
-
-    ok = rabbit_amqqueue:basic_consume(
-           Q, true, Ch1, Limiter1, false, 0, <<"ctag1">>, true, [],
-           undefined),
-    ok = rabbit_amqqueue:basic_consume(
-           Q2, true, Ch2, Limiter2, false, 0, <<"ctag2">>, true, [],
-           undefined),
-
-    %% list users
-    ok = control_action(add_user,
-      ["list_operations_timeout_pass-user",
-       "list_operations_timeout_pass-password"]),
-    {error, {user_already_exists, _}} =
-        control_action(add_user,
-          ["list_operations_timeout_pass-user",
-           "list_operations_timeout_pass-password"]),
-    ok = control_action_t(list_users, [], ?TIMEOUT_LIST_OPS_PASS),
-
-    %% list parameters
-    ok = dummy_runtime_parameters:register(),
-    ok = control_action(set_parameter, ["test", "good", "123"]),
-    ok = control_action_t(list_parameters, [], ?TIMEOUT_LIST_OPS_PASS),
-    ok = control_action(clear_parameter, ["test", "good"]),
-    dummy_runtime_parameters:unregister(),
-
-    %% list vhosts
-    ok = control_action(add_vhost, ["/list_operations_timeout_pass-vhost"]),
-    {error, {vhost_already_exists, _}} =
-        control_action(add_vhost, ["/list_operations_timeout_pass-vhost"]),
-    ok = control_action_t(list_vhosts, [], ?TIMEOUT_LIST_OPS_PASS),
-
-    %% list permissions
-    ok = control_action(set_permissions,
-      ["list_operations_timeout_pass-user", ".*", ".*", ".*"],
-      [{"-p", "/list_operations_timeout_pass-vhost"}]),
-    ok = control_action_t(list_permissions, [],
-      [{"-p", "/list_operations_timeout_pass-vhost"}],
-      ?TIMEOUT_LIST_OPS_PASS),
-
-    %% list user permissions
-    ok = control_action_t(list_user_permissions,
-      ["list_operations_timeout_pass-user"],
-      ?TIMEOUT_LIST_OPS_PASS),
-
-    %% list policies
-    ok = control_action_opts(
-      ["set_policy", "list_operations_timeout_pass-policy", ".*",
-       "{\"ha-mode\":\"all\"}"]),
-    ok = control_action_t(list_policies, [], ?TIMEOUT_LIST_OPS_PASS),
-    ok = control_action(clear_policy, ["list_operations_timeout_pass-policy"]),
-
-    %% list queues
-    ok = info_action_t(list_queues,
-      rabbit_amqqueue:info_keys(), false,
-      ?TIMEOUT_LIST_OPS_PASS),
-
-    %% list exchanges
-    ok = info_action_t(list_exchanges,
-      rabbit_exchange:info_keys(), true,
-      ?TIMEOUT_LIST_OPS_PASS),
-
-    %% list bindings
-    ok = info_action_t(list_bindings,
-      rabbit_binding:info_keys(), true,
-      ?TIMEOUT_LIST_OPS_PASS),
-
-    %% list connections
-    H = ?config(rmq_hostname, Config),
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    {ok, C1} = gen_tcp:connect(H, P, [binary, {active, false}]),
-    gen_tcp:send(C1, <<"AMQP", 0, 0, 9, 1>>),
-    {ok, <<1,0,0>>} = gen_tcp:recv(C1, 3, 100),
-
-    {ok, C2} = gen_tcp:connect(H, P, [binary, {active, false}]),
-    gen_tcp:send(C2, <<"AMQP", 0, 0, 9, 1>>),
-    {ok, <<1,0,0>>} = gen_tcp:recv(C2, 3, 100),
-
-    ok = info_action_t(
-      list_connections, rabbit_networking:connection_info_keys(), false,
-      ?TIMEOUT_LIST_OPS_PASS),
-
-    %% list consumers
-    ok = info_action_t(
-      list_consumers, rabbit_amqqueue:consumer_info_keys(), false,
-      ?TIMEOUT_LIST_OPS_PASS),
-
-    %% list channels
-    ok = info_action_t(
-      list_channels, rabbit_channel:info_keys(), false,
-      ?TIMEOUT_LIST_OPS_PASS),
-
-    %% do some cleaning up
-    ok = control_action(delete_user, ["list_operations_timeout_pass-user"]),
-    {error, {no_such_user, _}} =
-        control_action(delete_user, ["list_operations_timeout_pass-user"]),
-
-    ok = control_action(delete_vhost, ["/list_operations_timeout_pass-vhost"]),
-    {error, {no_such_vhost, _}} =
-        control_action(delete_vhost, ["/list_operations_timeout_pass-vhost"]),
-
-    %% close_connection
-    Conns = rabbit_ct_broker_helpers:get_connection_pids([C1, C2]),
-    [ok, ok] = [ok = control_action(
-        close_connection, [rabbit_misc:pid_to_string(ConnPid), "go away"])
-     || ConnPid <- Conns],
-
-    %% cleanup queues
-    [{ok, _} = rabbit_amqqueue:delete(QR, false, false) || QR <- [Q, Q2]],
-
-    [begin
-         unlink(Chan),
-         ok = rabbit_channel:shutdown(Chan)
-     end || Chan <- [Ch1, Ch2]],
-    passed.
-
-user_management(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, user_management1, [Config]).
-
-user_management1(_Config) ->
-
-    %% lots if stuff that should fail
-    {error, {no_such_user, _}} =
-        control_action(delete_user,
-          ["user_management-user"]),
-    {error, {no_such_user, _}} =
-        control_action(change_password,
-          ["user_management-user", "user_management-password"]),
-    {error, {no_such_vhost, _}} =
-        control_action(delete_vhost,
-          ["/user_management-vhost"]),
-    {error, {no_such_user, _}} =
-        control_action(set_permissions,
-          ["user_management-user", ".*", ".*", ".*"]),
-    {error, {no_such_user, _}} =
-        control_action(clear_permissions,
-          ["user_management-user"]),
-    {error, {no_such_user, _}} =
-        control_action(list_user_permissions,
-          ["user_management-user"]),
-    {error, {no_such_vhost, _}} =
-        control_action(list_permissions, [],
-          [{"-p", "/user_management-vhost"}]),
-    {error, {invalid_regexp, _, _}} =
-        control_action(set_permissions,
-          ["guest", "+foo", ".*", ".*"]),
-    {error, {no_such_user, _}} =
-        control_action(set_user_tags,
-          ["user_management-user", "bar"]),
-
-    %% user creation
-    ok = control_action(add_user,
-      ["user_management-user", "user_management-password"]),
-    {error, {user_already_exists, _}} =
-        control_action(add_user,
-          ["user_management-user", "user_management-password"]),
-    ok = control_action(clear_password,
-      ["user_management-user"]),
-    ok = control_action(change_password,
-      ["user_management-user", "user_management-newpassword"]),
-
-    TestTags = fun (Tags) ->
-                       Args = ["user_management-user" | [atom_to_list(T) || T <- Tags]],
-                       ok = control_action(set_user_tags, Args),
-                       {ok, #internal_user{tags = Tags}} =
-                           rabbit_auth_backend_internal:lookup_user(
-                             <<"user_management-user">>),
-                       ok = control_action(list_users, [])
-               end,
-    TestTags([foo, bar, baz]),
-    TestTags([administrator]),
-    TestTags([]),
-
-    %% user authentication
-    ok = control_action(authenticate_user,
-      ["user_management-user", "user_management-newpassword"]),
-    {refused, _User, _Format, _Params} =
-        control_action(authenticate_user,
-          ["user_management-user", "user_management-password"]),
-
-    %% vhost creation
-    ok = control_action(add_vhost,
-      ["/user_management-vhost"]),
-    {error, {vhost_already_exists, _}} =
-        control_action(add_vhost,
-          ["/user_management-vhost"]),
-    ok = control_action(list_vhosts, []),
-
-    %% user/vhost mapping
-    ok = control_action(set_permissions,
-      ["user_management-user", ".*", ".*", ".*"],
-      [{"-p", "/user_management-vhost"}]),
-    ok = control_action(set_permissions,
-      ["user_management-user", ".*", ".*", ".*"],
-      [{"-p", "/user_management-vhost"}]),
-    ok = control_action(set_permissions,
-      ["user_management-user", ".*", ".*", ".*"],
-      [{"-p", "/user_management-vhost"}]),
-    ok = control_action(list_permissions, [],
-      [{"-p", "/user_management-vhost"}]),
-    ok = control_action(list_permissions, [],
-      [{"-p", "/user_management-vhost"}]),
-    ok = control_action(list_user_permissions,
-      ["user_management-user"]),
-
-    %% user/vhost unmapping
-    ok = control_action(clear_permissions,
-      ["user_management-user"], [{"-p", "/user_management-vhost"}]),
-    ok = control_action(clear_permissions,
-      ["user_management-user"], [{"-p", "/user_management-vhost"}]),
-
-    %% vhost deletion
-    ok = control_action(delete_vhost,
-      ["/user_management-vhost"]),
-    {error, {no_such_vhost, _}} =
-        control_action(delete_vhost,
-          ["/user_management-vhost"]),
-
-    %% deleting a populated vhost
-    ok = control_action(add_vhost,
-      ["/user_management-vhost"]),
-    ok = control_action(set_permissions,
-      ["user_management-user", ".*", ".*", ".*"],
-      [{"-p", "/user_management-vhost"}]),
-    {new, _} = rabbit_amqqueue:declare(
-                 rabbit_misc:r(<<"/user_management-vhost">>, queue,
-                               <<"user_management-vhost-queue">>),
-                 true, false, [], none),
-    ok = control_action(delete_vhost,
-      ["/user_management-vhost"]),
-
-    %% user deletion
-    ok = control_action(delete_user,
-      ["user_management-user"]),
-    {error, {no_such_user, _}} =
-        control_action(delete_user,
-          ["user_management-user"]),
-
-    passed.
-
-runtime_parameters(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, runtime_parameters1, [Config]).
-
-runtime_parameters1(_Config) ->
-    dummy_runtime_parameters:register(),
-    Good = fun(L) -> ok                = control_action(set_parameter, L) end,
-    Bad  = fun(L) -> {error_string, _} = control_action(set_parameter, L) end,
-
-    %% Acceptable for bijection
-    Good(["test", "good", "\"ignore\""]),
-    Good(["test", "good", "123"]),
-    Good(["test", "good", "true"]),
-    Good(["test", "good", "false"]),
-    Good(["test", "good", "null"]),
-    Good(["test", "good", "{\"key\": \"value\"}"]),
-
-    %% Invalid json
-    Bad(["test", "good", "atom"]),
-    Bad(["test", "good", "{\"foo\": \"bar\""]),
-    Bad(["test", "good", "{foo: \"bar\"}"]),
-
-    %% Test actual validation hook
-    Good(["test", "maybe", "\"good\""]),
-    Bad(["test", "maybe", "\"bad\""]),
-    Good(["test", "admin", "\"ignore\""]), %% ctl means 'user' -> none
-
-    ok = control_action(list_parameters, []),
-
-    ok = control_action(clear_parameter, ["test", "good"]),
-    ok = control_action(clear_parameter, ["test", "maybe"]),
-    ok = control_action(clear_parameter, ["test", "admin"]),
-    {error_string, _} =
-        control_action(clear_parameter, ["test", "neverexisted"]),
-
-    %% We can delete for a component that no longer exists
-    Good(["test", "good", "\"ignore\""]),
-    dummy_runtime_parameters:unregister(),
-    ok = control_action(clear_parameter, ["test", "good"]),
-    passed.
-
-policy_validation(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, policy_validation1, [Config]).
-
-policy_validation1(_Config) ->
-    PolicyName = "runtime_parameters-policy",
-    dummy_runtime_parameters:register_policy_validator(),
-    SetPol = fun (Key, Val) ->
-                     control_action_opts(
-                       ["set_policy", PolicyName, ".*",
-                        rabbit_misc:format("{\"~s\":~p}", [Key, Val])])
-             end,
-    OK     = fun (Key, Val) ->
-                 ok = SetPol(Key, Val),
-                 true = does_policy_exist(PolicyName,
-                   [{definition, [{list_to_binary(Key), Val}]}])
-             end,
-
-    OK("testeven", []),
-    OK("testeven", [1, 2]),
-    OK("testeven", [1, 2, 3, 4]),
-    OK("testpos",  [2, 5, 5678]),
-
-    {error_string, _} = SetPol("testpos",  [-1, 0, 1]),
-    {error_string, _} = SetPol("testeven", [ 1, 2, 3]),
-
-    ok = control_action(clear_policy, [PolicyName]),
-    dummy_runtime_parameters:unregister_policy_validator(),
-    passed.
-
-policy_opts_validation(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, policy_opts_validation1, [Config]).
-
-policy_opts_validation1(_Config) ->
-    PolicyName = "policy_opts_validation-policy",
-    Set  = fun (Extra) -> control_action_opts(
-                            ["set_policy", PolicyName,
-                             ".*", "{\"ha-mode\":\"all\"}"
-                             | Extra]) end,
-    OK   = fun (Extra, Props) ->
-               ok = Set(Extra),
-               true = does_policy_exist(PolicyName, Props)
-           end,
-    Fail = fun (Extra) ->
-            case Set(Extra) of
-                {error_string, _} -> ok;
-                no_command when Extra =:= ["--priority"] -> ok;
-                no_command when Extra =:= ["--apply-to"] -> ok;
-                {'EXIT',
-                 {function_clause,
-                  [{rabbit_control_main,action, _, _} | _]}}
-                when Extra =:= ["--offline"] -> ok
-          end
-    end,
-
-    OK  ([], [{priority, 0}, {'apply-to', <<"all">>}]),
-
-    OK  (["--priority", "0"], [{priority, 0}]),
-    OK  (["--priority", "3"], [{priority, 3}]),
-    Fail(["--priority", "banana"]),
-    Fail(["--priority"]),
-
-    OK  (["--apply-to", "all"],    [{'apply-to', <<"all">>}]),
-    OK  (["--apply-to", "queues"], [{'apply-to', <<"queues">>}]),
-    Fail(["--apply-to", "bananas"]),
-    Fail(["--apply-to"]),
-
-    OK  (["--priority", "3",      "--apply-to", "queues"], [{priority, 3}, {'apply-to', <<"queues">>}]),
-    Fail(["--priority", "banana", "--apply-to", "queues"]),
-    Fail(["--priority", "3",      "--apply-to", "bananas"]),
-
-    Fail(["--offline"]),
-
-    ok = control_action(clear_policy, [PolicyName]),
-    passed.
-
-ha_policy_validation(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, ha_policy_validation1, [Config]).
-
-ha_policy_validation1(_Config) ->
-    PolicyName = "ha_policy_validation-policy",
-    Set  = fun (JSON) -> control_action_opts(
-                           ["set_policy", PolicyName,
-                            ".*", JSON]) end,
-    OK   = fun (JSON, Def) ->
-               ok = Set(JSON),
-               true = does_policy_exist(PolicyName, [{definition, Def}])
-           end,
-    Fail = fun (JSON) -> {error_string, _} = Set(JSON) end,
-
-    OK  ("{\"ha-mode\":\"all\"}", [{<<"ha-mode">>, <<"all">>}]),
-    Fail("{\"ha-mode\":\"made_up\"}"),
-
-    Fail("{\"ha-mode\":\"nodes\"}"),
-    Fail("{\"ha-mode\":\"nodes\",\"ha-params\":2}"),
-    Fail("{\"ha-mode\":\"nodes\",\"ha-params\":[\"a\",2]}"),
-    OK  ("{\"ha-mode\":\"nodes\",\"ha-params\":[\"a\",\"b\"]}",
-      [{<<"ha-mode">>, <<"nodes">>}, {<<"ha-params">>, [<<"a">>, <<"b">>]}]),
-    Fail("{\"ha-params\":[\"a\",\"b\"]}"),
-
-    Fail("{\"ha-mode\":\"exactly\"}"),
-    Fail("{\"ha-mode\":\"exactly\",\"ha-params\":[\"a\",\"b\"]}"),
-    OK  ("{\"ha-mode\":\"exactly\",\"ha-params\":2}",
-      [{<<"ha-mode">>, <<"exactly">>}, {<<"ha-params">>, 2}]),
-    Fail("{\"ha-params\":2}"),
-
-    OK  ("{\"ha-mode\":\"all\",\"ha-sync-mode\":\"manual\"}",
-      [{<<"ha-mode">>, <<"all">>}, {<<"ha-sync-mode">>, <<"manual">>}]),
-    OK  ("{\"ha-mode\":\"all\",\"ha-sync-mode\":\"automatic\"}",
-      [{<<"ha-mode">>, <<"all">>}, {<<"ha-sync-mode">>, <<"automatic">>}]),
-    Fail("{\"ha-mode\":\"all\",\"ha-sync-mode\":\"made_up\"}"),
-    Fail("{\"ha-sync-mode\":\"manual\"}"),
-    Fail("{\"ha-sync-mode\":\"automatic\"}"),
-
-    ok = control_action(clear_policy, [PolicyName]),
-    passed.
-
-queue_master_location_policy_validation(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, queue_master_location_policy_validation1, [Config]).
-
-queue_master_location_policy_validation1(_Config) ->
-    PolicyName = "queue_master_location_policy_validation-policy",
-    Set  = fun (JSON) ->
-                   control_action_opts(
-                     ["set_policy", PolicyName, ".*", JSON])
-           end,
-    OK   = fun (JSON, Def) ->
-               ok = Set(JSON),
-               true = does_policy_exist(PolicyName, [{definition, Def}])
-           end,
-    Fail = fun (JSON) -> {error_string, _} = Set(JSON) end,
-
-    OK  ("{\"queue-master-locator\":\"min-masters\"}",
-      [{<<"queue-master-locator">>, <<"min-masters">>}]),
-    OK  ("{\"queue-master-locator\":\"client-local\"}",
-      [{<<"queue-master-locator">>, <<"client-local">>}]),
-    OK  ("{\"queue-master-locator\":\"random\"}",
-      [{<<"queue-master-locator">>, <<"random">>}]),
-    Fail("{\"queue-master-locator\":\"made_up\"}"),
-
-    ok = control_action(clear_policy, [PolicyName]),
-    passed.
-
-queue_modes_policy_validation(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, queue_modes_policy_validation1, [Config]).
-
-queue_modes_policy_validation1(_Config) ->
-    PolicyName = "queue_modes_policy_validation-policy",
-    Set  = fun (JSON) ->
-                   control_action_opts(
-                     ["set_policy", PolicyName, ".*", JSON])
-           end,
-    OK   = fun (JSON, Def) ->
-               ok = Set(JSON),
-               true = does_policy_exist(PolicyName, [{definition, Def}])
-           end,
-    Fail = fun (JSON) -> {error_string, _} = Set(JSON) end,
-
-    OK  ("{\"queue-mode\":\"lazy\"}",
-      [{<<"queue-mode">>, <<"lazy">>}]),
-    OK  ("{\"queue-mode\":\"default\"}",
-      [{<<"queue-mode">>, <<"default">>}]),
-    Fail("{\"queue-mode\":\"wrong\"}"),
-
-    ok = control_action(clear_policy, [PolicyName]),
-    passed.
-
-vhost_removed_while_updating_policy(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, vhost_removed_while_updating_policy1, [Config]).
-
-vhost_removed_while_updating_policy1(_Config) ->
-    VHost = "/vhost_removed_while_updating_policy-vhost",
-    PolicyName = "vhost_removed_while_updating_policy-policy",
-
-    ok = control_action(add_vhost, [VHost]),
-    ok = control_action_opts(
-      ["set_policy", "-p", VHost, PolicyName, ".*", "{\"ha-mode\":\"all\"}"]),
-    true = does_policy_exist(PolicyName, []),
-
-    %% Removing the vhost triggers the deletion of the policy. Once
-    %% the policy and the vhost are actually removed, RabbitMQ calls
-    %% update_policies() which lists policies on the given vhost. This
-    %% obviously fails because the vhost is gone, but the call should
-    %% still succeed.
-    ok = control_action(delete_vhost, [VHost]),
-    false = does_policy_exist(PolicyName, []),
-
-    passed.
-
-does_policy_exist(PolicyName, Props) ->
-    PolicyNameBin = list_to_binary(PolicyName),
-    Policies = lists:filter(
-      fun(Policy) ->
-          lists:member({name, PolicyNameBin}, Policy)
-      end, rabbit_policy:list()),
-    case Policies of
-        [Policy] -> check_policy_props(Policy, Props);
-        []       -> false;
-        _        -> false
-    end.
-
-check_policy_props(Policy, [Prop | Rest]) ->
-    case lists:member(Prop, Policy) of
-        true  -> check_policy_props(Policy, Rest);
-        false -> false
-    end;
-check_policy_props(_Policy, []) ->
-    true.
 
 amqp_connection_refusal(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -1538,86 +1056,156 @@ set_vm_memory_high_watermark_command1(_Config) ->
                     )
     end.
 
+max_length_drop_head(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = <<"max_length_drop_head_queue">>,
+    QNameDefault = <<"max_length_default_drop_head_queue">>,
+    QNameBytes = <<"max_length_bytes_drop_head_queue">>,
+    QNameDefaultBytes = <<"max_length_bytes_default_drop_head_queue">>,
+
+    MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
+    MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
+    OverflowArgs = [{<<"x-overflow">>, longstr, <<"drop-head">>}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameDefault, arguments = MaxLengthArgs}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameDefaultBytes, arguments = MaxLengthBytesArgs}),
+
+    check_max_length_drops_head(Config, QName, Ch, <<"1">>, <<"2">>, <<"3">>),
+    check_max_length_drops_head(Config, QNameDefault, Ch, <<"1">>, <<"2">>, <<"3">>),
+
+    %% 80 bytes payload
+    Payload1 = << <<"1">> || _ <- lists:seq(1, 80) >>,
+    Payload2 = << <<"2">> || _ <- lists:seq(1, 80) >>,
+    Payload3 = << <<"3">> || _ <- lists:seq(1, 80) >>,
+    check_max_length_drops_head(Config, QName, Ch, Payload1, Payload2, Payload3),
+    check_max_length_drops_head(Config, QNameDefault, Ch, Payload1, Payload2, Payload3).
+
+max_length_reject_confirm(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = <<"max_length_reject_queue">>,
+    QNameBytes = <<"max_length_bytes_reject_queue">>,
+    MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
+    MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
+    OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    check_max_length_drops_publish(Config, QName, Ch, <<"1">>, <<"2">>, <<"3">>),
+    check_max_length_rejects(Config, QName, Ch, <<"1">>, <<"2">>, <<"3">>),
+
+    %% 80 bytes payload
+    Payload1 = << <<"1">> || _ <- lists:seq(1, 80) >>,
+    Payload2 = << <<"2">> || _ <- lists:seq(1, 80) >>,
+    Payload3 = << <<"3">> || _ <- lists:seq(1, 80) >>,
+
+    check_max_length_drops_publish(Config, QNameBytes, Ch, Payload1, Payload2, Payload3),
+    check_max_length_rejects(Config, QNameBytes, Ch, Payload1, Payload2, Payload3).
+
+max_length_drop_publish(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = <<"max_length_drop_publish_queue">>,
+    QNameBytes = <<"max_length_bytes_drop_publish_queue">>,
+    MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
+    MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
+    OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs}),
+    %% If confirms are not enable, publishes will still be dropped in reject-publish mode.
+    check_max_length_drops_publish(Config, QName, Ch, <<"1">>, <<"2">>, <<"3">>),
+
+    %% 80 bytes payload
+    Payload1 = << <<"1">> || _ <- lists:seq(1, 80) >>,
+    Payload2 = << <<"2">> || _ <- lists:seq(1, 80) >>,
+    Payload3 = << <<"3">> || _ <- lists:seq(1, 80) >>,
+
+    check_max_length_drops_publish(Config, QNameBytes, Ch, Payload1, Payload2, Payload3).
+
+check_max_length_drops_publish(Config, QName, Ch, Payload1, Payload2, Payload3) ->
+    sync_mirrors(QName, Config),
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    %% A single message is published and consumed
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+
+    %% Message 2 is dropped, message 1 stays
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+
+    %% Messages 2 and 3 are dropped, message 1 stays
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload3}),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).
+
+check_max_length_rejects(Config, QName, Ch, Payload1, Payload2, Payload3) ->
+    sync_mirrors(QName, Config),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    flush(),
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    %% First message can be enqueued and acks
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
+    receive #'basic.ack'{} -> ok
+    after 1000 -> error(expected_ack)
+    end,
+
+    %% The message cannot be enqueued and nacks
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
+    receive #'basic.nack'{} -> ok
+    after 1000 -> error(expected_nack)
+    end,
+
+    %% The message cannot be enqueued and nacks
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload3}),
+    receive #'basic.nack'{} -> ok
+    after 1000 -> error(expected_nack)
+    end,
+
+    {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+
+    %% Now we can publish message 2.
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
+    receive #'basic.ack'{} -> ok
+    after 1000 -> error(expected_ack)
+    end,
+
+    {#'basic.get_ok'{}, #amqp_msg{payload = Payload2}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).
+
+check_max_length_drops_head(Config, QName, Ch, Payload1, Payload2, Payload3) ->
+    sync_mirrors(QName, Config),
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    %% A single message is published and consumed
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+
+    %% Message 1 is replaced by message 2
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Payload2}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+
+    %% Messages 1 and 2 are replaced
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload3}),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Payload3}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).
+
+sync_mirrors(QName, Config) ->
+    case ?config(is_mirrored, Config) of
+        true ->
+            rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"sync_queue">>, QName]);
+        _ -> ok
+    end.
+
 %% ---------------------------------------------------------------------------
 %% rabbitmqctl helpers.
 %% ---------------------------------------------------------------------------
-
-control_action(Command, Args) ->
-    control_action(Command, node(), Args, default_options()).
-
-control_action(Command, Args, NewOpts) ->
-    control_action(Command, node(), Args,
-                   expand_options(default_options(), NewOpts)).
-
-control_action(Command, Node, Args, Opts) ->
-    case catch rabbit_control_main:action(
-                 Command, Node, Args, Opts,
-                 fun (Format, Args1) ->
-                         io:format(Format ++ " ...~n", Args1)
-                 end) of
-        ok ->
-            io:format("done.~n"),
-            ok;
-        {ok, Result} ->
-            rabbit_control_misc:print_cmd_result(Command, Result),
-            ok;
-        Other ->
-            io:format("failed: ~p~n", [Other]),
-            Other
-    end.
-
-control_action_t(Command, Args, Timeout) when is_number(Timeout) ->
-    control_action_t(Command, node(), Args, default_options(), Timeout).
-
-control_action_t(Command, Args, NewOpts, Timeout) when is_number(Timeout) ->
-    control_action_t(Command, node(), Args,
-                     expand_options(default_options(), NewOpts),
-                     Timeout).
-
-control_action_t(Command, Node, Args, Opts, Timeout) when is_number(Timeout) ->
-    case catch rabbit_control_main:action(
-                 Command, Node, Args, Opts,
-                 fun (Format, Args1) ->
-                         io:format(Format ++ " ...~n", Args1)
-                 end, Timeout) of
-        ok ->
-            io:format("done.~n"),
-            ok;
-        {ok, Result} ->
-            rabbit_control_misc:print_cmd_result(Command, Result),
-            ok;
-        Other ->
-            io:format("failed: ~p~n", [Other]),
-            Other
-    end.
-
-control_action_opts(Raw) ->
-    NodeStr = atom_to_list(node()),
-    case rabbit_control_main:parse_arguments(Raw, NodeStr) of
-        {ok, {Cmd, Opts, Args}} ->
-            case control_action(Cmd, node(), Args, Opts) of
-                ok    -> ok;
-                Error -> Error
-            end;
-        Error ->
-            Error
-    end.
-
-info_action(Command, Args, CheckVHost) ->
-    ok = control_action(Command, []),
-    if CheckVHost -> ok = control_action(Command, [], ["-p", "/"]);
-       true       -> ok
-    end,
-    ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
-    {bad_argument, dummy} = control_action(Command, ["dummy"]),
-    ok.
-
-info_action_t(Command, Args, CheckVHost, Timeout) when is_number(Timeout) ->
-    if CheckVHost -> ok = control_action_t(Command, [], ["-p", "/"], Timeout);
-       true       -> ok
-    end,
-    ok = control_action_t(Command, lists:map(fun atom_to_list/1, Args), Timeout),
-    ok.
 
 default_options() -> [{"-p", "/"}, {"-q", "false"}].
 
@@ -1628,3 +1216,8 @@ expand_options(As, Bs) ->
                             false -> [A | R]
                         end
                 end, Bs, As).
+
+flush() ->
+    receive _ -> flush()
+    after 10 -> ok
+    end.

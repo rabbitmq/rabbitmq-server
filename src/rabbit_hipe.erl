@@ -37,9 +37,13 @@ hipe_compile() ->
     hipe_compile(fun compile_and_load/1, false).
 
 compile_to_directory(Dir0) ->
-    Dir = rabbit_file:filename_as_a_directory(Dir0),
-    ok = prepare_ebin_directory(Dir),
-    hipe_compile(fun (Mod) -> compile_and_save(Mod, Dir) end, true).
+    Dir = rabbit_file:filename_as_a_directory(rabbit_data_coercion:to_list(Dir0)),
+    case prepare_ebin_directory(Dir) of
+        ok ->
+            hipe_compile(fun (Mod) -> compile_and_save(Mod, Dir) end, true);
+        {error, Err} ->
+            {error, Err}
+    end.
 
 needs_compilation(Mod, Force) ->
     Exists = code:which(Mod) =/= non_existing,
@@ -79,7 +83,7 @@ do_hipe_compile(HipeModules, CompileFun) ->
     Count = length(HipeModules),
     io:format("~nHiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
-    T1 = time_compat:monotonic_time(),
+    T1 = erlang:monotonic_time(),
     %% We use code:get_object_code/1 below to get the beam binary,
     %% instead of letting hipe get it itself, because hipe:c/{1,2}
     %% expects the given filename to actually exist on disk: it does not
@@ -99,8 +103,8 @@ do_hipe_compile(HipeModules, CompileFun) ->
          {'DOWN', MRef, process, _, normal} -> ok;
          {'DOWN', MRef, process, _, Reason} -> exit(Reason)
      end || {_Pid, MRef} <- PidMRefs],
-    T2 = time_compat:monotonic_time(),
-    Duration = time_compat:convert_time_unit(T2 - T1, native, seconds),
+    T2 = erlang:monotonic_time(),
+    Duration = erlang:convert_time_unit(T2 - T1, native, seconds),
     io:format("|~n~nCompiled ~B modules in ~Bs~n", [Count, Duration]),
     {ok, Count, Duration}.
 
@@ -110,9 +114,13 @@ split0([],       Ls)       -> Ls;
 split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
 
 prepare_ebin_directory(Dir) ->
-    ok = rabbit_file:ensure_dir(Dir),
-    ok = delete_beam_files(Dir),
-    ok.
+    case rabbit_file:ensure_dir(Dir) of
+        ok ->
+            ok = delete_beam_files(Dir),
+            ok;
+        {error, eperm} ->
+            {error, eperm}
+    end.
 
 delete_beam_files(Dir) ->
     {ok, Files} = file:list_dir(Dir),

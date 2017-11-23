@@ -135,7 +135,8 @@ join_and_part_cluster(Config) ->
 
     %% Allow clustering with already clustered node
     ok = stop_app(Rabbit),
-    {ok, already_member} = join_cluster(Rabbit, Hare),
+    {ok, <<"The node is already a member of this cluster">>} =
+        join_cluster(Rabbit, Hare),
     ok = start_app(Rabbit),
 
     stop_reset_start(Rabbit),
@@ -388,10 +389,9 @@ force_boot(Config) ->
 change_cluster_node_type(Config) ->
     [Rabbit, Hare, _Bunny] = cluster_members(Config),
 
-    %% Trying to change the ram node when not clustered should always fail
+    %% Trying to change the node to the ram type when not clustered should always fail
     ok = stop_app(Rabbit),
     assert_failure(fun () -> change_cluster_node_type(Rabbit, ram) end),
-    assert_failure(fun () -> change_cluster_node_type(Rabbit, disc) end),
     ok = start_app(Rabbit),
 
     ok = stop_app(Rabbit),
@@ -402,6 +402,7 @@ change_cluster_node_type(Config) ->
     assert_cluster_status({[Rabbit, Hare], [Hare], [Hare]},
                           [Rabbit, Hare]),
     change_cluster_node_type(Rabbit, disc),
+
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
                           [Rabbit, Hare]),
     change_cluster_node_type(Rabbit, ram),
@@ -523,46 +524,49 @@ erlang_config(Config) ->
     assert_not_clustered(Hare),
     assert_not_clustered(Rabbit),
 
-    %% If we use a legacy config file, the node fails to start.
+    %% List of nodes [node()] is equivalent to {[node()], disk}
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, [Rabbit]]),
-    assert_failure(fun () -> start_app(Hare) end),
-    assert_not_clustered(Rabbit),
+    ok = start_app(Hare),
+    assert_clustered([Rabbit, Hare]),
 
     %% If we use an invalid node type, the node fails to start.
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, {["Mike's computer"], disc}]),
+    %% Rabbit app stops abnormally, node goes down
     assert_failure(fun () -> start_app(Hare) end),
     assert_not_clustered(Rabbit),
 
     %% If we use an invalid node type, the node fails to start.
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, {[Rabbit], blue}]),
+    %% Rabbit app stops abnormally, node goes down
     assert_failure(fun () -> start_app(Hare) end),
     assert_not_clustered(Rabbit),
 
     %% If we use an invalid cluster_nodes conf, the node fails to start.
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, true]),
+    %% Rabbit app stops abnormally, node goes down
     assert_failure(fun () -> start_app(Hare) end),
     assert_not_clustered(Rabbit),
 
     %% The Erlang VM has stopped after previous rabbit app failure
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
@@ -642,7 +646,7 @@ wait_for_pid_file_to_contain_running_process_pid(PidFile, Attempts, Timeout) ->
     Pid = pid_from_file(PidFile),
     case rabbit_misc:is_os_process_alive(Pid) of
         true  -> ok;
-        false -> 
+        false ->
             ct:sleep(Timeout),
             wait_for_pid_file_to_contain_running_process_pid(PidFile, Attempts - 1, Timeout)
     end.
@@ -697,45 +701,46 @@ assert_not_clustered(Node) ->
 
 assert_failure(Fun) ->
     case catch Fun() of
+        {error, _Code, Reason}         -> Reason;
         {error, Reason}                -> Reason;
         {error_string, Reason}         -> Reason;
         {badrpc, {'EXIT', Reason}}     -> Reason;
         %% Failure to start an app result in node shutdown
         {badrpc, nodedown}             -> nodedown;
         {badrpc_multi, Reason, _Nodes} -> Reason;
-        Other                          -> exit({expected_failure, Other})
+        Other                          -> error({expected_failure, Other})
     end.
 
 stop_app(Node) ->
-    control_action(stop_app, Node).
+    rabbit_control_helper:command(stop_app, Node).
 
 start_app(Node) ->
-    control_action(start_app, Node).
+    rabbit_control_helper:command(start_app, Node).
 
 join_cluster(Node, To) ->
     join_cluster(Node, To, false).
 
 join_cluster(Node, To, Ram) ->
-    control_action(join_cluster, Node, [atom_to_list(To)], [{"--ram", Ram}]).
+    rabbit_control_helper:command_with_output(join_cluster, Node, [atom_to_list(To)], [{"--ram", Ram}]).
 
 reset(Node) ->
-    control_action(reset, Node).
+    rabbit_control_helper:command(reset, Node).
 
 force_reset(Node) ->
-    control_action(force_reset, Node).
+    rabbit_control_helper:command(force_reset, Node).
 
 forget_cluster_node(Node, Removee, RemoveWhenOffline) ->
-    control_action(forget_cluster_node, Node, [atom_to_list(Removee)],
+    rabbit_control_helper:command(forget_cluster_node, Node, [atom_to_list(Removee)],
                    [{"--offline", RemoveWhenOffline}]).
 
 forget_cluster_node(Node, Removee) ->
     forget_cluster_node(Node, Removee, false).
 
 change_cluster_node_type(Node, Type) ->
-    control_action(change_cluster_node_type, Node, [atom_to_list(Type)]).
+    rabbit_control_helper:command(change_cluster_node_type, Node, [atom_to_list(Type)]).
 
 update_cluster_nodes(Node, DiscoveryNode) ->
-    control_action(update_cluster_nodes, Node, [atom_to_list(DiscoveryNode)]).
+    rabbit_control_helper:command(update_cluster_nodes, Node, [atom_to_list(DiscoveryNode)]).
 
 stop_join_start(Node, ClusterTo, Ram) ->
     ok = stop_app(Node),
@@ -749,17 +754,6 @@ stop_reset_start(Node) ->
     ok = stop_app(Node),
     ok = reset(Node),
     ok = start_app(Node).
-
-control_action(Command, Node) ->
-    control_action(Command, Node, [], []).
-
-control_action(Command, Node, Args) ->
-    control_action(Command, Node, Args, []).
-
-control_action(Command, Node, Args, Opts) ->
-    rpc:call(Node, rabbit_control_main, action,
-             [Command, Node, Args, Opts,
-              fun io:format/2]).
 
 declare(Ch, Name) ->
     Res = amqp_channel:call(Ch, #'queue.declare'{durable = true,
