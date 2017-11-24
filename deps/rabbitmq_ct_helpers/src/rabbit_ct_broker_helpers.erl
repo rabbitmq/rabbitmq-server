@@ -880,12 +880,19 @@ force_vhost_failure(_Config, _Node, VHost, 0) ->
 force_vhost_failure(Config, Node, VHost, Attempts) ->
     case rpc(Config, Node, rabbit_vhost_sup_sup, is_vhost_alive, [VHost]) of
         true  ->
-            MessageStorePid = get_message_store_pid(Config, Node, VHost),
-            rpc(Config, Node,
-                erlang, exit, [MessageStorePid, force_vhost_failure]),
-            %% Give it a time to fail
-            timer:sleep(300),
-            force_vhost_failure(Config, Node, VHost, Attempts - 1);
+            try
+                MessageStorePid = get_message_store_pid(Config, Node, VHost),
+                rpc(Config, Node,
+                    erlang, exit, [MessageStorePid, force_vhost_failure]),
+                %% Give it a time to fail
+                timer:sleep(300),
+                force_vhost_failure(Config, Node, VHost, Attempts - 1)
+            catch
+                %% The vhost terminated while we were checking again.
+                exit:{shutdown, _} ->
+                    timer:sleep(300),
+                    force_vhost_failure(Config, Node, VHost, Attempts - 1)
+            end;
         false -> ok
     end.
 
