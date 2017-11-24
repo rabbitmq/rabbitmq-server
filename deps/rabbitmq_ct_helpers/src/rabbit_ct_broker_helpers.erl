@@ -639,7 +639,7 @@ enable_dist_proxy_manager(Config) ->
       {erlang_dist_module, inet_proxy_dist}).
 
 enable_dist_proxy(Config) ->
-    NodeConfigs = rabbit_ct_broker_helpers:get_node_configs(Config),
+    NodeConfigs = get_node_configs(Config),
     Nodes = [?config(nodename, NodeConfig) || NodeConfig <- NodeConfigs],
     ManagerNode = node(),
     %% We first start the proxy process on all nodes, then we close the
@@ -653,14 +653,14 @@ enable_dist_proxy(Config) ->
     %% it to be enabled.
     ok = lists:foreach(
       fun(NodeConfig) ->
-          ok = rabbit_ct_broker_helpers:rpc(Config,
+          ok = rpc(Config,
             ?config(nodename, NodeConfig),
             ?MODULE, start_dist_proxy_on_node,
             [NodeConfig, ManagerNode])
       end, NodeConfigs),
     ok = lists:foreach(
       fun(NodeConfig) ->
-          ok = rabbit_ct_broker_helpers:rpc(Config,
+          ok = rpc(Config,
             ?config(nodename, NodeConfig),
             ?MODULE, disconnect_from_other_nodes,
             [NodeConfig, Nodes])
@@ -685,11 +685,11 @@ allow_traffic_between(NodeA, NodeB) ->
     rpc:call(NodeB, inet_tcp_proxy, allow, [NodeA]).
 
 set_partition_handling_mode_globally(Config, Mode) ->
-    rabbit_ct_broker_helpers:rpc_all(Config,
+    rpc_all(Config,
       application, set_env, [rabbit, cluster_partition_handling, Mode]).
 
 set_partition_handling_mode(Config, Nodes, Mode) ->
-    rabbit_ct_broker_helpers:rpc(Config, Nodes,
+    rpc(Config, Nodes,
       application, set_env, [rabbit, cluster_partition_handling, Mode]).
 
 %% -------------------------------------------------------------------
@@ -859,7 +859,7 @@ add_vhost(Config, Node, VHost) ->
     add_vhost(Config, Node, VHost, <<"acting-user">>).
 
 add_vhost(Config, Node, VHost, Username) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, add, [VHost, Username]).
+    rpc(Config, Node, rabbit_vhost, add, [VHost, Username]).
 
 delete_vhost(Config, VHost) ->
     delete_vhost(Config, 0, VHost).
@@ -868,7 +868,7 @@ delete_vhost(Config, Node, VHost) ->
     delete_vhost(Config, Node, VHost, <<"acting-user">>).
 
 delete_vhost(Config, Node, VHost, Username) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, delete, [VHost, Username]).
+    rpc(Config, Node, rabbit_vhost, delete, [VHost, Username]).
 
 force_vhost_failure(Config, VHost) -> force_vhost_failure(Config, 0, VHost).
 
@@ -878,14 +878,11 @@ force_vhost_failure(Config, Node, VHost) ->
 force_vhost_failure(_Config, _Node, VHost, 0) ->
     error({failed_to_force_vhost_failure, no_more_attempts_left, VHost});
 force_vhost_failure(Config, Node, VHost, Attempts) ->
-    case rabbit_ct_broker_helpers:rpc(Config, Node,
-                                      rabbit_vhost_sup_sup, is_vhost_alive,
-                                      [VHost]) of
+    case rpc(Config, Node, rabbit_vhost_sup_sup, is_vhost_alive, [VHost]) of
         true  ->
             MessageStorePid = get_message_store_pid(Config, Node, VHost),
-            rabbit_ct_broker_helpers:rpc(Config, Node,
-                                         erlang, exit,
-                                         [MessageStorePid, force_vhost_failure]),
+            rpc(Config, Node,
+                erlang, exit, [MessageStorePid, force_vhost_failure]),
             %% Give it a time to fail
             timer:sleep(300),
             force_vhost_failure(Config, Node, VHost, Attempts - 1);
@@ -893,11 +890,9 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
     end.
 
 get_message_store_pid(Config, Node, VHost) ->
-    {ok, VHostSup} = rabbit_ct_broker_helpers:rpc(Config, Node,
-        rabbit_vhost_sup_sup, get_vhost_sup, [VHost]),
-    Children = rabbit_ct_broker_helpers:rpc(Config, Node,
-                                            supervisor, which_children,
-                                            [VHostSup]),
+    {ok, VHostSup} = rpc(Config, Node,
+                         rabbit_vhost_sup_sup, get_vhost_sup, [VHost]),
+    Children = rpc(Config, Node, supervisor, which_children, [VHostSup]),
     [MsgStorePid] = [Pid || {Name, Pid, _, _} <- Children,
                             Name == msg_store_persistent],
     MsgStorePid.
@@ -914,7 +909,7 @@ add_user(Config, Node, Username, Password) ->
     add_user(Config, Node, Username, Password, <<"acting-user">>).
 
 add_user(Config, Node, Username, Password, AuditUsername) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, add_user,
+    rpc(Config, Node, rabbit_auth_backend_internal, add_user,
         [rabbit_data_coercion:to_binary(Username),
          rabbit_data_coercion:to_binary(Password),
          AuditUsername]).
@@ -923,8 +918,8 @@ set_user_tags(Config, Node, Username, Tags) ->
     set_user_tags(Config, Node, Username, Tags, <<"acting-user">>).
 
 set_user_tags(Config, Node, Username, Tags, AuditUsername) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, set_tags,
-                                 [Username, Tags, AuditUsername]).
+    rpc(Config, Node, rabbit_auth_backend_internal, set_tags,
+        [Username, Tags, AuditUsername]).
 
 delete_user(Config, Username) ->
     delete_user(Config, 0, Username).
@@ -987,15 +982,15 @@ set_permissions(Config, Node, Username, VHost, ConfigurePerm, WritePerm, ReadPer
 
 set_permissions(Config, Node, Username, VHost, ConfigurePerm, WritePerm, ReadPerm,
                 ActingUser) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node,
-                                 rabbit_auth_backend_internal,
-                                 set_permissions,
-                                 [rabbit_data_coercion:to_binary(Username),
-                                  rabbit_data_coercion:to_binary(VHost),
-                                  rabbit_data_coercion:to_binary(ConfigurePerm),
-                                  rabbit_data_coercion:to_binary(WritePerm),
-                                  rabbit_data_coercion:to_binary(ReadPerm),
-                                  ActingUser]).
+    rpc(Config, Node,
+        rabbit_auth_backend_internal,
+        set_permissions,
+        [rabbit_data_coercion:to_binary(Username),
+         rabbit_data_coercion:to_binary(VHost),
+         rabbit_data_coercion:to_binary(ConfigurePerm),
+         rabbit_data_coercion:to_binary(WritePerm),
+         rabbit_data_coercion:to_binary(ReadPerm),
+         ActingUser]).
 
 clear_permissions(Config, VHost) ->
     clear_permissions(Config, 0, <<"guest">>, VHost).
@@ -1006,12 +1001,12 @@ clear_permissions(Config, Node, Username, VHost) ->
     clear_permissions(Config, Node, Username, VHost, <<"acting-user">>).
 
 clear_permissions(Config, Node, Username, VHost, ActingUser) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node,
-                                 rabbit_auth_backend_internal,
-                                 clear_permissions,
-                                 [rabbit_data_coercion:to_binary(Username),
-                                  rabbit_data_coercion:to_binary(VHost),
-                                  ActingUser]).
+    rpc(Config, Node,
+        rabbit_auth_backend_internal,
+        clear_permissions,
+        [rabbit_data_coercion:to_binary(Username),
+         rabbit_data_coercion:to_binary(VHost),
+         ActingUser]).
 
 
 %% Functions to execute code on a remote node/broker.
