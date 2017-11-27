@@ -44,7 +44,13 @@
 
 %%----------------------------------------------------------------------------
 
-ensure(FileJustChanged0) ->
+ensure(FileJustChanged) ->
+    case rabbit:is_running() of
+        true  -> ensure1(FileJustChanged);
+        false -> {error, rabbit_not_running}
+    end.
+
+ensure1(FileJustChanged0) ->
     {ok, OurFile0} = application:get_env(rabbit, enabled_plugins_file),
     FileJustChanged = filename:nativename(FileJustChanged0),
     OurFile = filename:nativename(OurFile0),
