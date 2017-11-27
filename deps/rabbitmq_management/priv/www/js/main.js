@@ -564,11 +564,11 @@ function postprocess() {
             update_manual($(this).attr('for'), $(this).attr('query'));
         });
 
-    $('.multifield input').on('keyup', function() {
+    $(document).on('keyup', '.multifield input', function() {
             update_multifields();
         });
 
-    $('.multifield select').on('change', function() {
+    $(document).on('change', '.multifield select', function() {
             update_multifields();
         });
 
