@@ -70,7 +70,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     missing = MapSet.difference(MapSet.new(enabled), MapSet.new(PluginHelpers.plugin_names(all)))
     case Enum.empty?(missing) do
         true  -> :ok;
-        false -> IO.puts("WARNING - plugins currently enabled but missing: #{Enum.to_list(missing)}~n~n")
+        false ->
+          names = Enum.join(Enum.to_list(missing), ", ")
+          IO.puts("WARNING - plugins currently enabled but missing: #{names}\n")
     end
     implicit           = :rabbit_plugins.dependencies(false, enabled, all)
     enabled_implicitly = implicit -- enabled
