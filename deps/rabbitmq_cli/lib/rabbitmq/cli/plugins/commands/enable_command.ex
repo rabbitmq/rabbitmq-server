@@ -46,7 +46,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   end
 
   def validate_execution_environment(args, opts) do
-    Validators.chain([&Validators.rabbit_is_running_or_offline_flag_used/2,
+    Validators.chain([&PluginHelpers.can_set_plugins_with_mode/2,
                       &Helpers.require_rabbit_and_plugins/2,
                       &PluginHelpers.enabled_plugins_file/2,
                       &Helpers.plugins_dir/2],
@@ -76,8 +76,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   end
 
   def do_run(plugins, %{node: node_name} = opts) do
-    %{online: online, offline: offline} = opts
-
     enabled = PluginHelpers.read_enabled(opts)
     all     = PluginHelpers.list(opts)
     implicit           = :rabbit_plugins.dependencies(false, enabled, all)
@@ -87,13 +85,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
       MapSet.new(enabled),
       MapSet.difference(MapSet.new(plugins), enabled_implicitly))
 
-    mode = case {online, offline} do
-             {true, false}  -> :online;
-             {false, true}  -> :offline;
-             # fallback to online mode
-             {false, false} -> :online
-           end
-
+    mode = PluginHelpers.mode(opts)
     case PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), opts) do
       {:ok, enabled_plugins} ->
         {:stream, Stream.concat(

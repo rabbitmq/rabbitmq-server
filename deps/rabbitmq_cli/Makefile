@@ -89,7 +89,7 @@ else
 endif
 
 dialyzer:: $(ESCRIPTS)
-	$(MIX_TEST) dialyzer
+	MIX_ENV=test mix dialyzer
 
 .PHONY: install
 

@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   end
 
   def validate_execution_environment(args, opts) do
-    Validators.chain([&Validators.rabbit_is_running_or_offline_flag_used/2,
+    Validators.chain([&PluginHelpers.can_set_plugins_with_mode/2,
                       &Helpers.require_rabbit_and_plugins/2,
                       &PluginHelpers.enabled_plugins_file/2,
                       &Helpers.plugins_dir/2],
@@ -62,14 +62,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   end
 
   def do_run(plugins, %{node: node_name} = opts) do
-    %{online: online, offline: offline} = opts
 
     all = PluginHelpers.list(opts)
-    mode = case {online, offline} do
-      {true, false}  -> :online;
-      {false, true}  -> :offline;
-      {false, false} -> :online
-    end
+    mode = PluginHelpers.mode(opts)
 
     case PluginHelpers.set_enabled_plugins(plugins, opts) do
       {:ok, enabled_plugins} ->
@@ -77,8 +72,15 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
             [[:rabbit_plugins.strictly_plugins(enabled_plugins, all)],
              RabbitMQ.CLI.Core.Helpers.defer(
                fn() ->
-                 map = PluginHelpers.update_enabled_plugins(enabled_plugins, mode, node_name, opts)
-                 filter_strictly_plugins(map, all, [:set, :started, :stopped])
+                 case PluginHelpers.update_enabled_plugins(enabled_plugins,
+                                                           mode,
+                                                           node_name,
+                                                           opts) do
+                   %{set: _} = map ->
+                     filter_strictly_plugins(map, all, [:set, :started, :stopped]);
+                   {:error, _} = err ->
+                     err
+                 end
                end)])};
       {:error, _} = err ->
         err
