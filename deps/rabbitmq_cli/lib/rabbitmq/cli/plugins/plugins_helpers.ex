@@ -32,11 +32,11 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   def can_set_plugins_with_mode(args, opts) do
     mode = mode(opts)
     case mode(opts) do
-      ## Can always set offline plugins list
+      # can always set offline plugins list
       :offline -> :ok;
-      ## It should fall back to offline mode in case of errors
+      # assume online mode, fall back to offline mode in case of errors
       :best_effort -> :ok;
-      ## The running node is required
+      # a running node is required
       :online ->
         Validators.chain([&Validators.node_is_running/2,
                           &Validators.rabbit_is_running/2],
