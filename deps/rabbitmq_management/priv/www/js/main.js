@@ -547,10 +547,6 @@ function postprocess() {
                            "after deletion.");
         });
 
-    $('div.section h2, div.section-hidden h2').on('click', function() {
-            toggle_visibility($(this));
-        });
-
     $('label').map(function() {
             if ($(this).attr('for') == '') {
                 var id = 'auto-label-' + Math.floor(Math.random()*1000000000);
@@ -577,11 +573,11 @@ function postprocess() {
             update_manual($(this).attr('for'), $(this).attr('query'));
         });
 
-    $('.multifield input').on('keyup', function() {
+    $(document).on('keyup', '.multifield input', function() {
             update_multifields();
         });
 
-    $('.multifield select').on('change', function() {
+    $(document).on('change', '.multifield select', function() {
             update_multifields();
         });
 
@@ -746,7 +742,8 @@ function postprocess_partial() {
 
     setup_visibility();
 
-    $('.updatable div.section h2, .updatable div.section-hidden h2').on('click', function() {
+    $('#main').off('click', 'div.section h2, div.section-hidden h2');
+    $('#main').on('click', 'div.section h2, div.section-hidden h2', function() {
             toggle_visibility($(this));
         });
 
