@@ -14,10 +14,35 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 alias RabbitMQ.CLI.Core.Helpers, as: CliHelpers
 alias RabbitMQ.CLI.Core.Config, as: Config
+alias RabbitMQ.CLI.Core.Validators, as: Validators
 
 defmodule RabbitMQ.CLI.Plugins.Helpers do
   import Rabbitmq.Atom.Coerce
   import RabbitCommon.Records
+
+  def mode(opts) do
+    %{online: online, offline: offline} = opts
+    case {online, offline} do
+      {true, false}  -> :online;
+      {false, true}  -> :offline;
+      {false, false} -> :best_effort
+    end
+  end
+
+  def can_set_plugins_with_mode(args, opts) do
+    mode = mode(opts)
+    case mode(opts) do
+      # can always set offline plugins list
+      :offline -> :ok;
+      # assume online mode, fall back to offline mode in case of errors
+      :best_effort -> :ok;
+      # a running node is required
+      :online ->
+        Validators.chain([&Validators.node_is_running/2,
+                          &Validators.rabbit_is_running/2],
+                          [args, opts])
+    end
+  end
 
   def list(opts) do
     {:ok, dir} = CliHelpers.plugins_dir(opts)
@@ -53,10 +78,23 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     write_enabled_plugins(plugin_atoms, plugins_file, opts)
   end
 
+  @spec update_enabled_plugins([atom()],
+                               :online | :offline | :best_effort,
+                               node(),
+                               map()) :: map() | {:error, any()}
   def update_enabled_plugins(enabled_plugins, mode, node_name, opts) do
     {:ok, plugins_file} = enabled_plugins_file(opts)
     case mode do
-      :online  ->
+      :online ->
+        case update_enabled_plugins(node_name, plugins_file) do
+          {:ok, started, stopped} ->
+            %{mode: :online,
+              started: Enum.sort(started),
+              stopped: Enum.sort(stopped),
+              set: Enum.sort(enabled_plugins)};
+          {:error, _} = err -> err
+        end;
+      :best_effort  ->
         case update_enabled_plugins(node_name, plugins_file) do
           {:ok, started, stopped} ->
             %{mode: :online,
@@ -137,7 +175,8 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   defp update_enabled_plugins(node_name, plugins_file) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_plugins,
                                           :ensure, [to_list(plugins_file)]) do
-      {:badrpc, :nodedown} -> {:error, :offline};
+      {:badrpc, :nodedown}          -> {:error, :offline};
+      {:error, :rabbit_not_running} -> {:error, :offline};
       {:ok, start, stop}   -> {:ok, start, stop};
       {:error, _} = err    -> err
     end

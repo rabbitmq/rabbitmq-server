@@ -37,7 +37,7 @@ defmodule SetPluginsCommandTest do
     opts = %{enabled_plugins_file: plugins_file,
              plugins_dir: plugins_dir,
              rabbitmq_home: rabbitmq_home,
-             online: true, offline: false}
+             online: false, offline: false}
 
     on_exit(fn ->
       set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname(),opts)

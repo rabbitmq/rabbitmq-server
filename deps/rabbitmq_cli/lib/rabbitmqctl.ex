@@ -285,6 +285,8 @@ defmodule RabbitMQCtl do
   defp format_validation_error({:bad_info_key, keys}), do: "Info key(s) #{Enum.join(keys, ",")} are not supported"
   defp format_validation_error(:rabbit_app_is_stopped), do: "this command requires the 'rabbit' app to be running on the target node. Start it with 'rabbitmqctl start_app'."
   defp format_validation_error(:rabbit_app_is_running), do: "this command requires the 'rabbit' app to be stopped on the target node. Stop it with 'rabbitmqctl stop_app'."
+  defp format_validation_error(:node_running), do: "this command requires the target node to be stopped."
+  defp format_validation_error(:node_not_running), do: "this command requires the target node to be running."
   defp format_validation_error(err), do: inspect err
 
   defp exit_program(code) do

@@ -36,6 +36,13 @@ defmodule RabbitMQ.CLI.Core.Validators do
     end
   end
 
+  def node_is_running(_, %{node: node_name}) do
+    case Helpers.node_running?(node_name) do
+      false -> {:validation_failure, :node_not_running};
+      true  -> :ok
+    end
+  end
+
   def mnesia_dir_is_set(_, opts) do
     case Helpers.require_mnesia_dir(opts) do
       :ok           -> :ok;

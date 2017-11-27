@@ -22,11 +22,11 @@ defmodule RabbitMQ.CLI.Core.Parser do
   # the English language is 5.
   @levenshtein_distance_limit 5
 
-  @spec parse(String.t) :: {command :: :no_command | atom() | {:suggest, String.t},
-                            command_name :: String.t,
-                            arguments :: [String.t],
-                            options :: map(),
-                            invalid :: [{String.t, String.t | nil}]}
+  @spec parse([String.t]) :: {command :: :no_command | atom() | {:suggest, String.t},
+                              command_name :: String.t,
+                              arguments :: [String.t],
+                              options :: map(),
+                              invalid :: [{String.t, String.t | nil}]}
 
   def parse(input) do
     {parsed_args, options, invalid} = parse_global(input)

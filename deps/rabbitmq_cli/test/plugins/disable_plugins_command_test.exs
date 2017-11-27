@@ -36,7 +36,7 @@ defmodule DisablePluginsCommandTest do
     opts = %{enabled_plugins_file: plugins_file,
              plugins_dir: plugins_dir,
              rabbitmq_home: rabbitmq_home,
-             online: true, offline: false,
+             online: false, offline: false,
              all: false}
 
     on_exit(fn ->
