@@ -81,8 +81,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   #
 
   defp compute_relative_values(all_pairs) do
-    pairs = Keyword.delete(all_pairs, :total)
-    total = Enum.reduce(pairs, 0, fn({_, bytes}, acc) -> acc + bytes end)
+    num_pairs = Keyword.delete(all_pairs, :strategy)
+    # Includes RSS, allocated and runtime-used ("erlang") values.
+    # See https://github.com/rabbitmq/rabbitmq-server/pull/1404.
+    totals    = Keyword.get(num_pairs, :total)
+    pairs     = Keyword.delete(num_pairs, :total)
+    total     = max_of(totals) ||
+                # Should not be necessary but be more defensive.
+                Keyword.get(totals, :rss) ||
+                Keyword.get(totals, :allocated) ||
+                Keyword.get(totals, :erlang)
 
     pairs
     |> Enum.map(fn({k, v}) ->
@@ -94,5 +102,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
 
   defp fraction_to_percent(x) do
     Float.round(x * 100, 2)
+  end
+
+  defp max_of(m) do
+    Keyword.values(m) |> Enum.max
   end
 end
