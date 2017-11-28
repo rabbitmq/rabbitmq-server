@@ -81,7 +81,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   #
 
   defp compute_relative_values(all_pairs) do
-    strategy  = Keyword.get(all_pairs, :strategy)
     num_pairs = Keyword.delete(all_pairs, :strategy)
     # Includes RSS, allocated and runtime-used ("erlang") values.
     # See https://github.com/rabbitmq/rabbitmq-server/pull/1404.
