@@ -200,11 +200,17 @@ export current_rmq_ref
 
 ifeq ($(origin base_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
+possible_base_rmq_ref := v3.7.x
+ifeq ($(possible_base_rmq_ref),$(current_rmq_ref))
+base_rmq_ref := $(current_rmq_ref)
+else
 base_rmq_ref := $(shell \
-	(git rev-parse --verify -q stable >/dev/null && \
-	  git merge-base --is-ancestor $$(git merge-base master HEAD) stable && \
-	  echo stable) || \
+	(git rev-parse --verify -q master >/dev/null && \
+	 git rev-parse --verify -q $(possible_base_rmq_ref) >/dev/null && \
+	 git merge-base --is-ancestor $$(git merge-base master HEAD) $(possible_base_rmq_ref) && \
+	 echo $(possible_base_rmq_ref)) || \
 	echo master)
+endif
 else
 base_rmq_ref := master
 endif
