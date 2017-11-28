@@ -87,10 +87,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
     # See https://github.com/rabbitmq/rabbitmq-server/pull/1404.
     totals    = Keyword.get(num_pairs, :total)
     pairs     = Keyword.delete(num_pairs, :total)
-    total     = Keyword.get(totals, strategy) ||
+    total     = max_of(totals) ||
                 # Should not be necessary but be more defensive.
-                # The list of totals depends on the strategy, so
-                # we have multiple fallback options.
                 Keyword.get(totals, :rss) ||
                 Keyword.get(totals, :allocated) ||
                 Keyword.get(totals, :erlang)
@@ -105,5 +103,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
 
   defp fraction_to_percent(x) do
     Float.round(x * 100, 2)
+  end
+
+  defp max_of(m) do
+    Keyword.values(m) |> Enum.max
   end
 end
