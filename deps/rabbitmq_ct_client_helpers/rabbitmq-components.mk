@@ -110,10 +110,11 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy = hex 1.1.2
+dep_cowboy = hex 2.0.0
+dep_cowlib = hex 2.0.0
 dep_jsx = hex 2.8.2
 dep_lager = hex 3.5.1
-dep_ranch = hex 1.3.2
+dep_ranch = hex 1.4.0
 dep_ranch_proxy_protocol = hex 1.4.2
 dep_recon = hex 2.3.2
 
@@ -200,11 +201,17 @@ export current_rmq_ref
 
 ifeq ($(origin base_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
+possible_base_rmq_ref := v3.7.x
+ifeq ($(possible_base_rmq_ref),$(current_rmq_ref))
+base_rmq_ref := $(current_rmq_ref)
+else
 base_rmq_ref := $(shell \
-	(git rev-parse --verify -q stable >/dev/null && \
-	  git merge-base --is-ancestor $$(git merge-base master HEAD) stable && \
-	  echo stable) || \
+	(git rev-parse --verify -q master >/dev/null && \
+	 git rev-parse --verify -q $(possible_base_rmq_ref) >/dev/null && \
+	 git merge-base --is-ancestor $$(git merge-base master HEAD) $(possible_base_rmq_ref) && \
+	 echo $(possible_base_rmq_ref)) || \
 	echo master)
+endif
 else
 base_rmq_ref := master
 endif
