@@ -39,6 +39,7 @@ boot() ->
                 "traces.lz4",
                 maps:from_list([
                     {mode, profile},
+                    {process_dump, true},
                     {running, true},
                     {send, true}]
                 )
