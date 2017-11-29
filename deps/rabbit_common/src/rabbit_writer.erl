@@ -175,6 +175,7 @@ system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
 enter_mainloop(Identity, State) ->
+    ?LG_PROCESS_TYPE(writer),
     Deb = sys:debug_options([]),
     ?store_proc_name(Identity),
     mainloop(Deb, State).
