@@ -62,4 +62,5 @@ start_queue_collector(SupPid, Identity) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    ?LG_PROCESS_TYPE(connection_helper_sup),
     {ok, {{one_for_one, 10, 10}, []}}.

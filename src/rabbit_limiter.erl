@@ -334,6 +334,7 @@ ensure_credit_invariant(C) ->
 %%----------------------------------------------------------------------------
 
 init([ProcName]) -> ?store_proc_name(ProcName),
+                    ?LG_PROCESS_TYPE(limiter),
                     {ok, #lim{}}.
 
 prioritise_call(get_prefetch_limit, _From, _Len, _State) -> 9;
