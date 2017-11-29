@@ -53,4 +53,4 @@ parse_value(Value) ->
 
 connections() ->
     Pids = [Pid || {{conns_sup, _}, Pid} <- ets:tab2list(ranch_server)],
-    [{app, rabbit}, {app, rabbit_common}, {scope, Pids}].
+    ['_', {scope, Pids}].
