@@ -270,16 +270,11 @@ Function findErlang
     abort:
     Abort
   ${Else}
-    ${VersionCompare} $2 "5.7.4" $0
-    ${VersionCompare} $2 "5.8.1" $1
+    ${VersionCompare} $2 "8.3" $0
 
     ${If} $0 = 2
       MessageBox MB_OK|MB_ICONEXCLAMATION "Your installed version of Erlang ($2) is too old. Please install a more recent version."
       Abort
-    ${ElseIf} $1 = 2
-      MessageBox MB_YESNO|MB_ICONEXCLAMATION "Your installed version of Erlang ($2) is comparatively old.$\nFor best results, please install a newer version.$\nDo you wish to continue?" IDYES no_abort
-      Abort
-      no_abort:
     ${EndIf}
 
     ReadRegStr $0 HKLM "Software\Ericsson\Erlang\$2" ""
