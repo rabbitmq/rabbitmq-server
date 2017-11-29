@@ -80,7 +80,6 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'xrefr'			\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
 	       --exclude '/PACKAGES/'			\
-	       --exclude '/upgrade/'			\
 	       --exclude '/amqp_client/doc/'		\
 	       --exclude '/amqp_client/rebar.config'	\
 	       --exclude '/cowboy/doc/'			\
