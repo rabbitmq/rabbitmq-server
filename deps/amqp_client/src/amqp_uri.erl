@@ -163,7 +163,8 @@ set(KVs, Ps, Fields) ->
 build_ssl_broker(ParsedUri, DefaultVHost) ->
     Params = build_broker(ParsedUri, DefaultVHost),
     Query = proplists:get_value('query', ParsedUri),
-    SSLOptions =
+    Host = proplists:get_value('host', ParsedUri),
+    SSLOptions0 =
         run_state_monad(
           [fun (L) -> KeyString = atom_to_list(Key),
                       case lists:keysearch(KeyString, 1, Query) of
@@ -177,15 +178,18 @@ build_ssl_broker(ParsedUri, DefaultVHost) ->
                               L
                       end
            end || {Fun, Key} <-
-                      [{fun find_path_parameter/1,    cacertfile},
-                       {fun find_path_parameter/1,    certfile},
-                       {fun find_path_parameter/1,    keyfile},
-                       {fun find_atom_parameter/1,    verify},
+                      [{fun find_path_parameter/1, cacertfile},
+                       {fun find_path_parameter/1, certfile},
+                       {fun find_path_parameter/1, keyfile},
+                       {fun find_atom_parameter/1, verify},
                        {fun find_boolean_parameter/1, fail_if_no_peer_cert},
                        {fun find_identity_parameter/1, password},
-                       {fun find_integer_parameter/1,  depth}]],
+                       {fun find_sni_parameter/1, server_name_indication},
+                       {fun find_integer_parameter/1, depth}]],
           []),
-    Params#amqp_params_network{ssl_options = SSLOptions}.
+    SSLOptions1 = maybe_add_sni(Host, SSLOptions0),
+    SSLOptions2 = maybe_add_verify(SSLOptions1),
+    Params#amqp_params_network{ssl_options = SSLOptions2}.
 
 broker_add_query(Params = #amqp_params_direct{}, Uri) ->
     broker_add_query(Params, Uri, record_info(fields, amqp_params_direct));
@@ -231,6 +235,11 @@ parse_amqp_param(Field, String) ->
 find_path_parameter(Value) ->
     find_identity_parameter(Value).
 
+find_sni_parameter("disable") ->
+    disable;
+find_sni_parameter(Value) ->
+    find_identity_parameter(Value).
+
 find_identity_parameter(Value) -> return(Value).
 
 find_integer_parameter(Value) ->
@@ -246,6 +255,24 @@ find_boolean_parameter(Value) ->
     end.
 
 find_atom_parameter(Value) -> return(list_to_atom(Value)).
+
+% https://github.com/erlang/otp/blob/master/lib/inets/src/http_client/httpc_handler.erl
+maybe_add_sni(Host, Options) ->
+    case inet_parse:domain(Host) andalso
+	  not lists:keymember(server_name_indication, 1, Options) of
+        true ->
+            [{server_name_indication, Host} | Options];
+        false ->
+            Options
+    end.
+
+maybe_add_verify(Options) ->
+    case lists:keymember(verify, 1, Options) of
+        true ->
+            Options;
+        false ->
+            [{verify, verify_peer} | Options]
+    end.
 
 mechanisms(ParsedUri) ->
     Query = proplists:get_value('query', ParsedUri),
