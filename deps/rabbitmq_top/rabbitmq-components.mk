@@ -115,7 +115,7 @@ dep_cowlib = hex 2.0.0
 dep_jsx = hex 2.8.2
 dep_lager = hex 3.5.1
 dep_ranch = hex 1.4.0
-dep_ranch_proxy_protocol = hex 1.4.2
+dep_ranch_proxy_protocol = hex 1.4.4
 dep_recon = hex 2.3.2
 
 dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d36dbf5e1e64942d9b0a1daf
@@ -326,11 +326,16 @@ endif
 
 UPSTREAM_RMQ_COMPONENTS_MK = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk
 
+ifeq ($(PROJECT),rabbit_common)
+check-rabbitmq-components.mk:
+	@:
+else
 check-rabbitmq-components.mk:
 	$(verbose) cmp -s rabbitmq-components.mk \
 		$(UPSTREAM_RMQ_COMPONENTS_MK) || \
 		(echo "error: rabbitmq-components.mk must be updated!" 1>&2; \
 		  false)
+endif
 
 ifeq ($(PROJECT),rabbit_common)
 rabbitmq-components-mk:
