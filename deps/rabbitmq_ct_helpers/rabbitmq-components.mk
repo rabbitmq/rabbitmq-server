@@ -319,11 +319,16 @@ endif
 
 UPSTREAM_RMQ_COMPONENTS_MK = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk
 
+ifeq ($(PROJECT),rabbit_common)
+check-rabbitmq-components.mk:
+	@:
+else
 check-rabbitmq-components.mk:
 	$(verbose) cmp -s rabbitmq-components.mk \
 		$(UPSTREAM_RMQ_COMPONENTS_MK) || \
 		(echo "error: rabbitmq-components.mk must be updated!" 1>&2; \
 		  false)
+endif
 
 ifeq ($(PROJECT),rabbit_common)
 rabbitmq-components-mk:
