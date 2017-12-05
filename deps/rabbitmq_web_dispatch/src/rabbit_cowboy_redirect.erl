@@ -16,17 +16,9 @@
 
 -module(rabbit_cowboy_redirect).
 
--export([init/3]).
--export([handle/2]).
--export([terminate/3]).
+-export([init/2]).
 
-init(_, Req, RedirectPort) ->
-    {ok, Req, RedirectPort}.
-
-handle(Req0, RedirectPort) ->
+init(Req0, RedirectPort) ->
     URI = cowboy_req:uri(Req0, #{port => RedirectPort}),
     Req = cowboy_req:reply(301, #{<<"location">> => URI}, Req0),
     {ok, Req, RedirectPort}.
-
-terminate(_, _, _) ->
-    ok.
