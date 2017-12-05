@@ -17,7 +17,6 @@
 -module(rabbit_web_dispatch_listing_handler).
 
 -export([init/2]).
--export([terminate/3]).
 
 init(Req0, Listener) ->
     HTMLPrefix =
@@ -35,6 +34,3 @@ init(Req0, Listener) ->
         end,
     Req = cowboy_req:reply(200, #{}, [HTMLPrefix, List, HTMLSuffix], Req0),
     {ok, Req, Listener}.
-
-terminate(_, _, _) ->
-    ok.
