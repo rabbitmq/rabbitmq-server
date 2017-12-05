@@ -221,7 +221,6 @@ init_per_testcase(Test, Config) ->
                 {certfile, filename:join([CertsDir, "client", "cert.pem"])},
                 {keyfile, filename:join([CertsDir, "client", "key.pem"])},
                 {verify, verify_peer},
-                {fail_if_no_peer_cert, true},
                 {server_name_indication, Hostname}
               ]
             };
