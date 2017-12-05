@@ -15,14 +15,8 @@
 %%
 
 -module(rabbit_mgmt_wm_redirect).
--export([init/3, handle/2, terminate/2]).
+-export([init/2]).
 
-init(_, Req, RedirectTo) ->
-    {ok, Req, RedirectTo}.
-
-handle(Req0, RedirectTo) ->
+init(Req0, RedirectTo) ->
     Req = cowboy_req:reply(301, #{<<"location">> => RedirectTo}, Req0),
     {ok, Req, RedirectTo}.
-
-terminate(_, _) ->
-    ok.
