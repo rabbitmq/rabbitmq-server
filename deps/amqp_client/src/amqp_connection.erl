@@ -171,7 +171,8 @@ start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
                 AmqpParams
         end,
     AmqpParams2 = set_connection_name(ConnName, AmqpParams1),
-    {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams2),
+    AmqpParams3 = amqp_ssl:maybe_enhance_ssl_options(AmqpParams2),
+    {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams3),
     amqp_gen_connection:connect(Connection).
 
 set_connection_name(undefined, Params) -> Params;

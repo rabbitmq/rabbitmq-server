@@ -161,10 +161,9 @@ set(KVs, Ps, Fields) ->
     Ps1.
 
 build_ssl_broker(ParsedUri, DefaultVHost) ->
-    Params = build_broker(ParsedUri, DefaultVHost),
+    Params0 = build_broker(ParsedUri, DefaultVHost),
     Query = proplists:get_value('query', ParsedUri),
-    Host = proplists:get_value('host', ParsedUri),
-    SSLOptions0 =
+    SSLOptions =
         run_state_monad(
           [fun (L) -> KeyString = atom_to_list(Key),
                       case lists:keysearch(KeyString, 1, Query) of
@@ -187,9 +186,8 @@ build_ssl_broker(ParsedUri, DefaultVHost) ->
                        {fun find_sni_parameter/1, server_name_indication},
                        {fun find_integer_parameter/1, depth}]],
           []),
-    SSLOptions1 = maybe_add_sni(Host, SSLOptions0),
-    SSLOptions2 = maybe_add_verify(SSLOptions1),
-    Params#amqp_params_network{ssl_options = SSLOptions2}.
+    Params1 = Params0#amqp_params_network{ssl_options = SSLOptions},
+    amqp_ssl:maybe_enhance_ssl_options(Params1).
 
 broker_add_query(Params = #amqp_params_direct{}, Uri) ->
     broker_add_query(Params, Uri, record_info(fields, amqp_params_direct));
@@ -255,24 +253,6 @@ find_boolean_parameter(Value) ->
     end.
 
 find_atom_parameter(Value) -> return(list_to_atom(Value)).
-
-% https://github.com/erlang/otp/blob/master/lib/inets/src/http_client/httpc_handler.erl
-maybe_add_sni(Host, Options) ->
-    case inet_parse:domain(Host) andalso
-	  not lists:keymember(server_name_indication, 1, Options) of
-        true ->
-            [{server_name_indication, Host} | Options];
-        false ->
-            Options
-    end.
-
-maybe_add_verify(Options) ->
-    case lists:keymember(verify, 1, Options) of
-        true ->
-            Options;
-        false ->
-            [{verify, verify_peer} | Options]
-    end.
 
 mechanisms(ParsedUri) ->
     Query = proplists:get_value('query', ParsedUri),
