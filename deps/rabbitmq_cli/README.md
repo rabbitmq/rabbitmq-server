@@ -97,6 +97,8 @@ There are also a number of optional callbacks:
    to provide additional command-specific documentation.
  * `scopes`: what scopes this command appears in. Scopes associate
    tools (e.g. `rabbitmqctl`, `rabbitmq-diagnostics`) with commands.
+ * `distribution`: control erlang distribution.
+   Can be `:cli` (default), `:none` or `{:fun, fun}`
 
 ### Tutorial
 

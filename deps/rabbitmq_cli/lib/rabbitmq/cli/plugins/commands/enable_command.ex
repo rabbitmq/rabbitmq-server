@@ -27,6 +27,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
     {args, Map.merge(%{online: false, offline: false, all: false}, opts)}
   end
 
+  def distribution(%{offline: true}),  do: :none
+  def distribution(%{offline: false}), do: :cli
+
   def switches(), do: [online: :boolean,
                        offline: :boolean,
                        all: :boolean]
