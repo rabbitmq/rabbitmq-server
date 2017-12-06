@@ -201,7 +201,6 @@ amqp_uri_parsing(_Config) ->
                        "&depth=5"),
     ?assertEqual(lists:usort([{certfile,  "/path/to/certfile.pem"},
                               {cacertfile,"/path/to/cacertfile.pem"},
-                              {verify,    verify_peer},
                               {password,  "topsecret"},
                               {verify,    verify_peer},
                               {depth,     5}]),
