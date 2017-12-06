@@ -33,7 +33,8 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
                       aliases: 0,
                       # validates execution environment, e.g. file presence,
                       # whether RabbitMQ is in an expected state on a node, etc
-                      validate_execution_environment: 2
+                      validate_execution_environment: 2,
+                      distribution: 1
 
   @callback validate_execution_environment(list(), map()) :: :ok | {:validation_failure, atom() | {atom(), any}}
   @callback switches() :: Keyword.t
@@ -42,4 +43,9 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback formatter() :: atom()
   @callback scopes() :: [atom()]
   @callback usage_additional() :: String.t | [String.t]
+  ## Erlang distribution control
+  ## :cli - default rabbitmqctl generated node name
+  ## :none - disable erlang distribution
+  ## {:fun, fun} - use a custom function to start distribution
+  @callback distribution(map()) :: :cli | :none | {:fun, ((map()) -> :ok | {:error, any()})}
 end

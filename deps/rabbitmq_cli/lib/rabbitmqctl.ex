@@ -67,8 +67,7 @@ defmodule RabbitMQCtl do
       _ ->
         options = parsed_options |> merge_all_defaults |> normalize_options
         {arguments, options} = command.merge_defaults(arguments, options)
-
-        with_distribution(options, fn() ->
+        maybe_with_distribution(command, options, fn() ->
           # The code below implements a tiny decision tree that has
           # to do with CLI argument and environment state validation.
 
@@ -367,19 +366,39 @@ defmodule RabbitMQCtl do
     """
   end
 
-  @spec with_distribution(options(), (() -> command_result())) :: command_result()
-  defp with_distribution(options, code) do
-    # Tries to start net_kernel distribution, and calls `code`
-    # function on success. Otherswise returns error suitable for
-    # handle_shutdown/0.
-    case Distribution.start(options) do
-      :ok      ->
-        code.()
-      {:ok, _} ->
-        code.()
-      {:error, reason} ->
-        {:error, ExitCodes.exit_config, "Distribution failed: #{inspect reason}"}
+  ## Tries to enable erlang distribution, which can be configured
+  ## via distribution callback in the command as :cli, :none or {:custom, fun()}.
+  ## :cli - default rabbitmqctl node name
+  ## :none - do not start a distribution (e.g. offline command)
+  ## {:fun, fun} - run a custom fuction to enable distribution.
+  ## custom mode is usefult for commands which should have specific node name.
+  ## Runs code if distribution is successful, or not needed.
+  @spec maybe_with_distribution(module(), options(), (() -> command_result())) :: command_result()
+  defp maybe_with_distribution(command, options, code) do
+    distribution_type = case function_exported?(command, :distribution, 1) do
+      false -> :cli
+      true  -> command.distribution(options)
+    end
+    case distribution_type do
+      :none -> code.()
+      :cli  ->
+        case Distribution.start(options) do
+          :ok      ->
+            code.()
+          {:ok, _} ->
+            code.()
+          {:error, reason} ->
+            {:error, ExitCodes.exit_config,
+             "Distribution failed: #{inspect reason}"}
+        end
+      {:fun, fun} ->
+        case fun.(options) do
+          :ok ->
+            code.()
+          {:error, reason} ->
+            {:error, ExitCodes.exit_config,
+             "Distribution failed: #{inspect reason}"}
+        end
     end
   end
-
 end
