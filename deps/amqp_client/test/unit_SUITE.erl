@@ -126,66 +126,60 @@ amqp_uri_parsing(_Config) ->
                  amqp_uri:parse("amqp://user:pass@[::1]:100")),
 
     %% TLS options
-    VFun1 = amqp_ssl:make_verify_fun("host1"),
     {ok, #amqp_params_network{host = "host1", ssl_options = TLSOpts1}} =
         amqp_uri:parse("amqps://host1/%2f?cacertfile=/path/to/cacertfile.pem"),
-    ?assertEqual(lists:usort([VFun1 | [
-                              {cacertfile,"/path/to/cacertfile.pem"},
-                              {server_name_indication, "host1"},
-                              {verify, verify_peer}]]),
-                 lists:usort(TLSOpts1)),
+    Opts1 = [{cacertfile,"/path/to/cacertfile.pem"},
+             {server_name_indication, "host1"},
+             {verify, verify_peer}],
+    Exp1 = amqp_ssl:add_verify_fun_to_opts("host1", Opts1),
+    ?assertEqual(lists:usort(Exp1), lists:usort(TLSOpts1)),
 
-    VFun2 = amqp_ssl:make_verify_fun("host2"),
     {ok, #amqp_params_network{host = "host2", ssl_options = TLSOpts2}} =
         amqp_uri:parse("amqps://host2/%2f?cacertfile=/path/to/cacertfile.pem"
                        "&certfile=/path/to/certfile.pem"),
-    ?assertEqual(lists:usort([VFun2 | [
-                              {certfile,  "/path/to/certfile.pem"},
-                              {cacertfile,"/path/to/cacertfile.pem"},
-                              {server_name_indication, "host2"},
-                              {verify, verify_peer}]]),
-                 lists:usort(TLSOpts2)),
+    Opts2 = [{certfile,  "/path/to/certfile.pem"},
+             {cacertfile,"/path/to/cacertfile.pem"},
+             {server_name_indication, "host2"},
+             {verify, verify_peer}],
+    Exp2 = amqp_ssl:add_verify_fun_to_opts("host2", Opts2),
+    ?assertEqual(lists:usort(Exp2), lists:usort(TLSOpts2)),
 
-    VFun3 = amqp_ssl:make_verify_fun("host3"),
     {ok, #amqp_params_network{host = "host3", ssl_options = TLSOpts3}} =
         amqp_uri:parse("amqps://host3/%2f?verify=verify_peer"
                        "&fail_if_no_peer_cert=true"),
-    ?assertEqual(lists:usort([VFun3 | [
-                              {fail_if_no_peer_cert, true},
-                              {verify, verify_peer},
-                              {server_name_indication, "host3"}]]),
-                 lists:usort(TLSOpts3)),
+    Opts3 = [{fail_if_no_peer_cert, true},
+             {verify, verify_peer},
+             {server_name_indication, "host3"}],
+    Exp3 = amqp_ssl:add_verify_fun_to_opts("host3", Opts3),
+    ?assertEqual(lists:usort(Exp3), lists:usort(TLSOpts3)),
 
-    VFun4 = amqp_ssl:make_verify_fun("host4"),
     {ok, #amqp_params_network{host = "host4", ssl_options = TLSOpts4}} =
         amqp_uri:parse("amqps://host4/%2f?cacertfile=/path/to/cacertfile.pem"
                        "&certfile=/path/to/certfile.pem"
                        "&password=topsecret"
                        "&depth=5"),
-    ?assertEqual(lists:usort([VFun4 | [
-                              {certfile,  "/path/to/certfile.pem"},
-                              {cacertfile,"/path/to/cacertfile.pem"},
-                              {server_name_indication, "host4"},
-                              {verify,    verify_peer},
-                              {password,  "topsecret"},
-                              {depth,     5}]]),
-                 lists:usort(TLSOpts4)),
+    Opts4 = [{certfile,  "/path/to/certfile.pem"},
+             {cacertfile,"/path/to/cacertfile.pem"},
+             {server_name_indication, "host4"},
+             {verify,    verify_peer},
+             {password,  "topsecret"},
+             {depth,     5}],
+    Exp4 = amqp_ssl:add_verify_fun_to_opts("host4", Opts4),
+    ?assertEqual(lists:usort(Exp4), lists:usort(TLSOpts4)),
 
-    VFun5 = amqp_ssl:make_verify_fun("foobar"),
     {ok, #amqp_params_network{host = "host5", ssl_options = TLSOpts5}} =
         amqp_uri:parse("amqps://host5/%2f?server_name_indication=foobar"),
-    ?assertEqual(lists:usort([VFun5 | [
-                              {server_name_indication, "foobar"},
-                              {verify, verify_peer}]]),
-                 lists:usort(TLSOpts5)),
+    Opts5 = [{server_name_indication, "foobar"},
+             {verify, verify_peer}],
+    Exp5 = amqp_ssl:add_verify_fun_to_opts("foobar", Opts5),
+    ?assertEqual(lists:usort(Exp5), lists:usort(TLSOpts5)),
 
-    VFun6 = amqp_ssl:make_verify_fun("barbaz"),
     {ok, #amqp_params_network{host = "127.0.0.1", ssl_options = TLSOpts6}} =
         amqp_uri:parse("amqps://127.0.0.1/%2f?server_name_indication=barbaz"),
-    ?assertEqual(lists:usort([VFun6 | [
-                              {server_name_indication, "barbaz"},
-                              {verify, verify_peer}]]),
-                 lists:usort(TLSOpts6)),
+    Opts6 = [{server_name_indication, "barbaz"},
+             {verify, verify_peer}],
+    Exp6 = amqp_ssl:add_verify_fun_to_opts("barbaz", Opts6),
+    ?assertEqual(lists:usort(Exp6), lists:usort(TLSOpts6)),
 
     {ok, #amqp_params_network{host = "host7", ssl_options = TLSOpts7}} =
         amqp_uri:parse("amqps://host7/%2f?server_name_indication=disable"),

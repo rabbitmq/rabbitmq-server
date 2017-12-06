@@ -5,7 +5,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([maybe_enhance_ssl_options/1,
-         make_verify_fun/1,
+         add_verify_fun_to_opts/2,
          verify_fun/3]).
 
 maybe_enhance_ssl_options(Params = #amqp_params_network{ssl_options = none}) ->
@@ -45,7 +45,7 @@ maybe_add_verify_fun(true, _Host, Options) ->
     % NB: verify_fun already present, don't add twice
     Options;
 maybe_add_verify_fun(false, Host, Options) ->
-    [make_verify_fun(Host) | Options].
+    add_verify_fun_to_opts(Host, Options).
 
 maybe_add_verify(Options) ->
     case lists:keymember(verify, 1, Options) of
@@ -55,12 +55,12 @@ maybe_add_verify(Options) ->
             [{verify, verify_peer} | Options]
     end.
 
-make_verify_fun(Host) ->
+add_verify_fun_to_opts(Host, Options) ->
     case erlang:system_info(otp_release) of
         "19" ->
             F = fun ?MODULE:verify_fun/3,
-            {verify_fun, {F, Host}};
-        _ -> {}
+            [{verify_fun, {F, Host}} | Options];
+        _ -> Options
     end.
 
 -type hostname() :: nonempty_string() | binary().
