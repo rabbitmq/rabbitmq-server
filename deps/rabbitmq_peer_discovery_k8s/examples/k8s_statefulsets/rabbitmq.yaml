@@ -14,7 +14,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:        
       - name: rabbitmq-k8s
-        image: pivotalrabbitmq/rabbitmq-autocluster:3.7-k8s-BETA
+        image: pivotalrabbitmq/rabbitmq-autocluster:3.7-k8s
         ports:
           - name: http
             protocol: TCP
