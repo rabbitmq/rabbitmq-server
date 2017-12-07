@@ -78,7 +78,7 @@ end_per_group(_, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     Hostname = re:replace(os:cmd("hostname"), "\\s+", "", [global,{return,list}]),
-    User = "O=client,CN=" ++ Hostname,
+    User = "O=client,C=UK,ST=England,CN=" ++ Hostname,
     {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["add_user", User, ""]),
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["set_permissions",  "-p", "/", User, ".*", ".*", ".*"]),
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0,

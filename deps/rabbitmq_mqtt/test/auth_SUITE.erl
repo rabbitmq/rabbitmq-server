@@ -173,7 +173,7 @@ init_per_testcase(Testcase, Config) ->
 
 set_cert_user_on_default_vhost(Config) ->
     Hostname = re:replace(os:cmd("hostname"), "\\s+", "", [global,{return,list}]),
-    User = "O=client,CN=" ++ Hostname,
+    User = "O=client,C=UK,ST=England,CN=" ++ Hostname,
     ok = rabbit_ct_broker_helpers:add_user(Config, 0, User, ""),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
     rabbit_ct_helpers:set_config(Config, [{temp_ssl_user, User}]).
