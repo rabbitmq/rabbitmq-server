@@ -24,7 +24,7 @@ services:
       - TCP_PORTS=15672, 5672 
     networks:
       - back
-    image:  pivotalrabbitmq/rabbitmq-autocluster:3.7-etcd-BETA
+    image:  pivotalrabbitmq/rabbitmq-autocluster:3.7-etcd
     expose:
       - 15672
       - 5672

@@ -17,7 +17,7 @@ docker-compose up
 How to scale:
 
 ```
-docker-compose scale rabbit=3
+docker-compose up --scale rabbit=3 -d
 ```
 
 
