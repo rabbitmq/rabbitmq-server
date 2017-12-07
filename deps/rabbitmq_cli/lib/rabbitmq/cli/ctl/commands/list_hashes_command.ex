@@ -26,6 +26,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListHashesCommand do
   end
   def validate(_, _), do: :ok
 
+  def distribution(_), do: :none
+
   def run(_, _) do
     {:ok, :rabbit_pbe.supported_hashes()}
   end
