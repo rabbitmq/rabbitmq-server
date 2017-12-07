@@ -60,7 +60,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Inspect
 
-  def usage, do: "exec <expr>"
+  def usage, do: "exec <expr> [--offline]"
 
   def banner(_, _), do: nil
 end
