@@ -17,10 +17,6 @@ defmodule RabbitMQCtl.MixfileBase do
   use Mix.Project
 
   def project do
-    deps_dir = case System.get_env("DEPS_DIR") do
-      nil -> "deps"
-      dir -> dir
-    end
     [
       app: :rabbitmqctl,
       version: "0.0.1",
@@ -30,8 +26,7 @@ defmodule RabbitMQCtl.MixfileBase do
       escript: [main_module: RabbitMQCtl,
                 emu_args: "-hidden",
                 path: "escript/rabbitmqctl"],
-      deps_path: deps_dir,
-      deps: deps(deps_dir),
+      deps: deps(),
       aliases: aliases()
    ]
   end
@@ -88,30 +83,56 @@ defmodule RabbitMQCtl.MixfileBase do
   #   {:mydep, git: "https://github.com/elixir-lang/mydep.git", tag: "0.1.0"}
   #
   # Type "mix help deps" for more examples and options
-  defp deps(deps_dir) do
-    [
-      # We use `true` as the command to "build" rabbit_common and
-      # amqp_client because Erlang.mk already built them.
-      {
-        :rabbit_common,
-        path: Path.join(deps_dir, "rabbit_common"),
-        compile: "true",
-        override: true
-      },
-      {
-        :amqp_client,
-        only: :test,
-        path: Path.join(deps_dir, "amqp_client"),
-        compile: "true",
-        override: true
-      },
-      {:amqp, "~> 0.2.2", only: :test},
-      {:temp, "~> 0.4", only: :test},
+  defp deps() do
+    elixir_deps = [
       {:json, "~> 1.0.0"},
       {:csv, "~> 2.0.0"},
       {:simetric, "~> 0.2.0"},
-      {:dialyxir, "~> 0.5", only: [:test], runtime: false}
+
+      {:amqp, "~> 0.2.2", only: :test},
+      {:dialyxir, "~> 0.5", only: :test, runtime: false},
+      {:temp, "~> 0.4", only: :test},
     ]
+
+    rabbitmq_deps = case System.get_env("DEPS_DIR") do
+      nil ->
+        # rabbitmq_cli is built as a standalone Elixir application.
+        [
+          {:rabbit_common, "~> 3.7.0"},
+          {:amqp_client, "~> 3.7.0", only: :test},
+        ]
+      deps_dir ->
+        # rabbitmq_cli is built as part of RabbitMQ.
+
+        # Mix is confused by any `rebar.{config,lock}` we might have left in
+        # `rabbit_common` or `amqp_client`. So just remove those files to be
+        # safe, as they are generated when we publish to Hex.pm only.
+        for dir <- ["rabbit_common", "amqp_client"] do
+          for file <- ["rebar.config", "rebar.lock"] do
+            File.rm(Path.join([deps_dir, dir, file]))
+          end
+        end
+
+        # We disable compilation for rabbit_common and amqp_client
+        # because Erlang.mk already built them.
+        [
+          {
+            :rabbit_common,
+            path: Path.join(deps_dir, "rabbit_common"),
+            compile: false,
+            override: true
+          },
+          {
+            :amqp_client,
+            path: Path.join(deps_dir, "amqp_client"),
+            compile: false,
+            override: true,
+            only: :test
+          },
+        ]
+    end
+
+    elixir_deps ++ rabbitmq_deps
   end
 
   defp aliases do

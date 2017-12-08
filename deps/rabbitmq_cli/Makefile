@@ -17,6 +17,11 @@ endif
 include rabbitmq-components.mk
 include erlang.mk
 
+# rabbitmq-mix.mk is generated during the creation of the RabbitMQ
+# source archive. It sets some environment variables to allow
+# rabbitmq_cli to build offline, using the bundled sources only.
+-include rabbitmq-mix.mk
+
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
