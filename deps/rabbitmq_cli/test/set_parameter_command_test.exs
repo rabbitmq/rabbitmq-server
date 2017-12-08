@@ -29,31 +29,26 @@ defmodule SetParameterCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     add_vhost @vhost
 
     enable_federation_plugin()
 
     on_exit([], fn ->
       delete_vhost @vhost
-
-
     end)
 
     :ok
   end
 
   setup context do
-
     on_exit(context, fn ->
       clear_parameter context[:vhost], context[:component_name], context[:key]
     end)
-
     {
       :ok,
       opts: %{
         node: get_rabbit_hostname(),
-        vhost: "/"
+        vhost: context[:vhost]
       }
     }
   end
@@ -61,6 +56,7 @@ defmodule SetParameterCommandTest do
   @tag component_name: @component_name, key: @key, value: @value, vhost: @root
   test "merge_defaults: a well-formed command with no vhost runs against the default" do
     assert match?({_, %{vhost: "/"}}, @command.merge_defaults([], %{}))
+    assert match?({_, %{vhost: "non_default"}}, @command.merge_defaults([], %{vhost: "non_default"}))
   end
 
   test "validate: wrong number of arguments leads to an arg count error" do
@@ -134,7 +130,7 @@ defmodule SetParameterCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.banner([context[:component_name], context[:key], context[:value]], vhost_opts)
-      =~ ~r/Setting runtime parameter \"#{context[:component_name]}\" for component \"#{context[:key]}\" to \"#{context[:value]}\" \.\.\./
+      =~ ~r/Setting runtime parameter \"#{context[:component_name]}\" for component \"#{context[:key]}\" to \"#{context[:value]}\" for vhost \"#{context[:vhost]}\" \.\.\./
   end
 
   # Checks each element of the first parameter against the expected context values

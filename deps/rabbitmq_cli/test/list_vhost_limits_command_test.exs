@@ -106,7 +106,7 @@ defmodule ListVhostLimitsCommandTest do
   end
 
   @tag vhost: "bad-vhost"
-  test "run: providing a non-existent vhost reports an error", context do
+  test "run: providing a non-existent vhost reports an error", _context do
     s = "non-existent-vhost-a9sd89"
 
     assert @command.run([], %{node: get_rabbit_hostname(),
