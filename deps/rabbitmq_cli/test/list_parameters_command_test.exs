@@ -30,7 +30,6 @@ defmodule ListParametersCommandTest do
     RabbitMQ.CLI.Core.Distribution.start()
     node = get_rabbit_hostname()
 
-
     {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
                                                 :application, :get_env,
                                                 [:rabbit, :enabled_plugins_file])
@@ -54,19 +53,15 @@ defmodule ListParametersCommandTest do
     on_exit(fn ->
       set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname(), opts)
       delete_vhost @vhost
-
-
     end)
 
     :ok
   end
 
   setup context do
-
     on_exit(fn ->
       clear_parameter context[:vhost], context[:component_name], context[:key]
     end)
-
     {
       :ok,
       opts: %{
