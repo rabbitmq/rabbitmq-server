@@ -1608,6 +1608,11 @@ get_monitor() {
             ocf_log info "${LH} comparing us (start time: $our_start_time, score: $new_score) with $node (start time: $node_start_time, score: $node_score)"
             if [ $node_start_time -ne 0 -a $node_score -ne 0 -a $node_start_time -lt $our_start_time ]; then
                 new_score=$((node_score - 10 < new_score ? node_score - 10 : new_score ))
+            elif [ $node_start_time -ne 0 -a $node_score -ne 0 -a $node_start_time -eq $our_start_time ]
+                # Do not get promoted if the other node is already master and we have the same start time
+                if is_master $node; then
+                    new_score=$((node_score - 10 < new_score ? node_score - 10 : new_score ))
+                fi
             fi
         done
     fi
