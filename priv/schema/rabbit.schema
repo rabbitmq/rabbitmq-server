@@ -713,6 +713,11 @@ end}.
 {mapping, "vm_memory_calculation_strategy", "rabbit.vm_memory_calculation_strategy",
     [{datatype, {enum, [rss, erlang, allocated, legacy]}}]}.
 
+%% The total memory available can be calculated from the OS resources
+%% (default option) or provided as a configuration parameter
+{mapping, "total_memory_available_override_value", "rabbit.total_memory_available_override_value", [
+    {datatype, [integer, string]}]}.
+
 %% Set disk free limit (in bytes). Once free disk space reaches this
 %% lower bound, a disk alarm will be set - see the documentation
 %% listed above for more details.
