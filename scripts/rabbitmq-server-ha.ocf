@@ -2187,7 +2187,6 @@ action_notify() {
                 ;;
             start)
                 ocf_log info "${LH} post-start begin."
-                local nodes_list="${OCF_RESKEY_CRM_meta_notify_start_uname} ${OCF_RESKEY_CRM_meta_notify_active_uname}"
                 # Do nothing, if the list of nodes being started or running reported empty
                 # Delegate recovery, if needed, to the "running out of the cluster" monitor's logic
                 if [ -z "${OCF_RESKEY_CRM_meta_notify_start_uname}" -a -z "${OCF_RESKEY_CRM_meta_notify_active_uname}" ] ; then
@@ -2196,7 +2195,7 @@ action_notify() {
                   return $OCF_SUCCESS
                 fi
                 # check did this event from this host
-                my_host "${nodes_list}"
+                my_host "${OCF_RESKEY_CRM_meta_notify_start_uname}"
                 rc=$?
                 # Do nothing, if there is no master reported
                 # Delegate recovery, if needed, to the "running out of the cluster" monitor's logic
