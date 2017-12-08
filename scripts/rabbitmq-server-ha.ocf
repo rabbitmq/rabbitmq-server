@@ -2190,7 +2190,7 @@ action_notify() {
                 local nodes_list="${OCF_RESKEY_CRM_meta_notify_start_uname} ${OCF_RESKEY_CRM_meta_notify_active_uname}"
                 # Do nothing, if the list of nodes being started or running reported empty
                 # Delegate recovery, if needed, to the "running out of the cluster" monitor's logic
-                if [ -z "${nodes_list}" ] ; then
+                if [ -z "${OCF_RESKEY_CRM_meta_notify_start_uname}" -a -z "${OCF_RESKEY_CRM_meta_notify_active_uname}" ] ; then
                   ocf_log warn "${LH} I'm a last man standing and I must survive!"
                   ocf_log info "${LH} post-start end."
                   return $OCF_SUCCESS
