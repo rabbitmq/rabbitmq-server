@@ -2222,7 +2222,6 @@ action_notify() {
                       rc2=$?
                       update_rabbit_start_time_if_rc $rc2
                     fi
-                    ocf_log info "${LH} post-start end."
                     if [ -s "${OCF_RESKEY_definitions_dump_file}" ] ; then
                         ocf_log info "File ${OCF_RESKEY_definitions_dump_file} exists"
                         ocf_run curl --silent --show-error --request POST --user $OCF_RESKEY_admin_user:$OCF_RESKEY_admin_password $OCF_RESKEY_host_ip:15672/api/definitions --header "Content-Type:application/json" --data @$OCF_RESKEY_definitions_dump_file
@@ -2239,6 +2238,7 @@ action_notify() {
                         return $OCF_ERR_GENERIC
                     fi
                 fi
+                ocf_log info "${LH} post-start end."
                 ;;
             stop)
                 # if rabbitmq-server stops on any another node, we should remove it from cluster (as ordinary operation)
