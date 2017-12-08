@@ -122,10 +122,13 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> $@/git-revisions.txt
 	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
 	$(verbose) mkdir -p $@/deps/licensing
-	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
+	$(verbose) set -e; for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
 		 $@/deps; \
+		rm -f \
+		 $@/deps/rabbit_common/rebar.config \
+		 $@/deps/rabbit_common/rebar.lock; \
 		if test -f $@/deps/$$(basename $$dep)/erlang.mk && \
 		   test "$$(wc -l $@/deps/$$(basename $$dep)/erlang.mk | awk '{print $$1;}')" = "1" && \
 		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" $@/deps/$$(basename $$dep)/erlang.mk; then \
@@ -134,12 +137,21 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$|include ../../erlang.mk|" \
 		 $@/deps/$$(basename $$dep)/Makefile && \
 		rm $@/deps/$$(basename $$dep)/Makefile.bak; \
+		mix_exs=$@/deps/$$(basename $$dep)/mix.exs; \
+		if test -f $$mix_exs; then \
+			(cd $$(dirname "$$mix_exs") && \
+			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get && \
+			 cp $(DEPS_DIR)/rabbit_common/mk/rabbitmq-mix.mk . && \
+			 rm -rf _build deps); \
+		fi; \
 		if test -f "$$dep/license_info"; then \
 			cp "$$dep/license_info" "$@/deps/licensing/license_info_$$(basename "$$dep")"; \
 			cat "$$dep/license_info" >> $@/LICENSE; \
 		fi; \
 		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
-		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
+		(cd $$dep; \
+		 echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") \
+		 >> $@/git-revisions.txt; \
 	done
 	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
