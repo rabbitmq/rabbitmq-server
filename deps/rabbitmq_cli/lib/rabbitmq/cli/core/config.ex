@@ -14,7 +14,6 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Config do
-
   def get_option(name, opts \\ %{}) do
     raw_option = opts[name] ||
                    get_system_option(name) ||

@@ -21,7 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(opts, %{vhost: "/"})}
+    {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
   def validate([], _) do
@@ -50,7 +50,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
 
   def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"
 
-  def banner([component_name, name, value], _) do
-    "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" ..."
+  def banner([component_name, name, value], %{vhost: vhost}) do
+    "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" in vhost \"#{vhost}\" ..."
   end
 end
