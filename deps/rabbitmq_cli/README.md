@@ -6,9 +6,8 @@ implementation of
 [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and
 other RabbitMQ CLI tools.
 
-This project is a work in progress and targets RabbitMQ `3.7.0`
-(currently the `master` branch).  For production use, go with the
-`rabbitmqctl` distributed with the RabbitMQ version you use.
+This project first shipped with RabbitMQ `3.7.0`. Please use the version of CLI
+tools that come with the RabbitMQ distribution version installed.
 
 
 ## Goals
