@@ -176,7 +176,8 @@ validation_success_for_AMQP_client1(Config) ->
     %% authority connects successfully.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cert, Certificate},
+                                                           ssl_options = [{verify, verify_none},
+                                                                          {cert, Certificate},
                                                                           {key, Key}]}),
 
     %% Clean: client & server TLS/TCP.
@@ -209,7 +210,8 @@ validation_failure_for_AMQP_client1(Config) ->
     Error = amqp_connection:start(
               #amqp_params_network{host = Host,
                                    port = Port,
-                                   ssl_options = [{cert, CertOther},
+                                   ssl_options = [{verify, verify_none},
+                                                  {cert, CertOther},
                                                   {key, KeyOther}]}),
     case Error of
         %% Expected error from amqp_client.
@@ -236,7 +238,7 @@ validate_chain(Config) ->
 validate_chain1(Config) ->
     %% Given: a whitelisted certificate `CertTrusted` AND a CA `RootTrusted`
     {Root, Cert, Key} = ct_helper:make_certs(),
-    {RootTrusted,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
+    {RootTrusted, CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
@@ -253,10 +255,10 @@ validate_chain1(Config) ->
     %% Then: the connection is successful.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cacerts, [RootTrusted]},
+                                                           ssl_options = [{cacerts, [Root, RootTrusted]},
                                                                           {cert, CertTrusted},
-                                                                          {key, KeyTrusted}]}),
-
+                                                                          {key, KeyTrusted},
+                                                                          {server_name_indication, disable}]}),
     %% Clean: client & server TLS/TCP
     ok = amqp_connection:close(Con),
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -296,7 +298,7 @@ validate_longer_chain1(Config) ->
     %% Then: the connection is successful.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
-                                                           ssl_options = [{cacerts, [CertInter]},
+                                                           ssl_options = [{cacerts, [Root, CertInter]},
                                                                           {cert, CertTrusted},
                                                                           {key, KeyTrusted}]}),
 
@@ -304,7 +306,7 @@ validate_longer_chain1(Config) ->
     %% Then: the connection is successful.
     {ok, Con2} = amqp_connection:start(#amqp_params_network{host = Host,
                                                             port = Port,
-                                                            ssl_options = [{cacerts, [RootCA, CertInter]},
+                                                            ssl_options = [{cacerts, [Root, RootCA, CertInter]},
                                                                            {cert, CertTrusted},
                                                                            {key, KeyTrusted}]}),
 
@@ -312,7 +314,7 @@ validate_longer_chain1(Config) ->
     %% Then: the connection is successful.
     {ok, Con3} = amqp_connection:start(#amqp_params_network{host = Host,
                                                             port = Port,
-                                                            ssl_options = [{cacerts, [CertInter, RootCA]},
+                                                            ssl_options = [{cacerts, [Root, CertInter, RootCA]},
                                                                            {cert, CertTrusted},
                                                                            {key, KeyTrusted}]}),
 
