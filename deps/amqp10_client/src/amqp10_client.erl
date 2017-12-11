@@ -395,6 +395,10 @@ parse_tls_opt("fail_if_no_peer_cert", V, Acc)
     [{fail_if_no_peer_cert, to_atom(V)} | Acc];
 parse_tls_opt("fail_if_no_peer_cert", _V, _Acc) ->
     throw({invalid_option, fail_if_no_peer_cert});
+parse_tls_opt("server_name_indication", "disable", Acc) ->
+    [{server_name_indication, disable} | Acc];
+parse_tls_opt("server_name_indication", V, Acc) ->
+    [{server_name_indication, V} | Acc];
 parse_tls_opt(_K, _V, Acc) ->
     Acc.
 
@@ -428,6 +432,27 @@ parse_uri_test_() ->
                   "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
                   "keyfile=/etc/keyfile.key&verify=verify_none&" ++
                   "fail_if_no_peer_cert=true")),
+     ?_assertMatch(
+        {ok, #{address := "my_proxy", port := 9876,
+               tls_opts := {secure_port, [{cacertfile, "/etc/cacertfile.pem"},
+                                          {certfile, "/etc/certfile.pem"},
+                                          {fail_if_no_peer_cert, true},
+                                          {keyfile, "/etc/keyfile.key"},
+                                          {server_name_indication, "frazzle"},
+                                          {verify, verify_none}
+                                         ]},
+               sasl := {plain, "fred", "passw"}}},
+        parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain"
+                  "&cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem"
+                  "&keyfile=/etc/keyfile.key&verify=verify_none"
+                  "&fail_if_no_peer_cert=true"
+                  "&server_name_indication=frazzle")),
+     ?_assertMatch(
+        {ok, #{address := "my_proxy", port := 9876,
+               tls_opts := {secure_port, [{server_name_indication, disable}]},
+               sasl := {plain, "fred", "passw"}}},
+        parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain"
+                  "&server_name_indication=disable")),
      ?_assertMatch({error, {invalid_option, verify}},
                    parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
                   "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
