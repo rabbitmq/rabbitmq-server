@@ -36,26 +36,48 @@ maybe_add_sni_0({server_name_indication, SniHost}, _Host, Options) ->
     maybe_add_verify_fun(lists:keymember(verify_fun, 1, Options), SniHost, Options).
 
 maybe_add_sni_1(false, _Host, Options) ->
+    % NB: host is not a DNS host name, so nothing to add
     Options;
-maybe_add_sni_1(true, Host, Options) ->
-    Opts1 = [{server_name_indication, Host} | Options],
-    maybe_add_verify_fun(lists:keymember(verify_fun, 1, Opts1), Host, Opts1).
+maybe_add_sni_1(true, _Host, Options) ->
+    % NB: For RabbitMQ 3.7.x, log a warning
+    ?LOG_WARN("Connection (~p): Server name indication is not enabled for this TLS connection. "
+              "Please see https://rabbitmq.com/ssl.html for more information.~n", [self()]),
+    Options.
+    % TODO FUTURE 3.8.x
+    % SNI will become the default in RabbitMQ 3.8.0
+    % Opts1 = [{server_name_indication, Host} | Options],
+    % maybe_add_verify_fun(lists:keymember(verify_fun, 1, Opts1), Host, Opts1).
 
 maybe_add_verify_fun(true, _Host, Options) ->
     % NB: verify_fun already present, don't add twice
     Options;
 maybe_add_verify_fun(false, Host, Options) ->
-    add_verify_fun_to_opts(Host, Options).
+    add_verify_fun_to_opts(lists:keyfind(verify, 1, Options), Host, Options).
 
 maybe_add_verify(Options) ->
-    case lists:keymember(verify, 1, Options) of
-        true ->
-            Options;
-        false ->
-            [{verify, verify_peer} | Options]
-    end.
+    ?LOG_WARN("Connection (~p): Certificate chain verification is not enabled for this TLS connection. "
+              "Please see https://rabbitmq.com/ssl.html for more information.~n", [self()]),
+    Options.
+    % TODO FUTURE 3.8.x
+    % verify_peer will become the default in RabbitMQ 3.8.0
+    % case lists:keymember(verify, 1, Options) of
+    %     true ->
+    %         Options;
+    %     false ->
+    %         [{verify, verify_peer} | Options]
+    % end.
 
 add_verify_fun_to_opts(Host, Options) ->
+    add_verify_fun_to_opts(false, Host, Options).
+
+add_verify_fun_to_opts({verify, verify_none}, _Host, Options) ->
+    % NB: this is the case where the user explicitly disabled
+    % certificate chain verification so there's not much sense
+    % in adding verify_fun
+    Options;
+add_verify_fun_to_opts(_, Host, Options) ->
+    % NB: this is the case where the user either did not
+    % set the verify option or set it to verify_peer
     case erlang:system_info(otp_release) of
         "19" ->
             F = fun ?MODULE:verify_fun/3,
@@ -92,4 +114,3 @@ verify_hostname(Cert, Hostname) ->
         false ->
             {fail, {bad_cert, hostname_check_failed}}
     end.
-
