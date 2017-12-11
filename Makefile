@@ -140,6 +140,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		mix_exs=$@/deps/$$(basename $$dep)/mix.exs; \
 		if test -f $$mix_exs; then \
 			(cd $$(dirname "$$mix_exs") && \
+			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force && \
 			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get && \
 			 cp $(DEPS_DIR)/rabbit_common/mk/rabbitmq-mix.mk . && \
 			 rm -rf _build deps); \
