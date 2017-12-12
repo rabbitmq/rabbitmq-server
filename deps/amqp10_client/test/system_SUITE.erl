@@ -54,11 +54,13 @@ groups() ->
      {rabbitmq_strict, [], [
                             basic_roundtrip_tls,
                             open_connection_plain_sasl,
-                            open_connection_plain_sasl_failure
+                            open_connection_plain_sasl_failure,
+                            open_connection_plain_sasl_parse_uri
                            ]},
      {activemq_no_anon, [],
       [
        open_connection_plain_sasl,
+       open_connection_plain_sasl_parse_uri,
        open_connection_plain_sasl_failure
       ]},
       {azure, [],
@@ -204,6 +206,30 @@ open_connection_plain_sasl(Config) ->
                 notify => self(),
                 container_id => <<"open_connection_plain_sasl_container">>,
                 sasl =>  ?config(sasl, Config)},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive
+        {amqp10_event, {connection, Connection, opened}} -> ok
+    after 5000 -> exit(connection_timeout)
+    end,
+    ok = amqp10_client:close_connection(Connection).
+
+open_connection_plain_sasl_parse_uri(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Uri = case ?config(sasl, Config) of
+              anon ->
+                  lists:flatten(
+                    io_lib:format("amqp://~s:~b", [Hostname, Port]));
+              {plain, Usr, Pwd} ->
+                  lists:flatten(
+                    io_lib:format("amqp://~s:~s@~s:~b?sasl=plain",
+                                  [Usr, Pwd, Hostname, Port]))
+          end,
+
+    {ok, ParsedConf} = amqp10_client:parse_uri(Uri),
+    OpnConf = maps:merge(#{notify => self(),
+                           container_id => <<"open_connection_plain_sasl_parse_uri_container">>},
+                         ParsedConf),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive
         {amqp10_event, {connection, Connection, opened}} -> ok
