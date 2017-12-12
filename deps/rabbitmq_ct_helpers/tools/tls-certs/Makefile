@@ -3,7 +3,7 @@ $(error DIR must be specified)
 endif
 
 PASSWORD ?= changeme
-HOSTNAME := $(shell if [$(uname) == 'Darwin']; then hostname -s; else hostname; fi)
+HOSTNAME := $(shell if [ $(uname) == 'Darwin' ]; then hostname -s; else hostname; fi)
 
 # Verbosity.
 
