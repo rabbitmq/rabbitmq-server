@@ -52,7 +52,7 @@ $(DIR)/%/cert.pem: $(DIR)/testca/cacert.pem
 	$(verbose) { ( cd $(DIR)/$(TARGET) && \
 	    openssl genrsa -out key.pem 2048 &&\
 	    openssl req -new -key key.pem -out req.pem -outform PEM\
-		-subj /CN=$$(hostname)/O=$(TARGET)/L=$$$$/ -nodes &&\
+		-subj /C=UK/ST=England/CN=$$(hostname -s)/O=$(TARGET)/L=$$$$/ -nodes &&\
 	    cd ../testca && \
 	    openssl ca -config $(CURDIR)/openssl.cnf -in ../$(TARGET)/req.pem -out \
 	      ../$(TARGET)/cert.pem -notext -batch -extensions \
