@@ -8,6 +8,10 @@ User=rabbitmq
 Group=rabbitmq
 NotifyAccess=all
 TimeoutStartSec=3600
+# Un-comment this setting if you need to increase RabbitMQ's
+# open files limit
+# LimitNOFILE=16384
+#
 # Note: systemd on CentOS 7 complains about in-line comments,
 # so only append them here
 #
