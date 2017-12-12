@@ -291,3 +291,7 @@
 %% For event audit purposes
 -define(INTERNAL_USER, <<"rmq-internal">>).
 -define(UNKNOWN_USER,  <<"unknown">>).
+
+%% Store metadata in the trace files when message tracing is enabled.
+-define(LG_INFO(Info), is_pid(whereis(lg)) andalso (lg ! Info)).
+-define(LG_PROCESS_TYPE(Type), ?LG_INFO(#{process_type => Type})).
