@@ -39,6 +39,7 @@ boot() ->
                 "traces.lz4",
                 maps:from_list([
                     {mode, profile},
+                    {process_dump, true},
                     {running, true},
                     {send, true}]
                 )
@@ -53,4 +54,4 @@ parse_value(Value) ->
 
 connections() ->
     Pids = [Pid || {{conns_sup, _}, Pid} <- ets:tab2list(ranch_server)],
-    [{app, rabbit}, {app, rabbit_common}, {scope, Pids}].
+    ['_', {scope, Pids}].

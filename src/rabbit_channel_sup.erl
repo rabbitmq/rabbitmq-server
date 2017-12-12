@@ -88,6 +88,7 @@ start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
 %%----------------------------------------------------------------------------
 
 init(Type) ->
+    ?LG_PROCESS_TYPE(channel_sup),
     {ok, {{one_for_all, 0, 1}, child_specs(Type)}}.
 
 child_specs({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, Identity}) ->

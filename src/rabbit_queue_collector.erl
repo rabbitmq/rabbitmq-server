@@ -49,6 +49,7 @@ delete_all(CollectorPid) ->
 %%----------------------------------------------------------------------------
 
 init([ProcName]) ->
+    ?LG_PROCESS_TYPE(queue_collector),
     ?store_proc_name(ProcName),
     {ok, #state{monitors = pmon:new(), delete_from = undefined}}.
 

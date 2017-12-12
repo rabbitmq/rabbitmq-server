@@ -383,6 +383,7 @@ force_event_refresh(Ref) ->
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid]) ->
     process_flag(trap_exit, true),
+    ?LG_PROCESS_TYPE(channel),
     ?store_proc_name({ConnName, Channel}),
     ok = pg_local:join(rabbit_channels, self()),
     Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of

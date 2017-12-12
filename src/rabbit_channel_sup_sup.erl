@@ -27,6 +27,8 @@
 
 -export([init/1]).
 
+-include("rabbit.hrl").
+
 %%----------------------------------------------------------------------------
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
@@ -44,6 +46,7 @@ start_channel(Pid, Args) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    ?LG_PROCESS_TYPE(channel_sup_sup),
     {ok, {{simple_one_for_one, 0, 1},
           [{channel_sup, {rabbit_channel_sup, start_link, []},
             temporary, infinity, supervisor, [rabbit_channel_sup]}]}}.
