@@ -347,7 +347,7 @@ parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
                        [] -> throw(plain_sasl_missing_userinfo);
                        U ->
                            [User, Pass] = string:tokens(U, ":"),
-                           {plain, User, Pass}
+                           {plain, to_binary(User), to_binary(Pass)}
                    end;
                _ -> none
            end,
@@ -403,65 +403,53 @@ parse_tls_opt(_K, _V, Acc) ->
     Acc.
 
 to_atom(X) when is_list(X) -> list_to_atom(X).
+to_binary(X) when is_list(X) -> list_to_binary(X).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
 parse_uri_test_() ->
-    [?_assertMatch({ok, #{address := "my_host", port := 9876,
-                          sasl := none}}, parse_uri("amqp://my_host:9876")),
-     ?_assertMatch({ok, #{address := "my_proxy",
-                          port := 9876,
-                          hostname := <<"my_host">>,
-                          idle_time_out := 60000,
-                          max_frame_size := 512,
-                          tls_opts := {secure_port, []},
-                          sasl := {plain, "fred", "passw"}}},
+    [?_assertEqual({ok, #{address => "my_host", port => 9876,
+                          sasl => none}}, parse_uri("amqp://my_host:9876")),
+     ?_assertEqual({ok, #{address => "my_proxy",
+                          port => 9876,
+                          hostname => <<"my_host">>,
+                          idle_time_out => 60000,
+                          max_frame_size => 512,
+                          tls_opts => {secure_port, []},
+                          sasl => {plain, <<"fred">>, <<"passw">>}}},
                    parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
                              "hostname=my_host&max_frame_size=512&idle_time_out=60000")),
-     ?_assertMatch(
-        {ok, #{address := "my_proxy", port := 9876,
-               tls_opts := {secure_port, [{cacertfile, "/etc/cacertfile.pem"},
-                                          {certfile, "/etc/certfile.pem"},
-                                          {fail_if_no_peer_cert, true},
-                                          {keyfile, "/etc/keyfile.key"},
-                                          {verify, verify_none}
-                                         ]},
-               sasl := {plain, "fred", "passw"}}},
-        parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
-                  "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
-                  "keyfile=/etc/keyfile.key&verify=verify_none&" ++
-                  "fail_if_no_peer_cert=true")),
-     ?_assertMatch(
-        {ok, #{address := "my_proxy", port := 9876,
-               tls_opts := {secure_port, [{cacertfile, "/etc/cacertfile.pem"},
+     ?_assertEqual(
+        {ok, #{address => "my_proxy", port => 9876,
+               tls_opts => {secure_port, [{cacertfile, "/etc/cacertfile.pem"},
                                           {certfile, "/etc/certfile.pem"},
                                           {fail_if_no_peer_cert, true},
                                           {keyfile, "/etc/keyfile.key"},
                                           {server_name_indication, "frazzle"},
                                           {verify, verify_none}
                                          ]},
-               sasl := {plain, "fred", "passw"}}},
+               sasl => {plain, <<"fred">>, <<"passw">>}}},
         parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain"
                   "&cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem"
                   "&keyfile=/etc/keyfile.key&verify=verify_none"
                   "&fail_if_no_peer_cert=true"
                   "&server_name_indication=frazzle")),
-     ?_assertMatch(
-        {ok, #{address := "my_proxy", port := 9876,
-               tls_opts := {secure_port, [{server_name_indication, disable}]},
-               sasl := {plain, "fred", "passw"}}},
+     ?_assertEqual(
+        {ok, #{address => "my_proxy", port => 9876,
+               tls_opts => {secure_port, [{server_name_indication, disable}]},
+               sasl => {plain, <<"fred">>, <<"passw">>}}},
         parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain"
                   "&server_name_indication=disable")),
-     ?_assertMatch({error, {invalid_option, verify}},
+     ?_assertEqual({error, {invalid_option, verify}},
                    parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
                   "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
                   "keyfile=/etc/keyfile.key&verify=verify_bananas&")),
-     ?_assertMatch({error, {invalid_option, fail_if_no_peer_cert}},
+     ?_assertEqual({error, {invalid_option, fail_if_no_peer_cert}},
                    parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
                   "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
                   "keyfile=/etc/keyfile.key&fail_if_no_peer_cert=banana&")),
-     ?_assertMatch({error, plain_sasl_missing_userinfo},
+     ?_assertEqual({error, plain_sasl_missing_userinfo},
                    parse_uri("amqp://my_host:9876?sasl=plain"))
     ].
 
