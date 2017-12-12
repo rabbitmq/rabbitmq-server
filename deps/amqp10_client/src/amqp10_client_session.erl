@@ -100,7 +100,12 @@
 -type link_ref() :: #link_ref{}.
 
 -export_type([snd_settle_mode/0,
-              rcv_settle_mode/0]).
+              rcv_settle_mode/0,
+              terminus_durability/0,
+              attach_args/0,
+              attach_role/0,
+              target_def/0,
+              source_def/0]).
 
 -record(link,
         {name :: link_name(),
@@ -142,7 +147,7 @@
          connection_config = #{} :: amqp10_client_connection:connection_config(),
          % the unsettled map needs to go in the session state as a disposition
          % can reference transfers for many different links
-         unsettled = #{} :: #{transfer_id() => {amqp10_client:delivery_tag(),
+         unsettled = #{} :: #{transfer_id() => {amqp10_msg:delivery_tag(),
                                                 any()}}, %TODO: refine as FsmRef
          incoming_unsettled = #{} :: #{transfer_id() => link_handle()},
          notify :: pid()
