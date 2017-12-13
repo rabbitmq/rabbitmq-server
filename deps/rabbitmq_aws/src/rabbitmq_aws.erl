@@ -14,6 +14,7 @@
          refresh_credentials/0,
          request/5, request/6, request/7,
          set_credentials/2,
+         has_credentials/0,
          set_region/1]).
 
 %% gen-server exports
@@ -198,6 +199,9 @@ handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
 handle_msg({set_region, Region}, State) ->
     {reply, ok, State#state{region = Region}};
 
+handle_msg(has_credentials, State) ->
+    {reply, has_credentials(State), State};
+
 handle_msg(_Request, State) ->
     {noreply, State}.
 
@@ -244,6 +248,9 @@ get_content_type(Headers) ->
   end,
   parse_content_type(Value).
 
+-spec has_credentials() -> true | false.
+has_credentials() ->
+  gen_server:call(rabbitmq_aws, has_credentials).
 
 -spec has_credentials(state()) -> true | false.
 %% @doc check to see if there are credentials made available in the current state
@@ -280,7 +287,7 @@ load_credentials(#state{region = Region}) ->
                   expiration = Expiration,
                   security_token = SecurityToken}};
     {error, Reason} ->
-      error_logger:error_msg("Failed to retrieve AWS credentials: ~p~n", [Reason]),
+      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~p. Will depend on config settings to be set.~n.", [Reason]),
       {error, #state{region = Region,
                      error = Reason,
                      access_key = undefined,
