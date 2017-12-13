@@ -870,8 +870,8 @@ is_clustered_with()
     rc=$?
     if [ "$rc" -ne 0 ]; then
         ocf_log err "${LH} Failed to check whether '$node_name' is considered running by us"
-        # XXX Or should we give remote node benefit of a doubt?
-        return 1
+        # We had a transient local error; that doesn't mean the remote node is
+        # not part of the cluster, so ignore this
     elif [ "$seen_as_running" != true ]; then
         ocf_log info "${LH} Node $node_name is not running, considering it not clustered with us"
         return 1
@@ -882,8 +882,8 @@ is_clustered_with()
     rc=$?
     if [ "$rc" -ne 0 ]; then
         ocf_log err "${LH} Failed to check whether '$node_name' is partitioned with us"
-        # XXX Or should we give remote node benefit of a doubt?
-        return 1
+        # We had a transient local error; that doesn't mean the remote node is
+        # partitioned with us, so ignore this
     elif [ "$seen_as_partitioned" != false ]; then
         ocf_log info "${LH} Node $node_name is partitioned from us"
         return 1
