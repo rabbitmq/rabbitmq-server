@@ -27,12 +27,12 @@ before_script:
   # information is missing. Our Erlang.mk's git_rmq fetch method relies
   # on it, so we need to restore it.
   #
-  # We simply fetch master and, if it exists, stable branches. A branch
+  # We simply fetch master and, if it exists, v3.6.x branches. A branch
   # is created, pointing to the detached HEAD.
   - |
     git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
-    git fetch upstream stable:stable || :
+    git fetch upstream v3.6.x:v3.6.x || :
     git fetch upstream master:master || :
 
 script:
