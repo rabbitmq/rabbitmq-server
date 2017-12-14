@@ -22,7 +22,7 @@
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 -include("rabbit_peer_discovery_k8s.hrl").
 
--export([list_nodes/0, supports_registration/0, register/0, unregister/0,
+-export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
          post_registration/0, lock/1, unlock/1]).
 
 -ifdef(TEST).
@@ -40,6 +40,14 @@
 %%
 %% API
 %%
+
+init() ->
+    rabbit_log:debug("Peer discovery Kubernetes: initialising..."),
+    ok = application:ensure_started(inets),
+    %% we cannot start this plugin yet since it depends on the rabbit app,
+    %% which is in the process of being started by the time this function is called
+    application:load(rabbitmq_peer_discovery_common),
+    rabbit_peer_discovery_httpc:maybe_configure_proxy().
 
 -spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}}.
 
