@@ -38,6 +38,8 @@
 
 -include("rabbit.hrl").
 
+-callback init() -> ok | {error, Reason :: string()}.
+
 -callback list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
                           {error, Reason :: string()}.
 
@@ -52,3 +54,5 @@
 -callback lock(Node :: atom())   -> {ok, Data :: term()} | not_supported | {error, Reason :: string()}.
 
 -callback unlock(Data :: term()) -> ok | {error, Reason :: string()}.
+
+-optional_callbacks([init/0]).
