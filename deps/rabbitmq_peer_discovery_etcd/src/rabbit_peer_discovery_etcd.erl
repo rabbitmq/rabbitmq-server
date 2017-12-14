@@ -156,7 +156,7 @@ base_path(Map) ->
 %% @doc Return a list of path segments that are the base path for all
 %% etcd keys related to current cluster.
 %% @end
--spec base_path() -> [rabbit_peer_discovery_httpc:path_component()].
+-spec base_path() -> [?HTTPC_MODULE:path_component()].
 base_path() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     base_path(M).
@@ -306,7 +306,7 @@ set_etcd_lock_key(UniqueId, Ttl) ->
 
 %% @doc Returns etcd path for startup lock
 %% @end
--spec startup_lock_path() -> [rabbit_peer_discovery_httpc:path_component()].
+-spec startup_lock_path() -> [?HTTPC_MODULE:path_component()].
 startup_lock_path() ->
     base_path() ++ ["startup_lock"].
 
