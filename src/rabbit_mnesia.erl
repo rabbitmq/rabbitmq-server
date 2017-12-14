@@ -107,11 +107,13 @@ init() ->
                             "Assuming we need to join an existing cluster or initialise from scratch...~n",
                             [dir()]),
             rabbit_peer_discovery:log_configured_backend(),
+            rabbit_peer_discovery:maybe_init(),
             init_with_lock();
         false ->
             NodeType = node_type(),
             init_db_and_upgrade(cluster_nodes(all), NodeType,
                                 NodeType =:= ram, _Retry = true),
+            rabbit_peer_discovery:maybe_init(),
             rabbit_peer_discovery:maybe_register()
     end,
     %% We intuitively expect the global name server to be synced when

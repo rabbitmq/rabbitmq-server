@@ -20,7 +20,7 @@
 %% API
 %%
 
--export([discover_cluster_nodes/0, backend/0, node_type/0,
+-export([maybe_init/0, discover_cluster_nodes/0, backend/0, node_type/0,
          normalize/1, format_discovered_nodes/1, log_configured_backend/0,
          register/0, unregister/0, maybe_register/0, maybe_unregister/0,
          maybe_inject_randomized_delay/0, lock/0, unlock/1]).
@@ -87,6 +87,22 @@ lock_acquisition_failure_mode() ->
 
 log_configured_backend() ->
   rabbit_log:info("Configured peer discovery backend: ~s~n", [backend()]).
+
+maybe_init() ->
+    Backend = backend(),
+    case erlang:function_exported(Backend, init, 0) of
+        true  ->
+            rabbit_log:debug("Peer discovery backend supports initialisation."),
+            case Backend:init() of
+                ok ->
+                    rabbit_log:debug("Peer discovery backend initialisation succeeded."),
+                    ok;
+                {error, Error} ->
+                    rabbit_log:warn("Peer discovery backend initialisation failed: ~p.", [Error]),
+                    ok
+            end;
+        false -> ok
+    end.
 
 
 -spec discover_cluster_nodes() -> {ok, Nodes :: list()} |
