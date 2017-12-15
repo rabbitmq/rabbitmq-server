@@ -23,7 +23,7 @@
 -include("rabbit_peer_discovery_consul.hrl").
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1, init/0]).
+         post_registration/0, lock/1, unlock/1]).
 -export([send_health_check_pass/0]).
 -export([session_ttl_update_callback/1]).
 %% useful for debugging from the REPL with RABBITMQ_ALLOW_INPUT
