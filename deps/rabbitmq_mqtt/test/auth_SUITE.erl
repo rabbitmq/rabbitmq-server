@@ -172,8 +172,15 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 set_cert_user_on_default_vhost(Config) ->
-    Hostname = re:replace(os:cmd("hostname"), "\\s+", "", [global,{return,list}]),
-    User = "O=client,C=UK,ST=England,CN=" ++ Hostname,
+    CertsDir = ?config(rmq_certsdir, Config),
+    CertFile = filename:join([CertsDir, "client", "cert.pem"]),
+    {ok, CertBin} = file:read_file(CertFile),
+    [{'Certificate', Cert, not_encrypted}] = public_key:pem_decode(CertBin),
+    UserBin = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                           rabbit_ssl,
+                                           peer_cert_auth_name,
+                                           [Cert]),
+    User = binary_to_list(UserBin),
     ok = rabbit_ct_broker_helpers:add_user(Config, 0, User, ""),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
     rabbit_ct_helpers:set_config(Config, [{temp_ssl_user, User}]).
