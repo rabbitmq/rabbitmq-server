@@ -98,7 +98,7 @@ maybe_init() ->
                     rabbit_log:debug("Peer discovery backend initialisation succeeded."),
                     ok;
                 {error, Error} ->
-                    rabbit_log:warn("Peer discovery backend initialisation failed: ~p.", [Error]),
+                    rabbit_log:warning("Peer discovery backend initialisation failed: ~p.", [Error]),
                     ok
             end;
         false -> ok
