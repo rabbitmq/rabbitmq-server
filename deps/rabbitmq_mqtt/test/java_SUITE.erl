@@ -77,8 +77,15 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    Hostname = re:replace(os:cmd("hostname"), "\\s+", "", [global,{return,list}]),
-    User = "O=client,CN=" ++ Hostname,
+    CertsDir = ?config(rmq_certsdir, Config),
+    CertFile = filename:join([CertsDir, "client", "cert.pem"]),
+    {ok, CertBin} = file:read_file(CertFile),
+    [{'Certificate', Cert, not_encrypted}] = public_key:pem_decode(CertBin),
+    UserBin = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                           rabbit_ssl,
+                                           peer_cert_auth_name,
+                                           [Cert]),
+    User = binary_to_list(UserBin),
     {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["add_user", User, ""]),
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["set_permissions",  "-p", "/", User, ".*", ".*", ".*"]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
