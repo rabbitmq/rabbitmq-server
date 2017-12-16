@@ -31,7 +31,7 @@ if ! getent passwd rabbitmq >/dev/null; then
 fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
-chown -R rabbitmq:rabbitmq /var/log/rabbitmq
+chown -R rabbitmq:adm /var/log/rabbitmq
 chgrp rabbitmq /etc/rabbitmq 
 chmod 2750 /etc/rabbitmq
 chmod 750 /var/lib/rabbitmq/mnesia
