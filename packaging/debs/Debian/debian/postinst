@@ -49,7 +49,7 @@ case "$1" in
             # log directory to the owner and the group. Others won't
             # have any access to log files: this is in case sensitive
             # data are accidentally logged (like process crash data).
-            chmod 750 /var/log/rabbitmq
+            chmod 2750 /var/log/rabbitmq
         else
             # The package was already configured: it's an upgrade over
             # a previously installed version, or it's an install over
@@ -80,5 +80,3 @@ esac
 #DEBHELPER#
 
 exit 0
-
-

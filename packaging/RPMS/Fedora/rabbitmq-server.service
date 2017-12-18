@@ -6,6 +6,7 @@ After=syslog.target network.target
 Type=notify
 User=rabbitmq
 Group=rabbitmq
+UMask=0027
 NotifyAccess=all
 TimeoutStartSec=3600
 # Un-comment this setting if you need to increase RabbitMQ's
