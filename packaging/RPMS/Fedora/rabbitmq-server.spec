@@ -148,6 +148,7 @@ if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitm
 fi
 
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
+chgrp rabbitmq %{_sysconfdir}/rabbitmq
 
 # Restore permissions saved during %pre. See comment in %pre for the
 # reason behind this.
@@ -218,8 +219,8 @@ systemctl try-restart %{name}.service >/dev/null 2>&1 || :
 %defattr(-,root,root,-)
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq/mnesia
-%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
-%attr(2750, -, rabbitmq) %dir %{_sysconfdir}/rabbitmq
+%attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
+%attr(2755, -, rabbitmq) %dir %{_sysconfdir}/rabbitmq
 
 %{_sysconfdir}/profile.d/rabbitmqctl-autocomplete.sh
 %{_datarootdir}/zsh/vendor-functions/_enable_rabbitmqctl_completion
