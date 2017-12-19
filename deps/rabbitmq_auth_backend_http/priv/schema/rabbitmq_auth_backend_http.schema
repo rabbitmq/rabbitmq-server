@@ -5,6 +5,9 @@
 %%
 %% ----------------------------------------------------------------------------
 
+{mapping, "auth_http.http_method", "rabbitmq_auth_backend_http.http_method",
+    [{datatype, {enum, [get,post]}}]}.
+
 {mapping, "auth_http.user_path", "rabbitmq_auth_backend_http.user_path",
     [{datatype, string}, {validators, ["uri"]}]}.
 
