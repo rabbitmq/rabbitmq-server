@@ -5,12 +5,22 @@ authentication (determining who can log in) and authorisation
 (determining what permissions they have) by making requests to an HTTP
 server.
 
+This plugin can put a significant amount of load on its backing service.
+We recommend using it together with [rabbitmq_auth_backend_cache](http://github.com/rabbitmq/rabbitmq-auth-backend-cache)
+with a reasonable caching interval (e.g. 1-3 minutes).
+
+
+## Project Maturity
+
+As of 3.7.0, this plugin is distributed with RabbitMQ.
+
+
+## RabbitMQ Version Requirements
+
+As of 3.7.0, this plugin is distributed with RabbitMQ.
+
 As with all [authentication plugins](http://rabbitmq.com/access-control.html), this one requires RabbitMQ server
 2.3.1 or later.
-
-Under a heavy load this plugin can put a higher than expected amount of load on it's backing service.
-We recommend using it together with [rabbitmq_auth_backend_cache](http://github.com/rabbitmq/rabbitmq-auth-backend-cache)
-with a reasonable caching interval (e.g. 2-3 minutes).
 
 ## Installing
 
