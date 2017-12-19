@@ -71,6 +71,11 @@ amqp_step(Fun) ->
             ct:pal("AMQP Step receieved ~p~n", [Recv]),
             case Fun(Recv) of
                 {_Ch, []} -> ok;
+                {Ch, {multi, Records}} ->
+                    [begin
+                         ct:pal("AMQP multi Step send ~p~n", [R]),
+                         send(Sock, Ch, R)
+                     end || R <- Records];
                 {Ch, Records} ->
                     ct:pal("AMQP Step send ~p~n", [Records]),
                     send(Sock, Ch, Records)
@@ -84,5 +89,5 @@ send_amqp_header_step(Sock) ->
 
 recv_amqp_header_step(Sock) ->
     ct:pal("Receiving AMQP protocol header"),
-    R = gen_tcp:recv(Sock, 8),
+    {ok, R} = gen_tcp:recv(Sock, 8),
     ct:pal("handshake Step receieved ~p~n", [R]).

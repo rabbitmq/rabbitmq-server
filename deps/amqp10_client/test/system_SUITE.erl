@@ -44,7 +44,8 @@ all() ->
      {group, rabbitmq},
      {group, rabbitmq_strict},
      {group, activemq},
-     {group, activemq_no_anon}
+     {group, activemq_no_anon},
+     {group, mock}
     ].
 
 groups() ->
@@ -70,7 +71,8 @@ groups() ->
       ]},
      {mock, [], [
                  insufficient_credit,
-                 incoming_heartbeat
+                 incoming_heartbeat,
+                 multi_transfer_without_delivery_id
                 ]}
     ].
 
@@ -148,8 +150,9 @@ init_per_group(azure, Config) ->
                                          {sb_port, 5671}
                                         ]);
 init_per_group(mock, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{mock_port, 21000},
-                                          {mock_host, "localhost"}
+    rabbit_ct_helpers:set_config(Config, [{mock_port, 25000},
+                                          {mock_host, "localhost"},
+                                          {sasl, none}
                                          ]).
 end_per_group(rabbitmq, Config) ->
     rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:teardown_steps());
@@ -554,6 +557,7 @@ insufficient_credit(Config) ->
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"mock1-sender">>,
                                                     <<"test">>),
+    await_link(Sender, attached, attached_timeout),
     Msg = amqp10_msg:new(<<"mock-tag">>, <<"banana">>, true),
     {error, insufficient_credit} = amqp10_client:send_msg(Sender, Msg),
 
@@ -561,6 +565,68 @@ insufficient_credit(Config) ->
     ok = amqp10_client:close_connection(Connection),
     ok.
 
+multi_transfer_without_delivery_id(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = true,
+                                             name = Name}, <<>>}) ->
+                         {Ch, [#'v1_0.attach'{name = Name,
+                                              handle = {uint, 99},
+                                              initial_delivery_count = {uint, 1},
+                                              role = false}
+                              ]}
+                 end,
+
+    LinkCreditStep = fun({1 = Ch, #'v1_0.flow'{}, <<>>}) ->
+                             {Ch, {multi, [[#'v1_0.transfer'{handle = {uint, 99},
+                                                             delivery_id = {uint, 12},
+                                                             more = true},
+                                            #'v1_0.data'{content = <<"hello ">>}],
+                                           [#'v1_0.transfer'{handle = {uint, 99},
+                                                             % delivery_id can be omitted
+                                                             % for continuation frames
+                                                             delivery_id = undefined,
+                                                             settled = true,
+                                                             more = false},
+                                            #'v1_0.data'{content = <<"world">>}]
+                                          ]}}
+                     end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep),
+             mock_server:amqp_step(LinkCreditStep)
+            ],
+
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"mock1-received">>,
+                                                    <<"test">>),
+    amqp10_client:flow_link_credit(Receiver, 100, 50),
+    receive
+        {amqp10_msg, Receiver, _InMsg} ->
+            ok
+    after 2000 ->
+              exit(delivery_timeout)
+    end,
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok.
 
 outgoing_heartbeat(Config) ->
     Hostname = ?config(rmq_hostname, Config),
@@ -609,7 +675,10 @@ incoming_heartbeat(Config) ->
 %%%
 
 receive_messages(Receiver, Num) ->
-    [ok = receive_one(Receiver) || _T <- lists:seq(1, Num)].
+    [begin
+         ct:pal("receive_messages ~p", [T]),
+         ok = receive_one(Receiver)
+     end || T <- lists:seq(1, Num)].
 
 publish_messages(Sender, Data, Num) ->
     [begin
