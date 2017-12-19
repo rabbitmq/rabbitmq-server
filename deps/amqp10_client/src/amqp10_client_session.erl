@@ -348,7 +348,7 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
               State0#state{links = Links#{OutHandle => Link1}}),
     {next_state, mapped, State};
 mapped({#'v1_0.transfer'{handle = {uint, InHandle},
-                         delivery_id = {uint, DeliveryId},
+                         delivery_id = MaybeDeliveryId,
                          settled = Settled} = Transfer0, Payload0},
                          #state{incoming_unsettled = Unsettled0} = State0) ->
 
@@ -359,10 +359,13 @@ mapped({#'v1_0.transfer'{handle = {uint, InHandle},
 
     {Transfer, Payload} = complete_partial_transfer(Transfer0, Payload0, Link),
     Msg = decode_as_msg(Transfer, Payload),
+
     % stash the DeliveryId - not sure for what yet
-    Unsettled = case Settled of
-                   true -> Unsettled0;
-                   _ -> Unsettled0#{DeliveryId => OutHandle}
+    Unsettled = case MaybeDeliveryId of
+                    {uint, DeliveryId} when Settled =/= true ->
+                        Unsettled0#{DeliveryId => OutHandle};
+                    _ ->
+                        Unsettled0
                 end,
 
     % link bookkeeping
