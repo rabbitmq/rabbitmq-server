@@ -5,8 +5,7 @@ performed by RabbitMQ nodes.
 
 ## Project Maturity
 
-This plugin is relatively young but has known production users.
-It's a candidate for inclusion into the RabbitMQ distribution.
+As of 3.7.0, this plugin is distributed with RabbitMQ.
 
 ## Overview
 
@@ -24,12 +23,13 @@ use network requests.
 
 As with all authentication plugins, this plugin requires requires 2.3.1 or later.
 
-`master` branch targest RabbitMQ master (future `3.7.0`). To use this plugin with RabbitMQ 3.6.x, see
-the `stable` branch.
+As of 3.7.0, this plugin is distributed with RabbitMQ. Enable it like any other plugin.
+
+To use this plugin with RabbitMQ 3.6.x, download a [3.6.x version from Bintray](https://bintray.com/rabbitmq/community-plugins/rabbitmq_auth_backend_cache) or see the `3.6.x` branch.
 
 ## Erlang Version Requirements
 
-This plugin requires Erlang `18.3` or a later version.
+This plugin requires Erlang `19.3` or a later version.
 
 ## Binary Builds
 
