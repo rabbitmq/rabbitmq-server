@@ -14,6 +14,20 @@ dispatcher_add(function(sammy) {
             render({'shovel': '/parameters/shovel/' + esc(this.params['vhost']) + '/' + esc(this.params['id'])},
                    'dynamic-shovel', '#/dynamic-shovels');
         });
+    sammy.put('#/shovel-parameters-move-messages', function() {
+            var num_keys = ['src-prefetch-count', 'reconnect-delay'];
+            var bool_keys = ['dest-add-forward-headers'];
+            var arrayable_keys = ['src-uri', 'dest-uri'];
+            var redirect = this.params['redirect'];
+            if (redirect !== undefined) {
+                delete this.params['redirect'];
+            }
+            put_parameter(this, [], num_keys, bool_keys, arrayable_keys);
+            if (redirect !== undefined) {
+                go_to(redirect);
+            }
+            return false;
+        });
     sammy.put('#/shovel-parameters', function() {
             // patch up the protocol selectors
             var src_proto = this.params['src-protocol-selector'];
