@@ -55,7 +55,7 @@ and which HTTP method to use.
 
 Below is a minimal configuration file example.
 
-In `rabbitmq.conf` (currently RabbitMQ master):
+In `rabbitmq.conf`:
 
     auth_backends.1 = http
     auth_http.user_path     = http://some-server/auth/user
@@ -63,7 +63,7 @@ In `rabbitmq.conf` (currently RabbitMQ master):
     auth_http.resource_path = http://some-server/auth/resource
     auth_http.topic_path    = http://some-server/auth/topic
 
-In the classic config format (`rabbitmq.config` prior to 3.7.0 or `advanced.config`):
+In the [classic config format](http://www.rabbitmq.com/configure.html) (`rabbitmq.config` prior to 3.7.0 or `advanced.config`):
 
     [
       {rabbit, [{auth_backends, [rabbit_auth_backend_http]}]},
