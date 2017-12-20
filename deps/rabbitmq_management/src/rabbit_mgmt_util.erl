@@ -253,7 +253,7 @@ reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
 reply0(Facts, ReqData, Context) ->
-    ReqData1 = set_resp_header(<<"Cache-Control">>, "no-cache", ReqData),
+    ReqData1 = set_resp_header(<<"cache-control">>, "no-cache", ReqData),
     try
         case maps:get(media_type, ReqData1, undefined) of
             {<<"application">>, <<"bert">>, _} ->
@@ -961,9 +961,7 @@ post_respond({true, ReqData, Context}) ->
 post_respond({stop, ReqData, Context}) ->
     {stop, ReqData, Context};
 post_respond({JSON, ReqData, Context}) ->
-    {true, set_resp_header(
-             <<"Content-Type">>, "application/json",
-             cowboy_req:set_resp_body(JSON, ReqData)), Context}.
+    {true, cowboy_req:set_resp_body(JSON, ReqData), Context}.
 
 is_admin(T)       -> intersects(T, [administrator]).
 is_policymaker(T) -> intersects(T, [administrator, policymaker]).
