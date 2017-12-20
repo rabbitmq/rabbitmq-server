@@ -112,7 +112,7 @@ vhost_data(Ranges, Id) ->
 
 node_data(Ranges, Id) ->
     maps:from_list(
-      [{mgmt_stats, mgmt_qeue_length_stats()}] ++
+      [{mgmt_stats, mgmt_queue_length_stats(Id)}] ++
       [{node_node_metrics, node_node_metrics()}] ++
       node_raw_detail_stats_data(Ranges, Id) ++
       [raw_message_data(node_coarse_stats,
@@ -385,7 +385,7 @@ to_match_condition({Id0, '_'}) when is_tuple(Id0) ->
 to_match_condition({Id0, '_'}) ->
     {'==', Id0, '$1'}.
 
-mgmt_qeue_length_stats() ->
+mgmt_queue_length_stats(Id) when Id =:= node() ->
     GCsQueueLengths = lists:map(fun (T) ->
         case whereis(rabbit_mgmt_metrics_gc:name(T)) of
             P when is_pid(P) ->
@@ -396,10 +396,13 @@ mgmt_qeue_length_stats() ->
         end
     end,
     ?GC_EVENTS),
-    [{metrics_gc_queue_length, GCsQueueLengths}].
+    [{metrics_gc_queue_length, GCsQueueLengths}];
+mgmt_queue_length_stats(_Id) ->
+    % if it isn't for the current node just return an empty list
+    [].
 
 node_node_metrics() ->
-    ets:tab2list(node_node_metrics).
+    maps:from_list(ets:tab2list(node_node_metrics)).
 
 select_range_sample(Table, #range{first = First, last = Last}) ->
     Range = Last - First,
