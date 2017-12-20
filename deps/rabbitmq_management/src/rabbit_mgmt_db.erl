@@ -395,19 +395,18 @@ detail_queue_stats(Ranges, Objs, Interval) ->
    Merged.
 
 node_node_stats(Lookup, Node, Ranges, Interval) ->
-    LocalNodeNodeMetrics = ets:tab2list(node_node_metrics),
+    LocalNodeNodeMetrics = maps:from_list(ets:tab2list(node_node_metrics)),
     RemoteNodeNodeMetrics = maps:get(node_node_metrics, Lookup),
-    NodeNodeMetrics = LocalNodeNodeMetrics ++ RemoteNodeNodeMetrics,
+    NodeNodeMetrics = maps:merge(LocalNodeNodeMetrics, RemoteNodeNodeMetrics),
     node_node_stats(Lookup, Node, Ranges, Interval, NodeNodeMetrics).
 
 node_node_stats(Lookup, Node, Ranges, Interval, NodeNodeMetrics) ->
     Table = node_node_coarse_stats,
     Type = coarse_node_node_stats,
-    NodeNodeMetricsD = maps:from_list(NodeNodeMetrics),
     [begin
         {Stats, DetailId} = get_detail_stats(Key, Lookup, Table, Type,
                                              first(Node), Ranges, Interval),
-        NodeMetrics = maybe_fetch_value(Key, NodeNodeMetricsD),
+        NodeMetrics = maybe_fetch_value(Key, NodeNodeMetrics),
         lists:flatten([{stats, Stats}, DetailId, NodeMetrics])
      end || {{T, Key}, _} <- maps:to_list(Lookup), T =:= Table].
 
