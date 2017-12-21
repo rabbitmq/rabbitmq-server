@@ -1,8 +1,10 @@
-Deploy RabbitMQ on K8s using [StatefulSet  Controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/). 
+Deploy RabbitMQ on K8s 
 ----
-The example uses the [RabbitMQ Docker image](https://hub.docker.com/_/rabbitmq/)  
+The example uses:
+* [RabbitMQ Docker image](https://hub.docker.com/_/rabbitmq/)
+* [StatefulSets controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/) K8S feature
 
-**Note**:  This is just an example to easily show how to deploy and test  RabbitMQ on K8s using the `rabbitmq-peer-discovery-k8s` plugin.
+**Note**: This is just an example to show how to use the `rabbitmq-peer-discovery-k8s` plugin.
    
 
 * Install [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
