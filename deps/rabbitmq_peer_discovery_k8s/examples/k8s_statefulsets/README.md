@@ -1,4 +1,4 @@
-The example shows how to deploy RabbitMQ on K8s using [StatefulSet  Controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/). 
+Deploy RabbitMQ on K8s using [StatefulSet  Controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/). 
 ----
 The example uses the [RabbitMQ Docker image](https://hub.docker.com/_/rabbitmq/)  
 
