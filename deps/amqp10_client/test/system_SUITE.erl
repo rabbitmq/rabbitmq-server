@@ -85,7 +85,8 @@ shared() ->
      transfer_unsettled,
      subscribe,
      subscribe_with_auto_flow,
-     outgoing_heartbeat
+     outgoing_heartbeat,
+     roundtrip_large_messages
     ].
 
 %% -------------------------------------------------------------------
@@ -305,7 +306,23 @@ basic_roundtrip_service_bus(Config) ->
 filtered_roundtrip_service_bus(Config) ->
     filtered_roundtrip(service_bus_config(Config, <<"filtered_roundtrip_service_bus">>)).
 
+roundtrip_large_messages(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpenConf = #{address => Hostname, port => Port, sasl => anon},
+    DataKb = crypto:strong_rand_bytes(1024),
+    roundtrip(OpenConf, DataKb),
+    Data1Mb = binary:copy(DataKb, 1024),
+    roundtrip(OpenConf, Data1Mb),
+    roundtrip(OpenConf, binary:copy(Data1Mb, 8)),
+    roundtrip(OpenConf, binary:copy(Data1Mb, 64)),
+    ok.
+
+
 roundtrip(OpenConf) ->
+    roundtrip(OpenConf, <<"banana">>).
+
+roundtrip(OpenConf, Body) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     {ok, Sender} = amqp10_client:attach_sender_link(Session,
@@ -318,8 +335,7 @@ roundtrip(OpenConf) ->
     Now = os:system_time(millisecond),
     Props = #{creation_time => Now},
     Msg0 =  amqp10_msg:set_properties(Props,
-                                      amqp10_msg:new(<<"my-tag">>, <<"banana">>,
-                                                     true)),
+                                      amqp10_msg:new(<<"my-tag">>, Body, true)),
     Msg1 = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg0),
     Msg = amqp10_msg:set_message_annotations(#{<<"x_key">> => "x_value"}, Msg1),
     % RabbitMQ AMQP 1.0 does not yet support delivery annotations
@@ -334,15 +350,15 @@ roundtrip(OpenConf) ->
                                                         <<"test1">>,
                                                         settled,
                                                         unsettled_state),
-    {ok, OutMsg} = amqp10_client:get_msg(Receiver),
+    {ok, OutMsg} = amqp10_client:get_msg(Receiver, 60000 * 5),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
-    ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~p~nIn: ~p~n", [OutMsg, Msg]),
+    % ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~p~nIn: ~p~n", [OutMsg, Msg]),
     #{creation_time := Now} = amqp10_msg:properties(OutMsg),
     #{<<"a_key">> := <<"a_value">>} = amqp10_msg:application_properties(OutMsg),
     #{<<"x_key">> := <<"x_value">>} = amqp10_msg:message_annotations(OutMsg),
     % #{<<"x_key">> := <<"x_value">>} = amqp10_msg:delivery_annotations(OutMsg),
-    ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)),
+    ?assertEqual([Body], amqp10_msg:body(OutMsg)),
     ok.
 
 filtered_roundtrip(OpenConf) ->
@@ -596,7 +612,7 @@ multi_transfer_without_delivery_id(Config) ->
                                                              % delivery_id can be omitted
                                                              % for continuation frames
                                                              delivery_id = undefined,
-                                                             settled = true,
+                                                             settled = undefined,
                                                              more = false},
                                             #'v1_0.data'{content = <<"world">>}]
                                           ]}}

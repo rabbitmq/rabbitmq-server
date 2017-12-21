@@ -465,4 +465,5 @@ sasl_to_bin(anon) -> <<"ANONYMOUS">>.
 
 config_defaults() ->
     #{sasl => none,
-      transfer_limit_margin => 0}.
+      transfer_limit_margin => 0,
+      max_frame_size => ?MAX_MAX_FRAME_SIZE}.
