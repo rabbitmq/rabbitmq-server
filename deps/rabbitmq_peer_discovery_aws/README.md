@@ -13,6 +13,11 @@ For a AWS-based peer discovery and cluster formation
 mechanism that supports 3.6.x, see [rabbitmq-autocluster](https://github.com/rabbitmq/rabbitmq-autocluster).
 
 
+## Documentation
+
+See [RabbitMQ Cluster Formation guide](http://www.rabbitmq.com/cluster-formation.html).
+
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](http://www.rabbitmq.com/github.html).
