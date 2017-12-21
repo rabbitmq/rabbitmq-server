@@ -1,6 +1,8 @@
 The example shows how to deploy RabbitMQ on K8s using [StatefulSet  Controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/). 
 ----
-The example uses Pivotal Docker image: [pivotalrabbitmq/rabbitmq-autocluster:3.7](https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-autocluster/)  
+The example uses the [RabbitMQ Docker image](https://hub.docker.com/_/rabbitmq/)  
+
+**Note**:  This is just an example to easily show how to deploy and test  RabbitMQ on K8s using the `rabbitmq-peer-discovery-k8s` plugin.
    
 
 1. Install [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
@@ -19,19 +21,14 @@ $ minikube start --cpus=2 --memory=2040 --vm-driver=virtualbox
 $ kubectl create namespace test-rabbitmq
 ```
 
-5. Deploy the service `YAML` file:
+5. Deploy the  `YAML` file:
 
 ```
-$ kubectl create -f examples/k8s_statefulsets/rabbitmq-service.yaml
+$ kubectl create -f examples/k8s_statefulsets/rabbitmq_statefulsets.yaml
 ```
-6. Deploy the RabbitMQ StatefulSet `YAML` file:
+6. Check the cluster status:
 
-```
-$ kubectl create -f examples/k8s_statefulsets/rabbitmq.yaml
-```
-7. Check the cluster status:
-
-Wait  few seconds....then 
+Wait few seconds....then 
 
 ```
 $ FIRST_POD=$(kubectl get pods --namespace test-rabbitmq -l 'app=rabbitmq' -o jsonpath='{.items[0].metadata.name }')
@@ -66,4 +63,4 @@ $ kubectl scale statefulset/rabbitmq --namespace=test-rabbitmq --replicas=5
 
 
 
-
+Enjoy! 
