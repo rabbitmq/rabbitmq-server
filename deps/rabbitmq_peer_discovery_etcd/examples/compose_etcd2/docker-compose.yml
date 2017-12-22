@@ -21,16 +21,19 @@ services:
       - back
   rabbit:
     environment:
-      - TCP_PORTS=15672, 5672 
+      - TCP_PORTS=15672, 5672
+      - RABBITMQ_ERLANG_COOKIE="mycookie"  
     networks:
       - back
-    image:  pivotalrabbitmq/rabbitmq-autocluster:3.7-etcd
+    image:  rabbitmq:3.7
     expose:
       - 15672
       - 5672
       - 5671
       - 15671
     tty: true
+    volumes:
+      - ./conf/:/etc/rabbitmq/
     command:  sh -c "sleep 10; rabbitmq-server;" 
   lb:
     image: dockercloud/haproxy
