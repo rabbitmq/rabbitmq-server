@@ -22,7 +22,7 @@ As of 3.7.0, this plugin is distributed with RabbitMQ.
 As with all [authentication plugins](http://rabbitmq.com/access-control.html), this one requires RabbitMQ server
 2.3.1 or later.
 
-## Installing
+## Using with RabbitMQ 3.6.x
 
 Install the corresponding .ez files from our
 [Community Plugins page](http://www.rabbitmq.com/community-plugins.html). Note that different
