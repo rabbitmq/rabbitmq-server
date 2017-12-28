@@ -61,7 +61,6 @@
 
 -define(LOG_EXCH_NAME, <<"amq.rabbitmq.log">>).
 
-%% @private
 init([Level]) when is_atom(Level) ->
     ?DEPRECATED([{level, Level}]),
     init([{level, Level}]);
@@ -116,7 +115,6 @@ get_option(K, Options, Default) ->
        false -> Default
    end.
 
-%% @private
 handle_call(get_loglevel, #state{level=Level} = State) ->
     {ok, Level, State};
 handle_call({set_loglevel, Level}, State) ->
@@ -130,7 +128,6 @@ handle_call({set_loglevel, Level}, State) ->
 handle_call(_Request, State) ->
     {ok, ok, State}.
 
-%% @private
 handle_event({log, _Message} = Event, State0) ->
     State1 = maybe_init_exchange(State0),
     handle_log_event(Event, State1);
