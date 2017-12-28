@@ -181,7 +181,7 @@ configure_lager() ->
     GeneratedHandlers = generate_lager_handlers(),
 
     %% If there are lager handlers configured,
-    %% both lager and generate RabbitMQ handlers  are used.
+    %% both lager and generate RabbitMQ handlers are used.
     %% This is because it's hard to decide clear preference rules.
     %% RabbitMQ handlers can be set to [] to use only lager handlers.
     Handlers = case application:get_env(lager, handlers, undefined) of
@@ -262,7 +262,8 @@ generate_lager_handlers(LogHandlersConfig) ->
                     Backend = lager_backend(file),
                     generate_handler(Backend, HandlerConfig)
             end;
-        ({Other, HandlerConfig}) when Other =:= console; Other =:= syslog ->
+        ({Other, HandlerConfig}) when
+              Other =:= console; Other =:= syslog; Other =:= rabbit ->
             case proplists:get_value(enabled, HandlerConfig, false) of
                 false -> [];
                 true  ->
@@ -275,7 +276,8 @@ generate_lager_handlers(LogHandlersConfig) ->
 
 lager_backend(file) -> lager_file_backend;
 lager_backend(console) -> lager_console_backend;
-lager_backend(syslog) -> lager_syslog_backend.
+lager_backend(syslog) -> lager_syslog_backend;
+lager_backend(rabbit) -> lager_rabbit_backend.
 
 generate_handler(Backend, HandlerConfig) ->
     [{Backend,
@@ -288,6 +290,9 @@ default_handler_config(lager_syslog_backend) ->
      {facility, daemon},
      {formatter_config, default_config_value(formatter_config)}];
 default_handler_config(lager_console_backend) ->
+    [{level, default_config_value(level)},
+     {formatter_config, default_config_value(formatter_config)}];
+default_handler_config(lager_rabbit_backend) ->
     [{level, default_config_value(level)},
      {formatter_config, default_config_value(formatter_config)}];
 default_handler_config(lager_file_backend) ->
