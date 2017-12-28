@@ -134,6 +134,15 @@ handle_event({log, _Message} = Event, State0) ->
 handle_event(_Event, State) ->
     {ok, State}.
 
+handle_info(_Info, State) ->
+    {ok, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
 %% @private
 handle_log_event({log, _Message}, #state{exchange=undefined} = State) ->
     % NB: tried to define the exchange but still undefined,
@@ -163,18 +172,6 @@ handle_log_event({log, Message},
         false ->
             {ok, State}
     end.
-
-%% @private
-handle_info(_Info, State) ->
-    {ok, State}.
-
-%% @private
-terminate(_Reason, _State) ->
-    ok.
-
-%% @private
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
 
 %% @private
 maybe_init_exchange(#state{exchange=undefined, init_exchange_ts=undefined} = State) ->
