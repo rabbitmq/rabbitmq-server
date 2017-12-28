@@ -674,6 +674,14 @@
 ##
 # log.dir = /var/log/rabbitmq
 
+## Logging to rabbit amq.rabbitmq.log exchange (can be true or false)
+##
+# log.rabbit = false
+
+## Loglevel to log to amq.rabbitmq.log exchange
+##
+# log.rabbit.level = info
+
 ## Logging to console (can be true or false)
 ##
 # log.console = false
