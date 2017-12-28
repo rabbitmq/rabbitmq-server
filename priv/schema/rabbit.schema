@@ -1047,6 +1047,13 @@ end}.
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 
+{mapping, "log.rabbit", "rabbit.log.rabbit.enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.rabbit.level", "rabbit.log.rabbit.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+
 {mapping, "log.syslog", "rabbit.log.syslog.enabled", [
     {datatype, {enum, [true, false]}}
 ]}.
