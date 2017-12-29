@@ -7,9 +7,9 @@ REM ### next line will be updated when generating a standalone release
 REM ERL_DIR=
 set ERL_DIR=
 
-REM These boot files don't appear to be referenced in the batch scripts
-REM set CLEAN_BOOT_FILE=start_clean
+REM This boot files isn't referenced in the batch scripts
 REM set SASL_BOOT_FILE=start_sasl
+set CLEAN_BOOT_FILE=start_clean
 
 if exist "%RABBITMQ_HOME%\erlang.mk" (
     REM RabbitMQ is executed from its source directory. The plugins
