@@ -232,7 +232,6 @@ exchanges(Config) ->
           "amq.fanout",
           "amq.headers",
           "amq.match",
-          "amq.rabbitmq.log",
           "amq.rabbitmq.trace",
           "amq.topic",
           "foo"]} = run_list(Config, l("exchanges")),
