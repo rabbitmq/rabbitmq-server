@@ -173,30 +173,19 @@
                    [{description, "message delivery logic ready"},
                     {requires,    core_initialized}]}).
 
--rabbit_boot_step({log_relay,
-                   [{description, "error log relay"},
-                    {mfa,         {rabbit_sup, start_child,
-                                   [rabbit_error_logger_lifecycle,
-                                    supervised_lifecycle,
-                                    [rabbit_error_logger_lifecycle,
-                                     {rabbit_error_logger, start, []},
-                                     {rabbit_error_logger, stop,  []}]]}},
-                    {requires,    routing_ready},
-                    {enables,     networking}]}).
-
 -rabbit_boot_step({direct_client,
                    [{description, "direct client"},
                     {mfa,         {rabbit_direct, boot, []}},
-                    {requires,    log_relay}]}).
+                    {requires,    routing_ready}]}).
 
 -rabbit_boot_step({connection_tracking,
                    [{description, "sets up internal storage for node-local connections"},
                     {mfa,         {rabbit_connection_tracking, boot, []}},
-                    {requires,    log_relay}]}).
+                    {requires,    routing_ready}]}).
 
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
-                    {requires,    log_relay}]}).
+                    {requires,    routing_ready}]}).
 
 -rabbit_boot_step({notify_cluster,
                    [{description, "notify cluster nodes"},

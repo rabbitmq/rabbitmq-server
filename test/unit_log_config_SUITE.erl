@@ -29,6 +29,7 @@ all() ->
     config_file_handler_level,
     config_file_handler_rotation,
     config_console_handler,
+    config_exchange_handler,
     config_syslog_handler,
     config_syslog_handler_options,
     config_multiple_handlers,
@@ -44,7 +45,6 @@ all() ->
     sink_handlers_merged_with_lager_extra_sinks_handlers,
     sink_file_rewrites_file_backends
     ].
-
 
 init_per_testcase(_, Config) ->
     application:load(rabbit),
@@ -82,7 +82,8 @@ sink_file_rewrites_file_backends(_) ->
     LagerHandlers = [
         {lager_file_backend, [{file, "lager_file.log"}, {level, error}]},
         {lager_file_backend, [{file, "lager_file_1.log"}, {level, error}]},
-        {lager_console_backend, [{level, info}]}
+        {lager_console_backend, [{level, info}]},
+        {lager_exchange_backend, [{level, info}]}
     ],
     application:set_env(lager, handlers, LagerHandlers),
     rabbit_lager:configure_lager(),
@@ -108,7 +109,8 @@ sink_rewrite_sinks() ->
                      {formatter_config, formatter_config()},
                      {level, warning},
                      {size, 0}]},
-            {lager_console_backend, [{level, warning}]}
+            {lager_console_backend, [{level, warning}]},
+            {lager_exchange_backend, [{level, warning}]}
         ]},
          {rabbit_handlers,[
             {lager_file_backend,
@@ -117,7 +119,8 @@ sink_rewrite_sinks() ->
                      {formatter_config, formatter_config()},
                      {level, warning},
                      {size, 0}]},
-            {lager_console_backend, [{level, warning}]}
+            {lager_console_backend, [{level, warning}]},
+            {lager_exchange_backend, [{level, warning}]}
         ]}]},
      {rabbit_log_lager_event,
         [{handlers,[{lager_forwarder_backend,[lager_event,inherit]}]},
@@ -133,11 +136,11 @@ sink_rewrite_sinks() ->
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]}
      ].
 
-
 sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
     application:set_env(rabbit, log, [
-        {file,    [{file, "rabbit_file.log"}, {level, debug}]},
-        {console, [{enabled, true}, {level, error}]},
+        {file,     [{file, "rabbit_file.log"}, {level, debug}]},
+        {console,  [{enabled, true}, {level, error}]},
+        {exchange, [{enabled, true}, {level, error}]},
         {categories, [
             {connection, [{level, debug}]},
             {channel, [{level, warning}, {file, "channel_log.log"}]}
@@ -153,6 +156,7 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
         {rabbit_log_channel_lager_event,
             [{handlers,
                 [{lager_console_backend, [{level, debug}]},
+                 {lager_exchange_backend, [{level, debug}]},
                  {lager_file_backend, [{level, error},
                                        {file, "channel_lager.log"}]}]}]}],
 
@@ -167,6 +171,8 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
             [{handlers,[
                 {lager_console_backend, [{level, error},
                                          {formatter_config, formatter_config()}]},
+                {lager_exchange_backend, [{level, error},
+                                        {formatter_config, formatter_config()}]},
                 {lager_file_backend,
                     [{date, ""},
                      {file, "channel_log.log"},
@@ -174,12 +180,15 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
                      {level, warning},
                      {size, 0}]},
                 {lager_console_backend, [{level, debug}]},
+                {lager_exchange_backend, [{level, debug}]},
                 {lager_file_backend, [{level, error},
                                       {file, "channel_lager.log"}]}
                 ]},
              {rabbit_handlers,[
                 {lager_console_backend, [{level, error},
                                          {formatter_config, formatter_config()}]},
+                {lager_exchange_backend, [{level, error},
+                                        {formatter_config, formatter_config()}]},
                 {lager_file_backend,
                     [{date, ""},
                      {file, "channel_log.log"},
@@ -209,27 +218,29 @@ sink_handlers_merged_with_lager_extra_sinks_handlers(_) ->
 
     ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
 
-
-
 config_handlers_merged_with_lager_handlers(_) ->
     application:set_env(rabbit, log, [
         {file,    [{file, "rabbit_file.log"}, {level, debug}]},
         {console, [{enabled, true}, {level, error}]},
+        {exchange,  [{enabled, true}, {level, error}]},
         {syslog,  [{enabled, true}]}
     ]),
 
     LagerHandlers = [
         {lager_file_backend, [{file, "lager_file.log"}, {level, info}]},
-        {lager_console_backend, [{level, info}]}
+        {lager_console_backend, [{level, info}]},
+        {lager_exchange_backend, [{level, info}]},
+        {lager_exchange_backend, [{level, info}]}
     ],
     application:set_env(lager, handlers, LagerHandlers),
     rabbit_lager:configure_lager(),
 
     FileHandlers = default_expected_handlers("rabbit_file.log", debug),
     ConsoleHandlers = expected_console_handler(error),
+    RabbitHandlers = expected_rabbit_handler(error),
     SyslogHandlers = expected_syslog_handler(),
 
-    ExpectedRabbitHandlers = sort_handlers(FileHandlers ++ ConsoleHandlers ++ SyslogHandlers),
+    ExpectedRabbitHandlers = sort_handlers(FileHandlers ++ ConsoleHandlers ++ RabbitHandlers ++ SyslogHandlers),
     ExpectedHandlers = sort_handlers(ExpectedRabbitHandlers ++ LagerHandlers),
 
     ?assertEqual(ExpectedRabbitHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))),
@@ -285,6 +296,7 @@ config_sink_file(_) ->
 
     application:set_env(rabbit, log, [
         {console, [{enabled, true}]},
+        {exchange, [{enabled, true}]},
         {file, [{level, error}]},
         {categories, [
             {connection, [{file, "connection.log"}, {level, warning}]}
@@ -305,6 +317,7 @@ config_sink_file_override_config_handler_file(_) ->
     application:set_env(rabbit, log, [
         {file, [{file, NonDefaultLogFile}, {level, error}]},
         {console, [{enabled, true}]},
+        {exchange, [{enabled, true}]},
         {categories, [
             {connection, [{file, "connection.log"}, {level, warning}]}
         ]}
@@ -314,7 +327,6 @@ config_sink_file_override_config_handler_file(_) ->
 
     ExpectedSinks = sort_sinks(file_sinks()),
     ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
-
 
 file_sinks() ->
     [{error_logger_lager_event,
@@ -327,6 +339,8 @@ file_sinks() ->
         [{handlers,[
             {lager_console_backend, [{level, warning},
                                      {formatter_config, formatter_config()}]},
+            {lager_exchange_backend, [{level, warning},
+                                    {formatter_config, formatter_config()}]},
             {lager_file_backend,
                 [{date, ""},
                  {file, "connection.log"},
@@ -336,6 +350,8 @@ file_sinks() ->
          {rabbit_handlers,[
             {lager_console_backend, [{level, warning},
                                      {formatter_config, formatter_config()}]},
+            {lager_exchange_backend, [{level, warning},
+                                    {formatter_config, formatter_config()}]},
             {lager_file_backend,
                 [{date, ""},
                  {file, "connection.log"},
@@ -360,7 +376,6 @@ file_sinks() ->
          {rabbit_handlers,[{lager_forwarder_backend,[lager_event,inherit]}]}]}
      ].
 
-
 config_multiple_handlers(_) ->
     DefaultLogFile = "rabbit_default.log",
     application:set_env(rabbit, lager_default_file, DefaultLogFile),
@@ -370,19 +385,21 @@ config_multiple_handlers(_) ->
         {file, [{file, false}]},
         %% Enable console output
         {console, [{enabled, true}]},
+        %% Enable exchange output
+        {exchange, [{enabled, true}]},
         %% Enable a syslog output
         {syslog, [{enabled, true}, {level, error}]}]),
 
     rabbit_lager:configure_lager(),
 
     ConsoleHandlers = expected_console_handler(),
+    RabbitHandlers = expected_rabbit_handler(),
     SyslogHandlers = expected_syslog_handler(error, "rabbitmq", daemon),
 
-    ExpectedHandlers = sort_handlers(SyslogHandlers ++ ConsoleHandlers),
+    ExpectedHandlers = sort_handlers(SyslogHandlers ++ ConsoleHandlers ++ RabbitHandlers),
 
     ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
     ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
-
 
 config_console_handler(_) ->
     DefaultLogFile = "rabbit_default.log",
@@ -399,12 +416,34 @@ config_console_handler(_) ->
     ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
     ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
+config_exchange_handler(_) ->
+    DefaultLogFile = "rabbit_default.log",
+    application:set_env(rabbit, lager_default_file, DefaultLogFile),
+    application:set_env(rabbit, log, [{exchange, [{enabled, true}]}]),
+
+    rabbit_lager:configure_lager(),
+
+    FileHandlers = default_expected_handlers(DefaultLogFile),
+    ExchangeHandlers = expected_rabbit_handler(),
+
+    ExpectedHandlers = sort_handlers(FileHandlers ++ ExchangeHandlers),
+
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
+    ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
+
 expected_console_handler() ->
     expected_console_handler(info).
 
 expected_console_handler(Level) ->
     [{lager_console_backend, [{level, Level},
                               {formatter_config, formatter_config()}]}].
+
+expected_rabbit_handler() ->
+    expected_rabbit_handler(info).
+
+expected_rabbit_handler(Level) ->
+    [{lager_exchange_backend, [{level, Level},
+                             {formatter_config, formatter_config()}]}].
 
 config_syslog_handler(_) ->
     DefaultLogFile = "rabbit_default.log",
@@ -527,7 +566,6 @@ default(_) ->
 
     ExpectedSinks = default_expected_sinks(LogUpgradeFile),
     ?assertEqual(ExpectedSinks, sort_sinks(application:get_env(lager, extra_sinks, undefined))).
-
 
 default_expected_handlers(File) ->
     default_expected_handlers(File, info, 0, "").
