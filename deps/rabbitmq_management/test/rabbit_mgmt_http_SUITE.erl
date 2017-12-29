@@ -1718,8 +1718,8 @@ exchanges_pagination_test(Config) ->
     timer:sleep(1500),
 
     PageOfTwo = http_get(Config, "/exchanges?page=1&page_size=2", ?OK),
-    ?assertEqual(19, maps:get(total_count, PageOfTwo)),
-    ?assertEqual(19, maps:get(filtered_count, PageOfTwo)),
+    ?assertEqual(18, maps:get(total_count, PageOfTwo)),
+    ?assertEqual(18, maps:get(filtered_count, PageOfTwo)),
     ?assertEqual(2, maps:get(item_count, PageOfTwo)),
     ?assertEqual(1, maps:get(page, PageOfTwo)),
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
@@ -1729,7 +1729,7 @@ exchanges_pagination_test(Config) ->
                 ], maps:get(items, PageOfTwo)),
 
     ByName = http_get(Config, "/exchanges?page=1&page_size=2&name=reg", ?OK),
-    ?assertEqual(19, maps:get(total_count, ByName)),
+    ?assertEqual(18, maps:get(total_count, ByName)),
     ?assertEqual(2, maps:get(filtered_count, ByName)),
     ?assertEqual(2, maps:get(item_count, ByName)),
     ?assertEqual(1, maps:get(page, ByName)),
@@ -1743,7 +1743,7 @@ exchanges_pagination_test(Config) ->
     RegExByName = http_get(Config,
                            "/exchanges?page=1&page_size=2&name=^(?=^reg)&use_regex=true",
                            ?OK),
-    ?assertEqual(19, maps:get(total_count, RegExByName)),
+    ?assertEqual(18, maps:get(total_count, RegExByName)),
     ?assertEqual(1, maps:get(filtered_count, RegExByName)),
     ?assertEqual(1, maps:get(item_count, RegExByName)),
     ?assertEqual(1, maps:get(page, RegExByName)),
