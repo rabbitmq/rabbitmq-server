@@ -493,10 +493,10 @@ credential_validator.regexp = ^abc\\d+",
    log.console.level = debug",
   [{rabbit,[{log, [{console, [{enabled, true}, {level, debug}]}]}]}],
   []},
- {log_debug_rabbit,
-  "log.rabbit = true
-   log.rabbit.level = debug",
-  [{rabbit,[{log, [{rabbit, [{enabled, true}, {level, debug}]}]}]}],
+ {log_debug_exchange,
+  "log.exchange = true
+   log.exchange.level = debug",
+  [{rabbit,[{log, [{exchange, [{enabled, true}, {level, debug}]}]}]}],
   []},
  {log_debug_syslog,
   "log.syslog = true

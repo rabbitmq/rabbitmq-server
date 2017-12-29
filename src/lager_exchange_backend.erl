@@ -24,7 +24,7 @@
 %%                             `time [ severity ] message'</li>
 %% </ul>
 
--module(lager_rabbit_backend).
+-module(lager_exchange_backend).
 
 -behaviour(gen_event).
 
@@ -56,7 +56,7 @@
 -define(DEPRECATED(_Msg), ok).
 -else.
 -define(DEPRECATED(Msg),
-        io:format(user, "WARNING: This is a deprecated lager_rabbit_backend configuration. Please use \"~w\" instead.~n", [Msg])).
+        io:format(user, "WARNING: This is a deprecated lager_exchange_backend configuration. Please use \"~w\" instead.~n", [Msg])).
 -endif.
 
 -define(LOG_EXCH_NAME, <<"amq.rabbitmq.log">>).
@@ -92,7 +92,7 @@ init(Level) when is_atom(Level) ->
     ?DEPRECATED([{level, Level}]),
     init([{level, Level}]);
 init(Other) ->
-    {error, {fatal, {bad_lager_rabbit_backend_config, Other}}}.
+    {error, {fatal, {bad_lager_exchange_backend_config, Other}}}.
 
 validate_options([]) -> true;
 validate_options([{level, L}|T]) when is_atom(L) ->
@@ -107,7 +107,7 @@ validate_options([{formatter, M}|T]) when is_atom(M) ->
 validate_options([{formatter_config, C}|T]) when is_list(C) ->
     validate_options(T);
 validate_options([H|_]) ->
-    throw({error, {fatal, {bad_lager_rabbit_backend_config, H}}}).
+    throw({error, {fatal, {bad_lager_exchange_backend_config, H}}}).
 
 get_option(K, Options, Default) ->
    case lists:keyfind(K, 1, Options) of
@@ -216,7 +216,7 @@ console_config_validation_test_() ->
     [
      ?_assertEqual(true, validate_options(Good)),
      ?_assertThrow({error, {fatal, {bad_level, foo}}}, validate_options(Bad1)),
-     ?_assertThrow({error, {fatal, {bad_lager_rabbit_backend_config, {larval, info}}}}, validate_options(Bad2)),
+     ?_assertThrow({error, {fatal, {bad_lager_exchange_backend_config, {larval, info}}}}, validate_options(Bad2)),
      ?_assertEqual(true, validate_options(AllGood))
     ].
 -endif.
