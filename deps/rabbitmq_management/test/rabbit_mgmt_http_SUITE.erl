@@ -1717,19 +1717,21 @@ exchanges_pagination_test(Config) ->
     %% for stats to update
     timer:sleep(1500),
 
+    Total     = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list_names, [])),
+
     PageOfTwo = http_get(Config, "/exchanges?page=1&page_size=2", ?OK),
-    ?assertEqual(18, maps:get(total_count, PageOfTwo)),
-    ?assertEqual(18, maps:get(filtered_count, PageOfTwo)),
+    ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
+    ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
     ?assertEqual(2, maps:get(item_count, PageOfTwo)),
     ?assertEqual(1, maps:get(page, PageOfTwo)),
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
-    ?assertEqual(10, maps:get(page_count, PageOfTwo)),
+    ?assertEqual(9, maps:get(page_count, PageOfTwo)),
     assert_list([#{name => <<"">>, vhost => <<"/">>},
                  #{name => <<"amq.direct">>, vhost => <<"/">>}
                 ], maps:get(items, PageOfTwo)),
 
     ByName = http_get(Config, "/exchanges?page=1&page_size=2&name=reg", ?OK),
-    ?assertEqual(18, maps:get(total_count, ByName)),
+    ?assertEqual(Total, maps:get(total_count, ByName)),
     ?assertEqual(2, maps:get(filtered_count, ByName)),
     ?assertEqual(2, maps:get(item_count, ByName)),
     ?assertEqual(1, maps:get(page, ByName)),
@@ -1743,7 +1745,7 @@ exchanges_pagination_test(Config) ->
     RegExByName = http_get(Config,
                            "/exchanges?page=1&page_size=2&name=^(?=^reg)&use_regex=true",
                            ?OK),
-    ?assertEqual(18, maps:get(total_count, RegExByName)),
+    ?assertEqual(Total, maps:get(total_count, RegExByName)),
     ?assertEqual(1, maps:get(filtered_count, RegExByName)),
     ?assertEqual(1, maps:get(item_count, RegExByName)),
     ?assertEqual(1, maps:get(page, RegExByName)),
@@ -1781,7 +1783,12 @@ exchanges_pagination_permissions_test(Config) ->
     QArgs = #{},
     http_put(Config, "/exchanges/%2f/test0", QArgs, "admin", "admin", {group, '2xx'}),
     http_put(Config, "/exchanges/vh1/test1", QArgs, "non-admin", "non-admin", {group, '2xx'}),
+
+    %% for stats to update
+    timer:sleep(1500),
+
     FirstPage = http_get(Config, "/exchanges?page=1&name=test1", "non-admin", "non-admin", ?OK),
+
     ?assertEqual(8, maps:get(total_count, FirstPage)),
     ?assertEqual(1, maps:get(item_count, FirstPage)),
     ?assertEqual(1, maps:get(page, FirstPage)),
@@ -1809,9 +1816,15 @@ queue_pagination_test(Config) ->
     http_put(Config, "/queues/vh1/test1", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2f/test2_reg", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/vh1/reg_test3", QArgs, {group, '2xx'}),
+
+    %% for stats to update
+    timer:sleep(1500),
+
+    Total     = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list_names, [])),
+
     PageOfTwo = http_get(Config, "/queues?page=1&page_size=2", ?OK),
-    ?assertEqual(4, maps:get(total_count, PageOfTwo)),
-    ?assertEqual(4, maps:get(filtered_count, PageOfTwo)),
+    ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
+    ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
     ?assertEqual(2, maps:get(item_count, PageOfTwo)),
     ?assertEqual(1, maps:get(page, PageOfTwo)),
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
@@ -1821,8 +1834,8 @@ queue_pagination_test(Config) ->
                 ], maps:get(items, PageOfTwo)),
 
     SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
-    ?assertEqual(4, maps:get(total_count, SortedByName)),
-    ?assertEqual(4, maps:get(filtered_count, SortedByName)),
+    ?assertEqual(Total, maps:get(total_count, SortedByName)),
+    ?assertEqual(Total, maps:get(filtered_count, SortedByName)),
     ?assertEqual(2, maps:get(item_count, SortedByName)),
     ?assertEqual(1, maps:get(page, SortedByName)),
     ?assertEqual(2, maps:get(page_size, SortedByName)),
@@ -1833,8 +1846,8 @@ queue_pagination_test(Config) ->
 
 
     FirstPage = http_get(Config, "/queues?page=1", ?OK),
-    ?assertEqual(4, maps:get(total_count, FirstPage)),
-    ?assertEqual(4, maps:get(filtered_count, FirstPage)),
+    ?assertEqual(Total, maps:get(total_count, FirstPage)),
+    ?assertEqual(Total, maps:get(filtered_count, FirstPage)),
     ?assertEqual(4, maps:get(item_count, FirstPage)),
     ?assertEqual(1, maps:get(page, FirstPage)),
     ?assertEqual(100, maps:get(page_size, FirstPage)),
@@ -1849,8 +1862,8 @@ queue_pagination_test(Config) ->
     ReverseSortedByName = http_get(Config,
                                    "/queues?page=2&page_size=2&sort=name&sort_reverse=true",
                                    ?OK),
-    ?assertEqual(4, maps:get(total_count, ReverseSortedByName)),
-    ?assertEqual(4, maps:get(filtered_count, ReverseSortedByName)),
+    ?assertEqual(Total, maps:get(total_count, ReverseSortedByName)),
+    ?assertEqual(Total, maps:get(filtered_count, ReverseSortedByName)),
     ?assertEqual(2, maps:get(item_count, ReverseSortedByName)),
     ?assertEqual(2, maps:get(page, ReverseSortedByName)),
     ?assertEqual(2, maps:get(page_size, ReverseSortedByName)),
@@ -1861,7 +1874,7 @@ queue_pagination_test(Config) ->
 
 
     ByName = http_get(Config, "/queues?page=1&page_size=2&name=reg", ?OK),
-    ?assertEqual(4, maps:get(total_count, ByName)),
+    ?assertEqual(Total, maps:get(total_count, ByName)),
     ?assertEqual(2, maps:get(filtered_count, ByName)),
     ?assertEqual(2, maps:get(item_count, ByName)),
     ?assertEqual(1, maps:get(page, ByName)),
@@ -1874,7 +1887,7 @@ queue_pagination_test(Config) ->
     RegExByName = http_get(Config,
                            "/queues?page=1&page_size=2&name=^(?=^reg)&use_regex=true",
                            ?OK),
-    ?assertEqual(4, maps:get(total_count, RegExByName)),
+    ?assertEqual(Total, maps:get(total_count, RegExByName)),
     ?assertEqual(1, maps:get(filtered_count, RegExByName)),
     ?assertEqual(1, maps:get(item_count, RegExByName)),
     ?assertEqual(1, maps:get(page, RegExByName)),
