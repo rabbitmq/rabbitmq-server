@@ -1725,7 +1725,7 @@ exchanges_pagination_test(Config) ->
     ?assertEqual(2, maps:get(item_count, PageOfTwo)),
     ?assertEqual(1, maps:get(page, PageOfTwo)),
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
-    ?assertEqual(9, maps:get(page_count, PageOfTwo)),
+    ?assertEqual(round(Total / 2), maps:get(page_count, PageOfTwo)),
     assert_list([#{name => <<"">>, vhost => <<"/">>},
                  #{name => <<"amq.direct">>, vhost => <<"/">>}
                 ], maps:get(items, PageOfTwo)),
