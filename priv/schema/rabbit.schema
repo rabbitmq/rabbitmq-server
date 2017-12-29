@@ -1047,10 +1047,10 @@ end}.
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 
-{mapping, "log.rabbit", "rabbit.log.rabbit.enabled", [
+{mapping, "log.exchange", "rabbit.log.exchange.enabled", [
     {datatype, {enum, [true, false]}}
 ]}.
-{mapping, "log.rabbit.level", "rabbit.log.rabbit.level", [
+{mapping, "log.exchange.level", "rabbit.log.exchange.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 

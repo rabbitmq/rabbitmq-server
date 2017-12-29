@@ -263,7 +263,7 @@ generate_lager_handlers(LogHandlersConfig) ->
                     generate_handler(Backend, HandlerConfig)
             end;
         ({Other, HandlerConfig}) when
-              Other =:= console; Other =:= syslog; Other =:= rabbit ->
+              Other =:= console; Other =:= syslog; Other =:= exchange ->
             case proplists:get_value(enabled, HandlerConfig, false) of
                 false -> [];
                 true  ->
@@ -274,10 +274,10 @@ generate_lager_handlers(LogHandlersConfig) ->
     end,
     LogHandlersConfig).
 
-lager_backend(file) -> lager_file_backend;
-lager_backend(console) -> lager_console_backend;
-lager_backend(syslog) -> lager_syslog_backend;
-lager_backend(rabbit) -> lager_rabbit_backend.
+lager_backend(file)     -> lager_file_backend;
+lager_backend(console)  -> lager_console_backend;
+lager_backend(syslog)   -> lager_syslog_backend;
+lager_backend(exchange) -> lager_exchange_backend.
 
 generate_handler(Backend, HandlerConfig) ->
     [{Backend,
@@ -292,7 +292,7 @@ default_handler_config(lager_syslog_backend) ->
 default_handler_config(lager_console_backend) ->
     [{level, default_config_value(level)},
      {formatter_config, default_config_value(formatter_config)}];
-default_handler_config(lager_rabbit_backend) ->
+default_handler_config(lager_exchange_backend) ->
     [{level, default_config_value(level)},
      {formatter_config, default_config_value(formatter_config)}];
 default_handler_config(lager_file_backend) ->
