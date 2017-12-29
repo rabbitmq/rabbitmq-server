@@ -1675,7 +1675,8 @@ connections_channels_pagination_test(Config) ->
     Conn2     = open_unmanaged_connection(Config),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
-    timer:sleep(1500), %% Sadly we need to sleep to let the stats update
+    %% for stats to update
+    timer:sleep(1500),
     PageOfTwo = http_get(Config, "/connections?page=1&page_size=2", ?OK),
     ?assertEqual(3, maps:get(total_count, PageOfTwo)),
     ?assertEqual(3, maps:get(filtered_count, PageOfTwo)),
@@ -1712,6 +1713,10 @@ exchanges_pagination_test(Config) ->
     http_put(Config, "/exchanges/vh1/test1", QArgs, {group, '2xx'}),
     http_put(Config, "/exchanges/%2f/test2_reg", QArgs, {group, '2xx'}),
     http_put(Config, "/exchanges/vh1/reg_test3", QArgs, {group, '2xx'}),
+
+    %% for stats to update
+    timer:sleep(1500),
+
     PageOfTwo = http_get(Config, "/exchanges?page=1&page_size=2", ?OK),
     ?assertEqual(19, maps:get(total_count, PageOfTwo)),
     ?assertEqual(19, maps:get(filtered_count, PageOfTwo)),
