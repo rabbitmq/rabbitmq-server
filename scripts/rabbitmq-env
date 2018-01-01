@@ -332,6 +332,25 @@ if [ "$ERL_LIBS" ]; then
     export ERL_LIBS
 fi
 
+run_escript()
+{
+    escript_main="${1:?escript_main must be defined}"
+    shift
+    escript="${1:?escript must be defined}"
+    shift
+
+    exec "${ERL_DIR}erl" +B \
+        -boot "${CLEAN_BOOT_FILE}" \
+        -noinput -noshell -hidden -smp enable \
+        "${RABBITMQ_CTL_ERL_ARGS}" \
+        -sasl errlog_type error \
+        -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
+        -nodename "$RABBITMQ_NODENAME" \
+        -run escript start \
+        -escript main "$escript_main" \
+        -extra "$escript" "$@"
+}
+
 RABBITMQ_ENV_LOADED=1
 
 # Since we source this elsewhere, don't accidentally stop execution
