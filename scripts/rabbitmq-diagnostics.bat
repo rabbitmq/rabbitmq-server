@@ -45,17 +45,16 @@ if not defined ERL_CRASH_DUMP_SECONDS (
     set ERL_CRASH_DUMP_SECONDS=0
 )
 
-"!ERLANG_HOME!\bin\escript.exe" ^
-"%RABBITMQ_HOME%\escript\rabbitmq-diagnostics" !STAR!
-rem -pa "!RABBITMQ_HOME!\ebin" ^
-rem -noinput ^
-rem -hidden ^
-rem !RABBITMQ_CTL_ERL_ARGS! ^
-rem -sasl errlog_type error ^
-rem -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
-rem -s rabbit_control_main ^
-rem -nodename !RABBITMQ_NODENAME! ^
-rem -extra !STAR!
+"!ERLANG_HOME!\bin\erl.exe" +B ^
+-boot !CLEAN_BOOT_FILE! ^
+-noinput -noshell -hidden -smp enable ^
+!RABBITMQ_CTL_ERL_ARGS! ^
+-sasl errlog_type error ^
+-mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
+-nodename !RABBITMQ_NODENAME! ^
+-run escript start ^
+-escript main rabbitmqctl_escript ^
+-extra "%RABBITMQ_HOME%\escript\rabbitmq-diagnostics" !STAR!
 
 endlocal
 endlocal
