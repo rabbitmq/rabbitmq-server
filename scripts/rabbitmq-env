@@ -339,10 +339,11 @@ run_escript()
     escript="${1:?escript must be defined}"
     shift
 
+    # shellcheck disable=SC2086
     exec "${ERL_DIR}erl" +B \
         -boot "${CLEAN_BOOT_FILE}" \
         -noinput -noshell -hidden -smp enable \
-        "${RABBITMQ_CTL_ERL_ARGS}" \
+        ${RABBITMQ_CTL_ERL_ARGS} \
         -sasl errlog_type error \
         -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
         -nodename "$RABBITMQ_NODENAME" \
