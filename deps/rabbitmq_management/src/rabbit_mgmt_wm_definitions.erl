@@ -344,7 +344,14 @@ add_parameter(Param, Username) ->
 add_global_parameter(Param, Username) ->
     Key   = maps:get(name,      Param, undefined),
     Term  = maps:get(value,     Param, undefined),
-    rabbit_runtime_parameters:set_global(Key, Term, Username).
+    case Term of
+        %% rabbit_runtime_parameters:parse_set_global/3 coerces maps to proplists
+        %% for backwards compatibility. See rabbitmq-management#528.
+        Val when is_map(Val) ->
+            rabbit_runtime_parameters:set_global(Key, rabbit_data_coercion:to_proplist(Term), Username);
+        _ ->
+            rabbit_runtime_parameters:set_global(Key, Term, Username)
+    end.
 
 add_policy(Param, Username) ->
     VHost = maps:get(vhost, Param, undefined),
@@ -356,7 +363,7 @@ add_policy(VHost, Param, Username) ->
            VHost, Key, maps:get(pattern, Param, undefined),
            case maps:get(definition, Param, undefined) of
                undefined -> undefined;
-               Def -> maps:to_list(Def)
+               Def -> rabbit_data_coercion:to_proplist(Def)
            end,
            maps:get(priority, Param, undefined),
            maps:get('apply-to', Param, <<"all">>),

@@ -19,6 +19,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -37,7 +38,8 @@ groups() ->
                                import_case1,
                                import_case2,
                                import_case3,
-                               import_case4
+                               import_case4,
+                               import_case5
                               ]}
     ].
 
@@ -79,6 +81,15 @@ import_case1(Config) -> import_case(Config, "case1").
 import_case2(Config) -> import_case(Config, "case2").
 import_case3(Config) -> import_case(Config, "case3").
 import_case4(Config) -> import_case(Config, "case4").
+
+import_case5(Config) ->
+    import_case(Config, "case5"),
+    ?assertEqual(rabbit_ct_broker_helpers:rpc(Config, 0,
+                                              rabbit_runtime_parameters, value_global,
+                                              [mqtt_port_to_vhost_mapping]),
+                 %% expect a proplist, see #528
+                 [{<<"1883">>,<<"/">>},
+                  {<<"1884">>,<<"vhost2">>}]).
 
 import_case(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
