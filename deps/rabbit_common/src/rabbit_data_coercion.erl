@@ -16,7 +16,7 @@
 
 -module(rabbit_data_coercion).
 
--export([to_binary/1, to_list/1, to_atom/1, to_integer/1]).
+-export([to_binary/1, to_list/1, to_atom/1, to_integer/1, to_proplist/1, to_map/1]).
 -export([to_atom/2]).
 
 -spec to_binary(Val :: binary() | list() | atom() | integer()) -> binary().
@@ -45,3 +45,11 @@ to_atom(Val, Encoding)  when is_binary(Val) -> binary_to_atom(Val, Encoding).
 to_integer(Val) when is_integer(Val) -> Val;
 to_integer(Val) when is_list(Val)    -> list_to_integer(Val);
 to_integer(Val) when is_binary(Val)  -> binary_to_integer(Val).
+
+-spec to_proplist(Val :: map() | list()) -> list().
+to_proplist(Val) when is_list(Val) -> Val;
+to_proplist(Val) when is_map(Val) -> maps:to_list(Val).
+
+-spec to_map(Val :: map() | list()) -> map().
+to_map(Val) when is_map(Val) -> Val;
+to_map(Val) when is_list(Val) -> maps:from_list(Val).

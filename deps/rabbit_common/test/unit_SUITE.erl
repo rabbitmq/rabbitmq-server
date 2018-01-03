@@ -18,6 +18,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -include("rabbit_memory.hrl").
 
@@ -33,6 +34,8 @@ all() ->
 groups() ->
     [
         {parallel_tests, [parallel], [
+            data_coercion_to_proplist,
+            data_coercion_to_map,
             encrypt_decrypt,
             encrypt_decrypt_term,
             version_equivalence,
@@ -280,6 +283,14 @@ platform_and_version(_Config) ->
         {error, ErrType} -> ct:fail("~p", [ErrType]);
         _ -> ok
     end.
+
+data_coercion_to_map(_Config) ->
+    ?assertEqual(#{a => 1}, rabbit_data_coercion:to_map([{a, 1}])),
+    ?assertEqual(#{a => 1}, rabbit_data_coercion:to_map(#{a => 1})).
+
+data_coercion_to_proplist(_Config) ->
+    ?assertEqual([{a, 1}], rabbit_data_coercion:to_proplist([{a, 1}])),
+    ?assertEqual([{a, 1}], rabbit_data_coercion:to_proplist(#{a => 1})).
 
 pid_decompose_compose(_Config) ->
     Pid = self(),
