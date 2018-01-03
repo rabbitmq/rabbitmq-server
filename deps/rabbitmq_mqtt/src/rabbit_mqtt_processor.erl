@@ -594,7 +594,8 @@ get_vhost_username(UserBin) ->
 get_vhost_from_user_mapping(_User, not_found) ->
     undefined;
 get_vhost_from_user_mapping(User, Mapping) ->
-    case rabbit_misc:pget(User, Mapping) of
+    M = rabbit_data_coercion:to_proplist(Mapping),
+    case rabbit_misc:pget(User, M) of
         undefined ->
             undefined;
         VHost ->
@@ -604,7 +605,8 @@ get_vhost_from_user_mapping(User, Mapping) ->
 get_vhost_from_port_mapping(_Port, not_found) ->
     undefined;
 get_vhost_from_port_mapping(Port, Mapping) ->
-    Res = case rabbit_misc:pget(rabbit_data_coercion:to_binary(Port), Mapping) of
+    M = rabbit_data_coercion:to_proplist(Mapping),
+    Res = case rabbit_misc:pget(rabbit_data_coercion:to_binary(Port), M) of
         undefined ->
             undefined;
         VHost ->
