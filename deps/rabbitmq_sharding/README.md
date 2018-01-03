@@ -97,6 +97,19 @@ client issue many `basic.consume` commands without too much time in
 between, it might happen that the plugin assigns the consumers to
 queues in an uneven way.
 
+
+## Load Distribution and Consumer Balancing
+
+This plugin can be affected by [queue master locator policy used](http://www.rabbitmq.com/ha.html) in
+the cluster as well as client connection load balancing strategy.
+
+"Minimum masters" is a queue master locator that is most in line with the goals of
+this plugin.
+
+For load balancers, the "least connections" strategy is more likely to produce an even distribution compared
+to round robin and other strategies.
+
+
 ## Installing ##
 
 ### RabbitMQ 3.6.0 or later
