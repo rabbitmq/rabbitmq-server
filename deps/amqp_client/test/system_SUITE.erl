@@ -201,13 +201,14 @@ init_per_testcase(Test, Config) ->
         non_existent_vhost -> <<"oops">>;
         _                  -> ?config(rmq_vhost, Config)
     end,
-    Hostname = case Test of
+    Host = case Test of
         basic_get_ipv4     -> "127.0.0.1";
         basic_get_ipv6     -> "::1";
         basic_get_ipv4_ssl -> "127.0.0.1";
         basic_get_ipv6_ssl -> "::1";
         _                  -> ?config(rmq_hostname, Config)
     end,
+    {ok, Hostname} = inet:gethostname(),
     {Port, SSLOpts} = if
         Test =:= basic_get_ipv4_ssl orelse
         Test =:= basic_get_ipv6_ssl ->
@@ -220,7 +221,8 @@ init_per_testcase(Test, Config) ->
                 {certfile, filename:join([CertsDir, "client", "cert.pem"])},
                 {keyfile, filename:join([CertsDir, "client", "key.pem"])},
                 {verify, verify_peer},
-                {fail_if_no_peer_cert, true}
+                {fail_if_no_peer_cert, true},
+                {server_name_indication, Hostname}
               ]
             };
         true ->
@@ -246,7 +248,7 @@ init_per_testcase(Test, Config) ->
             #amqp_params_network{
               username     = Username,
               password     = Password,
-              host         = Hostname,
+              host         = Host,
               port         = Port,
               virtual_host = VHost,
               channel_max  = ChannelMax,
