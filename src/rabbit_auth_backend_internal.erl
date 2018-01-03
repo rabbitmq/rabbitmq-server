@@ -98,8 +98,14 @@ hashing_module_for_user(#internal_user{
     hashing_algorithm = ModOrUndefined}) ->
         rabbit_password:hashing_mod(ModOrUndefined).
 
+%% For cases when we do not have a set of credentials,
+%% namely when x509 (TLS) certificates are used. This should only be
+%% possible when the EXTERNAL authentication mechanism is used, see
+%% rabbit_auth_mechanism_plain:handle_response/2 and rabbit_reader:auth_phase/2.
 user_login_authentication(Username, []) ->
     internal_check_user_login(Username, fun(_) -> true end);
+%% For cases when we do have a set of credentials. rabbit_auth_mechanism_plain:handle_response/2
+%% performs initial validation.
 user_login_authentication(Username, AuthProps) ->
     case lists:keyfind(password, 1, AuthProps) of
         {password, Cleartext} ->
