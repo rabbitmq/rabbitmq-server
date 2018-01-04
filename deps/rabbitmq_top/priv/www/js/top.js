@@ -34,21 +34,21 @@ HELP['gen-server2-buffer'] = "The processes with a <strong>gen_server2 buffer</s
 "They drain their Erlang mailbox into an internal queue as an optimisation. " +
 "In this context, \"queue\" refers to an internal data structure and must not be confused with a RabbitMQ queue.";
 
-$('select#top-node').live('change', function() {
+$(document).on('change', 'select#top-node', function() {
     var url='#/top/' + $(this).val() + "/" + $('select#row-count').val();
     go_to(url);
 });
 
-$('select#top-node-ets').live('change', function() {
+$(document).on('change', 'select#top-node-ets', function() {
     var url='#/top/ets/' + $(this).val() + "/" + $('select#row-count-ets').val();
     go_to(url);
 });
 
-$('select#row-count').live('change', function() {
+$(document).on('change', 'select#row-count', function() {
     go_to('#/top/' + $('select#top-node').val() + "/" + $(this).val());
 });
 
-$('select#row-count-ets').live('change', function() {
+$(document).on('change', 'select#row-count-ets', function() {
     go_to('#/top/ets/' + $('select#top-node-ets').val() + "/" + $(this).val());
 });
 
