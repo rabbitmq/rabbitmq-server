@@ -757,6 +757,10 @@ user_management1(_Config) ->
     passed.
 
 
+%% -------------------------------------------------------------------
+%% rabbit_auth_backend_internal
+%% -------------------------------------------------------------------
+
 login_with_credentials_but_no_password(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, login_with_credentials_but_no_password1, [Config]).
@@ -804,6 +808,7 @@ login_of_passwordless_user1(_Config) ->
       [Username]),
 
     passed.
+
 
 runtime_parameters(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
