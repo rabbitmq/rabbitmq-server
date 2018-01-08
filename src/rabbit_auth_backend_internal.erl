@@ -100,7 +100,7 @@ hashing_module_for_user(#internal_user{
 
 -define(BLANK_PASSWORD_REJECTION_MESSAGE,
         "user '~s' attempted to log in with a blank password, which is prohibited by the internal authN backend. "
-        "To use TLS/x509 certificate-based autentication, set the rabbitmq_auth_mechanism_ssl plugin and configure the client to use the EXTERNAL authentication mechanism. "
+        "To use TLS/x509 certificate-based authentication, see the rabbitmq_auth_mechanism_ssl plugin and configure the client to use the EXTERNAL authentication mechanism. "
         "Alternatively change the password for the user to be non-blank.").
 
 %% For cases when we do not have a set of credentials,
