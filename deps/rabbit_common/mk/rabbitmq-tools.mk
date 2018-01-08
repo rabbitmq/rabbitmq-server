@@ -2,6 +2,8 @@ READY_DEPS = $(foreach DEP,\
 	       $(filter $(RABBITMQ_COMPONENTS),$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)), \
 	       $(if $(wildcard $(DEPS_DIR)/$(DEP)),$(DEP),))
 
+RELEASED_RMQ_DEPS = $(filter $(RABBITMQ_COMPONENTS),$(DEPS) $(BUILD_DEPS))
+
 .PHONY: update-erlang-mk update-rabbitmq-components.mk
 
 update-erlang-mk: erlang-mk
@@ -131,10 +133,89 @@ else
 	$(verbose) cd $* && git config user.email "$(RMQ_GIT_USER_EMAIL)"
 endif
 
+.PHONY: show-branch
+
 show-branch: $(READY_DEPS:%=$(DEPS_DIR)/%+show-branch)
 	$(verbose) printf '%-34s %s\n' $(PROJECT): "$$(git symbolic-ref -q --short HEAD || git describe --tags --exact-match)"
 
 %+show-branch:
 	$(verbose) printf '%-34s %s\n' $(notdir $*): "$$(cd $* && (git symbolic-ref -q --short HEAD || git describe --tags --exact-match))"
+
+SINCE_TAG ?= last-release
+COMMITS_LOG_OPTS ?= --oneline --decorate --no-merges
+MARKDOWN ?= no
+
+define show_commits_since_tag
+set -e; \
+if test "$1"; then \
+	erlang_app=$(notdir $1); \
+	repository=$(call rmq_cmp_repo_name,$(notdir $1)); \
+	git_dir=-C\ "$1"; \
+else \
+	erlang_app=$(PROJECT); \
+	repository=$(call rmq_cmp_repo_name,$(PROJECT)); \
+fi; \
+case "$(SINCE_TAG)" in \
+last-release) \
+	ref=$$(git $$git_dir describe --abbrev=0 --tags \
+		--exclude "*-beta*" \
+		--exclude "*_milestone*" \
+		--exclude "*[-_]rc*"); \
+	;; \
+last-prerelease) \
+	ref=$$(git $$git_dir describe --abbrev=0 --tags); \
+	;; \
+*) \
+	git $$git_dir rev-parse "$(SINCE_TAG)" -- >/dev/null; \
+	ref=$(SINCE_TAG); \
+	;; \
+esac; \
+commits_count=$$(git $$git_dir log --oneline "$$ref.." | wc -l); \
+if test "$$commits_count" -gt 0; then \
+	if test "$(MARKDOWN)" = yes; then \
+		printf "\n## [\`$$repository\`](https://github.com/rabbitmq/$$repository)\n\nCommits since \`$$ref\`:\n\n"; \
+		git $$git_dir --no-pager log $(COMMITS_LOG_OPTS) \
+			--format="format:* %s ([\`%h\`](https://github.com/rabbitmq/$$repository/commit/%H))" \
+			"$$ref.."; \
+		echo; \
+	else \
+		echo; \
+		echo "# $$repository - Commits since $$ref"; \
+		git $$git_dir log $(COMMITS_LOG_OPTS) "$$ref.."; \
+	fi; \
+fi
+endef
+
+.PHONY: commits-since-release
+
+commits-since-release: commits-since-release-title \
+    $(RELEASED_RMQ_DEPS:%=$(DEPS_DIR)/%+commits-since-release)
+	$(verbose) $(call show_commits_since_tag)
+
+commits-since-release-title:
+	$(verbose) set -e; \
+	case "$(SINCE_TAG)" in \
+	last-release) \
+		ref=$$(git $$git_dir describe --abbrev=0 --tags \
+			--exclude "*-beta*" \
+			--exclude "*_milestone*" \
+			--exclude "*[-_]rc*"); \
+		;; \
+	last-prerelease) \
+		ref=$$(git $$git_dir describe --abbrev=0 --tags); \
+		;; \
+	*) \
+		ref=$(SINCE_TAG); \
+		;; \
+	esac; \
+	version=$$(echo "$$ref" | sed -E \
+		-e 's/rabbitmq_v([0-9]+)_([0-9]+)_([0-9]+)/v\1.\2.\3/' \
+		-e 's/_milestone/-beta./' \
+		-e 's/_rc/-rc./' \
+		-e 's/^v//'); \
+	echo "# Changes since RabbitMQ $$version"; \
+
+%+commits-since-release:
+	$(verbose) $(call show_commits_since_tag,$*)
 
 endif # ($(wildcard .git),)
