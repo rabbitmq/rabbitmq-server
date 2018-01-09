@@ -98,6 +98,11 @@ hashing_module_for_user(#internal_user{
     hashing_algorithm = ModOrUndefined}) ->
         rabbit_password:hashing_mod(ModOrUndefined).
 
+-define(BLANK_PASSWORD_REJECTION_MESSAGE,
+        "user '~s' attempted to log in with a blank password, which is prohibited by the internal authN backend. "
+        "To use TLS/x509 certificate-based authentication, see the rabbitmq_auth_mechanism_ssl plugin and configure the client to use the EXTERNAL authentication mechanism. "
+        "Alternatively change the password for the user to be non-blank.").
+
 %% For cases when we do not have a set of credentials,
 %% namely when x509 (TLS) certificates are used. This should only be
 %% possible when the EXTERNAL authentication mechanism is used, see
@@ -108,6 +113,12 @@ user_login_authentication(Username, []) ->
 %% performs initial validation.
 user_login_authentication(Username, AuthProps) ->
     case lists:keyfind(password, 1, AuthProps) of
+        {password, <<"">>} ->
+            {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE,
+             [Username]};
+        {password, ""} ->
+            {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE,
+             [Username]};
         {password, Cleartext} ->
             internal_check_user_login(
               Username,

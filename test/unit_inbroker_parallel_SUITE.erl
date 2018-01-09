@@ -19,6 +19,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -48,6 +49,10 @@ groups() ->
           {password_hashing, [], [
               password_hashing,
               change_password
+            ]},
+          {auth_backend_internal, [parallel], [
+              login_with_credentials_but_no_password,
+              login_of_passwordless_user
             ]},
           set_disk_free_limit_command,
           set_vm_memory_high_watermark_command,
@@ -516,6 +521,58 @@ change_password1(_Config) ->
         rabbit_auth_backend_internal:user_login_authentication(
             UserName, [{password, Password}]),
     passed.
+
+
+%% -------------------------------------------------------------------
+%% rabbit_auth_backend_internal
+%% -------------------------------------------------------------------
+
+login_with_credentials_but_no_password(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, login_with_credentials_but_no_password1, [Config]).
+
+login_with_credentials_but_no_password1(_Config) ->
+    Username = <<"login_with_credentials_but_no_password-user">>,
+    Password = <<"login_with_credentials_but_no_password-password">>,
+    ok = rabbit_auth_backend_internal:add_user(Username, Password, <<"acting-user">>),
+
+    try
+        rabbit_auth_backend_internal:user_login_authentication(Username,
+                                                              [{key, <<"value">>}]),
+        ?assert(false)
+    catch exit:{unknown_auth_props, Username, [{key, <<"value">>}]} ->
+            ok
+    end,
+
+    ok = rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>),
+
+    passed.
+
+%% passwordless users are not supposed to be used with
+%% this backend (and PLAIN authentication mechanism in general)
+login_of_passwordless_user(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, login_of_passwordless_user1, [Config]).
+
+login_of_passwordless_user1(_Config) ->
+    Username = <<"login_of_passwordless_user-user">>,
+    Password = <<"">>,
+    ok = rabbit_auth_backend_internal:add_user(Username, Password, <<"acting-user">>),
+
+    ?assertMatch(
+       {refused, _Message, [Username]},
+       rabbit_auth_backend_internal:user_login_authentication(Username,
+                                                              [{password, <<"">>}])),
+
+    ?assertMatch(
+       {refused, _Format, [Username]},
+       rabbit_auth_backend_internal:user_login_authentication(Username,
+                                                              [{password, ""}])),
+
+    ok = rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>),
+
+    passed.
+
 
 %% -------------------------------------------------------------------
 %% rabbitmqctl.
