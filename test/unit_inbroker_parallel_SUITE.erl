@@ -19,6 +19,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -46,6 +47,10 @@ groups() ->
           {password_hashing, [], [
               password_hashing,
               change_password
+            ]},
+          {auth_backend_internal, [parallel], [
+              login_with_credentials_but_no_password,
+              login_of_passwordless_user
             ]},
           {policy_validation, [parallel, {repeat, 20}], [
               ha_policy_validation,
@@ -684,9 +689,12 @@ user_management1(_Config) ->
     %% user authentication
     ok = control_action(authenticate_user,
       ["user_management-user", "user_management-newpassword"]),
-    {refused, _User, _Format, _Params} =
+    ?assertMatch({refused, _User, _Format, _Params},
         control_action(authenticate_user,
-          ["user_management-user", "user_management-password"]),
+          ["user_management-user", "user_management-password"])),
+    ?assertMatch({refused, _User, _Format, _Params},
+        control_action(authenticate_user,
+          ["user_management-user", ""])),
 
     %% vhost creation
     ok = control_action(add_vhost,
@@ -747,6 +755,60 @@ user_management1(_Config) ->
           ["user_management-user"]),
 
     passed.
+
+
+%% -------------------------------------------------------------------
+%% rabbit_auth_backend_internal
+%% -------------------------------------------------------------------
+
+login_with_credentials_but_no_password(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, login_with_credentials_but_no_password1, [Config]).
+
+login_with_credentials_but_no_password1(_Config) ->
+    Username = "login_with_credentials_but_no_password-user",
+    Password = "login_with_credentials_but_no_password-password",
+    ok = control_action(add_user, [Username, Password]),
+
+    try
+        rabbit_auth_backend_internal:user_login_authentication(Username,
+                                                              [{key, <<"value">>}]),
+        ?assert(false)
+    catch exit:{unknown_auth_props, Username, [{key, <<"value">>}]} ->
+            ok
+    end,
+
+    ok = control_action(delete_user,
+      [Username]),
+
+    passed.
+
+%% passwordless users are not supposed to be used with
+%% this backend (and PLAIN authentication mechanism in general)
+login_of_passwordless_user(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, login_of_passwordless_user1, [Config]).
+
+login_of_passwordless_user1(_Config) ->
+    Username = "login_of_passwordless_user-user",
+    Password = "",
+    ok = control_action(add_user, [Username, Password]),
+
+    ?assertMatch(
+       {refused, _Message, [Username]},
+       rabbit_auth_backend_internal:user_login_authentication(Username,
+                                                              [{password, <<"">>}])),
+
+    ?assertMatch(
+       {refused, _Format, [Username]},
+       rabbit_auth_backend_internal:user_login_authentication(Username,
+                                                              [{password, ""}])),
+
+    ok = control_action(delete_user,
+      [Username]),
+
+    passed.
+
 
 runtime_parameters(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
