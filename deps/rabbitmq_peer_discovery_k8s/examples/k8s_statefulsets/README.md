@@ -22,7 +22,7 @@ The example uses:
 
 
 ## Usage
-   
+
 
 * Install [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 
@@ -41,6 +41,12 @@ kubectl create namespace test-rabbitmq
 ```
 
 * For kubernetes 1.6 or above, RBAC Authorization feature enabled by default. It need configure RBAC related stuff to support access nodes info successfully by plugin. So deploy RBAC `YAML` file():
+
+```
+kubectl create -f examples/k8s_statefulsets/rabbitmq_rbac.yaml
+```
+
+* Deploy RBAC `YAML` file:
 
 ```
 kubectl create -f examples/k8s_statefulsets/rabbitmq_rbac.yaml
@@ -88,4 +94,3 @@ minikube ip
 ```
 kubectl scale statefulset/rabbitmq --namespace=test-rabbitmq --replicas=5
 ```
- 
