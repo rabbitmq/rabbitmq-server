@@ -582,18 +582,15 @@
 # MQTT section
 # =======================================
 
-## Set the default user name and password. Will be used as the default login
-## if a connecting client provides no other login details.
-##
-## Please note that setting this will allow clients to connect without
-## authenticating!
+## Set the default user name and password used for anonymous connections (when client
+## provides no credentials). Anonymous connections are highly discouraged!
 ##
 # mqtt.default_user = guest
 # mqtt.default_pass = guest
 
-## Enable anonymous access. If this is set to false, clients MUST provide
-## login information in order to connect. See the default_user/default_pass
-## configuration elements for managing logins without authentication.
+## Enable anonymous connections. If this is set to false, clients MUST provide
+## credentials in order to connect. See also the mqtt.default_user/mqtt.default_pass
+## keys. Anonymous connections are highly discouraged!
 ##
 # mqtt.allow_anonymous = true
 
