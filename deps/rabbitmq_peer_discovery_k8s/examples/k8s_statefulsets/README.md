@@ -23,7 +23,13 @@ $ minikube start --cpus=2 --memory=2040 --vm-driver=virtualbox
 $ kubectl create namespace test-rabbitmq
 ```
 
-* Deploy the  `YAML` file:
+* Deploy RBAC `YAML` file:
+
+```
+$ kubectl create -f examples/k8s_statefulsets/rabbitmq_rbac.yaml
+```
+
+* Deploy Service/ConfigMap/Statefulset `YAML` file:
 
 ```
 $ kubectl create -f examples/k8s_statefulsets/rabbitmq_statefulsets.yaml
