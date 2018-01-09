@@ -667,12 +667,38 @@
 ##
 # amqp1_0.protocol_strict_mode = false
 
-## Lager controls logging.
-## See https://github.com/basho/lager for more documentation
+## Logging settings.
 ##
+## See http://rabbitmq.com/logging.html and https://github.com/erlang-lager/lager for details.
+##
+
 ## Log direcrory, taken from the RABBITMQ_LOG_BASE env variable by default.
 ##
 # log.dir = /var/log/rabbitmq
+
+## Logging to file. Can be false or a filename.
+## Default:
+# log.file = rabbit.log
+
+## To disable logging to a file
+# log.file = false
+
+## Log level for file logging
+##
+# log.file.level = info
+
+## File rotation config. No rotation by defualt.
+## DO NOT SET rotation date to ''. Leave the value unset if "" is the desired value
+# log.file.rotation.date = $D0
+# log.file.rotation.size = 0
+
+## Logging to console (can be true or false)
+##
+# log.console = false
+
+## Log level for console logging
+##
+# log.console.level = info
 
 ## Logging to the amq.rabbitmq.log exchange (can be true or false)
 ##
@@ -682,36 +708,6 @@
 ##
 # log.exchange.level = info
 
-## Logging to console (can be true or false)
-##
-# log.console = false
-
-## Loglevel to log to console
-##
-# log.console.level = info
-
-## Logging to file. Can be false or filename.
-## Default:
-# log.file = rabbit.log
-
-## To turn off:
-# log.file = false
-
-## Loglevel to log to file
-##
-# log.file.level = info
-
-## File rotation config. No rotation by defualt.
-## DO NOT SET rotation date to ''. Leave unset if require "" value
-# log.file.rotation.date = $D0
-# log.file.rotation.size = 0
-
-
-## QA: Config for syslog logging
-# log.syslog = false
-# log.syslog.identity = rabbitmq
-# log.syslog.level    = info
-# log.syslog.facility = daemon
 
 
 ## ----------------------------------------------------------------------------
