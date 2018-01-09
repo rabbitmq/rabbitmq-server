@@ -624,7 +624,7 @@
 ## and TLS listeners.
 ##
 # mqtt.num_acceptors.tcp = 10
-# mqtt.num_acceptors.ssl = 1
+# mqtt.num_acceptors.ssl = 10
 
 ## TCP listener options (as per the broker configuration).
 ##
