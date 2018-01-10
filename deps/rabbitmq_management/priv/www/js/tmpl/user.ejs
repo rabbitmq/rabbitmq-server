@@ -35,20 +35,33 @@
           <th>
             <label>
               <select name="has-password" class="narrow controls-appearance">
-                <option value="password">Password:</option>
+                <% if (user.password_hash.length > 0) { %>
+                <option value="password" selected="selected">Password:</option>
                 <option value="no-password">No password</option>
+                <% } else { %>
+                <option value="no-password" selected="selected">No password</option>
+                <option value="password">Password:</option>
+                <% } %>
               </select>
             </label>
           </th>
           <td>
+            <% if (user.password_hash.length > 0) { %>
             <div id="password-div">
+            <% } else { %>
+            <div id="password-div" style="display: none;">
+            <% } %>
               <input type="password" name="password" />
               <span class="mand">*</span><br/>
               <input type="password" name="password_confirm" />
               <span class="mand">*</span>
               (confirm)
             </div>
+            <% if (user.password_hash.length > 0) { %>
             <div id="no-password-div" style="display: none;">
+            <% } else { %>
+            <div id="no-password-div">
+            <% } %>
               User cannot log in using password.
             </div>
           </td>
@@ -73,7 +86,6 @@
     </form>
   </div>
 </div>
-
 
 <div class="section-hidden">
   <h2>Delete this user</h2>
