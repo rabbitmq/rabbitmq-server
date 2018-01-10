@@ -584,6 +584,8 @@ set_tags_for_passwordless_user1(_Config) ->
     Password = <<"set_tags_for_passwordless_user">>,
     ok = rabbit_auth_backend_internal:add_user(Username, Password,
                                                <<"acting-user">>),
+    ok = rabbit_auth_backend_internal:clear_password(Username,
+                                                     <<"acting-user">>),
     ok = rabbit_auth_backend_internal:set_tags(Username, [management],
                                                <<"acting-user">>),
 
