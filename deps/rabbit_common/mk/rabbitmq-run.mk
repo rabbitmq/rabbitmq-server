@@ -85,6 +85,12 @@ RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NOD
 # directory is added to ERL_LIBS by rabbitmq-env.
 DIST_ERL_LIBS = $(shell echo "$(filter-out $(DEPS_DIR),$(subst :, ,$(ERL_LIBS)))" | tr ' ' :)
 
+ifdef PLUGINS_FROM_DEPS_DIR
+RMQ_PLUGINS_DIR=$(DEPS_DIR)
+else
+RMQ_PLUGINS_DIR=$(CURDIR)/$(DIST_DIR)
+endif
+
 define basic_script_env_settings
 MAKE="$(MAKE)" \
 ERL_LIBS="$(DIST_ERL_LIBS)" \
@@ -95,7 +101,7 @@ RABBITMQ_PID_FILE="$(call node_pid_file,$(2))" \
 RABBITMQ_LOG_BASE="$(call node_log_base,$(2))" \
 RABBITMQ_MNESIA_BASE="$(call node_mnesia_base,$(2))" \
 RABBITMQ_MNESIA_DIR="$(call node_mnesia_dir,$(2))" \
-RABBITMQ_PLUGINS_DIR="$(CURDIR)/$(DIST_DIR)" \
+RABBITMQ_PLUGINS_DIR="$(RMQ_PLUGINS_DIR)" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
 RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
 endef
