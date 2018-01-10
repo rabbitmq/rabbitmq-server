@@ -127,8 +127,9 @@ put_user(User, Version, ActingUser) ->
                     update_user_password_hash(Username, PasswordHash, Tags, User, Version, ActingUser);
                 {true, true} ->
                     throw({error, both_password_and_password_hash_are_provided});
-                %% clears password
+                %% clear password, update tags if needed
                 _ ->
+                    rabbit_auth_backend_internal:set_tags(Username, Tags, ActingUser),
                     rabbit_auth_backend_internal:clear_password(Username, ActingUser)
             end;
         false ->
