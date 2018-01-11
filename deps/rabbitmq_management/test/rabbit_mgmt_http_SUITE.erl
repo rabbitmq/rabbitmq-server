@@ -75,6 +75,7 @@ all_tests() -> [
     user_credential_validation_accept_everything_succeeds_test,
     user_credential_validation_min_length_succeeds_test,
     user_credential_validation_min_length_fails_test,
+    updating_tags_of_a_passwordless_user_test,
     permissions_validation_test,
     permissions_list_test,
     permissions_test,
@@ -600,6 +601,35 @@ user_credential_validation_min_length_fails_test(Config) ->
     http_put(Config, "/users/abc", [{password, <<"_">>},
                                     {tags, <<"management">>}], ?BAD_REQUEST),
     rabbit_ct_broker_helpers:switch_credential_validator(Config, accept_everything).
+
+updating_tags_of_a_passwordless_user_test(Config) ->
+    rabbit_ct_broker_helpers:delete_user(Config, ?NON_GUEST_USERNAME),
+    http_put(Config, "/users/abc", [{tags,     <<"management">>},
+                                    {password, <<"myuser">>}], [?CREATED, ?NO_CONTENT]),
+
+    %% clear user's password
+    http_put(Config, "/users/abc", [{tags,     <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    assert_item(#{name => ?NON_GUEST_USERNAME,
+                  tags => <<"management">>,
+                  password_hash => <<>>,
+                  hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
+                http_get(Config, "/users/abc")),
+
+    http_put(Config, "/users/abc", [{tags,     <<"impersonator">>}], [?CREATED, ?NO_CONTENT]),
+    assert_item(#{name => ?NON_GUEST_USERNAME,
+                  tags => <<"impersonator">>,
+                  password_hash => <<>>,
+                  hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
+                http_get(Config, "/users/abc")),
+
+    http_put(Config, "/users/abc", [{tags,     <<"">>}], [?CREATED, ?NO_CONTENT]),
+    assert_item(#{name => ?NON_GUEST_USERNAME,
+                  tags => <<"">>,
+                  password_hash => <<>>,
+                  hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
+                http_get(Config, "/users/abc")),
+
+    http_delete(Config, "/users/abc", ?NO_CONTENT).
 
 permissions_validation_test(Config) ->
     Good = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
