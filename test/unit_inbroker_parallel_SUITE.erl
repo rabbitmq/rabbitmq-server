@@ -52,7 +52,8 @@ groups() ->
             ]},
           {auth_backend_internal, [parallel], [
               login_with_credentials_but_no_password,
-              login_of_passwordless_user
+              login_of_passwordless_user,
+              set_tags_for_passwordless_user
             ]},
           set_disk_free_limit_command,
           set_vm_memory_high_watermark_command,
@@ -570,6 +571,44 @@ login_of_passwordless_user1(_Config) ->
                                                               [{password, ""}])),
 
     ok = rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>),
+
+    passed.
+
+
+set_tags_for_passwordless_user(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, set_tags_for_passwordless_user1, [Config]).
+
+set_tags_for_passwordless_user1(_Config) ->
+    Username = <<"set_tags_for_passwordless_user">>,
+    Password = <<"set_tags_for_passwordless_user">>,
+    ok = rabbit_auth_backend_internal:add_user(Username, Password,
+                                               <<"acting-user">>),
+    ok = rabbit_auth_backend_internal:clear_password(Username,
+                                                     <<"acting-user">>),
+    ok = rabbit_auth_backend_internal:set_tags(Username, [management],
+                                               <<"acting-user">>),
+
+    ?assertMatch(
+       {ok, #internal_user{tags = [management]}},
+       rabbit_auth_backend_internal:lookup_user(Username)),
+
+    ok = rabbit_auth_backend_internal:set_tags(Username, [management, policymaker],
+                                               <<"acting-user">>),
+
+    ?assertMatch(
+       {ok, #internal_user{tags = [management, policymaker]}},
+       rabbit_auth_backend_internal:lookup_user(Username)),
+
+    ok = rabbit_auth_backend_internal:set_tags(Username, [],
+                                               <<"acting-user">>),
+
+    ?assertMatch(
+       {ok, #internal_user{tags = []}},
+       rabbit_auth_backend_internal:lookup_user(Username)),
+
+    ok = rabbit_auth_backend_internal:delete_user(Username,
+                                                  <<"acting-user">>),
 
     passed.
 
