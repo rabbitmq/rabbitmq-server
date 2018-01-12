@@ -19,7 +19,8 @@
 -include("rabbit_log.hrl").
 
 %% API
--export([start_logger/0, log_locations/0, fold_sinks/2]).
+-export([start_logger/0, log_locations/0, fold_sinks/2,
+         broker_is_started/0]).
 
 %% For test purposes
 -export([configure_lager/0]).
@@ -38,6 +39,21 @@ start_logger() ->
               Acc
       end, ok),
     ensure_log_working().
+
+broker_is_started() ->
+    {ok, HwmCurrent} = application:get_env(lager, error_logger_hwm),
+    {ok, HwmOrig} = application:get_env(lager, error_logger_hwm_original),
+    case HwmOrig =:= HwmCurrent of
+        false ->
+            ok = application:set_env(lager, error_logger_hwm, HwmOrig),
+            Handlers = gen_event:which_handlers(lager_event),
+            lists:foreach(fun(Handler) ->
+                              lager:set_loghwm(Handler, HwmOrig)
+                          end, Handlers),
+            ok;
+        _ ->
+            ok
+    end.
 
 log_locations() ->
     ensure_lager_configured(),
@@ -233,10 +249,14 @@ configure_lager() ->
 
     case application:get_env(lager, error_logger_hwm) of
         undefined ->
-            application:set_env(lager, error_logger_hwm, 100);
-        {ok, Val} when is_integer(Val) andalso Val =< 100 ->
-            application:set_env(lager, error_logger_hwm, 100);
-        {ok, _Val} ->
+            application:set_env(lager, error_logger_hwm, 1000),
+            % NB: 50 is the default value in lager.app.src
+            application:set_env(lager, error_logger_hwm_original, 50);
+        {ok, Val} when is_integer(Val) andalso Val < 1000 ->
+            application:set_env(lager, error_logger_hwm, 1000),
+            application:set_env(lager, error_logger_hwm_original, Val);
+        {ok, Val} ->
+            application:set_env(lager, error_logger_hwm_original, Val),
             ok
     end,
     ok.

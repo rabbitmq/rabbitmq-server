@@ -320,6 +320,7 @@ broker_start() ->
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
     maybe_sd_notify(),
+    ok = rabbit_lager:broker_is_started(),
     ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())).
 
 %% Try to send systemd ready notification if it makes sense in the
