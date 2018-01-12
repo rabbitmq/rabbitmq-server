@@ -94,7 +94,7 @@ input#truncate { width: 50px; text-align: right; }
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
 table th, table td { font: 12px Verdana, sans-serif; padding: 2px 4px; }
-table.list th, table.list td { min-width: 5em; width: auto; }
+table.list th, table.list td { vertical-align: top; min-width: 5em; width: auto; }
 
 table.list { border-width: 1px; margin-bottom: 1em; }
 table.list th, table.list td { border: 1px solid #ccc; }
@@ -110,6 +110,8 @@ table.list td p.warning { margin: 0; padding: 5px; }
 table.list td.plain, table.list td.plain td, table.list td.plain th { border: none; background: none; }
 table.list th.plain { border-left: none; border-top: none; border-right: none; background: none; }
 table.list th.plain h3 { margin: 0; border: 0; }
+
+div.updatable>table.list td { vertical-align: middle; }
 
 #main .internal-purpose, #main .internal-purpose * { color: #aaa; }
 
