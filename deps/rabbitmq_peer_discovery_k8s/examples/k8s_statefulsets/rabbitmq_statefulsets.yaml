@@ -58,6 +58,7 @@ spec:
       labels:
         app: rabbitmq
     spec:
+      serviceAccountName: rabbitmq
       terminationGracePeriodSeconds: 10
       containers:        
       - name: rabbitmq-k8s
