@@ -23,7 +23,7 @@ $ minikube start --cpus=2 --memory=2040 --vm-driver=virtualbox
 $ kubectl create namespace test-rabbitmq
 ```
 
-* Deploy RBAC `YAML` file:
+* For kubernetes 1.6 or above, RBAC Authorization feature enabled by default. It need configure RBAC related stuff to support access nodes info successfully by plugin. So deploy RBAC `YAML` file():
 
 ```
 $ kubectl create -f examples/k8s_statefulsets/rabbitmq_rbac.yaml
