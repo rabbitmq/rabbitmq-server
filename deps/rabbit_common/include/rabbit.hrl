@@ -232,7 +232,7 @@
 
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2017 Pivotal Software, Inc.").
+-define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2018 Pivotal Software, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
 -define(OTP_MINIMUM, "19.3").
 -define(ERTS_MINIMUM, "8.3").
