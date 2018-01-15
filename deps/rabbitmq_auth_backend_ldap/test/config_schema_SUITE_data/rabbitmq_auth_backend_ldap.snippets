@@ -9,6 +9,57 @@
    auth_ldap.servers.2 = hostname2",
   [{rabbitmq_auth_backend_ldap,[{servers,["hostname1","hostname2"]}]}],
   [rabbitmq_auth_backend_ldap]},
+
+ {ldap_port,
+  "auth_ldap.port = 1234",
+  [{rabbitmq_auth_backend_ldap,[
+                                {port, 1234}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_connection_pool_size,
+  "auth_ldap.connection_pool_size = 128",
+  [{rabbitmq_auth_backend_ldap,[
+                                {pool_size, 128}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_servers_short,
+  "auth_ldap.servers.1 = hostname1
+   auth_ldap.servers.2 = hostname2",
+  [{rabbitmq_auth_backend_ldap,[{servers,["hostname1","hostname2"]}]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_timeouts,
+  "auth_ldap.timeout = 50
+   auth_ldap.idle_timeout = 90",
+  [{rabbitmq_auth_backend_ldap,[
+                                {timeout, 50},
+                                {idle_timeout, 90}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_use_ssl_true,
+  "auth_ldap.use_ssl = true",
+  [{rabbitmq_auth_backend_ldap,[
+                                {use_ssl, true}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_use_ssl_false,
+  "auth_ldap.use_ssl = false",
+  [{rabbitmq_auth_backend_ldap,[
+                                {use_ssl, false}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_use_starttls_true,
+  "auth_ldap.use_starttls = true",
+  [{rabbitmq_auth_backend_ldap,[
+                                {use_starttls, true}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
  {dn_lookup,
   "auth_ldap.dn_lookup_attribute = userPrincipalName
    auth_ldap.dn_lookup_base = DC=gopivotal,DC=com

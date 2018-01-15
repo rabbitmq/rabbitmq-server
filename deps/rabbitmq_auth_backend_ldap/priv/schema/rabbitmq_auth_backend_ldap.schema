@@ -40,6 +40,13 @@ end}.
 {mapping, "auth_ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl",
     [{datatype, {enum, [true, false]}}]}.
 
+%% Connect to the LDAP server using StartTLS
+%%
+%% {use_starttls, false},
+
+{mapping, "auth_ldap.use_starttls", "rabbitmq_auth_backend_ldap.use_starttls",
+    [{datatype, {enum, [true, false]}}]}.
+
 %% Specify the LDAP port to connect to
 %%
 %% {port, 389},
@@ -47,11 +54,25 @@ end}.
 {mapping, "auth_ldap.port", "rabbitmq_auth_backend_ldap.port",
     [{datatype, integer}]}.
 
+%% LDAP connection/worker pool size
+%%
+%% {pool_size, 64},
+
+{mapping, "auth_ldap.connection_pool_size", "rabbitmq_auth_backend_ldap.pool_size",
+    [{datatype, integer}]}.
+
 %% LDAP connection timeout, in milliseconds or 'infinity'
 %%
 %% {timeout, infinity},
 
 {mapping, "auth_ldap.timeout", "rabbitmq_auth_backend_ldap.timeout",
+    [{datatype, [integer, {atom, infinity}]}]}.
+
+%% LDAP connection inactivity timeout, in milliseconds or 'infinity'
+%%
+%% {idle_timeout, infinity},
+
+{mapping, "auth_ldap.idle_timeout", "rabbitmq_auth_backend_ldap.idle_timeout",
     [{datatype, [integer, {atom, infinity}]}]}.
 
 %% Enable logging of LDAP queries.
