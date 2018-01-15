@@ -690,6 +690,7 @@ count(VHost) ->
   end.
 
 info_keys() -> rabbit_amqqueue_process:info_keys().
+offline_info_keys() -> rabbit_amqqueue_process:offline_info_keys().
 
 map(Qs, F) -> rabbit_misc:filter_exit_map(F, Qs).
 
@@ -707,17 +708,28 @@ is_unresponsive(#amqqueue{ pid = QPid }, Timeout) ->
 
 info(Q = #amqqueue{ state = crashed }) -> info_down(Q, crashed);
 info(Q = #amqqueue{ state = stopped }) -> info_down(Q, stopped);
-info(#amqqueue{ pid = QPid }) -> delegate:invoke(QPid, {gen_server2, call, [info, infinity]}).
+info(Q)                                -> info(Q, info_keys()).
 
 info(Q = #amqqueue{ state = crashed }, Items) ->
     info_down(Q, Items, crashed);
 info(Q = #amqqueue{ state = stopped }, Items) ->
     info_down(Q, Items, stopped);
-info(#amqqueue{ pid = QPid }, Items) ->
+info(Q, Items) ->
+    OnlineItems = Items -- offline_info_keys(),
+    OfflineItems = Items -- OnlineItems,
+    OfflineRes = info_offline(Q, OfflineItems),
+    Res = OfflineRes ++ info_online(Q, OnlineItems),
+    [ {K, proplists:get_value(K, Res)} || K <- Items ].
+
+info_online(#amqqueue{}, []) -> [];
+info_online(#amqqueue{ pid = QPid }, Items) ->
     case delegate:invoke(QPid, {gen_server2, call, [{info, Items}, infinity]}) of
-        {ok, Res}      -> Res;
-        {error, Error} -> throw(Error)
+        {ok, Res}       -> Res;
+        {error, Error}  -> throw(Error)
     end.
+
+info_offline(Q, Items) ->
+  rabbit_amqqueue_process:info_offline(Q, Items).
 
 info_down(Q, DownReason) ->
     info_down(Q, rabbit_amqqueue_process:info_keys(), DownReason).

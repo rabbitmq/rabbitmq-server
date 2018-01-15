@@ -25,6 +25,7 @@
 -define(CONSUMER_BIAS_RATIO,           2.0). %% i.e. consume 100% faster
 
 -export([info_keys/0]).
+-export([info_offline/2, offline_info_keys/0]).
 
 -export([init_with_backing_queue_state/7]).
 
@@ -138,12 +139,24 @@
          user_who_performed_action
         ]).
 
+-define(OFFLINE_STATISTICS_KEYS,
+        [policy,
+         operator_policy,
+         effective_policy_definition,
+         memory,
+         slave_pids,
+         synchronised_slave_pids,
+         recoverable_slaves,
+         garbage_collection,
+         reductions]).
+
 -define(INFO_KEYS, [pid | ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name]]).
 
 %%----------------------------------------------------------------------------
 
 info_keys()       -> ?INFO_KEYS       ++ rabbit_backing_queue:info_keys().
 statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
+offline_info_keys() -> [pid | ?CREATION_EVENT_KEYS ++ ?OFFLINE_STATISTICS_KEYS].
 
 %%----------------------------------------------------------------------------
 
@@ -951,33 +964,6 @@ stop(Reply,   State) -> {stop, normal, Reply, State}.
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
-i(name,        #q{q = #amqqueue{name        = Name}})       -> Name;
-i(durable,     #q{q = #amqqueue{durable     = Durable}})    -> Durable;
-i(auto_delete, #q{q = #amqqueue{auto_delete = AutoDelete}}) -> AutoDelete;
-i(arguments,   #q{q = #amqqueue{arguments   = Arguments}})  -> Arguments;
-i(pid, _) ->
-    self();
-i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
-    '';
-i(owner_pid, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
-    ExclusiveOwner;
-i(exclusive, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
-    is_pid(ExclusiveOwner);
-i(policy,    #q{q = Q}) ->
-    case rabbit_policy:name(Q) of
-        none   -> '';
-        Policy -> Policy
-    end;
-i(operator_policy,    #q{q = Q}) ->
-    case rabbit_policy:name_op(Q) of
-        none   -> '';
-        Policy -> Policy
-    end;
-i(effective_policy_definition,  #q{q = Q}) ->
-    case rabbit_policy:effective_definition(Q) of
-        undefined -> [];
-        Def       -> Def
-    end;
 i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
     '';
 i(exclusive_consumer_pid, #q{exclusive_consumer = {ChPid, _ConsumerTag}}) ->
@@ -1000,42 +986,82 @@ i(consumer_utilisation, #q{consumers = Consumers}) ->
         0 -> '';
         _ -> rabbit_queue_consumers:utilisation(Consumers)
     end;
-i(memory, _) ->
-    {memory, M} = process_info(self(), memory),
+i(state, #q{status = running}) -> credit_flow:state();
+i(state, #q{status = State})   -> State;
+i(Item, #q{q = Q = #amqqueue{pid = Pid},
+           backing_queue_state = BQS,
+           backing_queue = BQ}) ->
+    case lists:member(Item, offline_info_keys()) of
+        true  ->
+            %% Pid should always be local.
+            Pid = self(),
+            i_offline(Item, Q);
+        false ->
+            BQ:info(Item, BQS)
+    end.
+
+info_offline(Q, Items) -> [{Item, i_offline(Item, Q)} || Item <- Items].
+
+i_offline(name,        #amqqueue{name        = Name})       -> Name;
+i_offline(durable,     #amqqueue{durable     = Durable})    -> Durable;
+i_offline(auto_delete, #amqqueue{auto_delete = AutoDelete}) -> AutoDelete;
+i_offline(arguments,   #amqqueue{arguments   = Arguments})  -> Arguments;
+i_offline(pid,         #amqqueue{pid         = Pid})        -> Pid;
+i_offline(owner_pid,   #amqqueue{exclusive_owner = none}) ->
+    '';
+i_offline(owner_pid, #amqqueue{exclusive_owner = ExclusiveOwner}) ->
+    ExclusiveOwner;
+i_offline(exclusive, #amqqueue{exclusive_owner = ExclusiveOwner}) ->
+    is_pid(ExclusiveOwner);
+i_offline(policy,    Q) ->
+    case rabbit_policy:name(Q) of
+        none   -> '';
+        Policy -> Policy
+    end;
+i_offline(operator_policy,    Q) ->
+    case rabbit_policy:name_op(Q) of
+        none   -> '';
+        Policy -> Policy
+    end;
+i_offline(effective_policy_definition,  Q) ->
+    case rabbit_policy:effective_definition(Q) of
+        undefined -> [];
+        Def       -> Def
+    end;
+i_offline(memory, #amqqueue{pid = Pid}) ->
+    {memory, M} = process_info(Pid, memory),
     M;
-i(slave_pids, #q{q = #amqqueue{name = Name}}) ->
+i_offline(slave_pids, #amqqueue{name = Name}) ->
     {ok, Q = #amqqueue{slave_pids = SPids}} =
         rabbit_amqqueue:lookup(Name),
     case rabbit_mirror_queue_misc:is_mirrored(Q) of
         false -> '';
         true  -> SPids
     end;
-i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
+i_offline(synchronised_slave_pids, #amqqueue{name = Name}) ->
     {ok, Q = #amqqueue{sync_slave_pids = SSPids}} =
         rabbit_amqqueue:lookup(Name),
     case rabbit_mirror_queue_misc:is_mirrored(Q) of
         false -> '';
         true  -> SSPids
     end;
-i(recoverable_slaves, #q{q = #amqqueue{name    = Name,
-                                       durable = Durable}}) ->
+i_offline(recoverable_slaves, #amqqueue{name    = Name,
+                                        durable = Durable}) ->
     {ok, Q = #amqqueue{recoverable_slaves = Nodes}} =
         rabbit_amqqueue:lookup(Name),
     case Durable andalso rabbit_mirror_queue_misc:is_mirrored(Q) of
         false -> '';
         true  -> Nodes
     end;
-i(state, #q{status = running}) -> credit_flow:state();
-i(state, #q{status = State})   -> State;
-i(garbage_collection, _State) ->
-    rabbit_misc:get_gc_info(self());
-i(reductions, _State) ->
-    {reductions, Reductions} = erlang:process_info(self(), reductions),
+i_offline(garbage_collection, #amqqueue{pid = Pid}) ->
+    rabbit_misc:get_gc_info(Pid);
+i_offline(reductions, #amqqueue{pid = Pid}) ->
+    {reductions, Reductions} = erlang:process_info(Pid, reductions),
     Reductions;
-i(user_who_performed_action, #q{q = #amqqueue{options = Opts}}) ->
+i_offline(user_who_performed_action, #amqqueue{options = Opts}) ->
     maps:get(user, Opts, ?UNKNOWN_USER);
-i(Item, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
-    BQ:info(Item, BQS).
+i_offline(Item, #q{}) ->
+    throw({bad_argument, {info_item_cannot_be_retrieved_offline, Item}}).
 
 emit_stats(State) ->
     emit_stats(State, []).
