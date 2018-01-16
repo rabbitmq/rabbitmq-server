@@ -23,6 +23,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   # API
   #
 
+  def distribution(_), do: :none
+
   def merge_defaults(args, opts) do
     {args, opts}
   end

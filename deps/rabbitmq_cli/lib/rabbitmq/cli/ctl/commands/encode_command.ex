@@ -27,6 +27,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     ]
   end
 
+  def distribution(_), do: :none
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{
         cipher:       :rabbit_pbe.default_cipher(),

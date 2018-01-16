@@ -20,6 +20,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
+  def switches(), do: [offline: :boolean]
+
+  def distribution(%{offline: true}), do: :none
+  def distribution(%{}), do: :cli
+
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
@@ -55,7 +60,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Inspect
 
-  def usage, do: "exec <expr>"
+  def usage, do: "exec <expr> [--offline]"
 
   def banner(_, _), do: nil
 end
