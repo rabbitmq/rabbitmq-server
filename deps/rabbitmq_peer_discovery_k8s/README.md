@@ -4,6 +4,13 @@ This is an K8s-based implementation of RabbitMQ [peer discovery interface](https
 (new in 3.7.0, previously available in the [rabbitmq-autocluster plugin](https://github.com/rabbitmq/rabbitmq-autocluster)
 by Gavin Roy).
 
+This plugin only performs peer discovery using Kubernetes API as a data source.
+Please get familiar with [RabbitMQ clustering fundamentals](https://rabbitmq.com/clustering.html) before attempting
+to use it.
+
+Cluster provisioning and most of Day 2 operations such as [proper monitoring](https://rabbitmq.com/monitoring.html)
+are not in scope for this plugin.
+
 
 ## Supported RabbitMQ Versions
 
@@ -30,4 +37,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2017.
+(c) Pivotal Software Inc., 2007-2018.
