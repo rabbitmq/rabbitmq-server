@@ -14,6 +14,13 @@ else
 MIX_TEST = mix test --max-cases=1
 endif
 
+WITHOUT = plugins/cover \
+	  plugins/ct \
+	  plugins/dialyzer \
+	  plugins/eunit \
+	  plugins/proper \
+	  plugins/triq
+
 include rabbitmq-components.mk
 include erlang.mk
 
