@@ -137,6 +137,10 @@ unregister() ->
 -spec post_registration() -> ok.
 
 post_registration() ->
+    %% don't wait for one full interval, make
+    %% sure we let Consul know the service is healthy
+    %% right after registration. See rabbitmq/rabbitmq_peer_discovery_consul#8.
+    send_health_check_pass(),
     ok.
 
 -spec lock(Node :: string()) -> {ok, Data :: term()} | {error, Reason :: string()}.
@@ -307,8 +311,9 @@ registration_body_maybe_add_check(Payload, undefined) ->
     end;
 registration_body_maybe_add_check(Payload, TTL) ->
     CheckItems = [{'Notes', list_to_atom(?CONSUL_CHECK_NOTES)},
-        {'TTL', list_to_atom(service_ttl(TTL))}],
-    Check = [{'Check', registration_body_maybe_add_deregister(CheckItems)}],
+        {'TTL', list_to_atom(service_ttl(TTL))},
+        {'Status', 'passing'}],
+    Check = [{'Check',  registration_body_maybe_add_deregister(CheckItems)}],
     lists:append(Payload, Check).
 
 -spec registration_body_add_port(Payload :: list()) -> list().
