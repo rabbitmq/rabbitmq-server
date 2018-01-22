@@ -101,6 +101,7 @@ dep_rabbitmq_web_mqtt                 = git_rmq rabbitmq-web-mqtt $(current_rmq_
 dep_rabbitmq_web_mqtt_examples        = git_rmq rabbitmq-web-mqtt-examples $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live master
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref) master
+dep_ra                                = git_rmq ra $(current_rmq_ref) $(base_rmq_ref) master
 
 dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(current_rmq_ref) $(base_rmq_ref) master
 
@@ -181,7 +182,8 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_web_mqtt_examples \
 		      rabbitmq_web_stomp \
 		      rabbitmq_web_stomp_examples \
-		      rabbitmq_website
+		      rabbitmq_website \
+		      ra
 
 # Several components have a custom erlang.mk/build.config, mainly
 # to disable eunit. Therefore, we can't use the top-level project's
