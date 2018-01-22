@@ -111,14 +111,15 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy = hex 1.0.4
-dep_ranch = hex 1.3.2
+dep_cowboy = hex 2.0.0
+dep_cowlib = hex 2.0.0
+dep_jsx = hex 2.8.2
+dep_lager = hex 3.5.1
+dep_ranch = hex 1.4.0
+dep_ranch_proxy_protocol = hex 1.4.4
 dep_recon = hex 2.3.2
 
-# Last commit of PropEr supporting Erlang R16B03.
-dep_proper_commit = 735d972758d8bd85b12483626fe1b66450d6a6fe
-# Last commit of sockjs support Erlang R16B03 and 17.x.
-dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 5af2b588c812c318b19bc105b577a759c71c3e0a
+dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d36dbf5e1e64942d9b0a1daf
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \
@@ -202,7 +203,7 @@ export current_rmq_ref
 
 ifeq ($(origin base_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
-possible_base_rmq_ref := v3.6.x
+possible_base_rmq_ref := v3.7.x
 ifeq ($(possible_base_rmq_ref),$(current_rmq_ref))
 base_rmq_ref := $(current_rmq_ref)
 else
