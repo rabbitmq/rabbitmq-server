@@ -335,7 +335,8 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                                       policy_version     = 0,
                                       slave_pids_pending_shutdown = [],
                                       vhost                       = VHost,
-                                      options = #{user => ActingUser}})),
+                                      options = #{user => ActingUser},
+                                      type               = get_queue_type(Args)})),
 
     Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
               {ok, Node0}  -> Node0;
@@ -351,6 +352,14 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
             rabbit_misc:protocol_error(internal_error,
                             "Cannot declare a queue '~s' on node '~s': ~255p",
                             [rabbit_misc:rs(QueueName), Node1, Error])
+    end.
+
+get_queue_type(Args) ->
+    case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
+        undefined ->
+            classic;
+        {_, V} ->
+            binary_to_atom(V, utf8)
     end.
 
 internal_declare(Q, true) ->
@@ -577,7 +586,8 @@ declare_args() ->
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
      {<<"x-max-priority">>,            fun check_non_neg_int_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
-     {<<"x-queue-mode">>,              fun check_queue_mode/2}].
+     {<<"x-queue-mode">>,              fun check_queue_mode/2},
+     {<<"x-queue-type">>,              fun check_queue_type/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -638,6 +648,14 @@ check_queue_mode({longstr, Val}, _Args) ->
         false -> {error, invalid_queue_mode}
     end;
 check_queue_mode({Type,    _}, _Args) ->
+    {error, {unacceptable_type, Type}}.
+
+check_queue_type({longstr, Val}, _Args) ->
+    case lists:member(Val, [<<"classic">>, <<"quorum">>]) of
+        true  -> ok;
+        false -> {error, invalid_queue_type}
+    end;
+check_queue_type({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
