@@ -143,8 +143,7 @@
           policy_version,
           slave_pids_pending_shutdown,
           vhost,                       %% secondary index
-          options = #{},
-          type = classic }).           %% immutable
+          options = #{}}).
 
 -record(exchange_serial, {name, next}).
 
