@@ -320,6 +320,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
 declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
     ok = check_declare_arguments(QueueName, Args),
+    Type = get_queue_type(Args),
     Q = rabbit_queue_decorator:set(
           rabbit_policy:set(#amqqueue{name               = QueueName,
                                       durable            = Durable,
@@ -336,8 +337,16 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                                       slave_pids_pending_shutdown = [],
                                       vhost                       = VHost,
                                       options = #{user => ActingUser},
-                                      type               = get_queue_type(Args)})),
+                                      type               = Type})),
 
+    case Type of
+        classic ->
+            declare_classic_queue(QueueName, Q, VHost, Node);
+        quorum ->
+            declare_quorum_queue(QueueName, Q)
+    end.
+
+declare_classic_queue(QueueName, Q, VHost, Node) ->
     Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
               {ok, Node0}  -> Node0;
               {error, _}   -> Node
@@ -353,6 +362,31 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                             "Cannot declare a queue '~s' on node '~s': ~255p",
                             [rabbit_misc:rs(QueueName), Node1, Error])
     end.
+
+declare_quorum_queue(QueueName, Q) ->
+    RaName = qname_to_rname(QueueName),
+    Id = {RaName, node()},
+    {ok, DataDir} = application:get_env(ra, data_dir),
+    {ok, _} = ra_nodes_sup:start_node(
+                #{id => Id,
+                  log_module => ra_log_file,
+                  log_init_args => #{data_dir =>
+                                         filename:join(DataDir,
+                                                       "quorum_queues"),
+                                     id => RaName},
+                  initial_nodes => [],
+                  machine => {module, ra_fifo}}
+               ),
+    _ = ra_node_proc:trigger_election(Id),
+    NewQ = Q#amqqueue{pid = RaName},
+    internal_declare(NewQ, false),
+    {new, NewQ}.
+
+%% TODO escape hack
+qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
+    erlang:binary_to_atom(<<"%2F_", Name/binary>>, utf8);
+qname_to_rname(#resource{virtual_host = VHost, name = Name}) ->
+    erlang:binary_to_atom(<<VHost/binary, "_", Name/binary>>, utf8).
 
 get_queue_type(Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
@@ -836,6 +870,7 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
                 AckRequired, Prefetch, Args]) ||
         {ChPid, CTag, AckRequired, Prefetch, Args, _} <- consumers(Q)].
 
+stat(#amqqueue{type = quorum}) -> {ok, 0, 0}; %% length, consumers count
 stat(#amqqueue{pid = QPid}) -> delegate:invoke(QPid, {gen_server2, call, [stat, infinity]}).
 
 pid_of(#amqqueue{pid = Pid}) -> Pid.

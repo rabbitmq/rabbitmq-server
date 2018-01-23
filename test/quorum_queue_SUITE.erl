@@ -17,6 +17,7 @@
 -module(quorum_queue_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
@@ -29,7 +30,8 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-          declare_args
+          declare_args,
+          start_queue
         ]}
     ].
 
@@ -89,6 +91,31 @@ declare_args(Config) ->
     DQ2 = <<"classic-q2">>,
     declare(Ch, DQ2),
     assert_queue_type(A, DQ2, classic).
+
+start_queue(Config) ->
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+    LQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', LQ, 0, 0},
+                 declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Check that the application and one ra node are up
+    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
+                                           rpc:call(A, application, which_applications, []))),
+    ?assertMatch([_], rpc:call(A, supervisor, which_children, [ra_nodes_sup])),
+
+    %% Test declare an existing queue
+    ?assertEqual({'queue.declare_ok', LQ, 0, 0},
+                 declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Test declare an existing queue with different arguments
+    ?assertExit(_, declare(Ch, LQ, [])),
+
+    %% Check that the application and process are still up
+    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
+                                           rpc:call(A, application, which_applications, []))),
+    ?assertMatch([_], rpc:call(A, supervisor, which_children, [ra_nodes_sup])).
 
 %%----------------------------------------------------------------------------
 

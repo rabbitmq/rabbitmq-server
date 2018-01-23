@@ -132,7 +132,7 @@ endef
 
 LOCAL_DEPS = sasl mnesia os_mon inets
 BUILD_DEPS = rabbitmq_cli
-DEPS = ranch lager rabbit_common
+DEPS = ranch lager rabbit_common ra
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 define usage_xml_to_erl
