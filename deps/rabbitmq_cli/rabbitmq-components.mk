@@ -40,6 +40,7 @@ endif
 dep_amqp_client                       = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_amqp10_client                     = git_rmq rabbitmq-amqp1.0-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_amqp10_common                     = git_rmq rabbitmq-amqp1.0-common $(current_rmq_ref) $(base_rmq_ref) master
+dep_ra                                = git_rmq ra $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit                            = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit_common                     = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_amqp1_0                  = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref) master
@@ -101,7 +102,6 @@ dep_rabbitmq_web_mqtt                 = git_rmq rabbitmq-web-mqtt $(current_rmq_
 dep_rabbitmq_web_mqtt_examples        = git_rmq rabbitmq-web-mqtt-examples $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live master
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref) master
-dep_ra                                = git_rmq ra $(current_rmq_ref) $(base_rmq_ref) master
 
 dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(current_rmq_ref) $(base_rmq_ref) master
 
@@ -111,19 +111,19 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy = hex 2.0.0
-dep_cowlib = hex 2.0.0
-dep_jsx = hex 2.8.2
-dep_lager = hex 3.5.1
-dep_ranch = hex 1.4.0
-dep_ranch_proxy_protocol = hex 1.4.4
+dep_cowboy = hex 1.0.4
+dep_ranch = hex 1.3.2
 dep_recon = hex 2.3.2
 
-dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d36dbf5e1e64942d9b0a1daf
+# Last commit of PropEr supporting Erlang R16B03.
+dep_proper_commit = 735d972758d8bd85b12483626fe1b66450d6a6fe
+# Last commit of sockjs support Erlang R16B03 and 17.x.
+dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 5af2b588c812c318b19bc105b577a759c71c3e0a
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \
 		      amqp10_client \
+		      ra \
 		      rabbit \
 		      rabbit_common \
 		      rabbitmq_amqp1_0 \
@@ -182,8 +182,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_web_mqtt_examples \
 		      rabbitmq_web_stomp \
 		      rabbitmq_web_stomp_examples \
-		      rabbitmq_website \
-		      ra
+		      rabbitmq_website
 
 # Several components have a custom erlang.mk/build.config, mainly
 # to disable eunit. Therefore, we can't use the top-level project's
@@ -203,7 +202,7 @@ export current_rmq_ref
 
 ifeq ($(origin base_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
-possible_base_rmq_ref := v3.7.x
+possible_base_rmq_ref := v3.6.x
 ifeq ($(possible_base_rmq_ref),$(current_rmq_ref))
 base_rmq_ref := $(current_rmq_ref)
 else
