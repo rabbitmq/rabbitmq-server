@@ -3,6 +3,7 @@
 .*.sw?
 *.beam
 *.coverdata
+/.*.plt
 /.erlang.mk/
 /cover/
 /deps/
