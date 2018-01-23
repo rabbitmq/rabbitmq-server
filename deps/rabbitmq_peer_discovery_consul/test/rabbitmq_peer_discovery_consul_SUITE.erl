@@ -160,7 +160,8 @@ registration_body_simple_case(_Config) ->
                        {'Port', 5672},
                        {'Check',
                          [{'Notes', ?CONSUL_CHECK_NOTES},
-                          {'TTL',   '30s'}]}],
+                          {'TTL',   '30s'},
+                          {'Status', 'passing'}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 registration_body_svc_addr_set_via_env_var(_Config) ->
@@ -171,7 +172,8 @@ registration_body_svc_addr_set_via_env_var(_Config) ->
                    {'Port', 5672},
                    {'Check',
                     [{'Notes', ?CONSUL_CHECK_NOTES},
-                     {'TTL',   '30s'}]}],
+                     {'TTL',   '30s'},
+                     {'Status', 'passing'}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 registration_body_svc_ttl_set_via_env_var(_Config) ->
@@ -181,7 +183,8 @@ registration_body_svc_ttl_set_via_env_var(_Config) ->
                    {'Port', 5672},
                    {'Check',
                     [{'Notes', ?CONSUL_CHECK_NOTES},
-                     {'TTL',   '257s'}]}],
+                     {'TTL',   '257s'},
+                     {'Status', 'passing'}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 registration_body_svc_tags_set_via_env_var(_Config) ->
@@ -191,7 +194,8 @@ registration_body_svc_tags_set_via_env_var(_Config) ->
                    {'Port', 5672},
                    {'Check',
                     [{'Notes', ?CONSUL_CHECK_NOTES},
-                     {'TTL',   '30s'}]},
+                     {'TTL',   '30s'},
+                     {'Status', 'passing'}]},
                    {'Tags',['urlprefix-:5672 proto=tcp',mq,'mq server']}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
@@ -203,6 +207,7 @@ registration_body_deregister_after_set_via_env_var(_Config) ->
                    {'Check',
                     [{'Notes', ?CONSUL_CHECK_NOTES},
                      {'TTL','30s'},
+                     {'Status', 'passing'},
                      {'DeregisterCriticalServiceAfter','520s'}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
@@ -454,7 +459,7 @@ registration_with_all_default_values_test(_Config) ->
               ?assertEqual([v1, agent, service, register], Path),
               ?assertEqual([], Args),
               ?assertEqual([], Headers),
-              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
+              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -471,7 +476,7 @@ registration_with_cluster_name_test(_Config) ->
               ?assertEqual([v1, agent, service, register], Path),
               ?assertEqual([], Args),
               ?assertEqual([], Headers),
-              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"},\"Tags\":[\"test-rabbit\"]}">>,
+              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Tags\":[\"test-rabbit\"]}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -488,7 +493,7 @@ registration_without_acl_token_test(_Config) ->
               ?assertEqual([v1, agent, service, register], Path),
               ?assertEqual([], Args),
               ?assertEqual([], Headers),
-              Expect = <<"{\"ID\":\"rabbit:10.0.0.1\",\"Name\":\"rabbit\",\"Address\":\"10.0.0.1\",\"Port\":5671,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
+              Expect = <<"{\"ID\":\"rabbit:10.0.0.1\",\"Name\":\"rabbit\",\"Address\":\"10.0.0.1\",\"Port\":5671,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -510,7 +515,7 @@ registration_with_acl_token_test(_Config) ->
               ?assertEqual([v1, agent, service, register], Path),
               ?assertEqual([], Args),
               ?assertEqual([], Headers),
-              Expect = <<"{\"ID\":\"rabbit:10.0.0.1\",\"Name\":\"rabbit\",\"Address\":\"10.0.0.1\",\"Port\":5671,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
+              Expect = <<"{\"ID\":\"rabbit:10.0.0.1\",\"Name\":\"rabbit\",\"Address\":\"10.0.0.1\",\"Port\":5671,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -535,7 +540,7 @@ registration_with_auto_addr_test(_Config) ->
                ?assertEqual([v1, agent, service, register], Path),
                ?assertEqual([], Args),
                ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
-               Expect = <<"{\"ID\":\"rabbitmq:bob\",\"Name\":\"rabbitmq\",\"Address\":\"bob\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
+               Expect = <<"{\"ID\":\"rabbitmq:bob\",\"Name\":\"rabbitmq\",\"Address\":\"bob\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
                ?assertEqual(Expect, Body),
                {ok, []}
              end),
@@ -559,7 +564,7 @@ registration_with_auto_addr_from_nodename_test(_Config) ->
               ?assertEqual([v1, agent, service, register], Path),
               ?assertEqual([], Args),
               ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
-              Expect = <<"{\"ID\":\"rabbitmq:bob.consul.node\",\"Name\":\"rabbitmq\",\"Address\":\"bob.consul.node\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
+              Expect = <<"{\"ID\":\"rabbitmq:bob.consul.node\",\"Name\":\"rabbitmq\",\"Address\":\"bob.consul.node\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -587,7 +592,7 @@ registration_with_auto_addr_nic_test(_Config) ->
               ?assertEqual([v1, agent, service, register], Path),
               ?assertEqual([], Args),
               ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
-              Expect = <<"{\"ID\":\"rabbitmq:172.16.4.50\",\"Name\":\"rabbitmq\",\"Address\":\"172.16.4.50\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\"}}">>,
+              Expect = <<"{\"ID\":\"rabbitmq:172.16.4.50\",\"Name\":\"rabbitmq\",\"Address\":\"172.16.4.50\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
