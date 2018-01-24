@@ -684,7 +684,7 @@
 ##
 # log.file.level = info
 
-## File rotation config. No rotation by defualt.
+## File rotation config. No rotation by default.
 ## DO NOT SET rotation date to ''. Leave the value unset if "" is the desired value
 # log.file.rotation.date = $D0
 # log.file.rotation.size = 0
