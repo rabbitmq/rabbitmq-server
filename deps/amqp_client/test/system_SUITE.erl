@@ -17,6 +17,7 @@
 -module(system_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("public_key/include/public_key.hrl").
 
 -include("amqp_client.hrl").
 -include("amqp_client_internal.hrl").
@@ -208,11 +209,17 @@ init_per_testcase(Test, Config) ->
         basic_get_ipv6_ssl -> "::1";
         _                  -> ?config(rmq_hostname, Config)
     end,
-    {ok, Hostname} = inet:gethostname(),
     {Port, SSLOpts} = if
         Test =:= basic_get_ipv4_ssl orelse
         Test =:= basic_get_ipv6_ssl ->
             CertsDir = ?config(rmq_certsdir, Config),
+            % Compute SNI from the server's certificate directly.
+            {ok, PemBin} = file:read_file(filename:join([CertsDir,
+                                                         "client",
+                                                         "cert.pem"])),
+            [{_, DerCert, _}] = public_key:pem_decode(PemBin),
+            [CN] = rabbit_cert_info:subject_items(DerCert,
+                                                  ?'id-at-commonName'),
             {
               rabbit_ct_broker_helpers:get_node_config(Config, 0,
                 tcp_port_amqp_tls),
@@ -222,7 +229,7 @@ init_per_testcase(Test, Config) ->
                 {keyfile, filename:join([CertsDir, "client", "key.pem"])},
                 {verify, verify_peer},
                 {fail_if_no_peer_cert, true},
-                {server_name_indication, Hostname}
+                {server_name_indication, CN}
               ]
             };
         true ->
