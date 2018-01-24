@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(quorum_queue_SUITE).
@@ -82,15 +82,13 @@ declare_args(Config) ->
     declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
     assert_queue_type(A, LQ, quorum),
 
-    DQ = <<"default-q">>,
+    DQ = <<"classic-q">>,
     declare(Ch, DQ, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
     assert_queue_type(A, DQ, classic),
 
-    DQ2 = <<"default-q2">>,
+    DQ2 = <<"classic-q2">>,
     declare(Ch, DQ2),
-    assert_queue_type(A, DQ2, classic),
-
-    passed.
+    assert_queue_type(A, DQ2, classic).
 
 %%----------------------------------------------------------------------------
 
