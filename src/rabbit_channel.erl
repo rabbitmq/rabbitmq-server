@@ -361,13 +361,29 @@ emit_info(PidList, InfoItems, Ref, AggregatorPid) ->
 
 refresh_config_local() ->
     rabbit_misc:upmap(
-      fun (C) -> gen_server2:call(C, refresh_config, infinity) end,
+      fun (C) ->
+        try
+          gen_server2:call(C, refresh_config, infinity)
+        catch _:Reason ->
+          rabbit_log:error("Failed to refresh channel config "
+                           "for channel ~p. Reason ~p",
+                           [C, Reason])
+        end
+      end,
       list_local()),
     ok.
 
 refresh_interceptors() ->
     rabbit_misc:upmap(
-      fun (C) -> gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT) end,
+      fun (C) ->
+        try
+          gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
+        catch _:Reason ->
+          rabbit_log:error("Failed to refresh channel interceptors "
+                           "for channel ~p. Reason ~p",
+                           [C, Reason])
+        end
+      end,
       list_local()),
     ok.
 
