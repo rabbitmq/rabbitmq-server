@@ -85,5 +85,4 @@ set_cluster_name(Name, Username) ->
 ensure_epmd() ->
     rabbit_nodes_common:ensure_epmd().
 
-all_running() -> [ Node || Node <- rabbit_mnesia:cluster_nodes(running),
-                           is_running(Node, rabbit) ].
+all_running() -> rabbit_mnesia:cluster_nodes(running).
