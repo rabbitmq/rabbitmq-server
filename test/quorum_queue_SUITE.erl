@@ -31,7 +31,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
           declare_args,
-          start_queue
+          start_queue,
+          stop_queue
         ]}
     ].
 
@@ -116,6 +117,27 @@ start_queue(Config) ->
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(A, application, which_applications, []))),
     ?assertMatch([_], rpc:call(A, supervisor, which_children, [ra_nodes_sup])).
+
+stop_queue(Config) ->
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+    LQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', LQ, 0, 0},
+                 declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Check that the application and one ra node are up
+    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
+                                           rpc:call(A, application, which_applications, []))),
+    ?assertMatch([_], rpc:call(A, supervisor, which_children, [ra_nodes_sup])),
+
+    %% Delete the quorum queue
+    ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = LQ})),
+
+    %% Check that the application and process are still up
+    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
+                                           rpc:call(A, application, which_applications, []))),
+    ?assertMatch([], rpc:call(A, supervisor, which_children, [ra_nodes_sup])).
 
 %%----------------------------------------------------------------------------
 

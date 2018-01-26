@@ -910,6 +910,14 @@ delete_immediately(QPids) ->
     [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
     ok.
 
+
+delete(#amqqueue{ type = quorum, pid = QPid, name = QName},
+       _IfUnused, _IfEmpty, ActingUser) ->
+    %% TODO Quorum queue needs to support queue length and consumer tracking
+    ok = ra:stop_node({QPid, node()}),
+    internal_delete(QName, ActingUser),
+    %% TODO needs real counter
+    {ok, 0};
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty, ActingUser) ->
     delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]}).
 
