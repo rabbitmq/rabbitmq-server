@@ -24,7 +24,7 @@ defmodule RabbitMQCtl.MixfileBase do
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       escript: [main_module: RabbitMQCtl,
-                emu_args: "-hidden -kernel inet_dist_listen_min 55672 -kernel inet_dist_listen_max 55672",
+                emu_args: "-hidden -kernel inet_dist_listen_min 35672 -kernel inet_dist_listen_max 35672",
                 path: "escript/rabbitmqctl"],
       deps: deps(),
       aliases: aliases()
