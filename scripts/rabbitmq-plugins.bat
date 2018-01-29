@@ -48,8 +48,6 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 "!ERLANG_HOME!\bin\erl.exe" +B ^
 -boot !CLEAN_BOOT_FILE! ^
 -noinput -noshell -hidden -smp enable ^
--kernel inet_dist_listen_min 35672 ^
--kernel inet_dist_listen_max 35672 ^
 !RABBITMQ_CTL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
