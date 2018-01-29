@@ -19,6 +19,9 @@
 %% We don't want warnings about the use of ssl:connection_info/1 in this
 %% module.
 -compile(nowarn_deprecated_function).
+-dialyzer({nowarn_function,
+           [connection_information_pre_18/1,
+            connection_information_pre_18/2]}).
 
 %% Declare versioned functions to allow dynamic code loading,
 %% depending on the Erlang version running. See 'code_version.erl' for details
