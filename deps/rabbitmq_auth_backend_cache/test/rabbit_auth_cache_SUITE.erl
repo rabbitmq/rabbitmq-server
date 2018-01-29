@@ -166,7 +166,19 @@ random_timing(Config, MaxTTL, Parallel) ->
                     ok = AuthCacheModule:put(Key, Value, TTL),
                     case AuthCacheModule:get(Key) of
                         {ok, Value} -> ok;
-                        Other -> error({Other, Value})
+                        Other ->
+                            case AuthCacheModule of
+                                rabbit_auth_cache_ets_segmented ->
+                                    State = sys:get_state(AuthCacheModule),
+                                    Data = case State of
+                                        {state, Segments, _, _} when is_list(Segments) ->
+                                            [ets:tab2list(Segment) || {_, Segment} <- Segments];
+                                        _ -> []
+                                    end,
+                                    error({Other, Value, State, Data});
+                                _ ->
+                                    error({Other, Value})
+                            end
                     end,
                     % expiry error
                     timer:sleep(TTL + 40),

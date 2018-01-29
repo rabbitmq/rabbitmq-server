@@ -15,7 +15,7 @@
 %%
 
 -module(rabbit_auth_cache_ets_segmented).
--behaviour(gen_server2).
+-behaviour(gen_server).
 -behaviour(rabbit_auth_cache).
 
 -export([start_link/1,
