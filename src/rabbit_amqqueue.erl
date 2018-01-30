@@ -251,7 +251,7 @@ recover_classic_queues(VHost, Queues) ->
 
 recover_quorum_queues(Queues) ->
     [begin
-         {ok, _} = ra_nodes_sup:start_node(ra_node_config(Id)),
+         ok = ra:start_node(ra_node_config(Id)),
          internal_declare(Q, true)
      end || #amqqueue{pid = Id} = Q <- Queues].
 
@@ -387,19 +387,21 @@ declare_quorum_queue(QueueName, Q) ->
     RaName = qname_to_rname(QueueName),
     Id = {RaName, node()},
     NewQ = Q#amqqueue{pid = Id},
-    {ok, _} = ra_nodes_sup:start_node(ra_node_config(Id)),
+    ok = ra:start_node(ra_node_config(Id)),
     _ = ra_node_proc:trigger_election(Id),
-    internal_declare(Q, false),
+    internal_declare(NewQ, false),
     {new, NewQ}.
 
-ra_node_config({RaName, _} = Id) ->
+ra_node_config({Name, _} = Id) ->
     {ok, DataDir} = application:get_env(ra, data_dir),
+    UId = atom_to_binary(Name, utf8),
     #{id => Id,
+      uid => UId,
       log_module => ra_log_file,
       log_init_args => #{data_dir =>
                              filename:join(DataDir,
                                            "quorum_queues"),
-                         id => RaName},
+                         uid => UId},
       initial_nodes => [],
       machine => {module, ra_fifo}}.
 
@@ -939,7 +941,7 @@ delete_immediately(QPids) ->
 delete(#amqqueue{ type = quorum, pid = QPid, name = QName},
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support queue length and consumer tracking
-    ok = ra:stop_node(QPid),
+    ok = ra:delete_node(QPid),
     internal_delete(QName, ActingUser),
     %% TODO needs real counter
     {ok, 0};
