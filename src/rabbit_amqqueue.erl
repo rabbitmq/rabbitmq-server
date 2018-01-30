@@ -231,6 +231,10 @@ warn_file_limit() ->
 
 recover(VHost) ->
     Queues = find_durable_queues(VHost),
+    {Classic, Quorum} = filter_per_type(Queues),
+    recover_classic_queues(VHost, Classic) ++ recover_quorum_queues(Quorum).
+
+recover_classic_queues(VHost, Queues) ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     %% We rely on BQ:start/1 returning the recovery terms in the same
     %% order as the supplied queue names, so that we can zip them together
@@ -245,17 +249,33 @@ recover(VHost) ->
             throw({error, Reason})
     end.
 
+recover_quorum_queues(Queues) ->
+    [begin
+         {ok, _} = ra_nodes_sup:start_node(ra_node_config(Id)),
+         internal_declare(Q, true)
+     end || #amqqueue{pid = Id} = Q <- Queues].
+
+filter_per_type(Queues) ->
+    lists:foldl(fun(#amqqueue{type = classic} = Q, {Cla, Quo}) ->
+                        {[Q | Cla], Quo};
+                   (#amqqueue{type = quorum} = Q, {Cla, Quo}) ->
+                        {Cla, [Q | Quo]}
+                end, {[], []}, Queues).
+
 stop(VHost) ->
+    %% TODO stop quorum queues on that vhost. Should we have a rabbit_nodes_sup per vhost?
     ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
     ok = BQ:stop(VHost).
 
 start(Qs) ->
+    {Classic, Quorum} = filter_per_type(Qs),
     %% At this point all recovered queues and their bindings are
     %% visible to routing, so now it is safe for them to complete
     %% their initialisation (which may involve interacting with other
     %% queues).
-    [Pid ! {self(), go} || #amqqueue{pid = Pid} <- Qs],
+    [Pid ! {self(), go} || #amqqueue{pid = Pid} <- Classic],
+    [ra_node_proc:trigger_election(Id) || #amqqueue{pid = Id} <- Quorum],
     ok.
 
 mark_local_durable_queues_stopped(VHost) ->
@@ -366,21 +386,22 @@ declare_classic_queue(QueueName, Q, VHost, Node) ->
 declare_quorum_queue(QueueName, Q) ->
     RaName = qname_to_rname(QueueName),
     Id = {RaName, node()},
-    {ok, DataDir} = application:get_env(ra, data_dir),
-    {ok, _} = ra_nodes_sup:start_node(
-                #{id => Id,
-                  log_module => ra_log_file,
-                  log_init_args => #{data_dir =>
-                                         filename:join(DataDir,
-                                                       "quorum_queues"),
-                                     id => RaName},
-                  initial_nodes => [],
-                  machine => {module, ra_fifo}}
-               ),
+    NewQ = Q#amqqueue{pid = Id},
+    {ok, _} = ra_nodes_sup:start_node(ra_node_config(Id)),
     _ = ra_node_proc:trigger_election(Id),
-    NewQ = Q#amqqueue{pid = RaName},
-    internal_declare(NewQ, false),
+    internal_declare(Q, false),
     {new, NewQ}.
+
+ra_node_config({RaName, _} = Id) ->
+    {ok, DataDir} = application:get_env(ra, data_dir),
+    #{id => Id,
+      log_module => ra_log_file,
+      log_init_args => #{data_dir =>
+                             filename:join(DataDir,
+                                           "quorum_queues"),
+                         id => RaName},
+      initial_nodes => [],
+      machine => {module, ra_fifo}}.
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
@@ -703,9 +724,13 @@ list_local_names() ->
 
 qnode(QPid) when is_pid(QPid) ->
     node(QPid);
-qnode(QName) ->
-    %% quorum queues use registered names
-    node(whereis(QName)).
+qnode({_, Node}) ->
+    Node.
+
+qpid(Pid) when is_pid(Pid) ->
+    Pid;
+qpid({Name, _}) ->
+    whereis(Name).
 
 list(VHostPath) ->
     list(VHostPath, rabbit_queue).
@@ -789,7 +814,7 @@ i_quorum(name,               #amqqueue{name               = Name}) -> Name;
 i_quorum(durable,            #amqqueue{durable            = Dur}) -> Dur;
 i_quorum(auto_delete,        #amqqueue{auto_delete        = AD}) -> AD;
 i_quorum(arguments,          #amqqueue{arguments          = Args}) -> Args;
-i_quorum(pid,                #amqqueue{pid                = QName}) -> whereis(QName);
+i_quorum(pid,                #amqqueue{pid                = {_, Node}}) -> Node;
 i_quorum(state,              #amqqueue{state              = ST}) -> ST;
 i_quorum(K, _Q) -> ''.
 
@@ -914,7 +939,7 @@ delete_immediately(QPids) ->
 delete(#amqqueue{ type = quorum, pid = QPid, name = QName},
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support queue length and consumer tracking
-    ok = ra:stop_node({QPid, node()}),
+    ok = ra:stop_node(QPid),
     internal_delete(QName, ActingUser),
     %% TODO needs real counter
     {ok, 0};
@@ -1159,7 +1184,7 @@ on_node_down(Node) ->
                                   #amqqueue{name = QName, pid = Pid} =
                                   Q <- mnesia:table(rabbit_queue),
                                     qnode(Pid) == Node andalso
-                                    not rabbit_mnesia:is_process_alive(Pid) andalso
+                                    not rabbit_mnesia:is_process_alive(qpid(Pid)) andalso
                                     (not rabbit_amqqueue:is_mirrored(Q) orelse
                                      rabbit_amqqueue:is_dead_exclusive(Q))])),
                 {Qs, Dels} = lists:unzip(QsDels),

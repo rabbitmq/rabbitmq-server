@@ -180,7 +180,8 @@ on_vhost_up(VHost) ->
                         QNames0;
                     (Q = #amqqueue{name       = QName,
                                        pid        = Pid,
-                                       slave_pids = SPids}, QNames0) ->
+                                       slave_pids = SPids,
+                                       type = classic}, QNames0) ->
                             %% We don't want to pass in the whole
                             %% cluster - we don't want a situation
                             %% where starting one node causes us to
@@ -196,7 +197,9 @@ on_vhost_up(VHost) ->
                             case lists:member(node(), SNodes) of
                                 true  -> [QName | QNames0];
                                 false -> QNames0
-                            end
+                            end;
+                    (_, QNames0) ->
+                            QNames0
                     end, [], rabbit_queue)
           end),
     [add_mirror(QName, node(), async) || QName <- QNames],
