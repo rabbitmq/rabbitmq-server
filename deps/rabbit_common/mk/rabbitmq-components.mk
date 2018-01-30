@@ -343,7 +343,16 @@ rabbitmq-components-mk:
 	@:
 else
 rabbitmq-components-mk:
+ifeq ($(FORCE),yes)
 	$(gen_verbose) cp -a $(UPSTREAM_RMQ_COMPONENTS_MK) .
+else
+	$(gen_verbose) if test -d .git && test -d $(DEPS_DIR)/rabbit_common/.git; then \
+		upstream_branch=$$(LANG=C git -C $(DEPS_DIR)/rabbit_common branch --list | awk '/^\* \(.*detached / {ref=$$0; sub(/.*detached [^ ]+ /, "", ref); sub(/\)$$/, "", ref); print ref; exit;} /^\* / {ref=$$0; sub(/^\* /, "", ref); print ref; exit}'); \
+		local_branch=$$(LANG=C git branch --list | awk '/^\* \(.*detached / {ref=$$0; sub(/.*detached [^ ]+ /, "", ref); sub(/\)$$/, "", ref); print ref; exit;} /^\* / {ref=$$0; sub(/^\* /, "", ref); print ref; exit}'); \
+		test "$$local_branch" = "$$upstream_branch" || exit 0; \
+	fi; \
+	cp -a $(UPSTREAM_RMQ_COMPONENTS_MK) .
+endif
 ifeq ($(DO_COMMIT),yes)
 	$(verbose) git diff --quiet rabbitmq-components.mk \
 	|| git commit -m 'Update rabbitmq-components.mk' rabbitmq-components.mk
