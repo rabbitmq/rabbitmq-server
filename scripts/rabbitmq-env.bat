@@ -333,9 +333,19 @@ if "!ERL_CRASH_DUMP!"=="" (
 )
 
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
-if "!$RABBITMQ_CTL_ERL_ARGS!"=="" (
+if "!RABBITMQ_CTL_ERL_ARGS!"=="" (
     if not "!CTL_ERL_ARGS!"=="" (
         set RABBITMQ_CTL_ERL_ARGS=!CTL_ERL_ARGS!
+    )
+)
+if "!RABBITMQ_CTL_DIST_PORT_MIN!"=="" (
+    if not "!CTL_DIST_PORT_MIN!"=="" (
+        set RABBITMQ_CTL_DIST_PORT_MIN=!CTL_DIST_PORT_MIN!
+    )
+)
+if "!RABBITMQ_CTL_DIST_PORT_MAX!"=="" (
+    if not "!CTL_DIST_PORT_MAX!"=="" (
+        set RABBITMQ_CTL_DIST_PORT_MAX=!CTL_DIST_PORT_MAX!
     )
 )
 
