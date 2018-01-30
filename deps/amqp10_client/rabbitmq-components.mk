@@ -111,8 +111,8 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy = hex 2.0.0
-dep_cowlib = hex 2.0.0
+dep_cowboy = hex 2.2.2
+dep_cowlib = hex 2.1.0
 dep_jsx = hex 2.8.2
 dep_lager = hex 3.5.1
 dep_ranch = hex 1.4.0
@@ -303,7 +303,7 @@ prepare-dist::
 	@:
 
 # --------------------------------------------------------------------
-# rabbitmq-components.mk checks.
+# Umbrella-specific settings.
 # --------------------------------------------------------------------
 
 # If this project is under the Umbrella project, we override $(DEPS_DIR)
@@ -323,30 +323,5 @@ endif
 
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
 SKIP_DEPS = 1
-endif
-endif
-
-UPSTREAM_RMQ_COMPONENTS_MK = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk
-
-ifeq ($(PROJECT),rabbit_common)
-check-rabbitmq-components.mk:
-	@:
-else
-check-rabbitmq-components.mk:
-	$(verbose) cmp -s rabbitmq-components.mk \
-		$(UPSTREAM_RMQ_COMPONENTS_MK) || \
-		(echo "error: rabbitmq-components.mk must be updated!" 1>&2; \
-		  false)
-endif
-
-ifeq ($(PROJECT),rabbit_common)
-rabbitmq-components-mk:
-	@:
-else
-rabbitmq-components-mk:
-	$(gen_verbose) cp -a $(UPSTREAM_RMQ_COMPONENTS_MK) .
-ifeq ($(DO_COMMIT),yes)
-	$(verbose) git diff --quiet rabbitmq-components.mk \
-	|| git commit -m 'Update rabbitmq-components.mk' rabbitmq-components.mk
 endif
 endif
