@@ -232,7 +232,7 @@ warn_file_limit() ->
 recover(VHost) ->
     Queues = find_durable_queues(VHost),
     {Classic, Quorum} = filter_per_type(Queues),
-    recover_classic_queues(VHost, Classic) ++ recover_quorum_queues(Quorum).
+    recover_classic_queues(VHost, Classic) ++ recover_quorum_queues(VHost, Quorum).
 
 recover_classic_queues(VHost, Queues) ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
@@ -249,9 +249,9 @@ recover_classic_queues(VHost, Queues) ->
             throw({error, Reason})
     end.
 
-recover_quorum_queues(Queues) ->
+recover_quorum_queues(VHost, Queues) ->
     [begin
-         ok = ra:start_node(ra_node_config(Id)),
+         ok = ra:start_node(ra_node_config(VHost, Id)),
          internal_declare(Q, true)
      end || #amqqueue{pid = Id} = Q <- Queues].
 
@@ -383,27 +383,32 @@ declare_classic_queue(QueueName, Q, VHost, Node) ->
                             [rabbit_misc:rs(QueueName), Node1, Error])
     end.
 
-declare_quorum_queue(QueueName, Q) ->
+declare_quorum_queue(QueueName, #amqqueue{vhost = VHost} = Q) ->
     RaName = qname_to_rname(QueueName),
     Id = {RaName, node()},
     NewQ = Q#amqqueue{pid = Id},
-    ok = ra:start_node(ra_node_config(Id)),
+    ok = ra:start_node(ra_node_config(VHost, Id)),
     _ = ra_node_proc:trigger_election(Id),
     internal_declare(NewQ, false),
     {new, NewQ}.
 
-ra_node_config({Name, _} = Id) ->
+ra_node_config(VHost, {Name, _} = Id) ->
     {ok, DataDir} = application:get_env(ra, data_dir),
     UId = atom_to_binary(Name, utf8),
     #{id => Id,
       uid => UId,
       log_module => ra_log_file,
       log_init_args => #{data_dir =>
-                             filename:join(DataDir,
-                                           "quorum_queues"),
+                             filename:join([DataDir, "quorum_queues",
+                                            vhost_dir(VHost)]),
                          uid => UId},
       initial_nodes => [],
       machine => {module, ra_fifo}}.
+
+vhost_dir(<<"/">>) ->
+    "%2F";
+vhost_dir(Other) ->
+    binary_to_list(Other).
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
