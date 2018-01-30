@@ -87,7 +87,7 @@ DEFAULT_SCHEDULER_BIND_TYPE="db"
 DEFAULT_DISTRIBUTION_BUFFER_SIZE=128000
 [ "x" = "x$RABBITMQ_DISTRIBUTION_BUFFER_SIZE" ] && RABBITMQ_DISTRIBUTION_BUFFER_SIZE=${DEFAULT_DISTRIBUTION_BUFFER_SIZE}
 
-## Common defaults
+## Common server defaults
 SERVER_ERL_ARGS="+P 1048576 +t 5000000 +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE"
 
 # We save the current value of $RABBITMQ_PID_FILE in case it was set by
@@ -180,6 +180,7 @@ rmq_check_if_shared_with_mnesia() {
 
 DEFAULT_NODE_IP_ADDRESS=auto
 DEFAULT_NODE_PORT=5672
+
 [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP_ADDRESS}
 [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT=${NODE_PORT}
 
@@ -189,6 +190,12 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_DIST_PORT" ] && RABBITMQ_DIST_PORT=${DIST_PORT}
 [ "x" = "x$RABBITMQ_DIST_PORT" ] && [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_DIST_PORT=$((${DEFAULT_NODE_PORT} + 20000))
 [ "x" = "x$RABBITMQ_DIST_PORT" ] && [ "x" != "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_DIST_PORT=$((${RABBITMQ_NODE_PORT} + 20000))
+
+[ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
+[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=${CTL_DIST_PORT_MIN}
+[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=${CTL_DIST_PORT_MAX}
+[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=$((${RABBITMQ_DIST_PORT} + 10000))
+[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=$((${RABBITMQ_DIST_PORT} + 10010))
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE=${IO_THREAD_POOL_SIZE}
@@ -241,8 +248,6 @@ rmq_normalize_path_var RABBITMQ_PLUGINS_DIR
 rmq_normalize_path_var RABBITMQ_LOGS
 
 rmq_normalize_path_var RABBITMQ_UPGRADE_LOG
-
-[ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
 # Check if files and directories non-related to Mnesia are configured
 # to be in $RABBITMQ_MNESIA_DIR. If this is the case, issue a warning
@@ -344,6 +349,8 @@ run_escript()
         -boot "${CLEAN_BOOT_FILE}" \
         -noinput -noshell -hidden -smp enable \
         ${RABBITMQ_CTL_ERL_ARGS} \
+        -kernel inet_dist_listen_min $RABBITMQ_CTL_DIST_PORT_MIN \
+        -kernel inet_dist_listen_max $RABBITMQ_CTL_DIST_PORT_MAX \
         -sasl errlog_type error \
         -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
         -nodename "$RABBITMQ_NODENAME" \
