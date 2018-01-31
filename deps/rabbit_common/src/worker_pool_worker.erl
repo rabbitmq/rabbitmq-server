@@ -151,12 +151,14 @@ code_change(_OldVsn, State, _Extra) ->
 terminate(_Reason, State) ->
     State.
 
--spec set_timeout(integer(), fun(() -> any())) -> reference().
+-spec set_timeout(non_neg_integer(), fun(() -> any())) ->
+    {ok, reference()}.
 set_timeout(Time, Fun) ->
     Key = make_ref(),
     set_timeout(Key, Time, Fun).
 
--spec set_timeout(Key, integer(), fun(() -> any())) -> Key when Key :: any().
+-spec set_timeout(Key, non_neg_integer(), fun(() -> any())) ->
+    {ok, Key} when Key :: any().
 set_timeout(Key, Time, Fun) ->
     Timeouts = get_timeouts(),
     set_timeout(Key, Time, Fun, Timeouts).
