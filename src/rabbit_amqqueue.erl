@@ -263,10 +263,14 @@ filter_per_type(Queues) ->
                 end, {[], []}, Queues).
 
 stop(VHost) ->
-    %% TODO stop quorum queues on that vhost. Should we have a rabbit_nodes_sup per vhost?
+    %% Classic queues
     ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
-    ok = BQ:stop(VHost).
+    ok = BQ:stop(VHost),
+    %% Quorum queues
+    Quorum = find_quorum_queues(VHost),
+    [ra:stop_node(Pid) || #amqqueue{pid = Pid} <- Quorum],
+    ok.
 
 start(Qs) ->
     {Classic, Quorum} = filter_per_type(Qs),
@@ -319,6 +323,18 @@ find_durable_queues() ->
                                 %% - if the record is present - in order to restart.
                                 (mnesia:read(rabbit_queue, Name, read) =:= []
                                 orelse not erlang:is_process_alive(Pid))]))
+      end).
+
+find_quorum_queues(VHost) ->
+    Node = node(),
+    mnesia:async_dirty(
+      fun () ->
+              qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
+                                              vhost = VH,
+                                              pid  = Pid}
+                                    <- mnesia:table(rabbit_durable_queue),
+                                VH =:= VHost,
+                                qnode(Pid) == Node]))
       end).
 
 recover_durable_queues(QueuesAndRecoveryTerms) ->
