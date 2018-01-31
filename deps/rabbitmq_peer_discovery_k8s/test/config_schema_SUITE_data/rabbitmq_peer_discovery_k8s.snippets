@@ -51,4 +51,37 @@
         ]}
     ], [rabbitmq_peer_discovery_k8s]
   }
+
+, {k8s_token_path, "cluster_formation.k8s.token_path = /a/b/c", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {k8s_token_path, "/a/b/c"}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
+
+, {k8s_token_path, "cluster_formation.k8s.cert_path = /a/b/c", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {k8s_cert_path, "/a/b/c"}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
+
+, {k8s_token_path, "cluster_formation.k8s.namespace_path = /a/b/c", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {k8s_namespace_path, "/a/b/c"}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
 ].
