@@ -31,7 +31,7 @@
     segment_size}).
 
 start_link(SegmentSize) ->
-    gen_server2:start_link({local, ?MODULE}, ?MODULE, [SegmentSize], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [SegmentSize], []).
 
 get(Key) ->
     case get_from_segments(Key) of
@@ -41,13 +41,13 @@ get(Key) ->
 
 put(Key, Value, TTL) ->
     Expiration = rabbit_auth_cache:expiration(TTL),
-    Segment = gen_server2:call(?MODULE, {get_write_segment, Expiration}),
+    Segment = gen_server:call(?MODULE, {get_write_segment, Expiration}),
     ets:insert(Segment, {Key, {Expiration, Value}}),
     ok.
 
 delete(Key) ->
     [ets:delete(Table, Key)
-     || Table <- gen_server2:call(?MODULE, get_segment_tables)].
+     || Table <- gen_server:call(?MODULE, get_segment_tables)].
 
 gc() ->
     case whereis(?MODULE) of
@@ -105,7 +105,7 @@ maybe_add_segment(Expiration, SegmentSize, OldSegments) ->
     end.
 
 get_from_segments(Key) ->
-    Tables = gen_server2:call(?MODULE, get_segment_tables),
+    Tables = gen_server:call(?MODULE, get_segment_tables),
     lists:flatmap(
         fun(undefined) -> [];
            (T) ->

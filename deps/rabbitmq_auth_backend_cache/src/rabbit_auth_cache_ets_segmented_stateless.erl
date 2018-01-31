@@ -15,7 +15,7 @@
 %%
 
 -module(rabbit_auth_cache_ets_segmented_stateless).
--behaviour(gen_server2).
+-behaviour(gen_server).
 -behaviour(rabbit_auth_cache).
 
 -export([start_link/1,
@@ -30,7 +30,7 @@
 -record(state, {gc_timer}).
 
 start_link(SegmentSize) ->
-    gen_server2:start_link({local, ?MODULE}, ?MODULE, [SegmentSize], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [SegmentSize], []).
 
 get(Key) ->
     case get_from_segments(Key) of
@@ -99,7 +99,7 @@ segment(Expiration, SegmentSize) ->
     End.
 
 add_segment(Segment) ->
-    gen_server2:call(?MODULE, {add_segment, Segment}).
+    gen_server:call(?MODULE, {add_segment, Segment}).
 
 do_add_segment(Segment) ->
     case ets:lookup(?SEGMENT_TABLE, Segment) of

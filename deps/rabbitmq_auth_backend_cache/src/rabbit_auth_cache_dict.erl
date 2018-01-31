@@ -15,7 +15,7 @@
 %%
 
 -module(rabbit_auth_cache_dict).
--behaviour(gen_server2).
+-behaviour(gen_server).
 -compile({no_auto_import,[get/1]}).
 -compile({no_auto_import,[put/2]}).
 
@@ -27,11 +27,11 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
-start_link() -> gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-get(Key) -> gen_server2:call(?MODULE, {get, Key}).
-put(Key, Value, TTL) -> gen_server2:cast(?MODULE, {put, Key, Value, TTL}).
-delete(Key) -> gen_server2:call(?MODULE, {delete, Key}).
+get(Key) -> gen_server:call(?MODULE, {get, Key}).
+put(Key, Value, TTL) -> gen_server:cast(?MODULE, {put, Key, Value, TTL}).
+delete(Key) -> gen_server:call(?MODULE, {delete, Key}).
 
 init(_Args) -> {ok, nostate}.
 
@@ -66,5 +66,5 @@ do_delete(Key) ->
         undefined -> ok;
         Tref      -> timer:cancel(Tref),
                      erase({timers, Key})
-        
+
     end.

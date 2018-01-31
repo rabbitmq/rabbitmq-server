@@ -15,7 +15,7 @@
 %%
 
 -module(rabbit_auth_cache_ets).
--behaviour(gen_server2).
+-behaviour(gen_server).
 -compile({no_auto_import,[get/1]}).
 -compile({no_auto_import,[put/2]}).
 
@@ -29,13 +29,13 @@
 
 -record(state, {cache, timers, ttl}).
 
-start_link() -> gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-get(Key) -> gen_server2:call(?MODULE, {get, Key}).
+get(Key) -> gen_server:call(?MODULE, {get, Key}).
 put(Key, Value, TTL) ->
     Expiration = rabbit_auth_cache:expiration(TTL),
-    gen_server2:cast(?MODULE, {put, Key, Value, TTL, Expiration}).
-delete(Key) -> gen_server2:call(?MODULE, {delete, Key}).
+    gen_server:cast(?MODULE, {put, Key, Value, TTL, Expiration}).
+delete(Key) -> gen_server:call(?MODULE, {delete, Key}).
 
 init(_Args) ->
     {ok, #state{cache = ets:new(?MODULE, [set, private]),
