@@ -18,6 +18,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -include("rabbit_federation.hrl").
 
@@ -37,7 +38,8 @@ groups() ->
           serialisation,
           scratch_space,
           remove_credentials,
-          get_connection_name
+          get_connection_name,
+          upstream_set_validation
         ]}
     ].
 
@@ -161,6 +163,21 @@ get_connection_name(_Config) ->
         whatever,
         whatever
     ),
+    ok.
+
+upstream_set_validation(_Config) ->
+    ?assertEqual(rabbit_federation_parameters:validate(<<"/">>, <<"federation-upstream-set">>,
+                                         <<"a-name">>,
+                                          [[{<<"upstream">>, <<"devtest1">>}],
+                                           [{<<"upstream">>, <<"devtest2">>}]],
+                                         <<"acting-user">>),
+                 [[ok], [ok]]),
+    ?assertEqual(rabbit_federation_parameters:validate(<<"/">>, <<"federation-upstream-set">>,
+                                         <<"a-name">>,
+                                          [#{<<"upstream">> => <<"devtest3">>},
+                                           #{<<"upstream">> => <<"devtest4">>}],
+                                         <<"acting-user">>),
+                 [[ok], [ok]]),
     ok.
 
 with_exchanges(Fun) ->
