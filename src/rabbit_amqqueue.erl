@@ -331,7 +331,8 @@ find_quorum_queues(VHost) ->
       fun () ->
               qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
                                               vhost = VH,
-                                              pid  = Pid}
+                                              pid  = Pid,
+                                              type = quorum}
                                     <- mnesia:table(rabbit_durable_queue),
                                 VH =:= VHost,
                                 qnode(Pid) == Node]))
