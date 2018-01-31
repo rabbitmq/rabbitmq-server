@@ -54,7 +54,6 @@ init([]) ->
     RestartStrategy = vhost_restart_strategy(),
     ets:new(?MODULE, [named_table, public, {keypos, #vhost_sup.vhost}]),
     %% TODO massive hack to start the fifo metrics while don't get fixed in ra
-    ets:new(ra_fifo_metrics, [public, named_table, {write_concurrency, true}]),
     {ok, {{simple_one_for_one, 0, 5},
           [{rabbit_vhost, {rabbit_vhost_sup_wrapper, start_link, []},
             RestartStrategy, ?SUPERVISOR_WAIT, supervisor,
