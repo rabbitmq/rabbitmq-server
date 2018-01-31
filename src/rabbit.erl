@@ -214,7 +214,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, rabbit_common, rabbit]).
+-define(APPS, [os_mon, mnesia, rabbit_common, ra, rabbit]).
 
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
