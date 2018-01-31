@@ -791,7 +791,7 @@ process_msg({system, From, Req},
         %% Since 17.0 replace_state is not a system message.
         {replace_state, StateFun} ->
             GS2State1 = StateFun(GS2State),
-            gen:reply(From, GS2State1),
+            _ = gen:reply(From, GS2State1),
             system_continue(Parent, Debug, GS2State1);
         _ ->
             %% gen_server puts Hib on the end as the 7th arg, but that version
@@ -1038,7 +1038,7 @@ handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
             {'EXIT', R} =
                 (catch terminate(Reason, Msg,
                                  GS2State #gs2_state { state = NState })),
-            common_reply(Name, From, Reply, NState, Debug),
+            _ = common_reply(Name, From, Reply, NState, Debug),
             exit(R);
         Other ->
             handle_common_reply(Other, Msg, GS2State)

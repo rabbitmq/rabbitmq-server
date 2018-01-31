@@ -227,7 +227,7 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(update, State) ->
-    erlang:cancel_timer(State#state.timer),
+    _ = erlang:cancel_timer(State#state.timer),
     State1 = internal_update(State),
     TRef = erlang:send_after(State1#state.timeout, self(), update),
     {noreply, State1#state{ timer = TRef }};

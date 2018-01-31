@@ -176,7 +176,7 @@ get_timeouts() ->
     end.
 
 set_timeout(Key, Time, Fun, Timeouts) ->
-    cancel_timeout(Key, Timeouts),
+    _ = cancel_timeout(Key, Timeouts),
     {ok, TRef} = timer:send_after(Time, {timeout, Key, Fun}),
     NewTimeouts = dict:store(Key, TRef, Timeouts),
     put(timeouts, NewTimeouts),
@@ -185,7 +185,7 @@ set_timeout(Key, Time, Fun, Timeouts) ->
 cancel_timeout(Key, Timeouts) ->
     case dict:find(Key, Timeouts) of
         {ok, TRef} ->
-            timer:cancel(TRef),
+            _ = timer:cancel(TRef),
             receive {timeout, Key, _} -> ok
             after 0 -> ok
             end,
