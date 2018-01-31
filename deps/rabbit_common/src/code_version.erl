@@ -95,7 +95,7 @@ unload(Module) ->
     code:delete(Module).
 
 compile_forms(Forms) ->
-    case compile:forms(Forms, [debug_info]) of
+    case compile:forms(Forms, [debug_info, return_errors]) of
         {ok, _ModName, Code} ->
             Code;
         {ok, _ModName, Code, _Warnings} ->
@@ -210,9 +210,11 @@ replace_version_forms(IsPost, AbsCode, VersionSupport) ->
     ToName = get_name_pairs(IsPost, VersionSupport),
     %% Rename versioned functions with their final name
     RenameFun = rename_abstract_functions(ToRename, ToName),
+    AbsCode1 = replace_function_forms(AbsCode0, RenameFun),
+    %% Adjust `-dialyzer` attribute.
+    AbsCode2 = fix_dialyzer_attribute(AbsCode1, ToDelete, ToName),
     %% Remove exports of all versioned functions
-    remove_exports(replace_function_forms(AbsCode0, RenameFun),
-                   ToDelete ++ ToRename).
+    remove_exports(AbsCode2, ToDelete ++ ToRename).
 
 replace_function_forms(AbsCode, Fun) ->
     ReplaceFunction =
@@ -227,6 +229,96 @@ replace_function_forms(AbsCode, Fun) ->
                      end
              end,
     fold_syntax_tree(Filter, AbsCode).
+
+fix_dialyzer_attribute(AbsCode, ToDelete, ToName) ->
+    FixDialyzer =
+        fun(Tree) ->
+                case erl_syntax_lib:analyze_attribute(Tree) of
+                    {dialyzer, {_, Value}} ->
+                        FixedValue = fix_dialyzer_attribute_value(Value,
+                                                                  ToDelete,
+                                                                  ToName),
+                        rebuild_dialyzer({dialyzer, FixedValue});
+                    _ ->
+                        Tree
+                end
+        end,
+    Filter = fun(Tree) ->
+                     case erl_syntax:type(Tree) of
+                         attribute -> FixDialyzer(Tree);
+                         _         -> Tree
+                     end
+             end,
+    fold_syntax_tree(Filter, AbsCode).
+
+fix_dialyzer_attribute_value(Info, ToDelete, ToName)
+  when is_list(Info) ->
+    lists:map(
+      fun(I) ->
+              fix_dialyzer_attribute_value(I, ToDelete, ToName)
+      end,
+      Info);
+fix_dialyzer_attribute_value({Warn, FunList}, ToDelete, ToName) ->
+    FixedFunList = fix_dialyzer_attribute_funlist(FunList, ToDelete, ToName),
+    {Warn, FixedFunList};
+fix_dialyzer_attribute_value(Info, _, _)
+  when is_atom(Info) ->
+    Info.
+
+fix_dialyzer_attribute_funlist(FunList, ToDelete, ToName)
+  when is_list(FunList) ->
+    lists:filtermap(
+      fun(I) ->
+              case fix_dialyzer_attribute_funlist(I, ToDelete, ToName) of
+                  [] -> false;
+                  R  -> {true, R}
+              end
+      end,
+      FunList);
+fix_dialyzer_attribute_funlist({FunName, Arity} = Fun,
+                               ToDelete, ToName)
+  when is_atom(FunName) andalso is_integer(Arity) andalso Arity >= 0 ->
+    remove_or_rename(Fun, ToDelete, ToName);
+fix_dialyzer_attribute_funlist(FunList, _, _) ->
+    FunList.
+
+remove_or_rename(Fun, ToDelete, ToName) ->
+    case lists:member(Fun, ToDelete) of
+        true ->
+            [];
+        false ->
+            case proplists:get_value(Fun, ToName) of
+                undefined -> Fun;
+                NewName   -> setelement(1, Fun, NewName)
+            end
+    end.
+
+rebuild_dialyzer({dialyzer, Value}) ->
+    erl_syntax:attribute(
+      erl_syntax:atom(dialyzer),
+      [rebuild_dialyzer_value(Value)]).
+
+rebuild_dialyzer_value(Value) when is_list(Value) ->
+    erl_syntax:list(
+      [rebuild_dialyzer_value(V) || V <- Value]);
+rebuild_dialyzer_value({Warn, FunList}) ->
+    erl_syntax:tuple(
+      [rebuild_dialyzer_warn(Warn),
+       rebuild_dialyzer_funlist(FunList)]);
+rebuild_dialyzer_value(Warn) when is_atom(Warn) ->
+    rebuild_dialyzer_warn(Warn).
+
+rebuild_dialyzer_warn(Warn) when is_list(Warn) ->
+    erl_syntax:list(
+      [rebuild_dialyzer_warn(W) || W <- Warn]);
+rebuild_dialyzer_warn(Warn) when is_atom(Warn) ->
+    erl_syntax:atom(Warn).
+
+rebuild_dialyzer_funlist(FunList) when is_list(FunList) ->
+    erl_syntax:list(
+      [rebuild_dialyzer_funlist({N, A}) || {N, A} <- FunList]);
+rebuild_dialyzer_funlist({FunName, Arity}) ->
+    erl_syntax:tuple([erl_syntax:atom(FunName), erl_syntax:integer(Arity)]).
 
 filter_export_pairs(Info, ToDelete) ->
     lists:filter(fun(Pair) ->
