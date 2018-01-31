@@ -43,6 +43,10 @@ end}.
 
 %% (ACL) Token path
 
+{mapping, "cluster_formation.k8s.token_path", "rabbit.cluster_formation.peer_discovery_k8s.k8s_token_path", [
+    {datatype, string}
+]}.
+
 {translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_token_path",
 fun(Conf) ->
     case cuttlefish:conf_get("cluster_formation.k8s.token_path", Conf, undefined) of
@@ -53,6 +57,10 @@ end}.
 
 %% Certificate path
 
+{mapping, "cluster_formation.k8s.cert_path", "rabbit.cluster_formation.peer_discovery_k8s.k8s_cert_path", [
+    {datatype, string}
+]}.
+
 {translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_cert_path",
 fun(Conf) ->
     case cuttlefish:conf_get("cluster_formation.k8s.cert_path", Conf, undefined) of
@@ -62,6 +70,10 @@ fun(Conf) ->
 end}.
 
 %% Namespace path
+
+{mapping, "cluster_formation.k8s.namespace_path", "rabbit.cluster_formation.peer_discovery_k8s.k8s_namespace_path", [
+    {datatype, string}
+]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_namespace_path",
 fun(Conf) ->
