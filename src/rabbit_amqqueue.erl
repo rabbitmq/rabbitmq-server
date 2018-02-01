@@ -251,7 +251,7 @@ recover_classic_queues(VHost, Queues) ->
 
 recover_quorum_queues(VHost, Queues) ->
     [begin
-         ok = ra:start_node(ra_node_config(VHost, Id)),
+         ok = ra:restart_node(ra_node_config(VHost, Id)),
          internal_declare(Q, true)
      end || #amqqueue{pid = Id} = Q <- Queues].
 
