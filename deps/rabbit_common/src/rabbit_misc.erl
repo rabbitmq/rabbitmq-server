@@ -270,11 +270,11 @@
 -spec get_channel_operation_timeout() -> non_neg_integer().
 -spec random(non_neg_integer()) -> non_neg_integer().
 -spec rpc_call(node(), atom(), atom(), [any()]) -> any().
--spec rpc_call(node(), atom(), atom(), [any()], number()) -> any().
+-spec rpc_call(node(), atom(), atom(), [any()], infinity | non_neg_integer()) -> any().
 -spec rpc_call
-        (node(), atom(), atom(), [any()], reference(), pid(), number()) -> any().
--spec report_default_thread_pool_size() -> 'ok'.
--spec get_gc_info(pid()) -> integer().
+        (node(), atom(), atom(), [any()], reference(), pid(), infinity | non_neg_integer()) -> any().
+-spec report_default_thread_pool_size() -> no_return().
+-spec get_gc_info(pid()) -> [any()].
 -spec group_proplists_by(fun((proplists:proplist()) -> any()),
                          list(proplists:proplist())) -> list(list(proplists:proplist())).
 
@@ -832,11 +832,11 @@ all_module_attributes(Name) ->
 build_acyclic_graph(VertexFun, EdgeFun, Graph) ->
     G = digraph:new([acyclic]),
     try
-        [case digraph:vertex(G, Vertex) of
-             false -> digraph:add_vertex(G, Vertex, Label);
-             _     -> ok = throw({graph_error, {vertex, duplicate, Vertex}})
-         end || GraphElem       <- Graph,
-                {Vertex, Label} <- VertexFun(GraphElem)],
+        _ = [case digraph:vertex(G, Vertex) of
+                 false -> digraph:add_vertex(G, Vertex, Label);
+                 _     -> ok = throw({graph_error, {vertex, duplicate, Vertex}})
+             end || GraphElem       <- Graph,
+                    {Vertex, Label} <- VertexFun(GraphElem)],
         [case digraph:add_edge(G, From, To) of
              {error, E} -> throw({graph_error, {edge, E, From, To}});
              _          -> ok
@@ -1131,7 +1131,7 @@ send_after(Millis, Pid, Msg) when Millis > ?MAX_ERLANG_SEND_AFTER ->
 send_after(Millis, Pid, Msg) ->
     {erlang, erlang:send_after(Millis, Pid, Msg)}.
 
-cancel_timer({erlang, Ref}) -> erlang:cancel_timer(Ref),
+cancel_timer({erlang, Ref}) -> _ = erlang:cancel_timer(Ref),
                                ok;
 cancel_timer({timer, Ref})  -> {ok, cancel} = timer:cancel(Ref),
                                ok.
@@ -1198,7 +1198,7 @@ rpc_call(Node, Mod, Fun, Args) ->
 rpc_call(Node, Mod, Fun, Args, Timeout) ->
     case rpc:call(Node, net_kernel, get_net_ticktime, [], Timeout) of
         {badrpc, _} = E -> E;
-        Time            -> net_kernel:set_net_ticktime(Time, 0),
+        Time            -> _ = net_kernel:set_net_ticktime(Time, 0),
                            rpc:call(Node, Mod, Fun, Args, Timeout)
     end.
 
@@ -1220,8 +1220,7 @@ guess_default_thread_pool_size() ->
 
 report_default_thread_pool_size() ->
     io:format("~b", [guess_default_thread_pool_size()]),
-    erlang:halt(0),
-    ok.
+    erlang:halt(0).
 
 get_gc_info(Pid) ->
     {garbage_collection, GC} = erlang:process_info(Pid, garbage_collection),

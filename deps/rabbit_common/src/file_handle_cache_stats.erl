@@ -30,7 +30,7 @@
 -define(COUNT_TIME_BYTES, [io_read, io_write]).
 
 init() ->
-    ets:new(?TABLE, [public, named_table]),
+    _ = ets:new(?TABLE, [public, named_table]),
     [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- ?COUNT_TIME_BYTES,
                                                Counter <- [count, bytes, time]],
     [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- ?COUNT_TIME,
@@ -40,15 +40,15 @@ init() ->
 
 update(Op, Bytes, Thunk) ->
     {Time, Res} = timer_tc(Thunk),
-    ets:update_counter(?TABLE, {Op, count}, 1),
-    ets:update_counter(?TABLE, {Op, bytes}, Bytes),
-    ets:update_counter(?TABLE, {Op, time}, Time),
+    _ = ets:update_counter(?TABLE, {Op, count}, 1),
+    _ = ets:update_counter(?TABLE, {Op, bytes}, Bytes),
+    _ = ets:update_counter(?TABLE, {Op, time}, Time),
     Res.
 
 update(Op, Thunk) ->
     {Time, Res} = timer_tc(Thunk),
-    ets:update_counter(?TABLE, {Op, count}, 1),
-    ets:update_counter(?TABLE, {Op, time}, Time),
+    _ = ets:update_counter(?TABLE, {Op, count}, 1),
+    _ = ets:update_counter(?TABLE, {Op, time}, Time),
     Res.
 
 update(Op) ->

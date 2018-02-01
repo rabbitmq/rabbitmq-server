@@ -151,12 +151,14 @@ code_change(_OldVsn, State, _Extra) ->
 terminate(_Reason, State) ->
     State.
 
--spec set_timeout(integer(), fun(() -> any())) -> reference().
+-spec set_timeout(non_neg_integer(), fun(() -> any())) ->
+    {ok, reference()}.
 set_timeout(Time, Fun) ->
     Key = make_ref(),
     set_timeout(Key, Time, Fun).
 
--spec set_timeout(Key, integer(), fun(() -> any())) -> Key when Key :: any().
+-spec set_timeout(Key, non_neg_integer(), fun(() -> any())) ->
+    {ok, Key} when Key :: any().
 set_timeout(Key, Time, Fun) ->
     Timeouts = get_timeouts(),
     set_timeout(Key, Time, Fun, Timeouts).
@@ -174,7 +176,7 @@ get_timeouts() ->
     end.
 
 set_timeout(Key, Time, Fun, Timeouts) ->
-    cancel_timeout(Key, Timeouts),
+    _ = cancel_timeout(Key, Timeouts),
     {ok, TRef} = timer:send_after(Time, {timeout, Key, Fun}),
     NewTimeouts = dict:store(Key, TRef, Timeouts),
     put(timeouts, NewTimeouts),
@@ -183,7 +185,7 @@ set_timeout(Key, Time, Fun, Timeouts) ->
 cancel_timeout(Key, Timeouts) ->
     case dict:find(Key, Timeouts) of
         {ok, TRef} ->
-            timer:cancel(TRef),
+            _ = timer:cancel(TRef),
             receive {timeout, Key, _} -> ok
             after 0 -> ok
             end,

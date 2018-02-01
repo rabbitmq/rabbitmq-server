@@ -102,6 +102,8 @@ set_group_leader_to_user_safely(undefined) ->
 set_group_leader_to_user_safely(User) when is_pid(User) ->
     group_leader(User, self()).
 
+-spec handle_damaged_io_system() -> no_return().
+
 handle_damaged_io_system() ->
     Msg = "Erlang VM I/O system is damaged, restart needed~n",
     io:format(standard_error, Msg, []),

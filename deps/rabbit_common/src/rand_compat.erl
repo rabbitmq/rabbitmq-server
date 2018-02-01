@@ -88,7 +88,7 @@ ensure_random_seed() ->
     end.
 
 uniform_pre_18()  ->
-    ensure_random_seed(),
+    _ = ensure_random_seed(),
     random:uniform().
 
 uniform_post_18() -> rand:uniform().
@@ -100,7 +100,7 @@ uniform(N) ->
     ?MODULE:uniform(N).
 
 uniform_pre_18(N)  ->
-    ensure_random_seed(),
+    _ = ensure_random_seed(),
     random:uniform(N).
 
 uniform_post_18(N) -> rand:uniform(N).
