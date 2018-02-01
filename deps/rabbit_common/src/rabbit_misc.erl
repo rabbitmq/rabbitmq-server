@@ -270,11 +270,11 @@
 -spec get_channel_operation_timeout() -> non_neg_integer().
 -spec random(non_neg_integer()) -> non_neg_integer().
 -spec rpc_call(node(), atom(), atom(), [any()]) -> any().
--spec rpc_call(node(), atom(), atom(), [any()], number()) -> any().
+-spec rpc_call(node(), atom(), atom(), [any()], infinity | non_neg_integer()) -> any().
 -spec rpc_call
-        (node(), atom(), atom(), [any()], reference(), pid(), number()) -> any().
--spec report_default_thread_pool_size() -> 'ok'.
--spec get_gc_info(pid()) -> integer().
+        (node(), atom(), atom(), [any()], reference(), pid(), infinity | non_neg_integer()) -> any().
+-spec report_default_thread_pool_size() -> no_return().
+-spec get_gc_info(pid()) -> [any()].
 -spec group_proplists_by(fun((proplists:proplist()) -> any()),
                          list(proplists:proplist())) -> list(list(proplists:proplist())).
 
@@ -1220,8 +1220,7 @@ guess_default_thread_pool_size() ->
 
 report_default_thread_pool_size() ->
     io:format("~b", [guess_default_thread_pool_size()]),
-    erlang:halt(0),
-    ok.
+    erlang:halt(0).
 
 get_gc_info(Pid) ->
     {garbage_collection, GC} = erlang:process_info(Pid, garbage_collection),
