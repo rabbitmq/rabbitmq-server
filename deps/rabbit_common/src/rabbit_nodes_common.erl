@@ -45,7 +45,7 @@ names(Hostname) ->
     Ref = make_ref(),
     {Pid, MRef} = spawn_monitor(
                     fun () -> Self ! {Ref, net_adm:names(Hostname)} end),
-    timer:exit_after(?EPMD_TIMEOUT, Pid, timeout),
+    _ = timer:exit_after(?EPMD_TIMEOUT, Pid, timeout),
     receive
         {Ref, Names}                         -> erlang:demonitor(MRef, [flush]),
                                                 Names;

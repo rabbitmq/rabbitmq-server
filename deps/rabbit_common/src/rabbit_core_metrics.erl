@@ -150,43 +150,43 @@ channel_stats(reductions, Id, Value) ->
 
 channel_stats(exchange_stats, publish, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, confirm, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, return_unroutable, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_exchange_stats, publish, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0, 0}),
+    _ = ets:update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0, 0}),
     ok;
 channel_stats(queue_stats, get, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, get_no_ack, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver_no_ack, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, redeliver, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, ack, Id, Value) ->
     %% Includes delete marker
-    ets:update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
     ok.
 
 delete(Table, Key) ->
