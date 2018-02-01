@@ -174,7 +174,7 @@ assert_utf8(B) ->
 
 validate_utf8(Bin) ->
     try
-        xmerl_ucs:from_utf8(Bin),
+        _ = xmerl_ucs:from_utf8(Bin),
         ok
     catch exit:{ucs, _} ->
             error

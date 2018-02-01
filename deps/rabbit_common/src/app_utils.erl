@@ -20,7 +20,7 @@
          stop_applications/1, stop_applications/2, app_dependency_order/2,
          app_dependencies/1]).
 
--type error_handler() :: fun((atom(), any()) -> 'ok').
+-type error_handler() :: fun((atom(), any()) -> 'ok' | no_return()).
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
 
 -spec load_applications([atom()])                   -> 'ok'.
@@ -31,6 +31,8 @@
 -spec stop_applications([atom()], error_handler())  -> 'ok'.
 -spec app_dependency_order([atom()], boolean())     -> [digraph:vertex()].
 -spec app_dependencies(atom())                      -> [atom()].
+-spec failed_to_start_app(atom(), any())            -> no_return().
+-spec failed_to_stop_app(atom(), any())             -> no_return().
 
 %%---------------------------------------------------------------------------
 %% Public API
@@ -41,15 +43,17 @@ load_applications(Apps) ->
 
 start_applications(Apps) ->
     start_applications(
-      Apps, fun (App, Reason) ->
-                    throw({error, {cannot_start_application, App, Reason}})
-            end).
+      Apps, fun failed_to_start_app/2).
 
 stop_applications(Apps) ->
     stop_applications(
-      Apps, fun (App, Reason) ->
-                    throw({error, {cannot_stop_application, App, Reason}})
-            end).
+      Apps, fun failed_to_stop_app/2).
+
+failed_to_start_app(App, Reason) ->
+    throw({error, {cannot_start_application, App, Reason}}).
+
+failed_to_stop_app(App, Reason) ->
+    throw({error, {cannot_stop_application, App, Reason}}).
 
 start_applications(Apps, ErrorHandler) ->
     start_applications(Apps, ErrorHandler, #{}).

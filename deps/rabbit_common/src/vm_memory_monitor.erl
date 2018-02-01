@@ -79,7 +79,8 @@
 -spec get_memory_limit() -> non_neg_integer().
 -spec get_memory_use(bytes) -> {non_neg_integer(),  float() | infinity};
                     (ratio) -> float() | infinity.
--spec get_cached_process_memory_and_limit() -> {non_neg_integer(), non_neg_integer()}.
+-spec get_cached_process_memory_and_limit() -> {non_neg_integer(),
+                                                float() | infinity}.
 -spec get_rss_memory() -> non_neg_integer().
 
 -export_type([memory_calculation_strategy/0]).
@@ -229,7 +230,7 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(update, State) ->
-    erlang:cancel_timer(State#state.timer),
+    _ = erlang:cancel_timer(State#state.timer),
     State1 = internal_update(State),
     TRef = erlang:send_after(State1#state.timeout, self(), update),
     {noreply, State1#state{ timer = TRef }};
