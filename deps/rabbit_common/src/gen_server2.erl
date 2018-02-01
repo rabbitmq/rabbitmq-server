@@ -235,6 +235,8 @@
 
 -type millis() :: non_neg_integer().
 
+-dialyzer({nowarn_function, do_multi_call/4}).
+
 %%%=========================================================================
 %%%  API
 %%%=========================================================================
@@ -814,6 +816,7 @@ process_msg(Msg, GS2State = #gs2_state { name = Name, debug  = Debug }) ->
 %%% ---------------------------------------------------
 %%% Send/recive functions
 %%% ---------------------------------------------------
+
 do_multi_call(Nodes, Name, Req, infinity) ->
     Tag = make_ref(),
     Monitors = send_nodes(Nodes, Name, Tag, Req),
@@ -1136,6 +1139,8 @@ print_event(Dev, Event, Name) ->
 %%% ---------------------------------------------------
 %%% Terminate the server.
 %%% ---------------------------------------------------
+
+-spec terminate(_, _, _) -> no_return().
 
 terminate(Reason, Msg, #gs2_state { name  = Name,
                                     mod   = Mod,
