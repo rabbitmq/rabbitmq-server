@@ -35,7 +35,8 @@ groups() ->
           stop_queue,
           restart_queue,
           restart_all_types,
-          stop_start_rabbit_app
+          stop_start_rabbit_app,
+          publish_to_queue
         ]}
     ].
 
@@ -229,6 +230,24 @@ stop_start_rabbit_app(Config) ->
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ1, no_ack = false}),
     {#'basic.get_ok'{}, #amqp_msg{}} =
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ2, no_ack = false}).
+
+publish_to_queue(Config) ->
+    %% Test the node restart with both types of queues (quorum and classic) to
+    %% ensure there are no regressions
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ok = amqp_channel:call(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
+                                     payload = <<"msg">>}),
+    ?assertEqual([[QQ, <<"1">>]],
+                 rabbit_ct_broker_helpers:rabbitmqctl_list(
+                   Config, 0, ["list_queues", "name", "messages"])).
 
 %%----------------------------------------------------------------------------
 

@@ -329,8 +329,7 @@ find_quorum_queues(VHost) ->
     Node = node(),
     mnesia:async_dirty(
       fun () ->
-              qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
-                                              vhost = VH,
+              qlc:e(qlc:q([Q || Q = #amqqueue{vhost = VH,
                                               pid  = Pid,
                                               type = quorum}
                                     <- mnesia:table(rabbit_durable_queue),
@@ -814,7 +813,8 @@ is_unresponsive(#amqqueue{ pid = QPid }, Timeout) ->
 
 
 info(Q = #amqqueue{ type = quorum }) -> info_quorum(Q, [name, durable, auto_delete,
-                                                        arguments, pid, state]);
+                                                        arguments, pid, state, messages,
+                                                        messages_ready]);
 info(Q = #amqqueue{ state = crashed }) -> info_down(Q, crashed);
 info(Q = #amqqueue{ state = stopped }) -> info_down(Q, stopped);
 info(#amqqueue{ pid = QPid }) -> delegate:invoke(QPid, {gen_server2, call, [info, infinity]}).
@@ -840,6 +840,12 @@ i_quorum(auto_delete,        #amqqueue{auto_delete        = AD}) -> AD;
 i_quorum(arguments,          #amqqueue{arguments          = Args}) -> Args;
 i_quorum(pid,                #amqqueue{pid                = {_, Node}}) -> Node;
 i_quorum(state,              #amqqueue{state              = ST}) -> ST;
+i_quorum(messages,           #amqqueue{pid                = {Name, _}}) ->
+    [{_, Enqueue, _, Settle, _}] = ets:lookup(ra_fifo_metrics, Name),
+    Enqueue - Settle;
+i_quorum(messages_ready,     #amqqueue{pid                = {Name, _}}) ->
+    [{_, Enqueue, Checkout, _, Return}] = ets:lookup(ra_fifo_metrics, Name),
+    Enqueue - Checkout - Return;
 i_quorum(K, _Q) -> ''.
 
 info_down(Q, DownReason) ->
@@ -1254,12 +1260,14 @@ deliver([], _Delivery) ->
     [];
 
 deliver(Qs, Delivery = #delivery{flow = Flow}) ->
-    {MPids, SPids} = qpids(Qs),
+    {Quorum, MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
     %% We use up two credits to send to a slave since the message
     %% arrives at the slave from two directions. We will ack one when
     %% the slave receives the message direct from the channel, and the
     %% other when it receives it via GM.
+
+    %% TODO what to do with credit flow for quorum queues?
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel
         %% process. We are accessing the rabbit_channel process
@@ -1278,13 +1286,19 @@ deliver(Qs, Delivery = #delivery{flow = Flow}) ->
     SMsg = {deliver, Delivery, true},
     delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
     delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
-    QPids.
+    [ra:send(Q, {enqueue, Delivery}) || Q <- Quorum],
+    QPids ++ Quorum.
 
-qpids([]) -> {[], []}; %% optimisation
-qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[QPid], SPids}; %% opt
+qpids([]) -> {[], [], []}; %% optimisation
+qpids([#amqqueue{pid = QPid, type = quorum}]) -> {[QPid], [], []}; %% opt
+qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[], [QPid], SPids}; %% opt
 qpids(Qs) ->
-    {MPids, SPids} = lists:foldl(fun (#amqqueue{pid = QPid, slave_pids = SPids},
-                                      {MPidAcc, SPidAcc}) ->
-                                         {[QPid | MPidAcc], [SPids | SPidAcc]}
-                                 end, {[], []}, Qs),
-    {MPids, lists:append(SPids)}.
+    {QuoPids, MPids, SPids} =
+        lists:foldl(fun (#amqqueue{pid = QPid, type = quorum},
+                         {QuoPidAcc, MPidAcc, SPidAcc}) ->
+                            {[QPid | QuoPidAcc], MPidAcc, SPidAcc};
+                        (#amqqueue{pid = QPid, slave_pids = SPids},
+                         {QuoPidAcc, MPidAcc, SPidAcc}) ->
+                            {QuoPidAcc, [QPid | MPidAcc], [SPids | SPidAcc]}
+                    end, {[], []}, Qs),
+    {QuoPids, MPids, lists:append(SPids)}.
