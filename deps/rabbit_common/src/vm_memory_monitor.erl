@@ -78,7 +78,8 @@
 -spec get_memory_limit() -> non_neg_integer().
 -spec get_memory_use(bytes) -> {non_neg_integer(),  float() | infinity};
                     (ratio) -> float() | infinity.
--spec get_cached_process_memory_and_limit() -> {non_neg_integer(), non_neg_integer()}.
+-spec get_cached_process_memory_and_limit() -> {non_neg_integer(),
+                                                float() | infinity}.
 
 -export_type([memory_calculation_strategy/0]).
 %%----------------------------------------------------------------------------
