@@ -47,7 +47,8 @@ unregister() ->
         {Class, Name} <- ?RUNTIME_PARAMETERS],
     ok.
 
-validate(_VHost, <<"federation-upstream-set">>, Name, Term, _User) ->
+validate(_VHost, <<"federation-upstream-set">>, Name, Term0, _User) ->
+    Term = [rabbit_data_coercion:to_proplist(Upstream) || Upstream <- Term0],
     [rabbit_parameter_validation:proplist(
        Name,
        [{<<"upstream">>, fun rabbit_parameter_validation:binary/2, mandatory} |
