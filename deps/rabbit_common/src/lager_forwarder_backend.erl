@@ -23,7 +23,7 @@
 
 -record(state, {
     next_sink :: atom(),
-    level :: {'mask', integer()}
+    level :: {'mask', integer()} | inherit
   }).
 
 %% @private
