@@ -1,6 +1,7 @@
 *~
 .sw?
 .*.sw?
+.*.plt
 *.beam
 *.coverdata
 /.*.plt

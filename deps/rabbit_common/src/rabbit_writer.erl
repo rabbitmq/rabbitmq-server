@@ -96,7 +96,7 @@
 
 -spec system_code_change(_,_,_,_) -> {'ok',_}.
 -spec system_continue(_,_,#wstate{}) -> any().
--spec system_terminate(_,_,_,_) -> none().
+-spec system_terminate(_,_,_,_) -> no_return().
 
 -spec send_command(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 -spec send_command

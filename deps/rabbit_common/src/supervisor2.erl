@@ -325,7 +325,7 @@ init_children(State, StartSpec) ->
                 {ok, NChildren} ->
                     {ok, State#state{children = NChildren}};
                 {error, NChildren, Reason} ->
-                    terminate_children(NChildren, SupName),
+                    _ = terminate_children(NChildren, SupName),
                     {stop, {shutdown, Reason}}
             end;
         Error ->
@@ -904,7 +904,7 @@ maybe_restart(Strategy, Child, State) ->
             Id = if ?is_simple(State) -> Child#child.pid;
                     true -> Child#child.name
                  end,
-            timer:apply_after(0,?MODULE,try_again_restart,[self(),Id,Reason]),
+            _ = timer:apply_after(0,?MODULE,try_again_restart,[self(),Id,Reason]),
             {ok,NState2};
         Other ->
             Other
@@ -982,7 +982,7 @@ terminate_children(Children, SupName) ->
 %% we do want them to be shut down as many functions from this module
 %% use this function to just clear everything.
 terminate_children([Child = #child{restart_type=temporary} | Children], SupName, Res) ->
-    do_terminate(Child, SupName),
+    _ = do_terminate(Child, SupName),
     terminate_children(Children, SupName, Res);
 terminate_children([Child | Children], SupName, Res) ->
     NChild = do_terminate(Child, SupName),
@@ -1139,7 +1139,7 @@ wait_dynamic_children(_Child, _Pids, 0, undefined, EStack) ->
 wait_dynamic_children(_Child, _Pids, 0, TRef, EStack) ->
 	%% If the timer has expired before its cancellation, we must empty the
 	%% mail-box of the 'timeout'-message.
-    erlang:cancel_timer(TRef),
+    _ = erlang:cancel_timer(TRef),
     receive
         {timeout, TRef, kill} ->
             EStack

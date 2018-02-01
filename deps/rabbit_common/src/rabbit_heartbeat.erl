@@ -57,7 +57,7 @@
 
 -spec system_code_change(_,_,_,_) -> {'ok',_}.
 -spec system_continue(_,_,{_, _}) -> any().
--spec system_terminate(_,_,_,_) -> none().
+-spec system_terminate(_,_,_,_) -> no_return().
 
 %%----------------------------------------------------------------------------
 start(SupPid, Sock, SendTimeoutSec, SendFun, ReceiveTimeoutSec, ReceiveFun) ->
