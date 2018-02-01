@@ -48,11 +48,11 @@ is_enabled() ->
     lists:member(?NODES_TO_BLOCK, ets:all()).
 
 allow(Node) ->
-    rabbit_log:warning("(~s) Allowing distribution between ~s and ~s~n",
+    error_logger:warning_msg("(~s) Allowing distribution between ~s and ~s~n",
       [?MODULE, node(), Node]),
     true = ets:delete(?NODES_TO_BLOCK, Node).
 block(Node) ->
-    rabbit_log:warning("(~s) BLOCKING distribution between ~s and ~s~n",
+    error_logger:warning_msg("(~s) BLOCKING distribution between ~s and ~s~n",
       [?MODULE, node(), Node]),
     true = ets:insert(?NODES_TO_BLOCK, {Node, block}).
 
@@ -82,7 +82,7 @@ error_handler(Thunk) ->
 go(Parent, Port, ProxyPort) ->
     ets:new(?NODES_TO_BLOCK, [public, named_table]),
     ets:new(?NODES_BLOCKED, [public, named_table]),
-    rabbit_log:info(
+    error_logger:info_msg(
       "(~s) Listening on proxy port ~p~n",
       [?MODULE, ProxyPort]),
     {ok, Sock} = gen_tcp:listen(ProxyPort, [inet,
@@ -100,7 +100,7 @@ run_it(SockIn, Port) ->
     case {inet:peername(SockIn), inet:sockname(SockIn)} of
         {{ok, {_Addr, SrcPort}}, {ok, {Addr, OtherPort}}} ->
             {ok, Remote, This} = inet_tcp_proxy_manager:lookup(SrcPort),
-            rabbit_log:info(
+            error_logger:info_msg(
               "(~s) => Incoming proxied connection from node ~s (port ~b) "
               "to node ~s (port ~b)~n",
               [?MODULE, Remote, SrcPort, This, OtherPort]),
@@ -124,12 +124,12 @@ run_loop(Sockets, RemoteNode, Buf0) ->
             case {WasBlocked, Block} of
                 {false, true} ->
                     true = ets:insert(?NODES_BLOCKED, {RemoteNode, blocked}),
-                    rabbit_log:warning(
+                    error_logger:warning_msg(
                       "(~s) Distribution BLOCKED between ~s and ~s~n",
                       [?MODULE, node(), RemoteNode]);
                 {true, false} ->
                     true = ets:delete(?NODES_BLOCKED, RemoteNode),
-                    rabbit_log:warning(
+                    error_logger:warning_msg(
                       "(~s) Distribution allowed between ~s and ~s~n",
                       [?MODULE, node(), RemoteNode]);
                 _ ->
@@ -141,7 +141,7 @@ run_loop(Sockets, RemoteNode, Buf0) ->
                 true  -> run_loop(Sockets, RemoteNode, Buf)
             end;
         {tcp_closed, Sock} ->
-            rabbit_log:info(
+            error_logger:info_msg(
               "(~s) Distribution closed between ~s and ~s~n",
               [?MODULE, node(), RemoteNode]),
             gen_tcp:close(other(Sock, Sockets));
