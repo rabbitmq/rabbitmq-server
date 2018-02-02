@@ -68,6 +68,15 @@
                       "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
   [rabbitmq_management]},
 
+ {path_prefix,
+  "management.path_prefix = /a/prefix",
+  [
+   {rabbitmq_management, [
+                          {path_prefix, "/a/prefix"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
  {cors_settings,
   "management.cors.allow_origins.1 = https://origin1.org
    management.cors.allow_origins.2 = https://origin2.org
