@@ -91,19 +91,19 @@ step_with_exit_handler(AggregatorPid, Ref, Fun, Item) ->
 %% processes. await_emitters_termination/1 helper can be used as a
 %% last statement of remote function to ensure this behaviour.
 spawn_emitter_caller(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
-    spawn_monitor(
-      fun () ->
-              case rpc_call_emitter(Node, Mod, Fun, Args, Ref, Pid, Timeout) of
-                  {error, _} = Error        ->
-                      Pid ! {Ref, error, Error};
-                  {bad_argument, _} = Error ->
-                      Pid ! {Ref, error, Error};
-                  {badrpc, _} = Error       ->
-                      Pid ! {Ref, error, Error};
-                  _                         ->
-                      ok
-              end
-      end),
+    _ = spawn_monitor(
+          fun () ->
+                  case rpc_call_emitter(Node, Mod, Fun, Args, Ref, Pid, Timeout) of
+                      {error, _} = Error        ->
+                          Pid ! {Ref, error, Error};
+                      {bad_argument, _} = Error ->
+                          Pid ! {Ref, error, Error};
+                      {badrpc, _} = Error       ->
+                          Pid ! {Ref, error, Error};
+                      _                         ->
+                          ok
+                  end
+          end),
     ok.
 
 rpc_call_emitter(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
@@ -143,7 +143,7 @@ collect_monitors([Monitor|Rest]) ->
 %% number of live nodes, but it's not mandatory - thus more generic
 %% name of 'ChunkCount' was chosen.
 wait_for_info_messages(Pid, Ref, Fun, Acc0, Timeout, ChunkCount) ->
-    notify_if_timeout(Pid, Ref, Timeout),
+    _ = notify_if_timeout(Pid, Ref, Timeout),
     wait_for_info_messages(Ref, Fun, Acc0, ChunkCount).
 
 wait_for_info_messages(Ref, Fun, Acc0, ChunksLeft) ->

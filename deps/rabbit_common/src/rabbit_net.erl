@@ -40,7 +40,7 @@
                  {raw, non_neg_integer(), non_neg_integer(), binary()}].
 -type hostname() :: inet:hostname().
 -type ip_port() :: inet:port_number().
--type host_or_ip() :: binary() | inet:ip_address().
+% -type host_or_ip() :: binary() | inet:ip_address().
 -spec is_ssl(socket()) -> boolean().
 -spec ssl_info(socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
 -spec controlling_process(socket(), pid()) -> ok_or_any_error().
@@ -75,11 +75,14 @@
           'nossl' | ok_val_or_error(rabbit_ssl:certificate()).
 -spec connection_string(socket(), 'inbound' | 'outbound') ->
           ok_val_or_error(string()).
--spec socket_ends(socket(), 'inbound' | 'outbound') ->
-          ok_val_or_error({host_or_ip(), ip_port(),
-                           host_or_ip(), ip_port()}).
+% -spec socket_ends(socket() | ranch_proxy:proxy_socket() | ranch_proxy_ssl:ssl_socket(),
+%                   'inbound' | 'outbound') ->
+%           ok_val_or_error({host_or_ip(), ip_port(),
+%                            host_or_ip(), ip_port()}).
 -spec is_loopback(socket() | inet:ip_address()) -> boolean().
--spec unwrap_socket(socket() | ranch_proxy:proxy_socket() | ranch_proxy_ssl:ssl_socket()) -> socket().
+% -spec unwrap_socket(socket() | ranch_proxy:proxy_socket() | ranch_proxy_ssl:ssl_socket()) -> socket().
+
+-dialyzer({nowarn_function, [socket_ends/2, unwrap_socket/1]}).
 
 %%---------------------------------------------------------------------------
 
