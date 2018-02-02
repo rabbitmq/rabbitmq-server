@@ -36,7 +36,8 @@ groups() ->
           restart_queue,
           restart_all_types,
           stop_start_rabbit_app,
-          publish_to_queue
+          publish_to_queue,
+          publish_and_restart
         ]}
     ].
 
@@ -241,11 +242,27 @@ publish_to_queue(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    ok = amqp_channel:call(Ch,
-                           #'basic.publish'{routing_key = QQ},
-                           #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
-                                     payload = <<"msg">>}),
+    publish(Ch, QQ),
     wait_for_messages(Config, 0, QQ, <<"1">>).
+
+publish_and_restart(Config) ->
+    %% Test the node restart with both types of queues (quorum and classic) to
+    %% ensure there are no regressions
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q1">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    publish(Ch, QQ),
+    wait_for_messages(Config, 0, QQ, <<"1">>),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Node),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Node),
+
+    wait_for_messages(Config, 0, QQ, <<"1">>),
+    publish(rabbit_ct_client_helpers:open_channel(Config, Node), QQ),
+    wait_for_messages(Config, 0, QQ, <<"2">>).
 
 %%----------------------------------------------------------------------------
 
@@ -283,3 +300,9 @@ wait_for_messages(Config, Node, Queue, Count, N) ->
             timer:sleep(500),
             wait_for_messages(Config, Node, Queue, Count, N - 1)
     end.
+
+publish(Ch, Queue) ->
+    ok = amqp_channel:call(Ch,
+                           #'basic.publish'{routing_key = Queue},
+                           #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
+                                     payload = <<"msg">>}).
