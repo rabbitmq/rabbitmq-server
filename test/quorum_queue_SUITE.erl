@@ -245,9 +245,7 @@ publish_to_queue(Config) ->
                            #'basic.publish'{routing_key = QQ},
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                                      payload = <<"msg">>}),
-    ?assertEqual([[QQ, <<"1">>]],
-                 rabbit_ct_broker_helpers:rabbitmqctl_list(
-                   Config, 0, ["list_queues", "name", "messages"])).
+    wait_for_messages(Config, 0, QQ, <<"1">>).
 
 %%----------------------------------------------------------------------------
 
@@ -268,3 +266,20 @@ get_queue_type(Node, Q) ->
     {ok, AMQQueue} =
         rpc:call(Node, rabbit_amqqueue, lookup, [QNameRes]),
     AMQQueue#amqqueue.type.
+
+wait_for_messages(Config, Node, Queue, Count) ->
+    wait_for_messages(Config, Node, Queue, Count, 60).
+
+wait_for_messages(Config, Node, Queue, Count, 0) ->
+    ?assertEqual([[Queue, Count]],
+                 rabbit_ct_broker_helpers:rabbitmqctl_list(
+                   Config, 0, ["list_queues", "name", "messages"]));
+wait_for_messages(Config, Node, Queue, Count, N) ->
+    case rabbit_ct_broker_helpers:rabbitmqctl_list(
+           Config, 0, ["list_queues", "name", "messages"]) of
+        [[Q, C]] when Q == Queue, C == Count ->
+            ok;
+        _ ->
+            timer:sleep(500),
+            wait_for_messages(Config, Node, Queue, Count, N - 1)
+    end.
