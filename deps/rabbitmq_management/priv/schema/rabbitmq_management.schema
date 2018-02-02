@@ -154,6 +154,14 @@ fun(Conf) ->
 end}.
 
 
+%% A custom path prefix for all HTTP request handlers.
+%%
+%% {path_prefix, "/a/prefix"},
+
+{mapping, "management.path_prefix", "rabbitmq_management.path_prefix",
+    [{datatype, string}]}.
+
+
 
 %% CORS
 
