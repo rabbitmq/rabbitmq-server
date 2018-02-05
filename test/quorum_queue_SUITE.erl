@@ -37,7 +37,9 @@ groups() ->
           restart_all_types,
           stop_start_rabbit_app,
           publish_to_queue,
-          publish_and_restart
+          publish_and_restart,
+          consume_from_queue,
+          consume_from_empty_queue
         ]}
     ].
 
@@ -243,7 +245,7 @@ publish_to_queue(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, 0, QQ, <<"1">>).
+    wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>).
 
 publish_and_restart(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
@@ -255,14 +257,43 @@ publish_and_restart(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
-    wait_for_messages(Config, 0, QQ, <<"1">>),
+    wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Node),
     ok = rabbit_ct_broker_helpers:start_node(Config, Node),
 
-    wait_for_messages(Config, 0, QQ, <<"1">>),
+    wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>),
     publish(rabbit_ct_client_helpers:open_channel(Config, Node), QQ),
-    wait_for_messages(Config, 0, QQ, <<"2">>).
+    wait_for_messages(Config, 0, QQ, <<"2">>, <<"2">>, <<"0">>).
+
+consume_from_queue(Config) ->
+    %% Test the node restart with both types of queues (quorum and classic) to
+    %% ensure there are no regressions
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>),
+    consume(Ch, QQ),
+    wait_for_messages(Config, 0, QQ, <<"1">>, <<"0">>, <<"1">>),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>).
+
+consume_from_empty_queue(Config) ->
+    %% Test the node restart with both types of queues (quorum and classic) to
+    %% ensure there are no regressions
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    consume_empty(Ch, QQ).
 
 %%----------------------------------------------------------------------------
 
@@ -284,21 +315,23 @@ get_queue_type(Node, Q) ->
         rpc:call(Node, rabbit_amqqueue, lookup, [QNameRes]),
     AMQQueue#amqqueue.type.
 
-wait_for_messages(Config, Node, Queue, Count) ->
-    wait_for_messages(Config, Node, Queue, Count, 60).
+wait_for_messages(Config, Node, Queue, Msgs, Ready, Unack) ->
+    wait_for_messages(Config, Node, Queue, Msgs, Ready, Unack, 60).
 
-wait_for_messages(Config, Node, Queue, Count, 0) ->
-    ?assertEqual([[Queue, Count]],
+wait_for_messages(Config, Node, Queue, Msgs, Ready, Unack, 0) ->
+    ?assertEqual([[Queue, Msgs, Ready, Unack]],
                  rabbit_ct_broker_helpers:rabbitmqctl_list(
-                   Config, 0, ["list_queues", "name", "messages"]));
-wait_for_messages(Config, Node, Queue, Count, N) ->
+                   Config, 0, ["list_queues", "name", "messages", "messages_ready",
+                               "messages_unacknowledged"]));
+wait_for_messages(Config, Node, Queue, Msgs, Ready, Unack, N) ->
     case rabbit_ct_broker_helpers:rabbitmqctl_list(
-           Config, 0, ["list_queues", "name", "messages"]) of
-        [[Q, C]] when Q == Queue, C == Count ->
+           Config, 0, ["list_queues", "name", "messages", "messages_ready",
+                       "messages_unacknowledged"]) of
+        [[Q, M, R, U]] when Q == Queue, M == Msgs, R == Ready, U == Unack ->
             ok;
         _ ->
             timer:sleep(500),
-            wait_for_messages(Config, Node, Queue, Count, N - 1)
+            wait_for_messages(Config, Node, Queue, Msgs, Ready, Unack, N - 1)
     end.
 
 publish(Ch, Queue) ->
@@ -306,3 +339,13 @@ publish(Ch, Queue) ->
                            #'basic.publish'{routing_key = Queue},
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                                      payload = <<"msg">>}).
+
+consume(Ch, Queue) ->
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Queue,
+                                                    no_ack = true})).
+
+consume_empty(Ch, Queue) ->
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Queue,
+                                                    no_ack = true})).

@@ -814,7 +814,7 @@ is_unresponsive(#amqqueue{ pid = QPid }, Timeout) ->
 
 info(Q = #amqqueue{ type = quorum }) -> info_quorum(Q, [name, durable, auto_delete,
                                                         arguments, pid, state, messages,
-                                                        messages_ready]);
+                                                        messages_ready, messages_unacknowledged]);
 info(Q = #amqqueue{ state = crashed }) -> info_down(Q, crashed);
 info(Q = #amqqueue{ state = stopped }) -> info_down(Q, stopped);
 info(#amqqueue{ pid = QPid }) -> delegate:invoke(QPid, {gen_server2, call, [info, infinity]}).
@@ -841,12 +841,18 @@ i_quorum(arguments,          #amqqueue{arguments          = Args}) -> Args;
 i_quorum(pid,                #amqqueue{pid                = {_, Node}}) -> Node;
 i_quorum(state,              #amqqueue{state              = ST}) -> ST;
 i_quorum(messages,           #amqqueue{pid                = {Name, _}}) ->
-    [{_, Enqueue, _, Settle, _}] = ets:lookup(ra_fifo_metrics, Name),
-    Enqueue - Settle;
+    quorum_messages(Name);
 i_quorum(messages_ready,     #amqqueue{pid                = {Name, _}}) ->
     [{_, Enqueue, Checkout, _, Return}] = ets:lookup(ra_fifo_metrics, Name),
-    Enqueue - Checkout - Return;
+    Enqueue - Checkout + Return;
+i_quorum(messages_unacknowledged, #amqqueue{pid           = {Name, _}}) ->
+    [{_, _, Checkout, Settle, Return}] = ets:lookup(ra_fifo_metrics, Name),
+    Checkout - Settle - Return;
 i_quorum(K, _Q) -> ''.
+
+quorum_messages(Name) ->
+    [{_, Enqueue, _, Settle, _}] = ets:lookup(ra_fifo_metrics, Name),
+    Enqueue - Settle.
 
 info_down(Q, DownReason) ->
     info_down(Q, rabbit_amqqueue_process:info_keys(), DownReason).
@@ -1025,8 +1031,16 @@ activate_limit_all(QPids, ChPid) ->
 credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{credit, ChPid, CTag, Credit, Drain}]}).
 
-basic_get(#amqqueue{pid = QPid}, ChPid, NoAck, LimiterPid) ->
-    delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]}).
+basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid) ->
+    delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
+basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, ChPid, NoAck, LimiterPid) ->
+    ra:send_and_await_consensus(Id, {checkout, get, self()}),
+    receive
+        {ra_event, _, machine, {msg, _, empty}} ->
+            empty;
+        {ra_event, _, machine, {msg, MsgId, Msg}} ->
+            {ok, quorum_messages(Name), {QName, Id, MsgId, false, Msg}}
+    end.
 
 basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
@@ -1286,7 +1300,7 @@ deliver(Qs, Delivery = #delivery{flow = Flow}) ->
     SMsg = {deliver, Delivery, true},
     delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
     delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
-    [ra:send(Q, {enqueue, Delivery}) || Q <- Quorum],
+    [ra:send(Q, {enqueue, Delivery#delivery.message}) || Q <- Quorum],
     QPids ++ Quorum.
 
 qpids([]) -> {[], [], []}; %% optimisation
