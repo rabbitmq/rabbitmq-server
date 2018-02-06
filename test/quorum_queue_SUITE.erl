@@ -39,7 +39,8 @@ groups() ->
           publish_to_queue,
           publish_and_restart,
           consume_from_queue,
-          consume_from_empty_queue
+          consume_from_empty_queue,
+          consume_and_autoack_from_queue
         ]}
     ].
 
@@ -278,10 +279,27 @@ consume_from_queue(Config) ->
 
     publish(Ch, QQ),
     wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>),
-    consume(Ch, QQ),
+    consume(Ch, QQ, true),
     wait_for_messages(Config, 0, QQ, <<"1">>, <<"0">>, <<"1">>),
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>).
+
+consume_and_autoack_from_queue(Config) ->
+    %% Test the node restart with both types of queues (quorum and classic) to
+    %% ensure there are no regressions
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>),
+    consume(Ch, QQ, false),
+    wait_for_messages(Config, 0, QQ, <<"0">>, <<"0">>, <<"0">>),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    wait_for_messages(Config, 0, QQ, <<"0">>, <<"0">>, <<"0">>).
 
 consume_from_empty_queue(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
@@ -293,7 +311,7 @@ consume_from_empty_queue(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    consume_empty(Ch, QQ).
+    consume_empty(Ch, QQ, true).
 
 %%----------------------------------------------------------------------------
 
@@ -340,12 +358,12 @@ publish(Ch, Queue) ->
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                                      payload = <<"msg">>}).
 
-consume(Ch, Queue) ->
+consume(Ch, Queue, NoAck) ->
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
                  amqp_channel:call(Ch, #'basic.get'{queue = Queue,
-                                                    no_ack = true})).
+                                                    no_ack = NoAck})).
 
-consume_empty(Ch, Queue) ->
+consume_empty(Ch, Queue, NoAck) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{queue = Queue,
-                                                    no_ack = true})).
+                                                    no_ack = NoAck})).
