@@ -116,6 +116,7 @@ all_tests() -> [
     format_output_test,
     columns_test,
     get_test,
+    get_encoding_test,
     get_fail_test,
     publish_test,
     publish_accept_json_test,
@@ -2243,6 +2244,41 @@ get_test(Config) ->
     amqp_channel:close(Ch),
     close_connection(Conn),
 
+    passed.
+
+get_encoding_test(Config) ->
+    Utf8Text = <<"Loïc was here!"/utf8>>,
+    Utf8Payload = base64:encode(Utf8Text),
+    BinPayload = base64:encode(<<0:64, 16#ff, 16#fd, 0:64>>),
+    Utf8Msg = msg(<<"get_encoding_test">>, #{}, Utf8Payload, <<"base64">>),
+    BinMsg  = msg(<<"get_encoding_test">>, #{}, BinPayload, <<"base64">>),
+    http_put(Config, "/queues/%2f/get_encoding_test", #{}, {group, '2xx'}),
+    http_post(Config, "/exchanges/%2f/amq.default/publish", Utf8Msg, ?OK),
+    http_post(Config, "/exchanges/%2f/amq.default/publish", BinMsg,  ?OK),
+    timer:sleep(250),
+    [RecvUtf8Msg1, RecvBinMsg1] = http_post(Config, "/queues/%2f/get_encoding_test/get",
+                                                          [{ackmode, ack_requeue_false},
+                                                           {count,    2},
+                                                           {encoding, auto}], ?OK),
+    %% Utf-8 payload must be returned as a utf-8 string when auto encoding is used.
+    ?assertEqual(<<"string">>, maps:get(payload_encoding, RecvUtf8Msg1)),
+    ?assertEqual(Utf8Text, maps:get(payload, RecvUtf8Msg1)),
+    %% Binary payload must be base64-encoded when auto is used.
+    ?assertEqual(<<"base64">>, maps:get(payload_encoding, RecvBinMsg1)),
+    ?assertEqual(BinPayload, maps:get(payload, RecvBinMsg1)),
+    %% Good. Now try forcing the base64 encoding.
+    http_post(Config, "/exchanges/%2f/amq.default/publish", Utf8Msg, ?OK),
+    http_post(Config, "/exchanges/%2f/amq.default/publish", BinMsg,  ?OK),
+    [RecvUtf8Msg2, RecvBinMsg2] = http_post(Config, "/queues/%2f/get_encoding_test/get",
+                                                          [{ackmode, ack_requeue_false},
+                                                           {count,    2},
+                                                           {encoding, base64}], ?OK),
+    %% All payloads must be base64-encoded when base64 encoding is used.
+    ?assertEqual(<<"base64">>, maps:get(payload_encoding, RecvUtf8Msg2)),
+    ?assertEqual(Utf8Payload, maps:get(payload, RecvUtf8Msg2)),
+    ?assertEqual(<<"base64">>, maps:get(payload_encoding, RecvBinMsg2)),
+    ?assertEqual(BinPayload, maps:get(payload, RecvBinMsg2)),
+    http_delete(Config, "/queues/%2f/get_encoding_test", {group, '2xx'}),
     passed.
 
 get_fail_test(Config) ->

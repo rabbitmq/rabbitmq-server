@@ -162,13 +162,14 @@ maybe_truncate(Payload, Len) ->
 
 payload_part(Payload, Enc) ->
     {PL, E} = case Enc of
-                  auto -> try
-                              %% TODO mochijson does this but is it safe?
-                              _ = xmerl_ucs:from_utf8(Payload),
-                              {Payload, string}
-                          catch exit:{ucs, _} ->
-                                  {base64:encode(Payload), base64}
+                  auto -> case is_utf8(Payload) of
+                              true -> {Payload, string};
+                              false -> {base64:encode(Payload), base64}
                           end;
                   _    -> {base64:encode(Payload), base64}
               end,
     [{payload, PL}, {payload_encoding, E}].
+
+is_utf8(<<>>) -> true;
+is_utf8(<<_/utf8, Rest/bits>>) -> is_utf8(Rest);
+is_utf8(_) -> false.
