@@ -232,7 +232,7 @@ warn_file_limit() ->
 recover(VHost) ->
     Queues = find_durable_queues(VHost),
     {Classic, Quorum} = filter_per_type(Queues),
-    recover_classic_queues(VHost, Classic) ++ recover_quorum_queues(VHost, Quorum).
+    recover_classic_queues(VHost, Classic) ++ recover_quorum_queues(Quorum).
 
 recover_classic_queues(VHost, Queues) ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
@@ -249,9 +249,9 @@ recover_classic_queues(VHost, Queues) ->
             throw({error, Reason})
     end.
 
-recover_quorum_queues(VHost, Queues) ->
+recover_quorum_queues(Queues) ->
     [begin
-         ok = ra:restart_node(ra_node_config(VHost, Id)),
+         ok = ra:restart_node(ra_node_config(Id)),
          internal_declare(Q, true)
      end || #amqqueue{pid = Id} = Q <- Queues].
 
@@ -399,16 +399,16 @@ declare_classic_queue(QueueName, Q, VHost, Node) ->
                             [rabbit_misc:rs(QueueName), Node1, Error])
     end.
 
-declare_quorum_queue(QueueName, #amqqueue{vhost = VHost} = Q) ->
+declare_quorum_queue(QueueName, Q) ->
     RaName = qname_to_rname(QueueName),
     Id = {RaName, node()},
     NewQ = Q#amqqueue{pid = Id},
-    ok = ra:start_node(ra_node_config(VHost, Id)),
+    ok = ra:start_node(ra_node_config(Id)),
     _ = ra_node_proc:trigger_election(Id),
     internal_declare(NewQ, false),
     {new, NewQ}.
 
-ra_node_config(VHost, {Name, _} = Id) ->
+ra_node_config({Name, _} = Id) ->
     {ok, DataDir} = application:get_env(ra, data_dir),
     UId = atom_to_binary(Name, utf8),
     #{id => Id,
@@ -418,11 +418,6 @@ ra_node_config(VHost, {Name, _} = Id) ->
                          uid => UId},
       initial_nodes => [],
       machine => {module, ra_fifo}}.
-
-vhost_dir(<<"/">>) ->
-    "%2F";
-vhost_dir(Other) ->
-    binary_to_list(Other).
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
@@ -846,7 +841,7 @@ i_quorum(messages_ready,     #amqqueue{pid                = {Name, _}}) ->
 i_quorum(messages_unacknowledged, #amqqueue{pid           = {Name, _}}) ->
     [{_, _, Checkout, Settle, Return}] = ets:lookup(ra_fifo_metrics, Name),
     Checkout - Settle - Return;
-i_quorum(K, _Q) -> ''.
+i_quorum(_K, _Q) -> ''.
 
 quorum_messages(Name) ->
     [{_, Enqueue, _, Settle, _}] = ets:lookup(ra_fifo_metrics, Name),
@@ -1031,7 +1026,8 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
 
 basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid) ->
     delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
-basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, ChPid, NoAck, LimiterPid) ->
+basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, _ChPid, NoAck,
+          _LimiterPid) ->
     ra:send_and_await_consensus(Id, {checkout, get, self()}),
     receive
         {ra_event, _, machine, {msg, _, empty}} ->
