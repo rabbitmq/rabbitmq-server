@@ -92,9 +92,8 @@ table.legend td { padding: 4px 0 4px 10px; width: 130px; }
 input#truncate { width: 50px; text-align: right; }
 
 table { border-collapse: collapse; }
-table th { font-weight: normal; color: black; }
-
-table th, table td { font: 12px Verdana, sans-serif; padding: 2px 4px; }
+table th { font-weight: normal; color: black; padding: 6px 5px 5px 5px; line-height: 1em; }
+table td { padding: 2px 5px; }
 table.list th, table.list td { vertical-align: top; min-width: 5em; width: auto; }
 
 table.list { border-width: 1px; margin-bottom: 1em; }
@@ -173,7 +172,7 @@ tr.alt2>td {
 td span,
 td abbr {
   display: inline-block;
-  padding: 3px 5px;
+  padding: 2px 4px;
   margin: 0 0 3px 0;
 }
 
@@ -322,7 +321,7 @@ input[type=submit][disabled]:hover, button[disabled]:hover, a.button.disabled { 
 
 h3 { padding: 0 0 2px 0; margin: 1em 0 1em 0; font-size: 1em; border-bottom: 1px solid #E4E4E4; font-weight: normal; }
 
-abbr { background: #99EBFF; padding: 3px 5px; border-radius: 5px; -moz-border-radius: 5px; border: none; cursor: default; text-decoration: none; }
+abbr { background: #99EBFF; padding: 2px 4px; border-radius: 5px; -moz-border-radius: 5px; border: none; cursor: default; text-decoration: none; }
 
 table.list td abbr a { display: inline; width: auto; }
 
