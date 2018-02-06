@@ -546,6 +546,7 @@ end}.
  end
 }.
 
+
 %% Customising Socket Options.
 %%
 %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
@@ -800,6 +801,15 @@ fun(Conf) ->
         Other -> Other
     end
 end}.
+
+%% Number of delegate processes to use for intra-cluster
+%% communication. On a machine which has a very large number of cores
+%% and is also part of a cluster, you may wish to increase this value.
+%%
+
+{mapping, "delegate_count", "rabbit.delegate_count", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
 
 %% Mirror sync batch size, in messages. Increasing this will speed
 %% up syncing but total batch size in bytes must not exceed 2 GiB.
