@@ -414,9 +414,7 @@ ra_node_config(VHost, {Name, _} = Id) ->
     #{id => Id,
       uid => UId,
       log_module => ra_log_file,
-      log_init_args => #{data_dir =>
-                             filename:join([DataDir, "quorum_queues",
-                                            vhost_dir(VHost)]),
+      log_init_args => #{data_dir => DataDir,
                          uid => UId},
       initial_nodes => [],
       machine => {module, ra_fifo}}.
