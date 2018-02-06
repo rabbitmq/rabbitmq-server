@@ -39,6 +39,7 @@ groups() ->
           scratch_space,
           remove_credentials,
           get_connection_name,
+          upstream_validation,
           upstream_set_validation
         ]}
     ].
@@ -178,6 +179,19 @@ upstream_set_validation(_Config) ->
                                            #{<<"upstream">> => <<"devtest4">>}],
                                          <<"acting-user">>),
                  [[ok], [ok]]),
+    ok.
+
+upstream_validation(_Config) ->
+    ?assertEqual(rabbit_federation_parameters:validate(<<"/">>, <<"federation-upstream">>,
+                                         <<"a-name">>,
+                                          [{<<"uri">>, <<"amqp://127.0.0.1/%2f">>}],
+                                         <<"acting-user">>),
+                 [ok]),
+    ?assertEqual(rabbit_federation_parameters:validate(<<"/">>, <<"federation-upstream">>,
+                                         <<"a-name">>,
+                                          #{<<"uri">> => <<"amqp://127.0.0.1/%2f">>},
+                                         <<"acting-user">>),
+                 [ok]),
     ok.
 
 with_exchanges(Fun) ->
