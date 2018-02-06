@@ -55,7 +55,8 @@ validate(_VHost, <<"federation-upstream-set">>, Name, Term0, _User) ->
         shared_validation()], Upstream)
      || Upstream <- Term];
 
-validate(_VHost, <<"federation-upstream">>, Name, Term, _User) ->
+validate(_VHost, <<"federation-upstream">>, Name, Term0, _User) ->
+    Term = rabbit_data_coercion:to_proplist(Term0),
     rabbit_parameter_validation:proplist(
       Name, [{<<"uri">>, fun validate_uri/2, mandatory} |
             shared_validation()], Term);
