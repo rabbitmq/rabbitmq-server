@@ -279,7 +279,7 @@ consume_from_queue(Config) ->
 
     publish(Ch, QQ),
     wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>),
-    consume(Ch, QQ, true),
+    consume(Ch, QQ, false),
     wait_for_messages(Config, 0, QQ, <<"1">>, <<"0">>, <<"1">>),
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>).
@@ -296,7 +296,7 @@ consume_and_autoack_from_queue(Config) ->
 
     publish(Ch, QQ),
     wait_for_messages(Config, 0, QQ, <<"1">>, <<"1">>, <<"0">>),
-    consume(Ch, QQ, false),
+    consume(Ch, QQ, true),
     wait_for_messages(Config, 0, QQ, <<"0">>, <<"0">>, <<"0">>),
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages(Config, 0, QQ, <<"0">>, <<"0">>, <<"0">>).
@@ -311,7 +311,7 @@ consume_from_empty_queue(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    consume_empty(Ch, QQ, true).
+    consume_empty(Ch, QQ, false).
 
 %%----------------------------------------------------------------------------
 

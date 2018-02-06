@@ -1041,9 +1041,9 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, ChPid, N
         {ra_event, _, machine, {msg, MsgId, Msg}} ->
             case NoAck of
                 true ->
-                    ok;
+                    {ok, _, _} = ra:send_and_await_consensus(Id, {settle, MsgId, self()});
                 false ->
-                    {ok, _, _} = ra:send_and_await_consensus(Id, {settle, MsgId, self()})
+                    ok
             end,
             {ok, quorum_messages(Name), {QName, Id, MsgId, false, Msg}}
     end.
