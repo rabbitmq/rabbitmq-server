@@ -93,7 +93,8 @@ input#truncate { width: 50px; text-align: right; }
 
 table { border-collapse: collapse; }
 table th { font-weight: normal; color: black; }
-table th, table td { font: 12px Verdana, sans-serif; padding: 5px 4px; }
+
+table th, table td { font: 12px Verdana, sans-serif; padding: 2px 4px; }
 table.list th, table.list td { vertical-align: top; min-width: 5em; width: auto; }
 
 table.list { border-width: 1px; margin-bottom: 1em; }
