@@ -542,23 +542,8 @@ handle_cast({command, Msg}, State) ->
 
 handle_cast({deliver, _CTag, _AckReq, _Msg}, State = #ch{state = closing}) ->
     noreply(State);
-handle_cast({deliver, ConsumerTag, AckRequired,
-             Msg = {_QName, QPid, _MsgId, Redelivered,
-                    #basic_message{exchange_name = ExchangeName,
-                                   routing_keys  = [RoutingKey | _CcRoutes],
-                                   content       = Content}}},
-            State = #ch{writer_pid = WriterPid,
-                        next_tag   = DeliveryTag}) ->
-    ok = rabbit_writer:send_command_and_notify(
-           WriterPid, QPid, self(),
-           #'basic.deliver'{consumer_tag = ConsumerTag,
-                            delivery_tag = DeliveryTag,
-                            redelivered  = Redelivered,
-                            exchange     = ExchangeName#resource.name,
-                            routing_key  = RoutingKey},
-           Content),
-    rabbit_basic:maybe_gc_large_msg(Content),
-    noreply(record_sent(ConsumerTag, AckRequired, Msg, State));
+handle_cast({deliver, ConsumerTag, AckRequired, Msg}, State) ->
+    noreply(handle_deliver(ConsumerTag, AckRequired, Msg, State));
 
 handle_cast({deliver_reply, _K, _Del}, State = #ch{state = closing}) ->
     noreply(State);
@@ -615,6 +600,23 @@ handle_cast({confirm, MsgSeqNos, QPid}, State = #ch{unconfirmed = UC}) ->
     {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
     noreply_coalesce(record_confirms(MXs, State#ch{unconfirmed = UC1})).
+
+handle_info({ra_fifo, {RegisteredName, _} = Id, {delivery, CTag, MsgId, Msg}},
+            #ch{consumer_mapping = ConsumerMapping} = State) ->
+    AckRequired = case maps:find(CTag, ConsumerMapping) of
+                      error ->
+                          false;
+                      {ok, {_, {NoAck, _, _, _}}} ->
+                          not NoAck
+                  end,
+    case AckRequired of
+        false ->
+            {ok, _, _} = ra:send_and_await_consensus(Id, {settle, MsgId, {CTag, self()}});
+        true ->
+            ok
+    end,
+    noreply(handle_deliver(CTag, AckRequired,
+                           {Id, whereis(RegisteredName), MsgId, true, Msg}, State));
 
 handle_info({bump_credit, Msg}, State) ->
     %% A rabbit_amqqueue_process is granting credit to our channel. If
@@ -2269,3 +2271,21 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
     _ = rabbit_exchange:lookup_or_die(ExchangeName).
+
+handle_deliver(ConsumerTag, AckRequired,
+               Msg = {_QName, QPid, _MsgId, Redelivered,
+                      #basic_message{exchange_name = ExchangeName,
+                                     routing_keys  = [RoutingKey | _CcRoutes],
+                                     content       = Content}},
+               State = #ch{writer_pid = WriterPid,
+                           next_tag   = DeliveryTag}) ->
+    ok = rabbit_writer:send_command_and_notify(
+           WriterPid, QPid, self(),
+           #'basic.deliver'{consumer_tag = ConsumerTag,
+                            delivery_tag = DeliveryTag,
+                            redelivered  = Redelivered,
+                            exchange     = ExchangeName#resource.name,
+                            routing_key  = RoutingKey},
+           Content),
+    rabbit_basic:maybe_gc_large_msg(Content),
+    record_sent(ConsumerTag, AckRequired, Msg, State).

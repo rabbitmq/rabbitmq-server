@@ -1028,28 +1028,45 @@ basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid) ->
     delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
 basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, _ChPid, NoAck,
           _LimiterPid) ->
-    ra:send_and_await_consensus(Id, {checkout, get, self()}),
+    %% TODO we don't have a consumer tag here!
+    CTag = <<"ctag">>,
+    {ok, _, _} = ra:send_and_await_consensus(Id, {checkout, get, {CTag, self()}}),
     receive
-        {ra_event, _, machine, {msg, _, empty}} ->
+        {ra_fifo, _ , {delivery, CTag, _, empty}} ->
             empty;
-        {ra_event, _, machine, {msg, MsgId, Msg}} ->
+        {ra_fifo, _ , {delivery, CTag, MsgId, Msg}} ->
             case NoAck of
                 true ->
-                    {ok, _, _} = ra:send_and_await_consensus(Id, {settle, MsgId, self()});
+                    {ok, _, _} = ra:send_and_await_consensus(Id, {settle, MsgId, {CTag, self()}});
                 false ->
                     ok
             end,
             {ok, quorum_messages(Name), {QName, Id, MsgId, false, Msg}}
     end.
 
-basic_consume(#amqqueue{pid = QPid, name = QName}, NoAck, ChPid, LimiterPid,
+basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, ActingUser) ->
     ok = check_consume_arguments(QName, Args),
     delegate:invoke(QPid, {gen_server2, call,
                            [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                              ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
-                             Args, OkMsg, ActingUser}, infinity]}).
+                             Args, OkMsg, ActingUser}, infinity]});
+basic_consume(#amqqueue{pid = Id, type = quorum}, _NoAck, ChPid, _LimiterPid,
+              _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
+              _ExclusiveConsume, _Args, OkMsg, _ActingUser) ->
+    maybe_send_reply(ChPid, OkMsg),
+    %% A prefetch count of 0 means no limitation, let's make it into something large for ra
+    Prefetch = case ConsumerPrefetchCount of
+                   0 -> 2000;
+                   Other -> Other
+               end,
+    {ok, _, _} = ra:send_and_await_consensus(Id, {checkout, {auto, Prefetch},
+                                                  {ConsumerTag, ChPid}}),
+    ok.
+
+maybe_send_reply(_ChPid, undefined) -> ok;
+maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
 basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg, ActingUser) ->
     delegate:invoke(QPid, {gen_server2, call,
