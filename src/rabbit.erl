@@ -401,7 +401,8 @@ sd_notify_socat(Unit) ->
     end.
 
 sd_current_unit() ->
-    case catch re:run(os:cmd("systemctl status " ++ os:getpid()), "([-.@0-9a-zA-Z]+)", [unicode, {capture, all_but_first, list}]) of
+    CmdOut = os:cmd("ps -o unit= -p " ++ os:getpid()),
+    case catch re:run(CmdOut, "([-.@0-9a-zA-Z]+)", [unicode, {capture, all_but_first, list}]) of
         {'EXIT', _} ->
             error;
         {match, [Unit]} ->
@@ -424,7 +425,7 @@ sd_wait_activation(_, _, 0) ->
     io:format(standard_error, "Service still in 'activating' state, bailing out~n", []),
     false;
 sd_wait_activation(Port, Unit, AttemptsLeft) ->
-    case os:cmd("systemctl show --property=ActiveState " ++ Unit) of
+    case os:cmd("systemctl show --property=ActiveState -- '" ++ Unit ++ "'") of
         "ActiveState=activating\n" ->
             timer:sleep(1000),
             sd_wait_activation(Port, Unit, AttemptsLeft - 1);
