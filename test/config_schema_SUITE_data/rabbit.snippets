@@ -522,5 +522,11 @@ credential_validator.regexp = ^abc\\d+",
    log.channel.file = file_name_channel",
   [{rabbit,[{log, [{categories, [{connection, [{file, "file_name_connection"}]},
                                  {channel, [{file, "file_name_channel"}]}]}]}]}],
+  []},
+ {delegate_count,
+  "delegate_count = 64",
+  [{rabbit, [
+      {delegate_count, 64}
+    ]}],
   []}
 ].
