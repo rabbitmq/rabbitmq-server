@@ -1005,8 +1005,12 @@ quorum_ctag(none) ->
 quorum_ctag(Other) ->
     Other.
 
-reject(QPid, Requeue, MsgIds, ChPid) ->
-    delegate:invoke_no_result(QPid, {gen_server2, cast, [{reject, Requeue, MsgIds, ChPid}]}).
+reject(QPid, Requeue, MsgIds, ChPid) when is_pid(QPid) ->
+    delegate:invoke_no_result(QPid, {gen_server2, cast, [{reject, Requeue, MsgIds, ChPid}]});
+reject(Id, true, CTagsMsgIds, ChPid) ->
+    [{ok, _, _} = ra:send_and_await_consensus(Id, {return, MsgId, {quorum_ctag(CTag), ChPid}})
+     || {CTag, MsgId} <- CTagsMsgIds],
+    ok.
 
 notify_down_all(QPids, ChPid) ->
     notify_down_all(QPids, ChPid, ?CHANNEL_OPERATION_TIMEOUT).

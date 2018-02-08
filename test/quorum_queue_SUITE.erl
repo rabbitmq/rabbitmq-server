@@ -36,15 +36,17 @@ groups() ->
           restart_queue,
           restart_all_types,
           stop_start_rabbit_app,
-          publish_to_queue,
+          publish,
           publish_and_restart,
-          consume_from_queue,
+          consume,
           consume_from_empty_queue,
-          consume_and_autoack_from_queue,
-          subscribe_to_queue,
-          subscribe_with_autoack_to_queue,
-          consume_and_ack_from_queue,
-          subscribe_and_ack_to_queue
+          consume_and_autoack,
+          subscribe,
+          subscribe_with_autoack,
+          consume_and_ack,
+          subscribe_and_ack,
+          consume_and_single_nack,
+          subscribe_and_single_nack
         ]}
     ].
 
@@ -239,7 +241,7 @@ stop_start_rabbit_app(Config) ->
     {#'basic.get_ok'{}, #amqp_msg{}} =
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ2, no_ack = false}).
 
-publish_to_queue(Config) ->
+publish(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
     %% ensure there are no regressions
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -271,7 +273,7 @@ publish_and_restart(Config) ->
     publish(rabbit_ct_client_helpers:open_channel(Config, Node), QQ),
     wait_for_messages(Config, QQ, <<"2">>, <<"2">>, <<"0">>).
 
-consume_from_queue(Config) ->
+consume(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -286,7 +288,7 @@ consume_from_queue(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
 
-consume_and_autoack_from_queue(Config) ->
+consume_and_autoack(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -311,7 +313,7 @@ consume_from_empty_queue(Config) ->
 
     consume_empty(Ch, QQ, false).
 
-subscribe_to_queue(Config) ->
+subscribe(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -330,7 +332,7 @@ subscribe_to_queue(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
 
-subscribe_with_autoack_to_queue(Config) ->
+subscribe_with_autoack(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -354,7 +356,7 @@ subscribe_with_autoack_to_queue(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
 
-consume_and_ack_from_queue(Config) ->
+consume_and_ack(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -370,7 +372,7 @@ consume_and_ack_from_queue(Config) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
 
-subscribe_and_ack_to_queue(Config) ->
+subscribe_and_ack(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -388,6 +390,45 @@ subscribe_and_ack_to_queue(Config) ->
     wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+
+consume_and_single_nack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    %% TODO we don't store consumer tag for basic.get!!! could it be fixed?
+    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple     = false,
+                                        requeue      = true}),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
+
+subscribe_and_single_nack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    subscribe(Ch, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+            ok
+    end,
+    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple     = false,
+                                        requeue      = true}),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
 
 %%----------------------------------------------------------------------------
 
