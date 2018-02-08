@@ -74,8 +74,9 @@
     <td><%= fmt_string(connection.vhost) %></td>
 <% } %>
 <% if(connection.client_properties.connection_name) { %>
-    <td><%= link_conn(connection.name) %>
-        <%= fmt_string(short_conn(connection.client_properties.connection_name)) %>
+    <td>
+      <%= link_conn(connection.name) %>
+      <sub><%= fmt_string(short_conn(connection.client_properties.connection_name)) %></sub>
     </td>
 <% } else { %>
     <td><%= link_conn(connection.name) %></td>
