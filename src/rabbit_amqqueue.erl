@@ -992,8 +992,18 @@ purge(#amqqueue{ pid = QPid }) ->
 requeue(QPid, MsgIds, ChPid) ->
     delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]}).
 
-ack(QPid, MsgIds, ChPid) ->
-    delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]}).
+ack(QPid, MsgIds, ChPid) when is_pid(QPid) ->
+    delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]});
+ack(Id, CTagsMsgIds, ChPid) ->
+    %% TODO Basic get doesn't have a consumer tag, we have to fake it again
+    [{ok, _, _} = ra:send_and_await_consensus(Id, {settle, MsgId, {quorum_ctag(CTag), ChPid}})
+     || {CTag, MsgId} <- CTagsMsgIds],
+    ok.
+
+quorum_ctag(none) ->
+    <<"ctag">>;
+quorum_ctag(Other) ->
+    Other.
 
 reject(QPid, Requeue, MsgIds, ChPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{reject, Requeue, MsgIds, ChPid}]}).

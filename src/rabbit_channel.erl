@@ -616,7 +616,7 @@ handle_info({ra_fifo, {RegisteredName, _} = Id, {delivery, CTag, MsgId, Msg}},
             ok
     end,
     noreply(handle_deliver(CTag, AckRequired,
-                           {Id, whereis(RegisteredName), MsgId, true, Msg}, State));
+                           {RegisteredName, Id, MsgId, true, Msg}, State));
 
 handle_info({bump_credit, Msg}, State) ->
     %% A rabbit_amqqueue_process is granting credit to our channel. If
@@ -1782,13 +1782,17 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
 
 foreach_per_queue(_F, []) ->
     ok;
-foreach_per_queue(F, [{_DTag, _CTag, {QPid, MsgId}}]) -> %% common case
+foreach_per_queue(F, [{_DTag, _CTag, {QPid, MsgId}}]) when is_pid(QPid) -> %% common case
     F(QPid, [MsgId]);
+foreach_per_queue(F, [{_DTag, CTag, {QPid, MsgId}}]) -> %% quorum queue, needs the consumer tag
+    F(QPid, [{CTag, MsgId}]);
 %% NB: UAL should be in youngest-first order; the tree values will
 %% then be in oldest-first order
 foreach_per_queue(F, UAL) ->
-    T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) ->
-                            rabbit_misc:gb_trees_cons(QPid, MsgId, T)
+    T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) when is_pid(QPid) ->
+                            rabbit_misc:gb_trees_cons(QPid, MsgId, T);
+                        ({_DTag, CTag, {QPid, MsgId}}, T) ->
+                            rabbit_misc:gb_trees_cons(QPid, {CTag, MsgId}, T)
                     end, gb_trees:empty(), UAL),
     rabbit_misc:gb_trees_foreach(F, T).
 

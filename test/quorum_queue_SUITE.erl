@@ -42,7 +42,9 @@ groups() ->
           consume_from_empty_queue,
           consume_and_autoack_from_queue,
           subscribe_to_queue,
-          subscribe_with_autoack_to_queue
+          subscribe_with_autoack_to_queue,
+          consume_and_ack_from_queue,
+          subscribe_and_ack_to_queue
         ]}
     ].
 
@@ -270,8 +272,6 @@ publish_and_restart(Config) ->
     wait_for_messages(Config, QQ, <<"2">>, <<"2">>, <<"0">>).
 
 consume_from_queue(Config) ->
-    %% Test the node restart with both types of queues (quorum and classic) to
-    %% ensure there are no regressions
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -287,8 +287,6 @@ consume_from_queue(Config) ->
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
 
 consume_and_autoack_from_queue(Config) ->
-    %% Test the node restart with both types of queues (quorum and classic) to
-    %% ensure there are no regressions
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -304,8 +302,6 @@ consume_and_autoack_from_queue(Config) ->
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
 
 consume_from_empty_queue(Config) ->
-    %% Test the node restart with both types of queues (quorum and classic) to
-    %% ensure there are no regressions
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -316,8 +312,6 @@ consume_from_empty_queue(Config) ->
     consume_empty(Ch, QQ, false).
 
 subscribe_to_queue(Config) ->
-    %% Test the node restart with both types of queues (quorum and classic) to
-    %% ensure there are no regressions
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -337,8 +331,6 @@ subscribe_to_queue(Config) ->
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
 
 subscribe_with_autoack_to_queue(Config) ->
-    %% Test the node restart with both types of queues (quorum and classic) to
-    %% ensure there are no regressions
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -360,6 +352,41 @@ subscribe_with_autoack_to_queue(Config) ->
     end,
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>),
     rabbit_ct_client_helpers:close_channel(Ch),
+    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+
+consume_and_ack_from_queue(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    %% TODO we don't store consumer tag for basic.get!!! could it be fixed?
+    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
+    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+
+subscribe_and_ack_to_queue(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    subscribe(Ch, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+            ok
+    end,
+    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
 
 %%----------------------------------------------------------------------------
@@ -408,9 +435,10 @@ publish(Ch, Queue) ->
                                      payload = <<"msg">>}).
 
 consume(Ch, Queue, NoAck) ->
-    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = Queue,
-                                                    no_ack = NoAck})).
+    {GetOk, _} = Reply = amqp_channel:call(Ch, #'basic.get'{queue = Queue,
+                                                            no_ack = NoAck}),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}}, Reply),
+    GetOk#'basic.get_ok'.delivery_tag.
 
 consume_empty(Ch, Queue, NoAck) ->
     ?assertMatch(#'basic.get_empty'{},
