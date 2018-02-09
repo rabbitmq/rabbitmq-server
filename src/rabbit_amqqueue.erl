@@ -32,7 +32,7 @@
 -export([list_down/1, count/1, list_names/0, list_local_names/0]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
--export([basic_get/4, basic_consume/11, basic_cancel/5, notify_decorators/1]).
+-export([basic_get/5, basic_consume/11, basic_cancel/5, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
@@ -161,7 +161,7 @@
 -spec notify_down_all(qpids(), pid(), non_neg_integer()) ->
           ok_or_errors().
 -spec activate_limit_all(qpids(), pid()) -> ok_or_errors().
--spec basic_get(rabbit_types:amqqueue(), pid(), boolean(), pid()) ->
+-spec basic_get(rabbit_types:amqqueue(), pid(), boolean(), pid(), rabbit_types:ctag()) ->
           {'ok', non_neg_integer(), qmsg()} | 'empty'.
 -spec credit
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), non_neg_integer(),
@@ -1000,8 +1000,8 @@ ack(Id, CTagsMsgIds, ChPid) ->
      || {CTag, MsgId} <- CTagsMsgIds],
     ok.
 
-quorum_ctag(none) ->
-    <<"ctag">>;
+quorum_ctag(Int) when is_integer(Int) ->
+    integer_to_binary(Int);
 quorum_ctag(Other) ->
     Other.
 
@@ -1038,12 +1038,11 @@ activate_limit_all(QPids, ChPid) ->
 credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{credit, ChPid, CTag, Credit, Drain}]}).
 
-basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid) ->
+basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid, _CTag) ->
     delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
 basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, _ChPid, NoAck,
-          _LimiterPid) ->
-    %% TODO we don't have a consumer tag here!
-    CTag = <<"ctag">>,
+          _LimiterPid, CTag0) ->
+    CTag = quorum_ctag(CTag0),
     {ok, _, _} = ra:send_and_await_consensus(Id, {checkout, get, {CTag, self()}}),
     receive
         {ra_fifo, _ , {delivery, CTag, _, empty}} ->
@@ -1051,7 +1050,8 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, _ChPid, 
         {ra_fifo, _ , {delivery, CTag, MsgId, Msg}} ->
             case NoAck of
                 true ->
-                    {ok, _, _} = ra:send_and_await_consensus(Id, {settle, MsgId, {CTag, self()}});
+                    {ok, _, _} = ra:send_and_await_consensus(
+                                   Id, {settle, MsgId, {CTag, self()}});
                 false ->
                     ok
             end,
@@ -1076,7 +1076,7 @@ basic_consume(#amqqueue{pid = Id, type = quorum}, _NoAck, ChPid, _LimiterPid,
                    Other -> Other
                end,
     {ok, _, _} = ra:send_and_await_consensus(Id, {checkout, {auto, Prefetch},
-                                                  {ConsumerTag, ChPid}}),
+                                                  {quorum_ctag(ConsumerTag), ChPid}}),
     ok.
 
 maybe_send_reply(_ChPid, undefined) -> ok;

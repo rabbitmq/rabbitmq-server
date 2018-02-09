@@ -1125,8 +1125,9 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
     check_read_permitted(QueueName, User),
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
+           %% Use the delivery tag as consumer tag for quorum queues
            fun (Q) -> rabbit_amqqueue:basic_get(
-                        Q, self(), NoAck, rabbit_limiter:pid(Limiter))
+                        Q, self(), NoAck, rabbit_limiter:pid(Limiter), DeliveryTag)
            end) of
         {ok, MessageCount,
          Msg = {QName, QPid, _MsgId, Redelivered,
@@ -1142,7 +1143,7 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
                                    message_count = MessageCount},
                    Content),
             State1 = monitor_delivering_queue(NoAck, QPid, QName, State),
-            {noreply, record_sent(none, not(NoAck), Msg, State1)};
+            {noreply, record_sent(DeliveryTag, not(NoAck), Msg, State1)};
         empty ->
             {reply, #'basic.get_empty'{}, State}
     end;
@@ -1697,8 +1698,8 @@ record_sent(ConsumerTag, AckRequired,
                         conn_name         = ConnName,
                         channel           = ChannelNum}) ->
     ?INCR_STATS(queue_stats, QName, 1, case {ConsumerTag, AckRequired} of
-                                           {none,  true} -> get;
-                                           {none, false} -> get_no_ack;
+                                           {_,  true} when is_integer(ConsumerTag) -> get;
+                                           {_, false} when is_integer(ConsumerTag) -> get_no_ack;
                                            {_   ,  true} -> deliver;
                                            {_   , false} -> deliver_no_ack
                                        end, State),
@@ -1803,13 +1804,14 @@ consumer_queues(Consumers) ->
 %% tell the limiter about the number of acks that have been received
 %% for messages delivered to subscribed consumers, but not acks for
 %% messages sent in a response to a basic.get (identified by their
-%% 'none' consumer tag)
+%% consumer tag as an integer (the same as the delivery tag, required
+%% quorum queues))
 notify_limiter(Limiter, Acked) ->
     %% optimisation: avoid the potentially expensive 'foldl' in the
     %% common case.
      case rabbit_limiter:is_active(Limiter) of
         false -> ok;
-        true  -> case lists:foldl(fun ({_, none, _}, Acc) -> Acc;
+        true  -> case lists:foldl(fun ({_, CTag, _}, Acc) when is_integer(CTag) -> Acc;
                                       ({_,    _, _}, Acc) -> Acc + 1
                                   end, 0, Acked) of
                      0     -> ok;
