@@ -596,10 +596,8 @@ handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
     noreply_coalesce(record_rejects(MXs, State#ch{unconfirmed = UC1}));
 
-handle_cast({confirm, MsgSeqNos, QPid}, State = #ch{unconfirmed = UC}) ->
-    {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
-    %% NB: don't call noreply/1 since we don't want to send confirms.
-    noreply_coalesce(record_confirms(MXs, State#ch{unconfirmed = UC1})).
+handle_cast({confirm, MsgSeqNos, QPid}, State) ->
+    noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
 
 handle_info({ra_fifo, {RegisteredName, _} = Id, {delivery, CTag, MsgId, Msg}},
             #ch{consumer_mapping = ConsumerMapping} = State) ->
@@ -617,6 +615,9 @@ handle_info({ra_fifo, {RegisteredName, _} = Id, {delivery, CTag, MsgId, Msg}},
     end,
     noreply(handle_deliver(CTag, AckRequired,
                            {RegisteredName, Id, MsgId, true, Msg}, State));
+
+handle_info({ra_event, {applied, Id, MsgSeqNo}} = Evt, State) ->
+    noreply_coalesce(confirm([MsgSeqNo], Id, State));
 
 handle_info({bump_credit, Msg}, State) ->
     %% A rabbit_amqqueue_process is granting credit to our channel. If
@@ -1887,6 +1888,11 @@ process_routing_confirm(true,    [],  MsgSeqNo,  XName, State) ->
 process_routing_confirm(true, QPids,  MsgSeqNo,  XName, State) ->
     State#ch{unconfirmed = dtree:insert(MsgSeqNo, QPids, XName,
                                         State#ch.unconfirmed)}.
+
+confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
+    {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
+    %% NB: don't call noreply/1 since we don't want to send confirms.
+    record_confirms(MXs, State#ch{unconfirmed = UC1}).
 
 send_nacks([], State) ->
     State;

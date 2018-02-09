@@ -1304,7 +1304,8 @@ deliver([], _Delivery) ->
     %% /dev/null optimisation
     [];
 
-deliver(Qs, Delivery = #delivery{flow = Flow}) ->
+deliver(Qs, Delivery = #delivery{flow = Flow,
+                                 confirm = Confirm}) ->
     {Quorum, MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
     %% We use up two credits to send to a slave since the message
@@ -1331,7 +1332,13 @@ deliver(Qs, Delivery = #delivery{flow = Flow}) ->
     SMsg = {deliver, Delivery, true},
     delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
     delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
-    [ra:send(Q, {enqueue, Delivery#delivery.message}) || Q <- Quorum],
+    case Confirm of
+        false ->
+            [ra:send(Q, {enqueue, Delivery#delivery.message}) || Q <- Quorum];
+        true ->
+            [ra:send_and_notify(Q, {enqueue, Delivery#delivery.message},
+                                Delivery#delivery.msg_seq_no) || Q <- Quorum]
+    end,
     QPids ++ Quorum.
 
 qpids([]) -> {[], [], []}; %% optimisation

@@ -46,7 +46,8 @@ groups() ->
           consume_and_ack,
           subscribe_and_ack,
           consume_and_single_nack,
-          subscribe_and_single_nack
+          subscribe_and_single_nack,
+          publisher_confirms
         ]}
     ].
 
@@ -242,8 +243,6 @@ stop_start_rabbit_app(Config) ->
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ2, no_ack = false}).
 
 publish(Config) ->
-    %% Test the node restart with both types of queues (quorum and classic) to
-    %% ensure there are no regressions
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -429,6 +428,20 @@ subscribe_and_single_nack(Config) ->
                                         multiple     = false,
                                         requeue      = true}),
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
+
+publisher_confirms(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    amqp_channel:wait_for_confirms(Ch).
 
 %%----------------------------------------------------------------------------
 
