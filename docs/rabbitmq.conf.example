@@ -240,6 +240,13 @@
 # tcp_listen_options.backlog = 128
 # tcp_listen_options.nodelay = true
 # tcp_listen_options.exit_on_close = false
+#
+# tcp_listen_options.keepalive = true
+# tcp_listen_options.send_timeout = 15000
+#
+# tcp_listen_options.buffer = 196608
+# tcp_listen_options.sndbuf = 196608
+# tcp_listen_options.recbuf = 196608
 
 ##
 ## Resource Limits & Flow Control
