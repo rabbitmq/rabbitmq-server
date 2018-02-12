@@ -36,13 +36,11 @@
 
 %%----------------------------------------------------------------------------
 
-%% No need to call mnesia:dirty_select/2 (cf. note below), let alone go
-%%  through qlc because query is so simple !
 match_bindings(SrcName, Match) ->
     MatchHead = #route{binding = #binding{source      = SrcName,
                                           _           = '_'}},
     Routes = ets:select(rabbit_route, [{MatchHead, [], [['$_']]}]),
-    [ Dest || [#route{binding = Binding = #binding{destination = Dest}}] <-
+    [Dest || [#route{binding = Binding = #binding{destination = Dest}}] <-
         Routes, Match(Binding)].
 
 match_routing_key(SrcName, [RoutingKey]) ->
