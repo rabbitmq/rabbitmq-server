@@ -141,9 +141,8 @@ Defaults to RabbitMQ.
           <term>RABBITMQ_BASE</term>
           <listitem>
             <para>
-Defaults to the application data directory of the current user.
-This is the location of log and database directories.
-
+Note: Windows only. Defaults to the application data directory of the
+current user. This is the location of log and database directories.
             </para>
           </listitem>
         </varlistentry>
