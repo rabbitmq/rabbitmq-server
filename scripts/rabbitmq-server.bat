@@ -57,10 +57,10 @@ if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.co
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
-        !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9! ^
-        -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!"  ^
+        -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
         -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
-        -rabbit plugins_dir "!$RABBITMQ_PLUGINS_DIR!" ^
+        -rabbit plugins_dir "!RABBITMQ_PLUGINS_DIR!" ^
+        !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!@localhost ^
         -extra "!RABBITMQ_NODENAME!"
 
 if ERRORLEVEL 2 (
