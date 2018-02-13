@@ -103,6 +103,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
     end
   end
 
+  def output({:error, {:plugins_not_found, missing}}, _opts) do
+    {:error, ExitCodes.exit_dataerr(), "The following plugins were not found: #{Enum.join(Enum.to_list(missing), ", ")}"}
+  end
   def output({:error, err}, _opts) do
     {:error, ExitCodes.exit_software(), to_string(err)}
   end
