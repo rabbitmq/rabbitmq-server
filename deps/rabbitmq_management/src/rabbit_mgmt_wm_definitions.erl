@@ -335,20 +335,31 @@ add_parameter(Param, Username) ->
     Comp  = maps:get(component, Param, undefined),
     Key   = maps:get(name,      Param, undefined),
     Term  = maps:get(value,     Param, undefined),
-    case rabbit_runtime_parameters:set(VHost, Comp, Key, Term, Username) of
+    Result = case is_map(Term) of
+        true ->
+            %% coerce maps to proplists for backwards compatibility.
+            %% See rabbitmq-management#528.
+            TermProplist = rabbit_data_coercion:to_proplist(Term),
+            rabbit_runtime_parameters:set(VHost, Comp, Key, TermProplist, Username);
+        _ ->
+            rabbit_runtime_parameters:set(VHost, Comp, Key, Term, Username)
+    end,
+    case Result of
         ok                -> ok;
-        {error_string, E} -> S = rabbit_misc:format(" (~s/~s/~s)", [VHost, Comp, Key]),
-                             exit(rabbit_data_coercion:to_binary(rabbit_mgmt_format:escape_html_tags(E ++ S)))
+        {error_string, E} ->
+            S = rabbit_misc:format(" (~s/~s/~s)", [VHost, Comp, Key]),
+            exit(rabbit_data_coercion:to_binary(rabbit_mgmt_format:escape_html_tags(E ++ S)))
     end.
 
 add_global_parameter(Param, Username) ->
     Key   = maps:get(name,      Param, undefined),
     Term  = maps:get(value,     Param, undefined),
-    case Term of
-        %% rabbit_runtime_parameters:parse_set_global/3 coerces maps to proplists
-        %% for backwards compatibility. See rabbitmq-management#528.
-        Val when is_map(Val) ->
-            rabbit_runtime_parameters:set_global(Key, rabbit_data_coercion:to_proplist(Term), Username);
+    case is_map(Term) of
+        true ->
+            %% coerce maps to proplists for backwards compatibility.
+            %% See rabbitmq-management#528.
+            TermProplist = rabbit_data_coercion:to_proplist(Term),
+            rabbit_runtime_parameters:set_global(Key, TermProplist, Username);
         _ ->
             rabbit_runtime_parameters:set_global(Key, Term, Username)
     end.
