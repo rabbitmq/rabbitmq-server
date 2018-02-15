@@ -35,7 +35,7 @@
     testcase_started/2, testcase_finished/2,
     exec/1, exec/2,
     make/3,
-    get_config/2, set_config/2,
+    get_config/2, set_config/2, delete_config/2,
     merge_app_env/2, merge_app_env_in_erlconf/2,
     cover_work_factor/2
   ]).
@@ -615,6 +615,9 @@ set_config(Config, [Tuple | Rest]) ->
     set_config(Config1, Rest);
 set_config(Config, []) ->
     Config.
+
+delete_config(Config, Key) ->
+    proplists:delete(Key, Config).
 
 merge_app_env(Config, Env) ->
     ErlangConfig = proplists:get_value(erlang_node_config, Config, []),
