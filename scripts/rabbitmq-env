@@ -344,12 +344,14 @@ run_escript()
     escript="${1:?escript must be defined}"
     shift
 
+    # Important: do not quote RABBITMQ_CTL_ERL_ARGS as they must be
+    # word-split
     # shellcheck disable=SC2086
     exec "${ERL_DIR}erl" +B \
         -boot "$CLEAN_BOOT_FILE" \
         -noinput -noshell -hidden -smp enable \
         "$RABBITMQ_NAME_TYPE" "rabbitmqescript$$@localhost" \
-        $RABBITMQ_CTL_ERL_ARGS \ # Do *not* quote this
+        $RABBITMQ_CTL_ERL_ARGS \
         -kernel inet_dist_listen_min "$RABBITMQ_CTL_DIST_PORT_MIN" \
         -kernel inet_dist_listen_max "$RABBITMQ_CTL_DIST_PORT_MAX" \
         -sasl errlog_type error \
