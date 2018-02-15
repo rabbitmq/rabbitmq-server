@@ -24,4 +24,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2017.
+(c) Pivotal Software Inc., 2007-2018.
