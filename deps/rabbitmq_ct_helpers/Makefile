@@ -10,6 +10,7 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
+	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
 include rabbitmq-components.mk
