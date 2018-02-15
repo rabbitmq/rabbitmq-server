@@ -1,6 +1,6 @@
 # RabbitMQ Peer Discovery Consul
 
-This is a Consul-based implementation of RabbitMQ [peer discovery interface](https://github.com/rabbitmq/rabbitmq-common/blob/master/src/rabbit_peer_discovery_backend.erl)
+This is a Consul-based implementation of RabbitMQ [peer discovery interface](http://www.rabbitmq.com/blog/2018/02/12/peer-discovery-subsystem-in-rabbitmq-3-7/)
 (new in 3.7.0, previously available in the [rabbitmq-autocluster plugin](https://github.com/rabbitmq/rabbitmq-autocluster)
 by Gavin Roy).
 
