@@ -140,6 +140,8 @@
 
 setup_steps() ->
     [
+      fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
+      fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
       fun run_make_dist/1,
       fun start_rabbitmq_nodes/1,
       fun share_dist_and_proxy_ports_map/1

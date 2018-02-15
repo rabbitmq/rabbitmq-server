@@ -24,6 +24,8 @@
     run_setup_steps/1, run_setup_steps/2,
     run_teardown_steps/1, run_teardown_steps/2,
     ensure_application_srcdir/3,
+    ensure_rabbitmqctl_cmd/1,
+    ensure_rabbitmq_plugins_cmd/1,
     start_long_running_testsuite_monitor/1,
     stop_long_running_testsuite_monitor/1,
     config_to_testcase_name/2,
@@ -68,8 +70,6 @@ run_setup_steps(Config, ExtraSteps) ->
       fun ensure_rabbit_srcdir/1,
       fun ensure_make_cmd/1,
       fun ensure_erl_call_cmd/1,
-      fun ensure_rabbitmqctl_cmd/1,
-      fun ensure_rabbitmq_plugins_cmd/1,
       fun ensure_ssl_certs/1,
       fun start_long_running_testsuite_monitor/1
     ],
