@@ -23,6 +23,9 @@
     run_steps/2,
     run_setup_steps/1, run_setup_steps/2,
     run_teardown_steps/1, run_teardown_steps/2,
+    register_teardown_step/2,
+    register_teardown_steps/2,
+    guess_tested_erlang_app_name/1,
     ensure_application_srcdir/3,
     ensure_rabbitmqctl_cmd/1,
     ensure_rabbitmq_plugins_cmd/1,
@@ -33,10 +36,13 @@
     testcase_number/3,
     testcase_absname/2, testcase_absname/3,
     testcase_started/2, testcase_finished/2,
+    term_checksum/1,
+    random_term_checksum/0,
     exec/1, exec/2,
     make/3,
-    get_config/2, set_config/2, delete_config/2,
+    get_config/2, get_config/3, set_config/2, delete_config/2,
     merge_app_env/2, merge_app_env_in_erlconf/2,
+    nodename_to_hostname/1,
     cover_work_factor/2
   ]).
 
@@ -63,6 +69,7 @@ run_setup_steps(Config) ->
 run_setup_steps(Config, ExtraSteps) ->
     Steps = [
       fun init_skip_as_error_flag/1,
+      fun guess_tested_erlang_app_name/1,
       fun ensure_current_srcdir/1,
       fun ensure_rabbitmq_ct_helpers_srcdir/1,
       fun ensure_erlang_mk_depsdir/1,
@@ -79,11 +86,19 @@ run_teardown_steps(Config) ->
     run_teardown_steps(Config, []).
 
 run_teardown_steps(Config, ExtraSteps) ->
+    RegisteredSteps = get_config(Config, teardown_steps, []),
     Steps = [
       fun stop_long_running_testsuite_monitor/1,
       fun symlink_priv_dir/1
     ],
-    run_steps(Config, ExtraSteps ++ Steps).
+    run_steps(Config, ExtraSteps ++ RegisteredSteps ++ Steps).
+
+register_teardown_step(Config, Step) ->
+    register_teardown_steps(Config, [Step]).
+
+register_teardown_steps(Config, Steps) ->
+    RegisteredSteps = get_config(Config, teardown_steps, []),
+    set_config(Config, {teardown_steps, Steps ++ RegisteredSteps}).
 
 run_steps(Config, [Step | Rest]) ->
     SkipAsError = case get_config(Config, skip_as_error) of
@@ -91,9 +106,14 @@ run_steps(Config, [Step | Rest]) ->
                       Value     -> Value
                   end,
     case Step(Config) of
-        {skip, Reason} when SkipAsError -> exit(Reason);
-        {skip, _} = Error               -> Error;
-        Config1                         -> run_steps(Config1, Rest)
+        {skip, Reason} when SkipAsError ->
+            run_teardown_steps(Config),
+            exit(Reason);
+        {skip, _} = Error ->
+            run_teardown_steps(Config),
+            Error;
+        Config1 ->
+            run_steps(Config1, Rest)
     end;
 run_steps(Config, []) ->
     Config.
@@ -108,6 +128,16 @@ init_skip_as_error_flag(Config) ->
                                end
                   end,
     set_config(Config, {skip_as_error, SkipAsError}).
+
+guess_tested_erlang_app_name(Config) ->
+    case os:getenv("DIALYZER_PLT") of
+        false ->
+            ok;
+        Filename ->
+            AppName0 = filename:basename(Filename, ".plt"),
+            AppName = string:strip(AppName0, left, $.),
+            set_config(Config, {tested_erlang_app, list_to_atom(AppName)})
+    end.
 
 ensure_current_srcdir(Config) ->
     Path = case get_config(Config, current_srcdir) of
@@ -490,6 +520,14 @@ testcase_number1([], _, N) ->
 %% Helpers for helpers.
 %% -------------------------------------------------------------------
 
+term_checksum(Term) ->
+    Bin = term_to_binary(Term),
+    <<Checksum:128/big-unsigned-integer>> = erlang:md5(Bin),
+    rabbit_misc:format("~32.16.0b", [Checksum]).
+
+random_term_checksum() ->
+    term_checksum(rabbit_misc:random(1000000)).
+
 exec(Cmd) ->
     exec(Cmd, []).
 
@@ -515,9 +553,17 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
         false -> [use_stdio, stderr_to_stdout | PortOptions]
     end,
     Log = "+ ~s (pid ~p)",
+    ExportedEnvVars = ["ERL_INETRC"],
+    ExportedEnv = lists:foldl(
+                    fun(Var, Env) ->
+                            case os:getenv(Var) of
+                                false -> Env;
+                                Value -> [{Var, Value} | Env]
+                            end
+                    end, [], ExportedEnvVars),
     {PortOptions2, Log1} = case proplists:get_value(env, PortOptions1) of
         undefined ->
-            {PortOptions1, Log};
+            {[{env, ExportedEnv} | PortOptions1], Log};
         Env ->
             Env1 = [
               begin
@@ -532,7 +578,8 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
               || {Key, Value} <- Env
             ],
             {
-              [{env, Env1} | proplists:delete(env, PortOptions1)],
+              [{env, Env1 ++ ExportedEnv}
+               | proplists:delete(env, PortOptions1)],
               Log ++ "~n~nEnvironment variables:~n" ++
               string:join(
                 [rabbit_misc:format("  ~s=~s", [K, V]) || {K, V} <- Env1],
@@ -594,7 +641,7 @@ port_receive_loop(Port, Stdout, Options) ->
     end.
 
 make(Config, Dir, Args) ->
-    Make = ?config(make_cmd, Config),
+    Make = rabbit_ct_vm_helpers:get_current_vm_config(Config, make_cmd),
     Verbosity = case os:getenv("V") of
         false -> [];
         V     -> ["V=" ++ V]
@@ -606,6 +653,9 @@ make(Config, Dir, Args) ->
 %% if the key is missing.
 get_config(Config, Key) ->
     proplists:get_value(Key, Config).
+
+get_config(Config, Key, Default) ->
+    proplists:get_value(Key, Config, Default).
 
 set_config(Config, Tuple) when is_tuple(Tuple) ->
     Key = element(1, Tuple),
@@ -636,6 +686,10 @@ merge_app_env_in_erlconf(ErlangConfig, [Env | Rest]) ->
     merge_app_env_in_erlconf(ErlangConfig1, Rest);
 merge_app_env_in_erlconf(ErlangConfig, []) ->
     ErlangConfig.
+
+nodename_to_hostname(Nodename) when is_atom(Nodename) ->
+    [_, Hostname] = string:tokens(atom_to_list(Nodename), "@"),
+    Hostname.
 
 %% -------------------------------------------------------------------
 %% Cover-related functions.

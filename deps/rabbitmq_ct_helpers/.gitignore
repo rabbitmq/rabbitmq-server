@@ -2,6 +2,8 @@
 .sw?
 .*.sw?
 *.beam
+.terraform/
+terraform.tfstate*
 /.erlang.mk/
 /cover/
 /deps/
