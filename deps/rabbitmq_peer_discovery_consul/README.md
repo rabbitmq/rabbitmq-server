@@ -22,6 +22,16 @@ For a Consul-based peer discovery and cluster formation
 mechanism that supports 3.6.x, see [rabbitmq-autocluster](https://github.com/rabbitmq/rabbitmq-autocluster).
 
 
+## Installation
+
+This plugin ships with RabbitMQ as of 3.7.0. There is no need to install it separately.
+Enable the plugin in offline mode before the node is first started:
+
+```
+rabbitmq-plugins --offline enable rabbitmq_peer_discovery_consul
+```
+
+
 ## Documentation
 
 See [RabbitMQ Cluster Formation guide](http://www.rabbitmq.com/cluster-formation.html).
