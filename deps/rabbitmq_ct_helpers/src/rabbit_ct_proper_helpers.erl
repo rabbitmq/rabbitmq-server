@@ -8,7 +8,7 @@
 %% License for the specific language governing rights and limitations
 %% under the License.
 %%
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2016-2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_ct_proper_helpers).
