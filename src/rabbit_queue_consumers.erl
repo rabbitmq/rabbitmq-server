@@ -23,6 +23,9 @@
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
          credit/6, utilisation/1]).
 
+%% for testing
+-export([subtract_acks/4]).
+
 %%----------------------------------------------------------------------------
 
 -define(UNSENT_MESSAGE_LIMIT,          200).
