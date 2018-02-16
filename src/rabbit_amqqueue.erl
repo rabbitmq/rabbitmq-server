@@ -25,14 +25,14 @@
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, requeue/3, ack/3, reject/4]).
+         stat/1, deliver/3, requeue/3, ack/4, reject/5]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
 -export([list_down/1, count/1, list_names/0, list_local_names/0]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
--export([basic_get/5, basic_consume/11, basic_cancel/5, notify_decorators/1]).
+-export([basic_get/6, basic_consume/12, basic_cancel/5, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
@@ -82,11 +82,13 @@
          rabbit_types:maybe(pid()), rabbit_types:username()) ->
             {'new' | 'existing' | 'absent' | 'owner_died',
              rabbit_types:amqqueue()} |
+            {'new', rabbit_types:amqqueue(), ra_fifo_client:state()} |
             rabbit_types:channel_exit().
 -spec declare
         (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
          rabbit_types:maybe(pid()), rabbit_types:username(), node()) ->
             {'new' | 'existing' | 'owner_died', rabbit_types:amqqueue()} |
+            {'new', rabbit_types:amqqueue(), ra_fifo_client:state()} |
             {'absent', rabbit_types:amqqueue(), absent_reason()} |
             rabbit_types:channel_exit().
 -spec internal_declare(rabbit_types:amqqueue(), boolean()) ->
@@ -152,16 +154,17 @@
 -spec delete_crashed_internal(rabbit_types:amqqueue(), rabbit_types:username()) -> 'ok'.
 -spec purge(rabbit_types:amqqueue()) -> qlen().
 -spec forget_all_durable(node()) -> 'ok'.
--spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
+-spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery(), #{Name :: atom() => ra_fifo_client:state()}) ->
                         qpids().
 -spec requeue(pid(), [msg_id()],  pid()) -> 'ok'.
--spec ack(pid(), [msg_id()], pid()) -> 'ok'.
--spec reject(pid(), [msg_id()], boolean(), pid()) -> 'ok'.
+-spec ack(pid(), [msg_id()], pid(), #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
+-spec reject(pid(), [msg_id()], boolean(), pid(), #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
 -spec notify_down_all(qpids(), pid()) -> ok_or_errors().
 -spec notify_down_all(qpids(), pid(), non_neg_integer()) ->
           ok_or_errors().
 -spec activate_limit_all(qpids(), pid()) -> ok_or_errors().
--spec basic_get(rabbit_types:amqqueue(), pid(), boolean(), pid(), rabbit_types:ctag()) ->
+-spec basic_get(rabbit_types:amqqueue(), pid(), boolean(), pid(), rabbit_types:ctag(),
+                #{Name :: atom() => ra_fifo_client:state()}) ->
           {'ok', non_neg_integer(), qmsg()} | 'empty'.
 -spec credit
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), non_neg_integer(),
@@ -170,7 +173,8 @@
 -spec basic_consume
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
          non_neg_integer(), rabbit_types:ctag(), boolean(),
-         rabbit_framing:amqp_table(), any(), rabbit_types:username()) ->
+         rabbit_framing:amqp_table(), any(), rabbit_types:username(),
+         #{Name :: atom() => ra_fifo_client:state()}) ->
             rabbit_types:ok_or_error('exclusive_consume_unavailable').
 -spec basic_cancel
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any(),
@@ -405,8 +409,9 @@ declare_quorum_queue(QueueName, Q) ->
     NewQ = Q#amqqueue{pid = Id},
     ok = ra:start_node(ra_node_config(Id)),
     _ = ra_node_proc:trigger_election(Id),
+    FState = ra_fifo_client:init([Id]),
     internal_declare(NewQ, false),
-    {new, NewQ}.
+    {new, NewQ, FState}.
 
 ra_node_config({Name, _} = Id) ->
     {ok, DataDir} = application:get_env(ra, data_dir),
@@ -992,25 +997,24 @@ purge(#amqqueue{ pid = QPid }) ->
 requeue(QPid, MsgIds, ChPid) ->
     delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]}).
 
-ack(QPid, MsgIds, ChPid) when is_pid(QPid) ->
+ack(QPid, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]});
-ack(Id, CTagsMsgIds, ChPid) ->
-    %% TODO Basic get doesn't have a consumer tag, we have to fake it again
-    [{ok, _, _} = ra:send_and_await_consensus(Id, {settle, MsgId, {quorum_ctag(CTag), ChPid}})
-     || {CTag, MsgId} <- CTagsMsgIds],
-    ok.
+ack({Name, _} = Id, {CTag, MsgIds}, _ChPid, FStates) ->
+    FState0 = get_quorum_state(Id, FStates),
+    {ok, FState} = ra_fifo_client:settle(quorum_ctag(CTag), MsgIds, FState0),
+    {ok, maps:put(Name, FState, FStates)}.
 
 quorum_ctag(Int) when is_integer(Int) ->
     integer_to_binary(Int);
 quorum_ctag(Other) ->
     Other.
 
-reject(QPid, Requeue, MsgIds, ChPid) when is_pid(QPid) ->
+reject(QPid, Requeue, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{reject, Requeue, MsgIds, ChPid}]});
-reject(Id, true, CTagsMsgIds, ChPid) ->
-    [{ok, _, _} = ra:send_and_await_consensus(Id, {return, MsgId, {quorum_ctag(CTag), ChPid}})
-     || {CTag, MsgId} <- CTagsMsgIds],
-    ok.
+reject({Name, _} = Id, true, {CTag, MsgIds}, _ChPid, FStates) ->
+    FState0 = get_quorum_state(Id, FStates),
+    {ok, FState} = ra_fifo_client:return(quorum_ctag(CTag), MsgIds, FState0),
+    {ok, maps:put(Name, FState, FStates)}.
 
 notify_down_all(QPids, ChPid) ->
     notify_down_all(QPids, ChPid, ?CHANNEL_OPERATION_TIMEOUT).
@@ -1038,46 +1042,47 @@ activate_limit_all(QPids, ChPid) ->
 credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{credit, ChPid, CTag, Credit, Drain}]}).
 
-basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid, _CTag) ->
+basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid, _CTag, _) ->
     delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
 basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, _ChPid, NoAck,
-          _LimiterPid, CTag0) ->
+          _LimiterPid, CTag0, FStates) ->
     CTag = quorum_ctag(CTag0),
-    {ok, _, _} = ra:send_and_await_consensus(Id, {checkout, get, {CTag, self()}}),
-    receive
-        {ra_fifo, _ , {delivery, CTag, _, empty}} ->
-            empty;
-        {ra_fifo, _ , {delivery, CTag, MsgId, Msg}} ->
-            case NoAck of
-                true ->
-                    {ok, _, _} = ra:send_and_await_consensus(
-                                   Id, {settle, MsgId, {CTag, self()}});
-                false ->
-                    ok
-            end,
-            {ok, quorum_messages(Name), {QName, Id, MsgId, false, Msg}}
+    Settlement = case NoAck of
+                     true ->
+                         settled;
+                     false ->
+                         unsettled
+                 end,
+    FState0 = get_quorum_state(Id, FStates),
+    case ra_fifo_client:dequeue(CTag, Settlement, FState0) of
+        {ok, empty, FState} ->
+            {empty, FState};
+        {ok, {MsgId, {MsgHeader, Msg}}, FState} ->
+            IsDelivered = maps:is_key(delivery_count, MsgHeader),
+            {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg},
+             maps:put(Name, FState, FStates)}
     end.
 
 basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
-              ExclusiveConsume, Args, OkMsg, ActingUser) ->
+              ExclusiveConsume, Args, OkMsg, ActingUser, _QStates) ->
     ok = check_consume_arguments(QName, Args),
     delegate:invoke(QPid, {gen_server2, call,
                            [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                              ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
                              Args, OkMsg, ActingUser}, infinity]});
-basic_consume(#amqqueue{pid = Id, type = quorum}, _NoAck, ChPid, _LimiterPid,
+basic_consume(#amqqueue{pid = {Name, _} = Id, type = quorum}, _NoAck, ChPid, _LimiterPid,
               _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
-              _ExclusiveConsume, _Args, OkMsg, _ActingUser) ->
+              _ExclusiveConsume, _Args, OkMsg, _ActingUser, QStates) ->
     maybe_send_reply(ChPid, OkMsg),
     %% A prefetch count of 0 means no limitation, let's make it into something large for ra
     Prefetch = case ConsumerPrefetchCount of
                    0 -> 2000;
                    Other -> Other
                end,
-    {ok, _, _} = ra:send_and_await_consensus(Id, {checkout, {auto, Prefetch},
-                                                  {quorum_ctag(ConsumerTag), ChPid}}),
-    ok.
+    FState0 = get_quorum_state(Id, QStates),
+    {ok, FState} = ra_fifo_client:checkout(quorum_ctag(ConsumerTag), Prefetch, FState0),
+    {ok, maps:put(Name, FState, QStates)}.
 
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
@@ -1300,12 +1305,12 @@ immutable(Q) -> Q#amqqueue{pid                = none,
                            decorators         = none,
                            state              = none}.
 
-deliver([], _Delivery) ->
+deliver([], _Delivery, QueueState) ->
     %% /dev/null optimisation
-    [];
+    {[], QueueState};
 
 deliver(Qs, Delivery = #delivery{flow = Flow,
-                                 confirm = Confirm}) ->
+                                 confirm = Confirm}, QueueState0) ->
     {Quorum, MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
     %% We use up two credits to send to a slave since the message
@@ -1332,14 +1337,25 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
     SMsg = {deliver, Delivery, true},
     delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
     delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
-    case Confirm of
-        false ->
-            [ra:send(Q, {enqueue, Delivery#delivery.message}) || Q <- Quorum];
-        true ->
-            [ra:send_and_notify(Q, {enqueue, Delivery#delivery.message},
-                                Delivery#delivery.msg_seq_no) || Q <- Quorum]
-    end,
-    QPids ++ Quorum.
+    QueueState =
+        case Confirm of
+            false ->
+                lists:foldl(
+                  fun({Name, _} = Pid, QStates) ->
+                          {ok, QS} = ra_fifo_client:enqueue(Delivery#delivery.message,
+                                                            get_quorum_state(Pid, QStates)),
+                          maps:put(Name, QS, QStates)
+                  end, QueueState0, Quorum);
+            true ->
+                lists:foldl(
+                  fun({Name, _} = Pid, QStates) ->
+                          {ok, QS} = ra_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
+                                                            Delivery#delivery.message,
+                                                            get_quorum_state(Pid, QStates)),
+                          maps:put(Name, QS, QStates)
+                  end, QueueState0, Quorum)
+        end,
+    {QPids ++ Quorum, QueueState}.
 
 qpids([]) -> {[], [], []}; %% optimisation
 qpids([#amqqueue{pid = QPid, type = quorum}]) -> {[QPid], [], []}; %% opt
@@ -1354,3 +1370,11 @@ qpids(Qs) ->
                             {QuoPidAcc, [QPid | MPidAcc], [SPids | SPidAcc]}
                     end, {[], []}, Qs),
     {QuoPids, MPids, lists:append(SPids)}.
+
+get_quorum_state({Name, _} = Id, Map) ->
+    try
+        maps:get(Name, Map)
+    catch
+        error:{badkey, _} ->
+            ra_fifo_client:init([Id])
+    end.

@@ -384,11 +384,10 @@ subscribe_and_ack(Config) ->
     subscribe(Ch, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
-            ok
-    end,
-    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
-    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
-    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+            wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+            amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
+            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+    end.
 
 consume_and_single_nack(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -421,14 +420,13 @@ subscribe_and_single_nack(Config) ->
     subscribe(Ch, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
-            ok
-    end,
-    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
-    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                        multiple     = false,
-                                        requeue      = true}),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
-
+            wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                                multiple     = false,
+                                                requeue      = true}),
+            wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>)
+    end.
+    
 publisher_confirms(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
