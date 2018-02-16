@@ -144,8 +144,7 @@ if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.co
         -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
         -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
         -rabbit plugins_dir "!RABBITMQ_PLUGINS_DIR!" ^
-        !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!@localhost ^
-        -extra "!RABBITMQ_NODENAME!"
+        !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!@localhost
 
 if ERRORLEVEL 3 (
     rem ERRORLEVEL means (or greater) so we need to catch all other failure
