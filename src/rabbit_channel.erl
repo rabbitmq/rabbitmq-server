@@ -2255,20 +2255,17 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
     QueueName = qbin_to_resource(StrippedQueueNameBin, VHostPath),
 
     check_configure_permitted(QueueName, User),
-    %% TODO Need the registered name! Maybe delete on rabbit_amqquee:delete?
-    %% QueueState = maps:remove(QPid, QueueStates0),
-    QueueStates = QueueStates0,
     case rabbit_amqqueue:with(
            QueueName,
            fun (Q) ->
                    rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
-                   rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username)
+                   rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username, QueueStates0)
            end,
-           fun (not_found)            -> {ok, 0, QueueStates};
+           fun (not_found)            -> {ok, 0, QueueStates0};
                ({absent, Q, crashed}) -> rabbit_amqqueue:delete_crashed(Q, Username),
-                                         {ok, 0, QueueStates};
+                                         {ok, 0, QueueStates0};
                ({absent, Q, stopped}) -> rabbit_amqqueue:delete_crashed(Q, Username),
-                                         {ok, 0, QueueStates};
+                                         {ok, 0, QueueStates0};
                ({absent, Q, Reason})  -> rabbit_misc:absent(Q, Reason)
            end) of
         {error, in_use} ->
@@ -2276,6 +2273,8 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
         {error, not_empty} ->
             precondition_failed("~s not empty", [rabbit_misc:rs(QueueName)]);
         {ok, Count} ->
+            {ok, Count, QueueStates0};
+        {ok, Count, QueueStates} ->
             {ok, Count, QueueStates}
     end;
 handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,

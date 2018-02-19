@@ -18,7 +18,7 @@
 
 -export([warn_file_limit/0]).
 -export([recover/1, stop/1, start/1, declare/6, declare/7,
-         delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
+         delete_immediately/1, delete_exclusive/2, delete/5, purge/1,
          forget_all_durable/1, delete_crashed/1, delete_crashed/2,
          delete_crashed_internal/2]).
 -export([pseudo_queue/2, immutable/1]).
@@ -140,13 +140,17 @@
 -spec delete_immediately(qpids()) -> 'ok'.
 -spec delete_exclusive(qpids(), pid()) -> 'ok'.
 -spec delete
-        (rabbit_types:amqqueue(), 'false', 'false', rabbit_types:username()) ->
+        (rabbit_types:amqqueue(), 'false', 'false', rabbit_types:username(),
+         #{Name :: atom() => ra_fifo_client:state()}) ->
             qlen();
-        (rabbit_types:amqqueue(), 'true' , 'false', rabbit_types:username()) ->
+        (rabbit_types:amqqueue(), 'true' , 'false', rabbit_types:username(),
+         #{Name :: atom() => ra_fifo_client:state()}) ->
             qlen() | rabbit_types:error('in_use');
-        (rabbit_types:amqqueue(), 'false', 'true', rabbit_types:username()) ->
+        (rabbit_types:amqqueue(), 'false', 'true', rabbit_types:username(),
+         #{Name :: atom() => ra_fifo_client:state()}) ->
             qlen() | rabbit_types:error('not_empty');
-        (rabbit_types:amqqueue(), 'true' , 'true', rabbit_types:username()) ->
+        (rabbit_types:amqqueue(), 'true' , 'true', rabbit_types:username(),
+         #{Name :: atom() => ra_fifo_client:state()}) ->
             qlen() |
             rabbit_types:error('in_use') |
             rabbit_types:error('not_empty').
@@ -971,13 +975,13 @@ delete_immediately(QPids) ->
 
 
 delete(#amqqueue{ type = quorum, pid = QPid, name = QName},
-       _IfUnused, _IfEmpty, ActingUser) ->
+       _IfUnused, _IfEmpty, ActingUser, QueueStates0) ->
     %% TODO Quorum queue needs to support queue length and consumer tracking
     ok = ra:delete_node(QPid),
     internal_delete(QName, ActingUser),
     %% TODO needs real counter
-    {ok, 0};
-delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty, ActingUser) ->
+    {ok, 0, maps:remove(QPid, QueueStates0)};
+delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty, ActingUser, _QueueStates0) ->
     delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]}).
 
 delete_crashed(Q) ->
