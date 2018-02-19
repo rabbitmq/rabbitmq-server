@@ -24,7 +24,7 @@
          credit/6, utilisation/1]).
 
 %% for testing
--export([subtract_acks/4]).
+-export([subtract_acks/2, subtract_acks/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -125,7 +125,7 @@ consumers(Consumers, Acc) ->
 count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 
 unacknowledged_message_count() ->
-    lists:sum([queue:len(C#cr.acktags) || C <- all_ch_record()]).
+    lists:sum([length(C#cr.acktags) || C <- all_ch_record()]).
 
 add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     Username, State = #state{consumers = Consumers,
@@ -182,7 +182,7 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
             All = priority_queue:join(Consumers, BlockedQ),
             ok = erase_ch_record(C),
             Filtered = priority_queue:filter(chan_pred(ChPid, true), All),
-            {[AckTag || {AckTag, _CTag} <- queue:to_list(ChAckTags)],
+            {[AckTag || {AckTag, _CTag} <- ChAckTags],
              tags(priority_queue:to_list(Filtered)),
              State#state{consumers = remove_consumers(ChPid, Consumers)}}
     end.
@@ -239,7 +239,7 @@ deliver_to_consumer(FetchFun,
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
                            {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
-                     true  -> queue:in({AckTag, CTag}, ChAckTags);
+                     true  -> [{AckTag, CTag} | ChAckTags];
                      false -> ChAckTags
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
@@ -248,7 +248,7 @@ deliver_to_consumer(FetchFun,
 
 record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
-    update_ch_record(C#cr{acktags = queue:in({AckTag, none}, ChAckTags)}),
+    update_ch_record(C#cr{acktags = [{AckTag, none} | ChAckTags]}),
     ok.
 
 subtract_acks(ChPid, AckTags, State) ->
@@ -256,8 +256,7 @@ subtract_acks(ChPid, AckTags, State) ->
         not_found ->
             not_found;
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
-            {CTagCounts, AckTags2} = subtract_acks(
-                                       AckTags, [], maps:new(), ChAckTags),
+            {CTagCounts, AckTags2} = subtract_acks(AckTags, ChAckTags),
             {Unblocked, Lim2} =
                 maps:fold(
                   fun (CTag, Count, {UnblockedN, LimN}) ->
@@ -272,6 +271,43 @@ subtract_acks(ChPid, AckTags, State) ->
                          unchanged
             end
     end.
+
+subtract_acks([], AckQ) ->
+    {maps:new(), AckQ};
+subtract_acks(_AckTags, []) ->
+    {maps:new(), []};
+subtract_acks(AckTags, AckQ) ->
+    SortedAckQ = lists:sort(fun({A, _}, {B, _}) -> A < B end, AckQ),
+    case AckTags of
+        [AckTag] -> subtract_acks_single(AckTag, SortedAckQ);
+        _        -> subtract_acks_multiple(lists:max(AckTags), SortedAckQ, maps:new())
+    end.
+
+subtract_acks_single(AckTag, AckQ) ->
+    case bs(AckTag, AckQ) of
+        {AckTag, CTag} = Item ->
+            {#{CTag => 1}, lists:delete(Item, AckQ)};
+        _              -> {maps:new(), AckQ}
+    end.
+
+bs(_, [])   -> false;
+bs(X, [{X, CTag}])  -> {X, CTag};
+bs(_X, [_])  -> false;
+bs(X, List) ->
+    Length = length(List),
+    Middle = (Length + 1) div 2,
+    {Tag, CTag} = lists:nth(Middle, List),
+    if
+        X == Tag -> {Tag, CTag};
+        X > Tag -> bs(X, lists:sublist(List, Middle + 1, Length));
+        X < Tag -> bs(X, lists:sublist(List, 1, Middle))
+    end.
+
+subtract_acks_multiple(AckTag, [{AckTag, CTag} | T], CTagCounts) ->
+    {maps:update_with(CTag, fun (Old) -> Old + 1 end, 1, CTagCounts), T};
+
+subtract_acks_multiple(AckTag, [{_, CTag} | T], CTagCounts) ->
+    subtract_acks_multiple(AckTag, T, maps:update_with(CTag, fun (Old) -> Old + 1 end, 1, CTagCounts)).
 
 subtract_acks([], [], CTagCounts, AckQ) ->
     {CTagCounts, AckQ};
@@ -381,7 +417,7 @@ ch_record(ChPid, LimiterPid) ->
                      Limiter = rabbit_limiter:client(LimiterPid),
                      C = #cr{ch_pid               = ChPid,
                              monitor_ref          = MonitorRef,
-                             acktags              = queue:new(),
+                             acktags              = [],
                              consumer_count       = 0,
                              blocked_consumers    = priority_queue:new(),
                              limiter              = Limiter,
@@ -394,8 +430,8 @@ ch_record(ChPid, LimiterPid) ->
 update_ch_record(C = #cr{consumer_count       = ConsumerCount,
                          acktags              = ChAckTags,
                          unsent_message_count = UnsentMessageCount}) ->
-    case {queue:is_empty(ChAckTags), ConsumerCount, UnsentMessageCount} of
-        {true, 0, 0} -> ok = erase_ch_record(C);
+    case {ChAckTags, ConsumerCount, UnsentMessageCount} of
+        {[], 0, 0} -> ok = erase_ch_record(C);
         _            -> ok = store_ch_record(C)
     end,
     C.
