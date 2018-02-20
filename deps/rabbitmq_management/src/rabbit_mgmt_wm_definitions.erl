@@ -184,7 +184,7 @@ apply_defs(Body, ActingUser, SuccessFun, ErrorFun) ->
                 for_all(permissions,        ActingUser, All, fun add_permission/2),
                 rabbit_log:info("Importing topic permissions..."),
                 for_all(topic_permissions,  ActingUser, All, fun add_topic_permission/2),
-                rabbit_log:info("Importing paramteres..."),
+                rabbit_log:info("Importing parameters..."),
                 for_all(parameters,         ActingUser, All, fun add_parameter/2),
                 rabbit_log:info("Importing global parameters..."),
                 for_all(global_parameters,  ActingUser, All, fun add_global_parameter/2),
