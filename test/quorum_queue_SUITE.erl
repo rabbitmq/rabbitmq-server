@@ -418,13 +418,19 @@ subscribe_and_single_nack(Config) ->
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
     subscribe(Ch, QQ, false),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+        {#'basic.deliver'{delivery_tag = DeliveryTag,
+                          redelivered  = false}, _} ->
             wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true}),
-            %% TODO message is re-sent to us!! Needs proper stats of unack
-            wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>)
+            receive
+                {#'basic.deliver'{delivery_tag = DeliveryTag1,
+                                  redelivered  = true}, _} ->
+                    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+                    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1}),
+                    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+            end
     end.
     
 publisher_confirms(Config) ->
