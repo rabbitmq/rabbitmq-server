@@ -29,10 +29,11 @@ defmodule RabbitMQ.CLI.Core.Config do
   def normalize(:erlang_cookie, c) when not is_atom(c) do
     Rabbitmq.Atom.Coerce.to_atom(c)
   end
-  def normalize(:longnames, true),   do: :longnames
-  def normalize(:longnames, "true"), do: :longnames
-  def normalize(:longnames, 'true'), do: :longnames
-  def normalize(:longnames, _),      do: :shortnames
+  def normalize(:longnames, true),       do: :longnames
+  def normalize(:longnames, "true"),     do: :longnames
+  def normalize(:longnames, 'true'),     do: :longnames
+  def normalize(:longnames, "\"true\""), do: :longnames
+  def normalize(:longnames, val),        do: :shortnames
   def normalize(_, value),           do: value
 
   def get_system_option(:script_name) do
