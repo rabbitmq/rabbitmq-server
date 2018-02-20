@@ -133,6 +133,10 @@ performance_queue_map(_Config) ->
         IterationCount, "Queue multiple ack lifo"),
     run(fun (_) -> subtract_acks_impl(lists:reverse(lists:seq(0, AckCount)), maps:new(), ack_tags_map(AckCount)) end,
         IterationCount, "Map multiple ack lifo"),
+    run(fun (_) -> subtract_acks(lists:reverse(lists:seq(0, AckCount div 2)), [], maps:new(), ack_tags_queue(AckCount)) end,
+        IterationCount, "Queue multiple ack in the middle"),
+    run(fun (_) -> subtract_acks_impl(lists:reverse(lists:seq(0, AckCount div 2)), maps:new(), ack_tags_map(AckCount)) end,
+        IterationCount, "Map multiple ack in the middle"),
     ok.
 
 run(F, IterationCount, Msg) ->
