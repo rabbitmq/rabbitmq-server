@@ -229,10 +229,10 @@ if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE!" (
         -boot !CLEAN_BOOT_FILE! ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
+        !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!@localhost ^
         -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
         -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
         -rabbit plugins_dir "!RABBITMQ_PLUGINS_DIR!" ^
-        !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!@localhost ^
         -extra "!RABBITMQ_NODENAME!"
 
 if ERRORLEVEL 3 (
