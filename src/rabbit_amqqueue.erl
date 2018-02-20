@@ -1091,7 +1091,7 @@ basic_consume(#amqqueue{pid = {Name, _} = Id, type = quorum}, _NoAck, ChPid, _Li
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
-basic_cancel(#amqqueue{pid = QPid}, ChPid, ConsumerTag, OkMsg, ActingUser) ->
+basic_cancel(#amqqueue{pid = QPid, type = classic}, ChPid, ConsumerTag, OkMsg, ActingUser) ->
     delegate:invoke(QPid, {gen_server2, call,
                            [{basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, infinity]}).
 

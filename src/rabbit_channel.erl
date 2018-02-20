@@ -608,7 +608,7 @@ handle_info({ra_event, {Name, _} = From, Evt}, #ch{queue_states = QueueStates,
         {{delivery, CTag, Msgs}, FState1} ->
             AckRequired = case maps:find(CTag, ConsumerMapping) of
                               error ->
-                                  false;
+                                  true;
                               {ok, {_, {NoAck, _, _, _}}} ->
                                   not NoAck
                   end,
@@ -1716,8 +1716,13 @@ reject(DeliveryTag, Requeue, Multiple,
 %% NB: Acked is in youngest-first order
 internal_reject(Requeue, Acked, Limiter, State = #ch{queue_states = QueueStates0}) ->
     QueueStates = foreach_per_queue(
-                    fun (QPid, MsgIds, Acc) ->
-                            rabbit_amqqueue:reject(QPid, Requeue, MsgIds, self(), Acc)
+                    fun({QPid, CTag}, MsgIds, Acc0) ->
+                            {ok, Acc} = rabbit_amqqueue:reject(QPid, Requeue, {CTag, MsgIds},
+                                                               self(), Acc0),
+                            Acc;
+                       (QPid, MsgIds, Acc0) ->
+                            rabbit_amqqueue:reject(QPid, Requeue, MsgIds, self(), Acc0),
+                            Acc0
                     end, Acked, QueueStates0),
     ok = notify_limiter(Limiter, Acked),
     State#ch{queue_states = QueueStates}.

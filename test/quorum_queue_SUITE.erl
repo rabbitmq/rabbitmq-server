@@ -399,7 +399,6 @@ consume_and_single_nack(Config) ->
 
     publish(Ch, QQ),
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
-    %% TODO we don't store consumer tag for basic.get!!! could it be fixed?
     DeliveryTag = consume(Ch, QQ, false),
     wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
@@ -424,6 +423,7 @@ subscribe_and_single_nack(Config) ->
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true}),
+            %% TODO message is re-sent to us!! Needs proper stats of unack
             wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>)
     end.
     
