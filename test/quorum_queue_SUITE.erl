@@ -48,9 +48,13 @@ groups() ->
           subscribe_and_ack,
           subscribe_and_multiple_ack,
           consume_and_requeue_nack,
+          consume_and_requeue_multiple_nack,
           subscribe_and_requeue_nack,
+          subscribe_and_requeue_multiple_nack,
           consume_and_nack,
+          consume_and_multiple_nack,
           subscribe_and_nack,
+          subscribe_and_multiple_nack,
           publisher_confirms
         ]}
     ].
@@ -327,10 +331,7 @@ subscribe(Config) ->
     publish(Ch, QQ),
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
     subscribe(Ch, QQ, false),
-    receive
-        {#'basic.deliver'{delivery_tag = _}, _} ->
-            ok
-    end,
+    receive_basic_deliver(false),
     wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
@@ -347,14 +348,8 @@ subscribe_with_autoack(Config) ->
     publish(Ch, QQ),
     wait_for_messages(Config, QQ, <<"2">>, <<"2">>, <<"0">>),
     subscribe(Ch, QQ, true),
-    receive
-        {#'basic.deliver'{delivery_tag = _}, _} ->
-            ok
-    end,
-    receive
-        {#'basic.deliver'{delivery_tag = _}, _} ->
-            ok
-    end,
+    receive_basic_deliver(false),
+    receive_basic_deliver(false),
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>),
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
@@ -425,14 +420,8 @@ subscribe_and_multiple_ack(Config) ->
     publish(Ch, QQ),
     wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
     subscribe(Ch, QQ, false),
-    receive
-        {#'basic.deliver'{delivery_tag = _}, _} ->
-            ok
-    end,
-    receive
-        {#'basic.deliver'{delivery_tag = _}, _} ->
-            ok
-    end,
+    receive_basic_deliver(false),
+    receive_basic_deliver(false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
             wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
@@ -450,13 +439,35 @@ consume_and_requeue_nack(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"2">>, <<"2">>, <<"0">>),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    wait_for_messages(Config, QQ, <<"2">>, <<"1">>, <<"1">>),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = true}),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
+    wait_for_messages(Config, QQ, <<"2">>, <<"2">>, <<"0">>).
+
+consume_and_requeue_multiple_nack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    _ = consume(Ch, QQ, false),
+    _ = consume(Ch, QQ, false),
+    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple     = true,
+                                        requeue      = true}),
+    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>).
 
 consume_and_nack(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -474,6 +485,61 @@ consume_and_nack(Config) ->
                                         multiple     = false,
                                         requeue      = false}),
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+
+consume_and_multiple_nack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    _ = consume(Ch, QQ, false),
+    _ = consume(Ch, QQ, false),
+    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple     = true,
+                                        requeue      = false}),
+    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+
+subscribe_and_requeue_multiple_nack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    subscribe(Ch, QQ, false),
+    receive_basic_deliver(false),
+    receive_basic_deliver(false),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag,
+                          redelivered  = false}, _} ->
+            wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                                multiple     = true,
+                                                requeue      = true}),
+            receive_basic_deliver(true),
+            receive_basic_deliver(true),
+            receive
+                {#'basic.deliver'{delivery_tag = DeliveryTag1,
+                                  redelivered  = true}, _} ->
+                    wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+                    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
+                                                       multiple     = true}),
+                    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+            end
+    end.
 
 subscribe_and_requeue_nack(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -519,6 +585,31 @@ subscribe_and_nack(Config) ->
             wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
+                                                requeue      = false}),
+            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+    end.
+
+subscribe_and_multiple_nack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    subscribe(Ch, QQ, false),
+    receive_basic_deliver(false),
+    receive_basic_deliver(false),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag,
+                          redelivered  = false}, _} ->
+            wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                                multiple     = true,
                                                 requeue      = false}),
             wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
     end.
@@ -601,4 +692,10 @@ subscribe(Ch, Queue, NoAck) ->
     receive
         #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
              ok
+    end.
+
+receive_basic_deliver(Redelivered) ->
+    receive
+        {#'basic.deliver'{redelivered = R}, _} when R == Redelivered ->
+            ok
     end.
