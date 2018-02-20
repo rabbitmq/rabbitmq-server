@@ -44,7 +44,9 @@ groups() ->
           subscribe,
           subscribe_with_autoack,
           consume_and_ack,
+          consume_and_multiple_ack,
           subscribe_and_ack,
+          subscribe_and_multiple_ack,
           consume_and_requeue_nack,
           subscribe_and_requeue_nack,
           consume_and_nack,
@@ -367,10 +369,29 @@ consume_and_ack(Config) ->
 
     publish(Ch, QQ),
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
-    %% TODO we don't store consumer tag for basic.get!!! could it be fixed?
     DeliveryTag = consume(Ch, QQ, false),
     wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
+    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+
+consume_and_multiple_ack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    _ = consume(Ch, QQ, false),
+    _ = consume(Ch, QQ, false),
+    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                       multiple     = true}),
     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
 
 subscribe_and_ack(Config) ->
@@ -388,6 +409,35 @@ subscribe_and_ack(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
             wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
+            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+    end.
+
+subscribe_and_multiple_ack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    subscribe(Ch, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = _}, _} ->
+            ok
+    end,
+    receive
+        {#'basic.deliver'{delivery_tag = _}, _} ->
+            ok
+    end,
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+            wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+            amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                               multiple     = true}),
             wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
     end.
 
