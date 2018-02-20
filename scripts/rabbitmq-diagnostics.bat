@@ -48,7 +48,6 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 "!ERLANG_HOME!\bin\erl.exe" +B ^
 -boot !CLEAN_BOOT_FILE! ^
 -noinput -noshell -hidden -smp enable ^
-!RABBITMQ_NAME_TYPE! rabbitmqescript!RANDOM!!TIME:~9!@localhost ^
 !RABBITMQ_CTL_ERL_ARGS! ^
 -kernel inet_dist_listen_min !RABBITMQ_CTL_DIST_PORT_MIN! ^
 -kernel inet_dist_listen_max !RABBITMQ_CTL_DIST_PORT_MAX! ^
