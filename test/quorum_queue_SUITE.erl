@@ -45,8 +45,10 @@ groups() ->
           subscribe_with_autoack,
           consume_and_ack,
           subscribe_and_ack,
-          consume_and_single_nack,
-          subscribe_and_single_nack,
+          consume_and_requeue_nack,
+          subscribe_and_requeue_nack,
+          consume_and_nack,
+          subscribe_and_nack,
           publisher_confirms
         ]}
     ].
@@ -389,7 +391,7 @@ subscribe_and_ack(Config) ->
             wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
     end.
 
-consume_and_single_nack(Config) ->
+consume_and_requeue_nack(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -406,7 +408,24 @@ consume_and_single_nack(Config) ->
                                         requeue      = true}),
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
 
-subscribe_and_single_nack(Config) ->
+consume_and_nack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple     = false,
+                                        requeue      = false}),
+    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+
+subscribe_and_requeue_nack(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -431,6 +450,27 @@ subscribe_and_single_nack(Config) ->
                     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1}),
                     wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
             end
+    end.
+
+subscribe_and_nack(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    subscribe(Ch, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag,
+                          redelivered  = false}, _} ->
+            wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                                multiple     = false,
+                                                requeue      = false}),
+            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
     end.
     
 publisher_confirms(Config) ->

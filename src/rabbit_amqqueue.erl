@@ -1018,6 +1018,10 @@ reject(QPid, Requeue, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
 reject({Name, _} = Id, true, {CTag, MsgIds}, _ChPid, FStates) ->
     FState0 = get_quorum_state(Id, FStates),
     {ok, FState} = ra_fifo_client:return(quorum_ctag(CTag), MsgIds, FState0),
+    {ok, maps:put(Name, FState, FStates)};
+reject({Name, _} = Id, false, {CTag, MsgIds}, _ChPid, FStates) ->
+    FState0 = get_quorum_state(Id, FStates),
+    {ok, FState} = ra_fifo_client:settle(quorum_ctag(CTag), MsgIds, FState0),
     {ok, maps:put(Name, FState, FStates)}.
 
 notify_down_all(QPids, ChPid) ->
