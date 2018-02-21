@@ -74,14 +74,16 @@ for /f "delims=" %%F in ("!RABBITMQ_BASE!") do set RABBITMQ_BASE=%%~sF
 
 REM Check for the short names here too
 if "!RABBITMQ_USE_LONGNAME!"=="true" (
-    set RABBITMQ_NAME_TYPE="-name"
+    set RABBITMQ_NAME_TYPE=-name
     set NAMETYPE=longnames
 ) else (
     if "!USE_LONGNAME!"=="true" (
-        set RABBITMQ_NAME_TYPE="-name"
+        set RABBITMQ_USE_LONGNAME=true
+        set RABBITMQ_NAME_TYPE=-name
         set NAMETYPE=longnames
     ) else (
-        set RABBITMQ_NAME_TYPE="-sname"
+        set RABBITMQ_USE_LONGNAME=false
+        set RABBITMQ_NAME_TYPE=-sname
         set NAMETYPE=shortnames
     )
 )
