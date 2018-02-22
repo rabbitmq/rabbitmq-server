@@ -1150,6 +1150,14 @@ end}.
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 
+% ==========================
+% Kernel section
+% ==========================
+
+{mapping, "net_ticktime", "kernel.net_ticktime",[
+    {datatype, [integer]}
+]}.
+
 % ===============================
 % Validators
 % ===============================
