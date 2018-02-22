@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.Core.Config do
   def normalize(:longnames, "true"),     do: :longnames
   def normalize(:longnames, 'true'),     do: :longnames
   def normalize(:longnames, "\"true\""), do: :longnames
-  def normalize(:longnames, val),        do: :shortnames
+  def normalize(:longnames, _val),       do: :shortnames
   def normalize(_, value),           do: value
 
   def get_system_option(:script_name) do
