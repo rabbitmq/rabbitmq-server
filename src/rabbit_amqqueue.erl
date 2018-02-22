@@ -44,6 +44,8 @@
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
 
+-export([dead_letter_publish/5]).
+
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
@@ -259,9 +261,9 @@ recover_classic_queues(VHost, Queues) ->
 
 recover_quorum_queues(Queues) ->
     [begin
-         ok = ra:restart_node(ra_node_config(Id)),
+         ok = ra:restart_node(ra_node_config(Q)),
          internal_declare(Q, true)
-     end || #amqqueue{pid = Id} = Q <- Queues].
+     end || Q <- Queues].
 
 filter_per_type(Queues) ->
     lists:foldl(fun(#amqqueue{type = classic} = Q, {Cla, Quo}) ->
@@ -411,13 +413,37 @@ declare_quorum_queue(QueueName, Q) ->
     RaName = qname_to_rname(QueueName),
     Id = {RaName, node()},
     NewQ = Q#amqqueue{pid = Id},
-    ok = ra:start_node(ra_node_config(Id)),
+    ok = ra:start_node(ra_node_config(NewQ)),
     _ = ra_node_proc:trigger_election(Id),
     FState = ra_fifo_client:init([Id]),
     internal_declare(NewQ, false),
     {new, NewQ, FState}.
 
-ra_node_config({Name, _} = Id) ->
+dead_letter_publish(X, RK, QName, Msg, Reason) ->
+    rabbit_dead_letter:publish(Msg, Reason, X, RK, QName).
+
+dlx_mfa(Q) ->
+    DLX = init_dlx(args_policy_lookup(<<"dead-letter-exchange">>, fun res_arg/2, Q), Q),
+    DLXRKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun res_arg/2, Q),
+    {?MODULE, dead_letter_publish, [DLX, DLXRKey, Q#amqqueue.name]}.
+        
+init_dlx(undefined, _Q) ->
+    undefined;
+init_dlx(DLX, #amqqueue{name = QName}) ->
+    rabbit_misc:r(QName, exchange, DLX).
+
+res_arg(_PolVal, ArgVal) -> ArgVal.
+
+args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
+    AName = <<"x-", Name/binary>>,
+    case {rabbit_policy:get(Name, Q), rabbit_misc:table_lookup(Args, AName)} of
+        {undefined, undefined}       -> undefined;
+        {undefined, {_Type, Val}}    -> Val;
+        {Val,       undefined}       -> Val;
+        {PolVal,    {_Type, ArgVal}} -> Resolve(PolVal, ArgVal)
+    end.
+
+ra_node_config(#amqqueue{pid = {Name, _} = Id} = Q) ->
     {ok, DataDir} = application:get_env(ra, data_dir),
     UId = atom_to_binary(Name, utf8),
     #{id => Id,
@@ -426,7 +452,8 @@ ra_node_config({Name, _} = Id) ->
       log_init_args => #{data_dir => DataDir,
                          uid => UId},
       initial_nodes => [],
-      machine => {module, ra_fifo}}.
+      machine => {module, ra_fifo},
+      machine_init_args => #{reject_mfa => dlx_mfa(Q)}}.
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
