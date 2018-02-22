@@ -1150,6 +1150,15 @@ end}.
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 
+% ==========================
+% Kernel section
+% ==========================
+
+{mapping, "net_ticktime", "kernel.net_ticktime",[
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
 % ===============================
 % Validators
 % ===============================
@@ -1198,4 +1207,9 @@ end}.
 {validator, "non_negative_integer", "number should be greater or equal to zero",
 fun(Int) when is_integer(Int) ->
     Int >= 0
+end}.
+
+{validator, "non_zero_positive_integer", "number should be greater or equal to one",
+fun(Int) when is_integer(Int) ->
+    Int >= 1
 end}.

@@ -528,5 +528,11 @@ credential_validator.regexp = ^abc\\d+",
   [{rabbit, [
       {delegate_count, 64}
     ]}],
-  []}
+  []},
+  {kernel_net_ticktime,
+   "net_ticktime = 20",
+   [{kernel, [
+      {net_ticktime, 20}
+     ]}],
+   []}
 ].
