@@ -1172,8 +1172,14 @@ rpc_call(Node, Mod, Fun, Args) ->
 rpc_call(Node, Mod, Fun, Args, Timeout) ->
     case rpc:call(Node, net_kernel, get_net_ticktime, [], Timeout) of
         {badrpc, _} = E -> E;
-        Time            -> _ = net_kernel:set_net_ticktime(Time, 0),
-                           rpc:call(Node, Mod, Fun, Args, Timeout)
+        ignored ->
+            rpc:call(Node, Mod, Fun, Args, Timeout);
+        {ongoing_change_to, NewValue} ->
+            _ = net_kernel:set_net_ticktime(NewValue, 0),
+            rpc:call(Node, Mod, Fun, Args, Timeout);
+        Time            ->
+            _ = net_kernel:set_net_ticktime(Time, 0),
+            rpc:call(Node, Mod, Fun, Args, Timeout)
     end.
 
 guess_number_of_cpu_cores() ->
