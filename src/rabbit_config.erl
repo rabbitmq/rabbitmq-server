@@ -94,14 +94,14 @@ maybe_print_warning_for_running_app(kernel, Config) ->
     ConfigWithoutSupportedEntry = proplists:delete(net_ticktime, Config),
     case length(ConfigWithoutSupportedEntry) > 0 of
         true -> io:format(standard_error,
-            "~nUnable to update config for app ~p from *.conf file."
-            " App is already running. Use advanced.config instead.~n", [kernel]);
+            "~nUnable to update config for app ~p from a .conf file."
+            " The app is already running. Use advanced.config instead.~n", [kernel]);
         false -> ok
     end;
 maybe_print_warning_for_running_app(App, _Config) ->
     io:format(standard_error,
-        "~nUnable to update config for app ~p from *.conf file."
-        " App is already running. Use advanced.config instead.~n",
+        "~nUnable to update config for app ~p from a .conf file: "
+        " The app is already running.~n",
         [App]).
 
 maybe_set_net_ticktime(undefined) ->
@@ -111,7 +111,11 @@ maybe_set_net_ticktime(KernelConfig) ->
         undefined ->
             ok;
         NetTickTime ->
-            case net_kernel:set_net_ticktime(NetTickTime) of
+            case net_kernel:set_net_ticktime(NetTickTime, 0) of
+                unchanged ->
+                    ok;
+                change_initiated ->
+                    ok;
                 {ongoing_change_to, NewNetTicktime} ->
                     io:format(standard_error,
                         "~nCouldn't set net_ticktime to ~p "
