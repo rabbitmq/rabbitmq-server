@@ -459,7 +459,7 @@
 # Kernel section
 # ======================================
 
-# kernel.net_ticktime = 60
+# net_ticktime = 60
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Management Plugin
