@@ -484,14 +484,9 @@ conditional_delete(X = #exchange{name = XName}, OnlyDurable) ->
     end.
 
 unconditional_delete(X = #exchange{name = XName}, OnlyDurable) ->
-    %% this 'guarded' delete prevents unnecessary writes to the mnesia
-    %% disk log
-    case mnesia:wread({rabbit_durable_exchange, XName}) of
-        []  -> ok;
-        [_] -> ok = mnesia:delete({rabbit_durable_exchange, XName})
-    end,
     ok = mnesia:delete({rabbit_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange_serial, XName}),
+    mnesia:delete({rabbit_durable_exchange, XName}),
     Bindings = rabbit_binding:remove_for_source(XName),
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(
                              XName, OnlyDurable)}.
