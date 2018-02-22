@@ -963,12 +963,7 @@ resume(QPid, ChPid) -> delegate:invoke_no_result(QPid, {gen_server2, cast, [{res
 
 internal_delete1(QueueName, OnlyDurable) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
-    %% this 'guarded' delete prevents unnecessary writes to the mnesia
-    %% disk log
-    case mnesia:wread({rabbit_durable_queue, QueueName}) of
-        []  -> ok;
-        [_] -> ok = mnesia:delete({rabbit_durable_queue, QueueName})
-    end,
+    mnesia:delete({rabbit_durable_queue, QueueName}),
     %% we want to execute some things, as decided by rabbit_exchange,
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName, OnlyDurable).
