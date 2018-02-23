@@ -44,7 +44,7 @@
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
 
--export([dead_letter_publish/5]).
+-export([dead_letter_publish/6]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -419,13 +419,14 @@ declare_quorum_queue(QueueName, Q) ->
     internal_declare(NewQ, false),
     {new, NewQ, FState}.
 
-dead_letter_publish(X, RK, QName, Msg, Reason) ->
-    rabbit_dead_letter:publish(Msg, Reason, X, RK, QName).
+dead_letter_publish(VHost, X, RK, QName, Msg, Reason) ->
+    rabbit_vhost_dead_letter:publish(VHost, Msg, Reason, X, RK, QName).
 
-dlx_mfa(Q) ->
+dlx_mfa(#amqqueue{name = Resource} = Q) ->
+    #resource{virtual_host = VHost} = Resource,
     DLX = init_dlx(args_policy_lookup(<<"dead-letter-exchange">>, fun res_arg/2, Q), Q),
     DLXRKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun res_arg/2, Q),
-    {?MODULE, dead_letter_publish, [DLX, DLXRKey, Q#amqqueue.name]}.
+    {?MODULE, dead_letter_publish, [VHost, DLX, DLXRKey, Q#amqqueue.name]}.
         
 init_dlx(undefined, _Q) ->
     undefined;
@@ -452,8 +453,8 @@ ra_node_config(#amqqueue{pid = {Name, _} = Id} = Q) ->
       log_init_args => #{data_dir => DataDir,
                          uid => UId},
       initial_nodes => [],
-      machine => {module, ra_fifo},
-      machine_init_args => #{reject_mfa => dlx_mfa(Q)}}.
+      machine => {module, ra_fifo,
+                  #{dead_letter_handler => dlx_mfa(Q)}}}.
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->

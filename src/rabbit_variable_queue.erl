@@ -488,6 +488,7 @@ start(VHost, DurableQueues) ->
                           Ref = proplists:get_value(persistent_ref, Terms),
                           Ref =/= undefined
                       end],
+    start_dead_letter_process(VHost),
     start_msg_store(VHost, ClientRefs, StartFunState),
     {ok, AllTerms}.
 
@@ -513,6 +514,14 @@ do_start_msg_store(VHost, Type, Refs, StartFunState) ->
             rabbit_log:error("Failed to start message store of type ~s for vhost '~s': ~p~n",
                              [Type, VHost, Error]),
             exit({error, Error})
+    end.
+
+start_dead_letter_process(VHost) ->
+    case rabbit_vhost_dead_letter:start(VHost) of
+        {ok, _} ->
+            rabbit_log:info("Started dead letter process for vhost '~s'~n", [VHost]);
+        Err ->
+            exit(Err)
     end.
 
 abbreviated_type(?TRANSIENT_MSG_STORE)  -> transient;
