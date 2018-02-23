@@ -27,3 +27,13 @@
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain '+P 2000000', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *+P\ 2000000* ]]
 }
+
+@test "can configure RABBITMQ_MAX_NUMBER_OF_ATOMS" {
+    declare -r scripts_dir="$BATS_TEST_DIRNAME/../scripts"
+    export RABBITMQ_SCRIPTS_DIR="$scripts_dir"
+    export RABBITMQ_CONF_ENV_FILE="$BATS_TMPDIR/rabbitmq-env.conf"
+    echo 'RABBITMQ_MAX_NUMBER_OF_ATOMS=10000000' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$scripts_dir/rabbitmq-env"
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain '+t 10000000', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *+t\ 10000000* ]]
+}
