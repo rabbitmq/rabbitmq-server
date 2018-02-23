@@ -940,7 +940,7 @@ dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
     QName = qname(State),
     {Res, Acks1, BQS1} =
         Fun(fun (Msg, AckTag, Acks) ->
-                    rabbit_vhost_dead_letter:publish(VHost, Msg, Reason, X, RK, QName),
+                    rabbit_vhost_dead_letter:publish(VHost, X, RK, QName, [{Reason, Msg}]),
                     [AckTag | Acks]
             end, [], BQS),
     {_Guids, BQS2} = BQ:ack(Acks1, BQS1),

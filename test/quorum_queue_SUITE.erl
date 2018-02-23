@@ -55,7 +55,10 @@ groups() ->
           consume_and_multiple_nack,
           subscribe_and_nack,
           subscribe_and_multiple_nack,
-          publisher_confirms
+          publisher_confirms,
+          dead_letter_to_classic_queue,
+          dead_letter_to_quorum_queue,
+          dead_letter_from_classic_to_quorum_queue
         ]}
     ].
 
@@ -628,6 +631,82 @@ publisher_confirms(Config) ->
     wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
     amqp_channel:wait_for_confirms(Ch).
 
+dead_letter_to_classic_queue(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    CQ = <<"classic-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, CQ}
+                                 ])),
+    ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
+    publish(Ch, QQ),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>],
+                               [CQ, <<"0">>, <<"0">>, <<"0">>]]),
+    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>],
+                               [CQ, <<"0">>, <<"0">>, <<"0">>]]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple     = false,
+                                        requeue      = false}),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>],
+                               [CQ, <<"1">>, <<"1">>, <<"0">>]]),
+    _ = consume(Ch, CQ, false).
+
+dead_letter_to_quorum_queue(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    QQ2 = <<"quorum-q2">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, QQ2}
+                                 ])),
+    ?assertEqual({'queue.declare_ok', QQ2, 0, 0},
+                 declare(Ch, QQ2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    publish(Ch, QQ),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>],
+                               [QQ2, <<"0">>, <<"0">>, <<"0">>]]),
+    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>],
+                               [QQ2, <<"0">>, <<"0">>, <<"0">>]]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple     = false,
+                                        requeue      = false}),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>],
+                               [QQ2, <<"1">>, <<"1">>, <<"0">>]]),
+    _ = consume(Ch, QQ2, false).
+
+dead_letter_from_classic_to_quorum_queue(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    CQ = <<"classic-q">>,
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', CQ, 0, 0},
+                 declare(Ch, CQ, [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, QQ}
+                                 ])),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    publish(Ch, CQ),
+    wait_for_messages(Config, [[CQ, <<"1">>, <<"1">>, <<"0">>],
+                               [QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    DeliveryTag = consume(Ch, CQ, false),
+    wait_for_messages(Config, [[CQ, <<"1">>, <<"0">>, <<"1">>],
+                               [QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple     = false,
+                                        requeue      = false}),
+    wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>],
+                               [QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    _ = consume(Ch, QQ, false).
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->
@@ -665,6 +744,25 @@ wait_for_messages(Config, Queue, Msgs, Ready, Unack, N) ->
         _ ->
             timer:sleep(500),
             wait_for_messages(Config, Queue, Msgs, Ready, Unack, N - 1)
+    end.
+
+wait_for_messages(Config, Stats) ->
+    wait_for_messages(Config, lists:sort(Stats), 60).
+
+wait_for_messages(Config, Stats, 0) ->
+    ?assertEqual(Stats,
+                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
+                              Config, 0, ["list_queues", "name", "messages", "messages_ready",
+                                          "messages_unacknowledged"])));
+wait_for_messages(Config, Stats, N) ->
+    case lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
+                      Config, 0, ["list_queues", "name", "messages", "messages_ready",
+                                  "messages_unacknowledged"])) of
+        Stats0 when Stats0 == Stats ->
+            ok;
+        _ ->
+            timer:sleep(500),
+            wait_for_messages(Config, Stats, N - 1)
     end.
 
 publish(Ch, Queue) ->

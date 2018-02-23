@@ -44,7 +44,7 @@
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
 
--export([dead_letter_publish/6]).
+-export([dead_letter_publish/5]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -419,8 +419,10 @@ declare_quorum_queue(QueueName, Q) ->
     internal_declare(NewQ, false),
     {new, NewQ, FState}.
 
-dead_letter_publish(VHost, X, RK, QName, Msg, Reason) ->
-    rabbit_vhost_dead_letter:publish(VHost, Msg, Reason, X, RK, QName).
+dead_letter_publish(_, undefined, _, _, _) ->
+    ok;
+dead_letter_publish(VHost, X, RK, QName, ReasonMsgs) ->
+    rabbit_vhost_dead_letter:publish(VHost, X, RK, QName, ReasonMsgs).
 
 dlx_mfa(#amqqueue{name = Resource} = Q) ->
     #resource{virtual_host = VHost} = Resource,
@@ -1049,7 +1051,7 @@ reject({Name, _} = Id, true, {CTag, MsgIds}, _ChPid, FStates) ->
     {ok, maps:put(Name, FState, FStates)};
 reject({Name, _} = Id, false, {CTag, MsgIds}, _ChPid, FStates) ->
     FState0 = get_quorum_state(Id, FStates),
-    {ok, FState} = ra_fifo_client:settle(quorum_ctag(CTag), MsgIds, FState0),
+    {ok, FState} = ra_fifo_client:discard(quorum_ctag(CTag), MsgIds, FState0),
     {ok, maps:put(Name, FState, FStates)}.
 
 notify_down_all(QPids, ChPid) ->

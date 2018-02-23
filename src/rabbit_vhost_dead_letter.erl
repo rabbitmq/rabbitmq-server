@@ -21,7 +21,7 @@
 -behaviour(gen_server).
 
 -export([start/1, start_link/0]).
--export([publish/6]).
+-export([publish/5]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -40,13 +40,13 @@ start(VHost) ->
             E
     end.
 
-publish(VHost, Msg, Reason, X, RK, QName) ->
+publish(VHost, X, RK, QName, ReasonMsgs) ->
     case vhost_dead_letter_pid(VHost) of
         no_pid ->
             %% TODO what to do???
             ok;
         Pid ->
-            gen_server:cast(Pid, {publish, Msg, Reason, X, RK, QName})
+            gen_server:cast(Pid, {publish, X, RK, QName, ReasonMsgs})
     end.
 
 vhost_dead_letter_pid(VHost) ->
@@ -65,8 +65,18 @@ init([]) ->
 handle_call(_Req, _From, State) ->
     {reply, ok, State}.
 
-handle_cast({publish, Msg, Reason, X, RK, QName}, #state{queue_states = QueueStates0} = State) ->
-    QueueStates = rabbit_dead_letter:publish(Msg, Reason, X, RK, QName, QueueStates0),
+handle_cast({publish, X, RK, QName, ReasonMsgs}, #state{queue_states = QueueStates0} = State)
+  when is_record(X, exchange) ->
+    QueueStates = batch_publish(X, RK, QName, ReasonMsgs, QueueStates0),
+    {noreply, State#state{queue_states = QueueStates}};
+handle_cast({publish, DLX, RK, QName, ReasonMsgs}, #state{queue_states = QueueStates0} = State) ->
+    QueueStates =
+        case rabbit_exchange:lookup(DLX) of
+            {ok, X} ->
+                batch_publish(X, RK, QName, ReasonMsgs, QueueStates0);
+            {error, not_found} ->
+                QueueStates0
+        end,
     {noreply, State#state{queue_states = QueueStates}}.
 
 handle_info(_I, State) ->
@@ -75,3 +85,8 @@ handle_info(_I, State) ->
 terminate(_, _) -> ok.
 
 code_change(_, State, _) -> {ok, State}.
+
+batch_publish(X, RK, QName, ReasonMsgs, QueueStates) ->
+    lists:foldl(fun({Reason, Msg}, Acc) ->
+                        rabbit_dead_letter:publish(Msg, Reason, X, RK, QName, Acc)
+                end, QueueStates, ReasonMsgs).
