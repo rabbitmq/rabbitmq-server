@@ -1026,7 +1026,8 @@ on_node_down(Node) ->
           fun () -> Dels = [delete_queue(Q)],
                     T = rabbit_binding:process_deletions(
                           lists:foldl(fun rabbit_binding:combine_deletions/2,
-                                      rabbit_binding:new_deletions(), Dels)),
+                                      rabbit_binding:new_deletions(), Dels),
+                          ?INTERNAL_USER),
                     fun () ->
                             T(),
                             lists:foreach(
@@ -1051,7 +1052,8 @@ on_node_down(Node) ->
                                       %      [{file,"src/rabbit_node_monitor.erl"},{line,548}]}]}
                                       rabbit_core_metrics:queue_deleted(QName),
                                       ok = rabbit_event:notify(queue_deleted,
-                                                               [{name, QName}])
+                                                               [{name, QName},
+                                                                {user, ?INTERNAL_USER}])
                               end, [Q])
                     end
           end) || Q <- queues_to_delete_from_node_down(Node)
