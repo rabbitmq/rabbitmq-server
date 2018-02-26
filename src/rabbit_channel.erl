@@ -602,7 +602,8 @@ handle_cast({confirm, MsgSeqNos, QPid}, State) ->
     noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
 
 handle_info({ra_event, {Name, _} = From, Evt}, #ch{queue_states = QueueStates,
-                                                   consumer_mapping = ConsumerMapping} = State0) ->
+                                                   consumer_mapping = ConsumerMapping,
+                                                   queue_names = QNames } = State0) ->
     FState0 = get_quorum_state(Name, QueueStates),
     case ra_fifo_client:handle_ra_event(From, Evt, FState0) of
         {{delivery, CTag, Msgs}, FState1} ->
@@ -620,11 +621,12 @@ handle_info({ra_event, {Name, _} = From, Evt}, #ch{queue_states = QueueStates,
                           true ->
                               FState1
                       end,
+            {ok, QName} = maps:find(From, QNames),
             State = lists:foldl(
                       fun({MsgId, {MsgHeader, Msg}}, Acc) ->
                               IsDelivered = maps:is_key(delivery_count, MsgHeader),
                               handle_deliver(CTag, AckRequired,
-                                             {Name, From, MsgId, IsDelivered, Msg}, Acc)
+                                             {QName, From, MsgId, IsDelivered, Msg}, Acc)
                       end, State0#ch{queue_states = maps:put(Name, FState2, QueueStates)}, Msgs),
             noreply(State);
         {internal, MsgSeqNos, FState1} ->
