@@ -70,8 +70,8 @@ setup() {
 @test "default Erlang maximum number of processes" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
-    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +P 10485760 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
-    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +P 10485760 "* ]]
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +P 1048576 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +P 1048576 "* ]]
 }
 
 @test "can configure Erlang maximum number of processes via conf file" {
