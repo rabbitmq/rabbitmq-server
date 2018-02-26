@@ -79,6 +79,14 @@ handle_cast({publish, DLX, RK, QName, ReasonMsgs}, #state{queue_states = QueueSt
         end,
     {noreply, State#state{queue_states = QueueStates}}.
 
+handle_info({ra_event, {Name, _} = From, Evt}, #state{queue_states = QueueStates} = State0) ->
+    FState0 = get_quorum_state(Name, QueueStates),
+    case ra_fifo_client:handle_ra_event(From, Evt, FState0) of
+        {_, FState1} ->
+            {noreply, State0#state{queue_states = maps:put(Name, FState1, QueueStates)}};
+        {_, _, FState1} ->
+            {noreply, State0#state{queue_states = maps:put(Name, FState1, QueueStates)}}
+    end;
 handle_info(_I, State) ->
     {noreply, State}.
 
@@ -90,3 +98,11 @@ batch_publish(X, RK, QName, ReasonMsgs, QueueStates) ->
     lists:foldl(fun({Reason, Msg}, Acc) ->
                         rabbit_dead_letter:publish(Msg, Reason, X, RK, QName, Acc)
                 end, QueueStates, ReasonMsgs).
+
+get_quorum_state(Id, Map) ->
+    try
+        maps:get(Id, Map)
+    catch
+        error:{badkey, _} ->
+            ra_fifo_client:init([Id])
+    end.
