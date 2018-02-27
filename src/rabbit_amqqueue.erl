@@ -1114,28 +1114,20 @@ maybe_clear_recoverable_node(Node,
     end.
 
 on_node_down(Node) ->
-    % Create 1 transaction per N queues that need to be deleted
-    %   * 1 transaction for all queues might block everything for a really long time
-    %   * ^^^ this is what used to happen before this change
-    %   * 1 transaction per queue will result in too many transaction
-    %   * ^^^ this is what happens now; it's not perfect, but it's a step in the right direction
-    %   * ^^^ OPTIMISE THIS BEFORE MERGING ^^^
-    %   * Maybe 1 transaction for every 10 queues that need to be deleted ?
-    %
     % For each transaction:
     %   * delete all queues in the transaction
     %   * capture the result for every delete queue
     [
         rabbit_misc:execute_mnesia_tx_with_tail(
-          fun () -> Dels = [delete_queue(Q)],
-                    T = rabbit_binding:process_deletions(
+          fun () -> QueueDeletions = [delete_queue(Queue) || Queue <- Queues],
+                    NotifyBindingDeletions = rabbit_binding:process_deletions(
                           lists:foldl(fun rabbit_binding:combine_deletions/2,
-                                      rabbit_binding:new_deletions(), Dels),
+                                      rabbit_binding:new_deletions(), QueueDeletions),
                           ?INTERNAL_USER),
                     fun () ->
-                            T(),
+                            NotifyBindingDeletions(),
                             lists:foreach(
-                              fun(QName) ->
+                              fun(Queue) ->
                                       % When 40k queues are being deleted,
                                       % this results in a rabbit_node_monitor function that recurses for 30 minutes,
                                       % meaning that no information is available for the node (Management Overview doesn't update):
@@ -1154,14 +1146,20 @@ on_node_down(Node) ->
                                       %      [{file,"src/rabbit_node_monitor.erl"},{line,755}]},
                                       %  {rabbit_node_monitor,handle_info,2,
                                       %      [{file,"src/rabbit_node_monitor.erl"},{line,548}]}]}
-                                      rabbit_core_metrics:queue_deleted(QName),
+                                      rabbit_core_metrics:queue_deleted(Queue),
                                       ok = rabbit_event:notify(queue_deleted,
-                                                               [{name, QName},
+                                                               [{name, Queue},
                                                                 {user, ?INTERNAL_USER}])
-                              end, [Q])
+                              end, Queues)
                     end
-          end) || Q <- queues_to_delete_from_node_down(Node)
-    ].
+          end) || Queues <- partition_queues(queues_to_delete_from_node_down(Node))
+    ],
+    ok.
+
+partition_queues([Q0,Q1,Q2,Q3,Q4,Q5,Q6,Q7,Q8,Q9 | T]) ->
+    [[Q0,Q1,Q2,Q3,Q4,Q5,Q6,Q7,Q8,Q9] | partition_queues(T)];
+partition_queues(T) ->
+    [T].
 
 delete_queue(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
