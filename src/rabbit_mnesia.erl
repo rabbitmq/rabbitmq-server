@@ -138,6 +138,7 @@ init_with_lock(0, _, InitFromConfig) ->
 init_with_lock(Retries, Timeout, InitFromConfig) ->
     case rabbit_peer_discovery:lock() of
         not_supported ->
+            rabbit_log:info("Peer discovery backend does not support locking, falling back to randomized delay"),
             %% See rabbitmq/rabbitmq-server#1202 for details.
             rabbit_peer_discovery:maybe_inject_randomized_delay(),
             InitFromConfig(),
