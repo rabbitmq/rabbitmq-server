@@ -869,12 +869,12 @@ end}.
 
 %% Cluster formation: Randomized startup delay
 
-{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_delay_range",
+{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_startup_delay_range",
     [{datatype, integer}]}.
-{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_delay_range",
+{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_startup_delay_range",
     [{datatype, integer}]}.
 
-{translation, "rabbit.cluster_formation.randomized_delay_range",
+{translation, "rabbit.cluster_formation.randomized_startup_delay_range",
 fun(Conf) ->
     Min = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.min", Conf, undefined),
     Max = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.max", Conf, undefined),
