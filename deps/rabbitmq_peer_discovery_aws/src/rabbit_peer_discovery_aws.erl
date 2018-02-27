@@ -106,7 +106,8 @@ list_nodes() ->
 -spec supports_registration() -> boolean().
 
 supports_registration() ->
-    false.
+    %% see rabbitmq-peer-discovery-aws#17
+    true.
 
 
 -spec register() -> ok.

@@ -31,7 +31,8 @@ groups() ->
     [
      {unit, [], [
                  maybe_add_tag_filters,
-                 get_hostname_name_from_reservation_set
+                 get_hostname_name_from_reservation_set,
+                 registration_support
                 ]}].
 
 %%%
@@ -70,6 +71,9 @@ get_hostname_name_from_reservation_set(_Config) ->
                                reservation_set(), []))
         end}]
     }.
+
+registration_support(_Config) ->
+    ?assertEqual(rabbit_peer_discovery_aws:supports_registration(), true).
 
 %%%
 %%% Implementation
