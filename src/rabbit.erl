@@ -204,6 +204,12 @@
                                    [rabbit_core_metrics_gc]}},
                     {enables,     networking}]}).
 
+-rabbit_boot_step({rabbit_quorum_metrics,
+                   [{description, "background quorum metrics collection"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_quorum_metrics]}},
+                    {requires,    recovery}]}).
+
 -rabbit_boot_step({rabbit_looking_glass,
                    [{description, "Looking Glass tracer and profiler"},
                     {mfa,         {rabbit_looking_glass, boot, []}},

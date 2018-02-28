@@ -262,8 +262,9 @@ recover_classic_queues(VHost, Queues) ->
 recover_quorum_queues(Queues) ->
     [begin
          ok = ra:restart_node(ra_node_config(Q)),
+         ets:insert(quorum_mapping, {RaName, QName}),
          internal_declare(Q, true)
-     end || Q <- Queues].
+     end || #amqqueue{name = QName, pid = {RaName, _}} = Q <- Queues].
 
 filter_per_type(Queues) ->
     lists:foldl(fun(#amqqueue{type = classic} = Q, {Cla, Quo}) ->
@@ -387,12 +388,12 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
 
     case Type of
         classic ->
-            declare_classic_queue(QueueName, Q, VHost, Node);
+            declare_classic_queue(Q, Node);
         quorum ->
-            declare_quorum_queue(QueueName, Q)
+            declare_quorum_queue(Q)
     end.
 
-declare_classic_queue(QueueName, Q, VHost, Node) ->
+declare_classic_queue(#amqqueue{name = QName, vhost = VHost} = Q, Node) ->
     Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
               {ok, Node0}  -> Node0;
               {error, _}   -> Node
@@ -406,17 +407,36 @@ declare_classic_queue(QueueName, Q, VHost, Node) ->
         {error, Error} ->
             rabbit_misc:protocol_error(internal_error,
                             "Cannot declare a queue '~s' on node '~s': ~255p",
-                            [rabbit_misc:rs(QueueName), Node1, Error])
+                            [rabbit_misc:rs(QName), Node1, Error])
     end.
 
-declare_quorum_queue(QueueName, Q) ->
-    RaName = qname_to_rname(QueueName),
+declare_quorum_queue(#amqqueue{name = QName,
+                               durable = Durable,
+                               auto_delete = AutoDelete,
+                               arguments = Arguments,
+                               exclusive_owner = ExclusiveOwner,
+                               options = Opts} = Q) ->
+    RaName = qname_to_rname(QName),
     Id = {RaName, node()},
     NewQ = Q#amqqueue{pid = Id},
     ok = ra:start_node(ra_node_config(NewQ)),
     _ = ra_node_proc:trigger_election(Id),
     FState = ra_fifo_client:init([Id]),
     internal_declare(NewQ, false),
+    ets:insert(quorum_mapping, {RaName, QName}),
+    OwnerPid = case ExclusiveOwner of
+                   none -> '';
+                   _ -> ExclusiveOwner
+               end,
+    %% TODO do the quorum queue receive the `force_event_refresh`? what do we do with it?
+    rabbit_event:notify(queue_created,
+                        [{name, QName},
+                         {durable, Durable},
+                         {auto_delete, AutoDelete},
+                         {arguments, Arguments},
+                         {owner_pid, OwnerPid},
+                         {exclusive, is_pid(ExclusiveOwner)},
+                         {user_who_performed_action, maps:get(user, Opts, ?UNKNOWN_USER)}]),
     {new, NewQ, FState}.
 
 dead_letter_publish(_, undefined, _, _, _) ->
@@ -1004,12 +1024,14 @@ delete_immediately(QPids) ->
     ok.
 
 
-delete(#amqqueue{ type = quorum, pid = QPid, name = QName},
+delete(#amqqueue{ type = quorum, pid = {Name, _} = QPid, name = QName},
        _IfUnused, _IfEmpty, ActingUser, QueueStates0) ->
     %% TODO Quorum queue needs to support queue length and consumer tracking
+    %% TODO needs real counter
     ok = ra:delete_node(QPid),
     internal_delete(QName, ActingUser),
-    %% TODO needs real counter
+    rabbit_core_metrics:queue_deleted(QName),
+    ets:delete(quorum_mapping, Name),
     {ok, 0, maps:remove(QPid, QueueStates0)};
 delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty, ActingUser, _QueueStates0) ->
     delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]}).
@@ -1109,9 +1131,9 @@ basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid,
                            [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                              ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
                              Args, OkMsg, ActingUser}, infinity]});
-basic_consume(#amqqueue{pid = {Name, _} = Id, type = quorum}, _NoAck, ChPid, _LimiterPid,
-              _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
-              _ExclusiveConsume, _Args, OkMsg, _ActingUser, QStates) ->
+basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum}, NoAck, ChPid,
+              _LimiterPid, _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
+              ExclusiveConsume, Args, OkMsg, _ActingUser, QStates) ->
     maybe_send_reply(ChPid, OkMsg),
     %% A prefetch count of 0 means no limitation, let's make it into something large for ra
     Prefetch = case ConsumerPrefetchCount of
@@ -1120,6 +1142,9 @@ basic_consume(#amqqueue{pid = {Name, _} = Id, type = quorum}, _NoAck, ChPid, _Li
                end,
     FState0 = get_quorum_state(Id, QStates),
     {ok, FState} = ra_fifo_client:checkout(quorum_ctag(ConsumerTag), Prefetch, FState0),
+    %% TODO maybe needs to be handled by ra? how can we manage the consumer deleted?
+    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                         not NoAck, QName, ConsumerPrefetchCount, Args),
     {ok, maps:put(Name, FState, QStates)}.
 
 maybe_send_reply(_ChPid, undefined) -> ok;
