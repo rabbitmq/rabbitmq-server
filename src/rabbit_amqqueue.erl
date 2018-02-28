@@ -261,8 +261,8 @@ recover_classic_queues(VHost, Queues) ->
 
 recover_quorum_queues(Queues) ->
     [begin
-         ok = ra:restart_node(ra_node_config(Q)),
          ets:insert(quorum_mapping, {RaName, QName}),
+         ok = ra:restart_node(ra_node_config(Q)),
          internal_declare(Q, true)
      end || #amqqueue{name = QName, pid = {RaName, _}} = Q <- Queues].
 
@@ -419,11 +419,11 @@ declare_quorum_queue(#amqqueue{name = QName,
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
     NewQ = Q#amqqueue{pid = Id},
+    ets:insert(quorum_mapping, {RaName, QName}),
     ok = ra:start_node(ra_node_config(NewQ)),
     _ = ra_node_proc:trigger_election(Id),
     FState = ra_fifo_client:init([Id]),
     internal_declare(NewQ, false),
-    ets:insert(quorum_mapping, {RaName, QName}),
     OwnerPid = case ExclusiveOwner of
                    none -> '';
                    _ -> ExclusiveOwner

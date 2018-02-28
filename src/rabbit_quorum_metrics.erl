@@ -56,7 +56,10 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(emit_stats, State) ->
-    emit_stats(),
+    case ets:info(ra_fifo_metrics, name) of
+        undefined -> ok;
+        _ -> emit_stats()
+    end,
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
     {noreply, rabbit_event:ensure_stats_timer(State1, #state.stats_timer, emit_stats)}.
 
