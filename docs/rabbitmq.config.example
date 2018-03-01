@@ -908,5 +908,13 @@
    %%                                     {lager_forwarder_backend,
    %%                                      [lager_event, info]}]}]}
    %% ]}
+  ]},
+  %% Ra implements quorum queues.
+  %% See https://github.com/rabbitmq/ra for more documentation
+  {ra, [
+   %%
+   %% Data directory, taken from the RABBITMQ_QUORUM_BASE env variable by default.
+   %% {data_dir, "/var/quorum"}
+   %%
   ]}
 ].
