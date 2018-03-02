@@ -37,7 +37,6 @@ BOOT_MODULE="rabbit"
 CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq
 LOG_BASE=${SYS_PREFIX}/var/log/rabbitmq
 MNESIA_BASE=${SYS_PREFIX}/var/lib/rabbitmq/mnesia
-QUORUM_BASE=${SYS_PREFIX}/var/lib/rabbitmq/quorum
 ENABLED_PLUGINS_FILE=${SYS_PREFIX}/etc/rabbitmq/enabled_plugins
 GENERATED_CONFIG_DIR=${SYS_PREFIX}/var/lib/rabbitmq/config
 ADVANCED_CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/advanced

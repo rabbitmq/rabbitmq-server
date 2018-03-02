@@ -1140,14 +1140,6 @@ end}.
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 
-% ==========================
-% Ra section
-% ==========================
-
-{mapping, "quorum.dir", "ra.data_dir", [
-    {datatype, string},
-    {validators, ["dir_writable"]}]}.
-
 % ===============================
 % Validators
 % ===============================

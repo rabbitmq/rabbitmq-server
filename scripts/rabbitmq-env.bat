@@ -228,19 +228,6 @@ if not exist "!RABBITMQ_MNESIA_BASE!" (
 )
 for /f "delims=" %%F in ("!RABBITMQ_MNESIA_BASE!") do set RABBITMQ_MNESIA_BASE=%%~sF
 
-REM [ "x" = "x$RABBITMQ_QUORUM_BASE" ] && RABBITMQ_QUORUM_BASE=${QUORUM_BASE}
-if "!RABBITMQ_QUORUM_BASE!"=="" (
-    if "!QUORUM_BASE!"=="" (
-        set RABBITMQ_QUORUM_BASE=!RABBITMQ_BASE!\quorum
-    ) else (
-        set RABBITMQ_QUORUM_BASE=!QUORUM_BASE!
-    )
-)
-if not exist "!RABBITMQ_QUORUM_BASE!" (
-    mkdir "!RABBITMQ_QUORUM_BASE!"
-)
-for /f "delims=" %%F in ("!RABBITMQ_QUORUM_BASE!") do set RABBITMQ_QUORUM_BASE=%%~sF
-
 REM [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
 REM No Windows equivalent
 
@@ -453,7 +440,6 @@ set CONFIG_FILE=
 set ENABLED_PLUGINS_FILE=
 set LOG_BASE=
 set MNESIA_BASE=
-set QUORUM_BASE=
 set PLUGINS_DIR=
 set SCRIPT_DIR=
 set SCRIPT_NAME=
