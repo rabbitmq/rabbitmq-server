@@ -54,7 +54,8 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -nodename !RABBITMQ_NODENAME! ^
 -run escript start ^
 -escript main rabbitmqctl_escript ^
--extra "%RABBITMQ_HOME%\escript\rabbitmq-plugins" --formatter=plugins !STAR!
+-extra "%RABBITMQ_HOME%\escript\rabbitmq-plugins" --formatter=plugins !STAR! ^
+-ra data_dir \""!RABBITMQ_QUORUM_DIR:\=/!"\"
 
 endlocal
 endlocal

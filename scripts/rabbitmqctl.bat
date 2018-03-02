@@ -51,6 +51,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 !RABBITMQ_CTL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
+-ra data_dir \""!RABBITMQ_QUORUM_DIR:\=/!"\" ^
 -nodename !RABBITMQ_NODENAME! ^
 -run escript start ^
 -escript main rabbitmqctl_escript ^
