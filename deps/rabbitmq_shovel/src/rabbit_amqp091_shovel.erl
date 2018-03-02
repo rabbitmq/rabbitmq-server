@@ -323,14 +323,14 @@ make_conn_and_chan([], ShovelName) ->
           [ShovelName]),
     erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan(URIs, ShovelName) ->
-    try do_make_conn_and_chane(URIs, ShovelName) of
+    try do_make_conn_and_chan(URIs, ShovelName) of
         Val -> Val
     catch throw:{error, Reason, URI} ->
         log_connection_failure(Reason, URI, ShovelName),
         make_conn_and_chan(lists:usort(URIs -- [URI]), ShovelName)
     end.
 
-do_make_conn_and_chane(URIs, ShovelName) ->
+do_make_conn_and_chan(URIs, ShovelName) ->
     URI = lists:nth(rand:uniform(length(URIs)), URIs),
     {ok, AmqpParam} = amqp_uri:parse(URI),
     ConnName = get_connection_name(ShovelName),
