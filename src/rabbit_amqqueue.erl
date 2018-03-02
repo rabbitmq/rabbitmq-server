@@ -25,7 +25,7 @@
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/3, requeue/3, ack/4, reject/5]).
+         stat/1, deliver/2, deliver/3, requeue/3, ack/4, reject/5]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
@@ -160,11 +160,13 @@
 -spec delete_crashed_internal(rabbit_types:amqqueue(), rabbit_types:username()) -> 'ok'.
 -spec purge(rabbit_types:amqqueue()) -> qlen().
 -spec forget_all_durable(node()) -> 'ok'.
--spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery(), #{Name :: atom() => ra_fifo_client:state()}) ->
-                        qpids().
+-spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery(), #{Name :: atom() => ra_fifo_client:state()} | 'untracked') ->
+                        {qpids(), #{Name :: atom() => ra_fifo_client:state()}}.
+-spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery()) -> 'ok'.
 -spec requeue(pid(), [msg_id()],  pid()) -> 'ok'.
 -spec ack(pid(), [msg_id()], pid(), #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
--spec reject(pid(), [msg_id()], boolean(), pid(), #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
+-spec reject(pid() | {atom(), node()}, [msg_id()], boolean(), pid(),
+             #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
 -spec notify_down_all(qpids(), pid()) -> ok_or_errors().
 -spec notify_down_all(qpids(), pid(), non_neg_integer()) ->
           ok_or_errors().
@@ -262,9 +264,9 @@ recover_classic_queues(VHost, Queues) ->
 recover_quorum_queues(Queues) ->
     [begin
          ets:insert(quorum_mapping, {RaName, QName}),
-         ok = ra:restart_node(ra_node_config(Q)),
+         ok = ra:restart_node(QPid),
          internal_declare(Q, true)
-     end || #amqqueue{name = QName, pid = {RaName, _}} = Q <- Queues].
+     end || #amqqueue{name = QName, pid = {RaName, _} = QPid} = Q <- Queues].
 
 filter_per_type(Queues) ->
     lists:foldl(fun(#amqqueue{type = classic} = Q, {Cla, Quo}) ->
@@ -280,7 +282,7 @@ stop(VHost) ->
     ok = BQ:stop(VHost),
     %% Quorum queues
     Quorum = find_quorum_queues(VHost),
-    [ra:stop_node(Pid) || #amqqueue{pid = Pid} <- Quorum],
+    _ = [ra:stop_node(Pid) || #amqqueue{pid = Pid} <- Quorum],
     ok.
 
 start(Qs) ->
@@ -289,8 +291,8 @@ start(Qs) ->
     %% visible to routing, so now it is safe for them to complete
     %% their initialisation (which may involve interacting with other
     %% queues).
-    [Pid ! {self(), go} || #amqqueue{pid = Pid} <- Classic],
-    [ra_node_proc:trigger_election(Id) || #amqqueue{pid = Id} <- Quorum],
+    _ = [Pid ! {self(), go} || #amqqueue{pid = Pid} <- Classic],
+    _ = [ra_node_proc:trigger_election(Id) || #amqqueue{pid = Id} <- Quorum],
     ok.
 
 mark_local_durable_queues_stopped(VHost) ->
@@ -422,8 +424,8 @@ declare_quorum_queue(#amqqueue{name = QName,
     ets:insert(quorum_mapping, {RaName, QName}),
     ok = ra:start_node(ra_node_config(NewQ)),
     _ = ra_node_proc:trigger_election(Id),
-    FState = ra_fifo_client:init([Id]),
-    internal_declare(NewQ, false),
+    FState = ra_fifo_client:init(RaName, [Id]),
+    _ = internal_declare(NewQ, false),
     OwnerPid = case ExclusiveOwner of
                    none -> '';
                    _ -> ExclusiveOwner
@@ -469,7 +471,8 @@ args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
 ra_node_config(#amqqueue{pid = {Name, _} = Id} = Q) ->
     {ok, DataDir} = application:get_env(ra, data_dir),
     UId = atom_to_binary(Name, utf8),
-    #{id => Id,
+    #{cluster_id => Name,
+      id => Id,
       uid => UId,
       log_module => ra_log_file,
       log_init_args => #{data_dir => DataDir,
@@ -1003,7 +1006,7 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
     [lists:zip(ConsumerInfoKeys,
                [Q#amqqueue.name, ChPid, CTag,
                 AckRequired, Prefetch, Args]) ||
-        {ChPid, CTag, AckRequired, Prefetch, Args, _} <- consumers(Q)].
+        {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)].
 
 stat(#amqqueue{type = quorum}) -> {ok, 0, 0}; %% length, consumers count
 stat(#amqqueue{pid = QPid}) -> delegate:invoke(QPid, {gen_server2, call, [stat, infinity]}).
@@ -1029,7 +1032,7 @@ delete(#amqqueue{ type = quorum, pid = {Name, _} = QPid, name = QName},
     %% TODO Quorum queue needs to support queue length and consumer tracking
     %% TODO needs real counter
     ok = ra:delete_node(QPid),
-    internal_delete(QName, ActingUser),
+    _ = internal_delete(QName, ActingUser),
     rabbit_core_metrics:queue_deleted(QName),
     ets:delete(quorum_mapping, Name),
     {ok, 0, maps:remove(QPid, QueueStates0)};
@@ -1368,6 +1371,10 @@ immutable(Q) -> Q#amqqueue{pid                = none,
                            decorators         = none,
                            state              = none}.
 
+deliver(Qs, Delivery) ->
+    deliver(Qs, Delivery, untracked),
+    ok.
+
 deliver([], _Delivery, QueueState) ->
     %% /dev/null optimisation
     {[], QueueState};
@@ -1401,15 +1408,22 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
     delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
     delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
     QueueState =
-        case Confirm of
-            false ->
+        case {QueueState0, Confirm} of
+            {untracked, _} ->
+                lists:foreach(
+                  fun({Name, _} = Pid) ->
+                          ok = ra_fifo_client:untracked_enqueue(Name, [Pid],
+                                                                Delivery#delivery.message)
+                  end, Quorum),
+                untracked;
+            {_, false} ->
                 lists:foldl(
                   fun({Name, _} = Pid, QStates) ->
                           {ok, QS} = ra_fifo_client:enqueue(Delivery#delivery.message,
                                                             get_quorum_state(Pid, QStates)),
                           maps:put(Name, QS, QStates)
                   end, QueueState0, Quorum);
-            true ->
+            {_, true} ->
                 lists:foldl(
                   fun({Name, _} = Pid, QStates) ->
                           {ok, QS} = ra_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
@@ -1439,5 +1453,5 @@ get_quorum_state({Name, _} = Id, Map) ->
         maps:get(Name, Map)
     catch
         error:{badkey, _} ->
-            ra_fifo_client:init([Id])
+            ra_fifo_client:init(Name, [Id])
     end.

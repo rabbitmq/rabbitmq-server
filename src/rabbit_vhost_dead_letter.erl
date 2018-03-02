@@ -21,6 +21,7 @@
 -behaviour(gen_server).
 
 -export([start/1, start_link/0]).
+-export([stop/1]).
 -export([publish/5]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -38,6 +39,18 @@ start(VHost) ->
             rabbit_log:error("Failed to start a dead letter process for vhost ~s: vhost no"
                              " longer exists!", [VHost]),
             E
+    end.
+
+stop(VHost) ->
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
+        {ok, VHostSup} ->
+            ok = supervisor2:terminate_child(VHostSup, rabbit_vhost_dead_letter),
+            ok = supervisor2:delete_child(VHostSup, rabbit_vhost_dead_letter);
+        {error, {no_such_vhost, VHost}} ->
+            rabbit_log:error("Failed to stop a dead letter process for vhost ~s: "
+                             "vhost no longer exists!", [VHost]),
+
+            ok
     end.
 
 publish(VHost, X, RK, QName, ReasonMsgs) ->
@@ -99,10 +112,10 @@ batch_publish(X, RK, QName, ReasonMsgs, QueueStates) ->
                         rabbit_dead_letter:publish(Msg, Reason, X, RK, QName, Acc)
                 end, QueueStates, ReasonMsgs).
 
-get_quorum_state(Id, Map) ->
+get_quorum_state({Name, _} = Id, Map) ->
     try
         maps:get(Id, Map)
     catch
         error:{badkey, _} ->
-            ra_fifo_client:init([Id])
+            ra_fifo_client:init(Name, [Id])
     end.

@@ -2152,11 +2152,11 @@ handle_method(#'queue.bind'{queue       = QueueNameBin,
 %% exists it by definition has one consumer.
 handle_method(#'queue.declare'{queue   = <<"amq.rabbitmq.reply-to",
                                            _/binary>> = QueueNameBin},
-              _ConnPid, _CollectorPid, VHost, _User, _QueueStates0) ->
+              _ConnPid, _CollectorPid, VHost, _User, QueueStates0) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = rabbit_misc:r(VHost, queue, StrippedQueueNameBin),
     case declare_fast_reply_to(StrippedQueueNameBin) of
-        exists    -> {ok, QueueName, 0, 1};
+        exists    -> {ok, QueueName, 0, 1, QueueStates0};
         not_found -> rabbit_misc:not_found(QueueName)
     end;
 handle_method(#'queue.declare'{queue       = QueueNameBin,
@@ -2245,14 +2245,14 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
 handle_method(#'queue.declare'{queue   = QueueNameBin,
                                nowait  = NoWait,
                                passive = true},
-              ConnPid, _CollectorPid, VHostPath, _User, _QueueStates0) ->
+              ConnPid, _CollectorPid, VHostPath, _User, QueueStates0) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = rabbit_misc:r(VHostPath, queue, StrippedQueueNameBin),
     {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
         rabbit_amqqueue:with_or_die(
           QueueName, fun (Q) -> {maybe_stat(NoWait, Q), Q} end),
     ok = rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
-    {ok, QueueName, MessageCount, ConsumerCount};
+    {ok, QueueName, MessageCount, ConsumerCount, QueueStates0};
 handle_method(#'queue.delete'{queue     = QueueNameBin,
                               if_unused = IfUnused,
                               if_empty  = IfEmpty},
@@ -2387,10 +2387,10 @@ handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
     State1 = monitor_delivering_queue(NoAck, QPid, QName, State),
     {noreply, record_sent(DeliveryTag, not(NoAck), Msg, State1)}.
 
-get_quorum_state(Id, Map) ->
+get_quorum_state({Name, _} = Id, Map) ->
     try
         maps:get(Id, Map)
     catch
         error:{badkey, _} ->
-            ra_fifo_client:init([Id])
+            ra_fifo_client:init(Name, [Id])
     end.

@@ -493,6 +493,7 @@ start(VHost, DurableQueues) ->
     {ok, AllTerms}.
 
 stop(VHost) ->
+    ok = rabbit_vhost_dead_letter:stop(VHost),
     ok = stop_msg_store(VHost),
     ok = rabbit_queue_index:stop(VHost).
 

@@ -235,7 +235,7 @@ declare_on_dead_queue1(_Config, SecondaryNode) ->
     receive
         {Pid, killed, OldPid} ->
             Q = dead_queue_loop(QueueName, OldPid),
-            {ok, 0} = rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
+            {ok, 0} = rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>, #{}),
             passed
     after ?TIMEOUT -> throw(failed_to_create_and_kill_queue)
     end.
@@ -264,7 +264,7 @@ refresh_events1(Config, SecondaryNode) ->
         rabbit_amqqueue:declare(queue_name(Config, <<"refresh_events-q">>),
                                 false, false, [], none, <<"acting-user">>),
     expect_events(name, QName, queue_created),
-    rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
+    rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>, #{}),
 
     dummy_event_receiver:stop(),
     passed.
