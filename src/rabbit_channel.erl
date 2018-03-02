@@ -604,7 +604,7 @@ handle_cast({confirm, MsgSeqNos, QPid}, State) ->
 handle_info({ra_event, {Name, _} = From, Evt}, #ch{queue_states = QueueStates,
                                                    consumer_mapping = ConsumerMapping,
                                                    queue_names = QNames } = State0) ->
-    FState0 = get_quorum_state(Name, QueueStates),
+    FState0 = get_quorum_state(From, QueueStates),
     case ra_fifo_client:handle_ra_event(From, Evt, FState0) of
         {{delivery, CTag, Msgs}, FState1} ->
             AckRequired = case maps:find(CTag, ConsumerMapping) of
@@ -2389,7 +2389,7 @@ handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
 
 get_quorum_state({Name, _} = Id, Map) ->
     try
-        maps:get(Id, Map)
+        maps:get(Name, Map)
     catch
         error:{badkey, _} ->
             ra_fifo_client:init(Name, [Id])

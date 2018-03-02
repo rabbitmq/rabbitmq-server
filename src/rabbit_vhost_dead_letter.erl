@@ -93,7 +93,7 @@ handle_cast({publish, DLX, RK, QName, ReasonMsgs}, #state{queue_states = QueueSt
     {noreply, State#state{queue_states = QueueStates}}.
 
 handle_info({ra_event, {Name, _} = From, Evt}, #state{queue_states = QueueStates} = State0) ->
-    FState0 = get_quorum_state(Name, QueueStates),
+    FState0 = get_quorum_state(From, QueueStates),
     case ra_fifo_client:handle_ra_event(From, Evt, FState0) of
         {_, FState1} ->
             {noreply, State0#state{queue_states = maps:put(Name, FState1, QueueStates)}};
@@ -114,7 +114,7 @@ batch_publish(X, RK, QName, ReasonMsgs, QueueStates) ->
 
 get_quorum_state({Name, _} = Id, Map) ->
     try
-        maps:get(Id, Map)
+        maps:get(Name, Map)
     catch
         error:{badkey, _} ->
             ra_fifo_client:init(Name, [Id])
