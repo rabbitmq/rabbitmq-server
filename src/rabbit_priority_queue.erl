@@ -393,6 +393,8 @@ handle_pre_hibernate(State = #state{bq = BQ}) ->
 handle_pre_hibernate(State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough1(handle_pre_hibernate(BQS)).
 
+handle_info(Msg, State = #state{bq = BQ}) ->
+    foreach1(fun (_P, BQSN) -> BQ:handle_info(Msg, BQSN) end, State);
 handle_info(Msg, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough1(handle_info(Msg, BQS)).
 
@@ -408,6 +410,7 @@ msg_rates(#state{bq = BQ, bqss = BQSs}) ->
           end, {0.0, 0.0}, BQSs);
 msg_rates(#passthrough{bq = BQ, bqs = BQS}) ->
     BQ:msg_rates(BQS).
+
 info(backing_queue_status, #state{bq = BQ, bqss = BQSs}) ->
     fold0(fun (P, BQSN, Acc) ->
                   combine_status(P, BQ:info(backing_queue_status, BQSN), Acc)
@@ -481,9 +484,9 @@ add0(Fun, BQSs) -> fold0(fun (P, BQSN, Acc) -> Acc + Fun(P, BQSN) end, 0, BQSs).
 %% Apply for all states
 foreach1(Fun, State = #state{bqss = BQSs}) ->
     a(State#state{bqss = foreach1(Fun, BQSs, [])}).
-foreach1(Fun, [{P, BQSN} | Rest], BQSAcc) ->
-    BQSN1 = Fun(P, BQSN),
-    foreach1(Fun, Rest, [{P, BQSN1} | BQSAcc]);
+foreach1(Fun, [{Priority, BQSN} | Rest], BQSAcc) ->
+    BQSN1 = Fun(Priority, BQSN),
+    foreach1(Fun, Rest, [{Priority, BQSN1} | BQSAcc]);
 foreach1(_Fun, [], BQSAcc) ->
     lists:reverse(BQSAcc).
 
