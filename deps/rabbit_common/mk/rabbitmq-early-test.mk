@@ -38,6 +38,8 @@ endif
 # from its UI. Furthermore, it displays a graph showing evolution of the
 # results over time.
 
+CT_OPTS += -hidden
+
 ifndef TRAVIS
 CT_HOOKS ?= cth_styledout
 TEST_DEPS += cth_styledout
