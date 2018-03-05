@@ -1445,7 +1445,7 @@ qpids(Qs) ->
                         (#amqqueue{pid = QPid, slave_pids = SPids},
                          {QuoPidAcc, MPidAcc, SPidAcc}) ->
                             {QuoPidAcc, [QPid | MPidAcc], [SPids | SPidAcc]}
-                    end, {[], []}, Qs),
+                    end, {[], [], []}, Qs),
     {QuoPids, MPids, lists:append(SPids)}.
 
 get_quorum_state({Name, _} = Id, Map) ->
