@@ -363,8 +363,14 @@ human_readable_connection_error(unknown_host) ->
     "unknown host (failed to resolve hostname)";
 human_readable_connection_error(econnrefused) ->
     "connection to target host was refused (ECONNREFUSED)";
+human_readable_connection_error(econnreset) ->
+    "connection to target host was reset by peer (ECONNRESET)";
 human_readable_connection_error(etimedout) ->
     "connection to target host timed out (ETIMEDOUT)";
+human_readable_connection_error(ehostunreach) ->
+    "target host is unreachable (EHOSTUNREACH)";
+human_readable_connection_error(nxdomain) ->
+    "target hostname cannot be resolved (NXDOMAIN)";
 human_readable_connection_error(eacces) ->
     "connection to target host failed with EACCES. "
     "This may be due to insufficient RabbitMQ process permissions or "
