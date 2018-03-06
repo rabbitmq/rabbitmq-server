@@ -87,6 +87,7 @@ declare(#amqqueue{name = QName,
                   arguments = Arguments,
                   exclusive_owner = ExclusiveOwner,
                   options = Opts} = Q) ->
+    check_invalid_arguments(QName, Arguments),
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
     NewQ = Q#amqqueue{pid = Id},
@@ -336,3 +337,16 @@ qnode(QPid) when is_pid(QPid) ->
     node(QPid);
 qnode({_, Node}) ->
     Node.
+
+check_invalid_arguments(QueueName, Args) ->
+    Keys = [<<"x-expires">>, <<"x-message-ttl">>, <<"x-max-length">>,
+            <<"x-max-length-bytes">>, <<"x-max-priority">>, <<"x-overflow">>,
+            <<"x-queue-mode">>],
+    [case rabbit_misc:table_lookup(Args, Key) of
+         undefined -> ok;
+         _TypeVal   -> rabbit_misc:protocol_error(
+                         precondition_failed,
+                         "invalid arg '~s' for ~s",
+                         [Key, rabbit_misc:rs(QueueName)])
+     end || Key <- Keys],
+    ok.

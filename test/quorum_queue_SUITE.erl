@@ -31,6 +31,7 @@ groups() ->
     [
       {non_parallel_tests, [], [
           declare_args,
+          declare_invalid_args,
           start_queue,
           stop_queue,
           restart_queue,
@@ -118,6 +119,49 @@ declare_args(Config) ->
     DQ2 = <<"classic-q2">>,
     declare(Ch, DQ2),
     assert_queue_type(Node, DQ2, classic).
+
+declare_invalid_args(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    LQ = <<"quorum-q">>,
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-expires">>, long, 2000}])),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-message-ttl">>, long, 2000}])),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-max-length">>, long, 2000}])),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-max-length-bytes">>, long, 2000}])),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-max-priority">>, long, 2000}])),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-overflow">>, longstr, <<"drop-head">>}])),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-queue-mode">>, longstr, <<"lazy">>}])).
 
 start_queue(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
