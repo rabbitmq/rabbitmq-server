@@ -56,6 +56,7 @@ groups() ->
           declare_policy_exactly,
           declare_config,
           calculate_min_master,
+          calculate_min_master_with_bindings,
           calculate_random,
           calculate_client_local
         ]}
@@ -210,6 +211,22 @@ calculate_min_master(Config) ->
     verify_min_master(Config, Q),
     ok.
 
+calculate_min_master_with_bindings(Config) ->
+    setup_test_environment(Config),
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test_bound">>),
+    Args = [{<<"x-queue-master-locator">>, longstr, <<"min-masters">>}],
+    declare(Config, QueueName, false, false, Args, none),
+    verify_min_master(Config, Q),
+    %% Add 20 bindings to this queue
+    [ bind(Config, QueueName, integer_to_binary(N)) || N <- lists:seq(1, 20) ],
+
+    QueueName1 = rabbit_misc:r(<<"/">>, queue, Q1 = <<"qm.test_unbound">>),
+    declare(Config, QueueName1, false, false, Args, none),
+    % Another queue should still be on the same node, bindings should
+    % not account for min-masters counting
+    verify_min_master(Config, Q1),
+    ok.
+
 calculate_random(Config) ->
     setup_test_environment(Config),
     QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
@@ -313,6 +330,17 @@ declare(Config, QueueName, Durable, AutoDelete, Args0, Owner) ->
     Args1 = [QueueName, Durable, AutoDelete, Args0, Owner],
     {new, Queue} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, declare, Args1),
     Queue.
+
+bind(Config, QueueName, RoutingKey) ->
+    ExchangeName = rabbit_misc:r(QueueName, exchange, <<"amq.direct">>),
+
+    ok = rabbit_ct_broker_helpers:rpc(
+        Config, 0, rabbit_binding, add,
+        [#binding{source      = ExchangeName,
+                  destination = QueueName,
+                  key         = RoutingKey,
+                  args        = []},
+         <<"acting-user">>]).
 
 verify_min_master(Config, Q, MinMasterNode) ->
     Rpc = rabbit_ct_broker_helpers:rpc(Config, 0,
