@@ -57,23 +57,26 @@ count_masters(Node, Masters) ->
 get_bound_queue_masters_per_vhost([], Acc) ->
     lists:flatten(Acc);
 get_bound_queue_masters_per_vhost([VHost|RemVHosts], Acc) ->
-    Bindings          = rabbit_binding:list(VHost),
-    BoundQueueMasters = get_queue_master_per_binding(VHost, Bindings, []),
+    BoundQueueNames =
+        lists:filtermap(
+            fun(#binding{destination =#resource{kind = queue,
+                                                name = QueueName}}) ->
+                    {true, QueueName};
+               (_) ->
+                    false
+            end,
+            rabbit_binding:list(VHost)),
+    UniqQueueNames = lists:usort(BoundQueueNames),
+    BoundQueueMasters = get_queue_masters(VHost, UniqQueueNames, []),
     get_bound_queue_masters_per_vhost(RemVHosts, [BoundQueueMasters|Acc]).
 
 
-get_queue_master_per_binding(_VHost, [], BoundQueueNodes) -> BoundQueueNodes;
-get_queue_master_per_binding(VHost, [#binding{destination=
-                                                  #resource{kind=queue,
-                                                            name=QueueName}}|
-                                     RemBindings],
-                             QueueMastersAcc) ->
+get_queue_masters(_VHost, [], BoundQueueNodes) -> BoundQueueNodes;
+get_queue_masters(VHost, [QueueName | RemQueueNames], QueueMastersAcc) ->
     QueueMastersAcc0 = case rabbit_queue_master_location_misc:lookup_master(
                               QueueName, VHost) of
                            {ok, Master} when is_atom(Master) ->
                                [Master|QueueMastersAcc];
                            _ -> QueueMastersAcc
                        end,
-    get_queue_master_per_binding(VHost, RemBindings, QueueMastersAcc0);
-get_queue_master_per_binding(VHost, [_|RemBindings], QueueMastersAcc) ->
-    get_queue_master_per_binding(VHost, RemBindings, QueueMastersAcc).
+    get_queue_masters(VHost, RemQueueNames, QueueMastersAcc0).
