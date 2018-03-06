@@ -24,20 +24,6 @@
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 
--define(STATISTICS_KEYS,
-        [policy,
-         operator_policy,
-         effective_policy_definition,
-         exclusive_consumer_pid,
-         exclusive_consumer_tag,
-         consumers,
-         consumer_utilisation,
-         memory,
-         state,
-         garbage_collection
-        ]).
-
-
 -export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -77,7 +63,7 @@ emit_stats() ->
                       R = reductions(Name),
                       [{_, QName}] = ets:lookup(quorum_mapping, Name),
                       rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
-                      Infos = infos(QName),
+                      Infos = rabbit_quorum_queue:infos(QName),
                       rabbit_core_metrics:queue_stats(QName, Infos),
                       rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
                                                                  {messages, M},
@@ -94,57 +80,4 @@ reductions(Name) ->
     catch
         error:badarg ->
             0
-    end.
-
-infos(QName) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
-    [{Item, i(Item, Q)} || Item <- ?STATISTICS_KEYS].
-
-i(policy, Q) ->
-    case rabbit_policy:name(Q) of
-        none   -> '';
-        Policy -> Policy
-    end;
-i(operator_policy, Q) ->
-    case rabbit_policy:name_op(Q) of
-        none   -> '';
-        Policy -> Policy
-    end;
-i(effective_policy_definition, Q) ->
-    case rabbit_policy:effective_definition(Q) of
-        undefined -> [];
-        Def       -> Def
-    end;
-i(exclusive_consumer_pid, _Q) ->
-    %% TODO
-    '';
-i(exclusive_consumer_tag, _Q) ->
-    %% TODO
-    '';
-i(consumers, _Q) ->
-    %% TODO
-    0;
-i(consumer_utilisation, _Q) ->
-    %% TODO!
-    0;
-i(memory, #amqqueue{pid = {Name, _}}) ->
-    try
-        {memory, M} = process_info(whereis(Name), memory),
-        M
-    catch
-        error:badarg ->
-            0
-    end;
-i(state, #amqqueue{pid = {Name, _}}) ->
-    %% TODO guess this is it by now?
-    case whereis(Name) of
-        undefined -> down;
-        _ -> running
-    end;
-i(garbage_collection, #amqqueue{pid = {Name, _}}) ->
-    try
-        rabbit_misc:get_gc_info(whereis(Name))
-    catch
-        error:badarg ->
-            []
     end.

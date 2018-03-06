@@ -601,22 +601,22 @@ handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
     noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
 
-handle_info({ra_event, {Name, _} = From, Evt}, #ch{queue_states = QueueStates,
+handle_info({ra_event, {Name, _} = From, _} = Evt, #ch{queue_states = QueueStates,
                                                    consumer_mapping = ConsumerMapping,
                                                    queue_names = QNames } = State0) ->
     FState0 = get_quorum_state(From, QueueStates),
-    case ra_fifo_client:handle_ra_event(From, Evt, FState0) of
+    case rabbit_quorum_queue:handle_event(Evt, FState0) of
         {{delivery, CTag, Msgs}, FState1} ->
             AckRequired = case maps:find(CTag, ConsumerMapping) of
                               error ->
                                   true;
                               {ok, {_, {NoAck, _, _, _}}} ->
                                   not NoAck
-                  end,
+                          end,
             FState2 = case AckRequired of
                           false ->
                               {MsgIds, _} = lists:unzip(Msgs),
-                              {ok, FS} = ra_fifo_client:settle(CTag, MsgIds, FState1),
+                              {ok, FS} = rabbit_quorum_queue:ack(CTag, MsgIds, FState1),
                               FS;
                           true ->
                               FState1
@@ -2392,5 +2392,5 @@ get_quorum_state({Name, _} = Id, Map) ->
         maps:get(Name, Map)
     catch
         error:{badkey, _} ->
-            ra_fifo_client:init(Name, [Id])
+            rabbit_quorum_queue:init_state(Id)
     end.
