@@ -217,7 +217,7 @@ calculate_min_master_with_bindings(Config) ->
     Args = [{<<"x-queue-master-locator">>, longstr, <<"min-masters">>}],
     declare(Config, QueueName, false, false, Args, none),
     verify_min_master(Config, Q),
-    % Do 20 bindings to this queue
+    %% Add 20 bindings to this queue
     [ bind(Config, QueueName, integer_to_binary(N)) || N <- lists:seq(1, 20) ],
 
     QueueName1 = rabbit_misc:r(<<"/">>, queue, Q1 = <<"qm.test_unbound">>),
