@@ -880,7 +880,7 @@ is_process_alive(Pid) when node(Pid) =:= node() ->
     erlang:is_process_alive(Pid);
 is_process_alive(Pid) ->
     Node = node(Pid),
-    lists:member(Node, [node() | nodes()]) andalso
+    lists:member(Node, [node() | nodes(connected)]) andalso
         rpc:call(Node, erlang, is_process_alive, [Pid]) =:= true.
 
 pget(K, P) ->

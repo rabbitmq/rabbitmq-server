@@ -23,6 +23,15 @@ endif
 # Common Test flags.
 # --------------------------------------------------------------------
 
+# We start the common_test node as a hidden Erlang node. The benefit
+# is that other Erlang nodes won't try to connect to each other after
+# discovering the common_test node if they are not meant to.
+#
+# This helps when several unrelated RabbitMQ clusters are started in
+# parallel.
+
+CT_OPTS += -hidden
+
 # Enable the following common_test hooks on Travis and Concourse:
 #
 # cth_fail_fast
