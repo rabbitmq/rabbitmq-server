@@ -62,8 +62,8 @@ groups() ->
               binding_recovery
             ]},
           {cluster_size_2, [], [
-              cycle_detection,
               user_id,
+              cycle_detection,
               restart_upstream
             ]},
           {cluster_size_3, [], [
