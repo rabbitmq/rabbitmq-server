@@ -133,9 +133,9 @@ multi_node_case1_test(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     Policy = [{pattern,    <<".*">>},
               {definition, [{'ha-mode', <<"all">>}]}],
-    http_put(Config, "/policies/%2f/HA", Policy, ?CREATED),
+    http_put(Config, "/policies/%2f/HA", Policy, [?CREATED, ?NO_CONTENT]),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     Q = wait_for(Config, "/queues/%2f/ha-queue"),
     assert_node(Nodename2, maps:get(node, Q)),
     assert_single_node(Nodename1, maps:get(slave_nodes, Q)),
@@ -157,9 +157,9 @@ ha_queue_hosted_on_other_node(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     Policy = [{pattern,    <<".*">>},
               {definition, [{'ha-mode', <<"all">>}]}],
-    http_put(Config, "/policies/%2f/HA", Policy, ?CREATED),
+    http_put(Config, "/policies/%2f/HA", Policy, [?CREATED, ?NO_CONTENT]),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     consume(Chan, <<"ha-queue">>),
 
@@ -179,9 +179,9 @@ ha_queue_with_multiple_consumers(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     Policy = [{pattern,    <<".*">>},
               {definition, [{'ha-mode', <<"all">>}]}],
-    http_put(Config, "/policies/%2f/HA", Policy, ?CREATED),
+    http_put(Config, "/policies/%2f/HA", Policy, [?CREATED, ?NO_CONTENT]),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     consume(Chan, <<"ha-queue">>),
 
@@ -206,7 +206,7 @@ ha_queue_with_multiple_consumers(Config) ->
 queue_on_other_node(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     consume(Chan, <<"some-queue">>),
 
@@ -224,7 +224,7 @@ queue_on_other_node(Config) ->
 queue_with_multiple_consumers(Config) ->
     Nodename1 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename1))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
@@ -257,7 +257,7 @@ queue_consumer_cancelled(Config) ->
     % create queue on node 2
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Tag = consume(Chan, <<"some-queue">>),
 
@@ -277,7 +277,7 @@ queue_consumer_channel_closed(Config) ->
     % create queue on node 2
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     consume(Chan, <<"some-queue">>),
     force_stats(), % ensure channel stats have been written
@@ -291,7 +291,7 @@ queue_consumer_channel_closed(Config) ->
     ok.
 
 queue(Config) ->
-    http_put(Config, "/queues/%2f/some-queue", none, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
@@ -309,7 +309,7 @@ queue(Config) ->
     ok.
 
 queues_single(Config) ->
-    http_put(Config, "/queues/%2f/some-queue", none, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
     _Res = http_get(Config, "/queues/%2f"),
@@ -321,8 +321,8 @@ queues_single(Config) ->
 queues_multiple(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", none, ?CREATED),
-    http_put(Config, "/queues/%2f/some-other-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/queues/%2f/some-other-queue", QArgs, [?CREATED, ?NO_CONTENT]),
 
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
@@ -335,7 +335,7 @@ queues_multiple(Config) ->
     ok.
 
 queues_removed(Config) ->
-    http_put(Config, "/queues/%2f/some-queue", none, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
     force_stats(),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     force_stats(),
@@ -347,7 +347,7 @@ queues_removed(Config) ->
 channels_multiple_on_different_nodes(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
@@ -366,7 +366,7 @@ channels_multiple_on_different_nodes(Config) ->
 channels_cancelled(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
@@ -396,7 +396,7 @@ channel(Config) ->
     ok.
 
 channel_other_node(Config) ->
-    http_put(Config, "/queues/%2f/some-queue", none, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     [{_, ChData}] = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list,
@@ -418,7 +418,7 @@ channel_other_node(Config) ->
 channel_with_consumer_on_other_node(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     ChName = get_channel_name(Config, 0),
     consume(Chan, <<"some-queue">>),
@@ -435,7 +435,7 @@ channel_with_consumer_on_other_node(Config) ->
 channel_with_consumer_on_same_node(Config) ->
     Nodename1 = get_node_config(Config, 0, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename1))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     ChName = get_channel_name(Config, 0),
     consume(Chan, <<"some-queue">>),
@@ -451,7 +451,7 @@ channel_with_consumer_on_same_node(Config) ->
 consumers(Config) ->
     Nodename2 = get_node_config(Config, 0, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
@@ -472,7 +472,7 @@ consumers(Config) ->
 connections(Config) ->
     Nodename2 = get_node_config(Config, 0, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, _Chan2} = amqp_connection:open_channel(Conn),
@@ -538,7 +538,7 @@ exchange(Config) ->
 vhosts(Config) ->
     Nodename2 = get_node_config(Config, 0, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
@@ -559,7 +559,7 @@ vhosts(Config) ->
 nodes(Config) ->
     Nodename2 = get_node_config(Config, 0, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
@@ -581,8 +581,8 @@ nodes(Config) ->
 overview(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/queue-n1", none, ?CREATED),
-    http_put(Config, "/queues/%2f/queue-n2", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/queue-n1", none, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/queues/%2f/queue-n2", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
