@@ -339,8 +339,7 @@ bind(Config, QueueName, RoutingKey) ->
         [#binding{source      = ExchangeName,
                   destination = QueueName,
                   key         = RoutingKey,
-                  args        = []},
-         <<"acting-user">>]).
+                  args        = []}]).
 
 verify_min_master(Config, Q, MinMasterNode) ->
     Rpc = rabbit_ct_broker_helpers:rpc(Config, 0,
