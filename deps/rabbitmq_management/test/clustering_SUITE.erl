@@ -721,12 +721,12 @@ dump_table(Config, Table) ->
 
 force_stats() ->
     force_all(),
-    timer:sleep(1000).
+    timer:sleep(1200).
 
 force_all() ->
     [begin
           {rabbit_mgmt_external_stats, N} ! emit_update,
-          timer:sleep(100)
+          timer:sleep(125)
      end || N <- [node() | nodes()]],
     send_to_all_collectors(collect_metrics).
 
