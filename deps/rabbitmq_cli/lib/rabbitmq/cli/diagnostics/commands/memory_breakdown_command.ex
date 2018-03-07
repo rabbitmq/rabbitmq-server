@@ -19,7 +19,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [unit: :string]
+  def switches(), do: [unit: :string, timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{unit: "gb"}, opts)}

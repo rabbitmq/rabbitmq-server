@@ -59,14 +59,14 @@ defmodule RabbitMQCtlTest do
     command = []
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/Usage:\n/
+    end) =~ ~r/\nUsage:\n/
   end
 
   test "Empty command with options shows usage, and exit with usage exit code" do
     command = ["-n", "sandwich@pastrami"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/Usage:\n/
+    end) =~ ~r/\nUsage:\n/
   end
 
   test "Short names without host connect properly" do
@@ -78,21 +78,21 @@ defmodule RabbitMQCtlTest do
     command = ["not_real"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/Usage\:/
+    end) =~ ~r/\nUsage\:/
   end
 
   test "Extraneous arguments return a usage error" do
     command = ["status", "extra"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/given:\n\t.*\nUsage:\n.* status/
+    end) =~ ~r/given:\n\t.*\n\nUsage:\n.* status/
   end
 
   test "Insufficient arguments return a usage error" do
     command = ["list_user_permissions"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
-    end) =~ ~r/given:\n\t.*\nUsage:\n.* list_user_permissions/
+    end) =~ ~r/given:\n\t.*\n\nUsage:\n.* list_user_permissions/
   end
 
   test "A bad argument returns a data error" do

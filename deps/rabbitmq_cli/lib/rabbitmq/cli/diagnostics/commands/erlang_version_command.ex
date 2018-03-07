@@ -17,7 +17,8 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [details: :boolean]
+  def switches(), do: [details: :boolean, timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{details: false}, opts)}

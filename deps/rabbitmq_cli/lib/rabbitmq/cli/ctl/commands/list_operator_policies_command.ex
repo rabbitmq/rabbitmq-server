@@ -22,6 +22,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListOperatorPoliciesCommand do
 
 
   def scopes(), do: [:ctl, :diagnostics]
+  def switches(), do: [timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}

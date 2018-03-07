@@ -34,7 +34,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [queue_timeout: :integer, local: :boolean]
+  def switches(), do: [queue_timeout: :integer, local: :boolean, timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   defp default_opts() do
     %{vhost: "/", local: false, queue_timeout: 15}

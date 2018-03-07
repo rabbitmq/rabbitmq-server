@@ -20,7 +20,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def merge_defaults(args, opts), do: {args, Map.merge(%{openssl_format: false}, opts)}
 
-  def switches(), do: [openssl_format: :boolean]
+  def switches(), do: [openssl_format: :boolean, timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}

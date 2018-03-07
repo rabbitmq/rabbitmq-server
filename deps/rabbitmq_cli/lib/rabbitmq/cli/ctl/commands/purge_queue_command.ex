@@ -18,6 +18,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
+  def switches(), do: [timeout: :integer]
+  def aliases(), do: [t: :timeout]
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end

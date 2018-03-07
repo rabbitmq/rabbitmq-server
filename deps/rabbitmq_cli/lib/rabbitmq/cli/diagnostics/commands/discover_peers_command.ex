@@ -17,6 +17,9 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  def switches(), do: [timeout: :integer]
+  def aliases(), do: [t: :timeout]
+
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([_|_], _) do
