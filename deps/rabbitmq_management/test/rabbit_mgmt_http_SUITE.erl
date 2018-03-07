@@ -783,7 +783,7 @@ connections_test(Config) ->
              rabbit_mgmt_format:print(
                "/connections/127.0.0.1%3A~w%20-%3E%20127.0.0.1%3A~w",
                [LocalPort, amqp_port(Config)])),
-    timer:sleep(1150),
+    timer:sleep(1500),
     http_get(Config, Path, ?OK),
     http_delete(Config, Path, {group, '2xx'}),
     %% TODO rabbit_reader:shutdown/2 returns before the connection is
@@ -1212,7 +1212,7 @@ permissions_connection_channel_consumer_test(Config) ->
     [amqp_channel:subscribe(
        Ch, #'basic.consume'{queue = <<"test">>}, self()) ||
         Ch <- [Ch1, Ch2, Ch3]],
-    timer:sleep(1150),
+    timer:sleep(1500),
     AssertLength = fun (Path, User, Len) ->
                            ?assertEqual(Len,
                                         length(http_get(Config, Path, User, User, ?OK)))
@@ -1265,7 +1265,7 @@ consumers_test(Config) ->
       Ch, #'basic.consume'{queue        = <<"test">>,
                            no_ack       = false,
                            consumer_tag = <<"my-ctag">> }, self()),
-    timer:sleep(1150),
+    timer:sleep(1500),
     assert_list([#{exclusive    => false,
                    ack_required => true,
                    consumer_tag => <<"my-ctag">>}], http_get(Config, "/consumers")),
@@ -1672,7 +1672,7 @@ exclusive_consumer_test(Config) ->
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     amqp_channel:subscribe(Ch, #'basic.consume'{queue     = QName,
                                                 exclusive = true}, self()),
-    timer:sleep(1000), %% Sadly we need to sleep to let the stats update
+    timer:sleep(1500), %% Sadly we need to sleep to let the stats update
     http_get(Config, "/queues/%2f/"), %% Just check we don't blow up
     close_channel(Ch),
     close_connection(Conn),
@@ -1683,7 +1683,7 @@ exclusive_queue_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
     #'queue.declare_ok'{ queue = QName } =
     amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
-    timer:sleep(1000), %% Sadly we need to sleep to let the stats update
+    timer:sleep(1500), %% Sadly we need to sleep to let the stats update
     Path = "/queues/%2f/" ++ rabbit_http_util:quote_plus(QName),
     Queue = http_get(Config, Path),
     assert_item(#{name        => QName,
@@ -2094,7 +2094,7 @@ samples_range_test(Config) ->
     %% Queues.
 
     http_put(Config, "/queues/%2f/test0", #{}, {group, '2xx'}),
-    timer:sleep(1150),
+    timer:sleep(1500),
 
     http_get(Config, "/queues/%2f?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/queues/%2f?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
@@ -2106,7 +2106,7 @@ samples_range_test(Config) ->
     %% Vhosts.
 
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
-    timer:sleep(1150),
+    timer:sleep(1500),
 
     http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
@@ -2177,7 +2177,7 @@ columns_test(Config) ->
     http_put(Config, "/queues/%2f/test", [{arguments, [{<<"foo">>, <<"bar">>}]}],
              {group, '2xx'}),
     Item = #{arguments => #{foo => <<"bar">>}, name => <<"test">>},
-    timer:sleep(1150),
+    timer:sleep(1500),
     [Item] = http_get(Config, "/queues?columns=arguments.foo,name", ?OK),
     Item = http_get(Config, "/queues/%2f/test?columns=arguments.foo,name", ?OK),
     http_delete(Config, "/queues/%2f/test", {group, '2xx'}),
@@ -2855,7 +2855,7 @@ wait_until(_Fun, 0) ->
 wait_until(Fun, N) ->
     case Fun() of
     true ->
-        timer:sleep(1000);
+        timer:sleep(1500);
     false ->
         timer:sleep(?COLLECT_INTERVAL),
         wait_until(Fun, N - 1)
