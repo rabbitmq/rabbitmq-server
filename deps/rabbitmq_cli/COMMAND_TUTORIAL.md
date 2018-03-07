@@ -320,6 +320,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
       {:bad_argument, "queue name cannot be empty string."}
     }
   end
+  def validate([_], _options) do
+    :ok
+  end
 
   def run([qname], %{node: node, vhost: vhost,
                      if_empty: if_empty, if_unused: if_unused}) do
@@ -331,7 +334,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
       {:ok, queue} ->
         ## Delete queue
         :rabbit_misc.rpc_call(node, :rabbit_amqqueue, :delete,
-                                    [queue, if_empty, if_unused]);
+                                    [queue, if_unused, if_empty, "cli_user"]);
       {:error, _} = error -> error
     end
   end
@@ -415,7 +418,7 @@ run([Qname], #{node := Node, vhost := Vhost,
         {ok, Queue} ->
         %% Delete queue
             rabbit_misc:rpc_call(Node, rabbit_amqqueue, delete,
-                                       [Queue, IfEmpty, IfUnused]);
+                                       [Queue, IfUnused, IfEmpty, <<"cli_user">>]);
         {error, _} = Error -> Error
     end.
 
