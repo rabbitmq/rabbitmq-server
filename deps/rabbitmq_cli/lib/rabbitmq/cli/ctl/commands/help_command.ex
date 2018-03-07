@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
         all_usage(opts);
       command ->
         Enum.join([base_usage(command, opts)] ++
-                  options_usage() ++
+                  options_usage(opts) ++
                   input_types(command), "\n")
     end
   end
@@ -61,7 +61,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def all_usage(opts) do
     Enum.join(tool_usage(program_name(opts)) ++
-              options_usage() ++
+              options_usage(opts) ++
               ["Commands:"] ++
               commands() ++
               input_types(), "\n")
@@ -69,31 +69,23 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def usage(), do: "help <command>"
 
-  defp tool_usage(tool_name = :'rabbitmqctl') do
-    ["Usage:",
-     "#{tool_name} [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"]
-
-  end
-
-  defp tool_usage(tool_name = :'rabbitmq-plugins') do
-    ["Usage:",
-     "#{tool_name} [-n <node>] [-q] <command> [<command options>]"]
-  end
-
-  defp tool_usage(tool_name = :'rabbitmq_plugins') do
-    ["Usage:",
-     "#{tool_name} [-n <node>] [-q] <command> [<command options>]"]
-  end
-
   defp tool_usage(tool_name) do
+    maybe_timeout = case supports_timeout(tool_name) do
+      true  -> " [-t <timeout>]"
+      false -> ""
+    end
     ["Usage:",
-     "#{tool_name} [-n <node>] [-q] <command> [<command options>]"]
+     "#{tool_name} [-n <node>]" <> maybe_timeout <> " [-l] [-q] <command> [<command options>]"]
   end
 
   def base_usage(command, opts) do
     tool_name = program_name(opts)
+    maybe_timeout = case supports_timeout(tool_name) do
+      true  -> " [-t <timeout>]"
+      false -> ""
+    end
     Enum.join(["Usage:",
-               "#{tool_name} [-n <node>] [-t <timeout>] [-q] " <>
+               "#{tool_name} [-n <node>]" <> maybe_timeout <> " [-l] [-q] " <>
                flatten_string(command.usage())], "\n")
   end
 
@@ -104,12 +96,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     str
   end
 
-  defp options_usage() do
+  defp options_usage(opts) do
+    tool_name = program_name(opts)
+    {maybe_timeout, timeout_explanation} = case supports_timeout(tool_name) do
+      true  ->
+        {"
+    -t timeout",
+         "
+
+Operation timeout in seconds. Only applicable to \"list\" commands. " <>
+         "Default is \"infinity\"."};
+      false -> {"", ""}
+    end
     ["
 General options:
     -n node
-    -q quiet
-    -t timeout
+    -q quiet" <> maybe_timeout <> "
     -l longnames
 
 Default node is \"rabbit@server\", where `server` is the local hostname. On a host
@@ -120,10 +122,7 @@ the correct suffix to use after the \"@\" sign. See rabbitmq-server(1) for
 details of configuring the RabbitMQ broker.
 
 Quiet output mode is selected with the \"-q\" flag. Informational messages are
-suppressed when quiet mode is in effect.
-
-Operation timeout in seconds. Only applicable to \"list\" commands. Default is
-\"infinity\".
+suppressed when quiet mode is in effect." <> timeout_explanation <> "
 
 If RabbitMQ broker uses long node names for erlang distribution, \"longnames\"
 option should be specified.
@@ -159,6 +158,11 @@ to display results. The default value is \"/\".\n"]
      |> Enum.map(&(&1.usage_additional))
      |> Enum.join("\n\n")]
   end
+
+  defp supports_timeout(:'rabbitmqctl'), do: true
+  defp supports_timeout(:'rabbitmq-diagnostics'), do: true
+  defp supports_timeout(:'rabbitmq_diagnostics'), do: true
+  defp supports_timeout(_), do: false
 
   def banner(_,_), do: nil
 end
