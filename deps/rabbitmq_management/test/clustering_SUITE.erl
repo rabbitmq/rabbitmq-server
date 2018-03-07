@@ -597,12 +597,12 @@ overview(Config) ->
     http_delete(Config, "/queues/%2f/queue-n2", ?NO_CONTENT),
     % assert there are two non-empty connection records
     ObjTots = maps:get(object_totals, Res),
-    2 = maps:get(connections, ObjTots),
-    2 = maps:get(channels, ObjTots),
+    ?assertEqual(2, maps:get(connections, ObjTots)),
+    ?assertEqual(2, maps:get(channels, ObjTots)),
     #{} = QT = maps:get(queue_totals, Res),
-    2 = maps:get(messages_ready, QT),
+    ?assert(maps:get(messages_ready, QT) >= 2),
     MS = maps:get(message_stats, Res),
-    2 = maps:get(publish, MS),
+    ?assert(maps:get(publish, MS) >= 2),
     ok.
 
 %%----------------------------------------------------------------------------
