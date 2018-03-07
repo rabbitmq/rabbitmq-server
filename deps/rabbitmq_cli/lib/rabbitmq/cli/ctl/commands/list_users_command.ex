@@ -21,6 +21,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
+  def switches(), do: [timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts), do: {args, opts}
 

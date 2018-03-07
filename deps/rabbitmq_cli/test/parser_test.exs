@@ -113,30 +113,6 @@ defmodule ParserTest do
     assert @subject.parse_global(["--node=rabbitmq@localhost"]) == {[], %{node: :"rabbitmq@localhost"}, []}
   end
 
-  test "no commands, one integer --timeout value" do
-    assert @subject.parse_global(["--timeout=600"]) == {[], %{timeout: 600}, []}
-  end
-
-  test "no commands, one string --timeout value is invalid" do
-    assert @subject.parse_global(["--timeout=sandwich"]) == {[], %{}, [{"--timeout", "sandwich"}]}
-  end
-
-  test "no commands, one float --timeout value is invalid" do
-    assert @subject.parse_global(["--timeout=60.5"]) == {[], %{}, [{"--timeout", "60.5"}]}
-  end
-
-  test "no commands, one integer -t value" do
-    assert @subject.parse_global(["-t", "600"]) == {[], %{timeout: 600}, []}
-  end
-
-  test "no commands, one string -t value is invalid" do
-    assert @subject.parse_global(["-t", "sandwich"]) == {[], %{}, [{"-t", "sandwich"}]}
-  end
-
-  test "no commands, one float -t value is invalid" do
-    assert @subject.parse_global(["-t", "60.5"]) == {[], %{}, [{"-t", "60.5"}]}
-  end
-
   test "no commands, one single-dash -p option" do
     assert @subject.parse_global(["-p", "sandwich"]) == {[], %{vhost: "sandwich"}, []}
   end

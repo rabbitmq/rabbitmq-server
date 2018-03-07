@@ -25,6 +25,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
+  def switches(), do: [timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   @info_keys ~w(queue_name channel_pid consumer_tag
                 ack_required prefetch_count arguments)a
