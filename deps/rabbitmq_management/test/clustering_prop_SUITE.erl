@@ -166,7 +166,7 @@ execute_op(_Config, force_stats, State) ->
 
 force_stats() ->
     force_all(),
-    timer:sleep(1000).
+    timer:sleep(5000).
 
 force_all() ->
     [begin

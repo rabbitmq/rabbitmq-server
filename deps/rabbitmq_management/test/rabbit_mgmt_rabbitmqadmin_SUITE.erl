@@ -297,8 +297,10 @@ publish(Config) ->
     {ok, _} = run(Config, ["declare", "queue", "name=test"]),
     {ok, _} = run(Config, ["publish", "routing_key=test", "payload=test_1"]),
     {ok, _} = run(Config, ["publish", "routing_key=test", "payload=test_2"]),
-    % publish with stdin
-    {ok, _} = rabbit_ct_helpers:exec(["python2", "-c",
+    %% publish with stdin
+    %% TODO: this must support Python 3 as well
+    Py      = find_python2(),
+    {ok, _} = rabbit_ct_helpers:exec([Py, "-c",
                                       publish_with_stdin_python_program(Config, "test_3")],
                                      []),
 
@@ -413,11 +415,20 @@ find_pythons() ->
          _ -> erlang:error("python not found")
     end.
 
+find_python2() ->
+    Py2  = rabbit_ct_helpers:exec(["python2", "-V"]),
+    Py27 = rabbit_ct_helpers:exec(["python2.7", "-V"]),
+    case {Py2, Py27} of
+        {{ok, _}, {ok, _}} -> ["python2.7"];
+        {{ok, _}, _} -> ["python2"];
+        {_, {ok, _}} -> ["python2.7"];
+        _            -> "python2"
+    end.
+
 publish_with_stdin_python_program(Config, In) ->
-    % This is a nasty workaround erlang ports not supporting EOF
-    Py = rabbit_ct_helpers:get_config(Config, python),
     MgmtPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt),
     RmqAdmin = rabbit_ct_helpers:get_config(Config, rabbitmqadmin_path),
+    Py       = find_python2(),
     "import subprocess;" ++
     "proc = subprocess.Popen(['" ++ Py ++ "', '" ++ RmqAdmin ++ "', '-P', '" ++ integer_to_list(MgmtPort) ++
     "', 'publish', 'routing_key=test'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE);" ++
