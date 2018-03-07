@@ -165,13 +165,13 @@ ha_queue_hosted_on_other_node(Config) ->
 
     force_stats(),
     Res = http_get(Config, "/queues/%2f/ha-queue"),
+    amqp_channel:close(Chan),
+    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
+    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
     % assert some basic data is there
     [Cons] = maps:get(consumer_details, Res),
     #{} = maps:get(channel_details, Cons), % channel details proplist must not be empty
     0 = maps:get(prefetch_count, Cons), % check one of the augmented properties
-    amqp_channel:close(Chan),
-    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
-    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
     <<"ha-queue">> = maps:get(name, Res),
     ok.
 
@@ -189,6 +189,9 @@ ha_queue_with_multiple_consumers(Config) ->
     consume(Chan, <<"ha-queue">>),
     force_stats(),
     Res = http_get(Config, "/queues/%2f/ha-queue"),
+    amqp_channel:close(Chan),
+    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
+    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
     % assert some basic data is there
     [C1, C2] = maps:get(consumer_details, Res),
     % channel details proplist must not be empty
@@ -197,9 +200,6 @@ ha_queue_with_multiple_consumers(Config) ->
     % check one of the augmented properties
     0 = maps:get(prefetch_count, C1),
     0 = maps:get(prefetch_count, C2),
-    amqp_channel:close(Chan),
-    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
-    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
     <<"ha-queue">> = maps:get(name, Res),
     ok.
 
