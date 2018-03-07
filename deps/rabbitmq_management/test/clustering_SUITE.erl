@@ -39,8 +39,8 @@ groups() ->
                                list_cluster_nodes_test,
                                multi_node_case1_test,
                                ha_queue_hosted_on_other_node,
-                               queue_on_other_node,
                                ha_queue_with_multiple_consumers,
+                               queue_on_other_node,
                                queue_with_multiple_consumers,
                                queue_consumer_cancelled,
                                queue_consumer_channel_closed,
@@ -49,11 +49,11 @@ groups() ->
                                queues_multiple,
                                queues_removed,
                                channels_multiple_on_different_nodes,
-                               channels_cancelled,
+                               channel_closed,
                                channel,
                                channel_other_node,
                                channel_with_consumer_on_other_node,
-                               channel_with_consumer_on_same_node,
+                               channel_with_consumer_on_one_node,
                                consumers,
                                connections,
                                exchanges,
@@ -129,69 +129,88 @@ list_cluster_nodes_test(Config) ->
     passed.
 
 multi_node_case1_test(Config) ->
-    Nodename1 = get_node_config(Config, 0, nodename),
-    Nodename2 = get_node_config(Config, 1, nodename),
+    Nodename1 = rabbit_data_coercion:to_binary(get_node_config(Config, 0, nodename)),
+    Nodename2 = rabbit_data_coercion:to_binary(get_node_config(Config, 1, nodename)),
     Policy = [{pattern,    <<".*">>},
               {definition, [{'ha-mode', <<"all">>}]}],
     http_put(Config, "/policies/%2f/HA", Policy, [?CREATED, ?NO_CONTENT]),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, [?CREATED, ?NO_CONTENT]),
-    Q = wait_for(Config, "/queues/%2f/ha-queue"),
-    assert_node(Nodename2, maps:get(node, Q)),
-    assert_single_node(Nodename1, maps:get(slave_nodes, Q)),
-    assert_single_node(Nodename1, maps:get(synchronised_slave_nodes, Q)),
-    %% restart node2
+    http_delete(Config, "/queues/%2f/multi-node-test-queue", [?NO_CONTENT, ?NOT_FOUND]),
+
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare(Chan, <<"multi-node-test-queue">>),
+    Q = wait_for_mirrored_queue(Config, "/queues/%2f/multi-node-test-queue"),
+
+    ?assert(lists:member(maps:get(node, Q), [Nodename1, Nodename2])),
+    [Mirror] = maps:get(slave_nodes, Q),
+    [Mirror] = maps:get(synchronised_slave_nodes, Q),
+    ?assert(lists:member(Mirror, [Nodename1, Nodename2])),
+
+    %% restart node2 so that queue master migrates
     restart_node(Config, 1),
 
-    Q2 = wait_for(Config, "/queues/%2f/ha-queue"),
-    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
+    Q2 = wait_for_mirrored_queue(Config, "/queues/%2f/multi-node-test-queue"),
+    http_delete(Config, "/queues/%2f/multi-node-test-queue", ?NO_CONTENT),
     http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
-    assert_node(Nodename1, maps:get(node, Q2)),
-    assert_single_node(Nodename2, maps:get(slave_nodes, Q2)),
-    assert_single_node(Nodename2, maps:get(synchronised_slave_nodes, Q2)),
+
+    ?assert(lists:member(maps:get(node, Q2), [Nodename1, Nodename2])),
+
+    rabbit_ct_client_helpers:close_connection(Conn),
 
     passed.
 
 ha_queue_hosted_on_other_node(Config) ->
-    % create ha queue on node 2
-    Nodename2 = get_node_config(Config, 1, nodename),
     Policy = [{pattern,    <<".*">>},
               {definition, [{'ha-mode', <<"all">>}]}],
     http_put(Config, "/policies/%2f/HA", Policy, [?CREATED, ?NO_CONTENT]),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_durable(Chan, <<"ha-queue">>),
+    _ = wait_for_mirrored_queue(Config, "/queues/%2f/ha-queue"),
+
+    {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
     consume(Chan, <<"ha-queue">>),
 
+    timer:sleep(5100),
     force_stats(),
     Res = http_get(Config, "/queues/%2f/ha-queue"),
-    amqp_channel:close(Chan),
-    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
-    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
+
     % assert some basic data is there
     [Cons] = maps:get(consumer_details, Res),
     #{} = maps:get(channel_details, Cons), % channel details proplist must not be empty
     0 = maps:get(prefetch_count, Cons), % check one of the augmented properties
     <<"ha-queue">> = maps:get(name, Res),
+
+    amqp_channel:close(Chan),
+    amqp_channel:close(Chan2),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
+    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
+
     ok.
 
 ha_queue_with_multiple_consumers(Config) ->
-    Nodename2 = get_node_config(Config, 1, nodename),
     Policy = [{pattern,    <<".*">>},
               {definition, [{'ha-mode', <<"all">>}]}],
     http_put(Config, "/policies/%2f/HA", Policy, [?CREATED, ?NO_CONTENT]),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    consume(Chan, <<"ha-queue">>),
 
+    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    _ = queue_declare_durable(Chan, <<"ha-queue3">>),
+    _ = wait_for_mirrored_queue(Config, "/queues/%2f/ha-queue3"),
+
+    consume(Chan, <<"ha-queue3">>),
     force_stats(),
-    consume(Chan, <<"ha-queue">>),
+
+    {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
+    consume(Chan2, <<"ha-queue3">>),
+
+    timer:sleep(5100),
     force_stats(),
-    Res = http_get(Config, "/queues/%2f/ha-queue"),
-    amqp_channel:close(Chan),
-    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
-    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
+
+    Res = http_get(Config, "/queues/%2f/ha-queue3"),
+
     % assert some basic data is there
     [C1, C2] = maps:get(consumer_details, Res),
     % channel details proplist must not be empty
@@ -200,48 +219,68 @@ ha_queue_with_multiple_consumers(Config) ->
     % check one of the augmented properties
     0 = maps:get(prefetch_count, C1),
     0 = maps:get(prefetch_count, C2),
-    <<"ha-queue">> = maps:get(name, Res),
+    <<"ha-queue3">> = maps:get(name, Res),
+
+    amqp_channel:close(Chan),
+    amqp_channel:close(Chan2),
+
+    http_delete(Config, "/queues/%2f/ha-queue3", ?NO_CONTENT),
+    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
+
     ok.
 
 queue_on_other_node(Config) ->
-    Nodename2 = get_node_config(Config, 1, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    consume(Chan, <<"some-queue">>),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare(Chan, <<"some-queue">>),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
 
+    {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
+    consume(Chan2, <<"some-queue">>),
+
+    timer:sleep(5100),
     force_stats(),
     Res = http_get(Config, "/queues/%2f/some-queue"),
-    amqp_channel:close(Chan),
-    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+
     % assert some basic data is present
     [Cons] = maps:get(consumer_details, Res),
     #{} = maps:get(channel_details, Cons), % channel details proplist must not be empty
     0 = maps:get(prefetch_count, Cons), % check one of the augmented properties
     <<"some-queue">> = maps:get(name, Res),
+
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    amqp_channel:close(Chan2),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
     ok.
 
 queue_with_multiple_consumers(Config) ->
-    Nodename1 = get_node_config(Config, 1, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename1))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    Q = <<"multi-consumer-queue1">>,
+    _ = queue_declare(Chan, Q),
+    _ = wait_for_queue(Config, "/queues/%2f/multi-consumer-queue1"),
+
+
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
-    consume(Chan, <<"ha-queue">>),
-    consume(Chan2, <<"ha-queue">>),
-    publish(Chan2, <<"ha-queue">>),
-    publish(Chan, <<"ha-queue">>),
+    consume(Chan,  Q),
+    consume(Chan2, Q),
+    publish(Chan2, Q),
+    publish(Chan,  Q),
     % ensure a message has been consumed and acked
     receive
         {#'basic.deliver'{delivery_tag = T}, _} ->
             amqp_channel:cast(Chan, #'basic.ack'{delivery_tag = T})
     end,
+
+    timer:sleep(5100),
     force_stats(),
-    Res = http_get(Config, "/queues/%2f/ha-queue"),
-    amqp_channel:close(Chan),
-    rabbit_ct_client_helpers:close_connection(Conn),
-    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
+
+    Res = http_get(Config, "/queues/%2f/multi-consumer-queue1"),
+    http_delete(Config, "/queues/%2f/multi-consumer-queue1", ?NO_CONTENT),
+
     % assert some basic data is there
     [C1, C2] = maps:get(consumer_details, Res),
     % channel details proplist must not be empty
@@ -250,137 +289,168 @@ queue_with_multiple_consumers(Config) ->
     % check one of the augmented properties
     0 = maps:get(prefetch_count, C1),
     0 = maps:get(prefetch_count, C2),
-    <<"ha-queue">> = maps:get(name, Res),
+    Q = maps:get(name, Res),
+
+    amqp_channel:close(Chan),
+    amqp_channel:close(Chan2),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
     ok.
 
 queue_consumer_cancelled(Config) ->
-    % create queue on node 2
-    Nodename2 = get_node_config(Config, 1, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    _ = queue_declare(Chan, <<"some-queue">>),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
     Tag = consume(Chan, <<"some-queue">>),
 
     #'basic.cancel_ok'{} =
          amqp_channel:call(Chan, #'basic.cancel'{consumer_tag = Tag}),
-
     force_stats(),
     Res = http_get(Config, "/queues/%2f/some-queue"),
+
+    amqp_channel:close(Chan),
+
     % assert there are no consumer details
     [] = maps:get(consumer_details, Res),
     <<"some-queue">> = maps:get(name, Res),
-    amqp_channel:close(Chan),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     ok.
 
 queue_consumer_channel_closed(Config) ->
-    % create queue on node 2
-    Nodename2 = get_node_config(Config, 1, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    _ = queue_declare(Chan, <<"some-queue">>),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
     consume(Chan, <<"some-queue">>),
     force_stats(), % ensure channel stats have been written
+
     amqp_channel:close(Chan),
     force_stats(),
+
     Res = http_get(Config, "/queues/%2f/some-queue"),
     % assert there are no consumer details
     [] = maps:get(consumer_details, Res),
     <<"some-queue">> = maps:get(name, Res),
+
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     ok.
 
 queue(Config) ->
     http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
+    {ok, Chan}  = amqp_connection:open_channel(?config(conn, Config)),
+    {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
+
     publish(Chan, <<"some-queue">>),
     basic_get(Chan, <<"some-queue">>),
     publish(Chan2, <<"some-queue">>),
     basic_get(Chan2, <<"some-queue">>),
     force_stats(),
-    timer:sleep(10000),
+    timer:sleep(5100),
     Res = http_get(Config, "/queues/%2f/some-queue"),
-    rabbit_ct_client_helpers:close_connection(Conn),
-    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     % assert single queue is returned
     [#{} | _] = maps:get(deliveries, Res),
+
+    amqp_channel:close(Chan),
+    amqp_channel:close(Chan2),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+
     ok.
 
 queues_single(Config) ->
     http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
-    _Res = http_get(Config, "/queues/%2f"),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
-    % assert single queue is returned
-    [_] = Res,
+
+    % assert at least one queue is returned
+    ?assert(length(Res) >= 1),
+
     ok.
 
 queues_multiple(Config) ->
-    Nodename2 = get_node_config(Config, 1, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
-    http_put(Config, "/queues/%2f/some-other-queue", QArgs, [?CREATED, ?NO_CONTENT]),
+    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    _ = queue_declare(Chan, <<"some-queue">>),
+    _ = queue_declare(Chan, <<"some-other-queue">>),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+    _ = wait_for_queue(Config, "/queues/%2f/some-other-queue"),
 
     force_stats(),
+    timer:sleep(5100),
+
     Res = http_get(Config, "/queues/%2f"),
+    [Q1, Q2 | _] = Res,
+
     % assert some basic data is present
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     http_delete(Config, "/queues/%2f/some-other-queue", ?NO_CONTENT),
-    % assert two non-empty queues are returned
-    [#{} = Q1, #{} = Q2] = Res,
-    false = (maps:get(name, Q1) =:= maps:get(name,Q2)),
+
+    false = (maps:get(name, Q1) =:= maps:get(name, Q2)),
+    amqp_channel:close(Chan),
+
     ok.
 
 queues_removed(Config) ->
     http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
     force_stats(),
+    N = length(http_get(Config, "/queues/%2f")),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     force_stats(),
-    Res = http_get(Config, "/queues/%2f"),
-    % assert single queue is returned
-    [] = Res,
+    ?assertEqual(N - 1, length(http_get(Config, "/queues/%2f"))),
     ok.
 
 channels_multiple_on_different_nodes(Config) ->
-    Nodename2 = get_node_config(Config, 1, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare(Chan, <<"some-queue">>),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan2} = amqp_connection:open_channel(Conn2),
     consume(Chan, <<"some-queue">>),
 
+    timer:sleep(5100),
     force_stats(),
+
     Res = http_get(Config, "/channels"),
-    amqp_channel:close(Chan),
-    amqp_channel:close(Chan2),
-    amqp_connection:close(Conn),
-    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     % assert two channels are present
     [_,_] = Res,
+
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    amqp_channel:close(Chan2),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    rabbit_ct_client_helpers:close_connection(Conn2),
+
     ok.
 
-channels_cancelled(Config) ->
-    Nodename2 = get_node_config(Config, 1, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, Chan2} = amqp_connection:open_channel(Conn),
-    consume(Chan, <<"some-queue">>),
+channel_closed(Config) ->
+    {ok, Chan}  = amqp_connection:open_channel(?config(conn, Config)),
+    _ = queue_declare(Chan, <<"some-queue">>),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
+    {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
     force_stats(),
-    amqp_channel:close(Chan2),
-    amqp_connection:close(Conn),
+
+    consume(Chan2, <<"some-queue">>),
+    amqp_channel:close(Chan),
+
+    timer:sleep(5100),
     force_stats(),
 
     Res = http_get(Config, "/channels"),
-    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
-    amqp_channel:close(Chan),
     % assert one channel is present
     [_] = Res,
+
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+
+    amqp_channel:close(Chan2),
+
     ok.
 
 channel(Config) ->
@@ -388,60 +458,78 @@ channel(Config) ->
     [{_, ChData}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [channel_created]),
 
     ChName = http_uri:encode(binary_to_list(pget(name, ChData))),
+    timer:sleep(5100),
     force_stats(),
     Res = http_get(Config, "/channels/" ++ ChName ),
-    amqp_channel:close(Chan),
     % assert channel is non empty
     #{} = Res,
+
+    amqp_channel:close(Chan),
     ok.
 
 channel_other_node(Config) ->
+    Q = <<"some-queue">>,
     http_put(Config, "/queues/%2f/some-queue", none, [?CREATED, ?NO_CONTENT]),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     [{_, ChData}] = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list,
                                                  [channel_created]),
     ChName = http_uri:encode(binary_to_list(pget(name, ChData))),
-    consume(Chan, <<"some-queue">>),
-    publish(Chan, <<"some-queue">>),
+    consume(Chan, Q),
+    publish(Chan, Q),
+
+    timer:sleep(5100),
     force_stats(),
-    force_stats(),
+
     Res = http_get(Config, "/channels/" ++ ChName ),
-    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
-    amqp_connection:close(Conn),
     % assert channel is non empty
     #{} = Res,
     [#{}] = maps:get(deliveries, Res),
     #{} = maps:get(connection_details, Res),
+
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    amqp_connection:close(Conn),
+
     ok.
 
 channel_with_consumer_on_other_node(Config) ->
-    Nodename2 = get_node_config(Config, 1, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    Q = <<"some-queue">>,
+    _ = queue_declare(Chan, Q),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
     ChName = get_channel_name(Config, 0),
-    consume(Chan, <<"some-queue">>),
-    publish(Chan, <<"some-queue">>),
+    consume(Chan, Q),
+    publish(Chan, Q),
+
+    timer:sleep(5100),
     force_stats(),
-    Res = http_get(Config, "/channels/" ++ ChName ),
+
+    Res = http_get(Config, "/channels/" ++ ChName),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
-    amqp_channel:close(Chan),
     % assert channel is non empty
     #{} = Res,
     [#{}] = maps:get(consumer_details, Res),
+
+    amqp_channel:close(Chan),
+
     ok.
 
-channel_with_consumer_on_same_node(Config) ->
-    Nodename1 = get_node_config(Config, 0, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename1))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
+channel_with_consumer_on_one_node(Config) ->
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    Q = <<"some-queue">>,
+    _ = queue_declare(Chan, Q),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
     ChName = get_channel_name(Config, 0),
-    consume(Chan, <<"some-queue">>),
+    consume(Chan, Q),
+
+    timer:sleep(5100),
     force_stats(),
-    Res = http_get(Config, "/channels/" ++ ChName ),
+
+    Res = http_get(Config, "/channels/" ++ ChName),
     amqp_channel:close(Chan),
+
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     % assert channel is non empty
     #{} = Res,
@@ -449,43 +537,55 @@ channel_with_consumer_on_same_node(Config) ->
     ok.
 
 consumers(Config) ->
-    Nodename2 = get_node_config(Config, 0, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare(Chan, <<"some-queue">>),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan2} = amqp_connection:open_channel(Conn2),
     consume(Chan, <<"some-queue">>),
     consume(Chan2, <<"some-queue">>),
+
+    timer:sleep(5100),
     force_stats(),
     Res = http_get(Config, "/consumers"),
-    amqp_channel:close(Chan),
-    rabbit_ct_client_helpers:close_connection(Conn),
-    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+
     % assert there are two non-empty consumer records
     [#{} = C1, #{} = C2] = Res,
     #{} = maps:get(channel_details, C1),
     #{} = maps:get(channel_details, C2),
+
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    rabbit_ct_client_helpers:close_connection(Conn2),
+
     ok.
 
 
 connections(Config) ->
-    Nodename2 = get_node_config(Config, 0, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
+    %% one connection is maintained by CT helpers
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, _Chan2} = amqp_connection:open_channel(Conn),
+
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, _Chan2} = amqp_connection:open_channel(Conn2),
+
+    %% channel count needs a bit longer for 2nd chan
+    timer:sleep(5100),
     force_stats(),
-    force_stats(), % channel count needs a bit longer for 2nd chan
+
     Res = http_get(Config, "/connections"),
-    amqp_channel:close(Chan),
-    rabbit_ct_client_helpers:close_connection(Conn),
-    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+
     % assert there are two non-empty connection records
-    [#{} = Q1, #{} = Q2] = Res,
-    1 = maps:get(channels, Q1),
-    1 = maps:get(channels, Q2),
+    [#{} = C1, #{} = C2] = Res,
+    1 = maps:get(channels, C1),
+    1 = maps:get(channels, C2),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn2),
+
     ok.
 
 
@@ -503,12 +603,13 @@ exchanges(Config) ->
 
     force_stats(),
     Res = http_get(Config, "/exchanges"),
-    amqp_channel:close(Chan),
-    rabbit_ct_client_helpers:close_connection(Conn),
     [X] = [X || X <- Res, maps:get(name, X) =:= XName],
 
-    % assert exchange has some message stats
-    #{} = maps:get(message_stats, X),
+    ?assertEqual(<<"direct">>, maps:get(type, X)),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
     ok.
 
 
@@ -527,82 +628,96 @@ exchange(Config) ->
     force_stats(),
     force_stats(),
     Res = http_get(Config, "/exchanges/%2F/some-other-exchange"),
+
+    ?assertEqual(<<"direct">>, maps:get(type, Res)),
+
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
 
-    % assert exchange has some message stats
-    #{} = maps:get(message_stats, Res),
-    [#{}] = maps:get(incoming, Res),
     ok.
 
 vhosts(Config) ->
-    Nodename2 = get_node_config(Config, 0, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare(Chan, <<"some-queue">>),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan2} = amqp_connection:open_channel(Conn2),
     publish(Chan2, <<"some-queue">>),
-    force_stats(),
-    % TODO:  force channels to emit stats instead of waiting
+    timer:sleep(5100), % TODO force stat emission
     force_stats(),
     Res = http_get(Config, "/vhosts"),
-    amqp_channel:close(Chan),
-    rabbit_ct_client_helpers:close_connection(Conn),
+
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     % default vhost
     [#{} = Vhost] = Res,
     % assert vhost has some message stats
     #{} = maps:get(message_stats, Vhost),
+
+    amqp_channel:close(Chan),
+    amqp_channel:close(Chan2),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
     ok.
 
 nodes(Config) ->
-    Nodename2 = get_node_config(Config, 0, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare(Chan, <<"some-queue">>),
+    _ = wait_for_queue(Config, "/queues/%2f/some-queue"),
+
     {ok, Chan2} = amqp_connection:open_channel(Conn),
     publish(Chan2, <<"some-queue">>),
+    timer:sleep(5100), % TODO force stat emission
     force_stats(),
     Res = http_get(Config, "/nodes"),
-    amqp_channel:close(Chan),
-    rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
 
     [#{} = N1 , #{} = N2] = Res,
-    % assert each node has some processors
-    ?assert(is_number(maps:get(processors, N1))),
-    ?assert(is_number(maps:get(processors, N2))),
+    ?assert(is_binary(maps:get(name, N1))),
+    ?assert(is_binary(maps:get(name, N2))),
     [#{} | _] = maps:get(cluster_links, N1),
     [#{} | _] = maps:get(cluster_links, N2),
+
+    amqp_channel:close(Chan),
+    amqp_channel:close(Chan2),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
     ok.
 
 overview(Config) ->
-    Nodename2 = get_node_config(Config, 1, nodename),
-    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/queue-n1", none, [?CREATED, ?NO_CONTENT]),
-    http_put(Config, "/queues/%2f/queue-n2", QArgs, [?CREATED, ?NO_CONTENT]),
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare(Chan, <<"queue-n1">>),
+    _ = queue_declare(Chan, <<"queue-n2">>),
+    _ = wait_for_queue(Config, "/queues/%2f/queue-n1"),
+    _ = wait_for_queue(Config, "/queues/%2f/queue-n2"),
+
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan2} = amqp_connection:open_channel(Conn2),
     publish(Chan, <<"queue-n1">>),
     publish(Chan2, <<"queue-n2">>),
-    timer:sleep(5000), % TODO force stat emission
+    timer:sleep(5100), % TODO force stat emission
     force_stats(), % channel count needs a bit longer for 2nd chan
     Res = http_get(Config, "/overview"),
-    amqp_channel:close(Chan),
-    rabbit_ct_client_helpers:close_connection(Conn),
+
     http_delete(Config, "/queues/%2f/queue-n1", ?NO_CONTENT),
     http_delete(Config, "/queues/%2f/queue-n2", ?NO_CONTENT),
     % assert there are two non-empty connection records
     ObjTots = maps:get(object_totals, Res),
-    ?assertEqual(2, maps:get(connections, ObjTots)),
-    ?assertEqual(2, maps:get(channels, ObjTots)),
+    ?assert(maps:get(connections, ObjTots) >= 2),
+    ?assert(maps:get(channels, ObjTots) >= 2),
     #{} = QT = maps:get(queue_totals, Res),
     ?assert(maps:get(messages_ready, QT) >= 2),
     MS = maps:get(message_stats, Res),
     ?assert(maps:get(publish, MS) >= 2),
+
+    amqp_channel:close(Chan),
+    amqp_channel:close(Chan2),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    rabbit_ct_client_helpers:close_connection(Conn2),
+
     ok.
 
 %%----------------------------------------------------------------------------
@@ -654,46 +769,44 @@ queue_declare(Chan, Name) ->
     #'queue.declare_ok'{queue = Q} = amqp_channel:call(Chan, Declare),
     Q.
 
+queue_declare_durable(Chan, Name) ->
+    Declare = #'queue.declare'{queue = Name, durable = true, exclusive = false},
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Chan, Declare),
+    Q.
+
 queue_bind(Chan, Ex, Q, Key) ->
     Binding = #'queue.bind'{queue = Q,
                             exchange = Ex,
                             routing_key = Key},
     #'queue.bind_ok'{} = amqp_channel:call(Chan, Binding).
 
-wait_for(Config, Path) ->
-    wait_for(Config, Path, [slave_nodes, synchronised_slave_nodes]).
+wait_for_mirrored_queue(Config, Path) ->
+    wait_for_queue(Config, Path, [slave_nodes, synchronised_slave_nodes]).
 
-wait_for(Config, Path, Keys) ->
-    wait_for(Config, Path, Keys, 1000).
+wait_for_queue(Config, Path) ->
+    wait_for_queue(Config, Path, []).
 
-wait_for(_Config, Path, Keys, 0) ->
+wait_for_queue(Config, Path, Keys) ->
+    wait_for_queue(Config, Path, Keys, 1000).
+
+wait_for_queue(_Config, Path, Keys, 0) ->
     exit({timeout, {Path, Keys}});
 
-wait_for(Config, Path, Keys, Count) ->
+wait_for_queue(Config, Path, Keys, Count) ->
     Res = http_get(Config, Path),
     case present(Keys, Res) of
         false -> timer:sleep(10),
-                 wait_for(Config, Path, Keys, Count - 1);
+                 wait_for_queue(Config, Path, Keys, Count - 1);
         true  -> Res
     end.
 
+present([], _Res) ->
+    true;
 present(Keys, Res) ->
     lists:all(fun (Key) ->
                       X = maps:get(Key, Res, undefined),
                       X =/= [] andalso X =/= undefined
               end, Keys).
-
-assert_single_node(Exp, Act) ->
-    ?assertEqual(1, length(Act)),
-    assert_node(Exp, hd(Act)).
-
-assert_nodes(Exp, Act0) ->
-    Act = [extract_node(A) || A <- Act0],
-    ?assertEqual(length(Exp), length(Act)),
-    [?assert(lists:member(E, Act)) || E <- Exp].
-
-assert_node(Exp, Act) ->
-    ?assertEqual(Exp, list_to_atom(binary_to_list(Act))).
 
 extract_node(N) ->
     list_to_atom(hd(string:tokens(binary_to_list(N), "@"))).
@@ -721,7 +834,7 @@ dump_table(Config, Table) ->
 
 force_stats() ->
     force_all(),
-    timer:sleep(1200).
+    timer:sleep(2000).
 
 force_all() ->
     [begin
