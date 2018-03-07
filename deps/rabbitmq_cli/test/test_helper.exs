@@ -162,6 +162,13 @@ defmodule TestHelper do
               [queue_name, false, false, "acting-user"])
   end
 
+  def lookup_queue(name, vhost) do
+    queue_name = :rabbit_misc.r(vhost, :queue, name)
+    :rpc.call(get_rabbit_hostname(),
+              :rabbit_amqqueue, :lookup,
+              [queue_name])
+  end
+
   def declare_exchange(name, vhost, type \\ :direct, durable \\ false, auto_delete \\ false, internal \\ false, args \\ []) do
     exchange_name = :rabbit_misc.r(vhost, :exchange, name)
     :rpc.call(get_rabbit_hostname(),
