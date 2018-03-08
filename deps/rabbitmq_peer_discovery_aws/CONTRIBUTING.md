@@ -27,23 +27,27 @@ See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 ## Running Tests
 
-To run a "fast suite" (a subset of tests):
+Integration tests of this plugin need AWS credentials and an SSH key pair.
+The credentials can be set in two ways:
 
-    make ct-fast
+ * Via a `$HOME/.aws/credentials` file
+ * Using the `AWS_SECRET_ACCESS_KEY` and `AWS_ACCESS_KEY_ID`
 
-To run a "slow suite" (a subset of tests that take much longer to run):
+Below is an example of a `.aws/credentials` file:
 
-    make ct-slow
+``` ini
+[default]
+aws_access_key_id = EXAMPLEACCESSKEYID
+aws_secret_access_key = a-secret-access-key
+```
 
-To run a particular suite:
+A private SSH key is also required to transfer a locally compiled version
+of the repository and transfer it to all remote nodes. It is set via the `SSH_KEY` environment
+variable.
 
-    make ct-$suite_name
+    make ct-integration
 
-for example, to run the `backing_queue` suite:
-
-    make ct-backing_queue
-
-Finally,
+will run integration tests [on AWS] only.
 
     make tests
 
