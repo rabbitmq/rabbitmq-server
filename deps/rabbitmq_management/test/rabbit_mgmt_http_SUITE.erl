@@ -911,14 +911,12 @@ queues_test(Config) ->
                    arguments   => #{}},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
-                   state       => <<"running">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
                    arguments   => #{}}], Queues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"/">>,
-                  state       => <<"running">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
@@ -2772,7 +2770,7 @@ rates_test(Config) ->
                   QueueTotals = maps:get(queue_totals, Overview, #{}),
                   HasPub andalso maps:get(messages_ready, QueueTotals, 0) > 0
           end,
-    wait_until(Fun, 60),
+    wait_until(Fun, 250),
     Overview = http_get(Config, "/overview"),
     MsgStats = maps:get(message_stats, Overview),
     QueueTotals = maps:get(queue_totals, Overview),
@@ -2857,7 +2855,7 @@ wait_until(Fun, N) ->
     true ->
         timer:sleep(1500);
     false ->
-        timer:sleep(?COLLECT_INTERVAL),
+        timer:sleep(?COLLECT_INTERVAL + 100),
         wait_until(Fun, N - 1)
     end.
 
