@@ -22,9 +22,14 @@
 
 -export([
     setup_steps/0,
+    setup_steps_for_vms/0,
     teardown_steps/0,
+    teardown_steps_for_vms/0,
+    run_make_dist/1,
     start_rabbitmq_nodes/1,
+    start_rabbitmq_nodes_on_vms/1,
     stop_rabbitmq_nodes/1,
+    stop_rabbitmq_nodes_on_vms/1,
     rewrite_node_config_file/2,
     cluster_nodes/1, cluster_nodes/2,
 
@@ -36,6 +41,7 @@
     control_action/2, control_action/3, control_action/4,
     rabbitmqctl/3, rabbitmqctl_list/3,
 
+    filter_out_erlang_code_path/1,
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
     rpc/5, rpc/6,
@@ -163,6 +169,9 @@
 
 setup_steps() ->
     [
+      fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
+      fun rabbit_ct_helpers:ensure_rabbitmqctl_app/1,
+      fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
       fun run_make_dist/1,
       fun start_rabbitmq_nodes/1,
       fun share_dist_and_proxy_ports_map/1
@@ -173,7 +182,23 @@ teardown_steps() ->
       fun stop_rabbitmq_nodes/1
     ].
 
+setup_steps_for_vms() ->
+    [
+      fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
+      fun rabbit_ct_helpers:ensure_rabbitmqctl_app/1,
+      fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
+      fun start_rabbitmq_nodes_on_vms/1,
+      fun maybe_cluster_nodes/1
+    ].
+
+teardown_steps_for_vms() ->
+    [
+      fun stop_rabbitmq_nodes_on_vms/1
+    ].
+
 run_make_dist(Config) ->
+    LockId = {make_dist, self()},
+    global:set_lock(LockId, [node()]),
     case os:getenv("SKIP_MAKE_TEST_DIST") of
         false ->
             SrcDir = ?config(current_srcdir, Config),
@@ -185,28 +210,54 @@ run_make_dist(Config) ->
                     %% record the fact we went through it already so we
                     %% save redundant calls.
                     os:putenv("SKIP_MAKE_TEST_DIST", "true"),
+                    global:del_lock(LockId, [node()]),
                     Config;
                 _ ->
+                    global:del_lock(LockId, [node()]),
                     {skip, "Failed to run \"make test-dist\""}
             end;
         _ ->
+            global:del_lock(LockId, [node()]),
             ct:pal(?LOW_IMPORTANCE, "(skip `$MAKE test-dist`)", []),
             Config
     end.
 
+start_rabbitmq_nodes_on_vms(Config) ->
+    ConfigsPerVM = configs_per_vm(Config),
+    start_rabbitmq_nodes_on_vms(Config, ConfigsPerVM, []).
+
+start_rabbitmq_nodes_on_vms(Config, [{Node, C} | Rest], NodeConfigsList) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, {rmq_nodes_clustered, false}),
+    Ret = rabbit_ct_vm_helpers:rpc(Config1,
+                                   Node,
+                                   ?MODULE,
+                                   start_rabbitmq_nodes,
+                                   [C]),
+    case Ret of
+        {skip, _} = Error ->
+            Error;
+        _ ->
+            NodeConfigs = get_node_configs(Ret),
+            start_rabbitmq_nodes_on_vms(Config, Rest,
+                                        [NodeConfigs | NodeConfigsList])
+    end;
+start_rabbitmq_nodes_on_vms(Config, [], NodeConfigsList) ->
+    merge_node_configs(Config, lists:reverse(NodeConfigsList)).
+
 start_rabbitmq_nodes(Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
+    Config0 = rabbit_ct_helpers:set_config(Config, [
         {rmq_username, list_to_binary(?DEFAULT_USER)},
         {rmq_password, list_to_binary(?DEFAULT_USER)},
-        {rmq_hostname, "localhost"},
         {rmq_vhost, <<"/">>},
         {rmq_channel_max, 0}]),
-    NodesCount0 = rabbit_ct_helpers:get_config(Config1, rmq_nodes_count),
-    NodesCount = case NodesCount0 of
-        undefined                                -> 1;
-        N when is_integer(N) andalso N >= 1      -> N;
-        L when is_list(L) andalso length(L) >= 1 -> length(L)
-    end,
+    Config1 = case rabbit_ct_helpers:get_config(Config0, rmq_hostname) of
+                  undefined ->
+                      rabbit_ct_helpers:set_config(
+                        Config0, {rmq_hostname, "localhost"});
+                  _ ->
+                      Config0
+              end,
+    NodesCount = get_nodes_count(Config1),
     Clustered0 = rabbit_ct_helpers:get_config(Config1, rmq_nodes_clustered),
     Clustered = case Clustered0 of
         undefined            -> true;
@@ -218,6 +269,55 @@ start_rabbitmq_nodes(Config) ->
       || I <- lists:seq(0, NodesCount - 1)
     ],
     wait_for_rabbitmq_nodes(Config1, Starters, [], Clustered).
+
+get_nodes_count(Config) ->
+    NodesCount = rabbit_ct_helpers:get_config(Config, rmq_nodes_count),
+    case NodesCount of
+        undefined                                -> 1;
+        N when is_integer(N) andalso N >= 1      -> N;
+        L when is_list(L) andalso length(L) >= 1 -> length(L)
+    end.
+
+set_nodes_count(Config, NodesCount) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, NodesCount}).
+
+configs_per_vm(Config) ->
+    CTPeers = rabbit_ct_vm_helpers:get_ct_peers(Config),
+    NodesCount = get_nodes_count(Config),
+    InstanceCount = length(CTPeers),
+    NodesPerVM = NodesCount div InstanceCount,
+    Remaining = NodesCount rem InstanceCount,
+    configs_per_vm(CTPeers, Config, [], NodesPerVM, Remaining).
+
+configs_per_vm([CTPeer | Rest], Config, ConfigsPerVM, NodesPerVM, Remaining) ->
+    Hostname = rabbit_ct_helpers:nodename_to_hostname(CTPeer),
+    Config0 = rabbit_ct_helpers:set_config(Config, {rmq_hostname, Hostname}),
+    NodesCount = if
+                     Remaining > 0 -> NodesPerVM + 1;
+                     true          -> NodesPerVM
+                 end,
+    if
+        NodesCount > 0 ->
+            Config1 = set_nodes_count(Config0, NodesCount),
+            configs_per_vm(Rest, Config, [{CTPeer, Config1} | ConfigsPerVM],
+                           NodesPerVM, Remaining - 1);
+        true ->
+            configs_per_vm(Rest, Config, ConfigsPerVM,
+                           NodesPerVM, Remaining)
+    end;
+configs_per_vm([], _, ConfigsPerVM, _, _) ->
+    lists:reverse(ConfigsPerVM).
+
+merge_node_configs(Config, NodeConfigsList) ->
+    merge_node_configs(Config, NodeConfigsList, []).
+
+merge_node_configs(Config, [], MergedNodeConfigs) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes, MergedNodeConfigs});
+merge_node_configs(Config, NodeConfigsList, MergedNodeConfigs) ->
+    HeadsAndTails = [{H, T} || [H | T] <- NodeConfigsList],
+    Heads = [H || {H, _} <- HeadsAndTails],
+    Tails = [T || {_, T} <- HeadsAndTails],
+    merge_node_configs(Config, Tails, MergedNodeConfigs ++ Heads).
 
 wait_for_rabbitmq_nodes(Config, [], NodeConfigs, Clustered) ->
     NodeConfigs1 = [NC || {_, NC} <- lists:keysort(1, NodeConfigs)],
@@ -390,10 +490,11 @@ update_tcp_ports_in_rmq_config(NodeConfig, []) ->
     NodeConfig.
 
 init_nodename(Config, NodeConfig, I) ->
+    Hostname = ?config(rmq_hostname, Config),
     Nodename0 = case rabbit_ct_helpers:get_config(Config, rmq_nodes_count) of
         NodesList when is_list(NodesList) ->
             Name = lists:nth(I + 1, NodesList),
-            rabbit_misc:format("~s@localhost", [Name]);
+            rabbit_misc:format("~s@~s", [Name, Hostname]);
         _ ->
             Base = ?config(tcp_ports_base, NodeConfig),
             Suffix0 = rabbit_ct_helpers:get_config(Config,
@@ -403,8 +504,8 @@ init_nodename(Config, NodeConfig, I) ->
                 _ when is_atom(Suffix0) -> [$- | atom_to_list(Suffix0)];
                 _                       -> [$- | Suffix0]
             end,
-            rabbit_misc:format("rmq-ct~s-~b-~b@localhost",
-              [Suffix, I + 1, Base])
+            rabbit_misc:format("rmq-ct~s-~b-~b@~s",
+              [Suffix, I + 1, Base, Hostname])
     end,
     Nodename = list_to_atom(Nodename0),
     rabbit_ct_helpers:set_config(NodeConfig, [
@@ -519,6 +620,17 @@ query_node(Config, NodeConfig) ->
         {enabled_plugins_file, EnabledPluginsFile}
       ]).
 
+maybe_cluster_nodes(Config) ->
+    Clustered0 = rabbit_ct_helpers:get_config(Config, rmq_nodes_clustered),
+    Clustered = case Clustered0 of
+        undefined            -> true;
+        C when is_boolean(C) -> C
+    end,
+    if
+        Clustered -> cluster_nodes(Config);
+        true      -> Config
+    end.
+
 cluster_nodes(Config) ->
     [NodeConfig1 | NodeConfigs] = get_node_configs(Config),
     cluster_nodes1(Config, NodeConfig1, NodeConfigs).
@@ -611,6 +723,42 @@ rotate_config_file(ConfigFile, OldName, Ext) ->
         false ->
             file:rename(OldName, NewName)
     end.
+
+stop_rabbitmq_nodes_on_vms(Config) ->
+    NodeConfigs = get_node_configs(Config),
+    NodeConfigsPerCTPeer = [
+                            {
+                             rabbit_ct_helpers:nodename_to_hostname(CTPeer),
+                             CTPeer,
+                             []
+                            }
+                            || CTPeer <-
+                               rabbit_ct_vm_helpers:get_ct_peers(Config)],
+    stop_rabbitmq_nodes_on_vms(Config, NodeConfigs, NodeConfigsPerCTPeer).
+
+stop_rabbitmq_nodes_on_vms(Config, [NodeConfig | Rest],
+                           NodeConfigsPerCTPeer) ->
+    RabbitMQNode = ?config(nodename, NodeConfig),
+    Hostname = rabbit_ct_helpers:nodename_to_hostname(RabbitMQNode),
+    {H, N, NodeConfigs} = lists:keyfind(Hostname, 1, NodeConfigsPerCTPeer),
+    NewEntry = {H, N, [NodeConfig | NodeConfigs]},
+    NodeConfigsPerCTPeer1 = lists:keystore(Hostname, 1,
+                                           NodeConfigsPerCTPeer,
+                                           NewEntry),
+    stop_rabbitmq_nodes_on_vms(Config, Rest, NodeConfigsPerCTPeer1);
+stop_rabbitmq_nodes_on_vms(Config, [], NodeConfigsPerCTPeer) ->
+    lists:foreach(
+      fun({_, CTPeer, NodeConfigs}) ->
+              Config1 = rabbit_ct_helpers:set_config(Config,
+                                                     {rmq_nodes,
+                                                      NodeConfigs}),
+              rabbit_ct_vm_helpers:rpc(Config1,
+                                       CTPeer,
+                                       ?MODULE,
+                                       stop_rabbitmq_nodes,
+                                       [Config1])
+      end, NodeConfigsPerCTPeer),
+    rabbit_ct_helpers:delete_config(Config, rmq_nodes).
 
 stop_rabbitmq_nodes(Config) ->
     NodeConfigs = get_node_configs(Config),
@@ -1015,21 +1163,35 @@ clear_permissions(Config, Node, Username, VHost, ActingUser) ->
          rabbit_data_coercion:to_binary(VHost),
          ActingUser]).
 
+filter_out_erlang_code_path(CodePath) ->
+    ErlangRoot = code:root_dir(),
+    ErlangRootLen = string:len(ErlangRoot),
+    lists:filter(
+      fun(Dir) ->
+              Dir =/= "." andalso
+              string:substr(Dir, 1, ErlangRootLen) =/= ErlangRoot
+      end, CodePath).
 
 %% Functions to execute code on a remote node/broker.
 
 add_code_path_to_node(Node, Module) ->
     Path1 = filename:dirname(code:which(Module)),
     Path2 = filename:dirname(code:which(?MODULE)),
-    Paths = lists:usort([Path1, Path2]),
-    ExistingPaths = rpc:call(Node, code, get_path, []),
-    lists:foreach(
-      fun(P) ->
-          case lists:member(P, ExistingPaths) of
-              true  -> ok;
-              false -> true = rpc:call(Node, code, add_pathz, [P])
-          end
-      end, Paths).
+    Paths = filter_out_erlang_code_path(lists:usort([Path1, Path2])),
+    case Paths of
+        [] ->
+            ok;
+        _ ->
+            ExistingPaths = rpc:call(Node, code, get_path, []),
+            lists:foreach(
+              fun(P) ->
+                      case lists:member(P, ExistingPaths) of
+                          true  -> ok;
+                          false -> true = rpc:call(Node, code, add_pathz, [P]),
+                                   ok
+                      end
+              end, Paths)
+    end.
 
 add_code_path_to_all_nodes(Config, Module) ->
     Nodenames = get_node_configs(Config, nodename),
