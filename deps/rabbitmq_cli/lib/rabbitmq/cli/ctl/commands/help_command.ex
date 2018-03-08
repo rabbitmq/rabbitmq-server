@@ -124,7 +124,7 @@ to display results. The default value is \"/\"."]
     |>  Enum.sort
     |>  Enum.map( fn(cmd) ->
                     maybe_timeout = case command_supports_timeout(cmd) do
-                      true  -> "[-t <timeout>]"
+                      true  -> " [-t <timeout>]"
                       false -> ""
                     end
                     case cmd.usage() do
