@@ -20,12 +20,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @default_timeout 10_000
 
-  def switches(), do: [pid: :integer]
+  def switches(), do: [pid: :integer, timeout: :integer]
 
-  def aliases(), do: ['P': :pid]
+  def aliases(), do: ['P': :pid, t: :timeout]
 
   def scopes(), do: [:ctl, :diagnostics]
-  
+
   def merge_defaults(args, opts) do
     timeout = case opts[:timeout] do
       nil       -> @default_timeout;

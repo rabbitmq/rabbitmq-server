@@ -17,6 +17,9 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  def switches(), do: [timeout: :integer]
+  def aliases(), do: [t: :timeout]
+
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate(args, _) when length(args) > 0 do

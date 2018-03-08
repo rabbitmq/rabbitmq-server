@@ -18,8 +18,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MaybeStuckCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def switches(), do: []
-  
+  def switches(), do: [timeout: :integer]
+  def aliases(), do: [t: :timeout]
+
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate(args, _) when length(args) > 0 do
@@ -35,5 +36,5 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MaybeStuckCommand do
     "Asking node #{node_name} to detect potentially stuck Erlang processes..."
   end
 
-  def usage, do: "maybe_stuck"  
+  def usage, do: "maybe_stuck"
 end

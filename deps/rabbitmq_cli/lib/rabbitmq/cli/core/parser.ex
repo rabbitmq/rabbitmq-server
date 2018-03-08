@@ -167,7 +167,6 @@ defmodule RabbitMQ.CLI.Core.Parser do
     [node: :atom,
      quiet: :boolean,
      dry_run: :boolean,
-     timeout: :integer,
      vhost: :string,
      longnames: :boolean,
      formatter: :string,
@@ -187,7 +186,6 @@ defmodule RabbitMQ.CLI.Core.Parser do
     [p: :vhost,
      n: :node,
      q: :quiet,
-     t: :timeout,
      l: :longnames]
   end
 

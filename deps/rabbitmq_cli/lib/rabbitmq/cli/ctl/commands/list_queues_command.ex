@@ -41,7 +41,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [offline: :boolean, online: :boolean, local: :boolean]
+  def switches(), do: [offline: :boolean, online: :boolean, local: :boolean, timeout: :integer]
+  def aliases(), do: [t: :timeout]
 
   defp default_opts() do
     %{vhost: "/", offline: false, online: false, local: false}
@@ -103,8 +104,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   end
 
   def usage_additional() do
-    "<queueinfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
+    ["<queueinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."]
   end
 
   def banner(_,%{vhost: vhost, timeout: timeout}) do

@@ -17,8 +17,8 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [if_empty: :boolean, if_unused: :boolean]
-  def aliases(), do: [e: :if_empty, u: :is_unused]
+  def switches(), do: [if_empty: :boolean, if_unused: :boolean, timeout: :integer]
+  def aliases(), do: [e: :if_empty, u: :is_unused, t: :timeout]
 
   def usage(), do: "delete_queue queue_name [--if_empty|-e] [--if_unused|-u]"
 
