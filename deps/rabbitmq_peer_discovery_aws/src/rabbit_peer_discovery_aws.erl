@@ -311,12 +311,13 @@ get_node_list_from_tags(Tags) ->
 get_hostname_name_from_reservation_set([], Accum) -> Accum;
 get_hostname_name_from_reservation_set([{"item", RI}|T], Accum) ->
     InstancesSet = proplists:get_value("instancesSet", RI),
-    Item = proplists:get_value("item", InstancesSet),
-    DNSName = proplists:get_value(select_hostname(), Item),
-    if
-        DNSName == [] -> get_hostname_name_from_reservation_set(T, Accum);
-        true -> get_hostname_name_from_reservation_set(T, lists:append([DNSName], Accum))
-    end.
+    Items = [Item || {"item", Item} <- InstancesSet],
+    HostnameKey = select_hostname(),
+    Hostnames = [Hostname || Item <- Items,
+                             {HKey, Hostname} <- Item,
+                             HKey == HostnameKey,
+                             Hostname =/= ""],
+    get_hostname_name_from_reservation_set(T, Accum ++ Hostnames).
 
 get_hostname_names(Path) ->
     case api_get_request("ec2", Path) of
