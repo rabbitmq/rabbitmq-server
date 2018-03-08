@@ -40,7 +40,9 @@
          ensure_mnesia_dir/0,
 
          on_node_up/1,
-         on_node_down/1
+         on_node_down/1,
+
+         merge_unsplit_data/2
         ]).
 
 %% Used internally in rpc calls
@@ -1027,3 +1029,37 @@ format_inconsistent_cluster_message(Thinker, Dissident) ->
     rabbit_misc:format("Node ~p thinks it's clustered "
                        "with node ~p, but ~p disagrees",
                        [Thinker, Dissident, Dissident]).
+
+merge_unsplit_data(init, [Tab|_]) ->
+    HandleMultiple = case mnesia:table_info(Tab, type) of
+        bag -> merge;
+        _   -> replace
+    end,
+    {ok, {Tab, HandleMultiple}};
+merge_unsplit_data(done, _S) ->
+    stop;
+merge_unsplit_data(Objs, {Tab, HandleMultiple} = S) ->
+    Merged = lists:map(
+        fun(Obj) ->
+            {write, merge_unsplit_record(Obj, {Tab, HandleMultiple})}
+        end,
+        Objs),
+    {ok, Merged, S}.
+
+merge_unsplit_record({[], B}, _) -> B;
+merge_unsplit_record({A, []}, _) -> A;
+merge_unsplit_record({A, A}, _) -> A;
+merge_unsplit_record({A, B}, {Tab, HandleMultiple}) ->
+    case lists:usort(A) == lists:usort(B) of
+        true  -> A;
+        false ->
+            case HandleMultiple of
+                merge   -> lists:usort(A ++ B);
+                replace ->
+                    rabbit_log:error("Data conflict merging table ~p"
+                                     " records on the left ~p"
+                                     " on the right ~p"
+                                     " Using the left version", [Tab, A, B]),
+                    A
+            end
+    end.
