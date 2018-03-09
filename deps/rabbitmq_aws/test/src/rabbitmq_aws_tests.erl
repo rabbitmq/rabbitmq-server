@@ -72,6 +72,18 @@ endpoint_host_test_() ->
      end}
   ].
 
+cn_endpoint_host_test_() ->
+  [
+    {"s3", fun() ->
+      Expectation = "s3.cn-north-1.amazonaws.com.cn",
+      ?assertEqual(Expectation, rabbitmq_aws:endpoint_host("cn-north-1", "s3"))
+     end},
+   {"s3", fun() ->
+      Expectation = "s3.cn-northwest-1.amazonaws.com.cn",
+      ?assertEqual(Expectation, rabbitmq_aws:endpoint_host("cn-northwest-1", "s3"))
+     end}
+  ].
+
 expired_credentials_test_() ->
   {
     foreach,
