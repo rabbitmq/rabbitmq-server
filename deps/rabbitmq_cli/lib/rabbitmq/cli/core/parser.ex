@@ -168,6 +168,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
      quiet: :boolean,
      dry_run: :boolean,
      vhost: :string,
+     # for backwards compatibility,
+     # not all commands support timeouts
      timeout: :integer,
      longnames: :boolean,
      formatter: :string,
@@ -188,6 +190,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
      n: :node,
      q: :quiet,
      l: :longnames,
+     # for backwards compatibility,
+     # not all commands support timeouts
      t: :timeout]
   end
 
