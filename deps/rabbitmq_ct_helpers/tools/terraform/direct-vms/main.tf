@@ -162,9 +162,11 @@ resource "aws_security_group" "allow_erlang_dist" {
 // install and configure Erlang, and start an Erlang node to later
 // control the VM.
 data "template_file" "user_data" {
-  template = "${file("${path.module}/templates/setup-erlang-${var.erlang_version}.sh")}"
+  template = "${file("${path.module}/templates/setup-erlang.sh")}"
   vars {
     default_user     = "${local.username}"
+    distribution     = "${local.distribution}"
+
     dirs_archive_url = "http://${aws_s3_bucket.dirs_archive.bucket_domain_name}/${aws_s3_bucket_object.dirs_archive.id}"
     erlang_cookie    = "${var.erlang_cookie}"
     erlang_nodename  = "${var.erlang_nodename}"
