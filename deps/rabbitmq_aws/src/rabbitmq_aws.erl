@@ -221,8 +221,19 @@ endpoint(_, Host, _, Path) ->
 %%      and region.
 %% @end
 endpoint_host(Region, Service) ->
-  lists:flatten(string:join([Service, Region, "amazonaws.com"], ".")).
+  lists:flatten(string:join([Service, Region, endpoint_tld(Region)], ".")).
 
+
+-spec endpoint_tld(Region :: region()) -> host().
+%% @doc Construct the endpoint hostname TLD for the request based upon the region.
+%%      See https://docs.aws.amazon.com/general/latest/gr/rande.html#ec2_region for details.
+%% @end
+endpoint_tld("cn-north-1") ->
+    "amazonaws.com.cn";
+endpoint_tld("cn-northwest-1") ->
+    "amazonaws.com.cn";
+endpoint_tld(_Other) ->
+    "amazonaws.com".
 
 -spec format_response(Response :: httpc_result()) -> result().
 %% @doc Format the httpc response result, returning the request result data
