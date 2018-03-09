@@ -168,6 +168,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
      quiet: :boolean,
      dry_run: :boolean,
      vhost: :string,
+     timeout: :integer,
      longnames: :boolean,
      formatter: :string,
      printer: :string,
@@ -186,7 +187,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
     [p: :vhost,
      n: :node,
      q: :quiet,
-     l: :longnames]
+     l: :longnames,
+     t: :timeout]
   end
 
   defp build_switches(default, command) do
@@ -204,7 +206,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
                         {command, {:redefining_global_aliases,
                                    command_aliases}}})
   end
-
+  
   defp apply_if_exported(mod, fun, args, default) do
     case function_exported?(mod, fun, length(args)) do
       true  -> apply(mod, fun, args);
@@ -214,8 +216,17 @@ defmodule RabbitMQ.CLI.Core.Parser do
 
   defp merge_if_different(default, specific, error) do
     case keyword_intersect(default, specific) do
-      [] -> Keyword.merge(default, specific);
-      _  -> exit(error)
+      []        -> Keyword.merge(default, specific);
+      conflicts ->
+        # if all conflicting keys are of the same type,
+        # that's acceptable
+        case Enum.all?(conflicts,
+              fn(c) ->
+                Keyword.get(default, c) == Keyword.get(specific, c)
+              end) do
+          true  -> Keyword.merge(default, specific);
+          false -> exit(error)
+        end
     end
   end
 

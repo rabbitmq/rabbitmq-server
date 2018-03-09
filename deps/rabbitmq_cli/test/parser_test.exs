@@ -152,6 +152,18 @@ defmodule ParserTest do
       {["seagull"], %{vhost: "my_vhost"}, []}
   end
 
+  test "--timeout can be specified before command" do
+    # for backwards compatibility
+    assert @subject.parse_global(["-n", "rabbitmq@localhost", "--timeout", "5", "sandwich", "pastrami"]) ==
+      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost", timeout: 5}, []}
+  end
+
+  test "-t can be specified before command" do
+    # for backwards compatibility
+    assert @subject.parse_global(["-n", "rabbitmq@localhost", "-t", "5", "sandwich", "pastrami"]) ==
+      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost", timeout: 5}, []}
+  end
+
   test "parse/1 returns command name" do
     command_line = ["pacific_gull", "fly", "-p", "my_vhost"]
     command = RabbitMQ.CLI.Seagull.Commands.PacificGullCommand
