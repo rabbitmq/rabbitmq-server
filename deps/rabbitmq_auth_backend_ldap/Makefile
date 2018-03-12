@@ -23,7 +23,7 @@ define PROJECT_ENV
 	    {timeout,               infinity},
 	    {log,                   false},
 	    {pool_size,             64},
-	    {idle_timeout,          infinity}
+	    {idle_timeout,          300}
 	  ]
 endef
 
