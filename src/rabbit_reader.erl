@@ -563,9 +563,14 @@ handle_other({channel_closing, ChPid}, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     {_, State1} = channel_cleanup(ChPid, State),
     maybe_close(control_throttle(State1));
+handle_other({'EXIT', Parent, normal}, State = #v1{parent = Parent}) ->
+    %% rabbitmq/rabbitmq-server#544
+    %% The connection port process has exited due to the TCP socket being closed.
+    %% Handle this case in the same manner as receiving {error, closed}
+    stop(closed, State);
 handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
-    terminate(io_lib:format("broker forced connection closure "
-                            "with reason '~w'", [Reason]), State),
+    Msg = io_lib:format("broker forced connection closure with reason '~w'", [Reason]),
+    terminate(Msg, State),
     %% this is what we are expected to do according to
     %% http://www.erlang.org/doc/man/sys.html
     %%
@@ -794,7 +799,7 @@ wait_for_channel_termination(N, TimerRef,
                     wait_for_channel_termination(N-1, TimerRef, State1)
             end;
         {'EXIT', Sock, _Reason} ->
-            [channel_cleanup(ChPid, State) || ChPid <- all_channels()],
+            clean_up_all_channels(State),
             exit(normal);
         cancel_wait ->
             exit(channel_termination_timeout)
@@ -962,6 +967,12 @@ channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
     end.
 
 all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
+
+clean_up_all_channels(State) ->
+    CleanupFun = fun(ChPid) ->
+                    channel_cleanup(ChPid, State)
+                 end,
+    lists:foreach(CleanupFun, all_channels()).
 
 %%--------------------------------------------------------------------------
 
