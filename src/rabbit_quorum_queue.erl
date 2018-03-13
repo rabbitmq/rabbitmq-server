@@ -16,8 +16,8 @@
 
 -module(rabbit_quorum_queue).
 
--export([init_state/1, handle_event/2]).
--export([declare/1, recover/1, stop/1, delete/4]).
+-export([init_state/1, init_state/2, handle_event/2]).
+-export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
 -export([info/1, info/2, stat/1, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/9]).
 -export([stateless_deliver/2, deliver/3]).
@@ -78,6 +78,14 @@
 init_state({Name, _} = Id) ->
     ra_fifo_client:init(Name, [Id]).
 
+init_state({Name, _} = Id, QName) ->
+    %% The quorum mapping entry is created on queue declare, but if another node
+    %% has processed this command the actual node won't have the entry.
+    %% init_state/1 can be used when there is guarantee this has been called, such
+    %% as when processing ack's and rejects. 
+    ets:insert_new(quorum_mapping, {Name, QName}),
+    ra_fifo_client:init(Name, [Id]).
+
 handle_event({ra_event, From, Evt}, FState) ->
     ra_fifo_client:handle_ra_event(From, Evt, FState).
 
@@ -126,11 +134,19 @@ delete(#amqqueue{ type = quorum, pid = {Name, _} = QPid, name = QName},
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Msgs = quorum_messages(Name),
-    ok = ra:delete_node(QPid),
     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+    ok = ra:delete_node(QPid),
     rabbit_core_metrics:queue_deleted(QName),
     ets:delete(quorum_mapping, Name),
     {ok, Msgs}.
+
+delete_immediately({Name, _} = QPid) ->
+    [{_, QName}] = ets:lookup(quorum_mapping, Name),
+    _ = rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER),
+    ok = ra:delete_node(QPid),
+    rabbit_core_metrics:queue_deleted(QName),
+    ets:delete(quorum_mapping, Name),
+    ok.
 
 ack(CTag, MsgIds, FState) ->
     ra_fifo_client:settle(quorum_ctag(CTag), MsgIds, FState).

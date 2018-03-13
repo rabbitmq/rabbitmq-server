@@ -59,7 +59,9 @@ groups() ->
           publisher_confirms,
           dead_letter_to_classic_queue,
           dead_letter_to_quorum_queue,
-          dead_letter_from_classic_to_quorum_queue
+          dead_letter_from_classic_to_quorum_queue,
+          cleanup_queue_state_on_channel_after_publish,
+          cleanup_queue_state_on_channel_after_subscribe
         ]}
     ].
 
@@ -90,9 +92,13 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_steps(Config1,
+                                          rabbit_ct_broker_helpers:setup_steps() ++
+                                              rabbit_ct_client_helpers:setup_steps()),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config2, 0, application, set_env,
+           [rabbit, channel_queue_cleanup_interval, 100]),
+    Config2.
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
@@ -751,6 +757,57 @@ dead_letter_from_classic_to_quorum_queue(Config) ->
                                [QQ, <<"1">>, <<"1">>, <<"0">>]]),
     _ = consume(Ch, QQ, false).
 
+cleanup_queue_state_on_channel_after_publish(Config) ->
+    %% Declare/delete the queue in one channel and publish on a different one,
+    %% to verify that the cleanup is propagated through channels
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    publish(Ch2, QQ),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    [NCh1, NCh2] = rpc:call(Node, rabbit_channel, list, []),
+    %% Check the channel state contains the state for the quorum queue on channel 1 and 2
+    wait_for_cleanup(Node, NCh1, 1),
+    wait_for_cleanup(Node, NCh2, 1),
+    ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
+    %% Check that all queue states have been cleaned
+    wait_for_cleanup(Node, NCh1, 0),
+    wait_for_cleanup(Node, NCh2, 0).
+
+cleanup_queue_state_on_channel_after_subscribe(Config) ->
+    %% Declare/delete the queue and publish in one channel, while consuming on a
+    %% different one to verify that the cleanup is propagated through channels
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    publish(Ch1, QQ),
+    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    subscribe(Ch2, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag,
+                          redelivered  = false}, _} ->
+            wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+            amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                multiple     = true}),
+            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+    end,
+    [NCh1, NCh2] = rpc:call(Node, rabbit_channel, list, []),
+    %% Check the channel state contains the state for the quorum queue on channel 1 and 2
+    wait_for_cleanup(Node, NCh1, 1),
+    wait_for_cleanup(Node, NCh2, 1),
+    ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
+    %% Check that all queue states have been cleaned
+    wait_for_cleanup(Node, NCh1, 0),
+    wait_for_cleanup(Node, NCh2, 0).
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->
@@ -840,4 +897,18 @@ receive_basic_deliver(Redelivered) ->
     receive
         {#'basic.deliver'{redelivered = R}, _} when R == Redelivered ->
             ok
+    end.
+
+wait_for_cleanup(Node, Channel, Number) ->
+    wait_for_cleanup(Node, Channel, Number, 60).
+
+wait_for_cleanup(Node, Channel, Number, 0) ->
+    ?assertEqual(Number, length(rpc:call(Node, rabbit_channel, list_queue_states, [Channel])));
+wait_for_cleanup(Node, Channel, Number, N) ->
+    case length(rpc:call(Node, rabbit_channel, list_queue_states, [Channel])) of
+        Length when Number == Length ->
+            ok;
+        _ ->
+            timer:sleep(500),
+            wait_for_cleanup(Node, Channel, Number, N - 1)
     end.

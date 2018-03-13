@@ -126,7 +126,8 @@ define PROJECT_ENV
 	    %% vhost had to shut down, see server#1158 and server#1280
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
-	    {default_consumer_prefetch, {false, 0}}
+	    {default_consumer_prefetch, {false, 0}},
+	    {channel_queue_cleanup_interval, 60000}
 	  ]
 endef
 

@@ -26,7 +26,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--record(state, {queue_states}).
+-record(state, {queue_states,
+                queue_cleanup_timer}).
 
 start(VHost) ->
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
@@ -73,7 +74,7 @@ start_link() ->
     gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
-    {ok, #state{queue_states = #{}}}.
+    {ok, init_queue_cleanup_timer(#state{queue_states = #{}})}.
 
 handle_call(_Req, _From, State) ->
     {reply, ok, State}.
@@ -100,6 +101,17 @@ handle_info({ra_event, {Name, _} = From, _} = Evt, #state{queue_states = QueueSt
         {_, _, FState1} ->
             {noreply, State0#state{queue_states = maps:put(Name, FState1, QueueStates)}}
     end;
+handle_info(queue_cleanup, State = #state{queue_states = QueueStates0}) ->
+    QueueStates = maps:filter(fun(Name, _) ->
+                                      [{_, QName}] = ets:lookup(quorum_mapping, Name),
+                                      case rabbit_amqqueue:lookup(QName) of
+                                          [] ->
+                                              false;
+                                          _ ->
+                                              true
+                                      end
+                              end, QueueStates0),
+    {noreply, init_queue_cleanup_timer(State#state{queue_states = QueueStates})};
 handle_info(_I, State) ->
     {noreply, State}.
 
@@ -119,3 +131,7 @@ get_quorum_state({Name, _} = Id, Map) ->
         error:{badkey, _} ->
             rabbit_quorum_queue:init_state(Id)
     end.
+
+init_queue_cleanup_timer(State) ->
+    {ok, Interval} = application:get_env(rabbit, channel_queue_cleanup_interval),
+    State#state{queue_cleanup_timer = erlang:send_after(Interval, self(), queue_cleanup)}.

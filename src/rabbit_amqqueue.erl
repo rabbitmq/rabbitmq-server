@@ -260,11 +260,10 @@ recover_classic_queues(VHost, Queues) ->
     end.
 
 filter_per_type(Queues) ->
-    lists:foldl(fun(#amqqueue{type = classic} = Q, {Cla, Quo}) ->
-                        {[Q | Cla], Quo};
-                   (#amqqueue{type = quorum} = Q, {Cla, Quo}) ->
-                        {Cla, [Q | Quo]}
-                end, {[], []}, Queues).
+    lists:partition(fun(#amqqueue{type = Type}) -> Type == classic end, Queues).
+
+filter_pid_per_type(QPids) ->
+    lists:partition(fun(QPid) -> is_pid(QPid) end, QPids).
 
 stop(VHost) ->
     %% Classic queues
@@ -362,7 +361,8 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                                       slave_pids_pending_shutdown = [],
                                       vhost                       = VHost,
                                       options = #{user => ActingUser},
-                                      type               = Type})),
+                                      type               = Type,
+                                      created_at         = erlang:monotonic_time()})),
 
     case Type of
         classic ->
@@ -899,7 +899,9 @@ delete_exclusive(QPids, ConnId) ->
     ok.
 
 delete_immediately(QPids) ->
-    [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
+    {Classic, Quorum} = filter_pid_per_type(QPids),
+    [gen_server2:cast(QPid, delete_immediately) || QPid <- Classic],
+    [rabbit_quorum_queue:delete_immediately(QPid) || QPid <- Quorum],
     ok.
 
 
@@ -969,9 +971,9 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
 
 basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid, _CTag, _) ->
     delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
-basic_get(#amqqueue{pid = {Name, _} = Id, type = quorum} = Q, _ChPid, NoAck,
+basic_get(#amqqueue{pid = {Name, _} = Id, type = quorum, name = QName} = Q, _ChPid, NoAck,
           _LimiterPid, CTag, FStates) ->
-    FState0 = get_quorum_state(Id, FStates),
+    FState0 = get_quorum_state(Id, QName, FStates),
     case rabbit_quorum_queue:basic_get(Q, NoAck, CTag, FState0) of
         {ok, empty, FState} ->
             {empty, FState};
@@ -991,7 +993,7 @@ basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q, 
               _LimiterPid, _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, _ActingUser, QStates) ->
     ok = check_consume_arguments(QName, Args),
-    FState0 = get_quorum_state(Id, QStates),
+    FState0 = get_quorum_state(Id, QName, QStates),
     {ok, FState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid, ConsumerPrefetchCount,
                                                      ConsumerTag, ExclusiveConsume, Args,
                                                      OkMsg, FState0),
@@ -1255,33 +1257,42 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
         case QueueState0 of
             untracked ->
                 lists:foreach(
-                  fun(Pid) ->
+                  fun({Pid, _QName}) ->
                           rabbit_quorum_queue:stateless_deliver(Pid, Delivery)
                   end, Quorum),
                 untracked;
             _ ->
                 lists:foldl(
-                  fun({Name, _} = Pid, QStates) ->
-                          FState0 = get_quorum_state(Pid, QStates),
+                  fun({{Name, _} = Pid, QName}, QStates) ->
+                          FState0 = get_quorum_state(Pid, QName, QStates),
                           FState = rabbit_quorum_queue:deliver(Confirm, Delivery, FState0),
                           maps:put(Name, FState, QStates)
                   end, QueueState0, Quorum)
         end,
-    {QPids ++ Quorum, QueueState}.
+    {QuorumPids, _} = lists:unzip(Quorum),
+    {QPids ++ QuorumPids, QueueState}.
 
 qpids([]) -> {[], [], []}; %% optimisation
-qpids([#amqqueue{pid = QPid, type = quorum}]) -> {[QPid], [], []}; %% opt
+qpids([#amqqueue{pid = QPid, type = quorum, name = QName}]) -> {[{QPid, QName}], [], []}; %% opt
 qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[], [QPid], SPids}; %% opt
 qpids(Qs) ->
     {QuoPids, MPids, SPids} =
-        lists:foldl(fun (#amqqueue{pid = QPid, type = quorum},
+        lists:foldl(fun (#amqqueue{pid = QPid, type = quorum, name = QName},
                          {QuoPidAcc, MPidAcc, SPidAcc}) ->
-                            {[QPid | QuoPidAcc], MPidAcc, SPidAcc};
+                            {[{QPid, QName} | QuoPidAcc], MPidAcc, SPidAcc};
                         (#amqqueue{pid = QPid, slave_pids = SPids},
                          {QuoPidAcc, MPidAcc, SPidAcc}) ->
                             {QuoPidAcc, [QPid | MPidAcc], [SPids | SPidAcc]}
                     end, {[], [], []}, Qs),
     {QuoPids, MPids, lists:append(SPids)}.
+
+get_quorum_state({Name, _} = Id, QName, Map) ->
+    try
+        maps:get(Name, Map)
+    catch
+        error:{badkey, _} ->
+            rabbit_quorum_queue:init_state(Id, QName)
+    end.
 
 get_quorum_state({Name, _} = Id, Map) ->
     try

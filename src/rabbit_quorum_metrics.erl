@@ -56,6 +56,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 emit_stats() ->
+    %% TODO if we have a ra cluster, shall we emit on all nodes???  Don't think so
     ets:foldl(fun({Name, Enqueue, Checkout, Settle, Return}, no_acc) ->
                       M = Enqueue - Settle,
                       MR = Enqueue - Checkout + Return,

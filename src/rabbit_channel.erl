@@ -69,6 +69,7 @@
 -export([get_vhost/1, get_user/1]).
 %% For testing
 -export([build_topic_variable_map/3]).
+-export([list_queue_states/1]).
 
 %% Mgmt HTTP API refactor
 -export([handle_method/5]).
@@ -153,7 +154,8 @@
   %% flow | noflow, see rabbitmq-server#114
   delivery_flow,
   interceptor_state,
-  queue_states
+  queue_states,
+  queue_cleanup_timer
 }).
 
 
@@ -379,6 +381,9 @@ force_event_refresh(Ref) ->
     [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
 
+list_queue_states(Pid) ->
+    gen_server2:call(Pid, list_queue_states).
+
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
@@ -443,7 +448,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     rabbit_event:if_enabled(State2, #ch.stats_timer,
                             fun() -> emit_stats(State2) end),
     put_operation_timeout(),
-    {ok, State2, hibernate,
+    State3 = init_queue_cleanup_timer(State2),
+    {ok, State3, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 prioritise_call(Msg, _From, _Len, _State) ->
@@ -492,6 +498,10 @@ handle_call({declare_fast_reply_to, Key}, _From,
               {_, _, Key} -> exists;
               _           -> not_found
           end, State);
+
+handle_call(list_queue_states, _From, State = #ch{queue_states = QueueStates}) ->
+    %% For testing of cleanup only
+    {reply, maps:keys(QueueStates), State};
 
 handle_call(_Request, _From, State) ->
     noreply(State).
@@ -604,7 +614,8 @@ handle_cast({confirm, MsgSeqNos, QPid}, State) ->
 handle_info({ra_event, {Name, _} = From, _} = Evt, #ch{queue_states = QueueStates,
                                                    consumer_mapping = ConsumerMapping,
                                                    queue_names = QNames } = State0) ->
-    FState0 = get_quorum_state(From, QueueStates),
+    {ok, QName} = maps:find(From, QNames),
+    FState0 = get_quorum_state(From, QName, QueueStates),
     case rabbit_quorum_queue:handle_event(Evt, FState0) of
         {{delivery, CTag, Msgs}, FState1} ->
             AckRequired = case maps:find(CTag, ConsumerMapping) of
@@ -621,7 +632,6 @@ handle_info({ra_event, {Name, _} = From, _} = Evt, #ch{queue_states = QueueState
                           true ->
                               FState1
                       end,
-            {ok, QName} = maps:find(From, QNames),
             State = lists:foldl(
                       fun({MsgId, {MsgHeader, Msg}}, Acc) ->
                               IsDelivered = maps:is_key(delivery_count, MsgHeader),
@@ -679,7 +689,21 @@ handle_info({{Ref, Node}, LateAnswer}, State = #ch{channel = Channel})
   when is_reference(Ref) ->
     rabbit_log_channel:warning("Channel ~p ignoring late answer ~p from ~p",
         [Channel, LateAnswer, Node]),
-    noreply(State).
+    noreply(State);
+handle_info(queue_cleanup, State = #ch{queue_states = QueueStates0}) ->
+    QueueStates =
+        maps:filter(fun(Name, _) ->
+                            case ets:lookup(quorum_mapping, Name) of
+                                [] ->
+                                    false;
+                                [{_, QName}] ->
+                                    case rabbit_amqqueue:lookup(QName) of
+                                        [] -> false;
+                                        _ -> true
+                                    end
+                            end
+                    end, QueueStates0),
+    noreply(init_queue_cleanup_timer(State#ch{queue_states = QueueStates})).
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
@@ -2219,14 +2243,14 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                                        CollectorPid, QPid)
                          end,
                     {ok, QueueName, 0, 0, QueueStates0};
-                {new, #amqqueue{pid = QPid}, FState} ->
+                {new, #amqqueue{pid = {Name, _} = QPid}, FState} ->
                     ok = case {Owner, CollectorPid} of
                              {none, _} -> ok;
                              {_, none} -> ok; %% Supports call from mgmt API
                              _    -> rabbit_queue_collector:register(
                                        CollectorPid, QPid)
                          end,
-                    {ok, QueueName, 0, 0, maps:put(QPid, FState, QueueStates0)};
+                    {ok, QueueName, 0, 0, maps:put(Name, FState, QueueStates0)};
                 {existing, _Q} ->
                     %% must have been created between the stat and the
                     %% declare. Loop around again.
@@ -2269,6 +2293,7 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
                    rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username, QueueStates0)
            end,
            fun (not_found)            -> {ok, 0, QueueStates0};
+               %% TODO delete crashed should clean up fifo states?
                ({absent, Q, crashed}) -> rabbit_amqqueue:delete_crashed(Q, Username),
                                          {ok, 0, QueueStates0};
                ({absent, Q, stopped}) -> rabbit_amqqueue:delete_crashed(Q, Username),
@@ -2387,10 +2412,14 @@ handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
     State1 = monitor_delivering_queue(NoAck, QPid, QName, State),
     {noreply, record_sent(DeliveryTag, not(NoAck), Msg, State1)}.
 
-get_quorum_state({Name, _} = Id, Map) ->
+get_quorum_state({Name, _} = Id, QName, Map) ->
     try
         maps:get(Name, Map)
     catch
         error:{badkey, _} ->
-            rabbit_quorum_queue:init_state(Id)
+            rabbit_quorum_queue:init_state(Id, QName)
     end.
+
+init_queue_cleanup_timer(State) ->
+    {ok, Interval} = application:get_env(rabbit, channel_queue_cleanup_interval),
+    State#ch{queue_cleanup_timer = erlang:send_after(Interval, self(), queue_cleanup)}.
