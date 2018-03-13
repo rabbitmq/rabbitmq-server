@@ -378,6 +378,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
       end).
 
 update(Name, Fun) ->
+    rabbit_log:error("Calling update ~p~n", [erlang:process_info(self(), current_stacktrace)]),
     case mnesia:wread({rabbit_queue, Name}) of
         [Q = #amqqueue{durable = Durable}] ->
             Q1 = Fun(Q),
@@ -392,6 +393,7 @@ update(Name, Fun) ->
     end.
 
 store_queue(Q = #amqqueue{durable = true}) ->
+    rabbit_log:error("Calling store queue ~p~n", [erlang:process_info(self(), current_stacktrace)]),
     ok = mnesia:write(rabbit_durable_queue,
                       Q#amqqueue{slave_pids      = [],
                                  sync_slave_pids = [],

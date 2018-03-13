@@ -50,12 +50,14 @@ create() ->
     lists:foreach(fun ({Tab, TabDef}) ->
                           TabDef1 = proplists:delete(match, TabDef),
                           case mnesia:create_table(Tab, TabDef1) of
-                              {atomic, ok} -> ok;
+                              {atomic, ok} ->
+                                ok;
                               {aborted, Reason} ->
                                   throw({error, {table_creation_failed,
                                                  Tab, TabDef1, Reason}})
                           end
                   end, definitions()),
+    % mnesia:change_table_majority(rabbit_durable_queue, true),
     ensure_secondary_indexes(),
     ok.
 

@@ -392,20 +392,25 @@ handle_info(Msg, State) ->
 terminate(_Reason, {not_started, _Q}) ->
     ok;
 terminate(_Reason, #state { backing_queue_state = undefined }) ->
+rabbit_log:error("Terminate reason ~p~n", [_Reason]),
     %% We've received a delete_and_terminate from gm, thus nothing to
     %% do here.
     ok;
 terminate({shutdown, dropped} = R, State = #state{backing_queue       = BQ,
                                                   backing_queue_state = BQS}) ->
+rabbit_log:error("Terminate reason ~p~n", [R]),
     %% See rabbit_mirror_queue_master:terminate/2
     terminate_common(State),
     BQ:delete_and_terminate(R, BQS);
 terminate(shutdown, State) ->
+rabbit_log:error("Terminate reason ~p~n", [shutdown]),
     terminate_shutdown(shutdown, State);
 terminate({shutdown, _} = R, State) ->
+rabbit_log:error("Terminate reason ~p~n", [R]),
     terminate_shutdown(R, State);
 terminate(Reason, State = #state{backing_queue       = BQ,
                                  backing_queue_state = BQS}) ->
+rabbit_log:error("Terminate reason ~p~n", [Reason]),
     terminate_common(State),
     BQ:delete_and_terminate(Reason, BQS).
 

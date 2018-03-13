@@ -270,6 +270,7 @@ init_with_backing_queue_state(Q = #amqqueue{exclusive_owner = Owner}, BQ, BQS,
     State3.
 
 terminate(shutdown = R,      State = #q{backing_queue = BQ, q = #amqqueue{ name = QName }}) ->
+    rabbit_log:error("Terminate shutdown~n"),
     rabbit_core_metrics:queue_deleted(qname(State)),
     terminate_shutdown(
     fun (BQS) ->
@@ -285,12 +286,15 @@ terminate({shutdown, missing_owner} = Reason, State) ->
     %% if the owner was missing then there will be no queue, so don't emit stats
     terminate_shutdown(terminate_delete(false, Reason, State), State);
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
+rabbit_log:error("Terminate shutdown ~p~n", [R]),
     rabbit_core_metrics:queue_deleted(qname(State)),
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(normal,            State) -> %% delete case
+rabbit_log:error("Terminate normal"),
     terminate_shutdown(terminate_delete(true, normal, State), State);
 %% If we crashed don't try to clean up the BQS, probably best to leave it.
 terminate(_Reason,           State = #q{q = Q}) ->
+rabbit_log:error("Terminate reason ~p~n", [_Reason]),
     terminate_shutdown(fun (BQS) ->
                                Q2 = Q#amqqueue{state = crashed},
                                rabbit_misc:execute_mnesia_transaction(
@@ -304,6 +308,7 @@ terminate_delete(EmitStats, Reason,
                  State = #q{q = #amqqueue{name          = QName},
                             backing_queue = BQ,
                             status = Status}) ->
+rabbit_log:error("Terminate delete ~n"),
     ActingUser = terminated_by(Status),
     fun (BQS) ->
         BQS1 = BQ:delete_and_terminate(Reason, BQS),

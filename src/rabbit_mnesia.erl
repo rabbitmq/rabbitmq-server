@@ -45,6 +45,8 @@
          merge_unsplit_data/2
         ]).
 
+-export([check_data_inconsistency/0, check_data_inconsistency/2, maybe_dirty_read/2]).
+
 %% Used internally in rpc calls
 -export([node_info/0, remove_node_if_mnesia_running/1]).
 
@@ -533,6 +535,9 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             ok = create_schema();
         {[], true, disc} ->
             %% First disc node up
+            lists:foreach(fun ({Tab, _TabDef}) ->
+                      mnesia:change_table_majority(Tab, true)
+              end, rabbit_table:definitions()),
             maybe_force_load(),
             ok;
         {[_ | _], _, _} ->
@@ -1063,3 +1068,42 @@ merge_unsplit_record({A, B}, {Tab, HandleMultiple}) ->
                     A
             end
     end.
+
+check_data_inconsistency() ->
+    RemoteNodes = rabbit_nodes:all_running(),
+    Tables = [Tab || Tab <- mnesia:system_info(tables) -- [schema],
+                     mnesia:table_info(Tab, type) =/= bag],
+    [check_data_inconsistency(Tables, Node) || Node <- RemoteNodes].
+
+check_data_inconsistency(Tables, Node) ->
+    rabbit_log:error("Checking inconsistency between ~p and ~p", [node(), Node]),
+    lists:foldl(fun(Tab, Acc) ->
+
+        CheckResult = mnesia:transaction(fun() ->
+                mnesia:foldl(fun(Record, Conflicts) ->
+                    case rpc:call(Node, rabbit_mnesia, maybe_dirty_read, [Tab, element(2, Record)]) of
+                        [Record]  -> Conflicts;
+                        [NotSame] -> [{conflict, Record, NotSame} | Conflicts];
+                        []        -> [{empty, Record, []} | Conflicts];
+                        no_table  -> [{no_table, Record} | Conflicts]
+                    end
+                end,
+                [],
+                Tab)
+            end,
+            []),
+        case CheckResult of
+            {atomic, []} -> Acc;
+            {atomic, Other} -> [{Tab, Other} | Acc]
+        end
+    end,
+    [],
+    Tables).
+
+maybe_dirty_read(Tab, Key) ->
+    case lists:member(Tab, mnesia:system_info(tables)) of
+        true  -> mnesia:dirty_read({Tab, Key});
+        false -> no_table
+    end.
+
+

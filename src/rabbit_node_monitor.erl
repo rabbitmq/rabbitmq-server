@@ -474,9 +474,14 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
             {noreply, State};
         {ok, _} ->
             rabbit_log:error(
-              FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
-              ArgsBase ++ [Proxy]),
-            upgrade_to_full_partition(Proxy),
+                FmtBase ++ "We will try to reconnect using unsplit ~n",
+                ArgsBase),
+            unsplit_server:handle_inconsistency(NotReallyDown),
+
+            % rabbit_log:error(
+            %   FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
+            %   ArgsBase ++ [Proxy]),
+            % upgrade_to_full_partition(Proxy),
             {noreply, State}
     end;
 
