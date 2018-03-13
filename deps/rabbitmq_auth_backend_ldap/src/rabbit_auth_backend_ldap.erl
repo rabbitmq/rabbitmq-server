@@ -465,11 +465,11 @@ with_ldap({ok, Creds}, Fun, Servers) ->
       ldap_pool,
       fun () ->
               case with_login(Creds, Servers, Opts, Fun) of
-                  {error, {gen_tcp_error, closed}} ->
-                      %% retry with new connection
-                      rabbit_log:warning("TCP connection to a LDAP server is already closed.~n"),
+                  {error, {gen_tcp_error, _}} ->
+                      %% purge and retry with a new connection
+                      rabbit_log:warning("TCP connection to a LDAP server was closed or otherwise defunct~n"),
                       purge_conn(Creds == anon, Servers, Opts),
-                      rabbit_log:warning("LDAP will retry with a new connection.~n"),
+                      rabbit_log:warning("LDAP will retry with a new connection~n"),
                       with_login(Creds, Servers, Opts, Fun);
                   Result -> Result
               end
@@ -502,7 +502,7 @@ with_login(Creds, Servers, Opts, Fun) ->
         Error ->
             ?L1("connect error: ~p", [Error]),
             case Error of
-                {error, {gen_tcp_error, closed}} -> Error;
+                {error, {gen_tcp_error, _}} -> Error;
                 %% Do not report internal connection error to a client
                 _Other                           -> {error, ldap_connect_error}
             end
