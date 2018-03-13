@@ -6,7 +6,8 @@ If you have [Vagrant](https://www.vagrantup.com) installed you
 can simply `vagrant up` from the root of the project directory.
 This will start a vagrant box with OpenLDAP running, accessible
 on local port 3890.
-Alternatively run OpenLDAP locally on port 3890 and use
+Alternatively run OpenLDAP locally on a local port specified via the `LDAP_PORT` environment variable
+(3890 by default to avoid conflicts) and use
 `example/setup.sh` to create the appropriate ldap databases.
 
 **IMPORTANT**: this will **wipe out your local OpenLDAP installation**!
