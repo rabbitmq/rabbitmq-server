@@ -14,6 +14,7 @@ EOF
 }
 
 variable "erlang_nodename" {
+  default     = "control"
   description = <<EOF
 Name of the remote Erlang node.
 EOF
