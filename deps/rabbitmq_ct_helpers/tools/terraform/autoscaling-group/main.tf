@@ -31,6 +31,10 @@ resource "aws_launch_configuration" "lc" {
   security_groups = ["${module.direct_vms.security_groups}"]
 
   user_data       = "${module.direct_vms.instance_user_data}"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_autoscaling_group" "asg" {
@@ -64,4 +68,8 @@ resource "aws_autoscaling_group" "asg" {
       propagate_at_launch = true
     }
   ]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
