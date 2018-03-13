@@ -848,7 +848,8 @@ prepare_dirs_to_download_archive(Config, CTPeer, Dir, I) ->
     PrivDir = ?config(priv_dir, Config),
     Archive = rabbit_misc:format(
                 "~s-~b-~s.tar.gz", [CTPeer, I, filename:basename(Dir)]),
-    FilesList = filelib:wildcard("**", Dir),
+    FilesList = [File || File <- filelib:wildcard("**", Dir),
+                         not filelib:is_dir(filename:join(Dir, File))],
     ct:pal(?LOW_IMPORTANCE, "Creating download dirs archive `~s`", [Archive]),
     Ret = erl_tar:create(
             filename:join(PrivDir, Archive),
