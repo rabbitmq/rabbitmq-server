@@ -31,11 +31,11 @@
   [rabbitmq_auth_backend_ldap]},
 
  {ldap_timeouts,
-  "auth_ldap.timeout = 50
-   auth_ldap.idle_timeout = 90",
+  "auth_ldap.timeout = 50000
+   auth_ldap.idle_timeout = 90000",
   [{rabbitmq_auth_backend_ldap,[
-                                {timeout, 50},
-                                {idle_timeout, 90}
+                                {timeout, 50000},
+                                {idle_timeout, 90000}
                                ]}],
   [rabbitmq_auth_backend_ldap]},
 
