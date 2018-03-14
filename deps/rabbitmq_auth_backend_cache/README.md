@@ -58,7 +58,7 @@ Or using the classic config for both parameters:
 To configure upstream auth backend, you should use `cached_backend` configuration item
 for the `rabbitmq_auth_backend_cache` application.
 
-Configuration that uses LDAP auth backend:
+Configuration that uses [LDAP auth backend](https://rabbitmq.com/ldap.html):
 
     auth_cache.cached_backend = ldap
 
@@ -76,6 +76,17 @@ Or using the classic config for both parameters:
 
     [{rabbitmq_auth_backend_cache, [{cached_backend, {rabbit_auth_backend_ldap,
                                                       rabbit_auth_backend_internal}}]}].
+
+Another example for the [HTTP backend](https://github.com/rabbitmq/rabbitmq-auth-backend-http)
+
+    auth_backends.1 = cache
+    auth_cache.cached_backend = http
+
+    auth_http.http_method   = post
+    auth_http.user_path     = http://localhost:8080/auth/user
+    auth_http.vhost_path    = http://localhost:8080/auth/vhost
+    auth_http.resource_path = http://localhost:8080/auth/resource
+
 
 ## Cache Configuration
 
