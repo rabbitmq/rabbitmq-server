@@ -755,13 +755,13 @@ delete(Q, IfUnused, IfEmpty) ->
             case IfEmpty of
                 true ->
                     rabbit_log:error("Queue ~s on vhost ~s master node is down. "
-                                     "Unable to check if the queue is empty. "
-                                     "Delete failed",
+                                     "The queue may be not empty. "
+                                     "Refusing to force-delete.",
                                      [Name, Vhost]),
                     {error, not_empty};
                 false ->
                     rabbit_log:warning("Queue ~s on vhost ~s master node is down. "
-                                       "Force-deleting the queue",
+                                       "Force-deleting the queue.",
                                        [Name, Vhost]),
                     delete_crashed_internal(Q1),
                     {ok, 0}
