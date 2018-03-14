@@ -70,7 +70,7 @@ end}.
 
 %% LDAP connection inactivity timeout, in milliseconds or 'infinity'
 %%
-%% {idle_timeout, infinity},
+%% {idle_timeout, 300000},
 
 {mapping, "auth_ldap.idle_timeout", "rabbitmq_auth_backend_ldap.idle_timeout",
     [{datatype, [integer, {atom, infinity}]}]}.
