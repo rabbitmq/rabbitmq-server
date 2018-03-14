@@ -835,8 +835,53 @@ delete_immediately(QPids) ->
     [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
     ok.
 
-delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty, ActingUser) ->
-    delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]}).
+delete(Q, IfUnused, IfEmpty, ActingUser) ->
+    case wait_for_promoted_or_stopped(Q) of
+        {promoted, Q1 = #amqqueue{pid = QPid}} ->
+            delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]});
+        {stopped, Q1} ->
+            #resource{name = Name, virtual_host = Vhost} = Q1#amqqueue.name,
+            case IfEmpty of
+                true ->
+                    rabbit_log:error("Queue ~s on vhost ~s master node is down. "
+                                     "Unable to check if the queue is empty. "
+                                     "Delete failed",
+                                     [Name, Vhost]),
+                    {error, not_empty};
+                false ->
+                    rabbit_log:warning("Queue ~s on vhost ~s master node is down. "
+                                       "Force-deleting the queue",
+                                       [Name, Vhost]),
+                    delete_crashed_internal(Q1, ActingUser),
+                    {ok, 0}
+            end;
+        {error, not_found} ->
+            %% Assume the queue was deleted
+            {ok, 0}
+    end.
+
+-spec wait_for_promoted_or_stopped(#amqqueue{}) -> {promoted, #amqqueue{}} | {stopped, #amqqueue{}} | {error, not_found}.
+wait_for_promoted_or_stopped(#amqqueue{name = QName}) ->
+    case lookup(QName) of
+        {ok, Q = #amqqueue{pid = QPid, slave_pids = SPids}} ->
+            case rabbit_mnesia:is_process_alive(QPid) of
+                true  -> {promoted, Q};
+                false ->
+                    case lists:any(fun(Pid) ->
+                                       rabbit_mnesia:is_process_alive(Pid)
+                                   end, SPids) of
+                        %% There is a live slave. May be promoted
+                        true ->
+                            timer:sleep(100),
+                            wait_for_promoted_or_stopped(Q);
+                        %% All slave pids are stopped.
+                        %% No process left for the queue
+                        false -> {stopped, Q}
+                    end
+            end;
+        {error, not_found} ->
+            {error, not_found}
+    end.
 
 delete_crashed(Q) ->
     delete_crashed(Q, ?INTERNAL_USER).
