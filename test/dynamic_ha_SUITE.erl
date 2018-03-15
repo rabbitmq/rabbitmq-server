@@ -57,7 +57,8 @@ groups() ->
       {clustered, [], [
           {cluster_size_2, [], [
               vhost_deletion,
-              promote_on_shutdown
+              promote_on_shutdown,
+              force_delete_if_no_master
             ]},
           {cluster_size_3, [], [
               change_policy,
@@ -226,6 +227,45 @@ vhost_deletion(Config) ->
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     amqp_channel:call(ACh, #'queue.declare'{queue = <<"vhost_deletion-q">>}),
     ok = rpc:call(A, rabbit_vhost, delete, [<<"/">>]),
+    ok.
+
+force_delete_if_no_master(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.nopromote">>,
+      <<"all">>),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    [begin
+         amqp_channel:call(ACh, #'queue.declare'{queue   = Q,
+                                                 durable = true}),
+         rabbit_ct_client_helpers:publish(ACh, Q, 10)
+     end || Q <- [<<"ha.nopromote.test1">>, <<"ha.nopromote.test2">>]],
+    ok = rabbit_ct_broker_helpers:restart_node(Config, B),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, A),
+
+    BCh = rabbit_ct_client_helpers:open_channel(Config, B),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 404, _}}, _},
+       amqp_channel:call(
+         BCh, #'queue.declare'{queue   = <<"ha.nopromote.test1">>,
+                               durable = true})),
+
+    BCh1 = rabbit_ct_client_helpers:open_channel(Config, B),
+    ?assertExit(
+        {{shutdown, {server_initiated_close, 404, _}}, _},
+        amqp_channel:call(
+            BCh1, #'queue.declare'{queue   = <<"ha.nopromote.test2">>,
+                                   durable = true})),
+    BCh2 = rabbit_ct_client_helpers:open_channel(Config, B),
+    #'queue.delete_ok'{} =
+        amqp_channel:call(BCh2, #'queue.delete'{queue = <<"ha.nopromote.test1">>}),
+    %% Delete with if_empty will fail, since we don't know if the queue is empty
+    ?assertExit(
+        {{shutdown, {server_initiated_close, 406, _}}, _},
+        amqp_channel:call(BCh2, #'queue.delete'{queue = <<"ha.nopromote.test2">>,
+                                                if_empty = true})),
+    BCh3 = rabbit_ct_client_helpers:open_channel(Config, B),
+    #'queue.delete_ok'{} =
+        amqp_channel:call(BCh3, #'queue.delete'{queue = <<"ha.nopromote.test2">>}),
     ok.
 
 promote_on_shutdown(Config) ->

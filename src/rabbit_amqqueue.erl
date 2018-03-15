@@ -746,8 +746,55 @@ delete_immediately(QPids) ->
     [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
     ok.
 
-delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty) ->
-    delegate:call(QPid, {delete, IfUnused, IfEmpty}).
+delete(Q, IfUnused, IfEmpty) ->
+    case wait_for_promoted_or_stopped(Q) of
+        {promoted, _Q1 = #amqqueue{pid = QPid}} ->
+            delegate:call(QPid, {delete, IfUnused, IfEmpty});
+        {stopped, Q1} ->
+            #resource{name = Name, virtual_host = Vhost} = Q1#amqqueue.name,
+            case IfEmpty of
+                true ->
+                    rabbit_log:error("Queue ~s in vhost ~s has its master node down and "
+                                     "no mirrors available or eligible for promotion. "
+                                     "The queue may be non-empty. "
+                                     "Refusing to force-delete.",
+                                     [Name, Vhost]),
+                    {error, not_empty};
+                false ->
+                    rabbit_log:warning("Queue ~s in vhost ~s has its master node is down and "
+                                       "no mirrors available or eligible for promotion. "
+                                       "Forcing queue deletion.",
+                                       [Name, Vhost]),
+                    delete_crashed_internal(Q1),
+                    {ok, 0}
+            end;
+        {error, not_found} ->
+            %% Assume the queue was deleted
+            {ok, 0}
+    end.
+
+-spec wait_for_promoted_or_stopped(#amqqueue{}) -> {promoted, #amqqueue{}} | {stopped, #amqqueue{}} | {error, not_found}.
+wait_for_promoted_or_stopped(#amqqueue{name = QName}) ->
+    case lookup(QName) of
+        {ok, Q = #amqqueue{pid = QPid, slave_pids = SPids}} ->
+            case rabbit_mnesia:is_process_alive(QPid) of
+                true  -> {promoted, Q};
+                false ->
+                    case lists:any(fun(Pid) ->
+                                       rabbit_mnesia:is_process_alive(Pid)
+                                   end, SPids) of
+                        %% There is a live slave. May be promoted
+                        true ->
+                            timer:sleep(100),
+                            wait_for_promoted_or_stopped(Q);
+                        %% All slave pids are stopped.
+                        %% No process left for the queue
+                        false -> {stopped, Q}
+                    end
+            end;
+        {error, not_found} ->
+            {error, not_found}
+    end.
 
 delete_crashed(#amqqueue{ pid = QPid } = Q) ->
     ok = rpc:call(node(QPid), ?MODULE, delete_crashed_internal, [Q]).
