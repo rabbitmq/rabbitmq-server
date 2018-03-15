@@ -53,7 +53,8 @@ groups() ->
               forget_offline_removes_things,
               force_boot,
               status_with_alarm,
-              wait_fails_when_cluster_fails
+              wait_fails_when_cluster_fails,
+              concurrent_default_data_creation
             ]},
           {cluster_size_4, [], [
               forget_promotes_offline_slave
@@ -635,6 +636,24 @@ wait_fails_when_cluster_fails(Config) ->
     wait_for_pid_file_to_contain_running_process_pid(RabbitPidFile, Attempts, Timeout),
     {error, _, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
       ["wait", RabbitPidFile]).
+
+concurrent_default_data_creation(Config) ->
+    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
+      nodename),
+    %% Run multiple times to detect race.
+    [concurrent_default_data_creation1(Rabbit, Hare) || _ <- lists:seq(1, 20)].
+
+concurrent_default_data_creation1(Rabbit, Hare) ->
+    %% Clear default data.
+    [{atomic, ok} = rpc:call(Rabbit, mnesia, clear_table, [Tab])
+     || Tab <- [rabbit_user, rabbit_user_permission, rabbit_vhost]],
+    %% Stop both nodes
+    [ok = rpc:call(Node, rabbit, stop, [])  || Node <- [Rabbit, Hare]],
+    %% Start nodes in parallel
+    [spawn(fun() -> rpc:call(Node, rabbit, start, []) end)
+     || Node <- [Rabbit, Hare]],
+    %% Verify both nodes are started successfully
+    [ok = rpc:call(Node, rabbit, await_startup, [Node]) || Node <- [Rabbit, Hare]].
 
 %% ----------------------------------------------------------------------------
 %% Internal utils
