@@ -57,8 +57,8 @@ groups() ->
       {clustered, [], [
           {cluster_size_2, [], [
               vhost_deletion,
-              promote_on_shutdown
-              force_delete_if_no_master,
+              promote_on_shutdown,
+              force_delete_if_no_master
             ]},
           {cluster_size_3, [], [
               change_policy,

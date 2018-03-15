@@ -748,7 +748,7 @@ delete_immediately(QPids) ->
 
 delete(Q, IfUnused, IfEmpty) ->
     case wait_for_promoted_or_stopped(Q) of
-        {promoted, Q1 = #amqqueue{pid = QPid}} ->
+        {promoted, _Q1 = #amqqueue{pid = QPid}} ->
             delegate:call(QPid, {delete, IfUnused, IfEmpty});
         {stopped, Q1} ->
             #resource{name = Name, virtual_host = Vhost} = Q1#amqqueue.name,
