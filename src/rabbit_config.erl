@@ -72,13 +72,10 @@ update_app_config(ConfigFile) ->
     %% For application config to be updated, applications should
     %% be unloaded first.
     %% If an application is already running, print an error.
-    lists:foreach(fun({App, _Config}) ->
+    lists:foreach(fun({App, AppConfig}) ->
         case lists:member(App, RunningApps) of
             true ->
-                io:format(standard_error,
-                          "~nUnable to update config for app ~p from *.conf file."
-                          " App is already running. Use advanced.config instead.~n",
-                          [App]);
+                maybe_print_warning_for_running_app(App, AppConfig);
             false ->
                 case lists:member(App, LoadedApps) of
                     true  -> application:unload(App);
@@ -87,10 +84,47 @@ update_app_config(ConfigFile) ->
         end
     end,
     Config),
+    maybe_set_net_ticktime(proplists:get_value(kernel, Config)),
     ok = application_controller:change_application_data([], [ConfigFile]),
     %% Make sure to load all the applications we're unloaded
     lists:foreach(fun(App) -> application:load(App) end, LoadedApps),
     ok.
+
+maybe_print_warning_for_running_app(kernel, Config) ->
+    ConfigWithoutSupportedEntry = proplists:delete(net_ticktime, Config),
+    case length(ConfigWithoutSupportedEntry) > 0 of
+        true -> io:format(standard_error,
+            "~nUnable to update config for app ~p from a .conf file."
+            " The app is already running. Use advanced.config instead.~n", [kernel]);
+        false -> ok
+    end;
+maybe_print_warning_for_running_app(App, _Config) ->
+    io:format(standard_error,
+        "~nUnable to update config for app ~p from a .conf file: "
+        " The app is already running.~n",
+        [App]).
+
+maybe_set_net_ticktime(undefined) ->
+    ok;
+maybe_set_net_ticktime(KernelConfig) ->
+    case proplists:get_value(net_ticktime, KernelConfig) of
+        undefined ->
+            ok;
+        NetTickTime ->
+            case net_kernel:set_net_ticktime(NetTickTime, 0) of
+                unchanged ->
+                    ok;
+                change_initiated ->
+                    ok;
+                {ongoing_change_to, NewNetTicktime} ->
+                    io:format(standard_error,
+                        "~nCouldn't set net_ticktime to ~p "
+                        "as net_kernel is busy changing net_ticktime to ~p seconds ~n",
+                        [NetTickTime, NewNetTicktime]);
+                _ ->
+                    ok
+            end
+    end.
 
 generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
     generate_config_file(ConfFiles, ConfDir, ScriptDir,

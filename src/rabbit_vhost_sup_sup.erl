@@ -183,7 +183,13 @@ start_vhost(VHost, Node) ->
 start_vhost(VHost) ->
     case rabbit_vhost:exists(VHost) of
         false -> {error, {no_such_vhost, VHost}};
-        true  -> supervisor2:start_child(?MODULE, [VHost])
+        true  ->
+            case whereis(?MODULE) of
+                Pid when is_pid(Pid) ->
+                    supervisor2:start_child(?MODULE, [VHost]);
+                undefined ->
+                    {error, rabbit_vhost_sup_sup_not_running}
+            end
     end.
 
 -spec is_vhost_alive(rabbit_types:vhost()) -> boolean().
@@ -221,9 +227,13 @@ save_vhost_process(VHost, VHostProcessPid) ->
 
 -spec lookup_vhost_sup_record(rabbit_types:vhost()) -> #vhost_sup{} | not_found.
 lookup_vhost_sup_record(VHost) ->
-    case ets:lookup(?MODULE, VHost) of
-        [] -> not_found;
-        [#vhost_sup{} = VHostSup] -> VHostSup
+    case ets:info(?MODULE, name) of
+        ?MODULE ->
+            case ets:lookup(?MODULE, VHost) of
+                [] -> not_found;
+                [#vhost_sup{} = VHostSup] -> VHostSup
+            end;
+        undefined -> not_found
     end.
 
 -spec vhost_sup_pid(rabbit_types:vhost()) -> no_pid | {ok, pid()}.

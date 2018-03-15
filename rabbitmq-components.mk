@@ -40,6 +40,7 @@ endif
 dep_amqp_client                       = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_amqp10_client                     = git_rmq rabbitmq-amqp1.0-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_amqp10_common                     = git_rmq rabbitmq-amqp1.0-common $(current_rmq_ref) $(base_rmq_ref) master
+dep_ra                                = git_rmq ra $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit                            = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit_common                     = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_amqp1_0                  = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref) master
@@ -101,7 +102,6 @@ dep_rabbitmq_web_mqtt                 = git_rmq rabbitmq-web-mqtt $(current_rmq_
 dep_rabbitmq_web_mqtt_examples        = git_rmq rabbitmq-web-mqtt-examples $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live master
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref) master
-dep_ra                                = git_rmq ra $(current_rmq_ref) $(base_rmq_ref) master
 
 dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(current_rmq_ref) $(base_rmq_ref) master
 
@@ -111,8 +111,8 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy = hex 2.0.0
-dep_cowlib = hex 2.0.0
+dep_cowboy = hex 2.2.2
+dep_cowlib = hex 2.1.0
 dep_jsx = hex 2.8.2
 dep_lager = hex 3.5.1
 dep_ranch = hex 1.4.0
@@ -124,6 +124,7 @@ dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \
 		      amqp10_client \
+		      ra \
 		      rabbit \
 		      rabbit_common \
 		      rabbitmq_amqp1_0 \
@@ -182,8 +183,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_web_mqtt_examples \
 		      rabbitmq_web_stomp \
 		      rabbitmq_web_stomp_examples \
-		      rabbitmq_website \
-		      ra
+		      rabbitmq_website
 
 # Several components have a custom erlang.mk/build.config, mainly
 # to disable eunit. Therefore, we can't use the top-level project's
@@ -203,7 +203,7 @@ export current_rmq_ref
 
 ifeq ($(origin base_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
-possible_base_rmq_ref := v3.7.x
+possible_base_rmq_ref := master
 ifeq ($(possible_base_rmq_ref),$(current_rmq_ref))
 base_rmq_ref := $(current_rmq_ref)
 else
@@ -303,7 +303,7 @@ prepare-dist::
 	@:
 
 # --------------------------------------------------------------------
-# rabbitmq-components.mk checks.
+# Umbrella-specific settings.
 # --------------------------------------------------------------------
 
 # If this project is under the Umbrella project, we override $(DEPS_DIR)
@@ -323,30 +323,5 @@ endif
 
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
 SKIP_DEPS = 1
-endif
-endif
-
-UPSTREAM_RMQ_COMPONENTS_MK = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk
-
-ifeq ($(PROJECT),rabbit_common)
-check-rabbitmq-components.mk:
-	@:
-else
-check-rabbitmq-components.mk:
-	$(verbose) cmp -s rabbitmq-components.mk \
-		$(UPSTREAM_RMQ_COMPONENTS_MK) || \
-		(echo "error: rabbitmq-components.mk must be updated!" 1>&2; \
-		  false)
-endif
-
-ifeq ($(PROJECT),rabbit_common)
-rabbitmq-components-mk:
-	@:
-else
-rabbitmq-components-mk:
-	$(gen_verbose) cp -a $(UPSTREAM_RMQ_COMPONENTS_MK) .
-ifeq ($(DO_COMMIT),yes)
-	$(verbose) git diff --quiet rabbitmq-components.mk \
-	|| git commit -m 'Update rabbitmq-components.mk' rabbitmq-components.mk
 endif
 endif

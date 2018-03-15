@@ -546,6 +546,7 @@ end}.
  end
 }.
 
+
 %% Customising Socket Options.
 %%
 %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
@@ -801,6 +802,15 @@ fun(Conf) ->
     end
 end}.
 
+%% Number of delegate processes to use for intra-cluster
+%% communication. On a machine which has a very large number of cores
+%% and is also part of a cluster, you may wish to increase this value.
+%%
+
+{mapping, "delegate_count", "rabbit.delegate_count", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
 %% Mirror sync batch size, in messages. Increasing this will speed
 %% up syncing but total batch size in bytes must not exceed 2 GiB.
 %% Available in RabbitMQ 3.6.0 or later.
@@ -859,12 +869,12 @@ end}.
 
 %% Cluster formation: Randomized startup delay
 
-{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_delay_range",
+{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_startup_delay_range",
     [{datatype, integer}]}.
-{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_delay_range",
+{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_startup_delay_range",
     [{datatype, integer}]}.
 
-{translation, "rabbit.cluster_formation.randomized_delay_range",
+{translation, "rabbit.cluster_formation.randomized_startup_delay_range",
 fun(Conf) ->
     Min = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.min", Conf, undefined),
     Max = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.max", Conf, undefined),
@@ -1140,6 +1150,15 @@ end}.
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 
+% ==========================
+% Kernel section
+% ==========================
+
+{mapping, "net_ticktime", "kernel.net_ticktime",[
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
 % ===============================
 % Validators
 % ===============================
@@ -1188,4 +1207,9 @@ end}.
 {validator, "non_negative_integer", "number should be greater or equal to zero",
 fun(Int) when is_integer(Int) ->
     Int >= 0
+end}.
+
+{validator, "non_zero_positive_integer", "number should be greater or equal to one",
+fun(Int) when is_integer(Int) ->
+    Int >= 1
 end}.

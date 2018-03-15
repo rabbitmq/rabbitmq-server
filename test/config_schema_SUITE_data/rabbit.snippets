@@ -405,21 +405,21 @@ tcp_listen_options.exit_on_close = false",
   "cluster_formation.randomized_startup_delay_range.min = 10
    cluster_formation.randomized_startup_delay_range.max = 30",
   [{rabbit, [{cluster_formation, [
-                                  {randomized_delay_range, {10, 30}}
+                                  {randomized_startup_delay_range, {10, 30}}
                                   ]}]}],
   []},
 
  {cluster_formation_randomized_startup_delay_min_only,
   "cluster_formation.randomized_startup_delay_range.min = 10",
   [{rabbit, [{cluster_formation, [
-                                  {randomized_delay_range, {10, 60}}
+                                  {randomized_startup_delay_range, {10, 60}}
                                   ]}]}],
   []},
 
  {cluster_formation_randomized_startup_delay_max_only,
   "cluster_formation.randomized_startup_delay_range.max = 30",
   [{rabbit, [{cluster_formation, [
-                                  {randomized_delay_range, {5, 30}}
+                                  {randomized_startup_delay_range, {5, 30}}
                                   ]}]}],
   []},
 
@@ -522,5 +522,17 @@ credential_validator.regexp = ^abc\\d+",
    log.channel.file = file_name_channel",
   [{rabbit,[{log, [{categories, [{connection, [{file, "file_name_connection"}]},
                                  {channel, [{file, "file_name_channel"}]}]}]}]}],
-  []}
+  []},
+ {delegate_count,
+  "delegate_count = 64",
+  [{rabbit, [
+      {delegate_count, 64}
+    ]}],
+  []},
+  {kernel_net_ticktime,
+   "net_ticktime = 20",
+   [{kernel, [
+      {net_ticktime, 20}
+     ]}],
+   []}
 ].

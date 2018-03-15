@@ -139,12 +139,14 @@ if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.co
 
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
+        -boot !CLEAN_BOOT_FILE! ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
+        !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!@localhost ^
         -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
         -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
-        -rabbit plugins_dir "!$RABBITMQ_PLUGINS_DIR!" ^
-        !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
+        -rabbit plugins_dir "!RABBITMQ_PLUGINS_DIR!" ^
+        -extra "!RABBITMQ_NODENAME!"
 
 if ERRORLEVEL 3 (
     rem ERRORLEVEL means (or greater) so we need to catch all other failure

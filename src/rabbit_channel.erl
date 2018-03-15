@@ -364,13 +364,29 @@ emit_info(PidList, InfoItems, Ref, AggregatorPid) ->
 
 refresh_config_local() ->
     rabbit_misc:upmap(
-      fun (C) -> gen_server2:call(C, refresh_config, infinity) end,
+      fun (C) ->
+        try
+          gen_server2:call(C, refresh_config, infinity)
+        catch _:Reason ->
+          rabbit_log:error("Failed to refresh channel config "
+                           "for channel ~p. Reason ~p",
+                           [C, Reason])
+        end
+      end,
       list_local()),
     ok.
 
 refresh_interceptors() ->
     rabbit_misc:upmap(
-      fun (C) -> gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT) end,
+      fun (C) ->
+        try
+          gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
+        catch _:Reason ->
+          rabbit_log:error("Failed to refresh channel interceptors "
+                           "for channel ~p. Reason ~p",
+                           [C, Reason])
+        end
+      end,
       list_local()),
     ok.
 
@@ -867,24 +883,22 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
+check_topic_authorisation(Resource = #exchange{type = topic},
+                          User, none, RoutingKey, Permission) ->
+    %% Called from outside the channel by mgmt API
+    AmqpParams = [],
+    check_topic_authorisation(Resource, User, AmqpParams, RoutingKey, Permission);
+check_topic_authorisation(Resource = #exchange{type = topic},
+                          User, ConnPid, RoutingKey, Permission) when is_pid(ConnPid) ->
+    AmqpParams = get_amqp_params(ConnPid),
+    check_topic_authorisation(Resource, User, AmqpParams, RoutingKey, Permission);
 check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
                           User = #user{username = Username},
-                          ConnPid,
-                          RoutingKey,
-                          Permission) ->
+                          AmqpParams, RoutingKey, Permission) ->
     Resource = Name#resource{kind = topic},
-    Timeout = get_operation_timeout(),
-    AmqpParams = case ConnPid of
-                     none ->
-                         %% Called from outside the channel by mgmt API
-                         [];
-                     _ ->
-                         rabbit_amqp_connection:amqp_params(ConnPid, Timeout)
-                 end,
     VariableMap = build_topic_variable_map(AmqpParams, VHost, Username),
-    Context = #{routing_key   => RoutingKey,
-                variable_map  => VariableMap
-    },
+    Context = #{routing_key  => RoutingKey,
+                variable_map => VariableMap},
     Cache = case get(topic_permission_cache) of
                 undefined -> [];
                 Other     -> Other
@@ -898,6 +912,18 @@ check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost
     end;
 check_topic_authorisation(_, _, _, _, _) ->
     ok.
+
+get_amqp_params(ConnPid) when is_pid(ConnPid) ->
+    Timeout = get_operation_timeout(),
+    get_amqp_params(ConnPid, rabbit_misc:is_process_alive(ConnPid), Timeout).
+
+get_amqp_params(ConnPid, false, _Timeout) ->
+    %% Connection process is dead
+    rabbit_log_channel:debug("file ~p, line ~p - connection process not alive: ~p~n",
+                             [?FILE, ?LINE, ConnPid]),
+    [];
+get_amqp_params(ConnPid, true, Timeout) ->
+    rabbit_amqp_connection:amqp_params(ConnPid, Timeout).
 
 build_topic_variable_map(AmqpParams, VHost, Username) ->
     VariableFromAmqpParams = extract_topic_variable_map_from_amqp_params(AmqpParams),
