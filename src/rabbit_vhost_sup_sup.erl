@@ -61,7 +61,9 @@ init([]) ->
 
 start_on_all_nodes(VHost) ->
     NodesStart = [ {Node, start_vhost(VHost, Node)}
-                   || Node <- rabbit_nodes:all_running() ],
+                   || Node <- rabbit_nodes:all_running(),
+                      %% Do not try to start a vhost on booting nodes.
+                      rabbit:is_booted(Node) ],
     Failures = lists:filter(fun
                                ({_, {ok, _}}) -> false;
                                ({_, {error, {already_started, _}}}) -> false;
