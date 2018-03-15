@@ -837,20 +837,22 @@ delete_immediately(QPids) ->
 
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     case wait_for_promoted_or_stopped(Q) of
-        {promoted, Q1 = #amqqueue{pid = QPid}} ->
+        {promoted, #amqqueue{pid = QPid}} ->
             delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]});
         {stopped, Q1} ->
             #resource{name = Name, virtual_host = Vhost} = Q1#amqqueue.name,
             case IfEmpty of
                 true ->
-                    rabbit_log:error("Queue ~s on vhost ~s master node is down. "
-                                     "The queue may be not empty. "
+                    rabbit_log:error("Queue ~s in vhost ~s has its master node down and "
+                                     "no mirrors available or eligible for promotion. "
+                                     "The queue may be non-empty. "
                                      "Refusing to force-delete.",
                                      [Name, Vhost]),
                     {error, not_empty};
                 false ->
-                    rabbit_log:warning("Queue ~s on vhost ~s master node is down. "
-                                       "Force-deleting the queue.",
+                    rabbit_log:warning("Queue ~s in vhost ~s has its master node is down and "
+                                       "no mirrors available or eligible for promotion. "
+                                       "Forcing queue deletion.",
                                        [Name, Vhost]),
                     delete_crashed_internal(Q1, ActingUser),
                     {ok, 0}
