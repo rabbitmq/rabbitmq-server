@@ -640,7 +640,11 @@ wait_fails_when_cluster_fails(Config) ->
 concurrent_default_data_creation(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
-    %% Run multiple times to detect race.
+    %% Run multiple times to detect a race.
+    %% This test simulates cocurrent database initialisation.
+    %% Since this is node-local state, in practice this can only
+    %% happen when a new cluster is formed and two nodes are booting
+    %% at roughly the same time (say, within a couple of ms from each other).
     [concurrent_default_data_creation1(Rabbit, Hare) || _ <- lists:seq(1, 20)].
 
 concurrent_default_data_creation1(Rabbit, Hare) ->
