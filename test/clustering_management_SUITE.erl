@@ -641,7 +641,7 @@ concurrent_default_data_creation(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
     %% Run multiple times to detect a race.
-    %% This test simulates cocurrent database initialisation.
+    %% This test simulates concurrent initialisation of several key node DB tables.
     %% Since this is node-local state, in practice this can only
     %% happen when a new cluster is formed and two nodes are booting
     %% at roughly the same time (say, within a couple of ms from each other).
