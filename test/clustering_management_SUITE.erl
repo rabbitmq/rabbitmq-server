@@ -657,7 +657,8 @@ concurrent_default_data_creation1(Rabbit, Hare) ->
     [spawn(fun() -> rpc:call(Node, rabbit, start, []) end)
      || Node <- [Rabbit, Hare]],
     %% Verify both nodes are started successfully
-    [ok = rpc:call(Node, rabbit, await_startup, [Node]) || Node <- [Rabbit, Hare]].
+    [ok = rpc:call(Node, rabbit, await_startup, [Node]) || Node <- [Rabbit, Hare]],
+    [{ok, _Pid} = rpc:call(Node, rabbit_vhost_sup_sup, get_vhost_sup, [<<"/">>]) || Node <- [Rabbit, Hare]].
 
 %% ----------------------------------------------------------------------------
 %% Internal utils
