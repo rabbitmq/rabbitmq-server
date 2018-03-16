@@ -48,16 +48,26 @@
 %%    epmd" as a shutdown or uninstall step.
 %% ----------------------------------------------------------------------------
 
-start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link() ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 init([]) ->
     {Me, Host} = rabbit_nodes:parts(node()),
     Mod = net_kernel:epmd_module(),
-    {port, Port, _Version} = Mod:port_please(Me, Host),
-    {ok, ensure_timer(#state{mod  = Mod,
-                             me   = Me,
-                             host = Host,
-                             port = Port})}.
+    init_handle_port_please(Mod:port_please(Me, Host), Mod, Me, Host).
+
+init_handle_port_please(noport, Mod, Me, Host) ->
+    State = #state{mod = Mod,
+                   me = Me,
+                   host = Host,
+                   port = undefined},
+    {ok, ensure_timer(State)};
+init_handle_port_please({port, Port, _Version}, Mod, Me, Host) ->
+    State = #state{mod = Mod,
+                   me = Me,
+                   host = Host,
+                   port = Port},
+    {ok, ensure_timer(State)}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -65,9 +75,9 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(check, State) ->
-    check_epmd(State),
-    {noreply, ensure_timer(State#state{timer = undefined})};
+handle_info(check, State0) ->
+    {ok, State1} = check_epmd(State0),
+    {noreply, ensure_timer(State1#state{timer = undefined})};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -83,15 +93,18 @@ code_change(_OldVsn, State, _Extra) ->
 ensure_timer(State) ->
     rabbit_misc:ensure_timer(State, #state.timer, ?CHECK_FREQUENCY, check).
 
-check_epmd(#state{mod  = Mod,
-                  me   = Me,
-                  host = Host,
-                  port = Port}) ->
-    case Mod:port_please(Me, Host) of
-        noport -> rabbit_log:warning(
-                    "epmd does not know us, re-registering ~s at port ~b~n",
-                    [Me, Port]),
-                  rabbit_nodes:ensure_epmd(),
-                  Mod:register_node(Me, Port);
-        _      -> ok
-    end.
+check_epmd(State = #state{mod  = Mod,
+                          me   = Me,
+                          host = Host,
+                          port = Port}) ->
+    Port1 = case Mod:port_please(Me, Host) of
+                noport ->
+                    rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b~n",
+                                       [Me, Port]),
+                    Port;
+                {port, NewPort, _Version} ->
+                    NewPort
+            end,
+    rabbit_nodes:ensure_epmd(),
+    Mod:register_node(Me, Port1),
+    {ok, State#state{port = Port1}}.
