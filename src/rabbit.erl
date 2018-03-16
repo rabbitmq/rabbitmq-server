@@ -27,6 +27,7 @@
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
+-export([is_booted/1]).
 
 -ifdef(TEST).
 
@@ -744,6 +745,13 @@ listeners() ->
 is_running() -> is_running(node()).
 
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
+
+is_booted(Node) ->
+    case is_booting(Node) of
+        false ->
+            is_running(Node);
+        _ -> false
+    end.
 
 environment() ->
     %% The timeout value is twice that of gen_server:call/2.

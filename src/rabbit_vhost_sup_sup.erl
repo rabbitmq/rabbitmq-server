@@ -60,14 +60,16 @@ init([]) ->
             [rabbit_vhost_sup_wrapper, rabbit_vhost_sup]}]}}.
 
 start_on_all_nodes(VHost) ->
-    NodesStart = [ {Node, start_vhost(VHost, Node)}
-                   || Node <- rabbit_nodes:all_running() ],
-    Failures = lists:filter(fun
+    %% Do not try to start a vhost on booting peer nodes
+    AllBooted = [Node || Node <- rabbit_nodes:all_running(), rabbit:is_booted(Node)],
+    Nodes     = [node() | AllBooted],
+    Results   = [{Node, start_vhost(VHost, Node)} || Node <- Nodes],
+    Failures  = lists:filter(fun
                                ({_, {ok, _}}) -> false;
                                ({_, {error, {already_started, _}}}) -> false;
                                (_) -> true
                             end,
-                            NodesStart),
+                            Results),
     case Failures of
         []     -> ok;
         Errors -> {error, {failed_to_start_vhost_on_nodes, Errors}}
