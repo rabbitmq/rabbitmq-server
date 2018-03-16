@@ -27,7 +27,7 @@
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
--export([is_booted/0, is_booted/1, is_booting/0]).
+-export([is_booted/1]).
 
 -ifdef(TEST).
 
@@ -653,16 +653,10 @@ await_startup(Node) ->
     end.
 
 is_booting(Node) ->
-    case rpc:call(Node, rabbit, is_booting, []) of
-        true  -> true;
-        false -> false;
-        {badrpc, _} = Err -> Err
-    end.
-
-is_booting() ->
-    case erlang:whereis(rabbit_boot) of
-        undefined        -> false;
-        P when is_pid(P) -> true
+    case rpc:call(Node, erlang, whereis, [rabbit_boot]) of
+        {badrpc, _} = Err -> Err;
+        undefined         -> false;
+        P when is_pid(P)  -> true
     end.
 
 wait_for_boot_to_start(Node) ->
@@ -753,14 +747,11 @@ is_running() -> is_running(node()).
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
 
 is_booted(Node) ->
-    case rpc:call(Node, rabbit, is_booted, []) of
-        true        -> true;
-        false       -> false;
-        {badrpc, _} -> false
+    case is_booting(Node) of
+        false ->
+            is_running(Node);
+        _ -> false
     end.
-
-is_booted() ->
-    is_running() andalso not is_booting().
 
 environment() ->
     %% The timeout value is twice that of gen_server:call/2.
