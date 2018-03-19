@@ -52,7 +52,7 @@ EOF
 
 # Setup repository to get Erlang.
 readonly esl_package=/tmp/erlang-solutions_1.0_all.deb
-wget -O"$esl_package" https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb
+wget -q -O"$esl_package" https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb
 dpkg -i "$esl_package"
 apt-get -qq update
 
@@ -108,7 +108,7 @@ chown "$default_user" "/home/$default_user/.erlang.cookie"
 
 # Fetch and extract the dirs archive.
 dirs_archive="/tmp/$(basename "$dirs_archive_url")"
-wget -O"$dirs_archive" "$dirs_archive_url"
+wget -q -O"$dirs_archive" "$dirs_archive_url"
 if test -s "$dirs_archive"; then
   xzcat "$dirs_archive" | tar xf - -P
 fi
