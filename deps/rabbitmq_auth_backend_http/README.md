@@ -30,11 +30,12 @@ releases of this plugin support different versions of RabbitMQ.
 
 ## Enabling the Plugin
 
-To enable the plugin, set the value of the `auth_backends` configuration item
-for the `rabbit` application to include `rabbit_auth_backend_http`.
-`auth_backends` is a list of authentication providers to try in order.
+First enable the plugin using `rabbitmq-plugins`:
 
-See the [Access Control guide](http://rabbitmq.com/access-control.html) for more information.
+    rabbitmq-plugins enable rabbitmq_auth_backend_http
+
+
+## Configuring the Plugin
 
 To use this backend exclusively, use the following snippet in `rabbitmq.conf` (currently
 in master)
@@ -45,10 +46,8 @@ Or, in the classic config format (`rabbitmq.config`, prior to 3.7.0) or `advance
 
     [{rabbit, [{auth_backends, [rabbit_auth_backend_http]}]}].
 
-See [RabbitMQ Configuration guide](http://www.rabbitmq.com/configure.html) for more detail
-on `auth_backends`.
-
-## Configuring the Plugin
+See [RabbitMQ Configuration guide](http://www.rabbitmq.com/configure.html) and
+[Access Control guide](http://rabbitmq.com/access-control.html) for more information.
 
 You need to configure the plugin to know which URIs to point at
 and which HTTP method to use.
