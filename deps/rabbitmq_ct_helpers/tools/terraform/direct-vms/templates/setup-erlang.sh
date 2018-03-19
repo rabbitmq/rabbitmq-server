@@ -78,7 +78,7 @@ apt_install_extra() {
       readonly extra_backports='git'
       ;;
     *)
-      readonly extra_pkgs='elixir git make rsync vim-nox zip'
+      readonly extra_pkgs='elixir git make rsync vim-nox xz-utils zip'
       readonly extra_backports=''
       ;;
   esac
