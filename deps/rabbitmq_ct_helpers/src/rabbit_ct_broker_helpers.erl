@@ -1182,15 +1182,25 @@ add_code_path_to_node(Node, Module) ->
         [] ->
             ok;
         _ ->
-            ExistingPaths = rpc:call(Node, code, get_path, []),
-            lists:foreach(
-              fun(P) ->
-                      case lists:member(P, ExistingPaths) of
-                          true  -> ok;
-                          false -> true = rpc:call(Node, code, add_pathz, [P]),
-                                   ok
-                      end
-              end, Paths)
+            case rpc:call(Node, code, get_path, []) of
+                ExistingPaths when is_list(ExistingPaths) ->
+                    lists:foreach(
+                      fun(P) ->
+                              case lists:member(P, ExistingPaths) of
+                                  true ->
+                                      ok;
+                                  false ->
+                                      true = rpc:call(
+                                               Node, code, add_pathz, [P]),
+                                      ok
+                              end
+                      end, Paths);
+                Error ->
+                    ct:pal(?LOW_IMPORTANCE,
+                           "Failed to add code path to node ~s: ~p~n",
+                           [Node, Error]),
+                    ok
+            end
     end.
 
 add_code_path_to_all_nodes(Config, Module) ->
