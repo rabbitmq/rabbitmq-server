@@ -620,7 +620,8 @@ declare_args() ->
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
      {<<"x-max-priority">>,            fun check_non_neg_int_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
-     {<<"x-queue-mode">>,              fun check_queue_mode/2}].
+     {<<"x-queue-mode">>,              fun check_queue_mode/2},
+     {<<"x-queue-type">>,              fun check_queue_type/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -682,6 +683,15 @@ check_queue_mode({longstr, Val}, _Args) ->
     end;
 check_queue_mode({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
+
+check_queue_type({longstr, Val}, _Args) ->
+    case lists:member(Val, [<<"classic">>, <<"quorum">>]) of
+        true  -> ok;
+        false -> {error, invalid_queue_type}
+    end;
+check_queue_type({Type,    _}, _Args) ->
+    {error, {unacceptable_type, Type}}.
+
 
 list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
 
