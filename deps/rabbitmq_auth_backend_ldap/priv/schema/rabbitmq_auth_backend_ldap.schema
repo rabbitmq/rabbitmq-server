@@ -80,13 +80,14 @@ end}.
 %%   - false (no logging is performed)
 %%   - true (verbose logging of the logic used by the plugin)
 %%   - network (as true, but additionally logs LDAP network traffic)
+%%   - network_unsafe (won't try to scrub any credentials)
 %%
 %% Defaults to false.
 %%
 %% {log, false},
 
 {mapping, "auth_ldap.log", "rabbitmq_auth_backend_ldap.log",
-    [{datatype, {enum, [true, false, network]}}]}.
+    [{datatype, {enum, [true, false, network, network_unsafe]}}]}.
 
 %%
 %% Authentication
