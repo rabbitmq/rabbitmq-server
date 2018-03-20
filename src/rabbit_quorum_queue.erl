@@ -278,7 +278,6 @@ i(durable,            #amqqueue{durable            = Dur}) -> Dur;
 i(auto_delete,        #amqqueue{auto_delete        = AD}) -> AD;
 i(arguments,          #amqqueue{arguments          = Args}) -> Args;
 i(pid,                #amqqueue{pid                = {_, Node}}) -> Node;
-i(state,              #amqqueue{state              = ST}) -> ST;
 i(messages,           #amqqueue{pid                = {Name, _}}) ->
     quorum_messages(Name);
 i(messages_ready,     #amqqueue{pid                = {Name, _}}) ->
