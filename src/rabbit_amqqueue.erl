@@ -1050,11 +1050,18 @@ queues_to_delete_when_node_down(NodeDown) ->
     end).
 
 notify_queue_binding_deletions(QueueDeletions) ->
-    NotifyBindingDeletions = rabbit_binding:process_deletions(
-        lists:foldl(fun rabbit_binding:combine_deletions/2,
-                  rabbit_binding:new_deletions(), QueueDeletions),
-        ?INTERNAL_USER),
-    NotifyBindingDeletions().
+    rabbit_misc:execute_mnesia_tx_with_tail(
+        fun() ->
+            rabbit_binding:process_deletions(
+                lists:foldl(
+                    fun rabbit_binding:combine_deletions/2,
+                    rabbit_binding:new_deletions(),
+                    QueueDeletions
+                ),
+                ?INTERNAL_USER
+            )
+        end
+    ).
 
 notify_queues_deleted(QueueDeletions) ->
     lists:foreach(
