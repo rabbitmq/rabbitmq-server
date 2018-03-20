@@ -88,6 +88,13 @@
                                ]}],
   [rabbitmq_auth_backend_ldap]},
 
+
+ {group_lookup_base,
+  "auth_ldap.group_lookup_base = DC=gopivotal,DC=com",
+  [{rabbitmq_auth_backend_ldap,
+       [{group_lookup_base, "DC=gopivotal,DC=com"}]}],
+  [rabbitmq_auth_backend_ldap]},
+
  {dn_lookup,
   "auth_ldap.dn_lookup_attribute = userPrincipalName
    auth_ldap.dn_lookup_base = DC=gopivotal,DC=com

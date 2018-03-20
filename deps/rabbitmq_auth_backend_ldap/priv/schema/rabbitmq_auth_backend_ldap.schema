@@ -185,6 +185,13 @@ end}.
 %% =============
 %%
 
+%% Groups are searched in the DN defined by the `group_lookup_base`
+%% configuration key, or the `dn_lookup_base` variable if
+%% former is `none`.
+
+{mapping, "auth_ldap.group_lookup_base", "rabbitmq_auth_backend_ldap.group_lookup_base",
+    [{datatype, [{enum, [none]}, string]}]}.
+
 %% The LDAP plugin can perform a variety of queries against your
 %% LDAP server to determine questions of authorisation. See
 %% http://www.rabbitmq.com/ldap.html#authorisation for more
