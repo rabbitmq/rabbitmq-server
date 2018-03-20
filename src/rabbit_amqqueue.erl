@@ -306,7 +306,7 @@ find_durable_queues(VHost) ->
                                 %% the policy). Thus, we must check if the local pid is alive
                                 %% - if the record is present - in order to restart.
                                 (mnesia:read(rabbit_queue, Name, read) =:= []
-                                orelse not erlang:is_process_alive(Pid))]))
+                                orelse not is_queue_process_alive(Pid))]))
       end).
 
 find_durable_queues() ->
@@ -322,7 +322,7 @@ find_durable_queues() ->
                                 %% the policy). Thus, we must check if the local pid is alive
                                 %% - if the record is present - in order to restart.
                                 (mnesia:read(rabbit_queue, Name, read) =:= []
-                                orelse not erlang:is_process_alive(Pid))]))
+                                orelse not is_queue_process_alive(Pid))]))
       end).
 
 recover_durable_queues(QueuesAndRecoveryTerms) ->
@@ -707,10 +707,10 @@ qnode(QPid) when is_pid(QPid) ->
 qnode({_, Node}) ->
     Node.
 
-qpid(Pid) when is_pid(Pid) ->
-    Pid;
-qpid({Name, _}) ->
-    whereis(Name).
+is_queue_process_alive(Pid) when is_pid(Pid) ->
+    erlang:is_process_alive(Pid);
+is_queue_process_alive({Name, _}) ->
+    whereis(Name) /= undefined.
 
 list(VHostPath) ->
     list(VHostPath, rabbit_queue).
@@ -1122,6 +1122,8 @@ cancel_sync_mirrors(#amqqueue{pid = QPid}) ->
 cancel_sync_mirrors(QPid) ->
     delegate:invoke(QPid, {gen_server2, call, [cancel_sync_mirrors, infinity]}).
 
+is_mirrored(#amqqueue{type = quorum}) ->
+    true;
 is_mirrored(Q) ->
     rabbit_mirror_queue_misc:is_mirrored(Q).
 
@@ -1177,7 +1179,7 @@ on_node_down(Node) ->
                                   #amqqueue{name = QName, pid = Pid} =
                                   Q <- mnesia:table(rabbit_queue),
                                     qnode(Pid) == Node andalso
-                                    not rabbit_mnesia:is_process_alive(qpid(Pid)) andalso
+                                    not is_queue_process_alive(Pid) andalso
                                     (not rabbit_amqqueue:is_mirrored(Q) orelse
                                      rabbit_amqqueue:is_dead_exclusive(Q))])),
                 {Qs, Dels} = lists:unzip(QsDels),

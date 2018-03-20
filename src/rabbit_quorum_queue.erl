@@ -98,10 +98,14 @@ declare(#amqqueue{name = QName,
     check_invalid_arguments(QName, Arguments),
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
-    NewQ = Q#amqqueue{pid = Id},
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    NewQ = Q#amqqueue{pid = Id,
+                      quorum_nodes = Nodes},
     ets:insert(quorum_mapping, {RaName, QName}),
-    ok = ra:start_node(ra_node_config(NewQ)),
-    _ = ra_node_proc:trigger_election(Id),
+    RaMachine = {module, ra_fifo,
+                 #{dead_letter_handler => dlx_mfa(NewQ)}},
+    {ok, _Started, _NotStarted} = ra:start_cluster(RaName, RaMachine,
+                                                   [{RaName, Node} || Node <- Nodes]),
     FState = init_state(Id),
     _ = rabbit_amqqueue:internal_declare(NewQ, false),
     OwnerPid = case ExclusiveOwner of
@@ -130,12 +134,12 @@ stop(VHost) ->
     _ = [ra:stop_node(Pid) || #amqqueue{pid = Pid} <- find_quorum_queues(VHost)],
     ok.
 
-delete(#amqqueue{ type = quorum, pid = {Name, _} = QPid, name = QName},
+delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = QNodes},
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Msgs = quorum_messages(Name),
     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-    ok = ra:delete_node(QPid),
+    ok = ra:delete_cluster([{Name, Node} || Node <- QNodes]),
     rabbit_core_metrics:queue_deleted(QName),
     ets:delete(quorum_mapping, Name),
     {ok, Msgs}.
@@ -143,7 +147,7 @@ delete(#amqqueue{ type = quorum, pid = {Name, _} = QPid, name = QName},
 delete_immediately({Name, _} = QPid) ->
     [{_, QName}] = ets:lookup(quorum_mapping, Name),
     _ = rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER),
-    ok = ra:delete_node(QPid),
+    ok = ra:delete_cluster([QPid]),
     rabbit_core_metrics:queue_deleted(QName),
     ets:delete(quorum_mapping, Name),
     ok.
@@ -214,20 +218,6 @@ stat(_Q) ->
     {ok, 0, 0}.  %% TODO length, consumers count
 
 %%----------------------------------------------------------------------------
-
-ra_node_config(#amqqueue{pid = {Name, _} = Id} = Q) ->
-    {ok, DataDir} = application:get_env(ra, data_dir),
-    UId = atom_to_binary(Name, utf8),
-    #{cluster_id => Name,
-      id => Id,
-      uid => UId,
-      log_module => ra_log_file,
-      log_init_args => #{data_dir => DataDir,
-                         uid => UId},
-      initial_nodes => [],
-      machine => {module, ra_fifo,
-                  #{dead_letter_handler => dlx_mfa(Q)}}}.
-
 dlx_mfa(#amqqueue{name = Resource} = Q) ->
     #resource{virtual_host = VHost} = Resource,
     DLX = init_dlx(args_policy_lookup(<<"dead-letter-exchange">>, fun res_arg/2, Q), Q),
@@ -337,7 +327,7 @@ i(garbage_collection, #amqqueue{pid = {Name, _}}) ->
 i(_K, _Q) -> ''.
 
 quorum_messages(Name) ->
-    [{_, Enqueue, _, Settle, _}] = ets:lookup(ra_fifo_metrics, Name),
+    S = [{_, Enqueue, _, Settle, _}] = ets:lookup(ra_fifo_metrics, Name),
     Enqueue - Settle.
 
 quorum_ctag(Int) when is_integer(Int) ->

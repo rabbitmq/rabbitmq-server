@@ -102,6 +102,7 @@
 -spec queue_options() -> 'ok'.
 -spec queue_type() -> 'ok'.
 -spec queue_created_at() -> 'ok'.
+-spec queue_quorum_nodes() -> 'ok'.
 -spec exchange_options() -> 'ok'.
 
 
@@ -620,6 +621,27 @@ queue_created_at(Table) ->
        sync_slave_pids, recoverable_slaves, policy, operator_policy,
        gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown, vhost, options,
        type, created_at]).
+
+queue_quorum_nodes() ->
+    ok = queue_quorum_nodes(rabbit_queue),
+    ok = queue_quorum_nodes(rabbit_durable_queue),
+    ok.
+
+queue_quorum_nodes(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+            Pid, SlavePids, SyncSlavePids, DSN, Policy, OperatorPolicy, GmPids, Decorators,
+            State, PolicyVersion, SlavePidsPendingShutdown, VHost, Options, Type, CreatedAt}) ->
+              {amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+               Pid, SlavePids, SyncSlavePids, DSN, Policy, OperatorPolicy, GmPids, Decorators,
+               State, PolicyVersion, SlavePidsPendingShutdown, VHost, Options, Type, CreatedAt,
+               undefined}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, recoverable_slaves, policy, operator_policy,
+       gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown, vhost, options,
+       type, created_at, quorum_nodes]).
 
 %% Prior to 3.6.0, passwords were hashed using MD5, this populates
 %% existing records with said default.  Users created with 3.6.0+ will

@@ -24,45 +24,52 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, single_node},
+      {group, clustered}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
-          declare_args,
-          declare_invalid_args,
-          start_queue,
-          stop_queue,
-          restart_queue,
-          restart_all_types,
-          stop_start_rabbit_app,
-          publish,
-          publish_and_restart,
-          consume,
-          consume_from_empty_queue,
-          consume_and_autoack,
-          subscribe,
-          subscribe_with_autoack,
-          consume_and_ack,
-          consume_and_multiple_ack,
-          subscribe_and_ack,
-          subscribe_and_multiple_ack,
-          consume_and_requeue_nack,
-          consume_and_requeue_multiple_nack,
-          subscribe_and_requeue_nack,
-          subscribe_and_requeue_multiple_nack,
-          consume_and_nack,
-          consume_and_multiple_nack,
-          subscribe_and_nack,
-          subscribe_and_multiple_nack,
-          publisher_confirms,
-          dead_letter_to_classic_queue,
-          dead_letter_to_quorum_queue,
-          dead_letter_from_classic_to_quorum_queue,
-          cleanup_queue_state_on_channel_after_publish,
-          cleanup_queue_state_on_channel_after_subscribe
-        ]}
+     {single_node, [], all_tests()},
+     {clustered, [], [
+                      {cluster_size_2, [], all_tests()}
+                     ]}
+    ].
+
+all_tests() ->
+    [
+     declare_args,
+     declare_invalid_args,
+     start_queue,
+     stop_queue,
+     restart_queue,
+     restart_all_types,
+     stop_start_rabbit_app,
+     publish,
+     publish_and_restart,
+     consume,
+     consume_from_empty_queue,
+     consume_and_autoack,
+     subscribe,
+     subscribe_with_autoack,
+     consume_and_ack,
+     consume_and_multiple_ack,
+     subscribe_and_ack,
+     subscribe_and_multiple_ack,
+     consume_and_requeue_nack,
+     consume_and_requeue_multiple_nack,
+     subscribe_and_requeue_nack,
+     subscribe_and_requeue_multiple_nack,
+     consume_and_nack,
+     consume_and_multiple_nack,
+     subscribe_and_nack,
+     subscribe_and_multiple_nack,
+     %% publisher_confirms,
+     dead_letter_to_classic_queue,
+     dead_letter_to_quorum_queue,
+     dead_letter_from_classic_to_quorum_queue,
+     cleanup_queue_state_on_channel_after_publish,
+     cleanup_queue_state_on_channel_after_subscribe
     ].
 
 %% -------------------------------------------------------------------
@@ -76,19 +83,21 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(_, Config) ->
-    Config.
+init_per_group(single_node, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 1}]);
+init_per_group(clustered, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
+init_per_group(cluster_size_2, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]).
 
 end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
-    ClusterSize = 1,
+    ClusterSize = ?config(rmq_nodes_count, Config),
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, ClusterSize},
-        {rmq_nodes_clustered, true},
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
@@ -209,11 +218,12 @@ stop_queue(Config) ->
 
     %% Delete the quorum queue
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = LQ})),
-
-    %% Check that the application and process are still up
+    %% Check that the application and process are down
+    wait_until(fun() ->
+                       [] == rpc:call(Node, supervisor, which_children, [ra_nodes_sup])
+               end),
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Node, application, which_applications, []))),
-    ?assertMatch([], rpc:call(Node, supervisor, which_children, [ra_nodes_sup])).
+                                           rpc:call(Node, application, which_applications, []))).
 
 restart_queue(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -304,37 +314,40 @@ stop_start_rabbit_app(Config) ->
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ2, no_ack = false}).
 
 publish(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 publish_and_restart(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
     %% ensure there are no regressions
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
-    QQ = <<"quorum-q1">>,
+    QQ = <<"quorum-q">>,
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Node),
     ok = rabbit_ct_broker_helpers:start_node(Config, Node),
 
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     publish(rabbit_ct_client_helpers:open_channel(Config, Node), QQ),
-    wait_for_messages(Config, QQ, <<"2">>, <<"2">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 2),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 consume(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -342,14 +355,17 @@ consume(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     consume(Ch, QQ, false),
-    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
     rabbit_ct_client_helpers:close_channel(Ch),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 consume_and_autoack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -357,11 +373,14 @@ consume_and_autoack(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     consume(Ch, QQ, true),
-    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     rabbit_ct_client_helpers:close_channel(Ch),
-    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 consume_from_empty_queue(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -374,7 +393,7 @@ consume_from_empty_queue(Config) ->
     consume_empty(Ch, QQ, false).
 
 subscribe(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -382,15 +401,18 @@ subscribe(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     subscribe(Ch, QQ, false),
     receive_basic_deliver(false),
-    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
     rabbit_ct_client_helpers:close_channel(Ch),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 subscribe_with_autoack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -399,16 +421,19 @@ subscribe_with_autoack(Config) ->
 
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"2">>, <<"2">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 2),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     subscribe(Ch, QQ, true),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
-    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     rabbit_ct_client_helpers:close_channel(Ch),
-    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 consume_and_ack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -416,14 +441,17 @@ consume_and_ack(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
-    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 consume_and_multiple_ack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -433,17 +461,20 @@ consume_and_multiple_ack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     _ = consume(Ch, QQ, false),
     _ = consume(Ch, QQ, false),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 3),
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                        multiple     = true}),
-    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 subscribe_and_ack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -451,17 +482,20 @@ subscribe_and_ack(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     subscribe(Ch, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
-            wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
-            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0)
     end.
 
 subscribe_and_multiple_ack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -471,20 +505,23 @@ subscribe_and_multiple_ack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     subscribe(Ch, QQ, false),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
-            wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 3),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                multiple     = true}),
-            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0)
     end.
 
 consume_and_requeue_nack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -493,16 +530,19 @@ consume_and_requeue_nack(Config) ->
 
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"2">>, <<"2">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 2),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages(Config, QQ, <<"2">>, <<"1">>, <<"1">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = true}),
-    wait_for_messages(Config, QQ, <<"2">>, <<"2">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 2),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 consume_and_requeue_multiple_nack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -512,18 +552,21 @@ consume_and_requeue_multiple_nack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     _ = consume(Ch, QQ, false),
     _ = consume(Ch, QQ, false),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 3),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = true,
                                         requeue      = true}),
-    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 consume_and_nack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -531,16 +574,19 @@ consume_and_nack(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = false}),
-    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 consume_and_multiple_nack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -550,18 +596,21 @@ consume_and_multiple_nack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     _ = consume(Ch, QQ, false),
     _ = consume(Ch, QQ, false),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 3),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = true,
                                         requeue      = false}),
-    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 subscribe_and_requeue_multiple_nack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -571,14 +620,16 @@ subscribe_and_requeue_multiple_nack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     subscribe(Ch, QQ, false),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 3),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = true,
                                                 requeue      = true}),
@@ -587,15 +638,17 @@ subscribe_and_requeue_multiple_nack(Config) ->
             receive
                 {#'basic.deliver'{delivery_tag = DeliveryTag1,
                                   redelivered  = true}, _} ->
-                    wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+                    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+                    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 3),
                     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
                                                        multiple     = true}),
-                    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+                    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+                    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0)
             end
     end.
 
 subscribe_and_requeue_nack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -603,26 +656,30 @@ subscribe_and_requeue_nack(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     subscribe(Ch, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true}),
             receive
                 {#'basic.deliver'{delivery_tag = DeliveryTag1,
                                   redelivered  = true}, _} ->
-                    wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+                    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+                    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
                     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1}),
-                    wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+                    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+                    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0)
             end
     end.
 
 subscribe_and_nack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -630,20 +687,23 @@ subscribe_and_nack(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     subscribe(Ch, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = false}),
-            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0)
     end.
 
 subscribe_and_multiple_nack(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -653,22 +713,25 @@ subscribe_and_multiple_nack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"3">>, <<"3">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     subscribe(Ch, QQ, false),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages(Config, QQ, <<"3">>, <<"0">>, <<"3">>),
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 3),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = true,
                                                 requeue      = false}),
-            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0)
     end.
     
 publisher_confirms(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -678,11 +741,13 @@ publisher_confirms(Config) ->
     amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
-    amqp_channel:wait_for_confirms(Ch).
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    amqp_channel:wait_for_confirms(Ch),
+    ct:pal("WAIT FOR CONFIRMS ~n", []).
 
 dead_letter_to_classic_queue(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -694,20 +759,23 @@ dead_letter_to_classic_queue(Config) ->
                                  ])),
     ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
     publish(Ch, QQ),
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>],
-                               [CQ, <<"0">>, <<"0">>, <<"0">>]]),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>]]),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>],
-                               [CQ, <<"0">>, <<"0">>, <<"0">>]]),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0), 
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = false}),
-    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>],
-                               [CQ, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages(Config, [[CQ, <<"1">>, <<"1">>, <<"0">>]]),
     _ = consume(Ch, CQ, false).
 
 dead_letter_to_quorum_queue(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     QQ = <<"quorum-q">>,
@@ -720,20 +788,26 @@ dead_letter_to_quorum_queue(Config) ->
     ?assertEqual({'queue.declare_ok', QQ2, 0, 0},
                  declare(Ch, QQ2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>],
-                               [QQ2, <<"0">>, <<"0">>, <<"0">>]]),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q2', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q2', 0),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>],
-                               [QQ2, <<"0">>, <<"0">>, <<"0">>]]),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q2', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q2', 0),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = false}),
-    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>],
-                               [QQ2, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q2', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q2', 0),
     _ = consume(Ch, QQ2, false).
 
 dead_letter_from_classic_to_quorum_queue(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     CQ = <<"classic-q">>,
@@ -745,22 +819,25 @@ dead_letter_from_classic_to_quorum_queue(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, CQ),
-    wait_for_messages(Config, [[CQ, <<"1">>, <<"1">>, <<"0">>],
-                               [QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages(Config, [[CQ, <<"1">>, <<"1">>, <<"0">>]]),
     DeliveryTag = consume(Ch, CQ, false),
-    wait_for_messages(Config, [[CQ, <<"1">>, <<"0">>, <<"1">>],
-                               [QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages(Config, [[CQ, <<"1">>, <<"0">>, <<"1">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = false}),
-    wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>],
-                               [QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>]]),
     _ = consume(Ch, QQ, false).
 
 cleanup_queue_state_on_channel_after_publish(Config) ->
     %% Declare/delete the queue in one channel and publish on a different one,
     %% to verify that the cleanup is propagated through channels
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Node),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -768,12 +845,16 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch2, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     [NCh1, NCh2] = rpc:call(Node, rabbit_channel, list, []),
     %% Check the channel state contains the state for the quorum queue on channel 1 and 2
     wait_for_cleanup(Node, NCh1, 1),
     wait_for_cleanup(Node, NCh2, 1),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
+    wait_until(fun() ->
+                       [] == rpc:call(Node, supervisor, which_children, [ra_nodes_sup])
+               end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Node, NCh1, 0),
     wait_for_cleanup(Node, NCh2, 0).
@@ -781,7 +862,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
 cleanup_queue_state_on_channel_after_subscribe(Config) ->
     %% Declare/delete the queue and publish in one channel, while consuming on a
     %% different one to verify that the cleanup is propagated through channels
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Node),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -789,21 +870,27 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch1, QQ),
-    wait_for_messages(Config, QQ, <<"1">>, <<"1">>, <<"0">>),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     subscribe(Ch2, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages(Config, QQ, <<"1">>, <<"0">>, <<"1">>),
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
             amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag,
                                                 multiple     = true}),
-            wait_for_messages(Config, QQ, <<"0">>, <<"0">>, <<"0">>)
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0)
     end,
     [NCh1, NCh2] = rpc:call(Node, rabbit_channel, list, []),
     %% Check the channel state contains the state for the quorum queue on channel 1 and 2
     wait_for_cleanup(Node, NCh1, 1),
     wait_for_cleanup(Node, NCh2, 1),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
+    wait_until(fun() ->
+                       [] == rpc:call(Node, supervisor, which_children, [ra_nodes_sup])
+               end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Node, NCh1, 0),
     wait_for_cleanup(Node, NCh2, 0).
@@ -828,43 +915,34 @@ get_queue_type(Node, Q) ->
         rpc:call(Node, rabbit_amqqueue, lookup, [QNameRes]),
     AMQQueue#amqqueue.type.
 
-wait_for_messages(Config, Queue, Msgs, Ready, Unack) ->
-    wait_for_messages(Config, Queue, Msgs, Ready, Unack, 60).
-
-wait_for_messages(Config, Queue, Msgs, Ready, Unack, 0) ->
-    ?assertEqual([[Queue, Msgs, Ready, Unack]],
-                 rabbit_ct_broker_helpers:rabbitmqctl_list(
-                   Config, 0, ["list_queues", "name", "messages", "messages_ready",
-                               "messages_unacknowledged"]));
-wait_for_messages(Config, Queue, Msgs, Ready, Unack, N) ->
-    case rabbit_ct_broker_helpers:rabbitmqctl_list(
-           Config, 0, ["list_queues", "name", "messages", "messages_ready",
-                       "messages_unacknowledged"]) of
-        [[Q, M, R, U]] when Q == Queue, M == Msgs, R == Ready, U == Unack ->
-            ok;
-        _ ->
-            timer:sleep(500),
-            wait_for_messages(Config, Queue, Msgs, Ready, Unack, N - 1)
-    end.
-
 wait_for_messages(Config, Stats) ->
     wait_for_messages(Config, lists:sort(Stats), 60).
 
 wait_for_messages(Config, Stats, 0) ->
     ?assertEqual(Stats,
-                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
-                              Config, 0, ["list_queues", "name", "messages", "messages_ready",
-                                          "messages_unacknowledged"])));
+                 lists:sort(
+                   filter_queues(Stats,
+                                 rabbit_ct_broker_helpers:rabbitmqctl_list(
+                                   Config, 0, ["list_queues", "name", "messages", "messages_ready",
+                                               "messages_unacknowledged"]))));
 wait_for_messages(Config, Stats, N) ->
-    case lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
-                      Config, 0, ["list_queues", "name", "messages", "messages_ready",
-                                  "messages_unacknowledged"])) of
+    case lists:sort(
+           filter_queues(Stats,
+                         rabbit_ct_broker_helpers:rabbitmqctl_list(
+                           Config, 0, ["list_queues", "name", "messages", "messages_ready",
+                                       "messages_unacknowledged"]))) of
         Stats0 when Stats0 == Stats ->
             ok;
         _ ->
             timer:sleep(500),
             wait_for_messages(Config, Stats, N - 1)
     end.
+
+filter_queues(Expected, Got) ->
+    Keys = [K || [K, _, _, _] <- Expected],
+    lists:filter(fun([K, _, _, _]) ->
+                         lists:member(K, Keys)
+                 end, Got).
 
 publish(Ch, Queue) ->
     ok = amqp_channel:call(Ch,
@@ -911,4 +989,46 @@ wait_for_cleanup(Node, Channel, Number, N) ->
         _ ->
             timer:sleep(500),
             wait_for_cleanup(Node, Channel, Number, N - 1)
+    end.
+
+
+wait_for_messages_ready(Nodes, QName, Ready) ->
+    wait_for_messages(Nodes, QName, Ready, fun ra_fifo:query_messages_ready/1, 60).
+
+wait_for_messages_pending_ack(Nodes, QName, Ready) ->
+    wait_for_messages(Nodes, QName, Ready, fun ra_fifo:query_messages_checked_out/1, 60).
+
+wait_for_messages(Nodes, QName, Number, Fun, 0) ->
+    Msgs = dirty_query(Nodes, QName, Fun),
+    Totals = lists:map(fun(M) -> maps:size(M) end, Msgs),
+    ?assertEqual(Totals, [Number || _ <- lists:seq(1, Nodes)]);
+wait_for_messages(Nodes, QName, Number, Fun, N) ->
+    Msgs = dirty_query(Nodes, QName, Fun),
+    case lists:all(fun(M) ->  maps:size(M) == Number end, Msgs) of
+        true ->
+            ok;
+        _ ->
+            timer:sleep(500),
+            wait_for_messages(Nodes, QName, Number, Fun, N - 1)
+    end.
+
+dirty_query(Nodes, QName, Fun) ->
+    lists:map(
+      fun(N) ->
+              {ok, {_, Msgs}, _} = rpc:call(N, ra, dirty_query, [{QName, N}, Fun]),
+              Msgs
+      end, Nodes).
+
+wait_until(Condition) ->
+    wait_until(Condition, 60).
+
+wait_until(Condition, 0) ->
+    ?assertEqual(true, Condition());
+wait_until(Condition, N) ->
+    case Condition() of
+        true ->
+            ok;
+        _ ->
+            timer:sleep(500),
+            wait_until(Condition, N - 1)
     end.
