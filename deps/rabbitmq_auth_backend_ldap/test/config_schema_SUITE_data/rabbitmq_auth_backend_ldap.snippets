@@ -60,6 +60,34 @@
                                ]}],
   [rabbitmq_auth_backend_ldap]},
 
+ {ldap_log_false,
+  "auth_ldap.log = false",
+  [{rabbitmq_auth_backend_ldap,[
+                                {log, false}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_log_true,
+  "auth_ldap.log = true",
+  [{rabbitmq_auth_backend_ldap,[
+                                {log, true}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_log_network,
+  "auth_ldap.log = network",
+  [{rabbitmq_auth_backend_ldap,[
+                                {log, network}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {ldap_log_network_unsafe,
+  "auth_ldap.log = network_unsafe",
+  [{rabbitmq_auth_backend_ldap,[
+                                {log, network_unsafe}
+                               ]}],
+  [rabbitmq_auth_backend_ldap]},
+
  {dn_lookup,
   "auth_ldap.dn_lookup_attribute = userPrincipalName
    auth_ldap.dn_lookup_base = DC=gopivotal,DC=com
