@@ -145,7 +145,8 @@
           vhost,                       %% secondary index
           options = #{},
           type = classic,
-          created_at }).               %% immutable
+          created_at,                  %% immutable
+          quorum_nodes }).
 
 -record(exchange_serial, {name, next}).
 
