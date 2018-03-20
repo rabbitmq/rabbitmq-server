@@ -144,7 +144,8 @@
           slave_pids_pending_shutdown,
           vhost,                       %% secondary index
           options = #{},
-          type = classic }).
+          type = classic,
+          created_at }).               %% immutable
 
 -record(exchange_serial, {name, next}).
 
