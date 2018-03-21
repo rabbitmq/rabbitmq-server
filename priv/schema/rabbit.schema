@@ -501,20 +501,20 @@ end}.
 %% =====================================================
 %%
 
-%% Set the default AMQP heartbeat delay (in seconds).
+%% Set the default connection heartbeat timeout (in seconds).
 %%
 %% {heartbeat, 600},
 
 {mapping, "heartbeat", "rabbit.heartbeat", [{datatype, integer}]}.
 
-%% Set the max permissible size of an AMQP frame (in bytes).
+%% Set the max permissible size of an AMQP 0-9-1 frame (in bytes).
 %%
 %% {frame_max, 131072},
 
 {mapping, "frame_max", "rabbit.frame_max", [{datatype, bytesize}]}.
 
 %% Set the max frame size the server will accept before connection
-%% tuning occurs
+%% tuning starts
 %%
 %% {initial_frame_max, 4096},
 
