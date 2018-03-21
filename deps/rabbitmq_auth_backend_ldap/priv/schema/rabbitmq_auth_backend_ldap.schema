@@ -33,20 +33,6 @@ fun(Conf) ->
     end
 end}.
 
-%% Connect to the LDAP server using SSL
-%%
-%% {use_ssl, false},
-
-{mapping, "auth_ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl",
-    [{datatype, {enum, [true, false]}}]}.
-
-%% Connect to the LDAP server using StartTLS
-%%
-%% {use_starttls, false},
-
-{mapping, "auth_ldap.use_starttls", "rabbitmq_auth_backend_ldap.use_starttls",
-    [{datatype, {enum, [true, false]}}]}.
-
 %% Specify the LDAP port to connect to
 %%
 %% {port, 389},
@@ -210,3 +196,131 @@ end}.
 %%
 %% {tag_queries, []}
 %   ]},
+
+%% Connect to the LDAP server using TLS
+%%
+%% {use_ssl, false},
+
+{mapping, "auth_ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Connect to the LDAP server using StartTLS
+%%
+%% {use_starttls, false},
+
+{mapping, "auth_ldap.use_starttls", "rabbitmq_auth_backend_ldap.use_starttls",
+    [{datatype, {enum, [true, false]}}]}.
+
+
+%% TLS options
+
+{mapping, "auth_ldap.ssl_options", "rabbitmq_auth_backend_ldap.ssl_options", [
+    {datatype, {enum, [none]}}
+]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.ssl_options", Conf, undefined) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid auth_ldap.ssl_options")
+    end
+end}.
+
+{mapping, "auth_ldap.ssl_options.verify", "rabbitmq_auth_backend_ldap.ssl_options.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "auth_ldap.ssl_options.fail_if_no_peer_cert", "rabbitmq_auth_backend_ldap.ssl_options.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.cacertfile", "rabbitmq_auth_backend_ldap.ssl_options.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "auth_ldap.ssl_options.certfile", "rabbitmq_auth_backend_ldap.ssl_options.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "auth_ldap.ssl_options.cacerts.$name", "rabbitmq_auth_backend_ldap.ssl_options.cacerts",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_ldap.ssl_options.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "auth_ldap.ssl_options.cert", "rabbitmq_auth_backend_ldap.ssl_options.cert",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("auth_ldap.ssl_options.cert", Conf))
+end}.
+
+{mapping, "auth_ldap.ssl_options.client_renegotiation", "rabbitmq_auth_backend_ldap.ssl_options.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.crl_check", "rabbitmq_auth_backend_ldap.ssl_options.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "auth_ldap.ssl_options.depth", "rabbitmq_auth_backend_ldap.ssl_options.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "auth_ldap.ssl_options.dh", "rabbitmq_auth_backend_ldap.ssl_options.dh",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.dh",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("auth_ldap.ssl_options.dh", Conf))
+end}.
+
+{mapping, "auth_ldap.ssl_options.dhfile", "rabbitmq_auth_backend_ldap.ssl_options.dhfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "auth_ldap.ssl_options.honor_cipher_order", "rabbitmq_auth_backend_ldap.ssl_options.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.honor_ecc_order", "rabbitmq_auth_backend_ldap.ssl_options.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.key.RSAPrivateKey", "rabbitmq_auth_backend_ldap.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "auth_ldap.ssl_options.key.DSAPrivateKey", "rabbitmq_auth_backend_ldap.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "auth_ldap.ssl_options.key.PrivateKeyInfo", "rabbitmq_auth_backend_ldap.ssl_options.key",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("auth_ldap.ssl_options.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> undefined
+    end
+end}.
+
+{mapping, "auth_ldap.ssl_options.keyfile", "rabbitmq_auth_backend_ldap.ssl_options.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "auth_ldap.ssl_options.log_alert", "rabbitmq_auth_backend_ldap.ssl_options.log_alert",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.password", "rabbitmq_auth_backend_ldap.ssl_options.password",
+    [{datatype, string}]}.
+
+{mapping, "auth_ldap.ssl_options.psk_identity", "rabbitmq_auth_backend_ldap.ssl_options.psk_identity",
+    [{datatype, string}]}.
+
+{mapping, "auth_ldap.ssl_options.reuse_sessions", "rabbitmq_auth_backend_ldap.ssl_options.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.secure_renegotiate", "rabbitmq_auth_backend_ldap.ssl_options.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "auth_ldap.ssl_options.versions.$version", "rabbitmq_auth_backend_ldap.ssl_options.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_ldap.ssl_options.versions", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
