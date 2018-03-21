@@ -126,9 +126,9 @@ declare(#amqqueue{name = QName,
 recover(Queues) ->
     [begin
          ets:insert(quorum_mapping, {Name, QName}),
-         ok = ra:restart_node(QPid),
+         ok = ra:restart_node({Name, node()}),
          rabbit_amqqueue:internal_declare(Q, true)
-     end || #amqqueue{name = QName, pid = {Name, _} = QPid} = Q <- Queues].
+     end || #amqqueue{name = QName, pid = {Name, _}} = Q <- Queues].
 
 stop(VHost) ->
     _ = [ra:stop_node(Pid) || #amqqueue{pid = Pid} <- find_quorum_queues(VHost)],
@@ -327,7 +327,7 @@ i(garbage_collection, #amqqueue{pid = {Name, _}}) ->
 i(_K, _Q) -> ''.
 
 quorum_messages(Name) ->
-    S = [{_, Enqueue, _, Settle, _}] = ets:lookup(ra_fifo_metrics, Name),
+    [{_, Enqueue, _, Settle, _}] = ets:lookup(ra_fifo_metrics, Name),
     Enqueue - Settle.
 
 quorum_ctag(Int) when is_integer(Int) ->

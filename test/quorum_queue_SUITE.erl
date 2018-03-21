@@ -32,7 +32,8 @@ groups() ->
     [
      {single_node, [], all_tests()},
      {clustered, [], [
-                      {cluster_size_2, [], all_tests()}
+                      {cluster_size_2, [], all_tests()},
+                      {cluster_size_3, [], [restart_multinode_queue]}
                      ]}
     ].
 
@@ -88,7 +89,9 @@ init_per_group(single_node, Config) ->
 init_per_group(clustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(cluster_size_2, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]).
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]);
+init_per_group(cluster_size_3, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -894,6 +897,26 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Node, NCh1, 0),
     wait_for_cleanup(Node, NCh2, 0).
+
+restart_multinode_queue(Config) ->
+    [Node, Node1, Node2] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Node2),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    wait_for_messages_ready([Node, Node1], '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack([Node, Node1], '%2F_quorum-q', 0),
+
+    ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 %%----------------------------------------------------------------------------
 
