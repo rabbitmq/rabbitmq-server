@@ -369,9 +369,9 @@ queue_name(Name) ->
         _ ->
             case mnesia:async_dirty(
                    fun () ->
-                           qlc:e(qlc:q([QName || Q = #amqqueue{name = QName,
-                                                               pid  = {N, _},
-                                                               type = quorum}
+                           qlc:e(qlc:q([QName || #amqqueue{name = QName,
+                                                           pid  = {N, _},
+                                                           type = quorum}
                                                      <- mnesia:table(rabbit_durable_queue),
                                                  N == Name]))
                    end) of
