@@ -35,7 +35,8 @@ groups() ->
                       {cluster_size_2, [], all_tests()},
                       {cluster_size_3, [], [recover_from_single_failure,
                                             recover_from_multiple_failures,
-                                            leadership_takeover]}
+                                            leadership_takeover,
+                                            delete_declare]}
                      ]}
     ].
 
@@ -950,6 +951,8 @@ recover_from_multiple_failures(Config) ->
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 leadership_takeover(Config) ->
+    %% Kill nodes in succession forcing the takeover of leadership, and all messages that
+    %% are in the queue.
     [Node, Node1, Node2] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
@@ -983,6 +986,27 @@ leadership_takeover(Config) ->
 
     ok = rabbit_ct_broker_helpers:start_node(Config, Node1),
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
+
+delete_declare(Config) ->
+    %% Delete cluster in ra is asynchronous, we have to ensure that we handle that in rmq
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+
+    ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Ensure that is a new queue and it's empty
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
 %%----------------------------------------------------------------------------
