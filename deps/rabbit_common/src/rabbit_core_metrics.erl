@@ -244,10 +244,20 @@ queue_deleted(Name) ->
 
 queues_deleted(Queues) ->
     [ delete_queue_metrics(Queue) || Queue <- Queues ],
-    MatchSpecCondition = build_match_spec_conditions_to_delete_all_queues(Queues),
-    delete_channel_queue_exchange_metrics(MatchSpecCondition),
-    delete_channel_queue_metrics(MatchSpecCondition),
+    [
+        begin
+            MatchSpecCondition = build_match_spec_conditions_to_delete_all_queues(QueuesPartition),
+            delete_channel_queue_exchange_metrics(MatchSpecCondition),
+            delete_channel_queue_metrics(MatchSpecCondition)
+        end || QueuesPartition <- partition_queues(Queues)
+    ],
     ok.
+
+partition_queues(Queues) when length(Queues) >= 1000 ->
+    {Partition, Rest} = lists:split(1000, Queues),
+    [Partition | partition_queues(Rest)];
+partition_queues(Queues) ->
+    [Queues].
 
 delete_queue_metrics(Queue) ->
     ets:delete(queue_coarse_metrics, Queue),
