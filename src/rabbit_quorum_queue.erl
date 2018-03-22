@@ -22,6 +22,7 @@
 -export([ack/3, reject/4, basic_get/4, basic_consume/9]).
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
+-export([queue_name/1]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -125,7 +126,7 @@ declare(#amqqueue{name = QName,
 
 recover(Queues) ->
     [begin
-         ets:insert(quorum_mapping, {Name, QName}),
+         ets:insert_new(quorum_mapping, {Name, QName}),
          ok = ra:restart_node({Name, node()}),
          rabbit_amqqueue:internal_declare(Q, true)
      end || #amqqueue{name = QName, pid = {Name, _}} = Q <- Queues].
@@ -150,7 +151,7 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
     {ok, Msgs}.
 
 delete_immediately({Name, _} = QPid) ->
-    [{_, QName}] = ets:lookup(quorum_mapping, Name),
+    QName = queue_name(Name),
     _ = rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER),
     ok = ra:delete_cluster([QPid]),
     rabbit_core_metrics:queue_deleted(QName),
@@ -272,7 +273,7 @@ i(name,               #amqqueue{name               = Name}) -> Name;
 i(durable,            #amqqueue{durable            = Dur}) -> Dur;
 i(auto_delete,        #amqqueue{auto_delete        = AD}) -> AD;
 i(arguments,          #amqqueue{arguments          = Args}) -> Args;
-i(pid,                #amqqueue{pid                = {_, Node}}) -> Node;
+i(pid,                #amqqueue{pid                = {Name, _}}) -> whereis(Name);
 i(messages,           #amqqueue{pid                = {Name, _}}) ->
     quorum_messages(Name);
 i(messages_ready,     #amqqueue{pid                = {Name, _}}) ->
@@ -360,3 +361,25 @@ check_invalid_arguments(QueueName, Args) ->
                          [Key, rabbit_misc:rs(QueueName)])
      end || Key <- Keys],
     ok.
+
+queue_name(Name) ->
+    case ets:lookup(quorum_mapping, Name) of
+        [{_, QName}] ->
+            QName;
+        _ ->
+            case mnesia:async_dirty(
+                   fun () ->
+                           qlc:e(qlc:q([QName || Q = #amqqueue{name = QName,
+                                                               pid  = {N, _},
+                                                               type = quorum}
+                                                     <- mnesia:table(rabbit_durable_queue),
+                                                 N == Name]))
+                   end) of
+                [QName] ->
+                    %% TODO if not present, undefined!
+                    ets:insert_new(quorum_mapping, {Name, QName}),
+                    QName;
+                [] ->
+                    undefined
+            end
+    end.

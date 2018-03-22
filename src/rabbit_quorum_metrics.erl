@@ -62,7 +62,7 @@ emit_stats() ->
                       MR = Enqueue - Checkout + Return,
                       MU = Checkout - Settle - Return,
                       R = reductions(Name),
-                      [{_, QName}] = ets:lookup(quorum_mapping, Name),
+                      QName = rabbit_quorum_queue:queue_name(Name),
                       rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
                       Infos = rabbit_quorum_queue:infos(QName),
                       rabbit_core_metrics:queue_stats(QName, Infos),

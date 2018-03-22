@@ -630,8 +630,10 @@ handle_cast({confirm, MsgSeqNos, QPid}, State) ->
 handle_info({ra_event, {Name, _} = From, _} = Evt, #ch{queue_states = QueueStates,
                                                        consumer_mapping = ConsumerMapping
                                                       } = State0) ->
-    case ets:lookup(quorum_mapping, Name) of
-        [{_, QName}] ->
+    case rabbit_quorum_queue:queue_name(Name) of
+        undefined ->
+            noreply_coalesce(State0);
+        QName ->
             FState0 = get_quorum_state(From, QName, QueueStates),
             case rabbit_quorum_queue:handle_event(Evt, FState0) of
                 {{delivery, CTag, Msgs}, FState1} ->
@@ -661,9 +663,7 @@ handle_info({ra_event, {Name, _} = From, _} = Evt, #ch{queue_states = QueueState
                                              State0#ch{queue_states = maps:put(Name, FState1, QueueStates)}));
                 eol ->
                     noreply_coalesce(State0#ch{queue_states = maps:remove(Name, QueueStates)})
-            end;
-        [] ->
-            noreply_coalesce(State0)
+            end
     end;
 
 handle_info({bump_credit, Msg}, State) ->
@@ -716,10 +716,10 @@ handle_info({{Ref, Node}, LateAnswer}, State = #ch{channel = Channel})
 handle_info(queue_cleanup, State = #ch{queue_states = QueueStates0}) ->
     QueueStates =
         maps:filter(fun(Name, _) ->
-                            case ets:lookup(quorum_mapping, Name) of
-                                [] ->
+                            case rabbit_quorum_queue:queue_name(Name) of
+                                undefined ->
                                     false;
-                                [{_, QName}] ->
+                                QName ->
                                     case rabbit_amqqueue:lookup(QName) of
                                         [] -> false;
                                         _ -> true

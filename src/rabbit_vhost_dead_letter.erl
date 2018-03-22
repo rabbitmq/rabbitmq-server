@@ -103,7 +103,7 @@ handle_info({ra_event, {Name, _} = From, _} = Evt, #state{queue_states = QueueSt
     end;
 handle_info(queue_cleanup, State = #state{queue_states = QueueStates0}) ->
     QueueStates = maps:filter(fun(Name, _) ->
-                                      [{_, QName}] = ets:lookup(quorum_mapping, Name),
+                                      QName = rabbit_quorum_queue:queue_name(Name),
                                       case rabbit_amqqueue:lookup(QName) of
                                           [] ->
                                               false;
