@@ -55,34 +55,27 @@ mqtt_init() ->
         {middlewares, [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler]}
     |CowboyOpts0]),
 
-    TCPConf0 = [{connection_type, supervisor}|get_env(tcp_config, [])],
-    TCPConf = case proplists:get_value(port, TCPConf0) of
-        undefined -> [{port, 15675}|TCPConf0];
-        _ -> TCPConf0
-    end,
-    TCPPort = proplists:get_value(port, TCPConf),
+    {TCPConf, IpStr, Port} = get_tcp_conf(),
 
     {ok, _} = ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
         ranch_tcp, TCPConf,
         rabbit_web_mqtt_connection_sup, CowboyOpts),
     listener_started('http/web-mqtt', TCPConf),
     rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w~n",
-                    ["0.0.0.0", TCPPort]),
+                    [IpStr, Port]),
 
     case get_env(ssl_config, []) of
         [] ->
             ok;
         TLSConf0 ->
             rabbit_networking:ensure_ssl(),
-            TLSPort = proplists:get_value(port, TLSConf0),
-            TLSConf = [{connection_type, supervisor}|TLSConf0],
-
+            {TLSConf, TLSIpStr, TLSPort} = get_tls_conf(TLSConf0),
             {ok, _} = ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 1),
                 ranch_ssl, TLSConf,
                 rabbit_web_mqtt_connection_sup, CowboyOpts),
             listener_started('https/web-mqtt', TLSConf),
             rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
-                            ["0.0.0.0", TLSPort])
+                            [TLSIpStr, TLSPort])
     end,
     ok.
 
@@ -94,8 +87,34 @@ listener_started(Protocol, Listener) ->
         <- rabbit_networking:tcp_listener_addresses(Port)],
     ok.
 
+get_tcp_conf() ->
+    TCPConf0 = [{connection_type, supervisor}|get_env(tcp_config, [])],
+    TCPConf1 = case proplists:get_value(port, TCPConf0) of
+                   undefined -> [{port, 15675}|TCPConf0];
+                   _ -> TCPConf0
+               end,
+    get_ip_port(TCPConf1).
+
+get_tls_conf(TLSConf0) ->
+    TLSConf1 = [{connection_type, supervisor}|TLSConf0],
+    TLSConf2 = case proplists:get_value(port, TLSConf1) of
+                   undefined -> [{port, 15674}|TLSConf1];
+                   _ -> TLSConf1
+               end,
+    get_ip_port(TLSConf2).
+
+get_ip_port(Conf0) ->
+    IpStr = proplists:get_value(ip, Conf0),
+    Ip = normalize_ip(IpStr),
+    Conf1 = lists:keyreplace(ip, 1, Conf0, {ip, Ip}),
+    Port = proplists:get_value(port, Conf1),
+    {Conf1, IpStr, Port}.
+
+normalize_ip(IpStr) when is_list(IpStr) ->
+    {ok, Ip} = inet:parse_address(IpStr),
+    Ip;
+normalize_ip(Ip) ->
+    Ip.
+
 get_env(Key, Default) ->
-    case application:get_env(rabbitmq_web_mqtt, Key) of
-        undefined -> Default;
-        {ok, V}   -> V
-    end.
+    rabbit_misc:get_env(rabbitmq_web_mqtt, Key, Default).
