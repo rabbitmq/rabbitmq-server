@@ -91,10 +91,15 @@
                         durable => terminus_durability()}.
 
 -type attach_role() :: {sender, target_def()} | {receiver, source_def(), pid()}.
+
+% http://www.amqp.org/specification/1.0/filters
+-type filter() :: #{binary() => binary() | map() | list(binary())}.
+
 -type attach_args() :: #{name => binary(),
                          role => attach_role(),
                          snd_settle_mode => snd_settle_mode(),
-                         rcv_settle_mode => rcv_settle_mode()
+                         rcv_settle_mode => rcv_settle_mode(),
+                         filter => filter()
                         }.
 
 -type link_ref() :: #link_ref{}.
@@ -630,10 +635,12 @@ build_frames(Channel, Trf, Payload, MaxPayloadSize, Acc) ->
 
 make_source(#{role := {sender, _}}) ->
     #'v1_0.source'{};
-make_source(#{role := {receiver, #{address := Address} = Target, _Pid}}) ->
+make_source(#{role := {receiver, #{address := Address} = Target, _Pid}, filter := Filter}) ->
     Durable = translate_terminus_durability(maps:get(durable, Target, none)),
+    TranslatedFilter = translate_filters(Filter),
     #'v1_0.source'{address = {utf8, Address},
-                   durable = {uint, Durable}}.
+                   durable = {uint, Durable},
+                   filter = TranslatedFilter}.
 
 make_target(#{role := {receiver, _Source, _Pid}}) ->
     #'v1_0.target'{};
@@ -645,6 +652,30 @@ make_target(#{role := {sender, #{address := Address} = Target}}) ->
 translate_terminus_durability(none) -> 0;
 translate_terminus_durability(configuration) -> 1;
 translate_terminus_durability(unsettled_state) -> 2.
+
+translate_filters(#{}) -> undefined;
+translate_filters(Filters) -> {map, maps:fold(fun(<<"apache.org:legacy-amqp-direct-binding:string">> = K, V, Acc) when is_binary(V) ->
+                                                [{{symbol, K}, {utf8, V}} | Acc];
+                                                 (<<"apache.org:legacy-amqp-topic-binding:string">> = K, V, Acc) when is_binary(V) ->
+                                                [{{symbol, K}, {utf8, V}} | Acc];
+                                                 (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
+                                                [{{symbol, K}, translate_legacy_amqp_headers_binding(V)} | Acc];
+                                                 (<<"apache.org:no-local-filter:list">> = K, V, Acc) when is_list(V) ->
+                                                [{{symbol, K}, lists:map(fun(Id) -> {utf8, Id} end, V)} | Acc];
+                                                 (<<"apache.org:selector-filter:string">> = K, V, Acc) when is_binary(V) ->
+                                                [{{symbol, K}, {utf8, V}} | Acc]
+                                              end, [], Filters)}.
+
+% https://people.apache.org/~rgodfrey/amqp-1.0/apache-filters.html
+translate_legacy_amqp_headers_binding(LegacyHeaders) -> {map, maps:fold(fun(<<"x-match">> = K, <<"any">> = V, Acc) ->
+                                                                            [{{utf8, K}, {utf8, V}} | Acc];
+                                                                           (<<"x-match">> = K, <<"all">> = V, Acc) ->
+                                                                            [{{utf8, K}, {utf8, V}} | Acc];
+                                                                           (<<"x-",_/binary>> = K, _, Acc) ->
+                                                                            Acc;
+                                                                           (K, V, Acc) ->
+                                                                            [{{utf8, K}, {utf8, V}} | Acc]
+                                                                        end, [], LegacyHeaders)}.
 
 send_detach(Send, {detach, OutHandle}, _From, State = #state{links = Links}) ->
     case Links of

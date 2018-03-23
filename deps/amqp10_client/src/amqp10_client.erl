@@ -244,11 +244,15 @@ attach_receiver_link(Session, Name, Source, SettleMode) ->
                            snd_settle_mode(), terminus_durability()) ->
     {ok, link_ref()}.
 attach_receiver_link(Session, Name, Source, SettleMode, Durability) ->
+    attach_receiver_link(Session, Name, Source, SettleMode, Durability, #{}).
+
+attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter) ->
     AttachArgs = #{name => Name,
                    role => {receiver, #{address => Source,
                                         durable => Durability}, self()},
                    snd_settle_mode => SettleMode,
-                   rcv_settle_mode => first},
+                   rcv_settle_mode => first,
+                   filter => Filter},
     amqp10_client_session:attach(Session, AttachArgs).
 
 -spec attach_link(pid(), attach_args()) -> {ok, link_ref()}.
