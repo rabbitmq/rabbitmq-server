@@ -1,9 +1,25 @@
-[{port,
+[{listener,
+  "web_stomp.tcp.listener = 127.0.0.1:12345",
+  [{rabbitmq_web_stomp,
+    [{tcp_config, [{ip,"127.0.0.1"},{port,12345}]}]}],
+  [rabbitmq_web_stomp]},
+ {tcp_config,
+  "web_stomp.tcp.ip = 127.0.0.4
+   web_stomp.tcp.port = 11123",
+  [{rabbitmq_web_stomp,
+    [{tcp_config, [{ip,"127.0.0.4"},{port,11123}]}]}],
+  [rabbitmq_web_stomp]},
+ {port,
   "web_stomp.port = 12345",
   [{rabbitmq_web_stomp,[{port,12345}]}],
   [rabbitmq_web_stomp]},
+ {ssl_listener,
+  "web_stomp.ssl.listener = 127.0.0.4:15672",
+  [{rabbitmq_web_stomp,
+    [{ssl_config, [{ip,"127.0.0.4"},{port,15672}]}]}],
+  [rabbitmq_web_stomp]},
  {ssl,
-  "web_stomp.ssl.port = 15671
+  "web_stomp.ssl.port       = 15671
    web_stomp.ssl.backlog    = 1024
    web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
    web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem

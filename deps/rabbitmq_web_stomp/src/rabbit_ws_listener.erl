@@ -99,11 +99,7 @@ listener_started(Protocol, Listener) ->
     ok.
 
 get_env(Key, Default) ->
-    case application:get_env(rabbitmq_web_stomp, Key) of
-        undefined -> Default;
-        {ok, V}   -> V
-    end.
-
+    rabbit_misc:get_env(rabbitmq_web_stomp, Key, Default).
 
 get_tcp_port(Configuration) ->
     %% The 'tcp_config' option may include the port, and we already have
