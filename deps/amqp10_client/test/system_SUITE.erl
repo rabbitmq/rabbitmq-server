@@ -65,7 +65,8 @@ groups() ->
       ]},
       {azure, [],
       [
-       basic_roundtrip_service_bus
+       basic_roundtrip_service_bus,
+       filtered_roundtrip_service_bus
       ]},
      {mock, [], [
                  insufficient_credit,
@@ -282,19 +283,24 @@ basic_roundtrip_tls(Config) ->
                 sasl => ?config(sasl, Config)},
     roundtrip(OpnConf).
 
-basic_roundtrip_service_bus(Config) ->
+service_bus_config(Config, ContainerId) ->
     Hostname = ?config(sb_endpoint, Config),
     Port = ?config(sb_port, Config),
     User = ?config(sb_keyname, Config),
     Password = ?config(sb_key, Config),
-    OpnConf = #{address => Hostname,
-                hostname => to_bin(Hostname),
-                port => Port,
-                tls_opts => {secure_port, [{versions, ['tlsv1.1']}]},
-                notify => self(),
-                container_id => <<"basic_roundtrip_service_bus">>,
-                sasl => {plain, User, Password}},
-    roundtrip(OpnConf).
+    #{address => Hostname,
+      hostname => to_bin(Hostname),
+      port => Port,
+      tls_opts => {secure_port, [{versions, ['tlsv1.1']}]},
+      notify => self(),
+      container_id => ContainerId,
+      sasl => {plain, User, Password}}.
+
+basic_roundtrip_service_bus(Config) ->
+    roundtrip(service_bus_config(Config, <<"basic_roundtrip_service_bus">>)).
+
+filtered_roundtrip_service_bus(Config) ->
+    filtered_roundtrip(service_bus_config(Config, <<"filtered_roundtrip_service_bus">>)).
 
 roundtrip(OpenConf) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
@@ -334,6 +340,59 @@ roundtrip(OpenConf) ->
     #{<<"x_key">> := <<"x_value">>} = amqp10_msg:message_annotations(OutMsg),
     % #{<<"x_key">> := <<"x_value">>} = amqp10_msg:delivery_annotations(OutMsg),
     ?assertEqual([<<"banana">>], amqp10_msg:body(OutMsg)),
+    ok.
+
+filtered_roundtrip(OpenConf) ->
+    filtered_roundtrip(OpenConf, <<"banana">>).
+
+filtered_roundtrip(OpenConf, Body) ->
+    {ok, Connection} = amqp10_client:open_connection(OpenConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    <<"default-sender">>,
+                                                    <<"test1">>,
+                                                    settled,
+                                                    unsettled_state),
+    await_link(Sender, credited, link_credit_timeout),
+
+    Now = os:system_time(millisecond),
+    Props1 = #{creation_time => Now},
+    Msg1 = amqp10_msg:set_properties(Props1, amqp10_msg:new(<<"msg-1-tag">>, Body, true)),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+
+    {ok, DefaultReceiver} = amqp10_client:attach_receiver_link(Session,
+                                                        <<"default-receiver">>,
+                                                        <<"test1">>,
+                                                        settled,
+                                                        unsettled_state),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    {ok, OutMsg1} = amqp10_client:get_msg(DefaultReceiver, 60000 * 5),
+    ?assertEqual(<<"msg-1-tag">>, amqp10_msg:delivery_tag(OutMsg1)),
+
+    timer:sleep(5 * 1000),
+
+    Now2 = os:system_time(millisecond),
+    Props2 = #{creation_time => Now2 - 1000},
+    Msg2 = amqp10_msg:set_properties(Props2, amqp10_msg:new(<<"msg-2-tag">>, Body, true)),
+    Now2Binary = integer_to_binary(Now2),
+
+    ok = amqp10_client:send_msg(Sender, Msg2),
+
+    {ok, FilteredReceiver} = amqp10_client:attach_receiver_link(Session,
+                                                        <<"filtered-receiver">>,
+                                                        <<"test1">>,
+                                                        settled,
+                                                        unsettled_state,
+                                                        #{<<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > ", Now2Binary>>}),
+
+    {ok, OutMsg2} = amqp10_client:get_msg(DefaultReceiver, 60000 * 5),
+    ?assertEqual(<<"msg-2-tag">>, amqp10_msg:delivery_tag(OutMsg2)),
+
+    {ok, OutMsgFiltered} = amqp10_client:get_msg(FilteredReceiver, 60000 * 5),
+    ?assertEqual(<<"msg-2-tag">>, amqp10_msg:delivery_tag(OutMsgFiltered)),
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
     ok.
 
 % a message is sent before the link attach is guaranteed to
