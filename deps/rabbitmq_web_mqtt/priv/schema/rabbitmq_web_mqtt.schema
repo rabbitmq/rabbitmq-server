@@ -3,20 +3,35 @@
 {mapping, "web_mqtt.num_acceptors.ssl", "rabbitmq_web_mqtt.num_ssl_acceptors", 
     [{datatype, integer}]}.
 
-{mapping, "web_mqtt.tcp.port", "rabbitmq_web_mqtt.tcp_config.port",
-    [{datatype, integer}]}.
 {mapping, "web_mqtt.tcp.backlog", "rabbitmq_web_mqtt.tcp_config.backlog",
     [{datatype, integer}]}.
+{mapping, "web_mqtt.tcp.listener", "rabbitmq_web_mqtt.tcp_config",
+    [{datatype, ip}]}.
 {mapping, "web_mqtt.tcp.ip", "rabbitmq_web_mqtt.tcp_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
-
-
-{mapping, "web_mqtt.ssl.port", "rabbitmq_web_mqtt.ssl_config.port",
+{mapping, "web_mqtt.tcp.port", "rabbitmq_web_mqtt.tcp_config.port",
     [{datatype, integer}]}.
+
+{translation,
+    "rabbitmq_web_mqtt.tcp_config",
+    fun(Conf) ->
+        Setting = cuttlefish:conf_get("web_mqtt.tcp.listener", Conf),
+        case Setting of
+            {Ip, Port} when is_list(Ip), is_integer(Port) ->
+                [{ip, Ip}, {port, Port}];
+            _ -> Setting
+        end
+    end
+}.
+
 {mapping, "web_mqtt.ssl.backlog", "rabbitmq_web_mqtt.ssl_config.backlog",
     [{datatype, integer}]}.
+{mapping, "web_mqtt.ssl.listener", "rabbitmq_web_mqtt.ssl_config",
+    [{datatype, ip}]}.
 {mapping, "web_mqtt.ssl.ip", "rabbitmq_web_mqtt.ssl_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "web_mqtt.ssl.port", "rabbitmq_web_mqtt.ssl_config.port",
+    [{datatype, integer}]}.
 {mapping, "web_mqtt.ssl.certfile", "rabbitmq_web_mqtt.ssl_config.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 {mapping, "web_mqtt.ssl.keyfile", "rabbitmq_web_mqtt.ssl_config.keyfile",
@@ -26,6 +41,17 @@
 {mapping, "web_mqtt.ssl.password", "rabbitmq_web_mqtt.ssl_config.password",
     [{datatype, string}]}.
 
+{translation,
+    "rabbitmq_web_mqtt.ssl_config",
+    fun(Conf) ->
+        Setting = cuttlefish:conf_get("web_mqtt.ssl.listener", Conf),
+        case Setting of
+            {Ip, Port} when is_list(Ip), is_integer(Port) ->
+                [{ip, Ip}, {port, Port}];
+            _ -> Setting
+        end
+    end
+}.
 
 {mapping, "web_mqtt.cowboy_opts.max_empty_lines", "rabbitmq_web_mqtt.cowboy_opts.max_empty_lines",
     [{datatype, integer}]}.
