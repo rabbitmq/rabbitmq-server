@@ -110,7 +110,8 @@
               attach_args/0,
               attach_role/0,
               target_def/0,
-              source_def/0]).
+              source_def/0,
+              filter/0]).
 
 -record(link,
         {name :: link_name(),
