@@ -4,7 +4,10 @@ sudo: false
 language: erlang
 notifications:
   email:
-    - alerts@rabbitmq.com
+    recipients:
+      - alerts@rabbitmq.com
+    on_success: never
+    on_failure: always
 addons:
   apt:
     sources:
