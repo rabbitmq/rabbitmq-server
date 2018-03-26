@@ -57,12 +57,16 @@ code_change(_OldVsn, State, _Extra) ->
 
 emit_stats() ->
     %% TODO if we have a ra cluster, shall we emit on all nodes???  Don't think so
-    ets:foldl(fun({Name, Enqueue, Checkout, Settle, Return}, no_acc) ->
-                      M = Enqueue - Settle,
-                      MR = Enqueue - Checkout + Return,
-                      MU = Checkout - Settle - Return,
-                      R = reductions(Name),
-                      QName = rabbit_quorum_queue:queue_name(Name),
+    ets:foldl(
+      fun({Name, Enqueue, Checkout, Settle, Return}, no_acc) ->
+              M = Enqueue - Settle,
+              MR = Enqueue - Checkout + Return,
+              MU = Checkout - Settle - Return,
+              R = reductions(Name),
+              case rabbit_quorum_queue:queue_name(Name) of
+                  undefined ->
+                      no_acc;
+                  QName ->
                       rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
                       Infos = rabbit_quorum_queue:infos(QName),
                       rabbit_core_metrics:queue_stats(QName, Infos),
@@ -72,7 +76,8 @@ emit_stats() ->
                                                                  {messages_unacknowledged, MU},
                                                                  {reductions, R}]),
                       no_acc
-              end, no_acc, ra_fifo_metrics).
+              end
+      end, no_acc, ra_fifo_metrics).
 
 reductions(Name) ->
     try
