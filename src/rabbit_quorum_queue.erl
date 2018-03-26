@@ -214,8 +214,12 @@ info(Q) ->
              messages_ready, messages_unacknowledged]).
 
 infos(QName) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
-    info(Q, ?STATISTICS_KEYS).
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            info(Q, ?STATISTICS_KEYS);
+        {error, not_found} ->
+            []
+    end.
 
 info(Q, Items) ->
     [{Item, i(Item, Q)} || Item <- Items].
