@@ -16,7 +16,20 @@
     [{datatype, integer}]}.
 {mapping, "web_stomp.tcp.ip", "rabbitmq_web_stomp.tcp_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "web_stomp.tcp.listener", "rabbitmq_web_stomp.tcp_config",
+    [{datatype, ip}]}.
 
+{translation,
+    "rabbitmq_web_stomp.tcp_config",
+    fun(Conf) ->
+        Setting = cuttlefish:conf_get("web_stomp.tcp.listener", Conf),
+        case Setting of
+            {Ip, Port} when is_list(Ip), is_integer(Port) ->
+                [{ip, Ip}, {port, Port}];
+            _ -> Setting
+        end
+    end
+}.
 
 {mapping, "web_stomp.ssl.port", "rabbitmq_web_stomp.ssl_config.port",
     [{datatype, integer}]}.
@@ -24,6 +37,8 @@
     [{datatype, integer}]}.
 {mapping, "web_stomp.ssl.ip", "rabbitmq_web_stomp.ssl_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "web_stomp.ssl.listener", "rabbitmq_web_stomp.ssl_config",
+    [{datatype, ip}]}.
 {mapping, "web_stomp.ssl.certfile", "rabbitmq_web_stomp.ssl_config.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 {mapping, "web_stomp.ssl.keyfile", "rabbitmq_web_stomp.ssl_config.keyfile",
@@ -33,6 +48,17 @@
 {mapping, "web_stomp.ssl.password", "rabbitmq_web_stomp.ssl_config.password",
     [{datatype, string}]}.
 
+{translation,
+    "rabbitmq_web_stomp.ssl_config",
+    fun(Conf) ->
+        Setting = cuttlefish:conf_get("web_stomp.ssl.listener", Conf),
+        case Setting of
+            {Ip, Port} when is_list(Ip), is_integer(Port) ->
+                [{ip, Ip}, {port, Port}];
+            _ -> Setting
+        end
+    end
+}.
 
 {mapping, "web_stomp.cowboy_opts.max_empty_lines", "rabbitmq_web_stomp.cowboy_opts.max_empty_lines",
     [{datatype, integer}]}.
