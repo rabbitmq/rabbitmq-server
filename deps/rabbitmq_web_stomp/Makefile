@@ -4,7 +4,6 @@ PROJECT_MOD = rabbit_ws_app
 
 define PROJECT_ENV
 [
-	    {port, 15674},
 	    {tcp_config, []},
 	    {num_tcp_acceptors, 10},
 	    {ssl_config, []},
