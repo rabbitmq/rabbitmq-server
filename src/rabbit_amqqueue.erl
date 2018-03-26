@@ -718,7 +718,7 @@ qnode({_, Node}) ->
     Node.
 
 is_queue_process_alive(Pid) when is_pid(Pid) ->
-    erlang:is_process_alive(Pid);
+    rabbit_mnesia:is_process_alive(Pid);
 is_queue_process_alive({Name, _}) ->
     whereis(Name) /= undefined.
 
