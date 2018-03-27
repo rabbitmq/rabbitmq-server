@@ -23,6 +23,7 @@
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
+-export([cancel_customer/2]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -104,7 +105,8 @@ declare(#amqqueue{name = QName,
                       quorum_nodes = Nodes},
     ets:insert(quorum_mapping, {RaName, QName}),
     RaMachine = {module, ra_fifo,
-                 #{dead_letter_handler => dlx_mfa(NewQ)}},
+                 #{dead_letter_handler => dlx_mfa(NewQ),
+                   cancel_customer_handler => {?MODULE, cancel_customer, []}}},
     {ok, _Started, _NotStarted} = ra:start_cluster(RaName, RaMachine,
                                                    [{RaName, Node} || Node <- Nodes]),
     FState = init_state(Id),
@@ -123,6 +125,15 @@ declare(#amqqueue{name = QName,
                          {exclusive, is_pid(ExclusiveOwner)},
                          {user_who_performed_action, maps:get(user, Opts, ?UNKNOWN_USER)}]),
     {new, NewQ, FState}.
+
+cancel_customer({ConsumerTag, ChPid}, Name) ->
+    QName = queue_name(Name),
+    rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
+    rabbit_event:notify(consumer_deleted,
+                        [{consumer_tag, ConsumerTag},
+                         {channel,      ChPid},
+                         {queue,        QName},
+                         {user_who_performed_action, ?INTERNAL_USER}]).
 
 recover(Queues) ->
     [begin
