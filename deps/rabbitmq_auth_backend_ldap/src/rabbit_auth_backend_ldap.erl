@@ -535,6 +535,9 @@ call_ldap_fun(Fun, LDAP, UserDN) ->
         {error, ldap_closed} ->
             %% LDAP connection was close, let with_login/5 retry
             {error, ldap_closed};
+        {error, {gen_tcp_error, E}} ->
+            %% ditto
+            {error, {gen_tcp_error, E}};
         {error, E} ->
             ?L1("evaluate error: ~s ~p", [scrub_dn(UserDN, env(log)), E]),
             {error, ldap_evaluate_error};
