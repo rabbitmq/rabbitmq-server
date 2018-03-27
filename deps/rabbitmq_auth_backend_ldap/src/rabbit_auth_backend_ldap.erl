@@ -38,6 +38,8 @@
 -define(SCRUBBED_CREDENTIAL,  "xxxx").
 -define(RESOURCE_ACCESS_QUERY_VARIABLES, [username, user_dn, vhost, resource, name, permission]).
 
+-define(LDAP_OPERATION_RETRIES, 10).
+
 -import(rabbit_misc, [pget/2]).
 
 -record(impl, { user_dn, password }).
@@ -476,7 +478,7 @@ with_ldap({ok, Creds}, Fun, Servers) ->
       end, reuse).
 
 with_login(Creds, Servers, Opts, Fun) ->
-    with_login(Creds, Servers, Opts, Fun, 5).
+    with_login(Creds, Servers, Opts, Fun, ?LDAP_OPERATION_RETRIES).
 with_login(_Creds, _Servers, _Opts, _Fun, 0 = _RetriesLeft) ->
     ?L1("failed to perform an LDAP operation: exhausted all retries", []),
     {error, ldap_connect_error};
