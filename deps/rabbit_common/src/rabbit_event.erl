@@ -65,7 +65,7 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_event:start_link({local, ?MODULE}).
+    gen_event:start_link({local, ?MODULE}, [{spawn_opt, [{fullsweep_after, 0}]}]).
 
 %% The idea is, for each stat-emitting object:
 %%
