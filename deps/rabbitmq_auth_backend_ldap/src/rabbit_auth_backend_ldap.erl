@@ -480,7 +480,7 @@ with_ldap({ok, Creds}, Fun, Servers) ->
 with_login(Creds, Servers, Opts, Fun) ->
     with_login(Creds, Servers, Opts, Fun, ?LDAP_OPERATION_RETRIES).
 with_login(_Creds, _Servers, _Opts, _Fun, 0 = _RetriesLeft) ->
-    ?L1("failed to perform an LDAP operation: exhausted all retries", []),
+    rabbit_log:warning("LDAP failed to perform an operation. TCP connection to a LDAP server was closed or otherwise defunct. Exhausted all retries.~n"),
     {error, ldap_connect_error};
 with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
     case get_or_create_conn(Creds == anon, Servers, Opts) of
