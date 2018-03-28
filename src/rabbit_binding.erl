@@ -331,8 +331,13 @@ binding_action(Binding = #binding{source      = SrcName,
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end, ErrFun).
 
-delete_object(Table, Record, LockKind) ->
-    mnesia:delete_object(Table, Record, LockKind).
+delete_object(Tab, Record, LockKind) ->
+    %% this 'guarded' delete prevents unnecessary writes to the mnesia
+    %% disk log
+    case mnesia:match_object(Tab, Record, LockKind) of
+        []  -> ok;
+        [_] -> mnesia:delete_object(Tab, Record, LockKind)
+    end.
 
 sync_route(Route, true, true, Fun) ->
     ok = Fun(rabbit_durable_route, Route, write),
