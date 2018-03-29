@@ -38,6 +38,8 @@
 -define(SCRUBBED_CREDENTIAL,  "xxxx").
 -define(RESOURCE_ACCESS_QUERY_VARIABLES, [username, user_dn, vhost, resource, name, permission]).
 
+-define(LDAP_OPERATION_RETRIES, 10).
+
 -import(rabbit_misc, [pget/2]).
 
 -record(impl, { user_dn, password }).
@@ -476,22 +478,41 @@ with_ldap({ok, Creds}, Fun, Servers) ->
       end, reuse).
 
 with_login(Creds, Servers, Opts, Fun) ->
+    with_login(Creds, Servers, Opts, Fun, ?LDAP_OPERATION_RETRIES).
+with_login(_Creds, _Servers, _Opts, _Fun, 0 = _RetriesLeft) ->
+    rabbit_log:warning("LDAP failed to perform an operation. TCP connection to a LDAP server was closed or otherwise defunct. Exhausted all retries.~n"),
+    {error, ldap_connect_error};
+with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
     case get_or_create_conn(Creds == anon, Servers, Opts) of
         {ok, LDAP} ->
             case Creds of
                 anon ->
                     ?L1("anonymous bind", []),
-                    call_ldap_fun(Fun, LDAP);
+                    case call_ldap_fun(Fun, LDAP) of
+                      {error, ldap_closed} ->
+                        with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                      Other -> Other
+                    end;
                 {UserDN, Password} ->
                     case eldap:simple_bind(LDAP, UserDN, Password) of
                         ok ->
                             ?L1("bind succeeded: ~s",
                                 [scrub_dn(UserDN, env(log))]),
-                            call_ldap_fun(Fun, LDAP, UserDN);
+                            case call_ldap_fun(Fun, LDAP, UserDN) of
+                                {error, ldap_closed} ->
+                                    with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                                {error, {gen_tcp_error, _}} ->
+                                    with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                                Other -> Other
+                            end;
                         {error, invalidCredentials} ->
                             ?L1("bind returned \"invalid credentials\": ~s",
                                 [scrub_dn(UserDN, env(log))]),
                             {refused, UserDN, []};
+                        {error, ldap_closed} ->
+                            with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                        {error, {gen_tcp_error, _}} ->
+                            with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
                         {error, E} ->
                             ?L1("bind error: ~s ~p",
                                 [scrub_dn(UserDN, env(log)), E]),
@@ -513,6 +534,12 @@ call_ldap_fun(Fun, LDAP) ->
 
 call_ldap_fun(Fun, LDAP, UserDN) ->
     case Fun(LDAP) of
+        {error, ldap_closed} ->
+            %% LDAP connection was close, let with_login/5 retry
+            {error, ldap_closed};
+        {error, {gen_tcp_error, E}} ->
+            %% ditto
+            {error, {gen_tcp_error, E}};
         {error, E} ->
             ?L1("evaluate error: ~s ~p", [scrub_dn(UserDN, env(log)), E]),
             {error, ldap_evaluate_error};
