@@ -40,7 +40,8 @@ groups() ->
           parse_amqp091_legacy,
           parse_amqp10,
           parse_amqp10_minimal,
-          validate_amqp10
+          validate_amqp10,
+          validate_amqp10_with_a_map
         ]}
     ].
 
@@ -77,8 +78,8 @@ parse_amqp091_legacy(_Config) ->
          {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
          {<<"add-forward-headers">>, true},
          {<<"add-timestamp-header">>, true},
-         {<<"publish-properties">>, [{<<"cluster_id">>, <<"x">>},
-                                     {<<"delivery_mode">>, 2}]},
+         {<<"publish-properties">>, #{<<"cluster_id">> => <<"x">>,
+                                      <<"delivery_mode">> => 2}},
          {<<"ack-mode">>, <<"on-publish">>},
          {<<"delete-after">>, <<"queue-length">>},
          {<<"prefetch-count">>, 30},
@@ -250,6 +251,34 @@ validate_amqp10(_Config) ->
                                                <<"message-ann-value">>}]},
          {<<"dest-properties">>, [{<<"user_id">>, <<"some-user">>}]}
         ],
+
+        Res = rabbit_shovel_parameters:validate("my-vhost", <<"shovel">>,
+                                                "my-shovel", Params, none),
+        [] = validate_ok(Res),
+        ok.
+
+validate_amqp10_with_a_map(_Config) ->
+    Params =
+        #{
+         <<"ack-mode">> => <<"on-publish">>,
+         <<"reconnect-delay">> => 1001,
+
+         <<"src-protocol">> => <<"amqp10">>,
+         <<"src-uri">> => <<"amqp://localhost:5672">>,
+         <<"src-address">> => <<"a-src-queue">>,
+         <<"src-delete-after">> => <<"never">>,
+         <<"src-prefetch-count">> => 30,
+
+         <<"dest-protocol">> => <<"amqp10">>,
+         <<"dest-uri">> => <<"amqp://remotehost:5672">>,
+         <<"dest-address">> => <<"a-dest-queue">>,
+         <<"dest-add-forward-headers">> => true,
+         <<"dest-add-timestamp-header">> => true,
+         <<"dest-application-properties">> => [{<<"some-app-prop">>,
+                                                <<"app-prop-value">>}],
+         <<"dest-message-annotations">> => [{<<"some-message-ann">>, <<"message-ann-value">>}],
+         <<"dest-properties">> => #{<<"user_id">> => <<"some-user">>}
+        },
 
         Res = rabbit_shovel_parameters:validate("my-vhost", <<"shovel">>,
                                                 "my-shovel", Params, none),
