@@ -30,7 +30,8 @@ start_link(Name, Config) ->
 
 %%----------------------------------------------------------------------------
 
-init([Name, Config]) ->
+init([Name, Config0]) ->
+    Config = rabbit_data_coercion:to_proplist(Config0),
     {ok, {{one_for_one, 1, ?MAX_WAIT},
           [{Name,
             {rabbit_shovel_worker, start_link, [dynamic, Name, Config]},

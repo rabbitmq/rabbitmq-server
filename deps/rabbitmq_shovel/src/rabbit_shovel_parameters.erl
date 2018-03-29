@@ -38,7 +38,8 @@ register() ->
 unregister() ->
     rabbit_registry:unregister(runtime_parameter, <<"shovel">>).
 
-validate(_VHost, <<"shovel">>, Name, Def, User) ->
+validate(_VHost, <<"shovel">>, Name, Def0, User) ->
+    Def = rabbit_data_coercion:to_proplist(Def0),
     Validations =
         shovel_validation()
         ++ src_validation(Def, User)
@@ -140,7 +141,8 @@ dest_validation(Def, User) ->
         {_, amqp10} -> amqp10_dest_validation(Def, User)
     end.
 
-amqp10_dest_validation(Def, User) ->
+amqp10_dest_validation(Def0, User) ->
+    Def = rabbit_data_coercion:to_proplist(Def0),
     [{<<"dest-uri">>, validate_uri_fun(User), mandatory},
      {<<"dest-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2, optional},
@@ -151,7 +153,8 @@ amqp10_dest_validation(Def, User) ->
      {<<"dest-properties">>, fun validate_amqp10_map/2, optional}
     ].
 
-amqp091_dest_validation(Def, User) ->
+amqp091_dest_validation(Def0, User) ->
+    Def = rabbit_data_coercion:to_proplist(Def0),
     [{<<"dest-uri">>,        validate_uri_fun(User), mandatory},
      {<<"dest-exchange">>,   fun rabbit_parameter_validation:binary/2,optional},
      {<<"dest-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
@@ -207,13 +210,21 @@ validate_delete_after(Name,  Term) ->
     {error, "~s should be number, \"never\" or \"queue-length\", actually was "
      "~p", [Name, Term]}.
 
-validate_amqp10_map(Name, Terms) ->
+validate_amqp10_map(Name, Terms0) ->
+    Terms = rabbit_data_coercion:to_proplist(Terms0),
     Str = fun rabbit_parameter_validation:binary/2,
     Validation = [{K, Str, optional} || {K, _} <- Terms],
     rabbit_parameter_validation:proplist(Name, Validation, Terms).
 
 %% TODO headers?
-validate_properties(Name, Term) ->
+validate_properties(Name, Term0) ->
+    Term = case Term0 of
+               T when is_map(T)  ->
+                   rabbit_data_coercion:to_proplist(Term0);
+               T when is_list(T) ->
+                   rabbit_data_coercion:to_proplist(Term0);
+               Other -> Other
+           end,
     Str = fun rabbit_parameter_validation:binary/2,
     Num = fun rabbit_parameter_validation:number/2,
     rabbit_parameter_validation:proplist(
@@ -426,7 +437,8 @@ set_properties(Props, []) ->
 set_properties(Props, [{Ix, V} | Rest]) ->
     set_properties(setelement(Ix, Props, V), Rest).
 
-lookup_indices(KVs, L) ->
+lookup_indices(KVs0, L) ->
+    KVs = rabbit_data_coercion:to_proplist(KVs0),
     [{1 + list_find(list_to_atom(binary_to_list(K)), L), V} || {K, V} <- KVs].
 
 list_find(K, L) -> list_find(K, L, 1).
