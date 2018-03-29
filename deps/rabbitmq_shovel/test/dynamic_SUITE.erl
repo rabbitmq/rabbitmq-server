@@ -286,8 +286,21 @@ validation(Config) ->
                   [{<<"delete-after">>,    <<"whenever">>} | QURIs]),
 
     %% Check properties have to look property-ish
+    valid_param(Config,
+                [{<<"src-exchange">>, <<"test">>},
+                 {<<"publish-properties">>, [{<<"cluster_id">>, <<"rabbit@localhost">>},
+                                             {<<"delivery_mode">>, 2}]}
+                 | URIs]),
+    valid_param(Config,
+                #{<<"publish-properties">> => #{<<"cluster_id">>    => <<"rabbit@localhost">>,
+                                                <<"delivery_mode">> => 2},
+                  <<"src-exchange">> => <<"test">>,
+                  <<"src-uri">>      => <<"amqp://">>,
+                  <<"dest-uri">>     => <<"amqp://">>}),
     invalid_param(Config,
                   [{<<"publish-properties">>, [{<<"nonexistent">>, <<>>}]}]),
+    invalid_param(Config,
+                  #{<<"publish-properties">> => #{<<"nonexistent">> => <<>>}}),
     invalid_param(Config,
                   [{<<"publish-properties">>, [{<<"cluster_id">>, 2}]}]),
     invalid_param(Config,
@@ -307,14 +320,16 @@ security_validation(Config) ->
           {<<"dest-queue">>, <<"test2">>}],
 
     A = lookup_user(Config, <<"a">>),
-    valid_param(Config, [{<<"src-uri">>,  <<"amqp:///a">>},
-                 {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
+    valid_param(Config, [{<<"src-uri">>,  <<"amqp://localhost:5672/a">>},
+                         {<<"dest-uri">>, <<"amqp://localhost:5672/b">>} | Qs], A),
+    %% src-uri and dest-uri are not valid URIs
     invalid_param(Config,
-                  [{<<"src-uri">>,  <<"amqp:///a">>},
-                   {<<"dest-uri">>, <<"amqp:///b">>} | Qs], A),
+                  [{<<"src-uri">>,  <<"an arbitrary string">>},
+                   {<<"dest-uri">>, <<"\o/ \o/ \o/">>} | Qs], A),
+    %% missing src-queue and dest-queue
     invalid_param(Config,
-                  [{<<"src-uri">>,  <<"amqp:///b">>},
-                   {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
+                  [{<<"src-uri">>,  <<"amqp://localhost/a">>},
+                   {<<"dest-uri">>, <<"amqp://localhost/b">>}], A),
 
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, security_validation_remove_user, []),
@@ -405,8 +420,8 @@ valid_param(Config, Value, User) ->
 
 valid_param1(_Config, Value, User) ->
     ok = rabbit_runtime_parameters:set(
-           <<"/">>, <<"shovel">>, <<"a">>, Value, User),
-    ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"a">>, <<"acting-user">>).
+           <<"/">>, <<"shovel">>, <<"name">>, Value, User),
+    ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"name">>, <<"acting-user">>).
 
 invalid_param(Config, Value) -> invalid_param(Config, Value, none).
 valid_param(Config, Value) -> valid_param(Config, Value, none).
