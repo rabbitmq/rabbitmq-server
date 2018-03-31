@@ -157,24 +157,9 @@ failed".
 
 ## Example Apps
 
-There are example backend services available in Python, Spring Boot and ASP.NET Web API.
+There are [example backend services](./examples) available in Python, PHP, Spring Boot, ASP.NET Web API.
 
-In `examples/rabbitmq_auth_backend_django` there's a very simple
-Django app that can be used for authentication. On Debian / Ubuntu you
-should be able to run start.sh to launch it after installing the
-python-django package. It's really not designed to be anything other
-than an example.
-
-In `examples/rabbitmq_auth_backend_spring_boot` there's a Spring Boot app
-that can be used for authentication. You'll need Java 1.8 and Maven
-to run it. It's really not designed to be anything other
-than an example.
-
-In `examples/rabbitmq_auth_backend_webapi_dotnet` is a very minimalistic ASP.NET Web API application
-that rabbitmq-auth-backend-http can authenticate against.You'll need .NET 4.5 and Visual Studio
-to run it It's really not designed to be anything other than an example.
-
-See `examples/README` for slightly more information.
+See [examples README](./examples/README.md) for more information.
 
 ## Building from Source
 
