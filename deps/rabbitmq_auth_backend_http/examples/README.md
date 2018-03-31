@@ -77,10 +77,66 @@ Port number may vary but will likely be `62190`.
 
 When the example is hosted on IIS, port 80 will be used by default.
 
+## PHP Boot Example
+
+`rabbitmq_auth_backend_php` is a simple [PHP](http://php.net/) application that rabbitmq-auth-backend-http can authenticate against.
+It's really not designed to be anything other than an example.
+
+### Running the Example
+
+First of all, you need PHP >= 5.4 and [Composer](https://getcomposer.org/) (php package manager).
+
+> ℹ️ The library need PHP >= 5.3, but to run this example you need the PHP >= 5.4 (only because PHP 5.4 as an internal webserver)
+
+The `rabbitmq-auth-backend-http-php` library depend on `symfony/security` and `symfony/http-foundation` components.
+Go to the `rabbitmq_auth_backend_php` folder and run `composer install`.
+
+```bash
+$ cd rabbitmq_auth_backend_php/
+$ composer install
+```
+
+Now you can run the PHP 5.4 server (server at http://127.0.0.1:8080)
+
+```
+$ composer start
+```
+
+Ensure the log file is writable `rabbitmq-auth-backend-http/examples/rabbitmq_auth_backend_php/var/log.log`.
+
+Go to `http://localhost:8080/user.php?username=Anthony&password=anthony-password`, all work properly if you see `Allow administrator` 
+
+### HTTP Endpoint Examples
+
+Have a look at the `bootstrap.php`. By default this example implement the same authorization rules than RabbitMQ.
+
+Users list:
+
+| User | password | is admin | Vhost | Configure regex | Write regex | Read regex | tags |
+|--|--|--|--|--|--|--|--|
+| Anthony | anthony-password | ✔️ | All | All | All | All | administrator |
+| James | bond | | / | .* | .* | .* | management |
+| Roger | rabbit | | | | | | monitoring |
+| bunny | bugs | | | | | | policymaker |
+
 ### rabbitmq.config Example
+
+ℹ️ Dont forget to set the proper url in your rabbit config file
 
 Below is a [RabbitMQ config file](http://www.rabbitmq.com/configure.html) example to go with this
 example:
+
+the new format
+```
+auth_backends.1 = internal  
+auth_backends.2 = http
+auth_http.user_path     = http://localhost:62190/auth/user.php  
+auth_http.vhost_path    = http://localhost:62190/auth/vhost.php  
+auth_http.resource_path = http://localhost:62190/auth/resource.php  
+auth_http.topic_path    = http://localhost:62190/auth/topic.php
+```
+
+Or 
 
 ``` erlang
 [
