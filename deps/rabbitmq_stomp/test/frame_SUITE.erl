@@ -28,6 +28,7 @@ all() ->
     parse_simple_frame,
     parse_simple_frame_crlf,
     parse_command_only,
+    parse_command_prefixed_with_newline,
     parse_ignore_empty_frames,
     parse_heartbeat_interframe,
     parse_crlf_interframe,
@@ -70,6 +71,9 @@ parse_simple_frame_gen(Term) ->
 
 parse_command_only(_) ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMMAND\n\n\0").
+
+parse_command_prefixed_with_newline(_) ->
+    {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\nCOMMAND\n\n\0").
 
 parse_ignore_empty_frames(_) ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\0\0COMMAND\n\n\0").
