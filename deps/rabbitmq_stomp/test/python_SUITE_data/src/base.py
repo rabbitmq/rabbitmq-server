@@ -210,7 +210,7 @@ class WaitableListener(object):
         print(hdr)
         print('#messages: {}'.format(len(self.messages)))
         print('#errors: {}', len(self.errors))
-        print('#receipts: {}'.format(len(self.receipts))
+        print('#receipts: {}'.format(len(self.receipts)))
         print('Remaining count: {}'.format(self.latch.get_count()))
         if full:
             if len(self.messages) != 0: print('Messages: {}'.format(self.messages))
