@@ -161,7 +161,7 @@ class WaitableListener(object):
     def __init__(self):
         self.debug = False
         if self.debug:
-            print '(listener) init'
+            print('(listener) init')
         self.messages = []
         self.errors = []
         self.receipts = []
@@ -179,17 +179,17 @@ class WaitableListener(object):
 
     def on_receipt(self, headers, message):
         if self.debug:
-            print '(on_receipt) message:', message, 'headers:', headers
+            print('(on_receipt) message: {}, headers: {}'.format(message, headers))
         self._append(self.receipts, message, headers)
 
     def on_error(self, headers, message):
         if self.debug:
-            print '(on_error) message:', message, 'headers:', headers
+            print('(on_error) message: {}, headers: {}'.format(message, headers))
         self._append(self.errors, message, headers)
 
     def on_message(self, headers, message):
         if self.debug:
-            print '(on_message) message:', message, 'headers:', headers
+            print('(on_message) message: {}, headers: {}'.format(message, headers))
         self._append(self.messages, message, headers)
 
     def reset(self, count=1):
@@ -207,15 +207,15 @@ class WaitableListener(object):
         return self.latch.await(timeout)
 
     def print_state(self, hdr="", full=False):
-        print hdr,
-        print '#messages:', len(self.messages),
-        print '#errors:', len(self.errors),
-        print '#receipts:', len(self.receipts),
-        print 'Remaining count:', self.latch.get_count()
+        print(hdr)
+        print('#messages: {}'.format(len(self.messages)))
+        print('#errors: {}', len(self.errors))
+        print('#receipts: {}'.format(len(self.receipts))
+        print('Remaining count: {}'.format(self.latch.get_count()))
         if full:
-            if len(self.messages) != 0: print 'Messages:', self.messages
-            if len(self.errors) != 0: print 'Messages:', self.errors
-            if len(self.receipts) != 0: print 'Messages:', self.receipts
+            if len(self.messages) != 0: print('Messages: {}'.format(self.messages))
+            if len(self.errors) != 0: print('Messages: {}'.format(self.errors))
+            if len(self.receipts) != 0: print('Messages: {}'.format(self.receipts))
 
 class Latch(object):
 
