@@ -471,7 +471,7 @@ class TestDurableSubscription(base.BaseTest):
             self.listener.reset(100)
 
             # send 100 messages
-            for x in xrange(0, 100):
+            for x in range(0, 100):
                 self.conn.send(destination, "msg" + str(x))
 
             self.assertTrue(self.listener.await(5))
@@ -499,7 +499,7 @@ class TestDurableSubscription(base.BaseTest):
             listener2.reset(101) ## 100 messages and 1 receipt
 
             # send 100 messages
-            for x in xrange(0, 100):
+            for x in range(0, 100):
                 self.conn.send(destination, "msg" + str(x))
 
             self.__subscribe(destination)
