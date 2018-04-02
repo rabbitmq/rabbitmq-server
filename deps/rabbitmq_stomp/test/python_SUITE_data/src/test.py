@@ -4,18 +4,17 @@ import test_runner
 
 if __name__ == '__main__':
     modules = [
-        'ack',
-        'amqp_headers',
-        'destinations',
+        'parsing',
         'errors',
         'lifecycle',
-        'parsing',
+        'ack',
+        'amqp_headers',
         'queue_properties',
-        'redelivered',
         'reliability',
-        'topic_permissions',
         'transactions',
-        'x_queue_name'
+        'x_queue_name',
+        'destinations',
+        'redelivered',
+        'topic_permissions',
     ]
     test_runner.run_unittests(modules)
-
