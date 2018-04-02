@@ -30,8 +30,8 @@ def connect(cnames):
                 sd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sd.settimeout(30000)
                 sd.connect((self.host, self.port))
-                sd.sendall(cmd)
-                self.match(resp, sd.recv(4096))
+                sd.sendall(cmd.encode('utf-8'))
+                self.match(resp, sd.recv(4096).decode('utf-8'))
                 setattr(self, cname, sd)
             try:
                 r = m(self, *args, **kwargs)
@@ -62,13 +62,13 @@ class TestParsing(unittest.TestCase):
         matched = re.match(pattern, data)
         if matched:
             return matched.groups()
-        self.assertTrue(False, 'No match:\n%r\n%r' % (pattern, data) )
+        self.assertTrue(False, 'No match:\n{}\n\n{}'.format(pattern, data))
 
     def recv_atleast(self, bufsize):
         recvhead = []
         rl = bufsize
         while rl > 0:
-            buf = self.cd.recv(rl)
+            buf = self.cd.recv(rl).decode('utf-8')
             bl = len(buf)
             if bl==0: break
             recvhead.append( buf )
@@ -78,14 +78,15 @@ class TestParsing(unittest.TestCase):
 
     @connect(['cd'])
     def test_newline_after_nul(self):
-        self.cd.sendall('\n'
-                        'SUBSCRIBE\n'
-                        'destination:/exchange/amq.fanout\n'
-                        '\n\x00\n'
-                        'SEND\n'
-                        'content-type:text/plain\n'
-                        'destination:/exchange/amq.fanout\n\n'
-                        'hello\n\x00\n')
+        cmd = ('\n'
+               'SUBSCRIBE\n'
+               'destination:/exchange/amq.fanout\n'
+               '\n\x00\n'
+               'SEND\n'
+               'content-type:text/plain\n'
+               'destination:/exchange/amq.fanout\n\n'
+               'hello\n\x00\n')
+        self.cd.sendall(cmd.encode('utf-8'))
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
@@ -94,17 +95,18 @@ class TestParsing(unittest.TestCase):
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
-        self.match(resp, self.cd.recv(4096))
+        self.match(resp, self.cd.recv(4096).decode('utf-8'))
 
     @connect(['cd'])
     def test_send_without_content_type(self):
-        self.cd.sendall('\n'
-                        'SUBSCRIBE\n'
-                        'destination:/exchange/amq.fanout\n'
-                        '\n\x00\n'
-                        'SEND\n'
-                        'destination:/exchange/amq.fanout\n\n'
-                        'hello\n\x00')
+        cmd = ('\n'
+               'SUBSCRIBE\n'
+               'destination:/exchange/amq.fanout\n'
+               '\n\x00\n'
+               'SEND\n'
+               'destination:/exchange/amq.fanout\n\n'
+               'hello\n\x00')
+        self.cd.sendall(cmd.encode('utf-8'))
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
@@ -112,38 +114,39 @@ class TestParsing(unittest.TestCase):
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
-        self.match(resp, self.cd.recv(4096))
+        self.match(resp, self.cd.recv(4096).decode('utf-8'))
 
     @connect(['cd'])
     def test_send_without_content_type_binary(self):
-        msg = u'\u0ca0\ufffd\x00\n\x01hello\x00'.encode('utf-8')
-        self.cd.sendall('\n'
-                        'SUBSCRIBE\n'
-                        'destination:/exchange/amq.fanout\n'
-                        '\n\x00\n'
-                        'SEND\n'
-                        'destination:/exchange/amq.fanout\n'
-                        'content-length:'+str(len(msg))+'\n\n'
-                        + msg + '\x00')
+        msg = 'hello'
+        cmd = ('\n'
+               'SUBSCRIBE\n'
+               'destination:/exchange/amq.fanout\n'
+               '\n\x00\n'
+               'SEND\n'
+               'destination:/exchange/amq.fanout\n' +
+               'content-length:{}\n\n'.format(len(msg)) +
+               '{}\x00'.format(msg))
+        self.cd.sendall(cmd.encode('utf-8'))
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'redelivered:false\n'
-                'content-length:'+str(len(msg))+'\n'
-                '\n'
-                + msg + '\0')
-        self.match(resp, self.cd.recv(4096))
+                'redelivered:false\n' +
+                'content-length:{}\n'.format(len(msg)) +
+                '\n{}\0'.format(msg))
+        self.match(resp, self.cd.recv(4096).decode('utf-8'))
 
     @connect(['cd'])
     def test_newline_after_nul_and_leading_nul(self):
-        self.cd.sendall('\n'
-                        '\x00SUBSCRIBE\n'
-                        'destination:/exchange/amq.fanout\n'
-                        '\n\x00\n'
-                        '\x00SEND\n'
-                        'destination:/exchange/amq.fanout\n'
-                        'content-type:text/plain\n'
-                        '\nhello\n\x00\n')
+        cmd = ('\n'
+               '\x00SUBSCRIBE\n'
+               'destination:/exchange/amq.fanout\n'
+               '\n\x00\n'
+               '\x00SEND\n'
+               'destination:/exchange/amq.fanout\n'
+               'content-type:text/plain\n'
+               '\nhello\n\x00\n')
+        self.cd.sendall(cmd.encode('utf-8'))
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
@@ -152,15 +155,16 @@ class TestParsing(unittest.TestCase):
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
-        self.match(resp, self.cd.recv(4096))
+        self.match(resp, self.cd.recv(4096).decode('utf-8'))
 
     @connect(['cd'])
     def test_bad_command(self):
         ''' Trigger an error message. '''
-        self.cd.sendall('WRONGCOMMAND\n'
-                        'destination:a\n'
-                        'exchange:amq.fanout\n'
-                        '\n\0')
+        cmd = ('WRONGCOMMAND\n'
+               'destination:a\n'
+               'exchange:amq.fanout\n'
+               '\n\0')
+        self.cd.sendall(cmd.encode('utf-8'))
         resp = ('ERROR\n'
                 'message:Bad command\n'
                 'content-type:text/plain\n'
@@ -169,7 +173,7 @@ class TestParsing(unittest.TestCase):
                 '\n'
                 'Could not interpret command "WRONGCOMMAND"\n'
                 '\0')
-        self.match(resp, self.cd.recv(4096))
+        self.match(resp, self.cd.recv(4096).decode('utf-8'))
 
     @connect(['sd', 'cd1', 'cd2'])
     def test_broadcast(self):
@@ -182,16 +186,17 @@ class TestParsing(unittest.TestCase):
                     'destination:/exchange/amq.topic/da9d4779\n'
                     '\n\0')
         for cd in [self.cd1, self.cd2]:
-            cd.sendall(subscribe)
+            cd.sendall(subscribe.encode('utf-8'))
 
         time.sleep(0.1)
 
-        self.sd.sendall('SEND\n'
-                        'content-type:text/plain\n'
-                        'destination:/exchange/amq.topic/da9d4779\n'
-                        '\n'
-                        'message'
-                        '\n\0')
+        cmd = ('SEND\n'
+               'content-type:text/plain\n'
+               'destination:/exchange/amq.topic/da9d4779\n'
+               '\n'
+               'message'
+               '\n\0')
+        self.sd.sendall(cmd.encode('utf-8'))
 
         resp=('MESSAGE\n'
             'subscription:(.*)\n'
@@ -204,7 +209,7 @@ class TestParsing(unittest.TestCase):
             'message'
             '\n\x00')
         for cd in [self.cd1, self.cd2]:
-            self.match(resp, cd.recv(4096))
+            self.match(resp, cd.recv(4096).decode('utf-8'))
 
     @connect(['cd'])
     def test_message_with_embedded_nulls(self):
@@ -215,7 +220,7 @@ class TestParsing(unittest.TestCase):
                     'id:xxx\n'
                     +dest+
                     '\n\0')
-        self.cd.sendall(subscribe)
+        self.cd.sendall(subscribe.encode('utf-8'))
 
         boilerplate = '0123456789'*1024 # large enough boilerplate
         message = '01'
@@ -225,13 +230,14 @@ class TestParsing(unittest.TestCase):
             oldi = i
         msg_len = len(message)
 
-        self.cd.sendall('SEND\n'
-                        +dest+
-                        'content-type:text/plain\n'
-                        'content-length:%i\n'
-                        '\n'
-                        '%s'
-                        '\0' % (len(message), message) )
+        cmd = ('SEND\n'
+               +dest+
+               'content-type:text/plain\n'
+               'content-length:%i\n'
+               '\n'
+               '%s'
+               '\0' % (len(message), message))
+        self.cd.sendall(cmd.encode('utf-8'))
 
         headresp=('MESSAGE\n'            # 8
             'subscription:(.*)\n'        # 14 + subscription
@@ -271,7 +277,7 @@ class TestParsing(unittest.TestCase):
                     'id:xxx\n'
                     +dest+
                     '\n\0')
-        self.cd.sendall(subscribe)
+        self.cd.sendall(subscribe.encode('utf-8'))
 
         boilerplate = '0123456789'*1024 # large enough boilerplate
 
@@ -290,7 +296,7 @@ class TestParsing(unittest.TestCase):
         while part_index < msg_to_send_len:
             part = msg_to_send[part_index:part_index+packet_size]
             time.sleep(0.1)
-            self.cd.sendall(part)
+            self.cd.sendall(part.encode('utf-8'))
             part_index += packet_size
 
         headresp=('MESSAGE\n'           # 8
