@@ -81,7 +81,7 @@ rabbitmqctl_srcs := mix.exs \
 # it's missing. Another way to do it is to use `mix local.hex` but it
 # can't be integrated in an alias and doing it from the Makefile isn't
 # practical.
-$(ACTUAL_ESCRIPTS): $(rabbitmqctl_srcs) deps
+$(ACTUAL_ESCRIPTS): $(rabbitmqctl_srcs)
 	$(gen_verbose) echo y | mix make_all
 
 $(LINKED_ESCRIPTS):
