@@ -56,4 +56,4 @@ include erlang.mk
 
 
 clean::
-	if test -d test/java_SUITE_data; then cd test/java_SUITE_data && make clean; fi
+	if test -d test/java_SUITE_data; then cd test/java_SUITE_data && $(MAKE) clean; fi
