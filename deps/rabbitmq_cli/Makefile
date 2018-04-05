@@ -85,6 +85,7 @@ $(ACTUAL_ESCRIPTS): $(rabbitmqctl_srcs)
 	$(gen_verbose) echo y | mix make_all
 
 $(LINKED_ESCRIPTS):
+	$(verbose) rm -f "$@"
 	$(gen_verbose) $(call link_escript,$<,$@)
 
 rel:: $(ESCRIPTS)
