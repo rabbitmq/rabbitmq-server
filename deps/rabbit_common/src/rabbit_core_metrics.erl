@@ -265,28 +265,34 @@ delete_queue_metrics(Queue) ->
     ok.
 
 delete_channel_queue_exchange_metrics(MatchSpecCondition) ->
-    ets:select_replace(
+    ChannelQueueExchangeMetricsToUpdate = ets:select(
         channel_queue_exchange_metrics,
         [
             {
-                {{'$2', {'$1', '$3'}}, '$4', '_'},
+                {{'$2', {'$1', '$3'}}, '_', '_'},
                 [MatchSpecCondition],
-                [{{{{'$2', {{'$1', '$3'}}}}, '$4', 1}}]
+                [{{'$2', {{'$1', '$3'}}}}]
             }
         ]
-    ).
+    ),
+    lists:foreach(fun(Key) ->
+        ets:update_element(channel_queue_exchange_metrics, Key, {3, 1})
+    end, ChannelQueueExchangeMetricsToUpdate).
 
 delete_channel_queue_metrics(MatchSpecCondition) ->
-    ets:select_replace(
+    ChannelQueueMetricsToUpdate = ets:select(
         channel_queue_metrics,
         [
             {
-                {{'$2', '$1'}, '$3', '$4', '$5', '$6', '$7', '$8', '_'},
+                {{'$2', '$1'}, '_', '_', '_', '_', '_', '_', '_'},
                 [MatchSpecCondition],
-                [{{{{'$2', '$1'}}, '$3', '$4', '$5', '$6', '$7', '$8', 1}}]
+                [{{'$2', '$1'}}]
             }
         ]
-    ).
+    ),
+    lists:foreach(fun(Key) ->
+        ets:update_element(channel_queue_metrics, Key, {8, 1})
+    end, ChannelQueueMetricsToUpdate).
 
 % [{'orelse',
 %    {'==', {Queue}, '$1'},
