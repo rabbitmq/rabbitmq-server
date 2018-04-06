@@ -40,7 +40,8 @@
 
 -export([queue_stats/2,
          queue_stats/5,
-         queue_deleted/1]).
+         queue_deleted/1,
+         queues_deleted/1]).
 
 -export([node_stats/2]).
 
