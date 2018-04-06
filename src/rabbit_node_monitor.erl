@@ -37,6 +37,7 @@
          alive_nodes/1, alive_rabbit_nodes/1]).
 
 -define(SERVER, ?MODULE).
+-define(NODE_REPLY_TIMEOUT, 5000).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
 -define(RABBIT_DOWN_PING_INTERVAL, 1000).
 
@@ -181,7 +182,7 @@ partitions() ->
     gen_server:call(?SERVER, partitions, infinity).
 
 partitions(Nodes) ->
-    {Replies, _} = gen_server:multi_call(Nodes, ?SERVER, partitions, infinity),
+    {Replies, _} = gen_server:multi_call(Nodes, ?SERVER, partitions, ?NODE_REPLY_TIMEOUT),
     Replies.
 
 status(Nodes) ->
