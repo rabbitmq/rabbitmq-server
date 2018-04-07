@@ -402,7 +402,7 @@ filtered_roundtrip(OpenConf, Body) ->
                                                         <<"test1">>,
                                                         settled,
                                                         unsettled_state,
-                                                        #{<<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > ", Now2Binary>>}),
+                                                        #{<<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > ", Now2Binary/binary>>}),
 
     {ok, OutMsg2} = amqp10_client:get_msg(DefaultReceiver, 60000 * 5),
     ?assertEqual(<<"msg-2-tag">>, amqp10_msg:delivery_tag(OutMsg2)),
