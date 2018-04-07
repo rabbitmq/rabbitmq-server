@@ -40,6 +40,7 @@
          attach_receiver_link/3,
          attach_receiver_link/4,
          attach_receiver_link/5,
+         attach_receiver_link/6,
          attach_link/2,
          detach_link/1,
          send_msg/2,
