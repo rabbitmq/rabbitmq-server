@@ -37,7 +37,7 @@ data:
       cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
       cluster_formation.k8s.address_type = ip
       cluster_formation.node_cleanup.interval = 10
-      # Set to true if automatic removal of unknown/absent nodes
+      # Set to false if automatic removal of unknown/absent nodes
       # is desired. This can be dangerous, see
       #  * http://www.rabbitmq.com/cluster-formation.html#node-health-checks-and-cleanup
       #  * https://groups.google.com/forum/#!msg/rabbitmq-users/wuOfzEywHXo/k8z_HWIkBgAJ
