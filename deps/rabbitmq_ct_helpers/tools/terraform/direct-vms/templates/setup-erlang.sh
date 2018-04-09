@@ -30,7 +30,7 @@ readonly erlang_cookie='${erlang_cookie}'
 readonly debian_codename="$${distribution#debian-*}"
 
 case "$erlang_version" in
-  20.[12])
+  20.[1-3])
     readonly erlang_package_version="1:$erlang_version-1"
     ;;
   19.3)
