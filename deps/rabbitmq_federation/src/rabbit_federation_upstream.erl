@@ -87,8 +87,9 @@ from_set(SetName, XorQ) ->
     from_set_contents(set_contents(SetName, vhost(XorQ)), XorQ).
 
 set_contents(<<"all">>, VHost) ->
-    Upstreams = rabbit_runtime_parameters:list(
+    Upstreams0 = rabbit_runtime_parameters:list(
                     VHost, <<"federation-upstream">>),
+    Upstreams  = [rabbit_data_coercion:to_list(U) || U <- Upstreams0],
     [[{<<"upstream">>, pget(name, U)}] || U <- Upstreams];
 
 set_contents(SetName, VHost) ->
@@ -138,9 +139,12 @@ from_upstream_or_set(US, Name, U, XorQ) ->
 bget(K, L1, L2) -> bget(K, L1, L2, undefined).
 
 bget(K0, L1, L2, D) ->
-    K = a2b(K0),
-    case pget(K, L1, undefined) of
-        undefined -> pget(K, L2, D);
+    K   = a2b(K0),
+    %% coerce maps to proplists
+    PL1 = rabbit_data_coercion:to_list(L1),
+    PL2 = rabbit_data_coercion:to_list(L2),
+    case pget(K, PL1, undefined) of
+        undefined -> pget(K, PL2, D);
         Result    -> Result
     end.
 
