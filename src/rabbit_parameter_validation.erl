@@ -77,6 +77,10 @@ proplist(Name, Constraints, Term) when is_list(Term) ->
                | Results]
     end;
 
+proplist(Name, Constraints, Term0) when is_map(Term0) ->
+    Term = maps:to_list(Term0),
+    proplist(Name, Constraints, Term);
+
 proplist(Name, _Constraints, Term) ->
     {error, "~s not a list ~p", [Name, Term]}.
 
