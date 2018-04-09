@@ -25,6 +25,8 @@
 -export([notify/2, notify/3, notify_if/3]).
 -export([sync_notify/2, sync_notify/3]).
 
+-ignore_xref([{gen_event, start_link, 2}]).
+
 %%----------------------------------------------------------------------------
 
 -record(state, {level, interval, timer}).
