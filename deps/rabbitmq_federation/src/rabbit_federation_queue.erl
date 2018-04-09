@@ -34,8 +34,6 @@
          consumer_state_changed/3]).
 -export([policy_changed_local/2]).
 
--import(rabbit_misc, [pget/2]).
-
 %%----------------------------------------------------------------------------
 
 startup(Q) ->
