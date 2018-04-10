@@ -4,7 +4,10 @@ sudo: false
 language: erlang
 notifications:
   email:
-    - alerts@rabbitmq.com
+    recipients:
+      - alerts@rabbitmq.com
+    on_success: never
+    on_failure: always
 addons:
   apt:
     sources:
@@ -15,7 +18,7 @@ addons:
       # Use Elixir from Erlang Solutions. The provided Elixir is
       # installed with kiex but is old. We also can't use kiex to
       # install a newer one because of GitHub API rate limiting.
-      - elixir=1.4.5-1
+      - elixir=1.6.0-1
       - maven
 cache:
   apt: true
@@ -26,7 +29,7 @@ env:
 
 otp_release:
   - "19.3"
-  - "20.1"
+  - "20.3"
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
@@ -44,7 +47,7 @@ before_script:
   - |
     echo YES | kiex implode
     elixir --version
-    elixir --version | grep -q 'Elixir 1.4.5'
+    elixir --version | grep -q 'Elixir 1.6.0'
 
 script:
   - make xref
