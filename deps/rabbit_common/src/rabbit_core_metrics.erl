@@ -40,7 +40,8 @@
 
 -export([queue_stats/2,
          queue_stats/5,
-         queue_deleted/1]).
+         queue_deleted/1,
+         queues_deleted/1]).
 
 -export([node_stats/2]).
 
@@ -240,6 +241,77 @@ queue_deleted(Name) ->
     lists:foreach(fun(Key) ->
                           ets:update_element(channel_queue_metrics, Key, {8, 1})
                   end, CQ).
+
+queues_deleted(Queues) ->
+    [ delete_queue_metrics(Queue) || Queue <- Queues ],
+    [
+        begin
+            MatchSpecCondition = build_match_spec_conditions_to_delete_all_queues(QueuesPartition),
+            delete_channel_queue_exchange_metrics(MatchSpecCondition),
+            delete_channel_queue_metrics(MatchSpecCondition)
+        end || QueuesPartition <- partition_queues(Queues)
+    ],
+    ok.
+
+partition_queues(Queues) when length(Queues) >= 1000 ->
+    {Partition, Rest} = lists:split(1000, Queues),
+    [Partition | partition_queues(Rest)];
+partition_queues(Queues) ->
+    [Queues].
+
+delete_queue_metrics(Queue) ->
+    ets:delete(queue_coarse_metrics, Queue),
+    ets:update_element(queue_metrics, Queue, {3, 1}),
+    ok.
+
+delete_channel_queue_exchange_metrics(MatchSpecCondition) ->
+    ChannelQueueExchangeMetricsToUpdate = ets:select(
+        channel_queue_exchange_metrics,
+        [
+            {
+                {{'$2', {'$1', '$3'}}, '_', '_'},
+                [MatchSpecCondition],
+                [{{'$2', {{'$1', '$3'}}}}]
+            }
+        ]
+    ),
+    lists:foreach(fun(Key) ->
+        ets:update_element(channel_queue_exchange_metrics, Key, {3, 1})
+    end, ChannelQueueExchangeMetricsToUpdate).
+
+delete_channel_queue_metrics(MatchSpecCondition) ->
+    ChannelQueueMetricsToUpdate = ets:select(
+        channel_queue_metrics,
+        [
+            {
+                {{'$2', '$1'}, '_', '_', '_', '_', '_', '_', '_'},
+                [MatchSpecCondition],
+                [{{'$2', '$1'}}]
+            }
+        ]
+    ),
+    lists:foreach(fun(Key) ->
+        ets:update_element(channel_queue_metrics, Key, {8, 1})
+    end, ChannelQueueMetricsToUpdate).
+
+% [{'orelse',
+%    {'==', {Queue}, '$1'},
+%    {'orelse',
+%        {'==', {Queue}, '$1'},
+%        % ...
+%            {'orelse',
+%                {'==', {Queue}, '$1'},
+%                {'==', true, true}
+%            }
+%    }
+%  }],
+build_match_spec_conditions_to_delete_all_queues([Queue|Queues]) ->
+     {'orelse',
+         {'==', {Queue}, '$1'},
+         build_match_spec_conditions_to_delete_all_queues(Queues)
+     };
+build_match_spec_conditions_to_delete_all_queues([]) ->
+    true.
 
 node_stats(persister_metrics, Infos) ->
     ets:insert(node_persister_metrics, {node(), Infos}),

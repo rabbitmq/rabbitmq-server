@@ -65,7 +65,17 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    gen_event:start_link({local, ?MODULE}).
+    %% gen_event:start_link/2 is not available before OTP 20
+    %% RabbitMQ 3.7 supports OTP >= 19.3
+    case erlang:function_exported(gen_event, start_link, 2) of
+        true ->
+            gen_event:start_link(
+              {local, ?MODULE},
+              [{spawn_opt, [{fullsweep_after, 0}]}]
+            );
+        false ->
+            gen_event:start_link({local, ?MODULE})
+    end.
 
 %% The idea is, for each stat-emitting object:
 %%
