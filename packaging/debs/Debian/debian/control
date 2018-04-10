@@ -13,7 +13,7 @@ Build-Depends: debhelper (>= 9),
  erlang-nox (>= 1:19.3-1) | esl-erlang (>= 1:19.3-1),
  erlang-dev (>= 1:19.3-1) | esl-erlang (>= 1:19.3-1),
  erlang-src (>= 1:19.3-1) | esl-erlang (>= 1:19.3-1),
- elixir (>= 1.4.5-1),
+ elixir (>= 1.6.0-1),
  zip,
  rsync
 Standards-Version: 3.9.6
