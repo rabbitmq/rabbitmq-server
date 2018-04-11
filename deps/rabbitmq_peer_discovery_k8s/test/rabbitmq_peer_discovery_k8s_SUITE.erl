@@ -36,7 +36,8 @@ groups() ->
                  extract_node_list_real_test,
                  extract_node_list_with_not_ready_addresses_test,
                  node_name_empty_test,
-                 node_name_suffix_test
+                 node_name_suffix_test,
+                 registration_support
                 ]}].
 
 init_per_testcase(T, Config) when T == node_name_empty_test;
@@ -56,6 +57,9 @@ end_per_testcase(_, _Config) ->
 %%%
 %%% Testcases
 %%%
+
+registration_support(_Config) ->
+    ?assertEqual(rabbit_peer_discovery_k8s:supports_registration(), true).
 
 extract_node_list_long_test(_Config) ->
     {ok, Response} =
