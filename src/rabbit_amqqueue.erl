@@ -279,7 +279,6 @@ start(Qs) ->
     %% their initialisation (which may involve interacting with other
     %% queues).
     _ = [Pid ! {self(), go} || #amqqueue{pid = Pid} <- Classic],
-    _ = [ra_node_proc:trigger_election(Id) || #amqqueue{pid = Id} <- Quorum],
     ok.
 
 mark_local_durable_queues_stopped(VHost) ->
