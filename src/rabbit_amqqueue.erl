@@ -273,7 +273,7 @@ stop(VHost) ->
     rabbit_quorum_queue:stop(VHost).
 
 start(Qs) ->
-    {Classic, Quorum} = filter_per_type(Qs),
+    {Classic, _Quorum} = filter_per_type(Qs),
     %% At this point all recovered queues and their bindings are
     %% visible to routing, so now it is safe for them to complete
     %% their initialisation (which may involve interacting with other
