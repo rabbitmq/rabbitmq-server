@@ -1,21 +1,65 @@
+# vim:sw=2:et:
+
 sudo: false
+language: erlang
+notifications:
+  email:
+    recipients:
+      - alerts@rabbitmq.com
+    on_success: never
+    on_failure: always
 addons:
   apt:
+    sources:
+      - sourceline: deb https://packages.erlang-solutions.com/ubuntu trusty contrib
+        key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
-    - xsltproc
-language: erlang
+      - awscli
+      # Use Elixir from Erlang Solutions. The provided Elixir is
+      # installed with kiex but is old. We also can't use kiex to
+      # install a newer one because of GitHub API rate limiting.
+      - elixir=1.6.0-1
+cache:
+  apt: true
+env:
+  global:
 
 otp_release:
-  - "19.2"
   - "19.3"
-  - "20.0"
-script: make test
-deploy:
-  provider: releases
-  api_key:
-    secure: v1/cDXun0Urf40xY+Vf7tuKwNP6SRBuYrKjLEI3tcYEjm+lrv1JFyBEQ6EwbT0IllJ+OIzXdsrdc2/L6CZFhx0+ovLWX10nLJM94d6GS+v1RPKdMchVlZ1WSG+NK6QqRqXwKnNSEQeTocz3qHhM6pZ3ddvnGaYdHT5nr5ph68Z3RdQaF7Z+Y7Dn/dVj9kUhKwG/PobWP80TkQCqfmUMyqLTbP70Jbe00ukNucTdTpoxyZGEFBc1pfGlc4EnmJaC4rN8oURPimek3GocT8WxQIOyXBp/KEHT5OwqJ0Cl1VL/K9Gr3rjAk5vBPVAuTGsWJoR9m/g707KIDChMxZFaUa0Y13oWjS2k9OYcQiD6teBrSNzk97zh9yg1r0WWY/8TSPsl/gUyi02/ipL14X7AVKaqyEQEkbgvglcxOb3aX+NmLspj/f+trvKAfftaOpRB5amXyCwhtCOkhqTo9KQ5o6qwbpcNQSkPpdAjzv686oU+V2ZZY8VvfCZ89twHDRIVUoDAHq6icsPBpxXmnedwBq4vBEfW9HEbdb+XODPrHKKJRwnJAYSqzqnFE3PQeUmn6LBskfXUaSJ4zyw8LnVke30qC+KNAJd/IJ+5pbqLWrppsXOXE8OYYQ1P/rsBR9vp8SP3XVfXhph0iKwU789q/wZ1R1A6N20BAa2zFYtvSEeA=
-  file: "plugins/rabbitmq_aws-${TRAVIS_TAG}.ez"
-  skip_cleanup: true
-  on:
-    tags: true
-    repo: gmr/rabbitmq-aws
+  - "20.3"
+
+before_script:
+  # The checkout made by Travis is a "detached HEAD" and branches
+  # information is missing. Our Erlang.mk's git_rmq fetch method relies
+  # on it, so we need to restore it.
+  #
+  # We simply fetch master and, if it exists, v3.7.x branches. A branch
+  # is created, pointing to the detached HEAD.
+  - |
+    git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
+    git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
+    git fetch upstream v3.7.x:v3.7.x || :
+    git fetch upstream master:master || :
+  # Make sure we use Elixir from Erlang Solutions and not kiex.
+  - |
+    echo YES | kiex implode
+    elixir --version
+    elixir --version | grep -q 'Elixir 1.6.0'
+
+script:
+  - make xref
+  - make tests
+
+after_failure:
+  - |
+    cd "$TRAVIS_BUILD_DIR"
+    if test -d logs && test "$AWS_ACCESS_KEY_ID" && test "$AWS_SECRET_ACCESS_KEY"; then
+      archive_name="$(basename "$TRAVIS_REPO_SLUG")-$TRAVIS_JOB_NUMBER"
+
+      tar -c --transform "s/^logs/${archive_name}/" -f - logs | \
+        xz > "${archive_name}.tar.xz"
+
+      aws s3 cp "${archive_name}.tar.xz" s3://server-release-pipeline/travis-ci-logs/ \
+        --region eu-west-1 \
+        --acl public-read
+    fi
