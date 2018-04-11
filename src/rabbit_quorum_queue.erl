@@ -23,7 +23,7 @@
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
--export([cancel_customer/2]).
+-export([cancel_customer/2, cancel_customer/3]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -127,7 +127,15 @@ declare(#amqqueue{name = QName,
     {new, NewQ, FState}.
 
 cancel_customer({ConsumerTag, ChPid}, Name) ->
+    Node = node(ChPid),
     QName = queue_name(Name),
+    case Node == node() of
+        true -> cancel_customer(ChPid, ConsumerTag, QName);
+        false -> rabbit_misc:rpc_call(Node, rabbit_quorum_queue, cancel_customer,
+                                      [ChPid, ConsumerTag, QName])
+    end.
+
+cancel_customer(ChPid, ConsumerTag, QName) ->
     rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},
@@ -213,12 +221,10 @@ stateless_deliver({Name, _} = Pid, Delivery) ->
                                           Delivery#delivery.message).
 
 deliver(false, Delivery, FState0) ->
-    {ok, FState} = ra_fifo_client:enqueue(Delivery#delivery.message, FState0),
-    FState;
+    ra_fifo_client:enqueue(Delivery#delivery.message, FState0);
 deliver(true, Delivery, FState0) ->
-    {ok, FState} = ra_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
-                                          Delivery#delivery.message, FState0),
-    FState.
+    ra_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
+                           Delivery#delivery.message, FState0).
 
 info(Q) ->
     info(Q, [name, durable, auto_delete, arguments, pid, state, messages,
