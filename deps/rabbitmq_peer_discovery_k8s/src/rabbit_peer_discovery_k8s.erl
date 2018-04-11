@@ -23,7 +23,7 @@
 -include("rabbit_peer_discovery_k8s.hrl").
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1]).
+         post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0]).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -65,7 +65,9 @@ list_nodes() ->
 -spec supports_registration() -> boolean().
 
 supports_registration() ->
-    false.
+    %% see rabbitmq-peer-discovery-aws#17,
+    %%     rabbitmq-peer-discovery-k8s#23
+    true.
 
 
 -spec register() -> ok.
@@ -91,9 +93,18 @@ lock(_Node) ->
 unlock(_Data) ->
     ok.
 
+-spec randomized_startup_delay_range() -> {integer(), integer()}.
+
+randomized_startup_delay_range() ->
+    %% Pods in a stateful set are initialized one by one,
+    %% so RSD is not really necessary for this plugin.
+    %% See http://www.rabbitmq.com/cluster-formation.html#peer-discovery-k8s for details.
+    {0, 2}.
+
 %%
 %% Implementation
 %%
+
 -spec get_config_key(Key :: atom(), Map :: #{atom() => peer_discovery_config_value()})
                     -> peer_discovery_config_value().
 
