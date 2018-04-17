@@ -19,7 +19,7 @@
 -export([init_state/1, init_state/2, handle_event/2]).
 -export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
 -export([info/1, info/2, stat/1, infos/1]).
--export([ack/3, reject/4, basic_get/4, basic_consume/9]).
+-export([ack/3, reject/4, basic_get/4, basic_consume/9, basic_cancel/4]).
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
@@ -54,6 +54,8 @@
                     ConsumerPrefetchCount :: non_neg_integer(), rabbit_types:ctag(),
                     ExclusiveConsume :: boolean(), Args :: rabbit_framing:amqp_table(),
                     any(), ra_fifo_client:state()) -> {'ok', ra_fifo_client:state()}.
+-spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), ra_fifo_client:state()) ->
+                          {'ok', ra_fifo_client:state()}.
 -spec stateless_deliver(ra_node_id(), rabbit_types:delivery()) -> 'ok'.
 -spec deliver(Confirm :: boolean(), rabbit_types:delivery(), ra_fifo_client:state()) ->
                      ra_fifo_client:state().
@@ -215,6 +217,10 @@ basic_consume(#amqqueue{name = QName, type = quorum}, NoAck, ChPid,
     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                          not NoAck, QName, ConsumerPrefetchCount, Args),
     {ok, FState}.
+
+basic_cancel(ConsumerTag, ChPid, OkMsg, FState0) ->
+    maybe_send_reply(ChPid, OkMsg),
+    ra_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), FState0).
 
 stateless_deliver({Name, _} = Pid, Delivery) ->
     ok = ra_fifo_client:untracked_enqueue(Name, [Pid],

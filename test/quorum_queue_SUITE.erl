@@ -73,7 +73,8 @@ all_tests() ->
      dead_letter_to_quorum_queue,
      dead_letter_from_classic_to_quorum_queue,
      cleanup_queue_state_on_channel_after_publish,
-     cleanup_queue_state_on_channel_after_subscribe
+     cleanup_queue_state_on_channel_after_subscribe,
+     basic_cancel
     ].
 
 %% -------------------------------------------------------------------
@@ -1008,6 +1009,27 @@ delete_declare(Config) ->
     %% Ensure that is a new queue and it's empty
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
+
+basic_cancel(Config) ->
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    subscribe(Ch, QQ, false),
+    receive
+        {#'basic.deliver'{}, _} ->
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
+            amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>}),
+            wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+            wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0)
+    end.
 
 %%----------------------------------------------------------------------------
 

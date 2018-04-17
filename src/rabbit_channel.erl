@@ -1304,7 +1304,8 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
 handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
               _, State = #ch{consumer_mapping = ConsumerMapping,
                              queue_consumers  = QCons,
-                             user             = #user{username = Username}}) ->
+                             user             = #user{username = Username},
+                             queue_states     = QueueStates0}) ->
     OkMsg = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
     case maps:find(ConsumerTag, ConsumerMapping) of
         error ->
@@ -1333,10 +1334,10 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
                    fun () ->
                            rabbit_amqqueue:basic_cancel(
                              Q, self(), ConsumerTag, ok_msg(NoWait, OkMsg),
-                             Username)
+                             Username, QueueStates0)
                    end) of
-                ok ->
-                    {noreply, NewState};
+                {ok, QueueStates} ->
+                    {noreply, NewState#ch{queue_states = QueueStates}};
                 {error, not_found} ->
                     %% Spec requires we ignore this situation.
                     return_ok(NewState, NoWait, OkMsg)

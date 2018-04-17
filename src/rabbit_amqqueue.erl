@@ -32,7 +32,7 @@
 -export([list_down/1, count/1, list_names/0, list_local_names/0]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
--export([basic_get/6, basic_consume/12, basic_cancel/5, notify_decorators/1]).
+-export([basic_get/6, basic_consume/12, basic_cancel/6, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
@@ -184,7 +184,8 @@
             rabbit_types:ok_or_error('exclusive_consume_unavailable').
 -spec basic_cancel
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any(),
-         rabbit_types:username()) -> 'ok'.
+         rabbit_types:username(), #{Name :: atom() => ra_fifo_client:state()}) ->
+                          'ok' | {'ok', #{Name :: atom() => ra_fifo_client:state()}}.
 -spec notify_decorators(rabbit_types:amqqueue()) -> 'ok'.
 -spec resume(pid(), pid()) -> 'ok'.
 -spec internal_delete(name(), rabbit_types:username()) ->
@@ -1009,9 +1010,15 @@ basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q, 
                                                      OkMsg, FState0),
     {ok, maps:put(Name, FState, QStates)}.
 
-basic_cancel(#amqqueue{pid = QPid, type = classic}, ChPid, ConsumerTag, OkMsg, ActingUser) ->
+basic_cancel(#amqqueue{pid = QPid, type = classic}, ChPid, ConsumerTag, OkMsg, ActingUser,
+             _QStates) ->
     delegate:invoke(QPid, {gen_server2, call,
-                           [{basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, infinity]}).
+                           [{basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, infinity]});
+basic_cancel(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum}, ChPid,
+             ConsumerTag, OkMsg, _ActingUser, QStates) ->
+    FState0 = get_quorum_state(Id, QName, QStates),
+    {ok, FState} = rabbit_quorum_queue:basic_cancel(ConsumerTag, ChPid, OkMsg, FState0),
+    {ok, maps:put(Name, FState, QStates)}.
 
 notify_decorators(#amqqueue{pid = QPid}) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]}).
