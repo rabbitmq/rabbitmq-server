@@ -298,11 +298,11 @@ i(pid,                #amqqueue{pid                = {Name, _}}) -> whereis(Name
 i(messages,           #amqqueue{pid                = {Name, _}}) ->
     quorum_messages(Name);
 i(messages_ready,     #amqqueue{pid                = {Name, _}}) ->
-    [{_, Enqueue, Checkout, _, Return}] = ets:lookup(ra_fifo_metrics, Name),
-    Enqueue - Checkout + Return;
+    [{_, MR, _, _}] = ets:lookup(ra_fifo_metrics, Name),
+    MR;
 i(messages_unacknowledged, #amqqueue{pid           = {Name, _}}) ->
-    [{_, _, Checkout, Settle, Return}] = ets:lookup(ra_fifo_metrics, Name),
-    Checkout - Settle - Return;
+    [{_, _, MU, _}] = ets:lookup(ra_fifo_metrics, Name),
+    MU;
 i(policy, Q) ->
     case rabbit_policy:name(Q) of
         none   -> '';
@@ -354,8 +354,8 @@ i(garbage_collection, #amqqueue{pid = {Name, _}}) ->
 i(_K, _Q) -> ''.
 
 quorum_messages(Name) ->
-    [{_, Enqueue, _, Settle, _}] = ets:lookup(ra_fifo_metrics, Name),
-    Enqueue - Settle.
+    [{_, _, _, M}] = ets:lookup(ra_fifo_metrics, Name),
+    M.
 
 quorum_ctag(Int) when is_integer(Int) ->
     integer_to_binary(Int);
