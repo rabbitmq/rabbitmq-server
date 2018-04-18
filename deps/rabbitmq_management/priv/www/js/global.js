@@ -407,6 +407,8 @@ var HELP = {
 
     'policy-ha-promote-on-shutdown' : 'One of <code>when-synced</code> or <code>always</code>. <a target="_blank" href="http://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
 
+    'policy-ha-promote-on-failure' : 'One of <code>when-synced</code> or <code>always</code>. <a target="_blank" href="http://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
+
     'policy-federation-upstream-set' :
     'A string; only if the federation plugin is enabled. Chooses the name of a set of upstreams to use with federation, or "all" to use all upstreams. Incompatible with <code>federation-upstream</code>.',
 
