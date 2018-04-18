@@ -58,6 +58,7 @@ groups() ->
           {cluster_size_2, [], [
               vhost_deletion,
               promote_on_shutdown,
+              promote_on_failure,
               force_delete_if_no_master
             ]},
           {cluster_size_3, [], [
@@ -267,6 +268,40 @@ force_delete_if_no_master(Config) ->
     #'queue.delete_ok'{} =
         amqp_channel:call(BCh3, #'queue.delete'{queue = <<"ha.nopromote.test2">>}),
     ok.
+
+promote_on_failure(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.promote">>,
+      <<"all">>, [{<<"ha-promote-on-failure">>, <<"always">>}]),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.nopromote">>,
+      <<"all">>, [{<<"ha-promote-on-failure">>, <<"when-synced">>}]),
+
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    [begin
+         amqp_channel:call(ACh, #'queue.declare'{queue   = Q,
+                                                 durable = true}),
+         rabbit_ct_client_helpers:publish(ACh, Q, 10)
+     end || Q <- [<<"ha.promote.test">>, <<"ha.nopromote.test">>]],
+    ok = rabbit_ct_broker_helpers:restart_node(Config, B),
+    ok = rabbit_ct_broker_helpers:kill_node(Config, A),
+    BCh = rabbit_ct_client_helpers:open_channel(Config, B),
+    #'queue.declare_ok'{message_count = 0} =
+        amqp_channel:call(
+          BCh, #'queue.declare'{queue   = <<"ha.promote.test">>,
+                                durable = true}),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 404, _}}, _},
+       amqp_channel:call(
+         BCh, #'queue.declare'{queue   = <<"ha.nopromote.test">>,
+                               durable = true})),
+    ok = rabbit_ct_broker_helpers:start_node(Config, A),
+    ACh2 = rabbit_ct_client_helpers:open_channel(Config, A),
+    #'queue.declare_ok'{message_count = 10} =
+        amqp_channel:call(
+          ACh2, #'queue.declare'{queue   = <<"ha.nopromote.test">>,
+                                 durable = true}),
+    ok.
+
 
 promote_on_shutdown(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
