@@ -367,7 +367,7 @@ handle_cast({gm_deaths, DeadGMPids},
         {error, not_found} ->
             {stop, normal, State};
         {error, {not_synced, _}} ->
-            rabbit_log:error("Mirror queue ~p in unexpected state after gm_deaths."
+            rabbit_log:error("Mirror queue ~p in unexpected state."
                              " Promoted to master but already a master.",
                              [QueueName]),
             error(unexpected_mirrored_state)
