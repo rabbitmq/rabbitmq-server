@@ -73,8 +73,7 @@ cluster_name() ->
 
 cluster_name_default() ->
     {ID, _} = parts(node()),
-    {ok, Host} = inet:gethostname(),
-    {ok, #hostent{h_name = FQDN}} = inet:gethostbyname(Host),
+    FQDN = rabbit_net:hostname(),
     list_to_binary(atom_to_list(make({ID, FQDN}))).
 
 set_cluster_name(Name, Username) ->
