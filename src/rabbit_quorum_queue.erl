@@ -24,6 +24,7 @@
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
 -export([cancel_customer/2, cancel_customer/3]).
+-export([become_leader/1]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -74,7 +75,9 @@
          consumer_utilisation,
          memory,
          state,
-         garbage_collection
+         garbage_collection,
+         followers,
+         leader
         ]).
 
 %%----------------------------------------------------------------------------
@@ -108,7 +111,8 @@ declare(#amqqueue{name = QName,
     ets:insert(quorum_mapping, {RaName, QName}),
     RaMachine = {module, ra_fifo,
                  #{dead_letter_handler => dlx_mfa(NewQ),
-                   cancel_customer_handler => {?MODULE, cancel_customer, []}}},
+                   cancel_customer_handler => {?MODULE, cancel_customer, []},
+                   become_leader_handler => {?MODULE, become_leader, []}}},
     {ok, _Started, _NotStarted} = ra:start_cluster(RaName, RaMachine,
                                                    [{RaName, Node} || Node <- Nodes]),
     FState = init_state(Id),
@@ -144,6 +148,13 @@ cancel_customer(ChPid, ConsumerTag, QName) ->
                          {channel,      ChPid},
                          {queue,        QName},
                          {user_who_performed_action, ?INTERNAL_USER}]).
+
+become_leader(Name) ->
+    Fun = fun(Q1) -> Q1#amqqueue{quorum_leader = node()} end,
+    rabbit_misc:execute_mnesia_transaction(
+      fun() ->
+              rabbit_amqqueue:update(queue_name(Name), Fun)
+      end).
 
 recover(Queues) ->
     [begin
@@ -357,7 +368,17 @@ i(garbage_collection, #amqqueue{pid = {Name, _}}) ->
         error:badarg ->
             []
     end;
+i(followers, #amqqueue{quorum_nodes = Nodes,
+                       quorum_leader = Leader,
+                       pid = {Name, _}}) ->
+    AliveNodes = [Node || Node <- Nodes, is_process_alive(Name, Node)],
+    AliveNodes -- [Leader];
+i(leader, #amqqueue{quorum_leader = Leader}) ->
+    Leader;
 i(_K, _Q) -> ''.
+
+is_process_alive(Name, Node) ->
+    erlang:is_pid(rpc:call(Node, erlang, whereis, [Name])).
 
 quorum_messages(Name) ->
     [{_, _, _, M}] = ets:lookup(ra_fifo_metrics, Name),

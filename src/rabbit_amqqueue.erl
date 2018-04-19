@@ -944,15 +944,35 @@ ack(QPid, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]});
 ack({Name, _} = Id, {CTag, MsgIds}, _ChPid, FStates) ->
     FState0 = get_quorum_state(Id, FStates),
-    {ok, FState} = rabbit_quorum_queue:ack(CTag, MsgIds, FState0),
-    {ok, maps:put(Name, FState, FStates)}.
+    case rabbit_quorum_queue:ack(CTag, MsgIds, FState0) of
+        {ok, FState} ->
+            {ok, maps:put(Name, FState, FStates)};
+        {slow, FState} ->
+            %% TODO Flow control?
+            rabbit_log:warning("SLOW in ack ~n", []),
+            {ok, maps:put(Name, FState, FStates)};
+        {error, stop_sending} ->
+            %% What to do?
+            rabbit_log:warning("STOP_SENDING in ack ~n", []),
+            {ok, FStates}
+    end.
 
 reject(QPid, Requeue, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{reject, Requeue, MsgIds, ChPid}]});
 reject({Name, _} = Id, Requeue, {CTag, MsgIds}, _ChPid, FStates) ->
     FState0 = get_quorum_state(Id, FStates),
-    {ok, FState} = rabbit_quorum_queue:reject(Requeue, CTag, MsgIds, FState0),
-    {ok, maps:put(Name, FState, FStates)}.
+    case rabbit_quorum_queue:reject(Requeue, CTag, MsgIds, FState0) of
+        {ok, FState} ->
+            {ok, maps:put(Name, FState, FStates)};
+        {slow, FState} ->
+            %% TODO flow control?
+            rabbit_log:warning("SLOW in reject ~n", []),
+            {ok, maps:put(Name, FState, FStates)};
+        {error, stop_sending} ->
+            %% TODO not a clue what to do at this level!
+            rabbit_log:warning("STOP_SENDING in reject ~n", []),
+            {ok, FStates}
+    end.
 
 notify_down_all(QPids, ChPid) ->
     notify_down_all(QPids, ChPid, ?CHANNEL_OPERATION_TIMEOUT).
@@ -1284,8 +1304,18 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
                 lists:foldl(
                   fun({{Name, _} = Pid, QName}, QStates) ->
                           FState0 = get_quorum_state(Pid, QName, QStates),
-                          FState = rabbit_quorum_queue:deliver(Confirm, Delivery, FState0),
-                          maps:put(Name, FState, QStates)
+                          case rabbit_quorum_queue:deliver(Confirm, Delivery, FState0) of
+                              {ok, FState} ->
+                                  maps:put(Name, FState, QStates);
+                              {slow, FState} ->
+                                  %% TODO flow control
+                                  rabbit_log:warning("SLOW in deliver ~n", []),
+                                  maps:put(Name, FState, QStates);
+                              {error, stop_sending} ->
+                                  %% TODO
+                                  rabbit_log:warning("STOP_SENDING in deliver ~n", []),
+                                  QStates
+                          end
                   end, QueueState0, Quorum)
         end,
     {QuorumPids, _} = lists:unzip(Quorum),
