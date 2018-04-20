@@ -174,17 +174,17 @@ $(SOURCE_DIST).manifest: $(SOURCE_DIST)
 
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(TAR) $(TAR_V) -T $(SOURCE_DIST).manifest --no-recursion -cf - | \
+		$(TAR) $(TAR_V) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
 		$(GZIP) --best > $@
 
 $(SOURCE_DIST).tar.bz2: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(TAR) $(TAR_V) -T $(SOURCE_DIST).manifest --no-recursion -cf - | \
+		$(TAR) $(TAR_V) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
 		$(BZIP2) > $@
 
 $(SOURCE_DIST).tar.xz: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(TAR) $(TAR_V) -T $(SOURCE_DIST).manifest --no-recursion -cf - | \
+		$(TAR) $(TAR_V) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
 		$(XZ) > $@
 
 $(SOURCE_DIST).zip: $(SOURCE_DIST).manifest
