@@ -81,8 +81,20 @@ rabbitmqctl_srcs := mix.exs \
 # it's missing. Another way to do it is to use `mix local.hex` but it
 # can't be integrated in an alias and doing it from the Makefile isn't
 # practical.
+#
+# We also verify if the CLI is built from the RabbitMQ source archive
+# (by checking if the Hex registry/cache is present). If it is, we use
+# another alias. This alias does exactly the same thing as `make_all`,
+# but calls `deps.get --only prod` instead of `deps.get`. This is what
+# we do to create the source archive, and we must do the same here,
+# otherwise mix(1) complains about missing dependencies (the non-prod
+# ones).
 $(ACTUAL_ESCRIPTS): $(rabbitmqctl_srcs)
-	$(gen_verbose) echo y | mix make_all
+	$(gen_verbose) if test -d ../.hex; then \
+		echo y | mix make_all_in_src_archive; \
+	else \
+		echo y | mix make_all; \
+	fi
 
 $(LINKED_ESCRIPTS):
 	$(verbose) rm -f "$@"
