@@ -24,7 +24,8 @@
          recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
          setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
          peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
-         tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1]).
+         tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1,
+         hostname/0]).
 
 %%---------------------------------------------------------------------------
 
