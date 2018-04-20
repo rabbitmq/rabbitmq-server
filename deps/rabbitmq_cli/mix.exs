@@ -151,6 +151,12 @@ defmodule RabbitMQCtl.MixfileBase do
         "compile",
         "escript.build",
       ],
+      make_all_in_src_archive: [
+        "deps.get --only prod",
+        "deps.compile",
+        "compile",
+        "escript.build",
+      ],
     ]
   end
 end
