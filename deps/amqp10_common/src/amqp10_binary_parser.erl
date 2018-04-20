@@ -55,8 +55,8 @@ parse_primitive(16#52, <<V:8/unsigned,  R/binary>>) -> {{uint, V},       R};
 parse_primitive(16#53, <<V:8/unsigned,  R/binary>>) -> {{ulong, V},      R};
 parse_primitive(16#54, <<V:8/signed,    R/binary>>) -> {{int, V},        R};
 parse_primitive(16#55, <<V:8/signed,    R/binary>>) -> {{long, V},       R};
-parse_primitive(16#56, <<0:8/unsigned,  R/binary>>) -> {false,           R};
-parse_primitive(16#56, <<1:8/unsigned,  R/binary>>) -> {true,            R};
+parse_primitive(16#56, <<0:8/unsigned,  R/binary>>) -> {{boolean, false},R};
+parse_primitive(16#56, <<1:8/unsigned,  R/binary>>) -> {{boolean, true}, R};
 parse_primitive(16#60, <<V:16/unsigned, R/binary>>) -> {{ushort, V},     R};
 parse_primitive(16#61, <<V:16/signed,   R/binary>>) -> {{short, V},      R};
 parse_primitive(16#70, <<V:32/unsigned, R/binary>>) -> {{uint, V},       R};
@@ -93,9 +93,9 @@ parse_primitive(16#d1,<<S:32/unsigned,CountAndValue:S/binary,R/binary>>) ->
 
 %% Arrays
 parse_primitive(16#e0,<<S:8/unsigned,CountAndV:S/binary,R/binary>>) ->
-    {{array, parse_array(8, CountAndV)}, R};
+    {parse_array(8, CountAndV), R};
 parse_primitive(16#f0,<<S:32/unsigned,CountAndV:S/binary,R/binary>>) ->
-    {{array, parse_array(32, CountAndV)}, R};
+    {parse_array(32, CountAndV), R};
 
 %% NaN or +-inf
 parse_primitive(16#72, <<V:32, R/binary>>) ->
@@ -111,8 +111,8 @@ parse_primitive(16#84, <<V:64, R/binary>>) ->
 parse_primitive(16#94, <<V:128, R/binary>>) ->
     {{as_is, 16#94, <<V:128>>}, R};
 
-parse_primitive(Type, _) ->
-    throw({primitive_type_unsupported, Type}).
+parse_primitive(Type, _Bin) ->
+    throw({primitive_type_unsupported, Type, _Bin}).
 
 parse_compound(UnitSize, Bin) ->
     <<Count:UnitSize, Bin1/binary>> = Bin,
@@ -129,24 +129,43 @@ parse_compound1(Count, Bin, Acc) ->
     {Value, Rest} = parse(Bin),
     parse_compound1(Count - 1, Rest, [Value | Acc]).
 
+%% array structure is {array, Ctor, [Data]}
+%% e.g. {array, symbol, [<<"amqp:accepted:list">>]}
 parse_array(UnitSize, Bin) ->
     <<Count:UnitSize, Bin1/binary>> = Bin,
     parse_array1(Count, Bin1).
 
-parse_array1(Count, <<?DESCRIBED,Rest/binary>>) ->
+parse_array1(Count, <<?DESCRIBED, Rest/binary>>) ->
     {Descriptor, Rest1} = parse(Rest),
-    List = parse_array1(Count, Rest1),
-    lists:map(fun (Value) ->
-                      {described, Descriptor, Value}
-              end, List);
-parse_array1(Count, <<Type,ArrayBin/binary>>) ->
+    {array, Type, List} = parse_array1(Count, Rest1),
+    Values = lists:map(fun (Value) ->
+                               {described, Descriptor, Value}
+                       end, List),
+    % this format cannot represent an empty array of described types
+    {array, {described, Descriptor, Type}, Values};
+parse_array1(Count, <<Type, ArrayBin/binary>>) ->
     parse_array2(Count, Type, ArrayBin, []).
 
-parse_array2(0, _Type, <<>>, Acc) ->
-    lists:reverse(Acc);
+parse_array2(0, Type, <<>>, Acc) ->
+    {array, parse_constructor(Type), lists:reverse(Acc)};
 parse_array2(Count, Type, Bin, Acc) ->
     {Value, Rest} = parse_primitive(Type, Bin),
     parse_array2(Count - 1, Type, Rest, [Value | Acc]).
+
+parse_constructor(16#a3) -> symbol;
+parse_constructor(16#b1) -> utf8;
+parse_constructor(16#50) -> ubyte;
+parse_constructor(16#51) -> byte;
+parse_constructor(16#60) -> ushort;
+parse_constructor(16#61) -> short;
+parse_constructor(16#70) -> uint;
+parse_constructor(16#71) -> int;
+parse_constructor(16#80) -> ulong;
+parse_constructor(16#81) -> long;
+parse_constructor(16#40) -> null;
+parse_constructor(16#56) -> boolean;
+parse_constructor(16#f0) -> array;
+parse_constructor(0) -> described.
 
 mapify([]) ->
     [];

@@ -20,6 +20,7 @@ endef
 
 BUILD_DEPS = rabbit_common
 
+DIALYZER_OPTS += --src -r test
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
