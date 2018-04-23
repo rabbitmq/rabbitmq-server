@@ -21,7 +21,42 @@
 
 -include("amqp10_framing.hrl").
 
--spec generate(tuple()) -> iolist().
+-type signed_byte() :: -128 .. 127.
+
+-type amqp10_ctor() :: ubyte | ushort | byte | short | int | uing | float |
+                       double |
+                       char | timestamp | uuid | utf8 | symbol | binary |
+                       list | map | array |
+                       {described, amqp10_type(), amqp10_ctor()}.
+
+-type amqp10_prim() ::
+    null |
+    true |
+    false |
+    {boolean, true | false} |
+    {ubyte, byte()} |
+    {ushort, non_neg_integer()} |
+    {uint, non_neg_integer()} |
+    {ulong, non_neg_integer()} |
+    {byte, signed_byte()} |
+    {short, integer()} |
+    {int, integer()} |
+    {float, float()} |
+    {double, float()} |
+    {char, binary()} |
+    {timestamp, integer()} |
+    {uuid, binary()} |
+    {utf8, binary()} |
+    {symbol, binary()} |
+    {binary, binary()} |
+    {list, [amqp10_prim()]} |
+    {map, [{amqp10_prim(), amqp10_prim()}]} | %% TODO: make map a map
+    {array, amqp10_ctor(), [amqp10_type()]}.
+
+-type amqp10_type() ::
+    amqp10_prim() |
+    {described, amqp10_type(), amqp10_prim()}.
+
 -spec build_frame(integer(), iolist()) -> iolist().
 
 -define(AMQP_FRAME_TYPE, 0).
@@ -39,6 +74,7 @@ build_heartbeat_frame() ->
     %% length is inclusive
     <<8:32, ?DOFF:8, ?AMQP_FRAME_TYPE:8, 0:16>>.
 
+-spec generate(amqp10_type()) -> iolist().
 generate({described, Descriptor, Value}) ->
     DescBin = generate(Descriptor),
     ValueBin = generate(Value),
@@ -47,6 +83,8 @@ generate({described, Descriptor, Value}) ->
 generate(null)  -> <<16#40>>;
 generate(true)  -> <<16#41>>;
 generate(false) -> <<16#42>>;
+generate({boolean, true}) -> <<16#56, 16#01>>;
+generate({boolean, false}) -> <<16#56, 16#00>>;
 
 %% some integral types have a compact encoding as a byte; this is in
 %% particular for the descriptors of AMQP types, which have the domain
@@ -112,8 +150,8 @@ generate({map, ListOfPairs}) ->
 
 generate({array, Type, List}) ->
     Count = length(List),
-    Body = iolist_to_binary(
-             [constructor(Type), [generate(Type, I) || I <- List]]),
+    Body = iolist_to_binary([constructor(Type),
+                             [generate(Type, I) || I <- List]]),
     S = size(Body),
     %% See generate({list, ...}) for an explanation of this test.
     if Count >= (256 - 1) orelse (S + 1) >= 256 ->
@@ -128,8 +166,49 @@ generate({as_is, TypeCode, Bin}) ->
 %% TODO again these are a stub to get SASL working. New codec? Will
 %% that ever happen? If not we really just need to split generate/1
 %% up into things like these...
-constructor(symbol) ->
-     <<16#a3>>.
+%% for these constructors map straight-forwardly
+constructor(symbol) -> <<16#b3>>;
+constructor(ubyte) -> <<16#50>>;
+constructor(ushort) -> <<16#60>>;
+constructor(short) -> <<16#61>>;
+constructor(uint) -> <<16#70>>;
+constructor(ulong) -> <<16#80>>;
+constructor(byte) -> <<16#51>>;
+constructor(int) -> <<16#71>>;
+constructor(long) -> <<16#81>>;
+constructor(float) -> <<16#72>>;
+constructor(double) -> <<16#82>>;
+constructor(char) -> <<16#73>>;
+constructor(timestamp) -> <<16#83>>;
+constructor(uuid) -> <<16#98>>;
+constructor(null) -> <<16#40>>;
+constructor(boolean) -> <<16#56>>;
+constructor(array) -> <<16#f0>>; % use large array type for all nested arrays
+constructor(utf8) -> <<16#b1>>;
+constructor({described, Descriptor, Primitive}) ->
+    [<<16#00>>, generate(Descriptor), constructor(Primitive)].
 
-generate(symbol, Value) ->
-    [<<(size(Value)):8>>, Value].
+% returns io_list
+generate(symbol, {symbol, V}) -> [<<(size(V)):32>>, V];
+generate(utf8, {utf8, V}) -> [<<(size(V)):32>>, V];
+generate(boolean, true) -> <<16#01>>;
+generate(boolean, false) -> <<16#00>>;
+generate(boolean, {boolean, true}) -> <<16#01>>;
+generate(boolean, {boolean, false}) -> <<16#00>>;
+generate(ubyte, {ubyte, V}) -> <<V:8/unsigned>>;
+generate(byte, {byte, V}) -> <<V:8/signed>>;
+generate(ushort, {ushort, V}) -> <<V:16/unsigned>>;
+generate(short, {short, V}) -> <<V:16/signed>>;
+generate(uint, {uint, V}) -> <<V:32/unsigned>>;
+generate(int, {int, V}) -> <<V:32/signed>>;
+generate(ulong, {ulong, V}) -> <<V:64/unsigned>>;
+generate(long, {long, V}) -> <<V:64/signed>>;
+generate({described, D, P}, {described, D, V}) ->
+    generate(P, V);
+generate(array, {array, Type, List}) ->
+    Count = length(List),
+    Body = iolist_to_binary([constructor(Type),
+                             [generate(Type, I) || I <- List]]),
+    S = size(Body),
+    %% See generate({list, ...}) for an explanation of this test.
+    [<<(S + 4):32/unsigned, Count:32/unsigned>>, Body].
