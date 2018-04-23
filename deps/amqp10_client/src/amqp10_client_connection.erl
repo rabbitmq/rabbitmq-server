@@ -178,10 +178,11 @@ expecting_socket({socket_ready, Socket}, State = #state{config = Cfg}) ->
 sasl_hdr_sent({protocol_header_received, 3, 1, 0, 0}, State) ->
     {next_state, sasl_hdr_rcvds, State}.
 
-sasl_hdr_rcvds(#'v1_0.sasl_mechanisms'{sasl_server_mechanisms = {array, Mechs}},
+sasl_hdr_rcvds(#'v1_0.sasl_mechanisms'{
+                  sasl_server_mechanisms = {array, symbol, Mechs}},
                State = #state{config = #{sasl := Sasl}}) ->
-    SaslBin = sasl_to_bin(Sasl),
-    case lists:any(fun({symbol, S}) when S =:= SaslBin -> true;
+    SaslBin = {symbol, sasl_to_bin(Sasl)},
+    case lists:any(fun(S) when S =:= SaslBin -> true;
                       (_) -> false
                    end, Mechs) of
         true ->
