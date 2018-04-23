@@ -8,7 +8,7 @@
 -define(DEBUG(F, A), ok).
 -endif.
 
--define(pprint(F), io:format("~p~n", [rabbit_amqp1_0_framing:pprint(F)])).
+-define(pprint(F), io:format("~p~n", [amqp10_framing:pprint(F)])).
 
 -define(SAFE(F),
         ((fun() ->
@@ -28,10 +28,7 @@
 
 %% Encoding
 
--define(DESCRIBED, 0:8).
--define(DESCRIBED_BIN, <<?DESCRIBED>>).
-
--include_lib("rabbit_amqp1_0_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -define(INFO_ITEMS, [pid,
                      auth_mechanism,

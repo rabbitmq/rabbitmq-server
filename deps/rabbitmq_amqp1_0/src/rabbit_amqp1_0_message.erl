@@ -118,8 +118,8 @@ assemble(Expected, _, Actual, _) ->
 decode_section(<<>>) ->
     none;
 decode_section(MsgBin) ->
-    {AmqpValue, Rest} = rabbit_amqp1_0_binary_parser:parse(MsgBin),
-    {rabbit_amqp1_0_framing:decode(AmqpValue), Rest}.
+    {AmqpValue, Rest} = amqp10_binary_parser:parse(MsgBin),
+    {amqp10_framing:decode(AmqpValue), Rest}.
 
 chunk(Rest, Uneaten) ->
     ChunkLen = size(Uneaten) - size(Rest),
@@ -209,7 +209,7 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
        ttl = from_expiration(Props),
        first_acquirer = not Redelivered,
        delivery_count = undefined},
-    HeadersBin = rabbit_amqp1_0_framing:encode_bin(Header10),
+    HeadersBin = amqp10_framing:encode_bin(Header10),
     MsgAnnoBin =
         case table_lookup(Headers, ?MESSAGE_ANNOTATIONS_HEADER) of
             undefined  -> <<>>;
@@ -237,7 +237,7 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                   content_type = wrap(symbol, Props#'P_basic'.content_type),
                   content_encoding = wrap(symbol, Props#'P_basic'.content_encoding),
                   creation_time = wrap(timestamp, Props#'P_basic'.timestamp)},
-                rabbit_amqp1_0_framing:encode_bin(Props10)
+                amqp10_framing:encode_bin(Props10)
         end,
     AppPropsBin =
         case table_lookup(Headers, ?APP_PROPERTIES_HEADER) of
@@ -250,7 +250,7 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                   <<"amqp-1.0">> ->
                       Content;
                   _Else -> % e.g., <<"binary">> if originally from 1.0
-                      rabbit_amqp1_0_framing:encode_bin(
+                      amqp10_framing:encode_bin(
                         #'v1_0.data'{content = Content})
               end,
     FooterBin =

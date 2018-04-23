@@ -14,10 +14,16 @@
       <version>4.12</version>
       <scope>test</scope>
     </dependency>
+    <!-- <dependency> -->
+    <!--   <groupId>org.apache.qpid</groupId> -->
+    <!--   <artifactId>proton-j</artifactId> -->
+    <!--   <version>0.13.0</version> -->
+    <!--   <scope>test</scope> -->
+    <!-- </dependency> -->
     <dependency>
       <groupId>org.apache.qpid</groupId>
-      <artifactId>proton-j</artifactId>
-      <version>0.13.0</version>
+      <artifactId>qpid-jms-client</artifactId>
+      <version>0.31.0</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

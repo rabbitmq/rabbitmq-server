@@ -45,9 +45,7 @@ groups() ->
           auth_failure
         ]},
       {java, [], [
-          roundtrip,
-          message_annotations,
-          footer
+          roundtrip
         ]}
     ].
 
@@ -141,14 +139,12 @@ fragmentation(Config) ->
 
 message_annotations(Config) ->
     run(Config, [
-        {dotnet, "message_annotations"},
-        {java, "MessageAnnotationsTest"}
+        {dotnet, "message_annotations"}
       ]).
 
 footer(Config) ->
     run(Config, [
-        {dotnet, "footer"},
-        {java, "FooterTest"}
+        {dotnet, "footer"}
       ]).
 
 data_types(Config) ->

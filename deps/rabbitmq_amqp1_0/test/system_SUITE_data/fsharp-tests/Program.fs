@@ -131,7 +131,8 @@ module Test =
             ["amqp:accepted:list", null
              "amqp:rejected:list", null
              "amqp:released:list", null
-             "amqp:modified:list", "amqp:not-implemented"] do
+             "amqp:modified:list", null
+             "amqp:madeup:list", "amqp:not-implemented"] do
 
             let source = new Source(Address = "outcomes_q",
                                     Outcomes = [| Symbol outcome |])
