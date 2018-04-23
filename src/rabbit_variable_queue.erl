@@ -2468,7 +2468,7 @@ reduce_memory_use(State = #vqstate {
     %% If blocked by the credit flow - the credit grant will resume processing,
     %% if limited by a batch - the batch continuation message should be sent.
     %% The continuation message will be prioritised over publishes,
-    %% but not cinsumptions, so the queue can make progess.
+    %% but not consumptions, so the queue can make progess.
     Blocked = credit_flow:blocked(),
     case {Blocked, NeedResumeA2B orelse NeedResumeB2D} of
         %% Credit bump will continue paging
