@@ -167,7 +167,7 @@ generate({as_is, TypeCode, Bin}) ->
 %% that ever happen? If not we really just need to split generate/1
 %% up into things like these...
 %% for these constructors map straight-forwardly
-constructor(symbol) -> <<16#a3>>;
+constructor(symbol) -> <<16#b3>>;
 constructor(ubyte) -> <<16#50>>;
 constructor(ushort) -> <<16#60>>;
 constructor(short) -> <<16#61>>;
@@ -189,7 +189,7 @@ constructor({described, Descriptor, Primitive}) ->
     [<<16#00>>, generate(Descriptor), constructor(Primitive)].
 
 % returns io_list
-generate(symbol, {symbol, V}) -> [<<(size(V)):8>>, V];
+generate(symbol, {symbol, V}) -> [<<(size(V)):32>>, V];
 generate(utf8, {utf8, V}) -> [<<(size(V)):32>>, V];
 generate(boolean, true) -> <<16#01>>;
 generate(boolean, false) -> <<16#00>>;

@@ -153,6 +153,8 @@ parse_array2(Count, Type, Bin, Acc) ->
     parse_array2(Count - 1, Type, Rest, [Value | Acc]).
 
 parse_constructor(16#a3) -> symbol;
+parse_constructor(16#b3) -> symbol;
+parse_constructor(16#a1) -> utf8;
 parse_constructor(16#b1) -> utf8;
 parse_constructor(16#50) -> ubyte;
 parse_constructor(16#51) -> byte;
@@ -165,7 +167,9 @@ parse_constructor(16#81) -> long;
 parse_constructor(16#40) -> null;
 parse_constructor(16#56) -> boolean;
 parse_constructor(16#f0) -> array;
-parse_constructor(0) -> described.
+parse_constructor(0) -> described;
+parse_constructor(X) ->
+    exit({failed_to_parse_constructor, X}).
 
 mapify([]) ->
     [];
