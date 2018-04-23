@@ -142,8 +142,8 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
                         recv_settle_mode = RSM} = Link, BCh) ->
     MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
     ?DEBUG("Inbound content:~n  ~p~n",
-           [[rabbit_amqp1_0_framing:pprint(Section) ||
-                Section <- rabbit_amqp1_0_framing:decode_bin(MsgBin)]]),
+           [[amqp10_framing:pprint(Section) ||
+                Section <- amqp10_framing:decode_bin(MsgBin)]]),
     {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(MsgBin),
     RKey = case LinkRKey of
                undefined -> MsgRKey;

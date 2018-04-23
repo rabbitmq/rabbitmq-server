@@ -307,7 +307,7 @@ handle_control(Flow = #'v1_0.flow'{},
 handle_control(Frame, _State) ->
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                    "Unexpected frame ~p",
-                   [rabbit_amqp1_0_framing:pprint(Frame)]).
+                   [amqp10_framing:pprint(Frame)]).
 
 run_buffer(State = #state{ writer_pid = WriterPid,
                            session = Session,

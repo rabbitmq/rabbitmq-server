@@ -200,17 +200,17 @@ call(Pid, Msg) ->
 
 %% Begin 1-0
 
-assemble_frame(Channel, Performative, rabbit_amqp1_0_framing) ->
+assemble_frame(Channel, Performative, amqp10_framing) ->
     ?DEBUG("Channel ~p <-~n~p~n~n",
-           [Channel, rabbit_amqp1_0_framing:pprint(Performative)]),
-    PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
-    rabbit_amqp1_0_binary_generator:build_frame(Channel, PerfBin);
+           [Channel, amqp10_framing:pprint(Performative)]),
+    PerfBin = amqp10_framing:encode_bin(Performative),
+    amqp10_binary_generator:build_frame(Channel, PerfBin);
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
     ?DEBUG("Channel ~p <-~n~p~n~n",
-           [Channel, rabbit_amqp1_0_framing:pprint(Performative)]),
-    PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
-    rabbit_amqp1_0_binary_generator:build_frame(Channel,
+           [Channel, amqp10_framing:pprint(Performative)]),
+    PerfBin = amqp10_framing:encode_bin(Performative),
+    amqp10_binary_generator:build_frame(Channel,
                                                 ?AMQP_SASL_FRAME_TYPE, PerfBin).
 
 %% Note: a transfer record can be followed by a number of other
@@ -219,12 +219,12 @@ assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
 %% just sending a chunk, so from this perspective it's just a binary.
 
 assemble_frames(Channel, Performative, Content, _FrameMax,
-                rabbit_amqp1_0_framing) ->
+                amqp10_framing) ->
     ?DEBUG("Channel ~p <-~n~p~n  followed by ~p bytes of content~n~n",
-           [Channel, rabbit_amqp1_0_framing:pprint(Performative),
+           [Channel, amqp10_framing:pprint(Performative),
             iolist_size(Content)]),
-    PerfBin = rabbit_amqp1_0_framing:encode_bin(Performative),
-    rabbit_amqp1_0_binary_generator:build_frame(Channel, [PerfBin, Content]).
+    PerfBin = amqp10_framing:encode_bin(Performative),
+    amqp10_binary_generator:build_frame(Channel, [PerfBin, Content]).
 
 %% End 1-0
 

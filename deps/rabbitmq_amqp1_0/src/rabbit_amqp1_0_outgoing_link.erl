@@ -45,7 +45,7 @@ attach(#'v1_0.attach'{name = Name,
             ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED -> false;
             _                                   -> ?DEFAULT_SEND_SETTLED
         end,
-    DOSym = rabbit_amqp1_0_framing:symbol_for(DefaultOutcome),
+    DOSym = amqp10_framing:symbol_for(DefaultOutcome),
     case ensure_source(Source,
                        #outgoing_link{delivery_count  = ?INIT_TXFR_COUNT,
                                       send_settled    = SndSettled,
@@ -211,11 +211,11 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
     Msg1_0 = rabbit_amqp1_0_message:annotated_message(
                RKey, Deliver, Msg),
     ?DEBUG("Outbound content:~n  ~p~n",
-           [[rabbit_amqp1_0_framing:pprint(Section) ||
-                Section <- rabbit_amqp1_0_framing:decode_bin(
+           [[amqp10_framing:pprint(Section) ||
+                Section <- amqp10_framing:decode_bin(
                              iolist_to_binary(Msg1_0))]]),
     %% TODO Ugh
-    TLen = iolist_size(rabbit_amqp1_0_framing:encode_bin(Txfr)),
+    TLen = iolist_size(amqp10_framing:encode_bin(Txfr)),
     Frames = case FrameMax of
                  unlimited ->
                      [[Txfr, Msg1_0]];
