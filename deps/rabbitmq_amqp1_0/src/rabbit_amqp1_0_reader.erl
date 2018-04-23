@@ -345,10 +345,10 @@ handle_1_0_frame0(Mode, Channel, Payload, State) ->
     end.
 
 parse_1_0_frame(Payload, _Channel) ->
-    {PerfDesc, Rest} = rabbit_amqp1_0_binary_parser:parse(Payload),
-    Perf = rabbit_amqp1_0_framing:decode(PerfDesc),
+    {PerfDesc, Rest} = amqp10_binary_parser:parse(Payload),
+    Perf = amqp10_framing:decode(PerfDesc),
     ?DEBUG("Channel ~p ->~n~p~n~s~n",
-           [_Channel, rabbit_amqp1_0_framing:pprint(Perf),
+           [_Channel, amqp10_framing:pprint(Perf),
             case Rest of
                 <<>> -> <<>>;
                 _    -> rabbit_misc:format(
@@ -390,7 +390,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                 SendFun =
                     fun() ->
                             Frame =
-                                rabbit_amqp1_0_binary_generator:build_heartbeat_frame(),
+                                amqp10_binary_generator:build_heartbeat_frame(),
                             catch rabbit_net:send(Sock, Frame)
                     end,
 
@@ -550,9 +550,9 @@ start_1_0_connection(sasl, State = #v1{sock = Sock}) ->
     Ms = {array, symbol,
           case application:get_env(rabbitmq_amqp1_0, default_user)  of
               {ok, none} -> [];
-              {ok, _}    -> [<<"ANONYMOUS">>]
+              {ok, _}    -> [{symbol, <<"ANONYMOUS">>}]
           end ++
-              [list_to_binary(atom_to_list(M)) || M <- auth_mechanisms(Sock)]},
+              [{symbol, list_to_binary(atom_to_list(M))} || M <- auth_mechanisms(Sock)]},
     Mechanisms = #'v1_0.sasl_mechanisms'{sasl_server_mechanisms = Ms},
     ok = send_on_channel0(Sock, Mechanisms, rabbit_amqp1_0_sasl),
     start_1_0_connection0(sasl, State);
@@ -606,7 +606,7 @@ send_1_0_handshake(Sock, Handshake) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, Handshake) end).
 
 send_on_channel0(Sock, Method) ->
-    send_on_channel0(Sock, Method, rabbit_amqp1_0_framing).
+    send_on_channel0(Sock, Method, amqp10_framing).
 
 send_on_channel0(Sock, Method, Framing) ->
     ok = rabbit_amqp1_0_writer:internal_send_command(
@@ -687,7 +687,7 @@ send_to_new_1_0_session(Channel, Frame, State) ->
         %% Note: the equivalent, start_channel is in channel_sup_sup
         rabbit_amqp1_0_session_sup_sup:start_session(
           %% NB subtract fixed frame header size
-          ChanSupSup, {rabbit_amqp1_0_framing, Sock, Channel,
+          ChanSupSup, {amqp10_framing, Sock, Channel,
                        case FrameMax of
                            unlimited -> unlimited;
                            _         -> FrameMax - 8

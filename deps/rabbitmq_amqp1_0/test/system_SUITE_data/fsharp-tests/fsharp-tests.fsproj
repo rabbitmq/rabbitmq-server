@@ -7,6 +7,7 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="AmqpNetLite" Version="2.0.0" />
+    <PackageReference Include="AmqpNetLite" Version="2.1.2" />
+    <PackageReference Include="AmqpNetLite.Serialization" Version="2.1.2" />
   </ItemGroup>
 </Project>
