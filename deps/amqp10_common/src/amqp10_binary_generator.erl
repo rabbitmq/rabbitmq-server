@@ -212,9 +212,3 @@ generate(array, {array, Type, List}) ->
     S = size(Body),
     %% See generate({list, ...}) for an explanation of this test.
     [<<(S + 4):32/unsigned, Count:32/unsigned>>, Body].
-% generate({short,    V})                           -> <<16#61,V:16/signed>>;
-% generate({float,    V})                           -> <<16#72,V:32/float>>;
-% generate({double,   V})                           -> <<16#82,V:64/float>>;
-% generate({char,     V})                           -> <<16#73,V:4/binary>>;
-% generate({timestamp,V})                           -> <<16#83,V:64/signed>>;
-% generate({uuid,     V})                           -> <<16#98,V:16/binary>>;
