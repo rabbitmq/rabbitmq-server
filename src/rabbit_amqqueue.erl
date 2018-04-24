@@ -1327,8 +1327,11 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
     {QPids ++ QuorumPids, QueueState}.
 
 qpids([]) -> {[], [], []}; %% optimisation
-qpids([#amqqueue{pid = QPid, type = quorum, name = QName}]) -> {[{QPid, QName}], [], []}; %% opt
-qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) -> {[], [QPid], SPids}; %% opt
+qpids([#amqqueue{quorum_leader = LeaderNode, pid = {LocalName, _},
+                 type = quorum, name = QName}]) ->
+    {[{{LocalName, LeaderNode}, QName}], [], []}; %% opt
+qpids([#amqqueue{pid = QPid, slave_pids = SPids}]) ->
+    {[], [QPid], SPids}; %% opt
 qpids(Qs) ->
     {QuoPids, MPids, SPids} =
         lists:foldl(fun (#amqqueue{pid = QPid, type = quorum, name = QName},
