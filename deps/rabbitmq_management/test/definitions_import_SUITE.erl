@@ -40,7 +40,8 @@ groups() ->
                                import_case3,
                                import_case4,
                                import_case5,
-                               import_case6
+                               import_case6,
+                               import_case7
                               ]}
     ].
 
@@ -83,6 +84,7 @@ import_case2(Config) -> import_case(Config, "case2").
 import_case3(Config) -> import_case(Config, "case3").
 import_case4(Config) -> import_case(Config, "case4").
 import_case6(Config) -> import_case(Config, "case6").
+import_case7(Config) -> import_case(Config, "case7").
 
 import_case5(Config) ->
     import_case(Config, "case5"),
