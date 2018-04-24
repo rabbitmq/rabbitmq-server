@@ -105,4 +105,5 @@ run_import_case(Path) ->
     ct:pal("Successfully loaded a definition to import from ~p~n", [Path]),
     rabbit_mgmt_wm_definitions:apply_defs(Body, ?INTERNAL_USER,
                                           fun ()  -> ct:pal("Import case ~p succeeded~n",  [Path]) end,
-                                          fun (E) -> ct:pal("Import case ~p failed: ~p~n", [Path, E]) end).
+                                          fun (E) -> ct:pal("Import case ~p failed: ~p~n", [Path, E]),
+                                                     ct:fail({failure, Path, E}) end).
