@@ -468,6 +468,9 @@ validation(Name, Terms) ->
 
 validation(_Name, [], _Validator) ->
     {error, "no policy provided", []};
+validation(Name, Terms0, Validator) when is_map(Terms0) ->
+    Terms = maps:to_list(Terms0),
+    validation(Name, Terms, Validator);
 validation(_Name, Terms, Validator) when is_list(Terms) ->
     {Keys, Modules} = lists:unzip(
                         rabbit_registry:lookup_all(Validator)),
@@ -481,8 +484,9 @@ validation(_Name, Terms, Validator) when is_list(Terms) ->
                  end;
         false -> {error, "definition must be a dictionary: ~p", [Terms]}
     end;
-validation(_Name, Term, _Validator) ->
-    {error, "parse error while reading policy: ~p", [Term]}.
+validation(Name, Term, Validator) ->
+    {error, "parse error while reading policy ~s: ~p. Validator: ~p.",
+     [Name, Term, Validator]}.
 
 validation0(Validators, Terms) ->
     case lists:foldl(
