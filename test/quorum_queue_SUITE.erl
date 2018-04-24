@@ -74,7 +74,8 @@ all_tests() ->
      dead_letter_from_classic_to_quorum_queue,
      cleanup_queue_state_on_channel_after_publish,
      cleanup_queue_state_on_channel_after_subscribe,
-     basic_cancel
+     basic_cancel,
+     purge
     ].
 
 %% -------------------------------------------------------------------
@@ -1031,6 +1032,25 @@ basic_cancel(Config) ->
             wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0)
     end.
 
+purge(Config) ->
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 2),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    _DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1), 
+    {'queue.purge_ok', 2} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0).
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->
@@ -1137,7 +1157,7 @@ wait_for_messages_pending_ack(Nodes, QName, Ready) ->
 wait_for_messages(Nodes, QName, Number, Fun, 0) ->
     Msgs = dirty_query(Nodes, QName, Fun),
     Totals = lists:map(fun(M) -> maps:size(M) end, Msgs),
-    ?assertEqual(Totals, [Number || _ <- lists:seq(1, Nodes)]);
+    ?assertEqual(Totals, [Number || _ <- lists:seq(1, length(Nodes))]);
 wait_for_messages(Nodes, QName, Number, Fun, N) ->
     Msgs = dirty_query(Nodes, QName, Fun),
     case lists:all(fun(M) ->  maps:size(M) == Number end, Msgs) of

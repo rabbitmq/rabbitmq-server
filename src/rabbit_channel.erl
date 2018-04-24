@@ -1487,10 +1487,15 @@ handle_method(#'queue.purge'{nowait = NoWait} = Method,
                              queue_collector_pid = CollectorPid,
                              virtual_host = VHostPath,
                              queue_states  = QueueStates0}) ->
-    {ok, PurgedMessageCount} = handle_method(Method, ConnPid, CollectorPid,
-                                             VHostPath, User, QueueStates0),
-    return_ok(State, NoWait,
-              #'queue.purge_ok'{message_count = PurgedMessageCount});
+    case handle_method(Method, ConnPid, CollectorPid,
+                       VHostPath, User, QueueStates0) of
+        {ok, PurgedMessageCount} ->
+            return_ok(State, NoWait,
+                      #'queue.purge_ok'{message_count = PurgedMessageCount});
+        {ok, PurgedMessageCount, QueueStates} ->
+            return_ok(State#ch{queue_states = QueueStates}, NoWait,
+                      #'queue.purge_ok'{message_count = PurgedMessageCount})
+    end;
 
 handle_method(#'tx.select'{}, _, #ch{confirm_enabled = true}) ->
     precondition_failed("cannot switch from confirm to tx mode");
@@ -2361,12 +2366,12 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
             ok
     end;
 handle_method(#'queue.purge'{queue = QueueNameBin},
-              ConnPid, _CollectorPid, VHostPath, User, _QueueStates0) ->
+              ConnPid, _CollectorPid, VHostPath, User, QueueStates0) ->
     QueueName = qbin_to_resource(QueueNameBin, VHostPath),
     check_read_permitted(QueueName, User),
     rabbit_amqqueue:with_exclusive_access_or_die(
       QueueName, ConnPid,
-      fun (Q) -> rabbit_amqqueue:purge(Q) end);
+      fun (Q) -> rabbit_amqqueue:purge(Q, QueueStates0) end);
 handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                   type        = TypeNameBin,
                                   passive     = false,

@@ -18,7 +18,7 @@
 
 -export([warn_file_limit/0]).
 -export([recover/1, stop/1, start/1, declare/6, declare/7,
-         delete_immediately/1, delete_exclusive/2, delete/5, purge/1,
+         delete_immediately/1, delete_exclusive/2, delete/5, purge/2,
          forget_all_durable/1, delete_crashed/1, delete_crashed/2,
          delete_crashed_internal/2]).
 -export([pseudo_queue/2, immutable/1]).
@@ -156,7 +156,8 @@
             rabbit_types:error('not_empty').
 -spec delete_crashed(rabbit_types:amqqueue()) -> 'ok'.
 -spec delete_crashed_internal(rabbit_types:amqqueue(), rabbit_types:username()) -> 'ok'.
--spec purge(rabbit_types:amqqueue()) -> qlen().
+-spec purge(rabbit_types:amqqueue(), #{Name :: atom() => ra_fifo_client:state()}) ->
+                   qlen() | {qlen(), #{Name :: atom() => ra_fifo_client:state()}}.
 -spec forget_all_durable(node()) -> 'ok'.
 -spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery(), #{Name :: atom() => ra_fifo_client:state()} | 'untracked') ->
                         {qpids(), #{Name :: atom() => ra_fifo_client:state()}}.
@@ -934,8 +935,12 @@ delete_crashed_internal(Q = #amqqueue{ name = QName }, ActingUser) ->
     BQ:delete_crashed(Q),
     ok = internal_delete(QName, ActingUser).
 
-purge(#amqqueue{ pid = QPid }) ->
-    delegate:invoke(QPid, {gen_server2, call, [purge, infinity]}).
+purge(#amqqueue{ pid = QPid, type = classic}, _) ->
+    delegate:invoke(QPid, {gen_server2, call, [purge, infinity]});
+purge(#amqqueue{ pid = {Name, _} = Id, type = quorum}, FStates) ->
+    FState0 = get_quorum_state(Id, FStates),
+    {ok, Total, FState} = rabbit_quorum_queue:purge(FState0),
+    {ok, Total, maps:put(Name, FState, FStates)}.
 
 requeue(QPid, MsgIds, ChPid) ->
     delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]}).

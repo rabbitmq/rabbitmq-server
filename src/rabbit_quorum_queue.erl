@@ -20,6 +20,7 @@
 -export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
 -export([info/1, info/2, stat/1, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/9, basic_cancel/4]).
+-export([purge/1]).
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
@@ -260,6 +261,9 @@ info(Q, Items) ->
 
 stat(_Q) ->
     {ok, 0, 0}.  %% TODO length, consumers count
+
+purge(FState) ->
+    ra_fifo_client:purge(FState).
 
 %%----------------------------------------------------------------------------
 dlx_mfa(#amqqueue{name = Resource} = Q) ->
