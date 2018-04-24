@@ -146,7 +146,8 @@
           options = #{},
           type = classic,
           created_at,                  %% immutable
-          quorum_nodes }).
+          quorum_nodes,
+          quorum_leader }).
 
 -record(exchange_serial, {name, next}).
 
