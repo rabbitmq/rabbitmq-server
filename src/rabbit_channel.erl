@@ -2419,11 +2419,7 @@ handle_deliver(ConsumerTag, AckRequired,
                                      content       = Content}},
                State = #ch{writer_pid = WriterPid,
                            next_tag   = DeliveryTag}) ->
-    SendFun = case is_pid(QPid) of
-                  true -> send_command_and_notify;
-                  false -> send_command
-              end,
-    ok = rabbit_writer:SendFun(
+    ok = rabbit_writer:send_command_and_notify(
            WriterPid, QPid, self(),
            #'basic.deliver'{consumer_tag = ConsumerTag,
                             delivery_tag = DeliveryTag,
