@@ -109,6 +109,7 @@ declare(#amqqueue{name = QName,
     NewQ = Q#amqqueue{pid = Id,
                       quorum_nodes = Nodes},
     ets:insert(quorum_mapping, {RaName, QName}),
+    _ = rabbit_amqqueue:internal_declare(NewQ, false),
     RaMachine = {module, ra_fifo,
                  #{dead_letter_handler => dlx_mfa(NewQ),
                    cancel_customer_handler => {?MODULE, cancel_customer, []},
@@ -116,7 +117,6 @@ declare(#amqqueue{name = QName,
     {ok, _Started, _NotStarted} = ra:start_cluster(RaName, RaMachine,
                                                    [{RaName, Node} || Node <- Nodes]),
     FState = init_state(Id),
-    _ = rabbit_amqqueue:internal_declare(NewQ, false),
     OwnerPid = case ExclusiveOwner of
                    none -> '';
                    _ -> ExclusiveOwner
