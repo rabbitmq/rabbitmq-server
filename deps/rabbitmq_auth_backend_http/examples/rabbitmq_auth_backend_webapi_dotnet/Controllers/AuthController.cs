@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Formatting;
+using System.Text;
 using System.Web.Http;
 
 namespace WebApiHttpAuthService.Controllers
@@ -9,8 +10,11 @@ namespace WebApiHttpAuthService.Controllers
     [RoutePrefix("auth")]
     public class AuthController : ApiController
     {
+        // Note: the following is necessary to ensure that no
+        // BOM is part of the response
+        private static readonly encoding = new UTF8Encoding(false);
 
-       [Route("user")]
+        [Route("user")]
         [HttpPost]
         public HttpResponseMessage user(FormDataCollection form)
         {
@@ -34,7 +38,7 @@ namespace WebApiHttpAuthService.Controllers
             }
 
             var resp = new HttpResponseMessage(HttpStatusCode.OK);
-            resp.Content = new StringContent(content, System.Text.Encoding.UTF8, "text/plain");
+            resp.Content = new StringContent(content, encoding, "text/plain");
             return resp;
         }
 
@@ -62,7 +66,7 @@ namespace WebApiHttpAuthService.Controllers
             }
 
             var resp = new HttpResponseMessage(HttpStatusCode.OK);
-            resp.Content = new StringContent(content, System.Text.Encoding.UTF8, "text/plain");
+            resp.Content = new StringContent(content, encoding, "text/plain");
             return resp;
         }
 
@@ -96,7 +100,7 @@ namespace WebApiHttpAuthService.Controllers
 
 
             var resp = new HttpResponseMessage(HttpStatusCode.OK);
-            resp.Content = new StringContent(content, System.Text.Encoding.UTF8, "text/plain");
+            resp.Content = new StringContent(content, encoding, "text/plain");
             return resp;
         }
 
@@ -129,7 +133,7 @@ namespace WebApiHttpAuthService.Controllers
             }
 
             var resp = new HttpResponseMessage(HttpStatusCode.OK);
-            resp.Content = new StringContent(content, System.Text.Encoding.UTF8, "text/plain");
+            resp.Content = new StringContent(content, encoding, "text/plain");
             return resp;
         }
                        
