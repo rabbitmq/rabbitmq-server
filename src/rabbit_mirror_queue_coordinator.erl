@@ -365,7 +365,12 @@ handle_cast({gm_deaths, DeadGMPids},
                                                    DeadPids),
             {stop, shutdown, State};
         {error, not_found} ->
-            {stop, normal, State}
+            {stop, normal, State};
+        {error, {not_synced, _}} ->
+            rabbit_log:error("Mirror queue ~p in unexpected state."
+                             " Promoted to master but already a master.",
+                             [QueueName]),
+            error(unexpected_mirrored_state)
     end;
 
 handle_cast(request_depth, State = #state { depth_fun = DepthFun,
