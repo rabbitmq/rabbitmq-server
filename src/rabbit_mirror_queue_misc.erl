@@ -311,7 +311,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
     [receive
          {'DOWN', MRef, process, _Pid, _Info} ->
              ok
-     after WT ->
+     after WaitTimeout ->
              rabbit_mirror_queue_misc:log_warning(
                QName, "Missing 'DOWN' message from ~p in node ~p~n",
                [Pid, node(Pid)]),
