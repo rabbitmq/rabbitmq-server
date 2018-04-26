@@ -1057,8 +1057,7 @@ notify_queue_binding_deletions(QueueDeletions) ->
                     fun rabbit_binding:combine_deletions/2,
                     rabbit_binding:new_deletions(),
                     QueueDeletions
-                ),
-                ?INTERNAL_USER
+                )
             )
         end
     ).
@@ -1067,8 +1066,7 @@ notify_queues_deleted(QueueDeletions) ->
     lists:foreach(
       fun(Queue) ->
               ok = rabbit_event:notify(queue_deleted,
-                                       [{name, Queue},
-                                        {user, ?INTERNAL_USER}])
+                                       [{name, Queue}])
       end,
       QueueDeletions).
 
