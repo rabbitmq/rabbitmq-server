@@ -103,6 +103,7 @@ declare(#amqqueue{name = QName,
                   arguments = Arguments,
                   exclusive_owner = ExclusiveOwner,
                   options = Opts} = Q) ->
+    ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
     check_invalid_arguments(QName, Arguments),
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
@@ -111,27 +112,38 @@ declare(#amqqueue{name = QName,
                       quorum_nodes = Nodes},
     ets:insert(quorum_mapping, {RaName, QName}),
     _ = rabbit_amqqueue:internal_declare(NewQ, false),
-    RaMachine = {module, ra_fifo,
-                 #{dead_letter_handler => dlx_mfa(NewQ),
-                   cancel_customer_handler => {?MODULE, cancel_customer, []},
-                   become_leader_handler => {?MODULE, become_leader, []}}},
-    {ok, _Started, _NotStarted} = ra:start_cluster(RaName, RaMachine,
-                                                   [{RaName, Node} || Node <- Nodes]),
-    FState = init_state(Id),
-    OwnerPid = case ExclusiveOwner of
-                   none -> '';
-                   _ -> ExclusiveOwner
-               end,
-    %% TODO do the quorum queue receive the `force_event_refresh`? what do we do with it?
-    rabbit_event:notify(queue_created,
-                        [{name, QName},
-                         {durable, Durable},
-                         {auto_delete, AutoDelete},
-                         {arguments, Arguments},
-                         {owner_pid, OwnerPid},
-                         {exclusive, is_pid(ExclusiveOwner)},
-                         {user_who_performed_action, maps:get(user, Opts, ?UNKNOWN_USER)}]),
-    {new, NewQ, FState}.
+    RaMachine = ra_machine(NewQ),
+    case ra:start_cluster(RaName, RaMachine,
+                          [{RaName, Node} || Node <- Nodes]) of
+        {ok, _, _} ->
+            FState = init_state(Id),
+            OwnerPid = case ExclusiveOwner of
+                           none -> '';
+                           _ -> ExclusiveOwner
+                       end,
+            %% TODO does the quorum queue receive the `force_event_refresh`?
+            %% what do we do with it?
+            rabbit_event:notify(queue_created,
+                                [{name, QName},
+                                 {durable, Durable},
+                                 {auto_delete, AutoDelete},
+                                 {arguments, Arguments},
+                                 {owner_pid, OwnerPid},
+                                 {exclusive, is_pid(ExclusiveOwner)},
+                                 {user_who_performed_action, ActingUser}]),
+            {new, NewQ, FState};
+        {error, Error} ->
+            _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+            rabbit_misc:protocol_error(internal_error,
+                            "Cannot declare a queue '~s' on node '~s': ~255p",
+                            [rabbit_misc:rs(QName), node(), Error])
+    end.
+
+ra_machine(Q) ->
+    {module, ra_fifo,
+     #{dead_letter_handler => dlx_mfa(Q),
+       cancel_customer_handler => {?MODULE, cancel_customer, []},
+       become_leader_handler => {?MODULE, become_leader, []}}}.
 
 cancel_customer({ConsumerTag, ChPid}, Name) ->
     Node = node(ChPid),
@@ -160,9 +172,26 @@ become_leader(Name) ->
 recover(Queues) ->
     [begin
          ets:insert_new(quorum_mapping, {Name, QName}),
-         ok = ra:restart_node({Name, node()}),
+         case ra:restart_node({Name, node()}) of
+             ok ->
+                 % queue was restarted, good
+                 ok;
+             {error, Err}
+               when Err == not_started orelse
+                    Err == name_not_registered ->
+                 % queue was never started on this node
+                 % so needs to be started from scratch.
+                 Machine = ra_machine(Q),
+                 RaNodes = [{Name, Node} || Node <- Nodes],
+                 % TODO: should we crash the vhost here or just log the error
+                 % and continue?
+                 ok = ra:start_node(Name, {Name, node()},
+                                    Machine, RaNodes)
+         end,
          rabbit_amqqueue:internal_declare(Q, true)
-     end || #amqqueue{name = QName, pid = {Name, _}} = Q <- Queues].
+     end || #amqqueue{name = QName,
+                      pid = {Name, _},
+                      quorum_nodes = Nodes} = Q <- Queues].
 
 stop(VHost) ->
     _ = [ra:stop_node(Pid) || #amqqueue{pid = Pid} <- find_quorum_queues(VHost)],
