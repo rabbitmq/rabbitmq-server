@@ -209,9 +209,6 @@ handle_call({gm_deaths, DeadGMPids}, From,
             gen_server2:reply(From, ok),
             {stop, normal, State};
         {error, {not_synced, SPids}} ->
-            WaitTimeout = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000),
-            rabbit_mirror_queue_misc:stop_all_slaves(
-                {error, not_synced}, SPids, QName, GM, WaitTimeout),
             BQ:delete_and_terminate({error, not_synced}, BQS),
             {stop, normal, State#state{backing_queue_state = undefined}};
         {ok, Pid, DeadPids, ExtraNodes} ->
