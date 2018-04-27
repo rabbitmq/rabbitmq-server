@@ -151,7 +151,7 @@ cancel_customer(ChPid, ConsumerTag, QName) ->
                          {user_who_performed_action, ?INTERNAL_USER}]).
 
 become_leader(Name) ->
-    Fun = fun(Q1) -> Q1#amqqueue{quorum_leader = node()} end,
+    Fun = fun(Q1) -> Q1#amqqueue{pid = {Name, node()}} end,
     rabbit_misc:execute_mnesia_transaction(
       fun() ->
               rabbit_amqqueue:update(queue_name(Name), Fun)
@@ -373,11 +373,10 @@ i(garbage_collection, #amqqueue{pid = {Name, _}}) ->
             []
     end;
 i(followers, #amqqueue{quorum_nodes = Nodes,
-                       quorum_leader = Leader,
-                       pid = {Name, _}}) ->
+                       pid = {Name, Leader}}) ->
     AliveNodes = [Node || Node <- Nodes, is_process_alive(Name, Node)],
     AliveNodes -- [Leader];
-i(leader, #amqqueue{quorum_leader = Leader}) ->
+i(leader, #amqqueue{pid = {_, Leader}}) ->
     Leader;
 i(_K, _Q) -> ''.
 

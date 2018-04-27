@@ -304,7 +304,7 @@ find_durable_queues(VHost) ->
                                     <- mnesia:table(rabbit_durable_queue),
                                 VH =:= VHost,
                                 (Type == classic andalso
-                                      (qnode(Pid) == Node andalso
+                                      (is_local_to_node(Pid, Node) andalso
                                        %% Terminations on node down will not remove the rabbit_queue
                                        %% record if it is a mirrored queue (such info is now obtained from
                                        %% the policy). Thus, we must check if the local pid is alive
@@ -325,7 +325,7 @@ find_durable_queues() ->
                                               quorum_nodes = QuorumNodes}
                                     <- mnesia:table(rabbit_durable_queue),
                                 (Type == classic andalso
-                                      (qnode(Pid) == Node andalso
+                                      (is_local_to_node(Pid, Node) andalso
                                        %% Terminations on node down will not remove the rabbit_queue
                                        %% record if it is a mirrored queue (such info is now obtained from
                                        %% the policy). Thus, we must check if the local pid is alive
@@ -710,8 +710,12 @@ list_names() -> mnesia:dirty_all_keys(rabbit_queue).
 
 list_local_names() ->
     [ Q#amqqueue.name || #amqqueue{state = State, pid = QPid} = Q <- list(),
-           State =/= crashed,
-           node() =:= qnode(QPid) ].
+           State =/= crashed, is_local_to_node(QPid, node())].
+
+is_local_to_node(QPid, Node) when is_pid(QPid) ->
+    Node =:= node(QPid);
+is_local_to_node({_, Leader}, Node) ->
+    Node =:= Leader.
 
 qnode(QPid) when is_pid(QPid) ->
     node(QPid);
@@ -855,9 +859,8 @@ info_local(VHostPath) ->
     map(list_local(VHostPath), fun (Q) -> info(Q, [name]) end).
 
 list_local(VHostPath) ->
-    [ Q || #amqqueue{state = State, pid=QPid} = Q <- list(VHostPath),
-           State =/= crashed,
-           node() =:= qnode(QPid) ].
+    [ Q || #amqqueue{state = State, pid = QPid} = Q <- list(VHostPath),
+           State =/= crashed, is_local_to_node(QPid, node()) ].
 
 force_event_refresh(Ref) ->
     [gen_server2:cast(Q#amqqueue.pid,
@@ -1099,7 +1102,7 @@ forget_all_durable(Node) ->
                                            #amqqueue{_ = '_'}, write),
                   [forget_node_for_queue(Node, Q) ||
                       #amqqueue{pid = Pid} = Q <- Qs,
-                      qnode(Pid) =:= Node],
+                      is_local_to_node(Pid, Node)],
                   ok
           end),
     ok.
@@ -1219,7 +1222,7 @@ on_node_down(Node) ->
                     qlc:e(qlc:q([{QName, delete_queue(QName)} ||
                                   #amqqueue{name = QName, pid = Pid} =
                                   Q <- mnesia:table(rabbit_queue),
-                                    qnode(Pid) == Node andalso
+                                    is_local_to_node(Pid, Node) andalso
                                     not is_queue_process_alive(Pid) andalso
                                     (not rabbit_amqqueue:is_mirrored(Q) orelse
                                      rabbit_amqqueue:is_dead_exclusive(Q))])),
