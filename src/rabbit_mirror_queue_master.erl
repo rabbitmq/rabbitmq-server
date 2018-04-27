@@ -212,33 +212,7 @@ delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
 
 stop_all_slaves(Reason, #state{name = QName, gm = GM, wait_timeout = WT}) ->
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
-    PidsMRefs = [{Pid, erlang:monitor(process, Pid)} || Pid <- [GM | SPids]],
-    ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
-    %% It's possible that we could be partitioned from some slaves
-    %% between the lookup and the broadcast, in which case we could
-    %% monitor them but they would not have received the GM
-    %% message. So only wait for slaves which are still
-    %% not-partitioned.
-    [receive
-         {'DOWN', MRef, process, _Pid, _Info} ->
-             ok
-     after WT ->
-             rabbit_mirror_queue_misc:log_warning(
-               QName, "Missing 'DOWN' message from ~p in node ~p~n",
-               [Pid, node(Pid)]),
-             ok
-     end
-     || {Pid, MRef} <- PidsMRefs, rabbit_mnesia:on_running_node(Pid)],
-    %% Normally when we remove a slave another slave or master will
-    %% notice and update Mnesia. But we just removed them all, and
-    %% have stopped listening ourselves. So manually clean up.
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              [Q] = mnesia:read({rabbit_queue, QName}),
-              rabbit_mirror_queue_misc:store_updated_slaves(
-                Q #amqqueue { gm_pids = [], slave_pids = [] })
-      end),
-    ok = gm:forget_group(QName).
+    rabbit_mirror_queue_misc:stop_all_slaves(Reason, SPids, QName, GM, WT).
 
 purge(State = #state { gm                  = GM,
                        backing_queue       = BQ,
