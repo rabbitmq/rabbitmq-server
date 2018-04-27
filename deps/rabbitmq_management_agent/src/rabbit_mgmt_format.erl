@@ -286,6 +286,12 @@ format_socket_opts([{user_lookup_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
 format_socket_opts([{sni_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
+format_socket_opts([{sni_hosts, Value} | Tail], Acc) ->
+    ConvertedValue = [
+                      {rabbit_data_coercion:to_binary(Hostname), Opts}
+                      || {Hostname, Opts} <- Value
+                     ],
+    format_socket_opts(Tail, [{sni_hosts, ConvertedValue} | Acc]);
 format_socket_opts([{reuse_session, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
 %% we do not want to report configured cipher suites, even
