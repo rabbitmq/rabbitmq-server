@@ -208,7 +208,7 @@ handle_call({gm_deaths, DeadGMPids}, From,
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State};
-        {error, {not_synced, SPids}} ->
+        {error, {not_synced, _SPids}} ->
             BQ:delete_and_terminate({error, not_synced}, BQS),
             {stop, normal, State#state{backing_queue_state = undefined}};
         {ok, Pid, DeadPids, ExtraNodes} ->
