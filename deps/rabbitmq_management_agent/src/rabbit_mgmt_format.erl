@@ -286,6 +286,11 @@ format_socket_opts([{user_lookup_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
 format_socket_opts([{sni_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
+%% we do not report SNI host details in the UI,
+%% so skip this option and avoid some recursive formatting
+%% complexity
+format_socket_opts([{sni_hosts, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, Acc);
 format_socket_opts([{reuse_session, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
 %% we do not want to report configured cipher suites, even
