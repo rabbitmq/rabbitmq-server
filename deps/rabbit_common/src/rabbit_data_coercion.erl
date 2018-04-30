@@ -25,8 +25,9 @@ to_binary(Val) when is_atom(Val)    -> atom_to_binary(Val, utf8);
 to_binary(Val) when is_integer(Val) -> integer_to_binary(Val);
 to_binary(Val)                      -> Val.
 
--spec to_list(Val :: integer() | list() | binary() | atom()) -> list().
+-spec to_list(Val :: integer() | list() | binary() | atom() | map()) -> list().
 to_list(Val) when is_list(Val)    -> Val;
+to_list(Val) when is_map(Val)     -> maps:to_list(Val);
 to_list(Val) when is_atom(Val)    -> atom_to_list(Val);
 to_list(Val) when is_binary(Val)  -> binary_to_list(Val);
 to_list(Val) when is_integer(Val) -> integer_to_list(Val).
