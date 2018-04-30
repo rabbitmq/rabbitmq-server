@@ -401,7 +401,11 @@ maybe_auto_sync(Q = #amqqueue{pid = QPid}) ->
 
 sync_queue(Q) ->
     rabbit_amqqueue:with(
-      Q, fun(#amqqueue{pid = QPid}) -> rabbit_amqqueue:sync_mirrors(QPid) end).
+      Q, fun(#amqqueue{pid = QPid, type = classic}) ->
+                 rabbit_amqqueue:sync_mirrors(QPid);
+            (#amqqueue{type = quorum}) ->
+                 {error, quorum_queue_not_supported}
+         end).
 
 cancel_sync_queue(Q) ->
     rabbit_amqqueue:with(
