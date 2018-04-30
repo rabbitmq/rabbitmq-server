@@ -39,7 +39,6 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(start_gc, State) ->
-    rabbit_log:warning("########### STARTING GC ~n", []),
     gc_connections(),
     gc_channels(),
     gc_queues(),

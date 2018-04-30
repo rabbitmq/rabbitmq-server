@@ -38,7 +38,8 @@ groups() ->
                                             leadership_takeover,
                                             delete_declare,
                                             metrics_cleanup_on_leadership_takeover,
-                                            metrics_cleanup_on_leader_crash]}
+                                            metrics_cleanup_on_leader_crash,
+                                            declare_during_node_down]}
                      ]}
     ].
 
@@ -1114,10 +1115,24 @@ purge(Config) ->
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     _DeliveryTag = consume(Ch, QQ, false),
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
-    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1), 
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
     {'queue.purge_ok', 2} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 0).
+
+declare_during_node_down(Config) ->
+    [Node, _, DownNode] = Nodes = rabbit_ct_broker_helpers:get_node_configs(
+                             Config, nodename),
+    rabbit_ct_broker_helpers:stop_node(Config, DownNode),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    rabbit_ct_broker_helpers:start_node(Config, DownNode),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    ok.
 
 %%----------------------------------------------------------------------------
 
