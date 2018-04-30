@@ -926,13 +926,59 @@ delete_immediately(QPids) ->
     [rabbit_quorum_queue:delete_immediately(QPid) || QPid <- Quorum],
     ok.
 
-
 delete(#amqqueue{ type = quorum, pid = QPid} = Q,
        IfUnused, IfEmpty, ActingUser, QueueStates0) ->
     {ok, Msgs} = rabbit_quorum_queue:delete(Q, IfUnused, IfEmpty, ActingUser),
     {ok, Msgs, maps:remove(QPid, QueueStates0)};
-delete(#amqqueue{ pid = QPid }, IfUnused, IfEmpty, ActingUser, _QueueStates0) ->
-    delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]}).
+delete(Q, IfUnused, IfEmpty, ActingUser, _QueueState) ->
+    case wait_for_promoted_or_stopped(Q) of
+        {promoted, #amqqueue{pid = QPid}} ->
+            delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]});
+        {stopped, Q1} ->
+            #resource{name = Name, virtual_host = Vhost} = Q1#amqqueue.name,
+            case IfEmpty of
+                true ->
+                    rabbit_log:error("Queue ~s in vhost ~s has its master node down and "
+                                     "no mirrors available or eligible for promotion. "
+                                     "The queue may be non-empty. "
+                                     "Refusing to force-delete.",
+                                     [Name, Vhost]),
+                    {error, not_empty};
+                false ->
+                    rabbit_log:warning("Queue ~s in vhost ~s has its master node is down and "
+                                       "no mirrors available or eligible for promotion. "
+                                       "Forcing queue deletion.",
+                                       [Name, Vhost]),
+                    delete_crashed_internal(Q1, ActingUser),
+                    {ok, 0}
+            end;
+        {error, not_found} ->
+            %% Assume the queue was deleted
+            {ok, 0}
+    end.
+
+-spec wait_for_promoted_or_stopped(#amqqueue{}) -> {promoted, #amqqueue{}} | {stopped, #amqqueue{}} | {error, not_found}.
+wait_for_promoted_or_stopped(#amqqueue{name = QName}) ->
+    case lookup(QName) of
+        {ok, Q = #amqqueue{pid = QPid, slave_pids = SPids}} ->
+            case rabbit_mnesia:is_process_alive(QPid) of
+                true  -> {promoted, Q};
+                false ->
+                    case lists:any(fun(Pid) ->
+                                       rabbit_mnesia:is_process_alive(Pid)
+                                   end, SPids) of
+                        %% There is a live slave. May be promoted
+                        true ->
+                            timer:sleep(100),
+                            wait_for_promoted_or_stopped(Q);
+                        %% All slave pids are stopped.
+                        %% No process left for the queue
+                        false -> {stopped, Q}
+                    end
+            end;
+        {error, not_found} ->
+            {error, not_found}
+    end.
 
 delete_crashed(Q) ->
     delete_crashed(Q, ?INTERNAL_USER).
@@ -1068,12 +1114,7 @@ resume(QPid, ChPid) -> delegate:invoke_no_result(QPid, {gen_server2, cast, [{res
 
 internal_delete1(QueueName, OnlyDurable) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
-    %% this 'guarded' delete prevents unnecessary writes to the mnesia
-    %% disk log
-    case mnesia:wread({rabbit_durable_queue, QueueName}) of
-        []  -> ok;
-        [_] -> ok = mnesia:delete({rabbit_durable_queue, QueueName})
-    end,
+    mnesia:delete({rabbit_durable_queue, QueueName}),
     %% we want to execute some things, as decided by rabbit_exchange,
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName, OnlyDurable).
@@ -1224,35 +1265,74 @@ maybe_clear_recoverable_node(Node,
     end.
 
 on_node_down(Node) ->
-    rabbit_misc:execute_mnesia_tx_with_tail(
-      fun () -> QsDels =
-                    qlc:e(qlc:q([{QName, delete_queue(QName)} ||
-                                  #amqqueue{name = QName, pid = Pid} =
-                                  Q <- mnesia:table(rabbit_queue),
-                                    is_local_to_node(Pid, Node) andalso
-                                    not is_queue_process_alive(Pid) andalso
-                                    (not rabbit_amqqueue:is_mirrored(Q) orelse
-                                     rabbit_amqqueue:is_dead_exclusive(Q))])),
-                {Qs, Dels} = lists:unzip(QsDels),
-                T = rabbit_binding:process_deletions(
-                      lists:foldl(fun rabbit_binding:combine_deletions/2,
-                                  rabbit_binding:new_deletions(), Dels),
-                      ?INTERNAL_USER),
-                fun () ->
-                        T(),
-                        lists:foreach(
-                          fun(QName) ->
-                                  rabbit_core_metrics:queue_deleted(QName),
-                                  ok = rabbit_event:notify(queue_deleted,
-                                                           [{name, QName},
-                                                            {user, ?INTERNAL_USER}])
-                          end, Qs)
-                end
-      end).
+    {QueueNames, QueueDeletions} = delete_queues_on_node_down(Node),
+    notify_queue_binding_deletions(QueueDeletions),
+    rabbit_core_metrics:queues_deleted(QueueNames),
+    notify_queues_deleted(QueueNames),
+    ok.
+
+delete_queues_on_node_down(Node) ->
+    lists:unzip(lists:flatten([
+        rabbit_misc:execute_mnesia_transaction(
+          fun () -> [{Queue, delete_queue(Queue)} || Queue <- Queues] end
+        ) || Queues <- partition_queues(queues_to_delete_when_node_down(Node))
+    ])).
 
 delete_queue(QueueName) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
     rabbit_binding:remove_transient_for_destination(QueueName).
+
+% If there are many queues and we delete them all in a single Mnesia transaction,
+% this can block all other Mnesia operations for a really long time.
+% In situations where a node wants to (re-)join a cluster,
+% Mnesia won't be able to sync on the new node until this operation finishes.
+% As a result, we want to have multiple Mnesia transactions so that other
+% operations can make progress in between these queue delete transactions.
+%
+% 10 queues per Mnesia transaction is an arbitrary number, but it seems to work OK with 50k queues per node.
+partition_queues([Q0,Q1,Q2,Q3,Q4,Q5,Q6,Q7,Q8,Q9 | T]) ->
+    [[Q0,Q1,Q2,Q3,Q4,Q5,Q6,Q7,Q8,Q9] | partition_queues(T)];
+partition_queues(T) ->
+    [T].
+
+queues_to_delete_when_node_down(NodeDown) ->
+    rabbit_misc:execute_mnesia_transaction(fun () ->
+        qlc:e(qlc:q([QName ||
+            #amqqueue{name = QName, pid = Pid} = Q <- mnesia:table(rabbit_queue),
+                qnode(Pid) == NodeDown andalso
+                not rabbit_mnesia:is_process_alive(qpid(Pid)) andalso
+                (not rabbit_amqqueue:is_mirrored(Q) orelse
+                rabbit_amqqueue:is_dead_exclusive(Q))]
+        ))
+    end).
+
+qpid(P) when is_pid(P) ->
+    P;
+qpid({Name, _}) ->
+    whereis(Name).
+
+notify_queue_binding_deletions(QueueDeletions) ->
+    rabbit_misc:execute_mnesia_tx_with_tail(
+        fun() ->
+            rabbit_binding:process_deletions(
+                lists:foldl(
+                    fun rabbit_binding:combine_deletions/2,
+                    rabbit_binding:new_deletions(),
+                    QueueDeletions
+                ),
+                ?INTERNAL_USER
+            )
+        end
+    ).
+
+notify_queues_deleted(QueueDeletions) ->
+    lists:foreach(
+      fun(Queue) ->
+              ok = rabbit_event:notify(queue_deleted,
+                                       [{name, Queue},
+                                        {user, ?INTERNAL_USER}])
+      end,
+      QueueDeletions).
 
 pseudo_queue(QueueName, Pid) ->
     #amqqueue{name         = QueueName,

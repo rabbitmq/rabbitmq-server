@@ -184,11 +184,16 @@ inject_randomized_delay() ->
 -spec randomized_delay_range_in_ms() -> {integer(), integer()}.
 
 randomized_delay_range_in_ms() ->
+  Backend    = backend(),
+  Default    = case erlang:function_exported(Backend, randomized_startup_delay_range, 0) of
+                   true  -> Backend:randomized_startup_delay_range();
+                   false -> ?DEFAULT_STARTUP_RANDOMIZED_DELAY
+               end,
   {Min, Max} = case application:get_env(rabbit, cluster_formation) of
                    {ok, Proplist} ->
-                       proplists:get_value(randomized_startup_delay_range, Proplist, ?DEFAULT_STARTUP_RANDOMIZED_DELAY);
+                       proplists:get_value(randomized_startup_delay_range, Proplist, Default);
                    undefined      ->
-                       ?DEFAULT_STARTUP_RANDOMIZED_DELAY
+                       Default
                end,
     {Min * 1000, Max * 1000}.
 

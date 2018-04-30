@@ -923,7 +923,9 @@ handle_pre_hibernate(State = #vqstate { index_state = IndexState }) ->
     State #vqstate { index_state = rabbit_queue_index:flush(IndexState) }.
 
 handle_info(bump_reduce_memory_use, State = #vqstate{ waiting_bump = true }) ->
-    State#vqstate{ waiting_bump = false }.
+    State#vqstate{ waiting_bump = false };
+handle_info(bump_reduce_memory_use, State) ->
+    State.
 
 resume(State) -> a(reduce_memory_use(State)).
 
@@ -2476,7 +2478,7 @@ reduce_memory_use(State = #vqstate {
     %% If blocked by the credit flow - the credit grant will resume processing,
     %% if limited by a batch - the batch continuation message should be sent.
     %% The continuation message will be prioritised over publishes,
-    %% but not cinsumptions, so the queue can make progess.
+    %% but not consumptions, so the queue can make progess.
     Blocked = credit_flow:blocked(),
     case {Blocked, NeedResumeA2B orelse NeedResumeB2D} of
         %% Credit bump will continue paging

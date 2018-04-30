@@ -223,13 +223,18 @@ handle_call(go, _From, {not_started, Q} = NotStarted) ->
     end;
 
 handle_call({gm_deaths, DeadGMPids}, From,
-            State = #state { gm = GM, q = Q = #amqqueue {
-                                                 name = QName, pid = MPid }}) ->
+            State = #state{ gm = GM,
+                            q = Q = #amqqueue{ name = QName, pid = MPid },
+                            backing_queue       = BQ,
+                            backing_queue_state = BQS}) ->
     Self = self(),
     case rabbit_mirror_queue_misc:remove_from_queue(QName, Self, DeadGMPids) of
         {error, not_found} ->
             gen_server2:reply(From, ok),
             {stop, normal, State};
+        {error, {not_synced, _SPids}} ->
+            BQ:delete_and_terminate({error, not_synced}, BQS),
+            {stop, normal, State#state{backing_queue_state = undefined}};
         {ok, Pid, DeadPids, ExtraNodes} ->
             rabbit_mirror_queue_misc:report_deaths(Self, false, QName,
                                                    DeadPids),

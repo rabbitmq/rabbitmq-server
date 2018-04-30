@@ -57,7 +57,9 @@ groups() ->
       {clustered, [], [
           {cluster_size_2, [], [
               vhost_deletion,
+              force_delete_if_no_master,
               promote_on_shutdown,
+              promote_on_failure,
               slave_recovers_after_vhost_failure,
               slave_recovers_after_vhost_down_an_up,
               master_migrates_on_vhost_down,
@@ -247,12 +249,51 @@ vhost_deletion(Config) ->
     ok = rpc:call(A, rabbit_vhost, delete, [<<"/">>, <<"acting-user">>]),
     ok.
 
-promote_on_shutdown(Config) ->
+force_delete_if_no_master(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.promote">>,
-      <<"all">>, [{<<"ha-promote-on-shutdown">>, <<"always">>}]),
     rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.nopromote">>,
       <<"all">>),
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    [begin
+         amqp_channel:call(ACh, #'queue.declare'{queue   = Q,
+                                                 durable = true}),
+         rabbit_ct_client_helpers:publish(ACh, Q, 10)
+     end || Q <- [<<"ha.nopromote.test1">>, <<"ha.nopromote.test2">>]],
+    ok = rabbit_ct_broker_helpers:restart_node(Config, B),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, A),
+
+    BCh = rabbit_ct_client_helpers:open_channel(Config, B),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 404, _}}, _},
+       amqp_channel:call(
+         BCh, #'queue.declare'{queue   = <<"ha.nopromote.test1">>,
+                               durable = true})),
+
+    BCh1 = rabbit_ct_client_helpers:open_channel(Config, B),
+    ?assertExit(
+        {{shutdown, {server_initiated_close, 404, _}}, _},
+        amqp_channel:call(
+            BCh1, #'queue.declare'{queue   = <<"ha.nopromote.test2">>,
+                                   durable = true})),
+    BCh2 = rabbit_ct_client_helpers:open_channel(Config, B),
+    #'queue.delete_ok'{} =
+        amqp_channel:call(BCh2, #'queue.delete'{queue = <<"ha.nopromote.test1">>}),
+    %% Delete with if_empty will fail, since we don't know if the queue is empty
+    ?assertExit(
+        {{shutdown, {server_initiated_close, 406, _}}, _},
+        amqp_channel:call(BCh2, #'queue.delete'{queue = <<"ha.nopromote.test2">>,
+                                                if_empty = true})),
+    BCh3 = rabbit_ct_client_helpers:open_channel(Config, B),
+    #'queue.delete_ok'{} =
+        amqp_channel:call(BCh3, #'queue.delete'{queue = <<"ha.nopromote.test2">>}),
+    ok.
+
+promote_on_failure(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.promote">>,
+      <<"all">>, [{<<"ha-promote-on-failure">>, <<"always">>}]),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.nopromote">>,
+      <<"all">>, [{<<"ha-promote-on-failure">>, <<"when-synced">>}]),
 
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     [begin
@@ -261,7 +302,7 @@ promote_on_shutdown(Config) ->
          rabbit_ct_client_helpers:publish(ACh, Q, 10)
      end || Q <- [<<"ha.promote.test">>, <<"ha.nopromote.test">>]],
     ok = rabbit_ct_broker_helpers:restart_node(Config, B),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, A),
+    ok = rabbit_ct_broker_helpers:kill_node(Config, A),
     BCh = rabbit_ct_client_helpers:open_channel(Config, B),
     #'queue.declare_ok'{message_count = 0} =
         amqp_channel:call(
@@ -277,6 +318,54 @@ promote_on_shutdown(Config) ->
     #'queue.declare_ok'{message_count = 10} =
         amqp_channel:call(
           ACh2, #'queue.declare'{queue   = <<"ha.nopromote.test">>,
+                                 durable = true}),
+    ok.
+
+promote_on_shutdown(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.promote">>,
+      <<"all">>, [{<<"ha-promote-on-shutdown">>, <<"always">>}]),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.nopromote">>,
+      <<"all">>),
+    rabbit_ct_broker_helpers:set_ha_policy(Config, A, <<"^ha.nopromoteonfailure">>,
+      <<"all">>, [{<<"ha-promote-on-failure">>, <<"when-synced">>},
+                  {<<"ha-promote-on-shutdown">>, <<"always">>}]),
+
+    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
+    [begin
+         amqp_channel:call(ACh, #'queue.declare'{queue   = Q,
+                                                 durable = true}),
+         rabbit_ct_client_helpers:publish(ACh, Q, 10)
+     end || Q <- [<<"ha.promote.test">>,
+                  <<"ha.nopromote.test">>,
+                  <<"ha.nopromoteonfailure.test">>]],
+    ok = rabbit_ct_broker_helpers:restart_node(Config, B),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, A),
+    BCh = rabbit_ct_client_helpers:open_channel(Config, B),
+    BCh1 = rabbit_ct_client_helpers:open_channel(Config, B),
+    #'queue.declare_ok'{message_count = 0} =
+        amqp_channel:call(
+          BCh, #'queue.declare'{queue   = <<"ha.promote.test">>,
+                                durable = true}),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 404, _}}, _},
+       amqp_channel:call(
+         BCh, #'queue.declare'{queue   = <<"ha.nopromote.test">>,
+                               durable = true})),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 404, _}}, _},
+       amqp_channel:call(
+         BCh1, #'queue.declare'{queue   = <<"ha.nopromoteonfailure.test">>,
+                               durable = true})),
+    ok = rabbit_ct_broker_helpers:start_node(Config, A),
+    ACh2 = rabbit_ct_client_helpers:open_channel(Config, A),
+    #'queue.declare_ok'{message_count = 10} =
+        amqp_channel:call(
+          ACh2, #'queue.declare'{queue   = <<"ha.nopromote.test">>,
+                                 durable = true}),
+    #'queue.declare_ok'{message_count = 10} =
+        amqp_channel:call(
+          ACh2, #'queue.declare'{queue   = <<"ha.nopromoteonfailure.test">>,
                                  durable = true}),
     ok.
 

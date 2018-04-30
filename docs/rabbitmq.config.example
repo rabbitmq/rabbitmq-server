@@ -471,7 +471,15 @@
    %%
    %% {disk_monitor_failure_retry_interval, 120000},
 
-   %% Whether or not to enable background GC.
+   %% Whether or not to enable background periodic forced GC runs for all
+   %% Erlang processes on the node in "waiting" state.
+   %%
+   %% Disabling background GC may reduce latency for client operations,
+   %% keeping it enabled may reduce median RAM usage by the binary heap
+   %% (see https://www.erlang-solutions.com/blog/erlang-garbage-collector.html).
+   %%
+   %% Before enabling this option, please take a look at the memory
+   %% breakdown (http://www.rabbitmq.com/memory-use.html).
    %%
    %% {background_gc_enabled, false},
 
