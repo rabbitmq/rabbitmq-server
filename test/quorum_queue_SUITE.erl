@@ -79,7 +79,8 @@ all_tests() ->
      cleanup_queue_state_on_channel_after_subscribe,
      basic_cancel,
      purge,
-     sync_queue
+     sync_queue,
+     cancel_sync_queue
     ].
 
 %% -------------------------------------------------------------------
@@ -1130,6 +1131,17 @@ sync_queue(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     {error, _, _} =
         rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"sync_queue">>, QQ]),
+    ok.
+
+cancel_sync_queue(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    {error, _, _} =
+        rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"cancel_sync_queue">>, QQ]),
     ok.
 
 declare_during_node_down(Config) ->

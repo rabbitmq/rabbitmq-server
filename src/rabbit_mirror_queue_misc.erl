@@ -409,8 +409,10 @@ sync_queue(Q) ->
 
 cancel_sync_queue(Q) ->
     rabbit_amqqueue:with(
-      Q, fun(#amqqueue{pid = QPid}) ->
-                 rabbit_amqqueue:cancel_sync_mirrors(QPid)
+      Q, fun(#amqqueue{pid = QPid, type = classic}) ->
+                 rabbit_amqqueue:cancel_sync_mirrors(QPid);
+            (#amqqueue{type = quorum}) ->
+                 {error, quorum_queue_not_supported}
          end).
 
 sync_batch_size(#amqqueue{} = Q) ->
