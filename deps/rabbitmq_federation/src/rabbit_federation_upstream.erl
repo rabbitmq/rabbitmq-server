@@ -103,7 +103,8 @@ from_set_contents(Set, XorQ) ->
     Results = [from_set_element(P, XorQ) || P <- Set],
     [R || R <- Results, R =/= not_found].
 
-from_set_element(UpstreamSetElem, XorQ) ->
+from_set_element(UpstreamSetElem0, XorQ) ->
+    UpstreamSetElem = rabbit_data_coercion:to_proplist(UpstreamSetElem0),
     Name = bget(upstream, UpstreamSetElem, []),
     case rabbit_runtime_parameters:value(
            vhost(XorQ), <<"federation-upstream">>, Name) of
