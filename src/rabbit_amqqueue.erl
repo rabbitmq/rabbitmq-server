@@ -1075,12 +1075,17 @@ basic_get(#amqqueue{pid = {Name, _} = Id, type = quorum, name = QName} = Q, _ChP
 
 basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
-              ExclusiveConsume, Args, OkMsg, ActingUser, _QStates) ->
+              ExclusiveConsume, Args, OkMsg, ActingUser, QState) ->
     ok = check_consume_arguments(QName, Args),
-    delegate:invoke(QPid, {gen_server2, call,
+    case delegate:invoke(QPid, {gen_server2, call,
                            [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                              ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
-                             Args, OkMsg, ActingUser}, infinity]});
+                             Args, OkMsg, ActingUser}, infinity]}) of
+        ok ->
+            {ok, QState};
+        Err ->
+            Err
+    end;
 basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q, NoAck, ChPid,
               _LimiterPid, _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, _ActingUser, QStates) ->
@@ -1092,9 +1097,14 @@ basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q, 
     {ok, maps:put(Name, FState, QStates)}.
 
 basic_cancel(#amqqueue{pid = QPid, type = classic}, ChPid, ConsumerTag, OkMsg, ActingUser,
-             _QStates) ->
-    delegate:invoke(QPid, {gen_server2, call,
-                           [{basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, infinity]});
+             QState) ->
+    case delegate:invoke(QPid, {gen_server2, call,
+                           [{basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser},
+                            infinity]}) of
+        ok ->
+            {ok, QState};
+        Err -> Err
+    end;
 basic_cancel(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum}, ChPid,
              ConsumerTag, OkMsg, _ActingUser, QStates) ->
     FState0 = get_quorum_state(Id, QName, QStates),
