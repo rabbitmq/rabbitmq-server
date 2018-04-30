@@ -35,7 +35,9 @@ groups() ->
     [
         {parallel_tests, [parallel], [
             data_coercion_to_proplist,
+            data_coercion_to_list,
             data_coercion_to_map,
+            pget,
             encrypt_decrypt,
             encrypt_decrypt_term,
             version_equivalence,
@@ -291,6 +293,17 @@ data_coercion_to_map(_Config) ->
 data_coercion_to_proplist(_Config) ->
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_proplist([{a, 1}])),
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_proplist(#{a => 1})).
+
+data_coercion_to_list(_Config) ->
+    ?assertEqual([{a, 1}], rabbit_data_coercion:to_list([{a, 1}])),
+    ?assertEqual([{a, 1}], rabbit_data_coercion:to_list(#{a => 1})).
+
+pget(_Config) ->
+    ?assertEqual(1, rabbit_misc:pget(a, [{a, 1}])),
+    ?assertEqual(undefined, rabbit_misc:pget(b, [{a, 1}])),
+
+    ?assertEqual(1, rabbit_misc:pget(a, #{a => 1})),
+    ?assertEqual(undefined, rabbit_misc:pget(b, #{a => 1})).
 
 pid_decompose_compose(_Config) ->
     Pid = self(),
