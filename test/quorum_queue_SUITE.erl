@@ -36,7 +36,9 @@ groups() ->
                       {cluster_size_3, [], [recover_from_single_failure,
                                             recover_from_multiple_failures,
                                             leadership_takeover,
-                                            delete_declare]}
+                                            delete_declare,
+                                            metrics_cleanup_on_leadership_takeover,
+                                            metrics_cleanup_on_leader_crash]}
                      ]}
     ].
 
@@ -110,12 +112,16 @@ init_per_testcase(Testcase, Config) ->
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
     Config2 = rabbit_ct_helpers:run_steps(Config1,
+                                          [fun merge_app_env/1 ] ++
                                           rabbit_ct_broker_helpers:setup_steps() ++
                                               rabbit_ct_client_helpers:setup_steps()),
     ok = rabbit_ct_broker_helpers:rpc(
            Config2, 0, application, set_env,
            [rabbit, channel_queue_cleanup_interval, 100]),
     Config2.
+
+merge_app_env(Config) ->
+    rabbit_ct_helpers:merge_app_env(Config, {rabbit, [{core_metrics_gc_interval, 100}]}).
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
@@ -990,6 +996,68 @@ leadership_takeover(Config) ->
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 3),
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 
+metrics_cleanup_on_leadership_takeover(Config) ->
+    %% Queue core metrics should be deleted from a node once the leadership is transferred
+    %% to another follower
+    [Node, _, _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+
+    wait_for_messages_ready([Node], '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack([Node], '%2F_quorum-q', 0),
+    {ok, _, {_, Leader}} = ra:members({'%2F_quorum-q', Node}),
+    QRes = rabbit_misc:r(<<"/">>, queue, QQ),
+    wait_until(
+      fun() ->
+              case rpc:call(Leader, ets, lookup, [queue_coarse_metrics, QRes]) of
+                  [{QRes, 3, 0, 3, _}] -> true;
+                  _ -> false
+              end
+      end),
+    force_leader_change(Leader, Nodes),
+    [] = rpc:call(Leader, ets, lookup, [queue_coarse_metrics, QRes]),
+    ok.
+
+metrics_cleanup_on_leader_crash(Config) ->
+    %% Queue core metrics should be deleted from a node once the leadership is transferred
+    %% to another follower
+    [Node, _, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+
+    wait_for_messages_ready([Node], '%2F_quorum-q', 3),
+    wait_for_messages_pending_ack([Node], '%2F_quorum-q', 0),
+    {ok, _, {Name, Leader}} = ra:members({'%2F_quorum-q', Node}),
+    QRes = rabbit_misc:r(<<"/">>, queue, QQ),
+    wait_until(
+      fun() ->
+              case rpc:call(Leader, ets, lookup, [queue_coarse_metrics, QRes]) of
+                  [{QRes, 3, 0, 3, _}] -> true;
+                  _ -> false
+              end
+      end),
+    Pid = rpc:call(Leader, erlang, whereis, [Name]),
+    rpc:call(Leader, erlang, exit, [Pid, kill]),
+    wait_until(
+      fun() ->
+              [] == rpc:call(Leader, ets, lookup, [queue_coarse_metrics, QRes])
+      end),
+    ok.
+
 delete_declare(Config) ->
     %% Delete cluster in ra is asynchronous, we have to ensure that we handle that in rmq
     [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1187,4 +1255,16 @@ wait_until(Condition, N) ->
         _ ->
             timer:sleep(500),
             wait_until(Condition, N - 1)
+    end.
+
+force_leader_change(Leader, Nodes) ->
+    [F1, _] = Nodes -- [Leader],
+    ok = rpc:call(F1, ra, trigger_election, [{'%2F_quorum-q', F1}]),
+    case ra:members({'%2F_quorum-q', Leader}) of
+        {ok, _, {_, Leader}} ->
+            %% Leader has been re-elected
+            force_leader_change(Leader, Nodes);
+        {ok, _, _} ->
+            %% Leader has changed
+            ok
     end.

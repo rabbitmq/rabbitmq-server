@@ -40,6 +40,7 @@
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 -export([is_mirrored/1, is_dead_exclusive/1]). % Note: exported due to use in qlc expression.
+-export([list_local_followers/0]).
 
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
@@ -711,6 +712,12 @@ list_names() -> mnesia:dirty_all_keys(rabbit_queue).
 list_local_names() ->
     [ Q#amqqueue.name || #amqqueue{state = State, pid = QPid} = Q <- list(),
            State =/= crashed, is_local_to_node(QPid, node())].
+
+list_local_followers() ->
+    [ Q#amqqueue.name
+      || #amqqueue{state = State, type = quorum, pid = {_, Leader},
+                   quorum_nodes = Nodes} = Q <- list(),
+         State =/= crashed, Leader =/= node(), lists:member(node(), Nodes)].
 
 is_local_to_node(QPid, Node) when is_pid(QPid) ->
     Node =:= node(QPid);

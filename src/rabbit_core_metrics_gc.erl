@@ -39,6 +39,7 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(start_gc, State) ->
+    rabbit_log:warning("########### STARTING GC ~n", []),
     gc_connections(),
     gc_channels(),
     gc_queues(),
@@ -77,7 +78,23 @@ gc_local_queues() ->
     Queues = rabbit_amqqueue:list_local_names(),
     GbSet = gb_sets:from_list(Queues),
     gc_entity(queue_metrics, GbSet),
-    gc_entity(queue_coarse_metrics, GbSet).
+    gc_entity(queue_coarse_metrics, GbSet),
+    Followers = gb_sets:from_list(rabbit_amqqueue:list_local_followers()),
+    gc_leader_data(Followers).
+
+gc_leader_data(Followers) ->
+    ets:foldl(fun({Id, _, _, _, _}, none) ->
+                      gc_leader_data(Id, queue_coarse_metrics, Followers)
+              end, none, queue_coarse_metrics).
+
+gc_leader_data(Id, Table, GbSet) ->
+    case gb_sets:is_member(Id, GbSet) of
+        true ->
+            ets:delete(Table, Id),
+            none;
+        false ->
+            none
+    end.
 
 gc_global_queues() ->
     GbSet = gb_sets:from_list(rabbit_amqqueue:list_names()),

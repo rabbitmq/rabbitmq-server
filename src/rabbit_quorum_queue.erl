@@ -25,7 +25,7 @@
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
 -export([cancel_customer/2, cancel_customer/3]).
--export([become_leader/1]).
+-export([become_leader/1, update_metrics/1]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -114,7 +114,8 @@ declare(#amqqueue{name = QName,
     RaMachine = {module, ra_fifo,
                  #{dead_letter_handler => dlx_mfa(NewQ),
                    cancel_customer_handler => {?MODULE, cancel_customer, []},
-                   become_leader_handler => {?MODULE, become_leader, []}}},
+                   become_leader_handler => {?MODULE, become_leader, []},
+                   metrics_handler => {?MODULE, update_metrics, []}}},
     {ok, _Started, _NotStarted} = ra:start_cluster(RaName, RaMachine,
                                                    [{RaName, Node} || Node <- Nodes]),
     FState = init_state(Id),
@@ -151,11 +152,42 @@ cancel_customer(ChPid, ConsumerTag, QName) ->
                          {user_who_performed_action, ?INTERNAL_USER}]).
 
 become_leader(Name) ->
+    QName = queue_name(Name),
     Fun = fun(Q1) -> Q1#amqqueue{pid = {Name, node()}} end,
     rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              rabbit_amqqueue:update(queue_name(Name), Fun)
-      end).
+      fun() -> rabbit_amqqueue:update(QName, Fun) end),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, #amqqueue{quorum_nodes = Nodes}} ->
+            [rpc:call(Node, ets, delete, [queue_coarse_metrics, QName])
+             || Node <- Nodes, Node =/= node()];
+        _ ->
+            ok
+    end.
+
+update_metrics({Name, MR, MU, M}) ->
+    R = reductions(Name),
+    case rabbit_quorum_queue:queue_name(Name) of
+        undefined ->
+            ok;
+        QName ->
+            rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
+            Infos = rabbit_quorum_queue:infos(QName),
+            rabbit_core_metrics:queue_stats(QName, Infos),
+            rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
+                                                       {messages, M},
+                                                       {messages_ready, MR},
+                                                       {messages_unacknowledged, MU},
+                                                       {reductions, R}])
+    end.
+
+reductions(Name) ->
+    try
+        {reductions, R} = process_info(whereis(Name), reductions),
+        R
+    catch
+        error:badarg ->
+            0
+    end.
 
 recover(Queues) ->
     [begin
@@ -318,12 +350,20 @@ i(arguments,          #amqqueue{arguments          = Args}) -> Args;
 i(pid,                #amqqueue{pid                = {Name, _}}) -> whereis(Name);
 i(messages,           #amqqueue{pid                = {Name, _}}) ->
     quorum_messages(Name);
-i(messages_ready,     #amqqueue{pid                = {Name, _}}) ->
-    [{_, MR, _, _}] = ets:lookup(ra_fifo_metrics, Name),
-    MR;
-i(messages_unacknowledged, #amqqueue{pid           = {Name, _}}) ->
-    [{_, _, MU, _}] = ets:lookup(ra_fifo_metrics, Name),
-    MU;
+i(messages_ready,     #amqqueue{name               = QName}) ->
+    case ets:lookup(queue_coarse_metrics, QName) of
+        [{_, MR, _, _, _}] ->
+            MR;
+        [] ->
+            0
+    end;
+i(messages_unacknowledged, #amqqueue{name          = QName}) ->
+    case ets:lookup(queue_coarse_metrics, QName) of
+        [{_, _, MU, _, _}] ->
+            MU;
+        [] ->
+            0
+    end;
 i(policy, Q) ->
     case rabbit_policy:name(Q) of
         none   -> '';
@@ -383,9 +423,13 @@ i(_K, _Q) -> ''.
 is_process_alive(Name, Node) ->
     erlang:is_pid(rpc:call(Node, erlang, whereis, [Name])).
 
-quorum_messages(Name) ->
-    [{_, _, _, M}] = ets:lookup(ra_fifo_metrics, Name),
-    M.
+quorum_messages(QName) ->
+    case ets:lookup(queue_coarse_metrics, QName) of
+        [{_, _, _, M, _}] ->
+            M;
+        [] ->
+            0
+    end.
 
 quorum_ctag(Int) when is_integer(Int) ->
     integer_to_binary(Int);
