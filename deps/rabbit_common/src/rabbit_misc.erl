@@ -228,9 +228,7 @@
 -spec ntoa(inet:ip_address()) -> string().
 -spec ntoab(inet:ip_address()) -> string().
 -spec is_process_alive(pid()) -> boolean().
--spec pget(term(), [term()]) -> term().
--spec pget(term(), [term()], term()) -> term().
--spec pget_or_die(term(), [term()]) -> term() | no_return().
+
 -spec pmerge(term(), term(), [term()]) -> [term()].
 -spec plmerge([term()], [term()]) -> [term()].
 -spec pset(term(), term(), [term()]) -> [term()].
@@ -883,6 +881,7 @@ is_process_alive(Pid) ->
     lists:member(Node, [node() | nodes(connected)]) andalso
         rpc:call(Node, erlang, is_process_alive, [Pid]) =:= true.
 
+-spec pget(term(), list()) -> term().
 pget(K, P) ->
     case lists:keyfind(K, 1, P) of
         {K, V} ->
@@ -890,6 +889,8 @@ pget(K, P) ->
         _ ->
             undefined
     end.
+
+-spec pget(term(), list(), term()) -> term().
 pget(K, P, D) ->
     case lists:keyfind(K, 1, P) of
         {K, V} ->
@@ -898,6 +899,7 @@ pget(K, P, D) ->
             D
     end.
 
+-spec pget_or_die(term(), list()) -> term() | no_return().
 pget_or_die(K, P) ->
     case proplists:get_value(K, P) of
         undefined -> exit({error, key_missing, K});
