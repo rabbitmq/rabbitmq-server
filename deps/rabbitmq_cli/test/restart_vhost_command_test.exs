@@ -79,10 +79,16 @@ defmodule RestartVhostCommandTest do
   def force_vhost_failure(node_name, vhost) do
     case :rpc.call(node_name, :rabbit_vhost_sup_sup, :get_vhost_sup, [vhost]) do
       {:ok, sup} ->
-        {_, pid, _, _} = :lists.keyfind(:msg_store_persistent, 1, :supervisor.which_children(sup))
-        Process.exit(pid, :foo)
-        :timer.sleep(100)
-        force_vhost_failure(node_name, vhost);
+        case :lists.keyfind(:msg_store_persistent, 1, :supervisor.which_children(sup)) do
+        {_, pid, _, _} ->
+          Process.exit(pid, :foo)
+          :timer.sleep(100)
+          force_vhost_failure(node_name, vhost);
+        false ->
+          Process.exit(sup, :foo)
+          :timer.sleep(100)
+          force_vhost_failure(node_name, vhost)
+        end;
       {:error, {:vhost_supervisor_not_running, _}} ->
         :ok
     end
