@@ -108,7 +108,6 @@ inactive(#state{consumers = Consumers}) ->
     priority_queue:is_empty(Consumers).
 
 all(#state{consumers = Consumers}) ->
-    error_logger:info_msg("Consumers ~p~n", [Consumers]),
     lists:foldl(fun (C, Acc) -> consumers(C#cr.blocked_consumers, Acc) end,
                 consumers(Consumers, []), all_ch_record()).
 
