@@ -899,8 +899,7 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
     [lists:zip(ConsumerInfoKeys,
                [Q#amqqueue.name, ChPid, CTag,
                 AckRequired, Prefetch, Args]) ||
-        {ChPid, CTag, AckRequired, Prefetch, Args}
-        <- consumers(Q)].
+        {ChPid, CTag, AckRequired, Prefetch, Args, _} <- consumers(Q)].
 
 stat(#amqqueue{type = quorum} = Q) -> rabbit_quorum_queue:stat(Q);
 stat(#amqqueue{pid = QPid}) -> delegate:invoke(QPid, {gen_server2, call, [stat, infinity]}).
