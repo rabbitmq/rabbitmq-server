@@ -27,7 +27,7 @@
 -export([cancel_customer/2, cancel_customer/3]).
 -export([become_leader/1, update_metrics/1]).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
 -type ra_node_id() :: {Name :: atom(), Node :: node()}.
@@ -323,8 +323,8 @@ info(Q, Items) ->
 stat(_Q) ->
     {ok, 0, 0}.  %% TODO length, consumers count
 
-purge(FState) ->
-    ra_fifo_client:purge(FState).
+purge(Node) ->
+    ra_fifo_client:purge(Node).
 
 %%----------------------------------------------------------------------------
 dlx_mfa(#amqqueue{name = Resource} = Q) ->

@@ -2327,9 +2327,13 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
     check_configure_permitted(QueueName, User),
     case rabbit_amqqueue:with(
            QueueName,
-           fun (Q) ->
+           fun (#amqqueue{pid = {Name, _}, type = quorum} = Q) ->
                    rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
-                   rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username, QueueStates0)
+                   {ok, C} = rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username),
+                   {ok, C, maps:remove(Name, QueueStates0)};
+               (Q) ->
+                   rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
+                   rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username)
            end,
            fun (not_found)            -> {ok, 0, QueueStates0};
                %% TODO delete crashed should clean up fifo states?
@@ -2366,12 +2370,12 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
             ok
     end;
 handle_method(#'queue.purge'{queue = QueueNameBin},
-              ConnPid, _CollectorPid, VHostPath, User, QueueStates0) ->
+              ConnPid, _CollectorPid, VHostPath, User, _QueueStates0) ->
     QueueName = qbin_to_resource(QueueNameBin, VHostPath),
     check_read_permitted(QueueName, User),
     rabbit_amqqueue:with_exclusive_access_or_die(
       QueueName, ConnPid,
-      fun (Q) -> rabbit_amqqueue:purge(Q, QueueStates0) end);
+      fun (Q) -> rabbit_amqqueue:purge(Q) end);
 handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                   type        = TypeNameBin,
                                   passive     = false,

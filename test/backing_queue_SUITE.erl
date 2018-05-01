@@ -709,7 +709,7 @@ bq_variable_queue_delete_msg_store_files_callback1(Config) ->
     %% give the queue a second to receive the close_fds callback msg
     timer:sleep(1000),
 
-    rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>, #{}),
+    rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
     passed.
 
 bq_queue_recover(Config) ->

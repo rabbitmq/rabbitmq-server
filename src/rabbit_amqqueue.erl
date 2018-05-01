@@ -18,7 +18,7 @@
 
 -export([warn_file_limit/0]).
 -export([recover/1, stop/1, start/1, declare/6, declare/7,
-         delete_immediately/1, delete_exclusive/2, delete/5, purge/2,
+         delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
          forget_all_durable/1, delete_crashed/1, delete_crashed/2,
          delete_crashed_internal/2]).
 -export([pseudo_queue/2, immutable/1]).
@@ -50,7 +50,7 @@
          set_ram_duration_target/2, set_maximum_since_use/2,
 	 emit_consumers_local/3]).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long,
@@ -141,24 +141,19 @@
 -spec delete_immediately(qpids()) -> 'ok'.
 -spec delete_exclusive(qpids(), pid()) -> 'ok'.
 -spec delete
-        (rabbit_types:amqqueue(), 'false', 'false', rabbit_types:username(),
-         #{Name :: atom() => ra_fifo_client:state()}) ->
+        (rabbit_types:amqqueue(), 'false', 'false', rabbit_types:username()) ->
             qlen();
-        (rabbit_types:amqqueue(), 'true' , 'false', rabbit_types:username(),
-         #{Name :: atom() => ra_fifo_client:state()}) ->
+        (rabbit_types:amqqueue(), 'true' , 'false', rabbit_types:username()) ->
             qlen() | rabbit_types:error('in_use');
-        (rabbit_types:amqqueue(), 'false', 'true', rabbit_types:username(),
-         #{Name :: atom() => ra_fifo_client:state()}) ->
+        (rabbit_types:amqqueue(), 'false', 'true', rabbit_types:username()) ->
             qlen() | rabbit_types:error('not_empty');
-        (rabbit_types:amqqueue(), 'true' , 'true', rabbit_types:username(),
-         #{Name :: atom() => ra_fifo_client:state()}) ->
+        (rabbit_types:amqqueue(), 'true' , 'true', rabbit_types:username()) ->
             qlen() |
             rabbit_types:error('in_use') |
             rabbit_types:error('not_empty').
 -spec delete_crashed(rabbit_types:amqqueue()) -> 'ok'.
 -spec delete_crashed_internal(rabbit_types:amqqueue(), rabbit_types:username()) -> 'ok'.
--spec purge(rabbit_types:amqqueue(), #{Name :: atom() => ra_fifo_client:state()}) ->
-                   qlen() | {qlen(), #{Name :: atom() => ra_fifo_client:state()}}.
+-spec purge(rabbit_types:amqqueue()) -> {ok, qlen()}.
 -spec forget_all_durable(node()) -> 'ok'.
 -spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery(), #{Name :: atom() => ra_fifo_client:state()} | 'untracked') ->
                         {qpids(), #{Name :: atom() => ra_fifo_client:state()}}.
@@ -904,7 +899,8 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
     [lists:zip(ConsumerInfoKeys,
                [Q#amqqueue.name, ChPid, CTag,
                 AckRequired, Prefetch, Args]) ||
-        {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)].
+        {ChPid, CTag, AckRequired, Prefetch, Args}
+        <- consumers(Q)].
 
 stat(#amqqueue{type = quorum} = Q) -> rabbit_quorum_queue:stat(Q);
 stat(#amqqueue{pid = QPid}) -> delegate:invoke(QPid, {gen_server2, call, [stat, infinity]}).
@@ -926,11 +922,10 @@ delete_immediately(QPids) ->
     [rabbit_quorum_queue:delete_immediately(QPid) || QPid <- Quorum],
     ok.
 
-delete(#amqqueue{ type = quorum, pid = QPid} = Q,
-       IfUnused, IfEmpty, ActingUser, QueueStates0) ->
-    {ok, Msgs} = rabbit_quorum_queue:delete(Q, IfUnused, IfEmpty, ActingUser),
-    {ok, Msgs, maps:remove(QPid, QueueStates0)};
-delete(Q, IfUnused, IfEmpty, ActingUser, _QueueState) ->
+delete(#amqqueue{ type = quorum} = Q,
+       IfUnused, IfEmpty, ActingUser) ->
+    rabbit_quorum_queue:delete(Q, IfUnused, IfEmpty, ActingUser);
+delete(Q, IfUnused, IfEmpty, ActingUser) ->
     case wait_for_promoted_or_stopped(Q) of
         {promoted, #amqqueue{pid = QPid}} ->
             delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]});
@@ -991,12 +986,10 @@ delete_crashed_internal(Q = #amqqueue{ name = QName }, ActingUser) ->
     BQ:delete_crashed(Q),
     ok = internal_delete(QName, ActingUser).
 
-purge(#amqqueue{ pid = QPid, type = classic}, _) ->
+purge(#amqqueue{ pid = QPid, type = classic}) ->
     delegate:invoke(QPid, {gen_server2, call, [purge, infinity]});
-purge(#amqqueue{ pid = {Name, _} = Id, type = quorum}, FStates) ->
-    FState0 = get_quorum_state(Id, FStates),
-    {ok, Total, FState} = rabbit_quorum_queue:purge(FState0),
-    {ok, Total, maps:put(Name, FState, FStates)}.
+purge(#amqqueue{ pid = NodeId, type = quorum}) ->
+    rabbit_quorum_queue:purge(NodeId).
 
 requeue(QPid, MsgIds, ChPid) ->
     delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]}).
