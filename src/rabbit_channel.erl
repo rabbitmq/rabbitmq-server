@@ -2428,14 +2428,18 @@ handle_deliver(ConsumerTag, AckRequired,
                                      content       = Content}},
                State = #ch{writer_pid = WriterPid,
                            next_tag   = DeliveryTag}) ->
-    ok = rabbit_writer:send_command_and_notify(
-           WriterPid, QPid, self(),
-           #'basic.deliver'{consumer_tag = ConsumerTag,
-                            delivery_tag = DeliveryTag,
-                            redelivered  = Redelivered,
-                            exchange     = ExchangeName#resource.name,
-                            routing_key  = RoutingKey},
-           Content),
+    Deliver = #'basic.deliver'{consumer_tag = ConsumerTag,
+                               delivery_tag = DeliveryTag,
+                               redelivered  = Redelivered,
+                               exchange     = ExchangeName#resource.name,
+                               routing_key  = RoutingKey},
+    case is_pid(QPid) of
+        true ->
+            ok = rabbit_writer:send_command_and_notify(
+                   WriterPid, QPid, self(), Deliver, Content);
+        false ->
+            ok = rabbit_writer:send_command(WriterPid, Deliver, Content)
+    end,
     rabbit_basic:maybe_gc_large_msg(Content),
     record_sent(ConsumerTag, AckRequired, Msg, State).
 

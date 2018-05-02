@@ -84,7 +84,8 @@
 %%----------------------------------------------------------------------------
 
 init_state({Name, _} = Id) ->
-    ra_fifo_client:init(Name, [Id]).
+    ra_fifo_client:init(Name, [Id], 1024, fun() -> credit_flow:block(Name), ok end,
+                        fun() -> credit_flow:unblock(Name), ok end).
 
 init_state({Name, _} = Id, QName) ->
     %% The quorum mapping entry is created on queue declare, but if another node
@@ -92,7 +93,8 @@ init_state({Name, _} = Id, QName) ->
     %% init_state/1 can be used when there is guarantee this has been called, such
     %% as when processing ack's and rejects. 
     ets:insert_new(quorum_mapping, {Name, QName}),
-    ra_fifo_client:init(Name, [Id]).
+    ra_fifo_client:init(Name, [Id], 1024, fun() -> credit_flow:block(Name), ok end,
+                        fun() -> credit_flow:unblock(Name), ok end).
 
 handle_event({ra_event, From, Evt}, FState) ->
     ra_fifo_client:handle_ra_event(From, Evt, FState).
