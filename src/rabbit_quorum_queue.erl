@@ -84,7 +84,8 @@
 %%----------------------------------------------------------------------------
 
 init_state({Name, _} = Id) ->
-    ra_fifo_client:init(Name, [Id], 1024, fun() -> credit_flow:block(Name), ok end,
+    {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
+    ra_fifo_client:init(Name, [Id], SoftLimit, fun() -> credit_flow:block(Name), ok end,
                         fun() -> credit_flow:unblock(Name), ok end).
 
 init_state({Name, _} = Id, QName) ->
@@ -93,7 +94,8 @@ init_state({Name, _} = Id, QName) ->
     %% init_state/1 can be used when there is guarantee this has been called, such
     %% as when processing ack's and rejects. 
     ets:insert_new(quorum_mapping, {Name, QName}),
-    ra_fifo_client:init(Name, [Id], 1024, fun() -> credit_flow:block(Name), ok end,
+    {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
+    ra_fifo_client:init(Name, [Id], SoftLimit, fun() -> credit_flow:block(Name), ok end,
                         fun() -> credit_flow:unblock(Name), ok end).
 
 handle_event({ra_event, From, Evt}, FState) ->
