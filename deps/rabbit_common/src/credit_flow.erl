@@ -62,6 +62,7 @@
 
 -export([send/1, send/2, ack/1, ack/2, handle_bump_msg/1, blocked/0, state/0]).
 -export([peer_down/1]).
+-export([block/1, unblock/1]).
 
 %%----------------------------------------------------------------------------
 
