@@ -306,7 +306,7 @@ find_durable_queues(VHost) ->
                                        %% the policy). Thus, we must check if the local pid is alive
                                        %% - if the record is present - in order to restart.
                                              (mnesia:read(rabbit_queue, Name, read) =:= []
-                                              orelse not is_queue_process_alive(Pid))))
+                                              orelse not rabbit_mnesia:is_process_alive(Pid))))
                                     orelse (Type == quorum andalso lists:member(Node, QuorumNodes))
                           ]))
       end).
@@ -327,7 +327,7 @@ find_durable_queues() ->
                                        %% the policy). Thus, we must check if the local pid is alive
                                        %% - if the record is present - in order to restart.
                                              (mnesia:read(rabbit_queue, Name, read) =:= []
-                                              orelse not is_queue_process_alive(Pid))))
+                                              orelse not rabbit_mnesia:is_process_alive(Pid))))
                                     orelse (Type == quorum andalso lists:member(Node, QuorumNodes))
                           ]))
       end).
@@ -723,11 +723,6 @@ qnode(QPid) when is_pid(QPid) ->
     node(QPid);
 qnode({_, Node}) ->
     Node.
-
-is_queue_process_alive(Pid) when is_pid(Pid) ->
-    rabbit_mnesia:is_process_alive(Pid);
-is_queue_process_alive({Name, _}) ->
-    whereis(Name) /= undefined.
 
 list(VHostPath) ->
     list(VHostPath, rabbit_queue).
@@ -1282,16 +1277,11 @@ queues_to_delete_when_node_down(NodeDown) ->
         qlc:e(qlc:q([QName ||
             #amqqueue{name = QName, pid = Pid} = Q <- mnesia:table(rabbit_queue),
                 qnode(Pid) == NodeDown andalso
-                not rabbit_mnesia:is_process_alive(qpid(Pid)) andalso
+                not rabbit_mnesia:is_process_alive(Pid) andalso
                 (not rabbit_amqqueue:is_mirrored(Q) orelse
                 rabbit_amqqueue:is_dead_exclusive(Q))]
         ))
     end).
-
-qpid(P) when is_pid(P) ->
-    P;
-qpid({Name, _}) ->
-    whereis(Name).
 
 notify_queue_binding_deletions(QueueDeletions) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
