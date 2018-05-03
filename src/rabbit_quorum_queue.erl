@@ -180,14 +180,14 @@ become_leader(Name) ->
             ok
     end.
 
-update_metrics({Name, MR, MU, M}) ->
+update_metrics({Name, MR, MU, M, C}) ->
     R = reductions(Name),
     case rabbit_quorum_queue:queue_name(Name) of
         undefined ->
             ok;
         QName ->
             rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
-            Infos = rabbit_quorum_queue:infos(QName),
+            Infos = [{consumers, C} | rabbit_quorum_queue:infos(QName)],
             rabbit_core_metrics:queue_stats(QName, Infos),
             rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
                                                        {messages, M},
@@ -418,9 +418,13 @@ i(exclusive_consumer_pid, _Q) ->
 i(exclusive_consumer_tag, _Q) ->
     %% TODO
     '';
-i(consumers, _Q) ->
-    %% TODO
-    0;
+i(consumers,     #amqqueue{name               = QName}) ->
+    case ets:lookup(queue_metrics, QName) of
+        [{_, M, _}] ->
+            proplists:get_value(consumers, M, 0);
+        [] ->
+            0
+    end;
 i(consumer_utilisation, _Q) ->
     %% TODO!
     0;
