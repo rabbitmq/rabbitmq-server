@@ -941,10 +941,13 @@ is_virgin_node() ->
             true;
         {ok, []} ->
             true;
-        {ok, [File1, File2]} ->
-            lists:usort([dir() ++ "/" ++ File1, dir() ++ "/" ++ File2]) =:=
+        {ok, [File1, File2, File3]} ->
+            lists:usort([filename:join(dir(), File1),
+                         filename:join(dir(), File2),
+                         filename:join(dir(), File3)]) =:=
                 lists:usort([rabbit_node_monitor:cluster_status_filename(),
-                             rabbit_node_monitor:running_nodes_filename()]);
+                             rabbit_node_monitor:running_nodes_filename(),
+                             rabbit_node_monitor:quorum_filename()]);
         {ok, _} ->
             false
     end.
