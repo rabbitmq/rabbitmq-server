@@ -17,6 +17,7 @@
 -module(rabbit_mgmt_rabbitmqadmin_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -155,18 +156,18 @@ fmt_long(Config) ->
         "",
         "--------------------------------------------------------------------------------",
         "" ]),
-    {ok, Out} = run(Config, ["--format", "long", "list", "vhosts", "name", "tracing"]).
+    ?assertEqual({ok, Out}, run(Config, ["--format", "long", "list", "vhosts", "name", "tracing"])).
 
 fmt_kvp(Config) ->
     Out = multi_line_string(["name=\"/\" tracing=\"False\""]),
-    {ok, Out} = run(Config, ["--format", "kvp", "list", "vhosts", "name", "tracing"]).
+    ?assertEqual({ok, Out}, run(Config, ["--format", "kvp", "list", "vhosts", "name", "tracing"])).
 
 fmt_tsv(Config) ->
     Out = multi_line_string([
                              "name\ttracing",
                              "/\tFalse"
                             ]),
-    {ok, Out} = run(Config, ["--format", "tsv", "list", "vhosts", "name", "tracing"]).
+    ?assertEqual({ok, Out}, run(Config, ["--format", "tsv", "list", "vhosts", "name", "tracing"])).
 
 fmt_table(Config) ->
     Out = multi_line_string([
@@ -176,9 +177,9 @@ fmt_table(Config) ->
                              "| /    | False   |",
                              "+------+---------+"
                             ]),
-    {ok, Out} = run(Config, ["list", "vhosts", "name", "tracing"]),
-    {ok, Out} = run(Config, ["--format", "table", "list",
-                             "vhosts", "name", "tracing"]).
+    ?assertEqual({ok, Out}, run(Config, ["list", "vhosts", "name", "tracing"])),
+    ?assertEqual({ok, Out}, run(Config, ["--format", "table", "list",
+                                         "vhosts", "name", "tracing"])).
 
 fmt_bash(Config) ->
     {ok, "/\n"} = run(Config, ["--format", "bash", "list",
