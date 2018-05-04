@@ -809,7 +809,10 @@ class Lister:
 
         def add_to_row(col, val):
             if col in column_ix:
-                row[column_ix[col]] = maybe_utf8(val)
+                if val is not None:
+                    row[column_ix[col]] = maybe_utf8(val)
+                else:
+                    row[column_ix[col]] = None
 
         if len(self.columns) == 0:
             for item in items:
