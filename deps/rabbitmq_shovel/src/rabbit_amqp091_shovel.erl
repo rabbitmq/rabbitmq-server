@@ -382,10 +382,10 @@ get_connection_name(ShovelName) when is_atom(ShovelName) ->
     Prefix = <<"Shovel ">>,
     ShovelNameAsBinary = atom_to_binary(ShovelName, utf8),
     <<Prefix/binary, ShovelNameAsBinary/binary>>;
-%% for dynamic shovels, name is a tuple with a binary
-get_connection_name({_, Name}) when is_binary(Name) ->
+%% for dynamic shovels, name is a binary
+get_connection_name(ShovelName) when is_binary(ShovelName) ->
     Prefix = <<"Shovel ">>,
-    <<Prefix/binary, Name/binary>>;
+    <<Prefix/binary, ShovelName/binary>>;
 %% fallback
 get_connection_name(_) ->
     <<"Shovel">>.
