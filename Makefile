@@ -24,7 +24,8 @@ define PROJECT_ENV
 	    %% 0 ("no limit") would make a better default, but that
 	    %% breaks the QPid Java client
 	    {frame_max, 131072},
-	    {channel_max, 0},
+	    %% see rabbitmq-server#1593
+	    {channel_max, 2048},
 	    {connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
@@ -62,7 +63,7 @@ define PROJECT_ENV
 	                         ]},
 	    {halt_on_upgrade_failure, true},
 	    {hipe_compile, false},
-	    %% see bug 24513 for how this list was created
+	    %% see bug 24513 [in legacy Bugzilla] for how this list was created
 	    {hipe_modules,
 	     [rabbit_reader, rabbit_channel, gen_server2, rabbit_exchange,
 	      rabbit_command_assembler, rabbit_framing_amqp_0_9_1, rabbit_basic,
