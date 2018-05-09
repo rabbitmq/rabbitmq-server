@@ -25,7 +25,7 @@ define PROJECT_ENV
 	    %% breaks the QPid Java client
 	    {frame_max, 131072},
 	    %% see rabbitmq-server#1593
-	    {channel_max, 2048},
+	    {channel_max, 2047},
 	    {connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
