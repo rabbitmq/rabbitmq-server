@@ -982,6 +982,7 @@ quorum_queues_test_loop(Config, N) ->
                end, 100),
 
     http_delete(Config, "/queues/%2f/qq", {group, '2xx'}),
+    close_connection(Conn),
     quorum_queues_test_loop(Config, N-1).
 
 queues_well_formed_json_test(Config) ->
@@ -1264,8 +1265,8 @@ permissions_connection_channel_consumer_test(Config) ->
         Ch <- [Ch1, Ch2, Ch3]],
     timer:sleep(1500),
     AssertLength = fun (Path, User, Len) ->
-                           ?assertEqual(Len,
-                                        length(http_get(Config, Path, User, User, ?OK)))
+                           Res = http_get(Config, Path, User, User, ?OK),
+                           ?assertEqual(Len, length(Res))
                    end,
     [begin
          AssertLength(P, "user", 1),
