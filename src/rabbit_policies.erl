@@ -40,6 +40,7 @@ register() ->
                           {policy_validator, <<"expires">>},
                           {policy_validator, <<"max-length">>},
                           {policy_validator, <<"max-length-bytes">>},
+                          {policy_validator, <<"max-priority">>},
                           {policy_validator, <<"queue-mode">>}]],
     ok.
 
@@ -89,6 +90,12 @@ validate_policy0(<<"max-length-bytes">>, Value)
     ok;
 validate_policy0(<<"max-length-bytes">>, Value) ->
     {error, "~p is not a valid maximum length in bytes", [Value]};
+
+validate_policy0(<<"max-priority">>, Value)
+  when is_integer(Value), Value >= 0, Value =< 255 ->
+    ok;
+validate_policy0(<<"max-priority">>, Value) ->
+    {error, "~p is not a valid max priority (must be an integer in the 1-255 range)", [Value]};
 
 validate_policy0(<<"queue-mode">>, <<"default">>) ->
     ok;
