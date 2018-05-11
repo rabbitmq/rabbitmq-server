@@ -93,8 +93,8 @@ handle_cast({publish, DLX, RK, QName, ReasonMsgs}, #state{queue_states = QueueSt
         end,
     {noreply, State#state{queue_states = QueueStates}}.
 
-handle_info({ra_event, {Name, _} = From, _} = Evt, #state{queue_states = QueueStates} = State0) ->
-    FState0 = get_quorum_state(From, QueueStates),
+handle_info({ra_event, {Name, _}, _} = Evt, #state{queue_states = QueueStates} = State0) ->
+    FState0 = maps:get(Name, QueueStates),
     case rabbit_quorum_queue:handle_event(Evt, FState0) of
         {_, FState1} ->
             {noreply, State0#state{queue_states = maps:put(Name, FState1, QueueStates)}};
@@ -123,14 +123,6 @@ batch_publish(X, RK, QName, ReasonMsgs, QueueStates) ->
     lists:foldl(fun({Reason, Msg}, Acc) ->
                         rabbit_dead_letter:publish(Msg, Reason, X, RK, QName, Acc)
                 end, QueueStates, ReasonMsgs).
-
-get_quorum_state({Name, _} = Id, Map) ->
-    try
-        maps:get(Name, Map)
-    catch
-        error:{badkey, _} ->
-            rabbit_quorum_queue:init_state(Id)
-    end.
 
 init_queue_cleanup_timer(State) ->
     {ok, Interval} = application:get_env(rabbit, channel_queue_cleanup_interval),
