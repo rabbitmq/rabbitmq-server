@@ -627,43 +627,46 @@ handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
     noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
 
-handle_info({ra_event, {Name, _} = From, _} = Evt, #ch{queue_states = QueueStates,
-                                                       consumer_mapping = ConsumerMapping
-                                                      } = State0) ->
-    case rabbit_quorum_queue:queue_name(Name) of
-        undefined ->
-            noreply_coalesce(State0);
-        QName ->
-            FState0 = get_quorum_state(From, QName, QueueStates),
-            case rabbit_quorum_queue:handle_event(Evt, FState0) of
-                {{delivery, CTag, Msgs}, FState1} ->
+handle_info({ra_event, {Name, _} = From, _} = Evt,
+            #ch{queue_states = QueueStates,
+                consumer_mapping = ConsumerMapping} = State0) ->
+    case QueueStates of
+        #{Name := QState0} ->
+            case rabbit_quorum_queue:handle_event(Evt, QState0) of
+                {{delivery, CTag, Msgs}, QState1} ->
                     AckRequired = case maps:find(CTag, ConsumerMapping) of
                                       error ->
                                           true;
                                       {ok, {_, {NoAck, _, _, _}}} ->
                                           not NoAck
                                   end,
-                    FState2 = case AckRequired of
+                    QState2 = case AckRequired of
                                   false ->
                                       {MsgIds, _} = lists:unzip(Msgs),
-                                      {ok, FS} = rabbit_quorum_queue:ack(CTag, MsgIds, FState1),
+                                      {ok, FS} = rabbit_quorum_queue:ack(CTag, MsgIds, QState1),
                                       FS;
                                   true ->
-                                      FState1
+                                      QState1
                               end,
+                    QName = rabbit_quorum_queue:queue_name(QState2),
                     State = lists:foldl(
                               fun({MsgId, {MsgHeader, Msg}}, Acc) ->
                                       IsDelivered = maps:is_key(delivery_count, MsgHeader),
                                       handle_deliver(CTag, AckRequired,
-                                                     {QName, From, MsgId, IsDelivered, Msg}, Acc)
-                              end, State0#ch{queue_states = maps:put(Name, FState2, QueueStates)}, Msgs),
+                                                     {QName, From, MsgId, IsDelivered, Msg},
+                                                     Acc)
+                              end, State0#ch{queue_states = maps:put(Name, QState2, QueueStates)}, Msgs),
                     noreply(State);
-                {internal, MsgSeqNos, FState1} ->
+                {internal, MsgSeqNos, QState1} ->
                     noreply_coalesce(confirm(MsgSeqNos, From,
-                                             State0#ch{queue_states = maps:put(Name, FState1, QueueStates)}));
+                                             State0#ch{queue_states = maps:put(Name, QState1, QueueStates)}));
                 eol ->
                     noreply_coalesce(State0#ch{queue_states = maps:remove(Name, QueueStates)})
-            end
+            end;
+        _ ->
+            %% the assumption here is that the queue state has been cleaned up and
+            %% this is a residual ra notification
+            noreply_coalesce(State0)
     end;
 
 handle_info({bump_credit, Msg}, State) ->
@@ -715,16 +718,9 @@ handle_info({{Ref, Node}, LateAnswer}, State = #ch{channel = Channel})
 
 handle_info(queue_cleanup, State = #ch{queue_states = QueueStates0}) ->
     QueueStates =
-        maps:filter(fun(Name, _) ->
-                            case rabbit_quorum_queue:queue_name(Name) of
-                                undefined ->
-                                    false;
-                                QName ->
-                                    case rabbit_amqqueue:lookup(QName) of
-                                        [] -> false;
-                                        _ -> true
-                                    end
-                            end
+        maps:filter(fun(_, QS) ->
+                            QName =  rabbit_quorum_queue:queue_name(QS),
+                            [] /= rabbit_amqqueue:lookup(QName)
                     end, QueueStates0),
     noreply(init_queue_cleanup_timer(State#ch{queue_states = QueueStates})).
 
@@ -2458,14 +2454,6 @@ handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
            Content),
     State1 = monitor_delivering_queue(NoAck, QPid, QName, State),
     {noreply, record_sent(DeliveryTag, not(NoAck), Msg, State1)}.
-
-get_quorum_state({Name, _} = Id, QName, Map) ->
-    try
-        maps:get(Name, Map)
-    catch
-        error:{badkey, _} ->
-            rabbit_quorum_queue:init_state(Id, QName)
-    end.
 
 init_queue_cleanup_timer(State) ->
     {ok, Interval} = application:get_env(rabbit, channel_queue_cleanup_interval),

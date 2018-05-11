@@ -990,17 +990,28 @@ requeue(QPid, MsgIds, ChPid) ->
 
 ack(QPid, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]});
-ack({Name, _} = Id, {CTag, MsgIds}, _ChPid, FStates) ->
-    FState0 = get_quorum_state(Id, FStates),
-    {ok, FState} = rabbit_quorum_queue:ack(CTag, MsgIds, FState0),
-    {ok, maps:put(Name, FState, FStates)}.
+ack({Name, _}, {CTag, MsgIds}, _ChPid, QuorumStates) ->
+    case QuorumStates of
+        #{Name := QState0} ->
+            {ok, QState} = rabbit_quorum_queue:ack(CTag, MsgIds, QState0),
+            {ok, maps:put(Name, QState, QuorumStates)};
+        _ ->
+            %% queue was not found
+            {ok, QuorumStates}
+    end.
 
 reject(QPid, Requeue, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{reject, Requeue, MsgIds, ChPid}]});
-reject({Name, _} = Id, Requeue, {CTag, MsgIds}, _ChPid, FStates) ->
-    FState0 = get_quorum_state(Id, FStates),
-    {ok, FState} = rabbit_quorum_queue:reject(Requeue, CTag, MsgIds, FState0),
-    {ok, maps:put(Name, FState, FStates)}.
+reject({Name, _}, Requeue, {CTag, MsgIds}, _ChPid, QuorumStates) ->
+    case QuorumStates of
+        #{Name := QState0} ->
+            {ok, QState} = rabbit_quorum_queue:reject(Requeue, CTag,
+                                                      MsgIds, QState0),
+            {ok, maps:put(Name, QState, QuorumStates)};
+        _ ->
+            %% queue was not found
+            {ok, QuorumStates}
+    end.
 
 notify_down_all(QPids, ChPid) ->
     notify_down_all(QPids, ChPid, ?CHANNEL_OPERATION_TIMEOUT).
@@ -1072,9 +1083,9 @@ basic_cancel(#amqqueue{pid = QPid, type = classic}, ChPid, ConsumerTag, OkMsg, A
             {ok, QState};
         Err -> Err
     end;
-basic_cancel(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum}, ChPid,
+basic_cancel(#amqqueue{pid = {Name, _} = Id, type = quorum}, ChPid,
              ConsumerTag, OkMsg, _ActingUser, QStates) ->
-    FState0 = get_quorum_state(Id, QName, QStates),
+    FState0 = get_quorum_state(Id, QStates),
     {ok, FState} = rabbit_quorum_queue:basic_cancel(ConsumerTag, ChPid, OkMsg, FState0),
     {ok, maps:put(Name, FState, QStates)}.
 
@@ -1410,10 +1421,5 @@ get_quorum_state({Name, _} = Id, QName, Map) ->
             rabbit_quorum_queue:init_state(Id, QName)
     end.
 
-get_quorum_state({Name, _} = Id, Map) ->
-    try
-        maps:get(Name, Map)
-    catch
-        error:{badkey, _} ->
-            rabbit_quorum_queue:init_state(Id)
-    end.
+get_quorum_state({Name, _}, Map) ->
+    maps:get(Name, Map).

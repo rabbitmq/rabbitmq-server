@@ -16,7 +16,7 @@
 
 -module(rabbit_quorum_queue).
 
--export([init_state/1, init_state/2, handle_event/2]).
+-export([init_state/2, handle_event/2]).
 -export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
 -export([info/1, info/2, stat/1, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/9, basic_cancel/4]).
@@ -24,9 +24,9 @@
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
--export([cancel_customer/2, cancel_customer/3]).
--export([become_leader/1, update_metrics/1]).
 -export([cluster_state/1, status/2]).
+-export([cancel_customer_handler/3, cancel_customer/3]).
+-export([become_leader/2, update_metrics/2]).
 -export([rpc_delete_metrics/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -36,7 +36,6 @@
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(), rabbit_types:message()}.
 
--spec init_state(ra_node_id()) -> ra_fifo_client:state().
 -spec handle_event({'ra_event', ra_node_id(), any()}, ra_fifo_client:state()) ->
                           {'internal', Correlators :: [term()], ra_fifo_client:state()} |
                           {ra_fifo:client_msg(), ra_fifo_client:state()}.
@@ -87,19 +86,12 @@
 
 %%----------------------------------------------------------------------------
 
-init_state({Name, _} = Id) ->
-    {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
-    ra_fifo_client:init(Name, [Id], SoftLimit, fun() -> credit_flow:block(Name), ok end,
-                        fun() -> credit_flow:unblock(Name), ok end).
-
+-spec init_state(ra_node_id(), rabbit_types:r('queue')) ->
+    ra_fifo_client:state().
 init_state({Name, _} = Id, QName) ->
-    %% The quorum mapping entry is created on queue declare, but if another node
-    %% has processed this command the actual node won't have the entry.
-    %% init_state/1 can be used when there is guarantee this has been called, such
-    %% as when processing ack's and rejects. 
-    ets:insert_new(quorum_mapping, {Name, QName}),
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
-    ra_fifo_client:init(Name, [Id], SoftLimit, fun() -> credit_flow:block(Name), ok end,
+    ra_fifo_client:init(QName, [Id], SoftLimit,
+                        fun() -> credit_flow:block(Name), ok end,
                         fun() -> credit_flow:unblock(Name), ok end).
 
 handle_event({ra_event, From, Evt}, FState) ->
@@ -118,13 +110,12 @@ declare(#amqqueue{name = QName,
     Nodes = rabbit_mnesia:cluster_nodes(all),
     NewQ = Q#amqqueue{pid = Id,
                       quorum_nodes = Nodes},
-    ets:insert(quorum_mapping, {RaName, QName}),
     _ = rabbit_amqqueue:internal_declare(NewQ, false),
     RaMachine = ra_machine(NewQ),
     case ra:start_cluster(RaName, RaMachine,
                           [{RaName, Node} || Node <- Nodes]) of
         {ok, _, _} ->
-            FState = init_state(Id),
+            FState = init_state(Id, QName),
             OwnerPid = case ExclusiveOwner of
                            none -> '';
                            _ -> ExclusiveOwner
@@ -147,23 +138,24 @@ declare(#amqqueue{name = QName,
                             [rabbit_misc:rs(QName), node(), Error])
     end.
 
-ra_machine(Q) ->
+ra_machine(Q = #amqqueue{name = QName}) ->
     {module, ra_fifo,
      #{dead_letter_handler => dlx_mfa(Q),
-       cancel_customer_handler => {?MODULE, cancel_customer, []},
-       become_leader_handler => {?MODULE, become_leader, []},
-       metrics_handler => {?MODULE, update_metrics, []}}}.
+       cancel_customer_handler => {?MODULE, cancel_customer, [QName]},
+       become_leader_handler => {?MODULE, become_leader, [QName]},
+       metrics_handler => {?MODULE, update_metrics, [QName]}}}.
 
-cancel_customer({ConsumerTag, ChPid}, Name) ->
+cancel_customer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
     Node = node(ChPid),
-    QName = queue_name(Name),
+    % QName = queue_name(Name),
     case Node == node() of
-        true -> cancel_customer(ChPid, ConsumerTag, QName);
-        false -> rabbit_misc:rpc_call(Node, rabbit_quorum_queue, cancel_customer,
-                                      [ChPid, ConsumerTag, QName])
+        true -> cancel_customer(QName, ChPid, ConsumerTag);
+        false -> rabbit_misc:rpc_call(Node, rabbit_quorum_queue,
+                                      cancel_customer,
+                                      [QName, ChPid, ConsumerTag])
     end.
 
-cancel_customer(ChPid, ConsumerTag, QName) ->
+cancel_customer(QName, ChPid, ConsumerTag) ->
     rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},
@@ -171,8 +163,8 @@ cancel_customer(ChPid, ConsumerTag, QName) ->
                          {queue,        QName},
                          {user_who_performed_action, ?INTERNAL_USER}]).
 
-become_leader(Name) ->
-    QName = queue_name(Name),
+become_leader(QName, Name) ->
+    % QName = queue_name(Name),
     Fun = fun(Q1) -> Q1#amqqueue{pid = {Name, node()}} end,
     %% as this function is called synchronously when a ra node becomes leader
     %% we need to ensure there is no chance of blocking as else the ra node
@@ -194,21 +186,16 @@ rpc_delete_metrics(QName) ->
     ets:delete(queue_metrics, QName),
     ok.
 
-update_metrics({Name, MR, MU, M, C}) ->
+update_metrics(QName, {Name, MR, MU, M, C}) ->
     R = reductions(Name),
-    case rabbit_quorum_queue:queue_name(Name) of
-        undefined ->
-            ok;
-        QName ->
-            rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
-            Infos = [{consumers, C} | rabbit_quorum_queue:infos(QName)],
-            rabbit_core_metrics:queue_stats(QName, Infos),
-            rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
-                                                       {messages, M},
-                                                       {messages_ready, MR},
-                                                       {messages_unacknowledged, MU},
-                                                       {reductions, R}])
-    end.
+    rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
+    Infos = [{consumers, C} | infos(QName)],
+    rabbit_core_metrics:queue_stats(QName, Infos),
+    rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
+                                               {messages, M},
+                                               {messages_ready, MR},
+                                               {messages_unacknowledged, MU},
+                                               {reductions, R}]).
 
 reductions(Name) ->
     try
@@ -221,7 +208,6 @@ reductions(Name) ->
 
 recover(Queues) ->
     [begin
-         ets:insert_new(quorum_mapping, {Name, QName}),
          case ra:restart_node({Name, node()}) of
              ok ->
                  % queue was restarted, good
@@ -239,8 +225,7 @@ recover(Queues) ->
                                     Machine, RaNodes)
          end,
          rabbit_amqqueue:internal_declare(Q, true)
-     end || #amqqueue{name = QName,
-                      pid = {Name, _},
+     end || #amqqueue{pid = {Name, _},
                       quorum_nodes = Nodes} = Q <- Queues].
 
 stop(VHost) ->
@@ -259,7 +244,6 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
             ok
     end,
     rabbit_core_metrics:queue_deleted(QName),
-    ets:delete(quorum_mapping, Name),
     {ok, Msgs}.
 
 delete_immediately({Name, _} = QPid) ->
@@ -267,7 +251,6 @@ delete_immediately({Name, _} = QPid) ->
     _ = rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER),
     ok = ra:delete_cluster([QPid]),
     rabbit_core_metrics:queue_deleted(QName),
-    ets:delete(quorum_mapping, Name),
     ok.
 
 ack(CTag, MsgIds, FState) ->
@@ -377,7 +360,7 @@ dlx_mfa(#amqqueue{name = Resource} = Q) ->
     DLX = init_dlx(args_policy_lookup(<<"dead-letter-exchange">>, fun res_arg/2, Q), Q),
     DLXRKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun res_arg/2, Q),
     {?MODULE, dead_letter_publish, [VHost, DLX, DLXRKey, Q#amqqueue.name]}.
-        
+
 init_dlx(undefined, _Q) ->
     undefined;
 init_dlx(DLX, #amqqueue{name = QName}) ->
@@ -540,24 +523,5 @@ check_invalid_arguments(QueueName, Args) ->
      end || Key <- Keys],
     ok.
 
-queue_name(Name) ->
-    case ets:lookup(quorum_mapping, Name) of
-        [{_, QName}] ->
-            QName;
-        _ ->
-            case mnesia:async_dirty(
-                   fun () ->
-                           qlc:e(qlc:q([QName || #amqqueue{name = QName,
-                                                           pid  = {N, _},
-                                                           type = quorum}
-                                                     <- mnesia:table(rabbit_durable_queue),
-                                                 N == Name]))
-                   end) of
-                [QName] ->
-                    %% TODO if not present, undefined!
-                    ets:insert_new(quorum_mapping, {Name, QName}),
-                    QName;
-                [] ->
-                    undefined
-            end
-    end.
+queue_name(RaFifoState) ->
+    ra_fifo_client:cluster_id(RaFifoState).
