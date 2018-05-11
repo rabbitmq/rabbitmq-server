@@ -27,6 +27,7 @@
 -export([cancel_customer/2, cancel_customer/3]).
 -export([become_leader/1, update_metrics/1]).
 -export([cluster_state/1, status/2]).
+-export([rpc_delete_metrics/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -173,15 +174,25 @@ cancel_customer(ChPid, ConsumerTag, QName) ->
 become_leader(Name) ->
     QName = queue_name(Name),
     Fun = fun(Q1) -> Q1#amqqueue{pid = {Name, node()}} end,
-    rabbit_misc:execute_mnesia_transaction(
-      fun() -> rabbit_amqqueue:update(QName, Fun) end),
-    case rabbit_amqqueue:lookup(QName) of
-        {ok, #amqqueue{quorum_nodes = Nodes}} ->
-            [rpc:call(Node, ets, delete, [queue_coarse_metrics, QName])
-             || Node <- Nodes, Node =/= node()];
-        _ ->
-            ok
-    end.
+    %% as this function is called synchronously when a ra node becomes leader
+    %% we need to ensure there is no chance of blocking as else the ra node
+    %% cannot establish it's leadership
+    spawn(fun() ->
+                  rabbit_misc:execute_mnesia_transaction(
+                    fun() -> rabbit_amqqueue:update(QName, Fun) end),
+                  case rabbit_amqqueue:lookup(QName) of
+                      {ok, #amqqueue{quorum_nodes = Nodes}} ->
+                          [rpc:call(Node, ?MODULE, rpc_delete_metrics, [QName])
+                           || Node <- Nodes, Node =/= node()];
+                      _ ->
+                          ok
+                  end
+          end).
+
+rpc_delete_metrics(QName) ->
+    ets:delete(queue_coarse_metrics, QName),
+    ets:delete(queue_metrics, QName),
+    ok.
 
 update_metrics({Name, MR, MU, M, C}) ->
     R = reductions(Name),

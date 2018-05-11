@@ -1025,7 +1025,10 @@ metrics_cleanup_on_leadership_takeover(Config) ->
               end
       end),
     force_leader_change(Leader, Nodes),
-    [] = rpc:call(Leader, ets, lookup, [queue_coarse_metrics, QRes]),
+    wait_until(fun () ->
+                       [] =:= rpc:call(Leader, ets, lookup, [queue_coarse_metrics, QRes]) andalso
+                       [] =:= rpc:call(Leader, ets, lookup, [queue_metrics, QRes])
+               end),
     ok.
 
 metrics_cleanup_on_leader_crash(Config) ->
