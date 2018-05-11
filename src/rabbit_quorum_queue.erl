@@ -26,6 +26,7 @@
 -export([queue_name/1]).
 -export([cancel_customer/2, cancel_customer/3]).
 -export([become_leader/1, update_metrics/1]).
+-export([cluster_state/1, status/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -65,6 +66,8 @@
 -spec info(rabbit_types:amqqueue(), rabbit_types:info_keys()) -> rabbit_types:infos().
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
 -spec stat(rabbit_types:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
+-spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
+-spec status(rabbit_types:vhost(), Name :: atom()) -> rabbit_types:infos().
 
 -define(STATISTICS_KEYS,
         [policy,
@@ -330,6 +333,33 @@ stat(_Q) ->
 purge(Node) ->
     ra_fifo_client:purge(Node).
 
+cluster_state(Name) ->
+    case whereis(Name) of
+        undefined -> down;
+        _ ->
+            case ets:lookup(ra_state, Name) of
+                [{_, recover}] -> recovering;
+                _ -> running
+            end
+    end.
+
+status(Vhost, QueueName) ->
+    %% Handle not found queues
+    QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
+    RName = qname_to_rname(QName),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, #amqqueue{pid = {_, Leader}, quorum_nodes = Nodes}} ->
+            Info = [{leader, Leader}, {members, Nodes}],
+            case ets:lookup(ra_state, RName) of
+                [{_, State}] ->
+                    [{local_state, State} | Info];
+                [] ->
+                    Info
+            end;
+        {error, not_found} = E ->
+            E
+    end.
+
 %%----------------------------------------------------------------------------
 dlx_mfa(#amqqueue{name = Resource} = Q) ->
     #resource{virtual_host = VHost} = Resource,
@@ -436,11 +466,16 @@ i(memory, #amqqueue{pid = {Name, _}}) ->
         error:badarg ->
             0
     end;
-i(state, #amqqueue{pid = {Name, _}}) ->
-    %% TODO guess this is it by now?
-    case whereis(Name) of
-        undefined -> down;
-        _ -> running
+i(state, #amqqueue{pid = {Name, Node}}) ->
+    %% Check against the leader or last known leader
+    case rpc:call(Node, ?MODULE, cluster_state, [Name]) of
+        {badrpc, _} -> down;
+        State -> State
+    end;
+i(local_state, #amqqueue{pid = {Name, _}}) ->
+    case ets:lookup(ra_state, Name) of
+        [{_, State}] -> State;
+        _ -> not_member
     end;
 i(garbage_collection, #amqqueue{pid = {Name, _}}) ->
     try

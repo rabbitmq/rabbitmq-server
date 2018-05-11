@@ -116,7 +116,7 @@ stop_and_delete_vhost(VHost, Node) ->
             {error, RpcErr}
     end.
 
--spec init_vhost(rabbit_types:vhost()) -> ok | {error, {no_such_vhost, rabbit_types:vhsot()}}.
+-spec init_vhost(rabbit_types:vhost()) -> ok | {error, {no_such_vhost, rabbit_types:vhost()}}.
 init_vhost(VHost) ->
     case start_vhost(VHost) of
         {ok, _} -> ok;
