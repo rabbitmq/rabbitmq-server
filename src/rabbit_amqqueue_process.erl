@@ -382,6 +382,7 @@ process_args_policy(State = #q{q                   = Q,
          {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
          {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
+         {<<"max-priority">>,            fun res_arg/2, fun init_max_priority/2},
          {<<"overflow">>,                fun res_arg/2, fun init_overflow/2},
          {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2}],
       drop_expired_msgs(
@@ -425,6 +426,9 @@ init_max_length(MaxLen, State) ->
 init_max_bytes(MaxBytes, State) ->
     {_Dropped, State1} = maybe_drop_head(State#q{max_bytes = MaxBytes}),
     State1.
+
+init_max_priority(_MaxPriority, State) ->
+    State.
 
 init_overflow(undefined, State) ->
     State;
