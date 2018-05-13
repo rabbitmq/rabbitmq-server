@@ -28,6 +28,8 @@
                     {requires,    pre_boot},
                     {enables,     kernel_ready}]}).
 
+-import(rabbit_misc, [pget/2]).
+
 -export([enable/0]).
 
 -export([start/1, stop/0]).
@@ -42,6 +44,8 @@
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          zip_msgs_and_acks/4]).
+
+-export([max_priority/1, priorities/1]).
 
 -record(state, {bq, bqss, max_priority}).
 -record(passthrough, {bq, bqs}).
@@ -125,9 +129,19 @@ collapse_recovery(QNames, DupNames, Recovery) ->
                               end, dict:new(), lists:zip(DupNames, Recovery)),
     [dict:fetch(Name, NameToTerms) || Name <- QNames].
 
-priorities(#amqqueue{arguments = Args}) ->
-    Ints = [long, short, signedint, byte, unsignedbyte, unsignedshort, unsignedint],
+max_priority(Q = #amqqueue{arguments = Args}) ->
     case rabbit_misc:table_lookup(Args, <<"x-max-priority">>) of
+        {Type, RequestedMax} -> {Type, RequestedMax};
+        undefined            ->
+            case rabbit_policy:effective_definition(Q) of
+                undefined -> undefined;
+                Proplist  -> {unsignedbyte, pget(<<"max-priority">>, Proplist)}
+            end
+    end.
+
+priorities(Q) ->
+    Ints = [long, short, signedint, byte, unsignedbyte, unsignedshort, unsignedint],
+    case max_priority(Q) of
         {Type, RequestedMax} ->
             case lists:member(Type, Ints) of
                 false -> none;
