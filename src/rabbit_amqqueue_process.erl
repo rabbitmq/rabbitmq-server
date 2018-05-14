@@ -311,8 +311,14 @@ terminate_delete(EmitStats, Reason,
                                                 fun() -> emit_stats(State) end);
            true      -> ok
         end,
-        %% don't care if the internal delete doesn't return 'ok'.
-        rabbit_amqqueue:internal_delete(QName, ActingUser),
+        %% This try-catch block transforms throws to errors since throws are not
+        %% logged.
+        try
+            %% don't care if the internal delete doesn't return 'ok'.
+            rabbit_amqqueue:internal_delete(QName, ActingUser)
+        catch
+            {error, Reason} -> error(Reason)
+        end,
         BQS1
     end.
 
