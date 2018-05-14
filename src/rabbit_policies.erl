@@ -102,10 +102,10 @@ validate_policy0(<<"max-length-bytes">>, Value) ->
     {error, "~p is not a valid maximum length in bytes", [Value]};
 
 validate_policy0(<<"max-priority">>, Value)
-  when is_integer(Value), Value >= 0, Value =< 255 ->
+  when is_integer(Value), Value >= 0, Value =< ?MAX_SUPPORTED_PRIORITY ->
     ok;
 validate_policy0(<<"max-priority">>, Value) ->
-    {error, "~p is not a valid max priority (must be an integer in the 1-255 range)", [Value]};
+    {error, "~p is not a valid max priority (must be an integer in the 1-~p range)", [Value, ?MAX_SUPPORTED_PRIORITY]};
 
 validate_policy0(<<"queue-mode">>, <<"default">>) ->
     ok;
