@@ -339,8 +339,8 @@ binding_action(Binding = #binding{source      = SrcName,
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end, ErrFun).
 
-delete_object(Table, Record, LockKind) ->
-    mnesia:delete_object(Table, Record, LockKind).
+dirty_delete_object(Table, Record, LockKind) ->
+    mnesia:dirty_delete_object(Table, Record).
 
 sync_route(Route, true, true, Fun) ->
     ok = Fun(rabbit_durable_route, Route, write),
@@ -411,15 +411,15 @@ remove_routes(Routes) ->
     %% Of course the destination might not really be durable but it's
     %% just as easy to try to delete it from the semi-durable table
     %% than check first
-    [ok = sync_route(R, false, true, fun mnesia:delete_object/3) ||
+    [ok = sync_route(R, false, true, fun dirty_delete_object/3) ||
         R <- RamRoutes],
-    [ok = sync_route(R, true,  true, fun mnesia:delete_object/3) ||
+    [ok = sync_route(R, true,  true, fun dirty_delete_object/3) ||
         R <- DiskRoutes],
     [R#route.binding || R <- Routes].
 
 remove_transient_routes(Routes) ->
     [begin
-         ok = sync_transient_route(R, fun delete_object/3),
+         ok = sync_transient_route(R, fun dirty_delete_object/3),
          R#route.binding
      end || R <- Routes].
 
