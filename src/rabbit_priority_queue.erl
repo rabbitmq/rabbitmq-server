@@ -128,11 +128,14 @@ collapse_recovery(QNames, DupNames, Recovery) ->
 priorities(#amqqueue{arguments = Args}) ->
     Ints = [long, short, signedint, byte, unsignedbyte, unsignedshort, unsignedint],
     case rabbit_misc:table_lookup(Args, <<"x-max-priority">>) of
-        {Type, Max} -> case lists:member(Type, Ints) of
-                           false -> none;
-                           true  -> lists:reverse(lists:seq(0, Max))
-                       end;
-        _           -> none
+        {Type, RequestedMax} ->
+            case lists:member(Type, Ints) of
+                false -> none;
+                true  ->
+                    Max = min(RequestedMax, ?MAX_SUPPORTED_PRIORITY),
+                    lists:reverse(lists:seq(0, Max))
+            end;
+        _                    -> none
     end.
 
 %%----------------------------------------------------------------------------

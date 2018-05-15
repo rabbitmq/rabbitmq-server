@@ -117,4 +117,3 @@ merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
 merge_policy_value(<<"max-length">>, Val, OpVal)       -> min(Val, OpVal);
 merge_policy_value(<<"max-length-bytes">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"expires">>, Val, OpVal)          -> min(Val, OpVal).
-
