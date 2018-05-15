@@ -103,5 +103,11 @@ put_vhost(Name, Trace, Username) ->
 maybe_grant_full_permissions(_Name, ?INTERNAL_USER) ->
     ok;
 maybe_grant_full_permissions(Name, Username) ->
+    U = rabbit_auth_backend_internal:lookup_user(Username),
+    maybe_grant_full_permissions(U, Name, Username).
+
+maybe_grant_full_permissions({ok, _}, Name, Username) ->
     rabbit_auth_backend_internal:set_permissions(
-      Username, Name, <<".*">>, <<".*">>, <<".*">>, Username).
+      Username, Name, <<".*">>, <<".*">>, <<".*">>, Username);
+maybe_grant_full_permissions(_, _Name, _Username) ->
+    ok.
