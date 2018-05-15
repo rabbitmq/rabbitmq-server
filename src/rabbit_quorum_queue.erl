@@ -15,13 +15,16 @@
 %%
 
 -module(rabbit_quorum_queue).
+-behaviour(rabbit_queue).
 
 -export([init_state/2, handle_event/2]).
--export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
+-export([declare/2, recover/1, stop/1, delete/4, delete_immediately/1]).
 -export([info/1, info/2, stat/1, infos/1]).
--export([ack/3, reject/4, basic_get/4, basic_consume/9, basic_cancel/4]).
+-export([ack/4, reject/4, basic_get/6, basic_consume/9, basic_cancel/4,
+         deliver/3, delivery_target/2]).
+-export([qname_to_local_name/1]).
 -export([purge/1]).
--export([stateless_deliver/2, deliver/3]).
+-export([stateless_deliver/2]).
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
@@ -39,20 +42,13 @@
 -spec handle_event({'ra_event', ra_node_id(), any()}, ra_fifo_client:state()) ->
                           {'internal', Correlators :: [term()], ra_fifo_client:state()} |
                           {ra_fifo:client_msg(), ra_fifo_client:state()}.
--spec declare(rabbit_types:amqqueue()) -> {'new', rabbit_types:amqqueue(), ra_fifo_client:state()}.
 -spec recover([rabbit_types:amqqueue()]) -> [rabbit_types:amqqueue() |
                                              {'absent', rabbit_types:amqqueue(), atom()}].
 -spec stop(rabbit_types:vhost()) -> 'ok'.
 -spec delete(rabbit_types:amqqueue(), boolean(), boolean(), rabbit_types:username()) ->
                     {'ok', QLen :: non_neg_integer()}.
--spec ack(rabbit_types:ctag(), [msg_id()], ra_fifo_client:state()) ->
-                 {'ok', ra_fifo_client:state()}.
 -spec reject(Confirm :: boolean(), rabbit_types:ctag(), [msg_id()], ra_fifo_client:state()) ->
                     {'ok', ra_fifo_client:state()}.
--spec basic_get(rabbit_types:amqqueue(), NoAck :: boolean(), rabbit_types:ctag(),
-                ra_fifo_client:state()) ->
-                       {'ok', 'empty', ra_fifo_client:state()} |
-                       {'ok', QLen :: non_neg_integer(), qmsg(), ra_fifo_client:state()}.
 -spec basic_consume(rabbit_types:amqqueue(), NoAck :: boolean(), ChPid :: pid(),
                     ConsumerPrefetchCount :: non_neg_integer(), rabbit_types:ctag(),
                     ExclusiveConsume :: boolean(), Args :: rabbit_framing:amqp_table(),
@@ -97,15 +93,17 @@ init_state({Name, _} = Id, QName) ->
 handle_event({ra_event, From, Evt}, FState) ->
     ra_fifo_client:handle_ra_event(From, Evt, FState).
 
+-spec declare(rabbit_types:amqqueue(), node()) ->
+    {'new', rabbit_types:amqqueue(), ra_fifo_client:state()}.
 declare(#amqqueue{name = QName,
+                  type = {_, RaName},
                   durable = Durable,
                   auto_delete = AutoDelete,
                   arguments = Arguments,
                   exclusive_owner = ExclusiveOwner,
-                  options = Opts} = Q) ->
+                  options = Opts} = Q, _Node) ->
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
     check_invalid_arguments(QName, Arguments),
-    RaName = qname_to_rname(QName),
     Id = {RaName, node()},
     Nodes = rabbit_mnesia:cluster_nodes(all),
     NewQ = Q#amqqueue{pid = Id,
@@ -115,7 +113,6 @@ declare(#amqqueue{name = QName,
     case ra:start_cluster(RaName, RaMachine,
                           [{RaName, Node} || Node <- Nodes]) of
         {ok, _, _} ->
-            FState = init_state(Id, QName),
             OwnerPid = case ExclusiveOwner of
                            none -> '';
                            _ -> ExclusiveOwner
@@ -130,7 +127,7 @@ declare(#amqqueue{name = QName,
                                  {owner_pid, OwnerPid},
                                  {exclusive, is_pid(ExclusiveOwner)},
                                  {user_who_performed_action, ActingUser}]),
-            {new, NewQ, FState};
+            {new, NewQ};
         {error, Error} ->
             _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
             rabbit_misc:protocol_error(internal_error,
@@ -147,7 +144,6 @@ ra_machine(Q = #amqqueue{name = QName}) ->
 
 cancel_customer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
     Node = node(ChPid),
-    % QName = queue_name(Name),
     case Node == node() of
         true -> cancel_customer(QName, ChPid, ConsumerTag);
         false -> rabbit_misc:rpc_call(Node, rabbit_quorum_queue,
@@ -164,7 +160,6 @@ cancel_customer(QName, ChPid, ConsumerTag) ->
                          {user_who_performed_action, ?INTERNAL_USER}]).
 
 become_leader(QName, Name) ->
-    % QName = queue_name(Name),
     Fun = fun(Q1) -> Q1#amqqueue{pid = {Name, node()}} end,
     %% as this function is called synchronously when a ra node becomes leader
     %% we need to ensure there is no chance of blocking as else the ra node
@@ -232,7 +227,7 @@ stop(VHost) ->
     _ = [ra:stop_node(Pid) || #amqqueue{pid = Pid} <- find_quorum_queues(VHost)],
     ok.
 
-delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = QNodes},
+delete(#amqqueue{pid = {Name, _}, name = QName, quorum_nodes = QNodes},
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Msgs = quorum_messages(Name),
@@ -249,20 +244,28 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
 delete_immediately({Name, _} = QPid) ->
     QName = queue_name(Name),
     _ = rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER),
-    ok = ra:delete_cluster([QPid]),
+    ok = ra:delete_node(QPid),
     rabbit_core_metrics:queue_deleted(QName),
     ok.
 
-ack(CTag, MsgIds, FState) ->
-    ra_fifo_client:settle(quorum_ctag(CTag), MsgIds, FState).
+-spec ack(term(), rabbit_types:ctag(), [msg_id()], ra_fifo_client:state()) ->
+    ra_fifo_client:state().
+ack(_, CTag, MsgIds, QState0) ->
+    {ok, QState} = ra_fifo_client:settle(quorum_ctag(CTag), MsgIds, QState0),
+    QState.
+
 
 reject(true, CTag, MsgIds, FState) ->
     ra_fifo_client:return(quorum_ctag(CTag), MsgIds, FState);
 reject(false, CTag, MsgIds, FState) ->
     ra_fifo_client:discard(quorum_ctag(CTag), MsgIds, FState).
 
-basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
-          CTag0, FState0) ->
+-spec basic_get(rabbit_types:amqqueue(), ChPid :: pid(), NoAck :: boolean(),
+                LimiterPid :: pid(), rabbit_types:ctag(), ra_fifo_client:state()) ->
+    {'ok', 'empty', ra_fifo_client:state()} |
+    {'ok', QLen :: non_neg_integer(), qmsg(), ra_fifo_client:state()}.
+basic_get(#amqqueue{name = QName, pid = {Name, _} = Id}, _,
+          NoAck, _, CTag0, FState0) ->
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
                      true ->
@@ -272,14 +275,15 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
                  end,
     case ra_fifo_client:dequeue(CTag, Settlement, FState0) of
         {ok, empty, FState} ->
-            {ok, empty, FState};
+            {empty, FState};
         {ok, {MsgId, {MsgHeader, Msg}}, FState} ->
             IsDelivered = maps:is_key(delivery_count, MsgHeader),
             {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg}, FState}
     end.
 
-basic_consume(#amqqueue{name = QName, type = quorum}, NoAck, ChPid,
+basic_consume(#amqqueue{name = QName}, NoAck, ChPid,
               ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg, FState0) ->
+    %% TODO why send it before consumer is created?
     maybe_send_reply(ChPid, OkMsg),
     %% A prefetch count of 0 means no limitation, let's make it into something large for ra
     Prefetch = case ConsumerPrefetchCount of
@@ -300,11 +304,44 @@ stateless_deliver({Name, _} = Pid, Delivery) ->
     ok = ra_fifo_client:untracked_enqueue(Name, [Pid],
                                           Delivery#delivery.message).
 
-deliver(false, Delivery, FState0) ->
-    ra_fifo_client:enqueue(Delivery#delivery.message, FState0);
-deliver(true, Delivery, FState0) ->
-    ra_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
-                           Delivery#delivery.message, FState0).
+deliver(Targets, Delivery, untracked) ->
+    lists:foreach(fun ({Id, _}) ->
+                        rabbit_quorum_queue:stateless_deliver(Id, Delivery)
+                end, Targets),
+    untracked;
+deliver(Targets, Delivery, QueueStates) ->
+    lists:foldl(fun ({{Name, _}, _} = T, QStates) ->
+                        QState = get_queue_state(T, QueueStates),
+                        maps:put(Name, deliver(Delivery, QState),
+                                 QStates)
+                end, QueueStates, Targets).
+
+deliver(Delivery, QState0) ->
+    Corr = case Delivery#delivery.confirm of
+               true -> Delivery#delivery.msg_seq_no;
+               false -> undefined
+           end,
+    case ra_fifo_client:enqueue(Corr, Delivery#delivery.message, QState0) of
+        {ok, QState} -> QState;
+        {slow, QState} -> QState;
+        {error, stop_sending} ->
+            %% TODO
+            rabbit_log:warning("STOP_SENDING in deliver ~n", []),
+            QState0
+    end.
+
+get_queue_state({{Name, _} = Id, QName}, Map) ->
+    try
+        maps:get(Name, Map)
+    catch
+        error:{badkey, _} ->
+            rabbit_quorum_queue:init_state(Id, QName)
+    end.
+
+delivery_target(#amqqueue{pid = QPid, name = QName}, #{quorum := S} = Acc) ->
+    Acc#{?MODULE => [{QPid, QName} | S]};
+delivery_target(#amqqueue{pid = QPid, name = QName}, Acc) ->
+    Acc#{?MODULE => [{QPid, QName}]}.
 
 info(Q) ->
     info(Q, [name, durable, auto_delete, arguments, pid, state, messages,
@@ -340,7 +377,7 @@ cluster_state(Name) ->
 status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
-    RName = qname_to_rname(QName),
+    RName = qname_to_local_name(QName),
     case rabbit_amqqueue:lookup(QName) of
         {ok, #amqqueue{pid = {_, Leader}, quorum_nodes = Nodes}} ->
             Info = [{leader, Leader}, {members, Nodes}],
@@ -383,9 +420,14 @@ dead_letter_publish(VHost, X, RK, QName, ReasonMsgs) ->
     rabbit_vhost_dead_letter:publish(VHost, X, RK, QName, ReasonMsgs).
 
 %% TODO escape hack
-qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
+%% TODO: avoid exhausting the atom table.
+%% One option for this is to have a reusable set of queue names (or rather
+%% ra_ cluster names) that can be re-used - these would bear no resemblence
+%% to the queue name itself - also this means limiting the number of
+%% simultaneous quorum queues the system can support.
+qname_to_local_name(#resource{virtual_host = <<"/">>, name = Name}) ->
     erlang:binary_to_atom(<<"%2F_", Name/binary>>, utf8);
-qname_to_rname(#resource{virtual_host = VHost, name = Name}) ->
+qname_to_local_name(#resource{virtual_host = VHost, name = Name}) ->
     erlang:binary_to_atom(<<VHost/binary, "_", Name/binary>>, utf8).
 
 find_quorum_queues(VHost) ->
@@ -394,7 +436,7 @@ find_quorum_queues(VHost) ->
       fun () ->
               qlc:e(qlc:q([Q || Q = #amqqueue{vhost = VH,
                                               pid  = Pid,
-                                              type = quorum}
+                                              type = {?MODULE, _}}
                                     <- mnesia:table(rabbit_durable_queue),
                                 VH =:= VHost,
                                 qnode(Pid) == Node]))

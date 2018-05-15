@@ -142,15 +142,15 @@ declare_args(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
     LQ = <<"quorum-q">>,
     declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    assert_queue_type(Node, LQ, quorum),
+    assert_queue_type(Node, LQ, rabbit_quorum_queue),
 
     DQ = <<"classic-q">>,
     declare(Ch, DQ, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
-    assert_queue_type(Node, DQ, classic),
+    assert_queue_type(Node, DQ, rabbit_classic_queue),
 
     DQ2 = <<"classic-q2">>,
     declare(Ch, DQ2),
-    assert_queue_type(Node, DQ2, classic).
+    assert_queue_type(Node, DQ2, rabbit_classic_queue).
 
 declare_invalid_args(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -865,8 +865,8 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
     [NCh1, NCh2] = rpc:call(Node, rabbit_channel, list, []),
-    %% Check the channel state contains the state for the quorum queue on channel 1 and 2
-    wait_for_cleanup(Node, NCh1, 1),
+    %% Check the channel state contains the state for the quorum queue on channel 2
+    wait_for_cleanup(Node, NCh1, 0),
     wait_for_cleanup(Node, NCh2, 1),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
@@ -1172,7 +1172,7 @@ declare(Ch, Q, Args) ->
                                            arguments = Args}).
 
 assert_queue_type(Node, Q, Expected) ->
-    Actual = get_queue_type(Node, Q),
+    {Actual, _Key} = get_queue_type(Node, Q),
     Expected = Actual.
 
 get_queue_type(Node, Q) ->

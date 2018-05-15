@@ -47,8 +47,8 @@
 %% When a queue is declared as exclusive on a channel, the channel
 %% will notify queue collector of that queue.
 
--include("rabbit_framing.hrl").
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(gen_server2).
 
@@ -560,6 +560,8 @@ handle_cast(terminate, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:flush(WriterPid),
     {stop, normal, State};
 
+%% sends a command back to client
+%% only used for basic_consume and basic_cancel
 handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg}, State) ->
     ok = send(Msg, State),
     noreply(consumer_monitor(CTag, State));
@@ -568,22 +570,24 @@ handle_cast({command, Msg}, State) ->
     ok = send(Msg, State),
     noreply(State);
 
+%% classic queue delivery
 handle_cast({deliver, _CTag, _AckReq, _Msg}, State = #ch{state = closing}) ->
     noreply(State);
 handle_cast({deliver, ConsumerTag, AckRequired, Msg}, State) ->
     noreply(handle_deliver(ConsumerTag, AckRequired, Msg, State));
 
+%% sent by anoter channel for the virtual reply to queue
 handle_cast({deliver_reply, _K, _Del}, State = #ch{state = closing}) ->
     noreply(State);
 handle_cast({deliver_reply, _K, _Del}, State = #ch{reply_consumer = none}) ->
     noreply(State);
 handle_cast({deliver_reply, Key, #delivery{message =
                     #basic_message{exchange_name = ExchangeName,
-                                   routing_keys  = [RoutingKey | _CcRoutes],
+                                   routing_keys  = [RoutingKey | _],
                                    content       = Content}}},
             State = #ch{writer_pid     = WriterPid,
                         next_tag       = DeliveryTag,
-                        reply_consumer = {ConsumerTag, _Suffix, Key}}) ->
+                        reply_consumer = {ConsumerTag, _, Key}}) ->
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -596,11 +600,13 @@ handle_cast({deliver_reply, Key, #delivery{message =
 handle_cast({deliver_reply, _K1, _}, State=#ch{reply_consumer = {_, _, _K2}}) ->
     noreply(State);
 
+%% classic queue AMQP 1.0 related
 handle_cast({send_credit_reply, Len}, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(
            WriterPid, #'basic.credit_ok'{available = Len}),
     noreply(State);
 
+%% sent by classic queue
 handle_cast({send_drained, CTagCredit}, State = #ch{writer_pid = WriterPid}) ->
     [ok = rabbit_writer:send_command(
             WriterPid, #'basic.credit_drained'{consumer_tag   = ConsumerTag,
@@ -608,15 +614,18 @@ handle_cast({send_drained, CTagCredit}, State = #ch{writer_pid = WriterPid}) ->
      || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
 
+%% internal
 handle_cast({force_event_refresh, Ref}, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State),
                         Ref),
     noreply(rabbit_event:init_stats_timer(State, #ch.stats_timer));
 
+%% from classic queue
 handle_cast({mandatory_received, MsgSeqNo}, State = #ch{mandatory = Mand}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
     noreply_coalesce(State#ch{mandatory = dtree:drop(MsgSeqNo, Mand)});
 
+%% from classic queue
 handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
     %% It does not matter which queue rejected the message,
     %% if any queue rejected it - it should not be confirmed.
@@ -624,9 +633,11 @@ handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
     noreply_coalesce(record_rejects(MXs, State#ch{unconfirmed = UC1}));
 
+%% classic queue: this is sent by the message store after flush probably?
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
     noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
 
+%% only sent by quorum queues
 handle_info({ra_event, {Name, _} = From, _} = Evt,
             #ch{queue_states = QueueStates,
                 consumer_mapping = ConsumerMapping} = State0) ->
@@ -643,8 +654,8 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     QState2 = case AckRequired of
                                   false ->
                                       {MsgIds, _} = lists:unzip(Msgs),
-                                      {ok, FS} = rabbit_quorum_queue:ack(CTag, MsgIds, QState1),
-                                      FS;
+                                      rabbit_quorum_queue:ack(From, CTag,
+                                                              MsgIds, QState1);
                                   true ->
                                       QState1
                               end,
@@ -701,7 +712,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     credit_flow:peer_down(QPid),
     #ch{queue_names = QNames, queue_monitors = QMons} = State4,
     case maps:find(QPid, QNames) of
-        {ok, QName} -> erase_queue_stats(QName);
+        {ok, {QName, _}} -> erase_queue_stats(QName);
         error       -> ok
     end,
     noreply(State4#ch{queue_names    = maps:remove(QPid, QNames),
@@ -1199,15 +1210,15 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
                         Q, self(), NoAck, rabbit_limiter:pid(Limiter),
                         DeliveryTag, QueueStates0)
            end) of
-        {ok, MessageCount, Msg} ->
-            handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount, Msg, State);
+        % {ok, MessageCount, Msg} ->
+        %     handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount, Msg, State);
         {ok, MessageCount, Msg, QueueStates} ->
             handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount, Msg,
                              State#ch{queue_states = QueueStates});
         {empty, QueueStates} ->
-            {reply, #'basic.get_empty'{}, State#ch{queue_states = QueueStates}};
-        empty ->
-            {reply, #'basic.get_empty'{}, State}
+            {reply, #'basic.get_empty'{}, State#ch{queue_states = QueueStates}}
+        % empty ->
+        %     {reply, #'basic.get_empty'{}, State}
     end;
 
 handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
@@ -1581,27 +1592,16 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                       Username, QueueStates0),
                     Q}
            end) of
-        {{ok, QueueStates}, Q = #amqqueue{pid = QPid, name = QName}} ->
+        {{ok, QueueStates}, Q = #amqqueue{pid = QPid, name = QName,
+                                          type = Type}} ->
             CM1 = maps:put(
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
                     ConsumerMapping),
             State1 = monitor_delivering_queue(
-                       NoAck, QPid, QName,
+                       NoAck, QPid, {QName, Type},
                        State#ch{consumer_mapping = CM1,
                                 queue_states = QueueStates}),
-            {ok, case NoWait of
-                     true  -> consumer_monitor(ActualConsumerTag, State1);
-                     false -> State1
-                 end};
-        {ok, Q = #amqqueue{pid = QPid, name = QName}} ->
-            CM1 = maps:put(
-                    ActualConsumerTag,
-                    {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
-                    ConsumerMapping),
-            State1 = monitor_delivering_queue(
-                       NoAck, QPid, QName,
-                       State#ch{consumer_mapping = CM1}),
             {ok, case NoWait of
                      true  -> consumer_monitor(ActualConsumerTag, State1);
                      false -> State1
@@ -1620,18 +1620,18 @@ consumer_monitor(ConsumerTag,
     {#amqqueue{pid = QPid}, _CParams} =
         maps:get(ConsumerTag, ConsumerMapping),
     CTags1 = case maps:find(QPid, QCons) of
-        {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
-        error -> gb_sets:singleton(ConsumerTag)
-    end,
+                 {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
+                 error -> gb_sets:singleton(ConsumerTag)
+             end,
     QCons1 = maps:put(QPid, CTags1, QCons),
     State#ch{queue_monitors  = pmon:monitor(QPid, QMons),
              queue_consumers = QCons1}.
 
-monitor_delivering_queue(NoAck, QPid, QName,
+monitor_delivering_queue(NoAck, QPid, QNameType,
                          State = #ch{queue_names       = QNames,
                                      queue_monitors    = QMons,
                                      delivering_queues = DQ}) ->
-    State#ch{queue_names       = maps:put(QPid, QName, QNames),
+    State#ch{queue_names       = maps:put(QPid, QNameType, QNames),
              queue_monitors    = pmon:monitor(QPid, QMons),
              delivering_queues = case NoAck of
                                      true  -> DQ;
@@ -1659,7 +1659,7 @@ handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
                    end,
     gb_sets:fold(
       fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
-              QName = maps:get(QPid, QNames),
+              {QName, _} = maps:get(QPid, QNames),
               case queue_down_consumer_action(CTag, CMap) of
                   remove ->
                       cancel_consumer(CTag, QName, StateN);
@@ -1775,15 +1775,18 @@ reject(DeliveryTag, Requeue, Multiple,
               end}.
 
 %% NB: Acked is in youngest-first order
-internal_reject(Requeue, Acked, Limiter, State = #ch{queue_states = QueueStates0}) ->
+internal_reject(Requeue, Acked, Limiter, State = #ch{queue_states = QueueStates0,
+                                                     queue_names = QNames}) ->
     QueueStates = foreach_per_queue(
                     fun({QPid, CTag}, MsgIds, Acc0) ->
-                            {ok, Acc} = rabbit_amqqueue:reject(QPid, Requeue, {CTag, MsgIds},
-                                                               self(), Acc0),
-                            Acc;
-                       (QPid, MsgIds, Acc0) ->
-                            rabbit_amqqueue:reject(QPid, Requeue, MsgIds, self(), Acc0),
-                            Acc0
+                            {_, QType} = maps:get(QPid, QNames),
+                            {ok, Acc} = rabbit_amqqueue:reject(QType, QPid,
+                                                               CTag, Requeue,
+                                                               MsgIds, Acc0),
+                            Acc
+                       % (QPid, MsgIds, Acc0) ->
+                       %      rabbit_amqqueue:reject(QPid, Requeue, MsgIds, self(), Acc0),
+                       %      Acc0
                     end, Acked, QueueStates0),
     ok = notify_limiter(Limiter, Acked),
     State#ch{queue_states = QueueStates}.
@@ -1849,14 +1852,11 @@ ack(Acked, State = #ch{queue_names = QNames,
     QueueStates =
         foreach_per_queue(
           fun ({QPid, CTag}, MsgIds, Acc0) ->
-                  {ok, Acc} = rabbit_amqqueue:ack(QPid, {CTag, MsgIds}, self(), Acc0),
+                  {_, QType} = maps:get(QPid, QNames),
+                  Acc = rabbit_amqqueue:ack(QType, QPid, CTag,
+                                            MsgIds, Acc0),
                   incr_queue_stats(QPid, QNames, MsgIds, State),
-                  Acc;
-              (QPid, MsgIds, Acc0) ->
-                  %% Classic queue
-                  _ = rabbit_amqqueue:ack(QPid, MsgIds, self(), Acc0),
-                  incr_queue_stats(QPid, QNames, MsgIds, State),
-                  Acc0
+                  Acc
           end, Acked, QueueStates0),
     ok = notify_limiter(State#ch.limiter, Acked),
     State#ch{queue_states = QueueStates}.
@@ -1930,22 +1930,15 @@ notify_limiter(Limiter, Acked) ->
                  end
     end.
 
-deliver_to_queues({#delivery{message   = #basic_message{exchange_name = XName},
-                             confirm   = false,
-                             mandatory = false},
-                   []}, State) -> %% optimisation
-    ?INCR_STATS(exchange_stats, XName, 1, publish, State),
-    State;
-deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
-                                                       exchange_name = XName},
-                                        mandatory  = Mandatory,
-                                        confirm    = Confirm,
-                                        msg_seq_no = MsgSeqNo},
-                   DelQNames}, State = #ch{queue_names    = QNames,
-                                           queue_monitors = QMons,
-                                           queue_states = QueueStates0}) ->
+%% TODO: this function could be moved to rabbit_amqqueue?
+%% ch fields could also be moved into their own data structure
+deliver_to_queues0(Delivery, DelQNames,
+                   State = #ch{queue_names = QNames,
+                               queue_monitors = QMons,
+                               queue_states = QueueStates0}) ->
     Qs = rabbit_amqqueue:lookup(DelQNames),
-    {DeliveredQPids, QueueStates} = rabbit_amqqueue:deliver(Qs, Delivery, QueueStates0),
+    {DeliveredQPids, QueueStates} = rabbit_amqqueue:deliver(Qs, Delivery,
+                                                            QueueStates0),
     %% The pmon:monitor_all/2 monitors all queues to which we
     %% delivered. But we want to monitor even queues we didn't deliver
     %% to, since we need their 'DOWN' messages to clean
@@ -1957,15 +1950,30 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     %% since alternative algorithms to update queue_names less
     %% frequently would in fact be more expensive in the common case.
     {QNames1, QMons1} =
-        lists:foldl(fun (#amqqueue{pid = QPid, name = QName},
+        lists:foldl(fun (#amqqueue{pid = QPid, name = QName, type = Type},
                          {QNames0, QMons0}) ->
                             {case maps:is_key(QPid, QNames0) of
                                  true  -> QNames0;
-                                 false -> maps:put(QPid, QName, QNames0)
+                                 false -> maps:put(QPid, {QName, Type}, QNames0)
                              end, pmon:monitor(QPid, QMons0)}
                     end, {QNames, pmon:monitor_all(DeliveredQPids, QMons)}, Qs),
-    State1 = State#ch{queue_names    = QNames1,
-                      queue_monitors = QMons1},
+    {DeliveredQPids, State#ch{queue_names = QNames1,
+                              queue_monitors = QMons1,
+                              queue_states = QueueStates}}.
+
+deliver_to_queues({#delivery{message   = #basic_message{exchange_name = XName},
+                             confirm   = false,
+                             mandatory = false},
+                   []}, State) -> %% optimisation
+    ?INCR_STATS(exchange_stats, XName, 1, publish, State),
+    State;
+deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
+                                                       exchange_name = XName},
+                                        mandatory  = Mandatory,
+                                        confirm    = Confirm,
+                                        msg_seq_no = MsgSeqNo},
+                   DelQNames}, State) ->
+    {DeliveredQPids, State1} = deliver_to_queues0(Delivery, DelQNames, State),
     %% NB: the order here is important since basic.returns must be
     %% sent before confirms.
     State2 = process_routing_mandatory(Mandatory, DeliveredQPids, MsgSeqNo,
@@ -1977,11 +1985,11 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
             ?INCR_STATS(exchange_stats, XName, 1, publish),
             [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish) ||
                 QPid        <- DeliveredQPids,
-                {ok, QName} <- [maps:find(QPid, QNames1)]];
+                {ok, QName} <- [maps:find(QPid, State3#ch.queue_names)]];
         _ ->
             ok
     end,
-    State3#ch{queue_states = QueueStates}.
+    State3.
 
 process_routing_mandatory(false,     _, _MsgSeqNo, _Msg, State) ->
     State;
@@ -2278,14 +2286,6 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                                        CollectorPid, QPid)
                          end,
                     {ok, QueueName, 0, 0, QueueStates0};
-                {new, #amqqueue{pid = {Name, _} = QPid}, FState} ->
-                    ok = case {Owner, CollectorPid} of
-                             {none, _} -> ok;
-                             {_, none} -> ok; %% Supports call from mgmt API
-                             _    -> rabbit_queue_collector:register(
-                                       CollectorPid, QPid)
-                         end,
-                    {ok, QueueName, 0, 0, maps:put(Name, FState, QueueStates0)};
                 {existing, _Q} ->
                     %% must have been created between the stat and the
                     %% declare. Loop around again.
@@ -2418,9 +2418,9 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
     _ = rabbit_exchange:lookup_or_die(ExchangeName).
 
 handle_deliver(ConsumerTag, AckRequired,
-               Msg = {_QName, QPid, _MsgId, Redelivered,
+               Msg = {_, QPid, _, Redelivered, % QName, MsgId
                       #basic_message{exchange_name = ExchangeName,
-                                     routing_keys  = [RoutingKey | _CcRoutes],
+                                     routing_keys  = [RoutingKey | _],
                                      content       = Content}},
                State = #ch{writer_pid = WriterPid,
                            next_tag   = DeliveryTag}) ->

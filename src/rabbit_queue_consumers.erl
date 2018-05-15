@@ -278,7 +278,8 @@ subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
     case queue:out(AckQ) of
         {{value, {T, CTag}}, QTail} ->
             subtract_acks(TL, Prefix,
-                          maps:update_with(CTag, fun (Old) -> Old + 1 end, 1, CTagCounts), QTail);
+                          maps:update_with(CTag,
+                                           fun (Old) -> Old + 1 end, 1, CTagCounts), QTail);
         {{value, V}, QTail} ->
             subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail);
         {empty, _} ->
