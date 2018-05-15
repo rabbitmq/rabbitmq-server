@@ -613,9 +613,9 @@ check_message_ttl_arg({Type, Val}, Args) ->
 
 check_max_priority_arg({Type, Val}, Args) ->
     case check_non_neg_int_arg({Type, Val}, Args) of
-        ok when Val =< 255 -> ok;
-        ok                 -> {error, {max_value_exceeded, Val}};
-        Error              -> Error
+        ok when Val =< ?MAX_SUPPORTED_PRIORITY -> ok;
+        ok                                     -> {error, {max_value_exceeded, Val}};
+        Error                                  -> Error
     end.
 
 %% Note that the validity of x-dead-letter-exchange is already verified
