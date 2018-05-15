@@ -988,7 +988,7 @@ internal_delete(QueueName, ActingUser) ->
                                                            ?INTERNAL_USER),
                       fun() ->
                               ok = T(),
-			      rabbit_core_metrics:queue_deleted(QueueName),
+                              rabbit_core_metrics:queue_deleted(QueueName),
                               ok = rabbit_event:notify(queue_deleted,
                                                        [{name, QueueName},
                                                         {user_who_performed_action, ActingUser}])
