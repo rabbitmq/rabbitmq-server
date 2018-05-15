@@ -339,7 +339,7 @@ binding_action(Binding = #binding{source      = SrcName,
               Fun(Src, Dst, Binding#binding{args = SortedArgs})
       end, ErrFun).
 
-dirty_delete_object(Table, Record, LockKind) ->
+dirty_delete_object(Table, Record, _LockKind) ->
     mnesia:dirty_delete_object(Table, Record).
 
 sync_route(Route, true, true, Fun) ->
