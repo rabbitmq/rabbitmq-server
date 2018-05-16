@@ -27,7 +27,9 @@
 
 start_logger() ->
     application:stop(lager),
+    application:stop(syslog),
     ensure_lager_configured(),
+    application:ensure_all_started(syslog),
     lager:start(),
     fold_sinks(
       fun
@@ -163,15 +165,19 @@ ensure_lager_configured() ->
     end.
 
 %% Lager should have handlers and sinks
+%% Error logger forwarding to syslog should be disabled
 lager_configured() ->
     Sinks = lager:list_all_sinks(),
     ExpectedSinks = list_expected_sinks(),
     application:get_env(lager, handlers) =/= undefined
     andalso
-    lists:all(fun(S) -> lists:member(S, Sinks) end, ExpectedSinks).
+    lists:all(fun(S) -> lists:member(S, Sinks) end, ExpectedSinks)
+    andalso
+    application:get_env(syslog, syslog_error_logger) =/= undefined.
 
 configure_lager() ->
     application:load(lager),
+    application:load(syslog),
     %% Turn off reformatting for error_logger messages
     case application:get_env(lager, error_logger_format_raw) of
         undefined -> application:set_env(lager, error_logger_format_raw, true);
@@ -192,6 +198,8 @@ configure_lager() ->
     end,
     %% Set rabbit.log config variable based on environment.
     prepare_rabbit_log_config(),
+    %% Configure syslog library.
+    configure_syslog(),
     %% At this point we should have rabbit.log application variable
     %% configured to generate RabbitMQ log handlers.
     GeneratedHandlers = generate_lager_handlers(),
@@ -261,6 +269,23 @@ configure_lager() ->
     end,
     ok.
 
+configure_syslog() ->
+    %% Disable error_logger forwarding to syslog if it's not configured
+    case application:get_env(syslog, syslog_error_logger) of
+        undefined -> application:set_env(syslog, syslog_error_logger, false);
+        _ -> ok
+    end,
+    LogConfig = application:get_env(rabbit, log, []),
+    case proplists:get_value(syslog, LogConfig, undefined) of
+        undefined -> ok;
+        SyslogConfig when is_list(SyslogConfig) ->
+            Identity = proplists:get_value(identity, SyslogConfig, "rabbitmq"),
+            Facility = proplists:get_value(facility, SyslogConfig, daemon),
+            application:set_env(syslog, app_name, Identity),
+            application:set_env(syslog, facility, Facility)
+    end.
+
+
 remove_rabbit_handlers(Handlers, FormerHandlers) ->
     lists:filter(fun(Handler) ->
         not lists:member(Handler, FormerHandlers)
@@ -296,19 +321,23 @@ generate_lager_handlers(LogHandlersConfig) ->
 
 lager_backend(file)     -> lager_file_backend;
 lager_backend(console)  -> lager_console_backend;
-lager_backend(syslog)   -> lager_syslog_backend;
+lager_backend(syslog)   -> syslog_lager_backend;
 lager_backend(exchange) -> lager_exchange_backend.
 
+%% Syslog backend is using an old API for configuration and
+%% does not support proplists.
+generate_handler(syslog_lager_backend, HandlerConfig) ->
+    Level = proplists:get_value(level, HandlerConfig,
+                                default_config_value(level)),
+    [{syslog_lager_backend,
+     [Level,
+      {},
+      {lager_default_formatter, default_config_value(formatter_config)}]}];
 generate_handler(Backend, HandlerConfig) ->
     [{Backend,
         lists:ukeymerge(1, lists:ukeysort(1, HandlerConfig),
                            lists:ukeysort(1, default_handler_config(Backend)))}].
 
-default_handler_config(lager_syslog_backend) ->
-    [{level, default_config_value(level)},
-     {identity, "rabbitmq"},
-     {facility, daemon},
-     {formatter_config, default_config_value(formatter_config)}];
 default_handler_config(lager_console_backend) ->
     [{level, default_config_value(level)},
      {formatter_config, default_config_value(formatter_config)}];
