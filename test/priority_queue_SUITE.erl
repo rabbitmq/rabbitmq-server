@@ -200,7 +200,7 @@ max_priorities_above_hard_limit(Config) ->
     Q = <<"max_priorities_above_hard_limit">>,
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       %% Note that lower values (e.g. 300) will cause overflow the byte type here.
+       %% Note that lower values (e.g. 300) will overflow the byte type here.
        %% However, values >= 256 would still be rejected when used by
        %% other clients
        declare(Ch, Q, 3000)),
