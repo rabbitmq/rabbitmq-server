@@ -408,7 +408,7 @@ internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               ok = store_queue(Q#amqqueue{state = live}),
-              rabbit_misc:const(Q)
+              rabbit_misc:const({created, Q})
       end);
 internal_declare(Q = #amqqueue{name = QueueName}, false) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
@@ -420,11 +420,11 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                                                  Q2 = Q1#amqqueue{state = live},
                                                  ok = store_queue(Q2),
                                                  B = add_default_binding(Q1),
-                                                 fun () -> B(), Q1 end;
+                                                 fun () -> B(), {created, Q1} end;
                           {absent, _Q, _} = R -> rabbit_misc:const(R)
                       end;
                   [ExistingQ] ->
-                      rabbit_misc:const(ExistingQ)
+                      rabbit_misc:const({existing, ExistingQ})
               end
       end).
 

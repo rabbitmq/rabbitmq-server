@@ -110,35 +110,42 @@ declare(#amqqueue{name = QName,
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
     Nodes = rabbit_mnesia:cluster_nodes(all),
-    NewQ = Q#amqqueue{pid = Id,
-                      quorum_nodes = Nodes},
-    _ = rabbit_amqqueue:internal_declare(NewQ, false),
-    RaMachine = ra_machine(NewQ),
-    case ra:start_cluster(RaName, RaMachine,
-                          [{RaName, Node} || Node <- Nodes]) of
-        {ok, _, _} ->
-            FState = init_state(Id, QName),
-            OwnerPid = case ExclusiveOwner of
-                           none -> '';
-                           _ -> ExclusiveOwner
-                       end,
-            %% TODO does the quorum queue receive the `force_event_refresh`?
-            %% what do we do with it?
-            rabbit_event:notify(queue_created,
-                                [{name, QName},
-                                 {durable, Durable},
-                                 {auto_delete, AutoDelete},
-                                 {arguments, Arguments},
-                                 {owner_pid, OwnerPid},
-                                 {exclusive, is_pid(ExclusiveOwner)},
-                                 {user_who_performed_action, ActingUser}]),
-            {new, NewQ, FState};
-        {error, Error} ->
-            _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-            rabbit_misc:protocol_error(internal_error,
-                            "Cannot declare a queue '~s' on node '~s': ~255p",
-                            [rabbit_misc:rs(QName), node(), Error])
+    NewQ0 = Q#amqqueue{pid = Id,
+                       quorum_nodes = Nodes},
+    case rabbit_amqqueue:internal_declare(NewQ0, false) of
+        {created, NewQ} ->
+            % rabbit_log:info("quorum queue declare res ~w~n", [DeclRes]),
+            RaMachine = ra_machine(NewQ),
+            case ra:start_cluster(RaName, RaMachine,
+                                  [{RaName, Node} || Node <- Nodes]) of
+                {ok, _, _} ->
+                    FState = init_state(Id, QName),
+                    OwnerPid = case ExclusiveOwner of
+                                   none -> '';
+                                   _ -> ExclusiveOwner
+                               end,
+                    %% TODO does the quorum queue receive the `force_event_refresh`?
+                    %% what do we do with it?
+                    rabbit_event:notify(queue_created,
+                                        [{name, QName},
+                                         {durable, Durable},
+                                         {auto_delete, AutoDelete},
+                                         {arguments, Arguments},
+                                         {owner_pid, OwnerPid},
+                                         {exclusive, is_pid(ExclusiveOwner)},
+                                         {user_who_performed_action, ActingUser}]),
+                    {new, NewQ, FState};
+                {error, Error} ->
+                    _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+                    rabbit_misc:protocol_error(internal_error,
+                                               "Cannot declare a queue '~s' on node '~s': ~255p",
+                                               [rabbit_misc:rs(QName), node(), Error])
+            end;
+        {existing, _} = Ex ->
+            Ex
     end.
+
+
 
 ra_machine(Q = #amqqueue{name = QName}) ->
     {module, ra_fifo,
@@ -226,7 +233,8 @@ recover(Queues) ->
                  ok = ra:start_node(Name, {Name, node()},
                                     Machine, RaNodes)
          end,
-         rabbit_amqqueue:internal_declare(Q, true)
+         {_, Q} = rabbit_amqqueue:internal_declare(Q, true),
+         Q
      end || #amqqueue{pid = {Name, _},
                       quorum_nodes = Nodes} = Q <- Queues].
 

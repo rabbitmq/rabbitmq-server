@@ -39,7 +39,9 @@ groups() ->
                                             delete_declare,
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
-                                            declare_during_node_down]}
+                                            declare_during_node_down]},
+                      {cluster_size_5, [], [start_queue,
+                                            start_queue_concurrent]}
                      ]}
     ].
 
@@ -101,7 +103,9 @@ init_per_group(clustered, Config) ->
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]);
 init_per_group(cluster_size_3, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]).
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]);
+init_per_group(cluster_size_5, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 5}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -110,9 +114,11 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+    TcpPortsBase = TestNumber * ClusterSize,
+    ct:pal("TcpPortsBase ~w~n", [TcpPortsBase]),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Testcase},
-        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
+        {tcp_ports_base, {skip_n_nodes, ClusterSize}}
       ]),
     Config2 = rabbit_ct_helpers:run_steps(Config1,
                                           [fun merge_app_env/1 ] ++
@@ -212,6 +218,10 @@ start_queue(Config) ->
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
+    %% Test declare with same arguments
+    ?assertEqual({'queue.declare_ok', LQ, 0, 0},
+                 declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
     %% Test declare an existing queue with different arguments
     ?assertExit(_, declare(Ch, LQ, [])),
 
@@ -219,6 +229,33 @@ start_queue(Config) ->
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Node, application, which_applications, []))),
     ?assertMatch([_], rpc:call(Node, supervisor, which_children, [ra_nodes_sup])).
+
+start_queue_concurrent(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    LQ = <<"quorum-q">>,
+    Self = self(),
+    [begin
+         _ = spawn_link(fun () ->
+                                {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Node),
+                                %% Test declare an existing queue
+                                ?assertEqual({'queue.declare_ok', LQ, 0, 0},
+                                             declare(Ch, LQ,
+                                                     [{<<"x-queue-type">>,
+                                                       longstr,
+                                                       <<"quorum">>}])),
+                                Self ! {done, Node}
+                        end)
+     end || Node <- Nodes],
+
+    [begin
+         receive {done, Node} -> ok
+         after 5000 -> exit({await_done_timeout, Node})
+         end
+     end || Node <- Nodes],
+
+
+    ok.
+
 
 stop_queue(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -1169,6 +1206,7 @@ declare(Ch, Q) ->
 declare(Ch, Q, Args) ->
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
+                                           auto_delete = false,
                                            arguments = Args}).
 
 assert_queue_type(Node, Q, Expected) ->
