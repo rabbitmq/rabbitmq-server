@@ -274,17 +274,7 @@ configure_syslog() ->
     case application:get_env(syslog, syslog_error_logger) of
         undefined -> application:set_env(syslog, syslog_error_logger, false);
         _ -> ok
-    end,
-    LogConfig = application:get_env(rabbit, log, []),
-    case proplists:get_value(syslog, LogConfig, undefined) of
-        undefined -> ok;
-        SyslogConfig when is_list(SyslogConfig) ->
-            Identity = proplists:get_value(identity, SyslogConfig, "rabbitmq"),
-            Facility = proplists:get_value(facility, SyslogConfig, daemon),
-            application:set_env(syslog, app_name, Identity),
-            application:set_env(syslog, facility, Facility)
     end.
-
 
 remove_rabbit_handlers(Handlers, FormerHandlers) ->
     lists:filter(fun(Handler) ->
