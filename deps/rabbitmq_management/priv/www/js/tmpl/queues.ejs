@@ -101,9 +101,13 @@
 <% if (nodes_interesting) { %>
    <td>
      <%= fmt_node(queue.node) %>
-     <%= fmt_mirrors(queue) %>
-     <% if (queue.state == 'syncing') { %>
-       <%= fmt_sync_state(queue) %>
+     <% if (queue.hasOwnProperty('members')) { %>
+      <%= fmt_members(queue) %>
+     <% } else { %>
+      <%= fmt_mirrors(queue) %>
+      <% if (queue.state == 'syncing') { %>
+        <%= fmt_sync_state(queue) %>
+      <% } %>
      <% } %>
    </td>
 <% } %>

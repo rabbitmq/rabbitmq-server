@@ -28,11 +28,38 @@
       </tr>
 <% if (nodes_interesting) { %>
       <tr>
+      <% if (queue.hasOwnProperty('members')) { %>
+        <th>Leader</th>
+      <% } else { %>
         <th>Node</th>
+      <% } %>
         <td><%= fmt_node(queue.node) %></td>
       </tr>
-  <% if (!queue.exclusive) { %>
+  <% if (queue.hasOwnProperty('members')) { %>
       <tr>
+        <th>Online</th>
+                                              <td>
+                                              <%
+                                              for (var i in queue.online) {
+                                                      %>
+                                                      <%= fmt_node(queue.online[i]) %>
+                                                      <br/>
+                                                      <% } %>
+                                              </td>
+      </tr>
+        <th>Members</th>
+                                              <td>
+                                              <%
+                                              for (var i in queue.members) {
+                                                      %>
+                                                      <%= fmt_node(queue.members[i]) %>
+                                                      <br/>
+                                                      <% } %>
+                                              </td>
+      </tr>
+  <% } else { %>
+    <% if (!queue.exclusive) { %>
+        <tr>
         <th>Mirrors</th>
         <td>
           <%
@@ -76,6 +103,7 @@
           <% } %>
         </td>
       </tr>
+  <% } %>
   <% } %>
 <% } %>
     </table>

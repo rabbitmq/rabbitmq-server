@@ -190,6 +190,24 @@ function fmt_sync_state(queue) {
     return res;
 }
 
+function fmt_members(queue) {
+    var res = '';
+    var offline = queue.members || [];
+    offline = jQuery.grep(offline,
+                          function (node, i) {
+                              return jQuery.inArray(node, queue.online) == -1;
+                          });
+    var followers = queue.online;
+    followers.splice(followers.indexOf(queue.node), 1);
+    if (queue.online.length >= ((queue.members.length / 2) + 1)) {
+        res += ' <abbr title="Followers: ' + followers + '">+' +
+            followers.length + '</abbr>';
+    } else {
+        res += ' <abbr class="warning" title="Cluster is in minority">+' + followers.length + '</abbr>';
+    }
+    return res;
+}
+
 function fmt_channel_mode(ch) {
     if (ch.transactional) {
         return '<abbr title="Transactional">T</abbr>';
