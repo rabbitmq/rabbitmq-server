@@ -30,6 +30,8 @@
 
 -define(RESOURCE_REQUEST_PARAMETERS, [username, vhost, resource, name, permission]).
 
+-define(SUCCESSFUL_RESPONSE_CODES, [200, 201]).
+
 %%--------------------------------------------------------------------
 
 description() ->
@@ -135,12 +137,12 @@ do_http_req(PathName, Query) ->
     end,
     case httpc:request(Method, Request, HttpOpts, []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
-            case Code of
-                200 -> case parse_resp(Body) of
-                           {error, _} = E -> E;
-                           Resp           -> Resp
-                       end;
-                _   -> {error, {Code, Body}}
+            case lists:member(Code, ?SUCCESSFUL_RESPONSE_CODES) of
+                true  -> case parse_resp(Body) of
+                             {error, _} = E -> E;
+                             Resp           -> Resp
+                         end;
+                false -> {error, {Code, Body}}
             end;
         {error, _} = E ->
             E
