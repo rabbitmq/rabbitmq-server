@@ -493,7 +493,7 @@ leader(#amqqueue{pid = {Name, Leader}}) ->
     end.
 
 online(#amqqueue{quorum_nodes = Nodes,
-                 pid = {Name, Leader}}) ->
+                 pid = {Name, _}}) ->
     [Node || Node <- Nodes, is_process_alive(Name, Node)].
 
 format(#amqqueue{quorum_nodes = Nodes} = Q) ->
