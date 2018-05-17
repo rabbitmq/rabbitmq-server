@@ -1070,12 +1070,174 @@ end}.
 {mapping, "log.syslog.level", "rabbit.log.syslog.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
-{mapping, "log.syslog.identity", "rabbit.log.syslog.identity", [
+
+{mapping, "log.syslog.identity", "syslog.app_name", [
     {datatype, string}
 ]}.
-{mapping, "log.syslog.facility", "rabbit.log.syslog.facility", [
-    {datatype, atom}
+
+{mapping, "log.syslog.facility", "syslog.facility", [
+    {datatype, {enum, [kern, kernel, user, mail, daemon, auth, syslog, lpr,
+                       news, uucp, cron, authpriv, ftp, ntp, audit, alert,
+                       clock, local0, local1, local2, local3, local4,
+                       local5, local6, local7]}}
 ]}.
+
+{mapping, "log.syslog.multiline_mode", "syslog.multiline_mode", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "log.syslog.ip", "syslog.dest_host", [
+    {datatype, string},
+    {validators, ["is_ip"]}
+]}.
+
+{translation, "syslog.dest_host",
+fun(Conf) ->
+    IpString = cuttlefish:conf_get("log.syslog.ip", Conf),
+    {ok, IP} = inet:parse_address(IpString),
+    IP
+end}.
+
+{mapping, "log.syslog.port", "syslog.dest_port", [
+    {datatype, integer}
+]}.
+
+{mapping, "log.syslog.transport", "syslog.protocol", [
+    {datatype, {enum, [udp, tcp, tls, ssl]}}
+]}.
+{mapping, "log.syslog.protocol", "syslog.protocol", [
+    {datatype, {enum, [rfc3164, rfc5424]}}
+]}.
+{mapping, "log.syslog.ssl_options.verify", "syslog.protocol", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "log.syslog.ssl_options.fail_if_no_peer_cert", "syslog.protocol", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "log.syslog.ssl_options.cacertfile", "syslog.protocol",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "log.syslog.ssl_options.certfile", "syslog.protocol",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "log.syslog.ssl_options.cacerts.$name", "syslog.protocol",
+    [{datatype, string}]}.
+
+{mapping, "log.syslog.ssl_options.cert", "syslog.protocol",
+    [{datatype, string}]}.
+
+{mapping, "log.syslog.ssl_options.client_renegotiation", "syslog.protocol",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "log.syslog.ssl_options.crl_check", "syslog.protocol",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "log.syslog.ssl_options.depth", "syslog.protocol",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "log.syslog.ssl_options.dh", "syslog.protocol",
+    [{datatype, string}]}.
+
+{mapping, "log.syslog.ssl_options.dhfile", "syslog.protocol",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "log.syslog.ssl_options.honor_cipher_order", "syslog.protocol",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "log.syslog.ssl_options.honor_ecc_order", "syslog.protocol",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "log.syslog.ssl_options.key.RSAPrivateKey", "syslog.protocol",
+    [{datatype, string}]}.
+
+{mapping, "log.syslog.ssl_options.key.DSAPrivateKey", "syslog.protocol",
+    [{datatype, string}]}.
+
+{mapping, "log.syslog.ssl_options.key.PrivateKeyInfo", "syslog.protocol",
+    [{datatype, string}]}.
+
+{mapping, "log.syslog.ssl_options.keyfile", "syslog.protocol",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "log.syslog.ssl_options.log_alert", "syslog.protocol",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "log.syslog.ssl_options.password", "syslog.protocol",
+    [{datatype, string}]}.
+
+{mapping, "log.syslog.ssl_options.psk_identity", "syslog.protocol",
+    [{datatype, string}]}.
+
+{mapping, "log.syslog.ssl_options.reuse_sessions", "syslog.protocol",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "log.syslog.ssl_options.secure_renegotiate", "syslog.protocol",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "log.syslog.ssl_options.versions.$version", "syslog.protocol",
+    [{datatype, atom}]}.
+
+{translation, "syslog.protocol",
+fun(Conf) ->
+    ParseSslOptions = fun() ->
+        RawSettings = [
+            {verify,               cuttlefish:conf_get("log.syslog.ssl_options.verify", Conf, undefined)},
+            {fail_if_no_peer_cert, cuttlefish:conf_get("log.syslog.ssl_options.fail_if_no_peer_cert", Conf, undefined)},
+            {cacertfile,           cuttlefish:conf_get("log.syslog.ssl_options.cacertfile", Conf, undefined)},
+            {certfile,             cuttlefish:conf_get("log.syslog.ssl_options.certfile", Conf, undefined)},
+            {cert,                 cuttlefish:conf_get("log.syslog.ssl_options.cert", Conf, undefined)},
+            {client_renegotiation, cuttlefish:conf_get("log.syslog.ssl_options.client_renegotiation", Conf, undefined)},
+            {crl_check,            cuttlefish:conf_get("log.syslog.ssl_options.crl_check", Conf, undefined)},
+            {depth,                cuttlefish:conf_get("log.syslog.ssl_options.depth", Conf, undefined)},
+            {dh,                   cuttlefish:conf_get("log.syslog.ssl_options.dh", Conf, undefined)},
+            {dhfile,               cuttlefish:conf_get("log.syslog.ssl_options.dhfile", Conf, undefined)},
+            {honor_cipher_order,   cuttlefish:conf_get("log.syslog.ssl_options.honor_cipher_order", Conf, undefined)},
+            {honor_ecc_order,      cuttlefish:conf_get("log.syslog.ssl_options.honor_ecc_order", Conf, undefined)},
+
+            {keyfile,              cuttlefish:conf_get("log.syslog.ssl_options.keyfile", Conf, undefined)},
+            {log_alert,            cuttlefish:conf_get("log.syslog.ssl_options.log_alert", Conf, undefined)},
+            {password,             cuttlefish:conf_get("log.syslog.ssl_options.password", Conf, undefined)},
+            {psk_identity,         cuttlefish:conf_get("log.syslog.ssl_options.psk_identity", Conf, undefined)},
+            {reuse_sessions,       cuttlefish:conf_get("log.syslog.ssl_options.reuse_sessions", Conf, undefined)},
+            {secure_renegotiate,   cuttlefish:conf_get("log.syslog.ssl_options.secure_renegotiate", Conf, undefined)}
+            ],
+        DefinedSettings = [{K, V} || {K, V} <- RawSettings, V  =/= undefined],
+
+        lists:map(
+            fun({K, Val}) when K == dh; K == cert -> {K, list_to_binary(Val)};
+               ({K, Val}) -> {K, Val}
+            end,
+            DefinedSettings) ++
+        [ {K, V}
+          || {K, V} <-
+            [{cacerts, [ list_to_binary(V) || {_, V} <- cuttlefish_variable:filter_by_prefix("log.syslog.ssl_options.cacerts", Conf)]},
+             {versions, [ V || {_, V} <- cuttlefish_variable:filter_by_prefix("log.syslog.ssl_options.versions", Conf) ]},
+             {key, case cuttlefish_variable:filter_by_prefix("log.syslog.ssl_options.key", Conf) of
+                      [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+                      _ -> undefined
+                   end}],
+          V =/= undefined,
+          V =/= []]
+    end,
+
+    Proto = cuttlefish:conf_get("log.syslog.protocol", Conf, undefined),
+    Transport = cuttlefish:conf_get("log.syslog.transport", Conf, udp),
+    case Transport of
+        TLS when TLS == tls; TLS == ssl ->
+            case Proto of
+                rfc3164 ->
+                    cuttlefish:invalid("Syslog protocol rfc3164 is not compatible with TLS");
+                _       ->
+                    {rfc5424, tls, ParseSslOptions()}
+            end;
+        _ when Transport == udp; Transport == tcp ->
+            case Proto of
+                undefined -> {rfc3164, Transport};
+                _         -> {Proto, Transport}
+            end;
+        _ -> cuttlefish:invalid("Invalid syslog transport ~p~n", [Transport])
+    end
+end}.
 
 {mapping, "log.file", "rabbit.log.file.file", [
     {datatype, [{enum, [false]}, string]}
