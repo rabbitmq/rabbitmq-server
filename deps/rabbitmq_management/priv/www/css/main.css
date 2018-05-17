@@ -325,7 +325,7 @@ abbr { background: #99EBFF; padding: 2px 4px; border-radius: 5px; -moz-border-ra
 
 table.list td abbr a { display: inline; width: auto; }
 
-abbr.warning { background: #red; }
+abbr.warning { background: #ff7a79; }
 
 .status-red abbr, .status-yellow abbr, .status-green abbr, .status-grey abbr, small abbr, abbr.normal { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
 
