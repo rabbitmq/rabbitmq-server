@@ -61,8 +61,6 @@ format_queue_stats({slave_pids, ''}) ->
     [];
 format_queue_stats({slave_pids, Pids}) ->
     [{slave_nodes, [node(Pid) || Pid <- Pids]}];
-format_queue_stats({followers, Nodes}) ->
-    [{slave_nodes, Nodes}, {synchronised_slave_nodes, Nodes}];
 format_queue_stats({leader, Leader}) ->
     [{node, Leader}];
 format_queue_stats({synchronised_slave_pids, ''}) ->
