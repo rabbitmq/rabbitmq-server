@@ -28,6 +28,7 @@
 -export([cancel_customer_handler/3, cancel_customer/3]).
 -export([become_leader/2, update_metrics/2]).
 -export([rpc_delete_metrics/1]).
+-export([format/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -80,8 +81,9 @@
          memory,
          state,
          garbage_collection,
-         followers,
-         leader
+         leader,
+         online,
+         members
         ]).
 
 %%----------------------------------------------------------------------------
@@ -478,13 +480,24 @@ i(garbage_collection, #amqqueue{pid = {Name, _}}) ->
         error:badarg ->
             []
     end;
-i(followers, #amqqueue{quorum_nodes = Nodes,
-                       pid = {Name, Leader}}) ->
-    AliveNodes = [Node || Node <- Nodes, is_process_alive(Name, Node)],
-    AliveNodes -- [Leader];
-i(leader, #amqqueue{pid = {_, Leader}}) ->
-    Leader;
+i(members, #amqqueue{quorum_nodes = Nodes}) ->
+    Nodes;
+i(online, Q) -> online(Q);
+i(leader, Q) -> leader(Q);
 i(_K, _Q) -> ''.
+
+leader(#amqqueue{pid = {Name, Leader}}) ->
+    case is_process_alive(Name, Leader) of
+        true -> Leader;
+        false -> ''
+    end.
+
+online(#amqqueue{quorum_nodes = Nodes,
+                 pid = {Name, Leader}}) ->
+    [Node || Node <- Nodes, is_process_alive(Name, Node)].
+
+format(#amqqueue{quorum_nodes = Nodes} = Q) ->
+    [{members, Nodes}, {online, online(Q)}, {leader, leader(Q)}].
 
 is_process_alive(Name, Node) ->
     erlang:is_pid(rpc:call(Node, erlang, whereis, [Name])).

@@ -41,6 +41,7 @@
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 -export([is_mirrored/1, is_dead_exclusive/1]). % Note: exported due to use in qlc expression.
 -export([list_local_followers/0]).
+-export([format/1]).
 
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
@@ -780,6 +781,8 @@ is_unresponsive(#amqqueue{ pid = QPid }, Timeout) ->
             true
     end.
 
+format(Q = #amqqueue{ type = quorum }) -> rabbit_quorum_queue:format(Q);
+format(_) -> [].
 
 info(Q = #amqqueue{ type = quorum }) -> rabbit_quorum_queue:info(Q);
 info(Q = #amqqueue{ state = crashed }) -> info_down(Q, crashed);
