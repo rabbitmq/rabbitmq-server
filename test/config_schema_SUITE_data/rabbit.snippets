@@ -547,7 +547,7 @@ credential_validator.regexp = ^abc\\d+",
     {syslog, [{app_name, "rabbitmq"},
               {facility, user},
               {multiline_mode, true},
-              {dest_host, {10, 10, 10, 10}},
+              {dest_host, "10.10.10.10"},
               {dest_port, 123}]}
    ],
    []},

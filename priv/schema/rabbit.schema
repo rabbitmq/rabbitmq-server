@@ -1091,13 +1091,6 @@ end}.
     {validators, ["is_ip"]}
 ]}.
 
-{translation, "syslog.dest_host",
-fun(Conf) ->
-    IpString = cuttlefish:conf_get("log.syslog.ip", Conf),
-    {ok, IP} = inet:parse_address(IpString),
-    IP
-end}.
-
 {mapping, "log.syslog.port", "syslog.dest_port", [
     {datatype, integer}
 ]}.
