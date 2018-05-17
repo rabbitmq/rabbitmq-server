@@ -110,7 +110,7 @@ declare(#amqqueue{name = QName,
     Id = {RaName, node()},
     Nodes = rabbit_mnesia:cluster_nodes(all),
     NewQ0 = Q#amqqueue{pid = Id,
-                      quorum_nodes = Nodes},
+                       quorum_nodes = Nodes},
     case rabbit_amqqueue:internal_declare(NewQ0, false) of
         {created, NewQ} ->
             RaMachine = ra_machine(NewQ),
@@ -136,6 +136,8 @@ declare(#amqqueue{name = QName,
         {existing, _} = Ex ->
             Ex
     end.
+
+
 
 ra_machine(Q = #amqqueue{name = QName}) ->
     {module, ra_fifo,
