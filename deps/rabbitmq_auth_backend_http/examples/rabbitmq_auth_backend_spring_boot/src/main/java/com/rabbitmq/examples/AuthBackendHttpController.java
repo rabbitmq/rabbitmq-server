@@ -41,7 +41,8 @@ public class AuthBackendHttpController {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthBackendHttpController.class);
 
     private final Map<String, User> users = new HashMap<String, User>() {{
-        put("guest", new User("guest", "guest", asList("administrator", "management")));
+        put("guest",   new User("guest", "guest", asList("administrator", "management")));
+        put("springy", new User("springy", "springy", asList("administrator", "management")));
     }};
 
     @RequestMapping("user")
