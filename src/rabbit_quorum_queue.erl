@@ -74,8 +74,6 @@
         [policy,
          operator_policy,
          effective_policy_definition,
-         exclusive_consumer_pid,
-         exclusive_consumer_tag,
          consumers,
          consumer_utilisation,
          memory,
@@ -103,10 +101,11 @@ declare(#amqqueue{name = QName,
                   durable = Durable,
                   auto_delete = AutoDelete,
                   arguments = Arguments,
-                  exclusive_owner = ExclusiveOwner,
                   options = Opts} = Q) ->
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
     check_invalid_arguments(QName, Arguments),
+    check_auto_delete(Q),
+    check_exclusive(Q),
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
     Nodes = rabbit_mnesia:cluster_nodes(all),
@@ -118,10 +117,6 @@ declare(#amqqueue{name = QName,
                           [{RaName, Node} || Node <- Nodes]) of
         {ok, _, _} ->
             FState = init_state(Id, QName),
-            OwnerPid = case ExclusiveOwner of
-                           none -> '';
-                           _ -> ExclusiveOwner
-                       end,
             %% TODO does the quorum queue receive the `force_event_refresh`?
             %% what do we do with it?
             rabbit_event:notify(queue_created,
@@ -129,8 +124,6 @@ declare(#amqqueue{name = QName,
                                  {durable, Durable},
                                  {auto_delete, AutoDelete},
                                  {arguments, Arguments},
-                                 {owner_pid, OwnerPid},
-                                 {exclusive, is_pid(ExclusiveOwner)},
                                  {user_who_performed_action, ActingUser}]),
             {new, NewQ, FState};
         {error, Error} ->
@@ -438,12 +431,6 @@ i(effective_policy_definition, Q) ->
         undefined -> [];
         Def       -> Def
     end;
-i(exclusive_consumer_pid, _Q) ->
-    %% TODO
-    '';
-i(exclusive_consumer_tag, _Q) ->
-    %% TODO
-    '';
 i(consumers,     #amqqueue{name               = QName}) ->
     case ets:lookup(queue_metrics, QName) of
         [{_, M, _}] ->
@@ -493,7 +480,7 @@ leader(#amqqueue{pid = {Name, Leader}}) ->
     end.
 
 online(#amqqueue{quorum_nodes = Nodes,
-                 pid = {Name, Leader}}) ->
+                 pid = {Name, _Leader}}) ->
     [Node || Node <- Nodes, is_process_alive(Name, Node)].
 
 format(#amqqueue{quorum_nodes = Nodes} = Q) ->
@@ -535,6 +522,22 @@ check_invalid_arguments(QueueName, Args) ->
                          [Key, rabbit_misc:rs(QueueName)])
      end || Key <- Keys],
     ok.
+
+check_auto_delete(#amqqueue{auto_delete = true, name = Name}) ->
+    rabbit_misc:protocol_error(
+      precondition_failed,
+      "invalid property 'auto-delete' for ~s",
+      [rabbit_misc:rs(Name)]);
+check_auto_delete(_) ->
+    ok.
+
+check_exclusive(#amqqueue{exclusive_owner = none}) ->
+    ok;
+check_exclusive(#amqqueue{name = Name}) ->
+    rabbit_misc:protocol_error(
+      precondition_failed,
+      "invalid property 'exclusive-owner' for ~s",
+      [rabbit_misc:rs(Name)]).
 
 queue_name(RaFifoState) ->
     ra_fifo_client:cluster_id(RaFifoState).

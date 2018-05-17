@@ -47,6 +47,7 @@ all_tests() ->
     [
      declare_args,
      declare_invalid_args,
+     declare_invalid_properties,
      start_queue,
      stop_queue,
      restart_queue,
@@ -151,6 +152,27 @@ declare_args(Config) ->
     DQ2 = <<"classic-q2">>,
     declare(Ch, DQ2),
     assert_queue_type(Node, DQ2, classic).
+
+declare_invalid_properties(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    LQ = <<"quorum-q">>,
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       amqp_channel:call(
+         rabbit_ct_client_helpers:open_channel(Config, Node),
+         #'queue.declare'{queue     = LQ,
+                          auto_delete = true,
+                          durable   = true,
+                          arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]})),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       amqp_channel:call(
+         rabbit_ct_client_helpers:open_channel(Config, Node),
+         #'queue.declare'{queue     = LQ,
+                          exclusive = true,
+                          durable   = true,
+                          arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]})).
 
 declare_invalid_args(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
