@@ -223,7 +223,8 @@ recover(Queues) ->
                  ok = ra:start_node(Name, {Name, node()},
                                     Machine, RaNodes)
          end,
-         rabbit_amqqueue:internal_declare(Q, true)
+         {_, Q} = rabbit_amqqueue:internal_declare(Q, true),
+         Q
      end || #amqqueue{pid = {Name, _},
                       quorum_nodes = Nodes} = Q <- Queues].
 
