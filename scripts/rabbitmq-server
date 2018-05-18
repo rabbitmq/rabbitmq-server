@@ -103,7 +103,7 @@ if [ ${PRELAUNCH_RESULT} = 2 ] ; then
     true
 elif [ ${PRELAUNCH_RESULT} = 0 ] ; then
     # dist port is not mentioned in the config file, we can set it
-    RABBITMQ_DIST_ARG="-kernel inet_dist_listen_min ${RABBITMQ_DIST_PORT} -kernel inet_dist_listen_max ${RABBITMQ_DIST_PORT}"
+    RABBITMQ_DIST_ARG="-kernel inet_dist_use_interface $RABBITMQ_DIST_INTERFACE -kernel inet_dist_listen_min $RABBITMQ_DIST_PORT -kernel inet_dist_listen_max $RABBITMQ_DIST_PORT"
 else
     exit ${PRELAUNCH_RESULT}
 fi
