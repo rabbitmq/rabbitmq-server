@@ -69,7 +69,7 @@ if ERRORLEVEL 2 (
 ) else if ERRORLEVEL 1 (
     exit /B 1
 ) else (
-    set RABBITMQ_DIST_ARG=-kernel inet_dist_use_interface !RABBITMQ_DIST_INTERFACE! -kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
+    set RABBITMQ_DIST_ARG=!RABBITMQ_DIST_INTERFACE_ARG! -kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
 if not exist "!RABBITMQ_SCHEMA_DIR!" (
