@@ -161,11 +161,17 @@ if "!RABBITMQ_ALLOW_DISTERL!"=="" (
 )
 
 if "!RABBITMQ_DIST_INTERFACE!"=="" (
-    if "!DIST_INTERFACE!"=="" (
-        set RABBITMQ_DIST_INTERFACE={127,0,0,1}
+    set RABBITMQ_DIST_INTERFACE=!DIST_INTERFACE!
+)
+
+if "!RABBITMQ_DIST_INTERFACE!"=="" (
+    if "!RABBITMQ_ALLOW_DISTERL!"=="true" (
+        set RABBITMQ_DIST_INTERFACE_ARG=
     ) else (
-        set RABBITMQ_DIST_INTERFACE=!DIST_INTERFACE!
+        set RABBITMQ_DIST_INTERFACE_ARG=-kernel inet_dist_use_interface {127,0,0,1}
     )
+) else (
+    set RABBITMQ_DIST_INTERFACE_ARG=-kernel inet_dist_use_interface !RABBITMQ_DIST_INTERFACE!
 )
 
 if "!RABBITMQ_ALLOW_DISTERL!"=="true" (
