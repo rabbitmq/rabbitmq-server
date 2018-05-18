@@ -394,7 +394,7 @@ config_multiple_handlers(_) ->
 
     ConsoleHandlers = expected_console_handler(),
     RabbitHandlers = expected_rabbit_handler(),
-    SyslogHandlers = expected_syslog_handler(error, "rabbitmq", daemon),
+    SyslogHandlers = expected_syslog_handler(error),
 
     ExpectedHandlers = sort_handlers(SyslogHandlers ++ ConsoleHandlers ++ RabbitHandlers),
 
@@ -464,14 +464,12 @@ config_syslog_handler_options(_) ->
     DefaultLogFile = "rabbit_default.log",
     application:set_env(rabbit, lager_default_file, DefaultLogFile),
     application:set_env(rabbit, log, [{syslog, [{enabled, true},
-                                                {identity, "foo"},
-                                                {facility, local1},
                                                 {level, warning}]}]),
 
     rabbit_lager:configure_lager(),
 
     FileHandlers = default_expected_handlers(DefaultLogFile),
-    SyslogHandlers = expected_syslog_handler(warning, "foo", local1),
+    SyslogHandlers = expected_syslog_handler(warning),
 
     ExpectedHandlers = sort_handlers(FileHandlers ++ SyslogHandlers),
 
@@ -479,13 +477,12 @@ config_syslog_handler_options(_) ->
     ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))).
 
 expected_syslog_handler() ->
-    expected_syslog_handler(info, "rabbitmq", daemon).
+    expected_syslog_handler(info).
 
-expected_syslog_handler(Level, Identity, Facility) ->
-    [{lager_syslog_backend, [{level, Level},
-                             {facility, Facility},
-                             {formatter_config, formatter_config()},
-                             {identity, Identity}]}].
+expected_syslog_handler(Level) ->
+    [{syslog_lager_backend, [Level,
+                             {},
+                             {lager_default_formatter, formatter_config()}]}].
 
 env_var_overrides_config(_) ->
     EnvLogFile = "rabbit_default.log",
