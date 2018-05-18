@@ -152,6 +152,18 @@ if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
     )
 )
 
+if "!RABBITMQ_ALLOW_DISTERL!"=="" (
+    if "!ALLOW_DISTERL!"=="" (
+        set RABBITMQ_ALLOW_DISTERL=false
+    ) else (
+        set RABBITMQ_ALLOW_DISTERL=!ALLOW_DISTERL!
+    )
+)
+
+if "!RABBITMQ_ALLOW_DISTERL!"=="true" (
+    set DIST_INTERFACE={0,0,0,0}
+)
+
 if "!RABBITMQ_DIST_INTERFACE!"=="" (
     if "!DIST_INTERFACE!"=="" (
         set RABBITMQ_DIST_INTERFACE={127,0,0,1}
