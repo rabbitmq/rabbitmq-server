@@ -315,8 +315,8 @@ remove_for_source(SrcName) ->
     Match = #route{binding = #binding{source = SrcName, _ = '_'}},
     remove_routes(
       lists:usort(
-        mnesia:dirty_match_object(rabbit_route, Match) ++
-            mnesia:dirty_match_object(rabbit_semi_durable_route, Match))).
+        mnesia:match_object(rabbit_route, Match, read) ++
+            mnesia:match_object(rabbit_semi_durable_route, Match, read))).
 
 remove_for_destination(DstName, OnlyDurable) ->
     remove_for_destination(DstName, OnlyDurable, fun remove_routes/1).
@@ -405,8 +405,8 @@ remove_routes(Routes) ->
     %% This partitioning allows us to suppress unnecessary delete
     %% operations on disk tables, which require an fsync.
     {RamRoutes, DiskRoutes} =
-        lists:partition(fun (R) -> mnesia:dirty_match_object(
-                                     rabbit_durable_route, R) == [] end,
+        lists:partition(fun (R) -> mnesia:match_object(
+                                     rabbit_durable_route, R, read) == [] end,
                         Routes),
     %% Of course the destination might not really be durable but it's
     %% just as easy to try to delete it from the semi-durable table
@@ -430,13 +430,13 @@ remove_for_destination(DstName, OnlyDurable, Fun) ->
     Routes = case OnlyDurable of
                  false ->
                         [reverse_route(R) ||
-                              R <- mnesia:dirty_match_object(
-                                     rabbit_reverse_route, MatchRev)];
+                              R <- mnesia:match_object(
+                                     rabbit_reverse_route, MatchRev, read)];
                  true  -> lists:usort(
-                            mnesia:dirty_match_object(
-                              rabbit_durable_route, MatchFwd) ++
-                                mnesia:dirty_match_object(
-                                  rabbit_semi_durable_route, MatchFwd))
+                            mnesia:match_object(
+                              rabbit_durable_route, MatchFwd, read) ++
+                                mnesia:match_object(
+                                  rabbit_semi_durable_route, MatchFwd, read))
              end,
     Bindings = Fun(Routes),
     group_bindings_fold(fun maybe_auto_delete/4, new_deletions(),
