@@ -195,7 +195,7 @@ init_it2(Recover, From, State = #q{q                   = Q,
                                    backing_queue_state = undefined}) ->
     {Barrier, TermsOrNew} = recovery_status(Recover),
     case rabbit_amqqueue:internal_declare(Q, Recover /= new) of
-        {Res, #amqqueue{} = Q1} when Res == created orelse Res == created ->
+        {Res, #amqqueue{} = Q1} when Res == created orelse Res == existing ->
             case matches(Recover, Q, Q1) of
                 true ->
                     ok = file_handle_cache:register_callback(
