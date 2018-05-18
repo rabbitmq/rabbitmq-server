@@ -386,10 +386,17 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         %% socket w/o delay before termination.
         rabbit_net:fast_close(RealSocket),
         rabbit_networking:unregister_connection(self()),
-	rabbit_core_metrics:connection_closed(self()),
+        rabbit_core_metrics:connection_closed(self()),
+        ClientProperties = case get(client_properties) of
+            undefined ->
+                [];
+            Properties ->
+                Properties
+        end,
         rabbit_event:notify(connection_closed, [{name, Name},
                                                 {pid, self()},
-                                                {node, node()}])
+                                                {node, node()},
+                                                {client_properties, ClientProperties}])
     end,
     done.
 
@@ -1129,6 +1136,9 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
     Connection2 = augment_connection_log_name(Connection1),
     State = State0#v1{connection_state = securing,
                       connection       = Connection2},
+    % adding client properties to process dictionary to send them later
+    % in the connection_closed event
+    put(client_properties, ClientProperties),
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
