@@ -322,7 +322,7 @@ generate_handler(syslog_lager_backend, HandlerConfig) ->
     [{syslog_lager_backend,
      [Level,
       {},
-      {lager_default_formatter, default_config_value(formatter_config)}]}];
+      {lager_default_formatter, syslog_formatter_config()}]}];
 generate_handler(Backend, HandlerConfig) ->
     [{Backend,
         lists:ukeymerge(1, lists:ukeysort(1, HandlerConfig),
@@ -343,6 +343,11 @@ default_handler_config(lager_file_backend) ->
 default_config_value(level) -> info;
 default_config_value(formatter_config) ->
     [date, " ", time, " ", color, "[", severity, "] ",
+       {pid, ""},
+       " ", message, "\n"].
+
+syslog_formatter_config() ->
+    [color, "[", severity, "] ",
        {pid, ""},
        " ", message, "\n"].
 
