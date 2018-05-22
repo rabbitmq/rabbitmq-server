@@ -482,7 +482,7 @@ expected_syslog_handler() ->
 expected_syslog_handler(Level) ->
     [{syslog_lager_backend, [Level,
                              {},
-                             {lager_default_formatter, formatter_config()}]}].
+                             {lager_default_formatter, syslog_formatter_config()}]}].
 
 env_var_overrides_config(_) ->
     EnvLogFile = "rabbit_default.log",
@@ -691,3 +691,6 @@ sort_handlers(Handlers) ->
 
 formatter_config() ->
     [date," ",time," ",color,"[",severity, "] ", {pid,[]}, " ",message,"\n"].
+
+syslog_formatter_config() ->
+    [color,"[",severity, "] ", {pid,[]}, " ",message,"\n"].
