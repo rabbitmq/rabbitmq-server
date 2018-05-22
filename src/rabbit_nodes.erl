@@ -20,9 +20,12 @@
 -export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0,
          is_running/2, is_process_running/2,
          cluster_name/0, set_cluster_name/2, ensure_epmd/0,
-         all_running/0, name_type/0]).
+         all_running/0, name_type/0, running_count/0,
+         await_running_count/2]).
 
 -include_lib("kernel/include/inet.hrl").
+
+-define(SAMPLING_INTERVAL, 1000).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -37,6 +40,9 @@
 -spec cluster_name() -> binary().
 -spec set_cluster_name(binary(), rabbit_types:username()) -> 'ok'.
 -spec all_running() -> [node()].
+-spec running_count() -> integer().
+
+-spec await_running_count(integer(), integer()) -> 'ok,' | {'error', atom()}.
 
 %%----------------------------------------------------------------------------
 
@@ -85,3 +91,20 @@ ensure_epmd() ->
     rabbit_nodes_common:ensure_epmd().
 
 all_running() -> rabbit_mnesia:cluster_nodes(running).
+
+running_count() -> length(all_running()).
+
+await_running_count(TargetCount, Timeout) ->
+    Retries = floor(Timeout/?SAMPLING_INTERVAL),
+    await_running_count_with_retries(TargetCount, Retries).
+
+await_running_count_with_retries(1, _Retries) -> true;
+await_running_count_with_retries(_TargetCount, Retries) when Retries =:= 0 ->
+    {error, timeout};
+await_running_count_with_retries(TargetCount, Retries) ->
+    case running_count() >= TargetCount of
+        true  -> ok;
+        false ->
+            timer:sleep(?SAMPLING_INTERVAL),
+            await_running_count_with_retries(TargetCount, Retries - 1)
+    end.
