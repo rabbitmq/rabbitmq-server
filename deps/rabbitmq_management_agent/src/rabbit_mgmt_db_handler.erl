@@ -77,7 +77,9 @@ ensure_statistics_enabled() ->
             application:set_env(rabbit, collect_statistics, coarse);
         {_, _} ->
             ok
-    end.
+    end,
+    rabbit:force_event_refresh(erlang:make_ref()),
+    ok.
 
 %%----------------------------------------------------------------------------
 
