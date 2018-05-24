@@ -40,14 +40,14 @@ if sys.version_info[0] == 2:
     from ConfigParser import ConfigParser, NoSectionError
     import httplib
     import urlparse
-    from urllib import quote_plus
+    from urllib import quote
     def b64(s):
         return base64.b64encode(s)
 else:
     from configparser import ConfigParser, NoSectionError
     import http.client as httplib
     import urllib.parse as urlparse
-    from urllib.parse import quote_plus
+    from urllib.parse import quote
     def b64(s):
         return base64.b64encode(s.encode('utf-8')).decode('utf-8')
 
@@ -613,7 +613,7 @@ class Management:
         path = self.get_arg()
         uri = "/definitions"
         if self.options.vhost:
-            uri += "/%s" % quote_plus(self.options.vhost).replace("+", "%20")
+            uri += "/%s" % quote(self.options.vhost)
         definitions = self.get(uri)
         f = open(path, 'w')
         f.write(definitions)
@@ -628,7 +628,7 @@ class Management:
         f.close()
         uri = "/definitions"
         if self.options.vhost:
-            uri += "/%s" % quote_plus(self.options.vhost).replace("+", "%20")
+            uri += "/%s" % quote(self.options.vhost)
         self.post(uri, definitions)
         self.verbose("Imported definitions for %s from \"%s\""
                      % (self.options.hostname, path))
@@ -655,7 +655,7 @@ class Management:
         uri = "/%s" % self._list_path_for_obj_type(obj_type)
         query = []
         if obj_info['vhost'] and self.options.vhost:
-            uri += "/%s" % quote_plus(self.options.vhost).replace("+", "%20")
+            uri += "/%s" % quote(self.options.vhost)
         cols = self.args[1:]
         if cols == [] and 'cols' in obj_info and self.use_cols():
             cols = obj_info['cols']
@@ -730,7 +730,7 @@ class Management:
         for k in upload:
             v = upload[k]
             if v and isinstance(v, (str, bytes)):
-                uri_args[k] = quote_plus(v).replace("+", "%20")
+                uri_args[k] = quote(v)
                 if k == 'destination_type':
                     uri_args['destination_char'] = v[0]
         uri = uri_template.format(**uri_args)
