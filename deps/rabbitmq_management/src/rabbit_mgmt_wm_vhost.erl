@@ -65,7 +65,7 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
       fun(_, VHost, ReqData) ->
               Trace = rabbit_mgmt_util:parse_bool(maps:get(tracing, VHost, undefined)),
               case put_vhost(Name, Trace, Username) of
-                  ok               ->
+                  ok                   ->
                       {true, ReqData, Context};
                   {error, timeout} = E ->
                       rabbit_mgmt_util:internal_server_error(
@@ -99,15 +99,15 @@ put_vhost(Name, Trace, Username) ->
                  %% on all nodes
                  case rabbit_vhost:await_running_on_all_nodes(Name, 15000) of
                      ok               ->
-                         maybe_grant_full_permissions(Name, Username),
-                         case Trace of
-                             true      -> rabbit_trace:start(Name);
-                             false     -> rabbit_trace:stop(Name);
-                             undefined -> ok
-                         end;
+                         maybe_grant_full_permissions(Name, Username);
                      {error, timeout} ->
                          {error, timeout}
                  end
+    end,
+    case Trace of
+        true      -> rabbit_trace:start(Name);
+        false     -> rabbit_trace:stop(Name);
+        undefined -> ok
     end.
 
 %% when definitions are loaded on boot, Username here will be ?INTERNAL_USER,
