@@ -180,6 +180,12 @@ end_per_group(_, Config) ->
     Steps = Teardown0 ++ Teardown1,
     rabbit_ct_helpers:run_teardown_steps(Config, Steps).
 
+init_per_testcase(Testcase = permissions_vhost_test, Config) ->
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost">>),
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost1">>),
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
+
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -187,26 +193,27 @@ end_per_testcase(Testcase, Config) ->
     Config1 = end_per_testcase0(Testcase, Config),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
-end_per_testcase0(queues_test, Config) ->
+end_per_testcase0(Testcase = queues_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"downvhost">>),
-    Config;
-end_per_testcase0(vhost_limits_list_test, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase0(Testcase = vhost_limits_list_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_2">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_1_user">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_2_user">>),
-    Config;
-end_per_testcase0(vhost_limit_set_test, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase0(Testcase = vhost_limit_set_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_1_user">>),
-    Config;
-end_per_testcase0(permissions_vhost_test, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase0(Testcase = permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost1">>),
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser2">>),
-    Config;
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase0(_, Config) -> Config.
+
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
@@ -643,12 +650,14 @@ permissions_validation_test(Config) ->
     passed.
 
 permissions_list_test(Config) ->
-    [#{user := <<"guest">>,
-       vhost := <<"/">>,
-       configure := <<".*">>,
-       write := <<".*">>,
-       read := <<".*">>}] =
-        http_get(Config, "/permissions"),
+    AllPerms            = http_get(Config, "/permissions"),
+    GuestInDefaultVHost = #{user      => <<"guest">>,
+                            vhost     => <<"/">>,
+                            configure => <<".*">>,
+                            write     => <<".*">>,
+                            read      => <<".*">>},
+
+    ?assert(lists:member(GuestInDefaultVHost, AllPerms)),
 
     http_put(Config, "/users/myuser1", [{password, <<"">>}, {tags, <<"administrator">>}],
              {group, '2xx'}),
@@ -664,15 +673,15 @@ permissions_list_test(Config) ->
 
     %% The user that creates the vhosts gets permission automatically
     %% See https://github.com/rabbitmq/rabbitmq-management/issues/444
-    6 = length(http_get(Config, "/permissions")),
-    2 = length(http_get(Config, "/users/myuser1/permissions")),
-    1 = length(http_get(Config, "/users/myuser2/permissions")),
+    ?assertEqual(6, length(http_get(Config, "/permissions"))),
+    ?assertEqual(2, length(http_get(Config, "/users/myuser1/permissions"))),
+    ?assertEqual(1, length(http_get(Config, "/users/myuser2/permissions"))),
 
     http_get(Config, "/users/notmyuser/permissions", ?NOT_FOUND),
     http_get(Config, "/vhosts/notmyvhost/permissions", ?NOT_FOUND),
 
-    http_delete(Config, "/users/myuser1", {group, '2xx'}),
-    http_delete(Config, "/users/myuser2", {group, '2xx'}),
+    http_delete(Config, "/users/myuser1",   {group, '2xx'}),
+    http_delete(Config, "/users/myuser2",   {group, '2xx'}),
     http_delete(Config, "/vhosts/myvhost1", {group, '2xx'}),
     http_delete(Config, "/vhosts/myvhost2", {group, '2xx'}),
     passed.

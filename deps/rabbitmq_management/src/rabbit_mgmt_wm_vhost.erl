@@ -63,10 +63,15 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
     rabbit_mgmt_util:with_decode(
       [], ReqData0, Context,
       fun(_, VHost, ReqData) ->
-              put_vhost(Name, rabbit_mgmt_util:parse_bool(
-                                maps:get(tracing, VHost, undefined)),
-                        Username),
-              {true, ReqData, Context}
+              Trace = rabbit_mgmt_util:parse_bool(maps:get(tracing, VHost, undefined)),
+              case put_vhost(Name, Trace, Username) of
+                  ok                   ->
+                      {true, ReqData, Context};
+                  {error, timeout} = E ->
+                      rabbit_mgmt_util:internal_server_error(
+                        "Timed out while waiting for the vhost to initialise", E,
+                        ReqData0, Context)
+              end
       end).
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
@@ -87,16 +92,24 @@ id(ReqData) ->
     rabbit_mgmt_util:id(vhost, ReqData).
 
 put_vhost(Name, Trace, Username) ->
-    case rabbit_vhost:exists(Name) of
+    Result = case rabbit_vhost:exists(Name) of
         true  -> ok;
         false -> rabbit_vhost:add(Name, Username),
-                 maybe_grant_full_permissions(Name, Username)
+                 %% wait for up to 15 seconds for the vhost to initialise
+                 %% on all nodes
+                 case rabbit_vhost:await_running_on_all_nodes(Name, 15000) of
+                     ok               ->
+                         maybe_grant_full_permissions(Name, Username);
+                     {error, timeout} ->
+                         {error, timeout}
+                 end
     end,
     case Trace of
         true      -> rabbit_trace:start(Name);
         false     -> rabbit_trace:stop(Name);
         undefined -> ok
-    end.
+    end,
+    Result.
 
 %% when definitions are loaded on boot, Username here will be ?INTERNAL_USER,
 %% which does not actually exist
