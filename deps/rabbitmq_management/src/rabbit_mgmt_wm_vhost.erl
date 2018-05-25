@@ -92,7 +92,7 @@ id(ReqData) ->
     rabbit_mgmt_util:id(vhost, ReqData).
 
 put_vhost(Name, Trace, Username) ->
-    case rabbit_vhost:exists(Name) of
+    AddVHostResult = case rabbit_vhost:exists(Name) of
         true  -> ok;
         false -> rabbit_vhost:add(Name, Username),
                  %% wait for up to 15 seconds for the vhost to initialise
@@ -108,7 +108,8 @@ put_vhost(Name, Trace, Username) ->
         true      -> rabbit_trace:start(Name);
         false     -> rabbit_trace:stop(Name);
         undefined -> ok
-    end.
+    end,
+    AddVHostResult.
 
 %% when definitions are loaded on boot, Username here will be ?INTERNAL_USER,
 %% which does not actually exist
