@@ -153,7 +153,7 @@ delete(VHostPath, ActingUser) ->
 
 -spec await_running_on_all_nodes(rabbit_types:vhost(), integer()) -> ok | {error, timeout}.
 await_running_on_all_nodes(VHost, Timeout) ->
-    Attempts = ceil(Timeout / ?AWAIT_SAMPLE_INTERVAL),
+    Attempts = round(Timeout / ?AWAIT_SAMPLE_INTERVAL),
     await_running_on_all_nodes0(VHost, Attempts).
 
 await_running_on_all_nodes0(_VHost, 0) ->
