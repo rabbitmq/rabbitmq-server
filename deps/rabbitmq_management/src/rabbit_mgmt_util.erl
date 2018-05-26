@@ -25,8 +25,8 @@
          is_authorized_vhost_visible/2,
          is_authorized_global_parameters/2]).
 
--export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
-         parse_int/1]).
+-export([bad_request/3, bad_request_exception/4, internal_server_error/4,
+         id/2, parse_bool/1, parse_int/1]).
 -export([with_decode/4, not_found/3]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
