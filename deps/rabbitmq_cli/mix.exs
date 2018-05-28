@@ -85,11 +85,11 @@ defmodule RabbitMQCtl.MixfileBase do
   # Type "mix help deps" for more examples and options
   defp deps() do
     elixir_deps = [
-      {:json, "~> 1.0.0"},
+      {:json, "~> 1.2.5"},
       {:csv, "~> 2.0.0"},
       {:simetric, "~> 0.2.0"},
 
-      {:amqp, "~> 0.2.2", only: :test},
+      {:amqp, "~> 1.0.2", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
       {:temp, "~> 0.4", only: :test},
     ]
