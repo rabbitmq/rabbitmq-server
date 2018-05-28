@@ -30,10 +30,11 @@ all() ->
 groups() ->
     [
      {unit, [], [
-                 extract_nodes_test
-                 , base_path_defaults_test
-                 , nodes_path_defaults_test
-                 , list_nodes_without_existing_directory_test
+                 extract_nodes_test,
+                 base_path_defaults_test,
+                 base_path_custom_test,
+                 nodes_path_defaults_test,
+                 list_nodes_without_existing_directory_test
                 ]}
     ].
 
@@ -91,6 +92,13 @@ extract_nodes_test(_Config) ->
 base_path_defaults_test(_Config) ->
   ?assertEqual([v2, keys, "rabbitmq", "default"],
                rabbit_peer_discovery_etcd:base_path(#{})).
+
+
+base_path_custom_test(_Config) ->
+  C = #{etcd_prefix => <<"example/com/1.2.3/config/mq">>,
+        cluster_name => <<"test_cluster">>},
+  ?assertEqual([v2, keys, "example/com/1.2.3/config/mq", "test_cluster"],
+               rabbit_peer_discovery_etcd:base_path(C)).
 
 
 nodes_path_defaults_test(_Config) ->
