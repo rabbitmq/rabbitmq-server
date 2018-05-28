@@ -134,7 +134,7 @@
         peer_cert_validity, auth_mechanism, ssl_protocol,
         ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
         timeout, frame_max, channel_max, client_properties, connected_at,
-        node, user_who_performed_action, connection_user_provided_name]).
+        node, user_who_performed_action]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
@@ -393,17 +393,17 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
             Properties ->
                 Properties
         end,
-        ConnectionUserProvidedName = case get(connection_user_provided_name) of
-            undefined ->
-                '';
-            ConnectionName ->
-                ConnectionName
+        EventProperties = [{name, Name},
+                           {pid, self()},
+                           {node, node()},
+                           {client_properties, ClientProperties}],
+        EventProperties1 = case get(connection_user_provided_name) of
+           undefined ->
+               EventProperties;
+           ConnectionUserProvidedName ->
+               [{user_provided_name, ConnectionUserProvidedName} | EventProperties]
         end,
-        rabbit_event:notify(connection_closed, [{name, Name},
-                                                {pid, self()},
-                                                {node, node()},
-                                                {client_properties, ClientProperties},
-                                                {connection_user_provided_name, ConnectionUserProvidedName}])
+        rabbit_event:notify(connection_closed, EventProperties1)
     end,
     done.
 
@@ -620,7 +620,9 @@ handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
   when ?IS_RUNNING(State) ->
     rabbit_event:notify(
       connection_created,
-      [{type, network} | infos(?CREATION_EVENT_KEYS, State)], Ref),
+      augment_infos_with_user_provided_connection_name(
+          [{type, network} | infos(?CREATION_EVENT_KEYS, State)], State),
+      Ref),
     rabbit_event:init_stats_timer(State, #v1.stats_timer);
 handle_other({'$gen_cast', {force_event_refresh, _Ref}}, State) ->
     %% Ignore, we will emit a created event once we start running.
@@ -1146,7 +1148,12 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
     % adding client properties to process dictionary to send them later
     % in the connection_closed event
     put(client_properties, ClientProperties),
-    put(connection_user_provided_name, user_provided_connection_name(Connection2)),
+    case user_provided_connection_name(Connection2) of
+        undefined ->
+            undefined;
+        UserProvidedConnectionName ->
+            put(connection_user_provided_name, UserProvidedConnectionName)
+    end,
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
@@ -1219,7 +1226,10 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                         connection          = NewConnection,
                         channel_sup_sup_pid = ChannelSupSupPid,
                         throttle            = Throttle1}),
-    Infos = [{type, network} | infos(?CREATION_EVENT_KEYS, State1)],
+    Infos = augment_infos_with_user_provided_connection_name(
+        [{type, network} | infos(?CREATION_EVENT_KEYS, State1)],
+        State1
+    ),
     rabbit_core_metrics:connection_created(proplists:get_value(pid, Infos),
                                            Infos),
     rabbit_event:notify(connection_created, Infos),
@@ -1476,13 +1486,6 @@ ic(client_properties, #connection{client_properties = CP}) -> CP;
 ic(auth_mechanism,    #connection{auth_mechanism = none})  -> none;
 ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
 ic(connected_at,      #connection{connected_at = T}) -> T;
-ic(connection_user_provided_name, C) ->
-    case user_provided_connection_name(C) of
-        undefined ->
-            '';
-        ConnectionUserProvidedName ->
-            ConnectionUserProvidedName
-    end;
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
@@ -1694,6 +1697,14 @@ augment_connection_log_name(#connection{name = Name} = Connection) ->
             rabbit_log_connection:info("Connection ~p (~s) has a client-provided name: ~s~n", [self(), Name, UserSpecifiedName]),
             ?store_proc_name(LogName),
             Connection#connection{log_name = LogName}
+    end.
+
+augment_infos_with_user_provided_connection_name(Infos, #v1{connection = Connection}) ->
+    case user_provided_connection_name(Connection) of
+     undefined ->
+         Infos;
+     UserProvidedConnectionName ->
+         [{user_provided_name, UserProvidedConnectionName} | Infos]
     end.
 
 user_provided_connection_name(#connection{client_properties = ClientProperties}) ->
