@@ -1,10 +1,27 @@
-Deploy RabbitMQ on K8s 
-----
+# Deploy RabbitMQ on Kubernetes with the Kubernetes Peer Discovery Plugin
+
+This is an **example** that demonstrates a RabbitMQ deployment on Kubernetes with peer discovery
+via `rabbitmq-peer-discovery-k8s` plugin.
+
+## Production (Non-)Suitability
+
+Some values in this example **may or may not be optimal for your deployment**. We encourage the user
+to get familiar with [RabbitMQ Production Checklist](http://www.rabbitmq.com/production-checklist.html)
+and the rest of [RabbitMQ documentation](https://www.rabbitmq.com/documentation.html) before going into production.
+
+Having [metrics](http://www.rabbitmq.com/monitoring.html), both of RabbitMQ and applications that use it,
+is critically important when making informed decisions about production systems.
+
+
+## Pre-requisites
+
 The example uses:
+
 * [RabbitMQ Docker image](https://hub.docker.com/_/rabbitmq/)
 * [StatefulSets controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/) K8S feature
 
-**Note**: This is just an example to show how to use the `rabbitmq-peer-discovery-k8s` plugin.
+
+## Usage
    
 
 * Install [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
