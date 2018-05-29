@@ -80,13 +80,13 @@ spec:
         livenessProbe:
           exec:
             command: ["rabbitmqctl", "status"]
-          initialDelaySeconds: 30
-          timeoutSeconds: 10
+          initialDelaySeconds: 60
+          timeoutSeconds: 60
         readinessProbe:
           exec:
             command: ["rabbitmqctl", "status"]
-          initialDelaySeconds: 10
-          timeoutSeconds: 10
+          initialDelaySeconds: 20
+          timeoutSeconds: 60
         imagePullPolicy: Always
         env:
           - name: MY_POD_IP
