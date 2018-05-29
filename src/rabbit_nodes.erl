@@ -42,8 +42,6 @@
 -spec all_running() -> [node()].
 -spec running_count() -> integer().
 
--spec await_running_count(integer(), integer()) -> 'ok,' | {'error', atom()}.
-
 %%----------------------------------------------------------------------------
 
 name_type() ->
@@ -94,11 +92,13 @@ all_running() -> rabbit_mnesia:cluster_nodes(running).
 
 running_count() -> length(all_running()).
 
+-spec await_running_count(integer(), integer()) -> 'ok' | {'error', atom()}.
+
 await_running_count(TargetCount, Timeout) ->
     Retries = floor(Timeout/?SAMPLING_INTERVAL),
     await_running_count_with_retries(TargetCount, Retries).
 
-await_running_count_with_retries(1, _Retries) -> true;
+await_running_count_with_retries(1, _Retries) -> ok;
 await_running_count_with_retries(_TargetCount, Retries) when Retries =:= 0 ->
     {error, timeout};
 await_running_count_with_retries(TargetCount, Retries) ->
