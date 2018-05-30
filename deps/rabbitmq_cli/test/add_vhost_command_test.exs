@@ -39,25 +39,23 @@ defmodule AddVhostCommandTest do
   end
 
   @tag vhost: @vhost
-  test "run: a valid name to an active RabbitMQ node is successful", context do
+  test "run: passing a valid vhost name to a running RabbitMQ node succeeds", context do
     assert @command.run([context[:vhost]], context[:opts]) == :ok
     assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
   @tag vhost: ""
-  test "run: An empty string to an active RabbitMQ node is still successful", context do
+  test "run: passing an empty string for vhost name with a running RabbitMQ node still succeeds", context do
     assert @command.run([context[:vhost]], context[:opts]) == :ok
     assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
-  test "run: A call to invalid or inactive RabbitMQ node returns a nodedown" do
-    target = :jake@thedog
-
-    opts = %{node: target}
+  test "run: attempt to use an unreachable node returns a nodedown" do
+    opts = %{node: :jake@thedog, timeout: 3000}
     assert @command.run(["na"], opts) == {:badrpc, :nodedown}
   end
 
-  test "run: Adding the same host twice results in a host exists message", context do
+  test "run: adding the same host twice is not idempotent", context do
     add_vhost context[:vhost]
 
     assert @command.run([context[:vhost]], context[:opts]) ==
