@@ -95,7 +95,7 @@ running_count() -> length(all_running()).
 -spec await_running_count(integer(), integer()) -> 'ok' | {'error', atom()}.
 
 await_running_count(TargetCount, Timeout) ->
-    Retries = floor(Timeout/?SAMPLING_INTERVAL),
+    Retries = round(Timeout/?SAMPLING_INTERVAL),
     await_running_count_with_retries(TargetCount, Retries).
 
 await_running_count_with_retries(1, _Retries) -> ok;
