@@ -623,7 +623,7 @@ purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
     Key = {IsAnon, Servers, Opts},
     {ok, Conn} = maps:find(Key, Conns),
-    rabbit_log:warning("LDAP Purging an already closed LDAP server connection"),
+    rabbit_log:warning("LDAP will purge an already closed or defunct LDAP server connection from the pool"),
     % We cannot close the connection with eldap:close/1 because as of OTP-13327
     % eldap will try to do_unbind first and will fail with a `{gen_tcp_error, closed}`.
     % Since we know that the connection is already closed, we just
