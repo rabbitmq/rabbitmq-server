@@ -468,10 +468,7 @@ with_ldap({ok, Creds}, Fun, Servers) ->
       fun () ->
               case with_login(Creds, Servers, Opts, Fun) of
                   {error, {gen_tcp_error, _}} ->
-                      %% purge and retry with a new connection
-                      rabbit_log:warning("TCP connection to a LDAP server was closed or otherwise defunct~n"),
-                      purge_conn(Creds == anon, Servers, Opts),
-                      rabbit_log:warning("LDAP will retry with a new connection~n"),
+                      purge_connection(Creds, Servers, Opts),
                       with_login(Creds, Servers, Opts, Fun);
                   Result -> Result
               end
@@ -480,7 +477,7 @@ with_ldap({ok, Creds}, Fun, Servers) ->
 with_login(Creds, Servers, Opts, Fun) ->
     with_login(Creds, Servers, Opts, Fun, ?LDAP_OPERATION_RETRIES).
 with_login(_Creds, _Servers, _Opts, _Fun, 0 = _RetriesLeft) ->
-    rabbit_log:warning("LDAP failed to perform an operation. TCP connection to a LDAP server was closed or otherwise defunct. Exhausted all retries.~n"),
+    rabbit_log:warning("LDAP failed to perform an operation. TCP connection to a LDAP server was closed or otherwise defunct. Exhausted all retries."),
     {error, ldap_connect_error};
 with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
     case get_or_create_conn(Creds == anon, Servers, Opts) of
@@ -489,9 +486,10 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
                 anon ->
                     ?L1("anonymous bind", []),
                     case call_ldap_fun(Fun, LDAP) of
-                      {error, ldap_closed} ->
-                        with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                      Other -> Other
+                        {error, ldap_closed} ->
+                            purge_connection(Creds, Servers, Opts),
+                            with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
+                        Other -> Other
                     end;
                 {UserDN, Password} ->
                     case eldap:simple_bind(LDAP, UserDN, Password) of
@@ -510,11 +508,13 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
                                 [scrub_dn(UserDN, env(log))]),
                             {refused, UserDN, []};
                         {error, ldap_closed} ->
+                            purge_connection(Creds, Servers, Opts),
                             with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
                         {error, {gen_tcp_error, _}} ->
+                            purge_connection(Creds, Servers, Opts),
                             with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
                         {error, E} ->
-                            ?L1("bind error: ~s ~p",
+                            ?L1("bind error: ~p ~p",
                                 [scrub_dn(UserDN, env(log)), E]),
                             %% Do not report internal bind error to a client
                             {error, ldap_bind_error}
@@ -525,9 +525,15 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
             case Error of
                 {error, {gen_tcp_error, _}} -> Error;
                 %% Do not report internal connection error to a client
-                _Other                           -> {error, ldap_connect_error}
+                _Other                      -> {error, ldap_connect_error}
             end
     end.
+
+purge_connection(Creds, Servers, Opts) ->
+    %% purge and retry with a new connection
+    rabbit_log:warning("TCP connection to a LDAP server was closed or otherwise defunct."),
+    purge_conn(Creds == anon, Servers, Opts),
+    rabbit_log:warning("LDAP will retry with a new connection.").
 
 call_ldap_fun(Fun, LDAP) ->
     call_ldap_fun(Fun, LDAP, "").
@@ -617,7 +623,7 @@ purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
     Key = {IsAnon, Servers, Opts},
     {ok, Conn} = maps:find(Key, Conns),
-    rabbit_log:warning("LDAP Purging an already closed LDAP server connection~n"),
+    rabbit_log:warning("LDAP Purging an already closed LDAP server connection"),
     % We cannot close the connection with eldap:close/1 because as of OTP-13327
     % eldap will try to do_unbind first and will fail with a `{gen_tcp_error, closed}`.
     % Since we know that the connection is already closed, we just
