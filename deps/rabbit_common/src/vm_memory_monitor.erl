@@ -27,6 +27,10 @@
 
 -behaviour(gen_server).
 
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 -export([start_link/1, start_link/3]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
