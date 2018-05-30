@@ -18,6 +18,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -53,7 +54,8 @@ groups() ->
               forget_offline_removes_things,
               force_boot,
               status_with_alarm,
-              wait_fails_when_cluster_fails
+              pid_file_and_await_node_startup,
+              await_running_count
             ]},
           {cluster_size_4, [], [
               forget_promotes_offline_slave
@@ -611,7 +613,7 @@ status_with_alarm(Config) ->
     ok = alarm_information_on_each_node(R, Rabbit, Hare).
 
 
-wait_fails_when_cluster_fails(Config) ->
+pid_file_and_await_node_startup(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
     RabbitConfig = rabbit_ct_broker_helpers:get_node_config(Config,Rabbit),
@@ -635,6 +637,46 @@ wait_fails_when_cluster_fails(Config) ->
     wait_for_pid_file_to_contain_running_process_pid(RabbitPidFile, Attempts, Timeout),
     {error, _, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
       ["wait", RabbitPidFile]).
+
+await_running_count(Config) ->
+    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
+      nodename),
+    RabbitConfig = rabbit_ct_broker_helpers:get_node_config(Config,Rabbit),
+    RabbitPidFile = ?config(pid_file, RabbitConfig),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
+      ["wait", RabbitPidFile]),
+    %% stop both nodes
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
+    %% start one node in the background
+    rabbit_ct_broker_helpers:start_node(Config, Rabbit),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
+                                                   ["wait", RabbitPidFile]),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, Rabbit,
+                                                  rabbit_nodes,
+                                                  await_running_count, [1, 30000])),
+    ?assertEqual({error, timeout},
+                 rabbit_ct_broker_helpers:rpc(Config, Rabbit,
+                                              rabbit_nodes,
+                                              await_running_count, [2, 1000])),
+    ?assertEqual({error, timeout},
+                 rabbit_ct_broker_helpers:rpc(Config, Rabbit,
+                                              rabbit_nodes,
+                                              await_running_count, [5, 1000])),
+    rabbit_ct_broker_helpers:start_node(Config, Hare),
+    %% this now succeeds
+    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, Rabbit,
+                                                  rabbit_nodes,
+                                                  await_running_count, [2, 30000])),
+    %% this still succeeds
+    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, Rabbit,
+                                                  rabbit_nodes,
+                                                  await_running_count, [1, 30000])),
+    %% this still fails
+    ?assertEqual({error, timeout},
+                 rabbit_ct_broker_helpers:rpc(Config, Rabbit,
+                                              rabbit_nodes,
+                                              await_running_count, [5, 1000])).
 
 %% ----------------------------------------------------------------------------
 %% Internal utils
