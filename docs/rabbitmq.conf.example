@@ -213,7 +213,7 @@
 ## * http://rabbitmq.com/heartbeats.html
 ## * http://rabbitmq.com/networking.html
 ##
-# heartbeat = 600
+# heartbeat = 60
 
 ## Set the max permissible size of an AMQP frame (in bytes).
 ##
