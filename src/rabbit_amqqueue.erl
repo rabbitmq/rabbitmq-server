@@ -626,7 +626,7 @@ declare_args() ->
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
-     {<<"x-max-priority">>,            fun check_non_neg_int_arg/2},
+     {<<"x-max-priority">>,            fun check_max_priority_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
      {<<"x-queue-type">>,              fun check_queue_type/2}].
@@ -661,6 +661,13 @@ check_message_ttl_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
         ok    -> rabbit_misc:check_expiry(Val);
         Error -> Error
+    end.
+
+check_max_priority_arg({Type, Val}, Args) ->
+    case check_non_neg_int_arg({Type, Val}, Args) of
+        ok when Val =< ?MAX_SUPPORTED_PRIORITY -> ok;
+        ok                                     -> {error, {max_value_exceeded, Val}};
+        Error                                  -> Error
     end.
 
 %% Note that the validity of x-dead-letter-exchange is already verified
@@ -1123,7 +1130,7 @@ internal_delete(QueueName, ActingUser) ->
                                                            ?INTERNAL_USER),
                       fun() ->
                               ok = T(),
-			      rabbit_core_metrics:queue_deleted(QueueName),
+                              rabbit_core_metrics:queue_deleted(QueueName),
                               ok = rabbit_event:notify(queue_deleted,
                                                        [{name, QueueName},
                                                         {user_who_performed_action, ActingUser}])

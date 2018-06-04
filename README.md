@@ -33,9 +33,9 @@
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](https://rabbitmq.com/github.html).
 
 
-## License
+## Licensing
 
-RabbitMQ server is [licensed under the MPL](LICENSE-MPL-RabbitMQ).
+RabbitMQ server is [licensed under the MPL 1.1](LICENSE-MPL-RabbitMQ).
 
 
 ## Building From Source and Packaging

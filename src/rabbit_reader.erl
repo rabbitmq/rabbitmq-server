@@ -387,10 +387,24 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         %% socket w/o delay before termination.
         rabbit_net:fast_close(RealSocket),
         rabbit_networking:unregister_connection(self()),
-	rabbit_core_metrics:connection_closed(self()),
-        rabbit_event:notify(connection_closed, [{name, Name},
-                                                {pid, self()},
-                                                {node, node()}])
+        rabbit_core_metrics:connection_closed(self()),
+        ClientProperties = case get(client_properties) of
+            undefined ->
+                [];
+            Properties ->
+                Properties
+        end,
+        EventProperties = [{name, Name},
+                           {pid, self()},
+                           {node, node()},
+                           {client_properties, ClientProperties}],
+        EventProperties1 = case get(connection_user_provided_name) of
+           undefined ->
+               EventProperties;
+           ConnectionUserProvidedName ->
+               [{user_provided_name, ConnectionUserProvidedName} | EventProperties]
+        end,
+        rabbit_event:notify(connection_closed, EventProperties1)
     end,
     done.
 
@@ -607,7 +621,9 @@ handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
   when ?IS_RUNNING(State) ->
     rabbit_event:notify(
       connection_created,
-      [{type, network} | infos(?CREATION_EVENT_KEYS, State)], Ref),
+      augment_infos_with_user_provided_connection_name(
+          [{type, network} | infos(?CREATION_EVENT_KEYS, State)], State),
+      Ref),
     rabbit_event:init_stats_timer(State, #v1.stats_timer);
 handle_other({'$gen_cast', {force_event_refresh, _Ref}}, State) ->
     %% Ignore, we will emit a created event once we start running.
@@ -1130,6 +1146,15 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
     Connection2 = augment_connection_log_name(Connection1),
     State = State0#v1{connection_state = securing,
                       connection       = Connection2},
+    % adding client properties to process dictionary to send them later
+    % in the connection_closed event
+    put(client_properties, ClientProperties),
+    case user_provided_connection_name(Connection2) of
+        undefined ->
+            undefined;
+        UserProvidedConnectionName ->
+            put(connection_user_provided_name, UserProvidedConnectionName)
+    end,
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
@@ -1202,7 +1227,10 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                         connection          = NewConnection,
                         channel_sup_sup_pid = ChannelSupSupPid,
                         throttle            = Throttle1}),
-    Infos = [{type, network} | infos(?CREATION_EVENT_KEYS, State1)],
+    Infos = augment_infos_with_user_provided_connection_name(
+        [{type, network} | infos(?CREATION_EVENT_KEYS, State1)],
+        State1
+    ),
     rabbit_core_metrics:connection_created(proplists:get_value(pid, Infos),
                                            Infos),
     rabbit_event:notify(connection_created, Infos),
@@ -1661,16 +1689,31 @@ control_throttle(State = #v1{connection_state = CS,
         _       -> State1
     end.
 
-augment_connection_log_name(#connection{client_properties = ClientProperties,
-                                        name = Name} = Connection) ->
-    case rabbit_misc:table_lookup(ClientProperties, <<"connection_name">>) of
-        {longstr, UserSpecifiedName} ->
+augment_connection_log_name(#connection{name = Name} = Connection) ->
+    case user_provided_connection_name(Connection) of
+        undefined ->
+            Connection;
+        UserSpecifiedName ->
             LogName = <<Name/binary, " - ", UserSpecifiedName/binary>>,
             rabbit_log_connection:info("Connection ~p (~s) has a client-provided name: ~s~n", [self(), Name, UserSpecifiedName]),
             ?store_proc_name(LogName),
-            Connection#connection{log_name = LogName};
+            Connection#connection{log_name = LogName}
+    end.
+
+augment_infos_with_user_provided_connection_name(Infos, #v1{connection = Connection}) ->
+    case user_provided_connection_name(Connection) of
+     undefined ->
+         Infos;
+     UserProvidedConnectionName ->
+         [{user_provided_name, UserProvidedConnectionName} | Infos]
+    end.
+
+user_provided_connection_name(#connection{client_properties = ClientProperties}) ->
+    case rabbit_misc:table_lookup(ClientProperties, <<"connection_name">>) of
+        {longstr, UserSpecifiedName} ->
+            UserSpecifiedName;
         _ ->
-            Connection
+            undefined
     end.
 
 dynamic_connection_name(Default) ->

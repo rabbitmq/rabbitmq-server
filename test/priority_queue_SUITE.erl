@@ -17,6 +17,7 @@
 -module(priority_queue_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
@@ -46,7 +47,9 @@ groups() ->
                            simple_order,
                            straight_through,
                            invoke,
-                           gen_server2_stats
+                           gen_server2_stats,
+                           negative_max_priorities,
+                           max_priorities_above_hard_limit
                           ]},
      {cluster_size_3, [], [
                            mirror_queue_auto_ack,
@@ -191,6 +194,28 @@ straight_through(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
+
+max_priorities_above_hard_limit(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"max_priorities_above_hard_limit">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       %% Note that lower values (e.g. 300) will overflow the byte type here.
+       %% However, values >= 256 would still be rejected when used by
+       %% other clients
+       declare(Ch, Q, 3000)),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+negative_max_priorities(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"negative_max_priorities">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(Ch, Q, -10)),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
 
 invoke(Config) ->
     %% Synthetic test to check the invoke callback, as the bug tested here
@@ -669,7 +694,7 @@ get_ok(Ch, Q, Ack, PBin) ->
     {#'basic.get_ok'{delivery_tag = DTag}, #amqp_msg{payload = PBin2}} =
         amqp_channel:call(Ch, #'basic.get'{queue  = Q,
                                            no_ack = Ack =:= no_ack}),
-    PBin = PBin2,
+    ?assertEqual(PBin, PBin2),
     maybe_ack(Ch, Ack, DTag).
 
 get_payload(Ch, Q, Ack, Ps) ->
