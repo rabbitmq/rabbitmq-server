@@ -307,6 +307,9 @@ ensure_rabbitmqctl_cmd(Config) ->
             case exec(Cmd, [drop_stdout]) of
                 {error, 64, _} ->
                     set_config(Config, {rabbitmqctl_cmd, Rabbitmqctl});
+                {error, Code, Reason} ->
+                    ct:pal(?LOW_IMPORTANCE, "Exec failed with exit code ~d: ~p", [Code, Reason]),
+                    Error;
                 _ ->
                     Error
             end
