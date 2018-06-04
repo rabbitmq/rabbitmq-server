@@ -153,7 +153,7 @@ random_timing(Config) ->
 
 random_timing(Config, MaxTTL, Parallel) ->
     AuthCacheModule = ?config(auth_cache_module, Config),
-    RandomTTls = [{N, rabbit_misc:random(MaxTTL) + 100} || N <- lists:seq(1, Parallel)],
+    RandomTTls = [{N, rabbit_misc:random(MaxTTL) + 200} || N <- lists:seq(1, Parallel)],
     Pid = self(),
     Ref = make_ref(),
     Pids = lists:map(
@@ -163,6 +163,7 @@ random_timing(Config, MaxTTL, Parallel) ->
                     Key = N,
                     Value = {tuple_with, N, TTL},
                     {error, not_found} = AuthCacheModule:get(Key),
+                    PutTime = erlang:system_time(milli_seconds),
                     ok = AuthCacheModule:put(Key, Value, TTL),
                     case AuthCacheModule:get(Key) of
                         {ok, Value} -> ok;
@@ -175,13 +176,13 @@ random_timing(Config, MaxTTL, Parallel) ->
                                             [ets:tab2list(Segment) || {_, Segment} <- Segments];
                                         _ -> []
                                     end,
-                                    error({Other, Value, State, Data});
+                                    error({Other, Value, PutTime, erlang:system_time(milli_seconds), State, Data});
                                 _ ->
-                                    error({Other, Value})
+                                    error({Other, Value, PutTime, erlang:system_time(milli_seconds)})
                             end
                     end,
                     % expiry error
-                    timer:sleep(TTL + 40),
+                    timer:sleep(TTL + 50),
                     {error, not_found} = AuthCacheModule:get(Key),
                     Pid ! {ok, self(), Ref}
                 end)
