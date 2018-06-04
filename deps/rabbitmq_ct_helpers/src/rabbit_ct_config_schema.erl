@@ -111,7 +111,6 @@ generate_config(Config, ConfFile, AdvancedFile) ->
     ResultsDir = ?config(results_dir, Config),
     Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
     ScriptDir = filename:dirname(Rabbitmqctl),
-    ct:pal("ConfFile=~p ScriptDir=~p SchemaDir=~p AdvancedFile=~p", [ConfFile, ScriptDir, SchemaDir, AdvancedFile]),
     rabbit_config:generate_config_file([ConfFile], ResultsDir, ScriptDir,
                                        SchemaDir, AdvancedFile).
 
