@@ -381,14 +381,11 @@ ensure_ssl_certs(Config) ->
     case make(Config, CertsMakeDir, Cmd) of
         {ok, _} ->
             %% Add SSL certs to the broker configuration.
-            Verify = case ?config(rabbitmq_ct_tls_verify, Config) of
-                         undefined   -> verify_peer;
-                         VerifyValue -> VerifyValue
-                     end,
-            FailIfNoPeerCert = case ?config(rabbitmq_ct_tls_fail_if_no_peer_cert, Config) of
-                         undefined   -> true;
-                         FailValue -> FailValue
-                     end,
+            Verify = get_config(Config, rabbitmq_ct_tls_verify, verify_peer),
+            FailIfNoPeerCert = get_config(
+                                 Config,
+                                 rabbitmq_ct_tls_fail_if_no_peer_cert,
+                                 true),
             Config1 = merge_app_env(Config,
               {rabbit, [
                   {ssl_options, [
