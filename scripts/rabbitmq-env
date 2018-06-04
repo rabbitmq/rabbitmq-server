@@ -292,7 +292,7 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
                "enabled_plugins_file=\"~s\"~n"
                "mnesia_base=\"~s\"~n"
                "mnesia_dir=\"~s\"~n", [P, E, B, M]).' \
-            2>/dev/null | head -n 4) || :)
+            2>/dev/null | grep -E '^(plugins_dir|enabled_plugins_file|mnesia_base|mnesia_dir)=') || :)
         if [ "${plugins_dir}" -a \
              "$RABBITMQ_PLUGINS_DIR_source" != 'environment' ]; then
             RABBITMQ_PLUGINS_DIR="${plugins_dir}"
