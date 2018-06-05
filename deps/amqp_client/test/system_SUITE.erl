@@ -209,7 +209,6 @@ init_per_testcase(Test, Config) ->
         basic_get_ipv6_ssl -> "::1";
         _                  -> ?config(rmq_hostname, Config)
     end,
-    {ok, Hostname} = inet:gethostname(),
     {Port, SSLOpts} = if
         Test =:= basic_get_ipv4_ssl orelse
         Test =:= basic_get_ipv6_ssl ->
