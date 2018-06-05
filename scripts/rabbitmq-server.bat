@@ -56,6 +56,27 @@ if ERRORLEVEL 2 (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
+rem The default allocation strategy RabbitMQ is using was introduced
+rem in Erlang/OTP 20.2.3. Earlier Erlang versions fail to start with
+rem this configuration. We therefore need to ensure that erl accepts
+rem these values before we can use them.
+rem
+rem The defaults are meant to reduce RabbitMQ's memory usage and help
+rem it reclaim memory at the cost of a slight decrease in performance
+rem (due to an increase in memory operations). These defaults can be
+rem overriden using the RABBITMQ_SERVER_ERL_ARGS variable.
+
+set RABBITMQ_DEFAULT_ALLOC_ARGS=+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30
+
+"!ERLANG_HOME!\bin\erl.exe" ^
+    !RABBITMQ_DEFAULT_ALLOC_ARGS! ^
+    -boot !CLEAN_BOOT_FILE! ^
+    -noinput -eval "halt(0)"
+
+if ERRORLEVEL 1 (
+    set RABBITMQ_DEFAULT_ALLOC_ARGS=
+)
+
 set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
 
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
@@ -124,6 +145,7 @@ if "!ENV_OK!"=="false" (
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^
 +W w ^
 +A "!RABBITMQ_IO_THREAD_POOL_SIZE!" ^
+!RABBITMQ_DEFAULT_ALLOC_ARGS! ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
 !RABBITMQ_LISTEN_ARG! ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
