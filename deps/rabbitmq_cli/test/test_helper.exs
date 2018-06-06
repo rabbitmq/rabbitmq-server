@@ -450,7 +450,7 @@ defmodule TestHelper do
     opts = context[:opts]
     plugins_dir = opts[:plugins_dir]
     all_directories = Enum.join([to_string(plugins_dir) | plugins_directories], Helpers.separator())
-    %{opts | plugins_dir: to_char_list(all_directories)}
+    %{opts | plugins_dir: to_charlist(all_directories)}
   end
 
   def get_opts_with_existing_plugins_directory(context) do

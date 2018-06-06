@@ -46,11 +46,13 @@ defmodule MaybeStuckCommandTest do
     assert @command.validate([], %{}) == :ok
   end
 
-  @tag test_timeout: 0
+  @tag test_timeout: 500
   test "run: targeting an unreachable node throws a badrpc", context do
-    target = :jake@thedog
+    assert @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})) == {:badrpc, :nodedown}
+  end
 
-    opts = %{node: target}
-    assert @command.run([], Map.merge(context[:opts], opts)) == {:badrpc, :nodedown}
+  @tag test_timeout: 0
+  test "run: timeout throws a badrpc", context do
+    assert @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})) == {:badrpc, :timeout}
   end
 end

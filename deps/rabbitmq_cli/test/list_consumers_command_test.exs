@@ -99,7 +99,7 @@ defmodule ListConsumersCommandTest do
       :timer.sleep(100)
       try do
         consumers = run_command_to_list(@command, [["queue_name", "consumer_tag"], context[:opts]])
-        {[[consumer1]], [consumers2]} = Enum.partition(consumers, fn([_]) -> true; ([_,_]) -> false end)
+        {[[consumer1]], [consumers2]} = Enum.split_with(consumers, fn([_]) -> true; ([_,_]) -> false end)
         assert [queue_name: queue_name1, consumer_tag: tag1] == consumer1
         assert Keyword.equal?([{tag2, queue_name2}, {tag3, queue_name2}],
           for([queue_name: q, consumer_tag: t] <- consumers2, do: {t, q}))

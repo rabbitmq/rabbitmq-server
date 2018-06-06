@@ -70,7 +70,7 @@ defmodule ListQueuesCommandTest do
   end
 
   @tag test_timeout: 0
-  test "run: zero timeout causes command to return badrpc", context do
+  test "run: timeout causes command to return badrpc", context do
     assert run_command_to_list(@command, [["name"], context[:opts]]) ==
       [{:error, {:badrpc, {:timeout, 0.0, "Some queue(s) are unresponsive, use list_unresponsive_queues command."}}}]
   end
