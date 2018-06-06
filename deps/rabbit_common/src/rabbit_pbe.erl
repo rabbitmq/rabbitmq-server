@@ -23,7 +23,7 @@
 %% Supported ciphers and hashes
 
 supported_ciphers() ->
-    NotSupportedByUs = [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm],
+    NotSupportedByUs = [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm, chacha20_poly1305],
     SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
     lists:filter(fun(Cipher) ->
         not lists:member(Cipher, NotSupportedByUs)
