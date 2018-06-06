@@ -15,6 +15,10 @@
 %%
 -module(inet_tcp_proxy).
 
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 %% A TCP proxy for insertion into the Erlang distribution mechanism,
 %% which allows us to simulate network partitions.
 
