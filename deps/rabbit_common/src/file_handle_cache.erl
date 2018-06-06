@@ -1484,7 +1484,12 @@ track_client(Pid, Clients) ->
 %% To increase the number of file descriptors: on Windows set ERL_MAX_PORTS
 %% environment variable, on Linux set `ulimit -n`.
 ulimit() ->
-    case proplists:get_value(max_fds, erlang:system_info(check_io)) of
+    IOStats = case erlang:system_info(check_io) of
+        [Val | _] when is_list(Val) -> Val;
+        Val when is_list(Val)       -> Val;
+        _Other                      -> []
+    end,
+    case proplists:get_value(max_fds, IOStats) of
         MaxFds when is_integer(MaxFds) andalso MaxFds > 1 ->
             case os:type() of
                 {win32, _OsName} ->
