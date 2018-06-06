@@ -50,7 +50,7 @@ defmodule ErlangVersionCommandTest do
     assert @command.validate([], %{details: true}) == :ok
   end
 
-  @tag test_timeout: 500
+  @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
     assert @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, details: false})) == {:badrpc, :nodedown}
   end
