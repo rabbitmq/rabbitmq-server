@@ -274,7 +274,10 @@ normalize({error, Reason}) ->
 -spec format_discovered_nodes(Nodes :: list()) -> string().
 
 format_discovered_nodes(Nodes) ->
-  string:join(lists:map(fun (Val) -> hd(io_lib:format("~s", [Val])) end, Nodes), ", ").
+  %% NOTE: in OTP 21 string:join/2 is deprecated but still available.
+  %%       Its recommended replacement is not a drop-in one, though, so
+  %%       we will not be switching just yet.
+  string:join(lists:map(fun rabbit_data_coercion:to_list/1, Nodes), ", ").
 
 
 
