@@ -59,12 +59,9 @@ defmodule CipherSuitesCommandTest do
     assert @command.validate([], %{openssl_format: true}) == :ok
   end
 
-  @tag test_timeout: 0
+  @tag test_timeout: 500
   test "run: targeting an unreachable node throws a badrpc", context do
-    target = :jake@thedog
-
-    opts = %{node: target}
-    assert @command.run([], Map.merge(context[:opts], opts)) == {:badrpc, :nodedown}
+    assert @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})) == {:badrpc, :nodedown}
   end
 
   test "run: returns a list of cipher suites", context do

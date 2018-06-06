@@ -29,7 +29,7 @@ defmodule ErlangCookieHashCommandTest do
   setup context do
     {:ok, opts: %{
         node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
+        timeout: context[:test_timeout] || 5000
       }}
   end
 
@@ -45,7 +45,7 @@ defmodule ErlangCookieHashCommandTest do
     assert @command.validate([], %{}) == :ok
   end
 
-  @tag test_timeout: 0
+  @tag test_timeout: 500
   test "run: targeting an unreachable node throws a badrpc", context do
     target = :jake@thedog
 
