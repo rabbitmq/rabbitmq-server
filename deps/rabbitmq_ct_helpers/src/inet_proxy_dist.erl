@@ -15,6 +15,10 @@
 %%
 -module(inet_proxy_dist).
 
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 %% A distribution plugin that uses the usual inet_tcp_dist but allows
 %% insertion of a proxy at the receiving end.
 
