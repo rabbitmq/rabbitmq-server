@@ -121,12 +121,6 @@
         <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
         <td><%= fmt_percent(queue.consumer_utilisation) %></td>
       </tr>
-      <% if (queue.hasOwnProperty('members')) { %>
-      <tr>
-        <th>Open files</th>
-        <td><%= fmt_table_short(queue.open_files) %></td>
-      </tr>
-      <% } %>
     </table>
 
     <table class="facts">

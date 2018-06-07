@@ -346,18 +346,6 @@
   </table>
 </div>
 
-<div class="box">
-  <h3>Quorum queue open file metrics</h3>
-  <table class="facts">
-    <% for(var k in node.ra_open_file_metrics) { %>
-    <tr>
-      <th><%= k %></th>
-      <td><%= node.ra_open_file_metrics[k] %></td>
-    </tr>
-    <% } %>
-  </table>
-</div>
-
 <h3>Plugins <span class="help" id="plugins"></span></h3>
 <table class="list">
   <tr>
