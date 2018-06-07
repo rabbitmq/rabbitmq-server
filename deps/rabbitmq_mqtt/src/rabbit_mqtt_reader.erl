@@ -15,6 +15,11 @@
 %%
 
 -module(rabbit_mqtt_reader).
+
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 -behaviour(gen_server2).
 
 -export([start_link/3]).
