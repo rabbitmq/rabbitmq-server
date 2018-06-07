@@ -42,7 +42,7 @@
                      rates_mode, uptime, run_queue, processors, exchange_types,
                      auth_mechanisms, applications, contexts, log_files,
                      db_dir, config_files, net_ticktime, enabled_plugins,
-                     mem_calculation_strategy, ra_open_file_metrics]).
+                     mem_calculation_strategy]).
 
 %%--------------------------------------------------------------------
 
@@ -230,22 +230,7 @@ i(gc_bytes_reclaimed, _State) ->
     Words * erlang:system_info(wordsize);
 i(context_switches, _State) ->
     {Sw, 0} = erlang:statistics(context_switches),
-    Sw;
-i(ra_open_file_metrics, _State) ->
-    [{ra_log_wal, ra_metrics(ra_log_wal)},
-     {ra_log_file_segment_writer, ra_metrics(ra_log_file_segment_writer)}].
-
-ra_metrics(K) ->
-    try
-        case ets:lookup(ra_open_file_metrics, whereis(K)) of
-            [] -> 0;
-            [{_, C}] -> C
-        end
-    catch
-        error:badarg ->
-            %% On startup the mgmt might start before ra does
-            0
-    end.
+    Sw.
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
