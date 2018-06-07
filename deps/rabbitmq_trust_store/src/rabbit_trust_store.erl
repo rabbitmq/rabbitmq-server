@@ -14,6 +14,11 @@
 %%
 
 -module(rabbit_trust_store).
+
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 -behaviour(gen_server).
 
 -export([mode/0, refresh/0, list/0]). %% Console Interface.
