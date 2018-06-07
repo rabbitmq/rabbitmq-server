@@ -19,7 +19,6 @@
 %% stats about read / write operations that go through the fhc.
 
 -export([init/0, update/3, update/2, update/1, get/0]).
--export([safe_update/2]).
 
 -define(TABLE, ?MODULE).
 
@@ -50,19 +49,6 @@ update(Op, Thunk) ->
     {Time, Res} = timer_tc(Thunk),
     _ = ets:update_counter(?TABLE, {Op, count}, 1),
     _ = ets:update_counter(?TABLE, {Op, time}, Time),
-    Res.
-
-safe_update(Op, Thunk) ->
-    {Time, Res} = timer_tc(Thunk),
-    try
-        _ = ets:update_counter(?TABLE, {Op, count}, 1),
-        _ = ets:update_counter(?TABLE, {Op, time}, Time)
-    catch
-        error:badarg ->
-            %% This can happen on startup, when ra tries to open a file before
-            %% the core is initialised.
-            ok
-    end,
     Res.
 
 update(Op) ->

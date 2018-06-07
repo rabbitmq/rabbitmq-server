@@ -167,8 +167,7 @@ define test_rabbitmq_config
       {loopback_users, []}
     ]},
   {ra, [
-      {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
-      {metrics_handler, {rabbit_quorum_queue, io_metrics_handler}}
+      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
     ]}
 ].
 endef
@@ -202,8 +201,7 @@ define test_rabbitmq_config_with_tls
         ]}
   ]},
   {ra, [
-      {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
-      {metrics_handler, {rabbit_quorum_queue, io_metrics_handler}}
+      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
     ]}
 ].
 endef
@@ -322,7 +320,6 @@ start-brokers start-cluster:
 		  RABBITMQ_SERVER_START_ARGS=" \
 		  -rabbit loopback_users [] \
 		  -ra data_dir "$(RABBITMQ_QUORUM_DIR)"
-	          -ra metrics_handler {rabbit_quorum_queue, io_metrics_handler}
 		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
 		  "; \
 		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
