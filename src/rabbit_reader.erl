@@ -16,6 +16,10 @@
 
 -module(rabbit_reader).
 
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 %% This is an AMQP 0-9-1 connection implementation. If AMQP 1.0 plugin is enabled,
 %% this module passes control of incoming AMQP 1.0 connections to it.
 %%
@@ -180,15 +184,6 @@
 
 start_link(HelperSup, Ref, Sock) ->
     Pid = proc_lib:spawn_link(?MODULE, init, [self(), HelperSup, Ref, Sock]),
-
-    %% In the event that somebody floods us with connections, the
-    %% reader processes can spew log events at error_logger faster
-    %% than it can keep up, causing its mailbox to grow unbounded
-    %% until we eat all the memory available and crash. So here is a
-    %% meaningless synchronous call to the underlying gen_event
-    %% mechanism. When it returns the mailbox is drained, and we
-    %% return to our caller to accept more connections.
-    gen_event:which_handlers(error_logger),
 
     {ok, Pid}.
 

@@ -16,6 +16,10 @@
 
 -module(rabbit_channel).
 
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 %% rabbit_channel processes represent an AMQP 0-9-1 channels.
 %%
 %% Connections parse protocol frames coming from clients and

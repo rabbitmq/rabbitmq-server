@@ -16,6 +16,10 @@
 
 -module(rabbit).
 
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
