@@ -171,6 +171,7 @@ data "template_file" "user_data" {
     erlang_cookie    = "${var.erlang_cookie}"
     erlang_nodename  = "${var.erlang_nodename}"
     erlang_version   = "${var.erlang_version}"
+    erlang_git_ref   = "${var.erlang_git_ref}"
   }
 }
 

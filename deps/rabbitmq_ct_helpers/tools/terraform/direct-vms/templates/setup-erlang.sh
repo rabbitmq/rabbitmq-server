@@ -17,6 +17,8 @@ export DEBIAN_FRONTEND
 # shellcheck disable=SC2016
 readonly erlang_version='${erlang_version}'
 # shellcheck disable=SC2016
+erlang_git_ref='${erlang_git_ref}'
+# shellcheck disable=SC2016
 readonly erlang_nodename='${erlang_nodename}'
 # shellcheck disable=SC2016
 readonly default_user='${default_user}'
@@ -30,6 +32,11 @@ readonly erlang_cookie='${erlang_cookie}'
 readonly debian_codename="$${distribution#debian-*}"
 
 case "$erlang_version" in
+  21.0)
+    if test -z "$erlang_git_ref"; then
+      erlang_git_ref='OTP-21.0-rc2'
+    fi
+    ;;
   20.[1-3])
     readonly erlang_package_version="1:$erlang_version-1"
     ;;
@@ -45,40 +52,61 @@ case "$erlang_version" in
     ;;
 esac
 
-# Enable backports.
-cat >/etc/apt/sources.list.d/backports.list << EOF
+setup_backports() {
+  # Enable backports.
+  cat >/etc/apt/sources.list.d/backports.list << EOF
 deb http://httpredir.debian.org/debian $debian_codename-backports main
 EOF
+  apt-get -qq update
+}
 
-# Setup repository to get Erlang.
-readonly esl_package=/tmp/erlang-solutions_1.0_all.deb
-wget -q -O"$esl_package" https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb
-dpkg -i "$esl_package"
-apt-get -qq update
+# --------------------------------------------------------------------
+# Functions to take Erlang and Elixir from Debian packages.
+# --------------------------------------------------------------------
 
-# Configure Erlang version pinning.
-cat >/etc/apt/preferences.d/erlang <<EOF
+setup_erlang_deb_repository() {
+  # Setup repository to get Erlang.
+  readonly esl_package=/tmp/erlang-solutions_1.0_all.deb
+  wget -q -O"$esl_package" \
+    https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb
+  dpkg -i "$esl_package"
+  apt-get -qq update
+
+  # Configure Erlang version pinning.
+  cat >/etc/apt/preferences.d/erlang <<EOF
 Package: erlang*
 Pin: version $erlang_package_version
 Pin-Priority: 1000
 EOF
+}
 
 apt_install_erlang() {
   apt-get -qq install -y --no-install-recommends \
     erlang-base-hipe erlang-nox erlang-dev erlang-src erlang-common-test
 }
 
-apt_install_extra() {
+apt_install_elixir() {
   case "$debian_codename" in
     wheezy)
       # We don't install Elixir because we only use Debian Wheezy to
       # run Erlang R16B03. This version of Erlang is only useful for
       # RabbitMQ 3.6.x which doesn't depend on Elixir.
+      ;;
+    *)
+      apt-get -qq install -y --no-install-recommends \
+        elixir
+      ;;
+  esac
+}
+
+apt_install_extra() {
+  case "$debian_codename" in
+    wheezy)
       readonly extra_pkgs='make rsync vim-nox zip'
       readonly extra_backports='git'
       ;;
     *)
-      readonly extra_pkgs='elixir git make rsync vim-nox xz-utils zip'
+      readonly extra_pkgs='git make rsync vim-nox xz-utils zip'
       readonly extra_backports=''
       ;;
   esac
@@ -95,8 +123,79 @@ apt_install_extra() {
     $extra_backports
 }
 
+# --------------------------------------------------------------------
+# Functions to build Erlang and Elixir from sources.
+# --------------------------------------------------------------------
+
+install_kerl() {
+  apt-get -qq install -y --no-install-recommends \
+    curl
+
+  mkdir -p /usr/local/bin
+  cd /usr/local/bin
+  curl -O https://raw.githubusercontent.com/kerl/kerl/master/kerl
+  chmod a+x kerl
+}
+
+kerl_install_erlang() {
+  apt-get -qq install -y --no-install-recommends \
+    git \
+    build-essential \
+    autoconf automake libtool \
+    libssl-dev \
+    libncurses5-dev \
+    libsctp1 libsctp-dev
+
+  kerl build git https://github.com/erlang/otp.git "$erlang_git_ref" "$erlang_version"
+  kerl install "$erlang_version" /usr/local/erlang
+
+  . /usr/local/erlang/activate
+  echo '. /usr/local/erlang/activate' > /etc/profile.d/erlang.sh
+}
+
+install_kiex() {
+  curl -sSL https://raw.githubusercontent.com/taylor/kiex/master/install | bash -s
+
+  mv "$HOME/.kiex" /usr/local/kiex
+  sed -E \
+    -e 's,\\\$HOME/\.kiex,/usr/local/kiex,' \
+    -e 's,\$HOME/\.kiex,/usr/local/kiex,' \
+    < /usr/local/kiex/bin/kiex \
+    > /usr/local/kiex/bin/kiex.patched
+  mv /usr/local/kiex/bin/kiex.patched /usr/local/kiex/bin/kiex
+  chmod a+x /usr/local/kiex/bin/kiex
+}
+
+kiex_install_elixir() {
+  export PATH=/usr/local/kiex/bin:$PATH
+  elixir_version=$(kiex list releases | tail -n 1 | awk '{print $1}')
+  kiex install $elixir_version
+
+  . /usr/local/kiex/elixirs/elixir-$elixir_version.env
+  cat >> /etc/profile.d/erlang.sh <<EOF
+
+. /usr/local/kiex/elixirs/elixir-$elixir_version.env
+EOF
+}
+
+# --------------------------------------------------------------------
+# Main.
+# --------------------------------------------------------------------
+
+setup_backports
+
 # Install Erlang + various tools.
-apt_install_erlang
+if test "$erlang_package_version"; then
+  setup_erlang_deb_repository
+  apt_install_erlang
+  apt_install_elixir
+elif test "$erlang_git_ref"; then
+  install_kerl
+  kerl_install_erlang
+  install_kiex
+  kiex_install_elixir
+fi
+
 apt_install_extra
 
 # Store Erlang cookie file for both root and the default user.

@@ -118,6 +118,7 @@ start_vms() {
   terraform apply \
     -auto-approve=true \
     -var="erlang_version=$erlang_branch" \
+    -var="erlang_git_ref=$erlang_git_ref" \
     -var="erlang_cookie=$erlang_cookie" \
     -var="erlang_nodename=$erlang_nodename" \
     -var="ssh_key=$ssh_key" \
@@ -131,6 +132,7 @@ destroy_vms() {
   terraform destroy \
     -force \
     -var="erlang_version=$erlang_branch" \
+    -var="erlang_git_ref=$erlang_git_ref" \
     -var="erlang_cookie=$erlang_cookie" \
     -var="erlang_nodename=$erlang_nodename" \
     -var="ssh_key=$ssh_key" \
@@ -139,6 +141,13 @@ destroy_vms() {
     -var="upload_dirs_archive=$dirs_archive" \
     "$terraform_dir"
 }
+
+case "$erlang_version" in
+  *@*)
+    erlang_git_ref=${erlang_version#*@}
+    erlang_version=${erlang_version%@*}
+    ;;
+esac
 
 erlang_branch=$(canonicalize_erlang_version "$erlang_version")
 if test -z "$erlang_branch"; then

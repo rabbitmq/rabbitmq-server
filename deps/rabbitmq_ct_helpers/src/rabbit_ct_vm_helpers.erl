@@ -31,6 +31,7 @@
 
          ensure_terraform_cmd/1,
          determine_erlang_version/1,
+         determine_erlang_git_ref/1,
          compute_code_path/1,
          find_terraform_ssh_key/1,
          set_terraform_files_suffix/1,
@@ -69,6 +70,7 @@ setup_steps() ->
     [
      fun ensure_terraform_cmd/1,
      fun determine_erlang_version/1,
+     fun determine_erlang_git_ref/1,
      fun compute_code_path/1,
      fun find_terraform_ssh_key/1,
      fun set_terraform_files_suffix/1,
@@ -132,6 +134,30 @@ determine_erlang_version(Config) ->
     ct:pal(?LOW_IMPORTANCE, "Erlang version: ~s", [ErlangVersion]),
     rabbit_ct_helpers:set_config(
       Config, {erlang_version, ErlangVersion}).
+
+determine_erlang_git_ref(Config) ->
+    GitRef = case rabbit_ct_helpers:get_config(Config, erlang_git_ref) of
+                  undefined ->
+                      case os:getenv("ERLANG_GIT_REF") of
+                          false ->
+                              Version = erlang:system_info(system_version),
+                              ReOpts = [{capture, all_but_first, list}],
+                              Match = re:run(Version,
+                                             "source-([0-9a-fA-F]+)",
+                                             ReOpts),
+                              case Match of
+                                  {match, [V]} -> V;
+                                  _            -> ""
+                              end;
+                          V ->
+                              V
+                      end;
+                  V ->
+                      V
+              end,
+    ct:pal(?LOW_IMPORTANCE, "Erlang Git reference: ~s", [GitRef]),
+    rabbit_ct_helpers:set_config(
+      Config, {erlang_git_ref, GitRef}).
 
 compute_code_path(Config) ->
     EntireCodePath = code:get_path(),
@@ -453,6 +479,7 @@ destroy_terraform_vms(Config) ->
 
 terraform_var_flags(Config) ->
     ErlangVersion = ?config(erlang_version, Config),
+    GitRef = ?config(erlang_git_ref, Config),
     SshKey = ?config(terraform_ssh_key, Config),
     Suffix = ?config(terraform_files_suffix, Config),
     EC2Region = ?config(terraform_aws_ec2_region, Config),
@@ -474,6 +501,7 @@ terraform_var_flags(Config) ->
     Archive = ?config(upload_dirs_archive, Config),
     [
      {"-var=erlang_version=~s", [ErlangVersion]},
+     {"-var=erlang_git_ref=~s", [GitRef]},
      {"-var=erlang_cookie=~s", [erlang:get_cookie()]},
      {"-var=erlang_nodename=~s", [?ERLANG_REMOTE_NODENAME]},
      {"-var=ssh_key=~s", [SshKey]},
@@ -724,7 +752,7 @@ write_inetrc(Config) ->
 
 wait_for_ct_peers(Config) ->
     CTPeers = get_ct_peers(Config),
-    Timeout = 7 * 60 * 1000,
+    Timeout = 20 * 60 * 1000,
     {ok, TRef} = timer:send_after(Timeout, ct_peers_timeout),
     wait_for_ct_peers(Config, CTPeers, TRef).
 

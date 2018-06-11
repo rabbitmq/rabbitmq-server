@@ -7,6 +7,14 @@ the underlying OS.
 EOF
 }
 
+variable "erlang_git_ref" {
+  default     = ""
+  description = <<EOF
+Git reference if building Erlang from Git. Specifying the Erlang
+version is still required.
+EOF
+}
+
 variable "erlang_cookie" {
   description = <<EOF
 Erlang cookie to deploy on VMs.
@@ -72,6 +80,7 @@ variable "erlang_version_to_system" {
     "20.1"   = "debian-stretch"
     "20.2"   = "debian-stretch"
     "20.3"   = "debian-stretch"
+    "21.0"   = "debian-stretch"
   }
 }
 
