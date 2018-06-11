@@ -461,7 +461,10 @@ load_elixir(Config) ->
     Config.
 
 stop_long_running_testsuite_monitor(Config) ->
-    ?config(long_running_testsuite_monitor, Config) ! stop,
+    case get_config(Config, long_running_testsuite_monitor) of
+        undefined -> ok;
+        Pid       -> Pid ! stop
+    end,
     Config.
 
 long_running_testsuite_monitor(TimerRef, Testcases) ->
