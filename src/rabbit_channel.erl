@@ -51,8 +51,8 @@
 %% When a queue is declared as exclusive on a channel, the channel
 %% will notify queue collector of that queue.
 
--include("rabbit_framing.hrl").
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(gen_server2).
 
@@ -1643,7 +1643,8 @@ monitor_delivering_queue(NoAck, QPid, QName,
                                  end}.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
-                                                       mandatory   = Mand}) ->
+                                                       mandatory   = Mand})
+  when is_pid(QPid) ->
     {MMsgs, Mand1} = dtree:take(QPid, Mand),
     [basic_return(Msg, State, no_route) || {_, Msg} <- MMsgs],
     State1 = State#ch{mandatory = Mand1},
@@ -1651,9 +1652,12 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
         true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
                  send_nacks(MXs, State1#ch{unconfirmed = UC1});
         false -> {MXs, UC1} = dtree:take(QPid, UC),
-                              record_confirms(MXs, State1#ch{unconfirmed = UC1})
+                 record_confirms(MXs, State1#ch{unconfirmed = UC1})
 
-    end.
+    end;
+handle_publishing_queue_down(_QPid, _Reason, State) ->
+    %% for quorum queues we cannot infer anything from a queue down
+    State.
 
 handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
                                               queue_names      = QNames}) ->
