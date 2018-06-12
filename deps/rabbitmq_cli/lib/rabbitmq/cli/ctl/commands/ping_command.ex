@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
     # and error values that are used by CLI commands
     msg = "Failed to successfully connect and authenticate to #{node_name} in #{timeout} ms"
     try do
-      case :gen.call({:net_kernel, node_name}, :'$gen_call', {:is_auth, node_name}, timeout) do
+      case :gen.call({:net_kernel, node_name}, :'$gen_call', {:is_auth, node()}, timeout) do
         :ok      -> :ok
         {:ok, _} -> :ok
         _        ->
