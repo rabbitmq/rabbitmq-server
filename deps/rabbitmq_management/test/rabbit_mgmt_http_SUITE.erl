@@ -1780,7 +1780,7 @@ exchanges_pagination_test(Config) ->
 
 
     RegExByName = http_get(Config,
-                           "/exchanges?page=1&page_size=2&name=^(?=^reg)&use_regex=true",
+                           "/exchanges?page=1&page_size=2&name=%5E(?=%5Ereg)&use_regex=true",
                            ?OK),
     ?assertEqual(Total, maps:get(total_count, RegExByName)),
     ?assertEqual(1, maps:get(filtered_count, RegExByName)),
@@ -1922,7 +1922,7 @@ queue_pagination_test(Config) ->
                 ], maps:get(items, ByName)),
 
     RegExByName = http_get(Config,
-                           "/queues?page=1&page_size=2&name=^(?=^reg)&use_regex=true",
+                           "/queues?page=1&page_size=2&name=%5E(?=%5Ereg)&use_regex=true",
                            ?OK),
     ?assertEqual(Total, maps:get(total_count, RegExByName)),
     ?assertEqual(1, maps:get(filtered_count, RegExByName)),
