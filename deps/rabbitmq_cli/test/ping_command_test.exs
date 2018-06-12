@@ -14,11 +14,11 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule NodeHealthCheckCommandTest do
+defmodule PingCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand
+  @command RabbitMQ.CLI.Ctl.Commands.PingCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -52,26 +52,16 @@ defmodule NodeHealthCheckCommandTest do
     assert @command.run([], context[:opts])
   end
 
-  test "run: request to a named, active node with an alarm in effect fails", context do
-    set_vm_memory_high_watermark(0.0000000000001)
-    # give VM memory monitor check some time to kick in
-    :timer.sleep(1500)
-    {:healthcheck_failed, _message} = @command.run([], context[:opts])
-
-    reset_vm_memory_high_watermark()
-    :timer.sleep(1500)
-    assert @command.run([], context[:opts]) == :ok
-  end
-
   test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
 
-
-    assert match?({:badrpc, :nodedown}, @command.run([], %{node: target, timeout: 70000}))
+    assert match?({:error, _}, @command.run([], %{node: target, timeout: 70000}))
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/Checking health/
-    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/#{get_rabbit_hostname()}/
+    banner  = @command.banner([], context[:opts])
+
+    assert banner =~ ~r/Will ping/
+    assert banner =~ ~r/#{get_rabbit_hostname()}/
   end
 end
