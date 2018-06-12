@@ -37,7 +37,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
   def run([], %{node: node_name, timeout: timeout}) do
     # this is very similar to what net_adm:ping/1 does reimplemented with support for custom timeouts
     # and error values that are used by CLI commands
-    msg = "Failed to successfully connect and authenticate to #{node_name} in #{timeout} ms"
+    msg = "Failed to connect and authenticate to #{node_name} in #{timeout} ms"
     try do
       case :gen.call({:net_kernel, node_name}, :'$gen_call', {:is_auth, node()}, timeout) do
         :ok      -> :ok
@@ -68,7 +68,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
 
   def output(:ok, _) do
     {:ok, "Ping succeeded"}
-  end  
+  end
   def output({:error, :timeout}, %{node: node_name}) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
      "Error: timed out while waiting for a response from #{node_name}."}
