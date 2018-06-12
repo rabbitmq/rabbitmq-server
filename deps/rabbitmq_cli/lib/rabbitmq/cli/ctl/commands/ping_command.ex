@@ -19,6 +19,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
 
   @default_timeout 60_000
 
+  def scopes(), do: [:ctl, :diagnostics]
+
   def merge_defaults(args, opts) do
     timeout = case opts[:timeout] do
       nil       -> @default_timeout;
