@@ -55,12 +55,14 @@ init(Req0, Opts) ->
     {cowboy_websocket, Req, {Socket, Peername, Sockname, Headers, FrameType}}.
 
 websocket_init({Socket, Peername, Sockname, Headers, FrameType}) ->
-    Conn = {?MODULE, self(), [
-        {socket, Socket},
-        {peername, Peername},
-        {sockname, Sockname},
-        {headers, Headers}]},
-    {ok, _Sup, Pid} = rabbit_ws_sup:start_client({Conn, heartbeat}),
+    Info = [{socket, Socket},
+            {peername, Peername},
+            {sockname, Sockname},
+            {headers, Headers}],
+    {ok, _Sup, Pid} = rabbit_ws_sup:start_client({{?MODULE,
+                                                   #{pid  => self(),
+                                                     info => Info}},
+                                                  heartbeat}),
     {ok, #state{pid=Pid, type=FrameType}}.
 
 websocket_handle({text, Data}, State=#state{pid=Pid}) ->
@@ -109,13 +111,13 @@ filter_stomp_protocols(Protocols) ->
 %% within the Websocket process. This could be a good refactoring
 %% once SockJS gets removed.
 
-info({?MODULE, _, Info}) ->
+info(#{info := Info}) ->
     Info.
 
-send(Data, {?MODULE, Pid, _}) ->
+send(#{pid := Pid}, Data) ->
     Pid ! {send, Data},
     ok.
 
-close(Code, Reason, {?MODULE, Pid, _}) ->
+close(#{pid := Pid}, Code, Reason) ->
     Pid ! {close, Code, Reason},
     ok.
