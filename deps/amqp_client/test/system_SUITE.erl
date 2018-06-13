@@ -1284,7 +1284,10 @@ channel_death(Config) ->
         throw({unexpected_success, Ret})
     catch
         exit:{{badarg,
-               [{amqp_channel, is_connection_method, 1, _} | _]}, _} -> ok
+               [{amqp_channel, is_connection_method, 1, _} | _]}, _} -> ok;
+        exit:{{badarg,
+               [{erlang, element, [1, bogus_message], []},
+                {amqp_channel, is_connection_method, 1, _} | _]}, _} -> ok
     end,
     wait_for_death(Channel),
     wait_for_death(Connection).
