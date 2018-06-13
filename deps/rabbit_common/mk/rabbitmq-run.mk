@@ -274,12 +274,18 @@ start-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) status >/dev/null
 
 start-rabbit-on-node:
-	$(exec_verbose) echo 'rabbit:start().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
+	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) \
+	  eval 'rabbit:start().' | \
+	  sed -E -e '/^ completed with .* plugins\.$$/d' -e '/^ok$$/d'
 	$(verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE)
 
 stop-rabbit-on-node:
-	$(exec_verbose) echo 'rabbit:stop().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
+	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) \
+	  eval 'rabbit:stop().' | \
+	  sed -E -e '/^ok$$/d'
 
 stop-node:
 	$(exec_verbose) ( \
@@ -330,9 +336,11 @@ stop-brokers stop-cluster:
 # --------------------------------------------------------------------
 
 set-resource-alarm:
-	$(exec_verbose) echo 'rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []}).' | \
-	$(ERL_CALL) $(ERL_CALL_OPTS)
+	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) \
+	  eval 'rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []}).'
 
 clear-resource-alarm:
-	$(exec-verbose) echo 'rabbit_alarm:clear_alarm({resource_limit, $(SOURCE), node()}).' | \
-	$(ERL_CALL) $(ERL_CALL_OPTS)
+	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) \
+	  eval 'rabbit_alarm:clear_alarm({resource_limit, $(SOURCE), node()}).'
