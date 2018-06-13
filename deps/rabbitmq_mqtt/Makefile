@@ -34,7 +34,7 @@ DEPS = ranch rabbit_common rabbit amqp_client ranch_proxy_protocol
 TEST_DEPS = emqttc ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
-dep_emqttc = git https://github.com/emqtt/emqttc.git master
+dep_emqttc = git https://github.com/rabbitmq/emqttc.git remove-logging
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
