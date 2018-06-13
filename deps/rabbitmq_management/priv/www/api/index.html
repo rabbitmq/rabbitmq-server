@@ -28,7 +28,7 @@
     <p>Many URIs require the name of a virtual host as part of the
     path, since names only uniquely identify objects within a virtual
     host. As the default virtual host is called "<code>/</code>", this
-    will need to be encoded as "<code>%2f</code>".</p>
+    will need to be encoded as "<code>%2F</code>".</p>
 
     <p>PUTing a resource creates it. The JSON object you upload must
     have certain mandatory keys (documented below) and may have
@@ -125,12 +125,12 @@ Content-Length: 0</pre>
 <pre>:: Windows
 C:\&gt; curl -i -u guest:guest -H "content-type:application/json" ^
        -XPUT -d"{""type"":""direct"",""durable"":true}" ^
-       http://localhost:15672/api/exchanges/%2f/my-new-exchange
+       http://localhost:15672/api/exchanges/%2F/my-new-exchange
 
 # Unix
 $ curl -i -u guest:guest -H "content-type:application/json" \
     -XPUT -d'{"type":"direct","durable":true}' \
-    http://localhost:15672/api/exchanges/%2f/my-new-exchange
+    http://localhost:15672/api/exchanges/%2F/my-new-exchange
 
 HTTP/1.1 204 No Content
 Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)
@@ -144,11 +144,11 @@ Content-Length: 0</pre>
         And delete it again:
 <pre>:: Windows
 C:\&gt; curl -i -u guest:guest -H "content-type:application/json" ^
-       -XDELETE http://localhost:15672/api/exchanges/%2f/my-new-exchange
+       -XDELETE http://localhost:15672/api/exchanges/%2F/my-new-exchange
 
 # Unix
 $ curl -i -u guest:guest -H "content-type:application/json" \
-    -XDELETE http://localhost:15672/api/exchanges/%2f/my-new-exchange
+    -XDELETE http://localhost:15672/api/exchanges/%2F/my-new-exchange
 
 HTTP/1.1 204 No Content
 Server: MochiWeb/1.1 WebMachine/1.10.0 (never breaks eye contact)

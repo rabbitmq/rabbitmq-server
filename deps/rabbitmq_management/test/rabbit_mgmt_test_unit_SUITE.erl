@@ -73,10 +73,10 @@ amqp_table_test(_Config) ->
     assert_table(#{<<"x-expires">> => 1000},
                  [{<<"x-expires">>, long, 1000}]),
     assert_table(#{<<"x-forwarding">> =>
-                   [#{<<"uri">> => <<"amqp://localhost/%2f/upstream">>}]},
+                   [#{<<"uri">> => <<"amqp://localhost/%2F/upstream">>}]},
                  [{<<"x-forwarding">>, array,
                    [{table, [{<<"uri">>, longstr,
-                              <<"amqp://localhost/%2f/upstream">>}]}]}]).
+                              <<"amqp://localhost/%2F/upstream">>}]}]}]).
 
 assert_table(JSON, AMQP) ->
     ?assertEqual(JSON, rabbit_mgmt_format:amqp_table(AMQP)),
