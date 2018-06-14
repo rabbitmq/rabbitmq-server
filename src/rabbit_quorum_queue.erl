@@ -29,6 +29,7 @@
 -export([become_leader/2, update_metrics/2]).
 -export([rpc_delete_metrics/1]).
 -export([format/1]).
+-export([open_files/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -81,7 +82,8 @@
          garbage_collection,
          leader,
          online,
-         members
+         members,
+         open_files
         ]).
 
 %%----------------------------------------------------------------------------
@@ -218,17 +220,17 @@ recover(Queues) ->
                     Err == name_not_registered ->
                  % queue was never started on this node
                  % so needs to be started from scratch.
-                 Machine = ra_machine(Q),
+                 Machine = ra_machine(Q0),
                  RaNodes = [{Name, Node} || Node <- Nodes],
                  % TODO: should we crash the vhost here or just log the error
                  % and continue?
                  ok = ra:start_node(Name, {Name, node()},
                                     Machine, RaNodes)
          end,
-         {_, Q} = rabbit_amqqueue:internal_declare(Q, true),
+         {_, Q} = rabbit_amqqueue:internal_declare(Q0, true),
          Q
      end || #amqqueue{pid = {Name, _},
-                      quorum_nodes = Nodes} = Q <- Queues].
+                      quorum_nodes = Nodes} = Q0 <- Queues].
 
 stop(VHost) ->
     _ = [ra:stop_node(Pid) || #amqqueue{pid = Pid} <- find_quorum_queues(VHost)],
@@ -478,7 +480,20 @@ i(members, #amqqueue{quorum_nodes = Nodes}) ->
     Nodes;
 i(online, Q) -> online(Q);
 i(leader, Q) -> leader(Q);
+i(open_files, #amqqueue{pid = {Name, _},
+                        quorum_nodes = Nodes}) ->
+    {Data, _} = rpc:multicall(Nodes, rabbit_quorum_queue, open_files, [Name]),
+    lists:flatten(Data);
 i(_K, _Q) -> ''.
+
+open_files(Name) ->
+    case whereis(Name) of
+        undefined -> {node(), 0};
+        Pid -> case ets:lookup(ra_open_file_metrics, Pid) of
+                   [] -> {node(), 0};
+                   [{_, Count}] -> {node(), Count}
+               end
+    end.
 
 leader(#amqqueue{pid = {Name, Leader}}) ->
     case is_process_alive(Name, Leader) of
