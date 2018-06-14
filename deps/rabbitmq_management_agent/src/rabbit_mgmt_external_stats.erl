@@ -42,7 +42,7 @@
                      rates_mode, uptime, run_queue, processors, exchange_types,
                      auth_mechanisms, applications, contexts, log_files,
                      db_dir, config_files, net_ticktime, enabled_plugins,
-                     mem_calculation_strategy]).
+                     mem_calculation_strategy, ra_open_file_metrics]).
 
 %%--------------------------------------------------------------------
 
