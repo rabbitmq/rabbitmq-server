@@ -106,7 +106,7 @@ end}.
     [{datatype, [{enum, [none]}, string]}]}.
 
 {mapping, "auth_ldap.dn_lookup_bind", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
-    [{datatype, [{enum, [as_user]}]}]}.
+    [{datatype, [{enum, [as_user, anon]}]}]}.
 
 {mapping, "auth_ldap.dn_lookup_bind.user_dn", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
     [{datatype, [string]}]}.
@@ -114,10 +114,17 @@ end}.
 {mapping, "auth_ldap.dn_lookup_bind.password", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
     [{datatype, [string]}]}.
 
+%%  - as_user (to bind as the authenticated user - requires a password)
+%%  - anon    (to bind anonymously)
+%%  - {UserDN, Password} (to bind with a specified user name and password)
+%%
+%% Defaults to 'as_user'.
+
 {translation, "rabbitmq_auth_backend_ldap.dn_lookup_bind",
 fun(Conf) ->
     case cuttlefish:conf_get("auth_ldap.dn_lookup_bind", Conf, undefined) of
         as_user -> as_user;
+        anon    -> anon;
         _       ->
             User = cuttlefish:conf_get("auth_ldap.dn_lookup_bind.user_dn", Conf),
             Pass = cuttlefish:conf_get("auth_ldap.dn_lookup_bind.password", Conf),
@@ -138,8 +145,6 @@ end}.
 %%  - {UserDN, Password} (to bind with a specified user name and password)
 %%
 %% Defaults to 'as_user'.
-%%
-%% {other_bind, as_user},
 
 {mapping, "auth_ldap.other_bind", "rabbitmq_auth_backend_ldap.other_bind",
     [{datatype, {enum, [as_user, anon]}}]}.
