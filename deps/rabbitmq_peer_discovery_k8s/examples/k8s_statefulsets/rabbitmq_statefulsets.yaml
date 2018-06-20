@@ -81,12 +81,14 @@ spec:
           exec:
             command: ["rabbitmqctl", "status"]
           initialDelaySeconds: 60
-          timeoutSeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 10
         readinessProbe:
           exec:
             command: ["rabbitmqctl", "status"]
           initialDelaySeconds: 20
-          timeoutSeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 10
         imagePullPolicy: Always
         env:
           - name: MY_POD_IP
