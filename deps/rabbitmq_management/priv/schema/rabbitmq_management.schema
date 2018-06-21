@@ -63,13 +63,13 @@ end}.
 {mapping, "management.listener.ssl_opts.fail_if_no_peer_cert", "rabbitmq_management.listener.ssl_opts.fail_if_no_peer_cert", [
     {datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listener.ssl_opts.cacertfile", "rabbitmq_management.listener.ssl_opts.cacertfile", 
+{mapping, "management.listener.ssl_opts.cacertfile", "rabbitmq_management.listener.ssl_opts.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "management.listener.ssl_opts.certfile", "rabbitmq_management.listener.ssl_opts.certfile", 
+{mapping, "management.listener.ssl_opts.certfile", "rabbitmq_management.listener.ssl_opts.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "management.listener.ssl_opts.cacerts.$name", "rabbitmq_management.listener.ssl_opts.cacerts", 
+{mapping, "management.listener.ssl_opts.cacerts.$name", "rabbitmq_management.listener.ssl_opts.cacerts",
     [{datatype, string}]}.
 
 {translation, "rabbitmq_management.listener.ssl_opts.cacerts",
@@ -78,7 +78,7 @@ fun(Conf) ->
     [ list_to_binary(V) || {_, V} <- Settings ]
 end}.
 
-{mapping, "management.listener.ssl_opts.cert", "rabbitmq_management.listener.ssl_opts.cert", 
+{mapping, "management.listener.ssl_opts.cert", "rabbitmq_management.listener.ssl_opts.cert",
     [{datatype, string}]}.
 
 {translation, "rabbitmq_management.listener.ssl_opts.cert",
@@ -86,16 +86,16 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("management.listener.ssl_opts.cert", Conf))
 end}.
 
-{mapping, "management.listener.ssl_opts.client_renegotiation", "rabbitmq_management.listener.ssl_opts.client_renegotiation", 
+{mapping, "management.listener.ssl_opts.client_renegotiation", "rabbitmq_management.listener.ssl_opts.client_renegotiation",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listener.ssl_opts.crl_check", "rabbitmq_management.listener.ssl_opts.crl_check", 
+{mapping, "management.listener.ssl_opts.crl_check", "rabbitmq_management.listener.ssl_opts.crl_check",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
-{mapping, "management.listener.ssl_opts.depth", "rabbitmq_management.listener.ssl_opts.depth", 
+{mapping, "management.listener.ssl_opts.depth", "rabbitmq_management.listener.ssl_opts.depth",
     [{datatype, integer}, {validators, ["byte"]}]}.
 
-{mapping, "management.listener.ssl_opts.dh", "rabbitmq_management.listener.ssl_opts.dh", 
+{mapping, "management.listener.ssl_opts.dh", "rabbitmq_management.listener.ssl_opts.dh",
     [{datatype, string}]}.
 
 {translation, "rabbitmq_management.listener.ssl_opts.dh",
@@ -103,19 +103,19 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("management.listener.ssl_opts.dh", Conf))
 end}.
 
-{mapping, "management.listener.ssl_opts.dhfile", "rabbitmq_management.listener.ssl_opts.dhfile", 
+{mapping, "management.listener.ssl_opts.dhfile", "rabbitmq_management.listener.ssl_opts.dhfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "management.listener.ssl_opts.honor_cipher_order", "rabbitmq_management.listener.ssl_opts.honor_cipher_order", 
+{mapping, "management.listener.ssl_opts.honor_cipher_order", "rabbitmq_management.listener.ssl_opts.honor_cipher_order",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listener.ssl_opts.key.RSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key", 
+{mapping, "management.listener.ssl_opts.key.RSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key",
     [{datatype, string}]}.
 
-{mapping, "management.listener.ssl_opts.key.DSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key", 
+{mapping, "management.listener.ssl_opts.key.DSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key",
     [{datatype, string}]}.
 
-{mapping, "management.listener.ssl_opts.key.PrivateKeyInfo", "rabbitmq_management.listener.ssl_opts.key", 
+{mapping, "management.listener.ssl_opts.key.PrivateKeyInfo", "rabbitmq_management.listener.ssl_opts.key",
     [{datatype, string}]}.
 
 {translation, "rabbitmq_management.listener.ssl_opts.key",
@@ -126,25 +126,25 @@ fun(Conf) ->
     end
 end}.
 
-{mapping, "management.listener.ssl_opts.keyfile", "rabbitmq_management.listener.ssl_opts.keyfile", 
+{mapping, "management.listener.ssl_opts.keyfile", "rabbitmq_management.listener.ssl_opts.keyfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "management.listener.ssl_opts.log_alert", "rabbitmq_management.listener.ssl_opts.log_alert", 
+{mapping, "management.listener.ssl_opts.log_alert", "rabbitmq_management.listener.ssl_opts.log_alert",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listener.ssl_opts.password", "rabbitmq_management.listener.ssl_opts.password", 
+{mapping, "management.listener.ssl_opts.password", "rabbitmq_management.listener.ssl_opts.password",
     [{datatype, string}]}.
 
-{mapping, "management.listener.ssl_opts.psk_identity", "rabbitmq_management.listener.ssl_opts.psk_identity", 
+{mapping, "management.listener.ssl_opts.psk_identity", "rabbitmq_management.listener.ssl_opts.psk_identity",
     [{datatype, string}]}.
 
-{mapping, "management.listener.ssl_opts.reuse_sessions", "rabbitmq_management.listener.ssl_opts.reuse_sessions", 
+{mapping, "management.listener.ssl_opts.reuse_sessions", "rabbitmq_management.listener.ssl_opts.reuse_sessions",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listener.ssl_opts.secure_renegotiate", "rabbitmq_management.listener.ssl_opts.secure_renegotiate", 
+{mapping, "management.listener.ssl_opts.secure_renegotiate", "rabbitmq_management.listener.ssl_opts.secure_renegotiate",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listener.ssl_opts.versions.$version", "rabbitmq_management.listener.ssl_opts.versions", 
+{mapping, "management.listener.ssl_opts.versions.$version", "rabbitmq_management.listener.ssl_opts.versions",
     [{datatype, atom}]}.
 
 {translation, "rabbitmq_management.listener.ssl_opts.versions",
@@ -162,6 +162,11 @@ end}.
     [{datatype, string}]}.
 
 
+%% Session timeout
+
+{mapping, "management.login_session_timeout", "rabbitmq_management.login_session_timeout", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
 
 %% CORS
 
@@ -204,7 +209,7 @@ end}.
 %% One of 'basic', 'detailed' or 'none'. See
 %% http://www.rabbitmq.com/management.html#fine-stats for more details.
 %% {rates_mode, basic},
-{mapping, "management.rates_mode", "rabbitmq_management.rates_mode", 
+{mapping, "management.rates_mode", "rabbitmq_management.rates_mode",
     [{datatype, {enum, [basic, detailed, none]}}]}.
 
 %% Configure how long aggregated data (such as message rates and queue
@@ -218,7 +223,7 @@ end}.
 %%   {detailed, [{10, 5}]}]}
 %   ]},
 
-{mapping, "management.sample_retention_policies.$section.$interval", 
+{mapping, "management.sample_retention_policies.$section.$interval",
           "rabbitmq_management.sample_retention_policies",
           [{datatype, integer}]}.
 
@@ -227,16 +232,16 @@ fun(Conf) ->
     Global = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.global", Conf),
     Basic = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.basic", Conf),
     Detailed = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.detailed", Conf),
-    TranslateKey = fun("minute") -> 60; 
-                      ("hour") -> 3600; 
+    TranslateKey = fun("minute") -> 60;
+                      ("hour") -> 3600;
                       ("day") -> 86400;
                       (Other) -> list_to_integer(Other)
                    end,
     TranslatePolicy = fun(Section) ->
         [ {TranslateKey(Key), Val} || {[_,_,_,Key], Val} <- Section ]
     end,
-    [{global,   TranslatePolicy(Global)}, 
-     {basic,    TranslatePolicy(Basic)}, 
+    [{global,   TranslatePolicy(Global)},
+     {basic,    TranslatePolicy(Basic)},
      {detailed, TranslatePolicy(Detailed)}]
 end}.
 

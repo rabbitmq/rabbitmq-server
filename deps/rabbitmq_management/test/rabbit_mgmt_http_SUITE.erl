@@ -394,6 +394,12 @@ vhosts_trace_test(Config) ->
 users_test(Config) ->
     assert_item(#{name => <<"guest">>, tags => <<"administrator">>},
                 http_get(Config, "/whoami")),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management, login_session_timeout, 100]),
+    assert_item(#{name => <<"guest">>,
+                  tags => <<"administrator">>,
+                  login_session_timeout => 100},
+                http_get(Config, "/whoami")),
     http_get(Config, "/users/myuser", ?NOT_FOUND),
     http_put_raw(Config, "/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put(Config, "/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
