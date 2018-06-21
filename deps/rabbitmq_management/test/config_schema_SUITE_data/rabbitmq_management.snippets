@@ -77,6 +77,15 @@
   ], [rabbitmq_management]
  },
 
+ {login_session_timeout,
+  "management.login_session_timeout = 1234",
+  [
+   {rabbitmq_management, [
+                          {login_session_timeout, 1234}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
  {cors_settings,
   "management.cors.allow_origins.1 = https://origin1.org
    management.cors.allow_origins.2 = https://origin2.org
