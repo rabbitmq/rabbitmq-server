@@ -94,7 +94,7 @@ validate_token_active(#{}) -> ok.
 
 -spec check_token(binary()) -> {ok, map()} | {error, term()}.
 check_token(Token) ->
-    case 'Elixir.UaaJWT':decode_and_verify(Token) of
+    case uaa_jwt:decode_and_verify(Token) of
         {error, Reason} -> {refused, {error, Reason}};
         {true, Payload} -> validate_payload(Payload);
         {false, _}      -> {refused, signature_invalid}
