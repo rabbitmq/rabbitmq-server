@@ -34,7 +34,12 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User}) ->
-    rabbit_mgmt_util:reply(rabbit_mgmt_format:user(User), ReqData, Context).
+    FormattedUser = rabbit_mgmt_format:user(User),
+    Expiration = case application:get_env(rabbitmq_management, login_session_timeout) of
+        undefined -> [];
+        {ok, Val} -> [{login_session_timeout, Val}]
+    end,
+    rabbit_mgmt_util:reply(FormattedUser ++ Expiration, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
