@@ -24,7 +24,7 @@ function set_auth_pref(userinfo) {
     var date  = new Date();
     var login_session_timeout = get_login_session_timeout();
 
-    if(login_session_timeout) {
+    if (login_session_timeout) {
         date.setSeconds(date.getSeconds() + login_session_timeout);
     } else {
         // 8 hours from now
