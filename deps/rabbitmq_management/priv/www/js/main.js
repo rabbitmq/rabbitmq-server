@@ -25,7 +25,7 @@ function set_auth_pref(userinfo) {
     var login_session_timeout = get_login_session_timeout();
 
     if (login_session_timeout) {
-        date.setSeconds(date.getSeconds() + login_session_timeout);
+        date.setMinutes(date.getMinutes() + login_session_timeout);
     } else {
         // 8 hours from now
         date.setHours(date.getHours() + 8);
@@ -106,9 +106,10 @@ function get_login_session_timeout() {
 }
 
 function update_login_session_timeout(login_session_timeout) {
-    var auth_info = get_cookie_value('auth')
+    var auth_info = get_cookie_value('auth');
     var date  = new Date();
-    date.setSeconds(date.getSeconds() + login_session_timeout);
+    // `login_session_timeout` minutes from now
+    date.setMinutes(date.getMinutes() + login_session_timeout);
     store_cookie_value('login_session_timeout', login_session_timeout);
     store_cookie_value_with_expiration('auth', auth_info, date);
 }

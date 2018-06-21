@@ -161,8 +161,7 @@ end}.
 {mapping, "management.path_prefix", "rabbitmq_management.path_prefix",
     [{datatype, string}]}.
 
-
-%% Session timeout
+%%  Login session timeout in minutes
 
 {mapping, "management.login_session_timeout", "rabbitmq_management.login_session_timeout", [
     {datatype, integer}, {validators, ["non_negative_integer"]}
