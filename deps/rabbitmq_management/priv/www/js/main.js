@@ -22,8 +22,14 @@ function set_auth_pref(userinfo) {
 
     var b64 = b64_encode_utf8(userinfo);
     var date  = new Date();
-    // 8 hours from now
-    date.setHours(date.getHours() + 8);
+    var login_session_timeout = get_login_session_timeout();
+
+    if (login_session_timeout) {
+        date.setMinutes(date.getMinutes() + login_session_timeout);
+    } else {
+        // 8 hours from now
+        date.setHours(date.getHours() + 8);
+    }
     store_cookie_value_with_expiration('auth', encodeURIComponent(b64), date);
 }
 
@@ -80,12 +86,32 @@ function check_login() {
     }
     else {
         replace_content('outer', format('layout', {}));
+        var user_login_session_timeout = parseInt(user.login_session_timeout);
+        // Update auth login_session_timeout if changed
+        if (has_auth_cookie_value() && !isNaN(user_login_session_timeout) &&
+            user_login_session_timeout !== get_login_session_timeout()) {
+
+            update_login_session_timeout(user_login_session_timeout);
+        }
         setup_global_vars();
         setup_constant_events();
         update_vhosts();
         update_interval();
         setup_extensions();
     }
+}
+
+function get_login_session_timeout() {
+    parseInt(get_cookie_value('login_session_timeout'));
+}
+
+function update_login_session_timeout(login_session_timeout) {
+    var auth_info = get_cookie_value('auth');
+    var date  = new Date();
+    // `login_session_timeout` minutes from now
+    date.setMinutes(date.getMinutes() + login_session_timeout);
+    store_cookie_value('login_session_timeout', login_session_timeout);
+    store_cookie_value_with_expiration('auth', auth_info, date);
 }
 
 function start_app() {
