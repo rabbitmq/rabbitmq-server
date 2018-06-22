@@ -81,6 +81,7 @@ variable "erlang_version_to_system" {
     "20.2"   = "debian-stretch"
     "20.3"   = "debian-stretch"
     "21.0"   = "debian-stretch"
+    "22.0"   = "debian-stretch"
   }
 }
 
