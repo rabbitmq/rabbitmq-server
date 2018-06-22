@@ -32,9 +32,14 @@ readonly erlang_cookie='${erlang_cookie}'
 readonly debian_codename="$${distribution#debian-*}"
 
 case "$erlang_version" in
+  22.0)
+    if test -z "$erlang_git_ref"; then
+      erlang_git_ref='master'
+    fi
+    ;;
   21.0)
     if test -z "$erlang_git_ref"; then
-      erlang_git_ref='OTP-21.0-rc2'
+      erlang_git_ref='OTP-21.0'
     fi
     ;;
   20.[1-3])
