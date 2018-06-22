@@ -497,6 +497,12 @@ terraform_var_flags(Config) ->
                              _ ->
                                  rabbit_misc:format("~s: ", [ErlangApp])
                          end,
+    TestedApp = ?config(tested_erlang_app, Config),
+    _ = application:load(TestedApp),
+    InstanceNameSuffix = case application:get_key(TestedApp, vsn) of
+                             {ok, AppVer} -> " - " ++ AppVer;
+                             undefined    -> ""
+                         end,
     ct:pal(?LOW_IMPORTANCE, "Number of VMs requested: ~b", [InstanceCount]),
     Archive = ?config(upload_dirs_archive, Config),
     [
@@ -511,7 +517,8 @@ terraform_var_flags(Config) ->
      {"-var=vpc_cidr_block=~s", [CidrBlock]},
      {"-var=files_suffix=~s", [Suffix]},
      {"-var=aws_ec2_region=~s", [EC2Region]},
-     {"-var=instance_name_prefix=~s", [InstanceNamePrefix]}
+     {"-var=instance_name_prefix=~s", [InstanceNamePrefix]},
+     {"-var=instance_name_suffix=~s", [InstanceNameSuffix]}
     ].
 
 instance_count(Config) ->

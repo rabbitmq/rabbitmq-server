@@ -5,7 +5,7 @@ provider "aws" {
 }
 
 locals {
-  vm_name           = "${var.instance_name_prefix}${var.instance_name} - Erlang ${var.erlang_version}"
+  vm_name           = "${var.instance_name_prefix}${var.instance_name}${var.instance_name_suffix} - Erlang ${var.erlang_version}"
 
   resource_prefix   = "rabbitmq-testing-"
   distribution      = "${lookup(var.erlang_version_to_system, var.erlang_version)}"

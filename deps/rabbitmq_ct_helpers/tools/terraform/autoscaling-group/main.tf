@@ -16,6 +16,7 @@ module "direct_vms" {
   upload_dirs_archive = "${var.upload_dirs_archive}"
   instance_name_prefix = "${var.instance_name_prefix}"
   instance_name = "${var.instance_name}"
+  instance_name_suffix = "${var.instance_name_suffix}"
   vpc_cidr_block = "${var.vpc_cidr_block}"
   files_suffix = "${var.files_suffix}"
   aws_ec2_region = "${var.aws_ec2_region}"

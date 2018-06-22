@@ -53,6 +53,10 @@ variable "instance_name_prefix" {
   default = "RabbitMQ testing: "
 }
 
+variable "instance_name_suffix" {
+  default = ""
+}
+
 variable "instance_name" {
   default = "Unnamed"
 }
