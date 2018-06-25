@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-gem install bunny
-gem install cf-uaac
+gem list cf-uaac | grep cf-uaac || exit 1
+gem list bunny | grep bunny || exit 1
 
 target=${UAA_HOST:="http://localhost:8080/uaa"}
 # export to use a different ctl, e.g. if the node was built from source
@@ -24,36 +24,38 @@ uaac user add rabbit_nosuper -p rabbit_nosuper --email rabbit_nosuper@example.co
 
 # Create permissions
 # Uaa groups will become scopes, which should define RabbitMQ permissions.
-uaac group add "read:*/*"
-uaac group add "write:*/*"
-uaac group add "configure:*/*"
+uaac group add "rabbitmq.read:*/*"
+uaac group add "rabbitmq.write:*/*"
+uaac group add "rabbitmq.configure:*/*"
 
-uaac group add "write:uaa_vhost/*"
-uaac group add "read:uaa_vhost/some*"
+uaac group add "rabbitmq.write:uaa_vhost/*"
+uaac group add "rabbitmq.read:uaa_vhost/some*"
 
 # Assigning groups to users.
 # rabbit_super will be able to read,write and configure any resources.
-uaac member add "read:*/*" rabbit_super
-uaac member add "write:*/*" rabbit_super
-uaac member add "configure:*/*" rabbit_super
+uaac member add "rabbitmq.read:*/*" rabbit_super
+uaac member add "rabbitmq.write:*/*" rabbit_super
+uaac member add "rabbitmq.configure:*/*" rabbit_super
 
 # rabbit_nosuper will be able to read uaa_vhost resources starting with some
 # and write to any uaa_vhost resources
-uaac member add "write:uaa_vhost/*" rabbit_nosuper
-uaac member add "read:uaa_vhost/some*" rabbit_nosuper
+uaac member add "rabbitmq.write:uaa_vhost/*" rabbit_nosuper
+uaac member add "rabbitmq.read:uaa_vhost/some*" rabbit_nosuper
 
 # Configure RabbiqMQ
 # Add uaa_vhost and other vhost to check permissions
 $ctl add_vhost uaa_vhost
 $ctl add_vhost other_vhost
 
+uaac client add rabbit_client --name rabbit_client --scope 'rabbitmq.*' --authorized_grant_types password,client_credentials --authorities rabbitmq --secret rabbit_secret --redirect_uri 'http://localhost:15672'
+
 # Set guest user permissions to create queues.
 $ctl set_permissions -p uaa_vhost guest '.*' '.*' '.*'
 $ctl set_permissions -p other_vhost guest '.*' '.*' '.*'
 
 # Get access tokens
-uaac token owner get cf rabbit_super -s "" -p rabbit_super
-uaac token owner get cf rabbit_nosuper -s "" -p rabbit_nosuper
+uaac token owner get rabbit_client rabbit_super -s rabbit_secret -p rabbit_super
+uaac token owner get rabbit_client rabbit_nosuper -s rabbit_secret -p rabbit_nosuper
 
 echo "Auth info for rabbit_nosuper user
 This user will have read access to uaa_vhost resources,

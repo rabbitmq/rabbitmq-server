@@ -221,10 +221,17 @@ a set of RabbitMQ permissions scopes.
 
 The `demo/setup.sh` script can be used to configure a demo user and groups.
 The script will also create RabbitMQ resources associated with permissions.
-The script uses `uaac` and `bunny` (RabbitMQ client) and requires rubygems to be installed.
+The script uses `uaac` and `bunny` (RabbitMQ client) and requires them to be installed.
+
 When running the script, UAA server and RabbitMQ server should be running.
 You should configure `UAA_HOST` (localhost:8080/uaa for local machine) and
 `RABBITMQCTL` (a path to `rabbitmqctl` script) environment variables to run this script.
+
+```
+gem install uaac
+gem install bunny
+RABBITMQCTL=<path_to_rabbitmqctl> demo/setup.sh
+```
 
 Please refer to `demo/setup.sh` to get more info about configuring UAA permissions.
 
