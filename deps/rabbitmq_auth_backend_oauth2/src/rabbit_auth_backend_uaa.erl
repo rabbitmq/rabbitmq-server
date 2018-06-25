@@ -38,10 +38,11 @@ description() ->
 %%--------------------------------------------------------------------
 
 user_login_authentication(Username, _AuthProps) ->
+    rabbit_log:error("UAA AUTH ~n", []),
     case check_token(Username) of
         {error, _} = E  -> E;
-        {refused, Err}  -> {refused, "Denied by UAA plugin with error: ~p",
-                            [Err]};
+        {refused, Err}  ->
+            {refused, "Denied by UAA plugin with error: ~p", [Err]};
         {ok, UserData} -> {ok, #auth_user{username = Username,
                                            tags = [],
                                            impl = UserData}}
@@ -104,9 +105,9 @@ validate_payload(#{<<"scope">> := Scope, <<"aud">> := Aud} = UserData) ->
     ResIdStr = application:get_env(rabbitmq_auth_backend_uaa,
                                    resource_server_id, <<>>),
     ResId = rabbit_data_coercion:to_binary(ResIdStr),
-    case valid_aud(Aud, ResId) of
-        true  -> {ok, UserData#{<<"scope">> => filter_scope(Scope, ResId)}};
-        false -> {refused, {invalid_aud, UserData, ResId}}
+    case check_aud(Aud, ResId) of
+        ok           -> {ok, UserData#{<<"scope">> => filter_scope(Scope, ResId)}};
+        {error, Err} -> {refused, {invalid_aud, Err}}
     end.
 
 filter_scope(Scope, <<"">>) -> Scope;
@@ -126,11 +127,15 @@ filter_scope(Scope, ResId)  ->
         end,
         Scope).
 
-valid_aud(_, <<>>)    -> true;
-valid_aud(Aud, ResId) ->
+check_aud(_, <<>>)    -> ok;
+check_aud(Aud, ResId) ->
     case Aud of
-        List when is_list(List) -> lists:member(ResId, Aud);
-        _                       -> false
+        List when is_list(List) ->
+            case lists:member(ResId, Aud) of
+                true  -> ok;
+                false -> {error, {resource_id_is_missing_in_aud, ResId, Aud}}
+            end;
+        _ -> {error, {aud_field_should_be_a_list, Aud}}
     end.
 
 get_scopes(#{<<"scope">> := Scope}) -> Scope.
