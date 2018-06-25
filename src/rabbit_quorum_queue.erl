@@ -447,9 +447,11 @@ i(consumers,     #amqqueue{name               = QName}) ->
         [] ->
             0
     end;
-i(consumer_utilisation, _Q) ->
-    %% TODO!
-    0;
+i(consumer_utilisation, #amqqueue{pid = {Name, _}}) ->
+    case ets:lookup(ra_customer_utilisation, Name) of
+        [{_, Utilisation}] -> Utilisation;
+        _ -> 0
+    end;
 i(memory, #amqqueue{pid = {Name, _}}) ->
     try
         {memory, M} = process_info(whereis(Name), memory),
