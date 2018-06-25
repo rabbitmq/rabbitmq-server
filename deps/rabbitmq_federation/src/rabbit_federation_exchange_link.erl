@@ -202,11 +202,14 @@ terminate(Reason, #state{downstream_connection = DConn,
                          internal_exchange     = IntExchange,
                          queue                 = Queue}) ->
     timer:cancel(TRef),
+
+    %% Terminate the direct connection
+    rabbit_federation_link_util:ensure_connection_closed(DConn),
+
     %% Cleanup of internal queue and exchange
     delete_upstream_queue(Conn, Queue),
     delete_upstream_exchange(Conn, IntExchange),
 
-    rabbit_federation_link_util:ensure_connection_closed(DConn),
     rabbit_federation_link_util:ensure_connection_closed(Conn),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, XName),
     ok.
