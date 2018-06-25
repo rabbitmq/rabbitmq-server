@@ -49,7 +49,7 @@ validate([_], Options) ->
 validate_json(Json) ->
     case rabbit_json:try_decode(Json) of
         {ok, _} ->
-            case 'Elixir.UaaJWT':verify_signing_key(json, Json) of
+            case uaa_jwt:verify_signing_key(json, Json) of
                 ok -> ok;
                 {error, {fields_missing_for_kty, Kty}} ->
                     {validation_failure,
@@ -71,7 +71,7 @@ validate_json(Json) ->
     end.
 
 validate_pem(Pem) ->
-    case 'Elixir.UaaJWT':verify_signing_key(pem, Pem) of
+    case uaa_jwt:verify_signing_key(pem, Pem) of
         ok -> ok;
         {error, invalid_pem_string} ->
             {validation_failure, <<"Unable to read a key from the PEM string">>};
@@ -80,7 +80,7 @@ validate_pem(Pem) ->
     end.
 
 validate_pem_file(PemFile) ->
-    case 'Elixir.UaaJWT':verify_signing_key(pem_file, PemFile) of
+    case uaa_jwt:verify_signing_key(pem_file, PemFile) of
         ok -> ok;
         {error, enoent} ->
             {validation_failure, {bad_argument, <<"PEM file not found">>}};
@@ -118,7 +118,7 @@ run([Name], #{node := Node} = Options) ->
         #{pem_file := PemFile} -> {pem_file, PemFile}
     end,
     case rabbit_misc:rpc_call(Node,
-                              'Elixir.UaaJWT', add_signing_key,
+                              uaa_jwt, add_signing_key,
                               [Name, Type, Value]) of
         {ok, _Keys}  -> ok;
         {error, Err} -> {error, Err}
