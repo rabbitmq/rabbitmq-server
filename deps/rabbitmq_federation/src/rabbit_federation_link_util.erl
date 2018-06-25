@@ -301,7 +301,7 @@ disposable_channel_call(Conn, Method, ErrFun) ->
         end
     catch
           Exception:Reason ->
-            rabbit_log_federation:error("Federation Link: Could not create a disposable channel -> ~p:~p~n", [Exception, Reason])
+            rabbit_log_federation:error("Federation link could not create a disposable (one-off) channel due to an error ~p: ~p~n", [Exception, Reason])
     end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
