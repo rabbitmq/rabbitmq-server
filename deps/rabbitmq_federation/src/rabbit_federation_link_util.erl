@@ -290,13 +290,18 @@ disposable_channel_call(Conn, Method) ->
     disposable_channel_call(Conn, Method, fun(_, _) -> ok end).
 
 disposable_channel_call(Conn, Method, ErrFun) ->
-    {ok, Ch} = amqp_connection:open_channel(Conn),
     try
-        amqp_channel:call(Ch, Method)
-    catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
-            ErrFun(Code, Text)
-    after
-        ensure_channel_closed(Ch)
+        {ok, Ch} = amqp_connection:open_channel(Conn),
+        try
+            amqp_channel:call(Ch, Method)
+        catch exit:{{shutdown, {server_initiated_close, Code, Text}}, _} ->
+                ErrFun(Code, Text)
+        after
+            ensure_channel_closed(Ch)
+        end
+    catch
+          Exception:Reason ->
+            rabbit_log_federation:error("Federation Link: Could not create a disposable channel -> ~p:~p~n", [Exception, Reason])
     end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
