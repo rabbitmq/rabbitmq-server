@@ -54,6 +54,7 @@ groups() ->
                  registration_with_auto_addr_test,
                  registration_with_auto_addr_from_nodename_test,
                  registration_with_auto_addr_nic_test,
+                 registration_with_auto_addr_nic_issue_12_test,
                  registration_generic_error_test
                 ]}
      , {unregistration_tests, [], [
@@ -599,6 +600,35 @@ registration_with_auto_addr_nic_test(_Config) ->
           os:putenv("CONSUL_HOST", "consul.service.consul"),
           os:putenv("CONSUL_PORT", "8500"),
           os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+           os:putenv("CONSUL_SVC_ADDR_AUTO", "true"),
+          os:putenv("CONSUL_SVC_ADDR_NIC", "en0"),
+          ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
+          ?assert(meck:validate(rabbit_peer_discovery_httpc)),
+          ?assert(meck:validate(rabbit_peer_discovery_util)).
+
+registration_with_auto_addr_nic_issue_12_test(_Config) ->
+          meck:new(rabbit_peer_discovery_util, [passthrough]),
+          meck:expect(rabbit_peer_discovery_util, nic_ipv4,
+            fun(NIC) ->
+              ?assertEqual("en0", NIC),
+              {ok, "172.16.4.50"}
+            end),
+          meck:expect(rabbit_peer_discovery_httpc, put,
+            fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+              ?assertEqual("http", Scheme),
+              ?assertEqual("consul.service.consul", Host),
+              ?assertEqual(8500, Port),
+              ?assertEqual([v1, agent, service, register], Path),
+              ?assertEqual([], Args),
+              ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
+              Expect = <<"{\"ID\":\"rabbitmq:172.16.4.50\",\"Name\":\"rabbitmq\",\"Address\":\"172.16.4.50\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
+              ?assertEqual(Expect, Body),
+              {ok, []}
+            end),
+          os:putenv("CONSUL_HOST", "consul.service.consul"),
+          os:putenv("CONSUL_PORT", "8500"),
+          os:putenv("CONSUL_ACL_TOKEN", "token-value"),
+           os:putenv("CONSUL_SVC_ADDR_AUTO", "false"),
           os:putenv("CONSUL_SVC_ADDR_NIC", "en0"),
           ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
           ?assert(meck:validate(rabbit_peer_discovery_httpc)),
