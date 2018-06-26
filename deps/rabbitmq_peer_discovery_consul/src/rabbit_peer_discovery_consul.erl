@@ -385,8 +385,15 @@ service_address(_, true, "undefined", FromNodename) ->
   rabbit_peer_discovery_util:node_hostname(FromNodename);
 service_address(Value, false, "undefined", _) ->
   Value;
-service_address(_, false, NIC, _) ->
+service_address(_, true, NIC, _) ->
   %% TODO: support IPv6
+  {ok, Addr} = rabbit_peer_discovery_util:nic_ipv4(NIC),
+  Addr;
+%% this combination makes no sense but this is what rabbitmq-autocluster
+%% and this plugin have been allowing for a couple of years, so we keep
+%% this clause around for backwards compatibility.
+%% See rabbitmq/rabbitmq-peer-discovery-consul#12 for details.
+service_address(_, false, NIC, _) ->
   {ok, Addr} = rabbit_peer_discovery_util:nic_ipv4(NIC),
   Addr.
 
