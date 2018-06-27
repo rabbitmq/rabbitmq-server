@@ -178,6 +178,13 @@ declare_invalid_properties(Config) ->
          #'queue.declare'{queue     = LQ,
                           exclusive = true,
                           durable   = true,
+                          arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]})),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       amqp_channel:call(
+         rabbit_ct_client_helpers:open_channel(Config, Node),
+         #'queue.declare'{queue     = LQ,
+                          durable   = false,
                           arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]})).
 
 declare_invalid_args(Config) ->

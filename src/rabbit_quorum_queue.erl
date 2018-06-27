@@ -108,6 +108,7 @@ declare(#amqqueue{name = QName,
     check_invalid_arguments(QName, Arguments),
     check_auto_delete(Q),
     check_exclusive(Q),
+    check_non_durable(Q),
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
     Nodes = rabbit_mnesia:cluster_nodes(all),
@@ -575,6 +576,15 @@ check_exclusive(#amqqueue{name = Name}) ->
     rabbit_misc:protocol_error(
       precondition_failed,
       "invalid property 'exclusive-owner' for ~s",
+      [rabbit_misc:rs(Name)]).
+
+check_non_durable(#amqqueue{durable = true}) ->
+    ok;
+check_non_durable(#amqqueue{name = Name,
+                            durable = false}) ->
+    rabbit_misc:protocol_error(
+      precondition_failed,
+      "invalid property 'non-durable' for ~s",
       [rabbit_misc:rs(Name)]).
 
 queue_name(RaFifoState) ->
