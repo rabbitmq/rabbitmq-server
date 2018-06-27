@@ -90,7 +90,11 @@ format_req({Status0, Body, Req}) ->
     User = "-",
     Time = webmachine_log:fmtnow(),
     Status = integer_to_list(Status0),
-    Length = integer_to_list(iolist_size(Body)),
+    Length1 = case Body of
+        {sendfile, _, Length0, _} -> Length0;
+        _ -> iolist_size(Body)
+    end,
+    Length = integer_to_list(Length1),
     Method = cowboy_req:method(Req),
     Path = cowboy_req:path(Req),
     Peer = case cowboy_req:peer(Req) of
