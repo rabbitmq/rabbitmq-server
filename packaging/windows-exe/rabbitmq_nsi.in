@@ -131,7 +131,12 @@ Section "RabbitMQ Service" RabbitService
   ExecDos::exec /DETAILED '"$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" start' ""
   ReadEnvStr $1 "HOMEDRIVE"
   ReadEnvStr $2 "HOMEPATH"
-  CopyFiles "$WINDIR\.erlang.cookie" "$1$2\.erlang.cookie"
+  IfFileExists "$SYSDIR\config\systemprofile\.erlang.cookie" 0 +5
+    CopyFiles "$SYSDIR\config\systemprofile\.erlang.cookie" "$1$2\.erlang.cookie"
+    Goto cookie_copied
+  IfFileExists "$WINDIR\.erlang.cookie" 0 +3
+    CopyFiles "$WINDIR\.erlang.cookie" "$1$2\.erlang.cookie"
+  cookie_copied:
 SectionEnd
 
 ;--------------------------------
@@ -161,7 +166,7 @@ Section "Start Menu" RabbitStartMenu
   ShellLink::SetRunAsAdministrator "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Service - stop.lnk"
 
   SetOutPath "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin"
-  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Command Prompt (sbin dir).lnk" "$WINDIR\system32\cmd.exe" "/k cd $INSTDIR\rabbitmq_server-%%VERSION%%\sbin" "$WINDIR\system32\cmd.exe"
+  CreateShortCut "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Command Prompt (sbin dir).lnk" "$SYSDIR\cmd.exe" "/k cd $INSTDIR\rabbitmq_server-%%VERSION%%\sbin" "$SYSDIR\cmd.exe"
   ShellLink::SetRunAsAdministrator "$SMPROGRAMS\RabbitMQ Server\RabbitMQ Command Prompt (sbin dir).lnk"
 
   SetOutPath $INSTDIR
