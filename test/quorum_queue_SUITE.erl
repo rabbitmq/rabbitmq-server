@@ -1348,7 +1348,7 @@ wait_for_messages(Nodes, QName, Number, Fun, N) ->
 dirty_query(Nodes, QName, Fun) ->
     lists:map(
       fun(N) ->
-              {ok, {_, Msgs}, _} = rpc:call(N, ra, dirty_query, [{QName, N}, Fun]),
+              {ok, {_, Msgs}, _} = rpc:call(N, ra, committed_query, [{QName, N}, Fun]),
               Msgs
       end, Nodes).
 
