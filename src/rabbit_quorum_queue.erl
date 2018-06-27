@@ -241,14 +241,28 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Msgs = quorum_messages(Name),
     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-    {ok, Leader} = ra:delete_cluster([{Name, Node} || Node <- QNodes]),
-    MRef = erlang:monitor(process, Leader),
-    receive
-        {'DOWN', MRef, process, _, _} ->
-            ok
-    end,
-    rabbit_core_metrics:queue_deleted(QName),
-    {ok, Msgs}.
+    case ra:delete_cluster([{Name, Node} || Node <- QNodes]) of
+        {ok, Leader} ->
+            MRef = erlang:monitor(process, Leader),
+            receive
+                {'DOWN', MRef, process, _, _} ->
+                    ok
+            end,
+            rabbit_core_metrics:queue_deleted(QName),
+            {ok, Msgs};
+        {error, {no_more_nodes_to_try, Errs}} = Err ->
+            case lists:all(fun({{error, noproc}, _}) -> true;
+                              (_) -> false
+                           end, Errs) of
+                true ->
+                    %% If all ra nodes were already down, the delete
+                    %% has succeed
+                    rabbit_core_metrics:queue_deleted(QName),
+                    {ok, Msgs};
+                false ->
+                    Err
+            end
+    end.
 
 delete_immediately({Name, _} = QPid) ->
     QName = queue_name(Name),
