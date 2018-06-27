@@ -243,13 +243,13 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
     Msgs = quorum_messages(Name),
     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
     case ra:delete_cluster([{Name, Node} || Node <- QNodes]) of
-        {ok, Leader} ->
+        {ok, {_, LeaderNode} = Leader} ->
             MRef = erlang:monitor(process, Leader),
             receive
                 {'DOWN', MRef, process, _, _} ->
                     ok
             end,
-            rabbit_core_metrics:queue_deleted(QName),
+            rpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName]),
             {ok, Msgs};
         {error, {no_more_nodes_to_try, Errs}} = Err ->
             case lists:all(fun({{error, noproc}, _}) -> true;
