@@ -1058,7 +1058,11 @@ basic_get(#amqqueue{pid = {Name, _} = Id, type = quorum, name = QName} = Q, _ChP
         {ok, empty, FState} ->
             {empty, FState};
         {ok, Count, Msg, FState} ->
-            {ok, Count, Msg, maps:put(Name, FState, FStates)}
+            {ok, Count, Msg, maps:put(Name, FState, FStates)};
+        {error, Reason} ->
+            rabbit_misc:protocol_error(internal_error,
+                                       "Cannot get a message from quorum queue '~s': ~p",
+                                       [rabbit_misc:rs(QName), Reason])
     end.
 
 basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid, LimiterPid,

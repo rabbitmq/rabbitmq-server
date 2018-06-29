@@ -39,7 +39,9 @@ groups() ->
                                             delete_declare,
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
-                                            declare_during_node_down]},
+                                            declare_during_node_down,
+                                            consume_in_minority
+                                           ]},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent]}
                      ]}
@@ -446,6 +448,21 @@ consume(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
+
+consume_in_minority(Config) ->
+    [Node0, Node1, Node2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Node1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Node2),
+
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
+                amqp_channel:call(Ch, #'basic.get'{queue = QQ,
+                                                   no_ack = false})).
 
 consume_and_autoack(Config) ->
     [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
