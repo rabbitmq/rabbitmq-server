@@ -101,18 +101,20 @@ check_token(Token) ->
         {false, _}      -> {refused, signature_invalid}
     end.
 
-validate_payload(#{<<"scope">> := Scope, <<"aud">> := Aud} = UserData) ->
-    ResIdStr = application:get_env(rabbitmq_auth_backend_uaa,
-                                   resource_server_id, <<>>),
-    ResId = rabbit_data_coercion:to_binary(ResIdStr),
-    case check_aud(Aud, ResId) of
-        ok           -> {ok, UserData#{<<"scope">> => filter_scope(Scope, ResId)}};
+validate_payload(#{<<"scope">> := _Scope, <<"aud">> := _Aud} = UserData) ->
+    ResourceServerId = rabbit_data_coercion:to_binary(application:get_env(rabbitmq_auth_backend_uaa,
+                                                                          resource_server_id, <<>>)),
+    validate_payload(UserData, ResourceServerId).
+
+validate_payload(#{<<"scope">> := Scope, <<"aud">> := Aud} = UserData, ResourceServerId) ->
+    case check_aud(Aud, ResourceServerId) of
+        ok           -> {ok, UserData#{<<"scope">> => filter_scope(Scope, ResourceServerId)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end.
 
 filter_scope(Scope, <<"">>) -> Scope;
-filter_scope(Scope, ResId)  ->
-    Pattern = <<ResId/binary, ".">>,
+filter_scope(Scope, ResourceServerId)  ->
+    Pattern = <<ResourceServerId/binary, ".">>,
     PatternLength = byte_size(Pattern),
     lists:filtermap(
         fun(ScopeEl) ->
@@ -128,14 +130,14 @@ filter_scope(Scope, ResId)  ->
         Scope).
 
 check_aud(_, <<>>)    -> ok;
-check_aud(Aud, ResId) ->
+check_aud(Aud, ResourceServerId) ->
     case Aud of
         List when is_list(List) ->
-            case lists:member(ResId, Aud) of
+            case lists:member(ResourceServerId, Aud) of
                 true  -> ok;
-                false -> {error, {resource_id_is_missing_in_aud, ResId, Aud}}
+                false -> {error, {resource_id_not_found_in_aud, ResourceServerId, Aud}}
             end;
-        _ -> {error, {aud_field_should_be_a_list, Aud}}
+        _ -> {error, {badarg, {aud_is_not_a_list, Aud}}}
     end.
 
 get_scopes(#{<<"scope">> := Scope}) -> Scope.

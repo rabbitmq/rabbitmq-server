@@ -4,12 +4,14 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 all() ->
     [
         test_own_scope,
+        test_validate_payload_resource_server_id_mismatch,
         test_validate_payload,
-        test_token,
+        test_token_access,
         test_command_json,
         test_command_pem,
         test_command_pem_no_kid
@@ -30,10 +32,10 @@ end_per_suite(Config) ->
         Env),
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-test_token(_) ->
-    % Generate token with JOSE
-    % Check authorization with the token
-    % Check access with the user
+test_token_access(_) ->
+    %% Generate a token with JOSE
+    %% Check authorization with the token
+    %% Check user access granted by token
     Jwk = fixture_jwk(),
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
@@ -258,40 +260,32 @@ test_own_scope(_) ->
         end,
         Examples).
 
-test_validate_payload(_) ->
-    application:load(rabbitmq_auth_backend_uaa),
-    Resp = #{<<"aud">> => [<<"foo">>, <<"bar">>],
-             <<"scope">> => [<<"foo">>, <<"foo.bar">>,
-                             <<"bar.foo">>, <<"one.two">>,
-                             <<"foobar">>, <<"foo.other.third">>]},
-    NoAudResp = #{<<"aud">> => [], <<"scope">> => [<<"foo.bar">>, <<"bar.foo">>]},
-    NoScope = #{<<"aud">> => [<<"rabbit">>], <<"scope">> => [<<"foo.bar">>, <<"bar.foo">>]},
-    Examples = [
-        {"foo",
-         Resp,
-         {ok, #{<<"aud">> => [<<"foo">>, <<"bar">>],
-                <<"scope">> => [<<"bar">>, <<"other.third">>]}}},
-        {"bar",
-         Resp,
-         {ok, #{<<"aud">> => [<<"foo">>, <<"bar">>], <<"scope">> => [<<"foo">>]}}},
-        {"rabbit",
-            Resp,
-            {refused, {invalid_aud, Resp, <<"rabbit">>}}},
-        {"rabbit",
-            NoScope,
-            {ok, #{<<"aud">> => [<<"rabbit">>], <<"scope">> => []}}},
-        {"foo",
-            NoAudResp,
-            {refused, {invalid_aud, NoAudResp, <<"foo">>}}}
-    ],
-    lists:map(
-        fun({ResId, Src, Res}) ->
-            application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, ResId),
-            Res = rabbit_auth_backend_uaa:validate_payload(Src)
-        end,
-        Examples).
-
 -define(EXPIRE_TIME, 2000).
+-define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
+
+test_validate_payload_resource_server_id_mismatch(_) ->
+    NoKnownResourceServerId = #{<<"aud">>   => [<<"foo">>, <<"bar">>],
+                                <<"scope">> => [<<"foo">>, <<"foo.bar">>,
+                                                <<"bar.foo">>, <<"one.two">>,
+                                                <<"foobar">>, <<"foo.other.third">>]},
+    EmptyAud = #{<<"aud">>   => [],
+                 <<"scope">> => [<<"foo.bar">>, <<"bar.foo">>]},
+
+    ?assertEqual({refused, {invalid_aud, {resource_id_not_found_in_aud, ?RESOURCE_SERVER_ID,
+                                          [<<"foo">>,<<"bar">>]}}},
+                 rabbit_auth_backend_uaa:validate_payload(NoKnownResourceServerId, ?RESOURCE_SERVER_ID)),
+
+    ?assertEqual({refused, {invalid_aud, {resource_id_not_found_in_aud, ?RESOURCE_SERVER_ID, []}}},
+                 rabbit_auth_backend_uaa:validate_payload(EmptyAud, ?RESOURCE_SERVER_ID)).
+
+test_validate_payload(_) ->
+    KnownResourceServerId = #{<<"aud">>   => [?RESOURCE_SERVER_ID],
+                              <<"scope">> => [<<"foo">>, <<"rabbitmq.bar">>,
+                                              <<"bar.foo">>, <<"one.two">>,
+                                              <<"foobar">>, <<"rabbitmq.other.third">>]},
+    ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID],
+                        <<"scope">> => [<<"bar">>, <<"other.third">>]}},
+                 rabbit_auth_backend_uaa:validate_payload(KnownResourceServerId, ?RESOURCE_SERVER_ID)).
 
 expirable_token() ->
     TokenPayload = fixture_token(),
