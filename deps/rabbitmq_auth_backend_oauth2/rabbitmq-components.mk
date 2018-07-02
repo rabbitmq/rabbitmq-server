@@ -38,6 +38,9 @@ endif
 # base of the topic branch.
 
 dep_amqp_client                       = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_amqp10_client                     = git_rmq rabbitmq-amqp1.0-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_amqp10_common                     = git_rmq rabbitmq-amqp1.0-common $(current_rmq_ref) $(base_rmq_ref) master
+dep_ra                                = git_rmq ra $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit                            = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit_common                     = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_amqp1_0                  = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref) master
@@ -78,6 +81,7 @@ dep_rabbitmq_peer_discovery_common    = git_rmq rabbitmq-peer-discovery-common $
 dep_rabbitmq_peer_discovery_consul    = git_rmq rabbitmq-peer-discovery-consul $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_peer_discovery_etcd      = git_rmq rabbitmq-peer-discovery-etcd $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_peer_discovery_k8s       = git_rmq rabbitmq-peer-discovery-k8s $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_random_exchange          = git_rmq rabbitmq-random-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
@@ -107,14 +111,20 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy_commit = 1.1.2
-dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
-dep_ranch_commit = 1.3.2
+dep_cowboy = hex 2.3.0
+dep_cowlib = hex 2.2.1
+dep_jsx = hex 2.9.0
+dep_lager = hex 3.6.3
+dep_ranch = hex 1.5.0
+dep_ranch_proxy_protocol = hex 1.5.0
+dep_recon = hex 2.3.4
+
 dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d36dbf5e1e64942d9b0a1daf
-dep_webmachine_commit = 1.10.8p2
-dep_ranch_proxy_protocol = git git://github.com/heroku/ranch_proxy_protocol.git 1.4.2
 
 RABBITMQ_COMPONENTS = amqp_client \
+		      amqp10_common \
+		      amqp10_client \
+		      ra \
 		      rabbit \
 		      rabbit_common \
 		      rabbitmq_amqp1_0 \
@@ -155,6 +165,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_peer_discovery_consul \
 		      rabbitmq_peer_discovery_etcd \
 		      rabbitmq_peer_discovery_k8s \
+		      rabbitmq_random_exchange \
 		      rabbitmq_recent_history_exchange \
 		      rabbitmq_routing_node_stamp \
 		      rabbitmq_rtopic_exchange \
@@ -192,11 +203,17 @@ export current_rmq_ref
 
 ifeq ($(origin base_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
+possible_base_rmq_ref := master
+ifeq ($(possible_base_rmq_ref),$(current_rmq_ref))
+base_rmq_ref := $(current_rmq_ref)
+else
 base_rmq_ref := $(shell \
-	(git rev-parse --verify -q stable >/dev/null && \
-	  git merge-base --is-ancestor $$(git merge-base master HEAD) stable && \
-	  echo stable) || \
+	(git rev-parse --verify -q master >/dev/null && \
+	 git rev-parse --verify -q $(possible_base_rmq_ref) >/dev/null && \
+	 git merge-base --is-ancestor $$(git merge-base master HEAD) $(possible_base_rmq_ref) && \
+	 echo $(possible_base_rmq_ref)) || \
 	echo master)
+endif
 else
 base_rmq_ref := master
 endif
@@ -286,7 +303,7 @@ prepare-dist::
 	@:
 
 # --------------------------------------------------------------------
-# rabbitmq-components.mk checks.
+# Umbrella-specific settings.
 # --------------------------------------------------------------------
 
 # If this project is under the Umbrella project, we override $(DEPS_DIR)
@@ -306,25 +323,5 @@ endif
 
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
 SKIP_DEPS = 1
-endif
-endif
-
-UPSTREAM_RMQ_COMPONENTS_MK = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk
-
-check-rabbitmq-components.mk:
-	$(verbose) cmp -s rabbitmq-components.mk \
-		$(UPSTREAM_RMQ_COMPONENTS_MK) || \
-		(echo "error: rabbitmq-components.mk must be updated!" 1>&2; \
-		  false)
-
-ifeq ($(PROJECT),rabbit_common)
-rabbitmq-components-mk:
-	@:
-else
-rabbitmq-components-mk:
-	$(gen_verbose) cp -a $(UPSTREAM_RMQ_COMPONENTS_MK) .
-ifeq ($(DO_COMMIT),yes)
-	$(verbose) git diff --quiet rabbitmq-components.mk \
-	|| git commit -m 'Update rabbitmq-components.mk' rabbitmq-components.mk
 endif
 endif

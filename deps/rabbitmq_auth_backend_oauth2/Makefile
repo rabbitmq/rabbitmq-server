@@ -1,4 +1,5 @@
 PROJECT = rabbitmq_auth_backend_uaa
+PROJECT_DESCRIPTION = OAuth 2 and JWT-based AuthN and AuthZ backend
 
 BUILD_DEPS = rabbit_common
 DEPS = uaa_jwt rabbit cowlib
@@ -17,15 +18,3 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
-
-MIX_ERL_LIBS = $(subst $(space),:,$(patsubst %,$(DEPS_DIR)/%/_build/dev/lib,$(DEPS)))
-
-# # Space character
-# space := $(subst ,, )
-# MIX_ERL_LIBS = $(subst $(space),:,$(wildcard $(DEPS_DIR)/*/_build/dev/lib))
-
-ifeq ($(ERL_LIBS),)
-	ERL_LIBS = $(MIX_ERL_LIBS)
-else
-	ERL_LIBS := $(ERL_LIBS):$(MIX_ERL_LIBS)
-endif
