@@ -90,7 +90,7 @@
 
 -spec init_state(ra_node_id(), rabbit_types:r('queue')) ->
     ra_fifo_client:state().
-init_state({Name, _} = Id, QName) ->
+init_state({Name, _}, QName) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} = rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
