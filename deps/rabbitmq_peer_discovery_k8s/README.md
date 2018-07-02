@@ -29,10 +29,14 @@ Enable the plugin in offline mode before the node is first started:
 rabbitmq-plugins --offline enable rabbitmq_peer_discovery_k8s
 ```
 
-
 ## Documentation
 
-See [RabbitMQ Cluster Formation guide](http://www.rabbitmq.com/cluster-formation.html).
+See [RabbitMQ Cluster Formation guide](http://www.rabbitmq.com/cluster-formation.html) for an overview
+of the peer discovery subsystem, general and Kubernetes-specific configurable values and troubleshooting tips.
+
+Example deployments that use this plugin can be found under [examples](./examples). Note that they
+are just that, examples, and won't be optimal for every use case or cover a lot of important production
+system concerns such as monitoring and sizing.
 
 
 ## Contributing
