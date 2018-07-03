@@ -33,7 +33,7 @@
 
 description() ->
     [{name, <<"UAA">>},
-     {description, <<"UAA token authentication / authorisation">>}].
+     {description, <<"Performs authentication and authorisation using JWT tokens and OAuth 2 scopes">>}].
 
 %%--------------------------------------------------------------------
 
@@ -87,7 +87,7 @@ with_decoded_token(DecodedToken, Fun) ->
 
 validate_token_active(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     case Exp =< os:system_time(seconds) of
-        true  -> {error, "Auth token expired at unix time: ~p"};
+        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~p", [Exp])};
         false -> ok
     end;
 validate_token_active(#{}) -> ok.
