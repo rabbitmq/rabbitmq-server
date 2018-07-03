@@ -4,6 +4,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 all() ->
     [
@@ -255,8 +256,8 @@ permission_topic(_Config) ->
 
 
 vhost_allowed(Vhost, Scope) ->
-    ct:pal("Check vhost ~tp with permission ~tp", [Vhost, Scope]),
-    true = rabbit_oauth2_scope:vhost_access(Vhost, [Scope]).
+    ct:pal(?LOW_IMPORTANCE, "Check vhost ~tp with permission ~tp", [Vhost, Scope]),
+    ?assertEqual(true, rabbit_oauth2_scope:vhost_access(Vhost, [Scope])).
 
 read_allowed(Vhost, Resource, Scope) ->
     resource_perm(Vhost, Resource, Scope, read, true).
@@ -277,14 +278,14 @@ configure_refused(Vhost, Resource, Scope) ->
     resource_perm(Vhost, Resource, Scope, configure, false).
 
 resource_perm(Vhost, Resource, Scope, Permission, Result) ->
-    ct:pal("Checking access for vhost ~tp resource ~tp scope ~tp with permission ~tp", [Vhost, Result, Scope, Permission]),
-    [ Result = rabbit_oauth2_scope:resource_access(
+    ct:pal(?LOW_IMPORTANCE,
+           "Checking access for vhost ~tp resource ~tp scope ~tp with permission ~tp", [Vhost, Result, Scope, Permission]),
+    [ ?assertEqual(Result, rabbit_oauth2_scope:resource_access(
           #resource{virtual_host = Vhost,
                     kind = Kind,
                     name = Resource},
           Permission,
-          [Scope]) ||
-        Kind <- [queue, exchange] ].
+          [Scope])) || Kind <- [queue, exchange] ].
 
 topic_read_allowed(Vhost, Resource, RoutingKey, Scope) ->
     topic_perm(Vhost, Resource, RoutingKey, Scope, read, true).
@@ -293,10 +294,10 @@ topic_read_refused(Vhost, Resource, RoutingKey, Scope) ->
     topic_perm(Vhost, Resource, RoutingKey, Scope, read, false).
 
 topic_perm(Vhost, Resource, RoutingKey, Scope, Permission, Result) ->
-    Result = rabbit_oauth2_scope:topic_access(
+    ?assertEqual(Result, rabbit_oauth2_scope:topic_access(
         #resource{virtual_host = Vhost,
                   kind = topic,
                   name = Resource},
         Permission,
         #{routing_key => RoutingKey},
-        [Scope]).
+        [Scope])).

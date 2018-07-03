@@ -112,24 +112,24 @@ test_unsuccessful_access_with_a_token(_) ->
 
     %% access to these resources is not granted
     ?assertEqual(false, rabbit_auth_backend_uaa:check_resource_access(
-              User,
-              #resource{virtual_host = <<"vhost">>,
-                        kind = queue,
-                        name = <<"foo1">>},
-              configure)),
+                          User,
+                          #resource{virtual_host = <<"vhost">>,
+                                    kind = queue,
+                                    name = <<"foo1">>},
+                          configure)),
     ?assertEqual(false, rabbit_auth_backend_uaa:check_resource_access(
-              User,
-              #resource{virtual_host = <<"vhost">>,
-                        kind = custom,
-                        name = <<"bar">>},
-              write)),
+                          User,
+                          #resource{virtual_host = <<"vhost">>,
+                                    kind = custom,
+                                    name = <<"bar">>},
+                          write)),
     ?assertEqual(false, rabbit_auth_backend_uaa:check_topic_access(
-              User,
-              #resource{virtual_host = <<"vhost">>,
-                        kind = topic,
-                        name = <<"bar">>},
-              read,
-              #{routing_key => <<"foo/#">>})).
+                          User,
+                          #resource{virtual_host = <<"vhost">>,
+                                    kind = topic,
+                                    name = <<"bar">>},
+                          read,
+                          #{routing_key => <<"foo/#">>})).
 
 test_token_expiration(_) ->
     Jwk = fixture_jwk(),
@@ -139,32 +139,32 @@ test_token_expiration(_) ->
     Token = sign_token_hs(TokenData, Jwk),
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
-    true = rabbit_auth_backend_uaa:check_resource_access(
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_resource_access(
              User,
              #resource{virtual_host = <<"vhost">>,
                        kind = queue,
                        name = <<"foo">>},
-             configure),
-    true = rabbit_auth_backend_uaa:check_resource_access(
+             configure)),
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_resource_access(
              User,
              #resource{virtual_host = <<"vhost">>,
                        kind = exchange,
                        name = <<"foo">>},
-             write),
+             write)),
 
     wait_for_token_to_expire(),
     #{<<"exp">> := Exp} = TokenData,
     ExpectedError = "Auth token expired at unix time: " ++ integer_to_list(Exp),
-    {error, ExpectedError} =
-        rabbit_auth_backend_uaa:check_resource_access(
-             User,
-             #resource{virtual_host = <<"vhost">>,
-                       kind = queue,
-                       name = <<"foo">>},
-             configure),
+    ?assertEqual({error, ExpectedError},
+                 rabbit_auth_backend_uaa:check_resource_access(
+                   User,
+                   #resource{virtual_host = <<"vhost">>,
+                             kind = queue,
+                             name = <<"foo">>},
+                   configure)),
 
-    {refused, _, _} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any).
+    ?assertMatch({refused, _, _},
+                 rabbit_auth_backend_uaa:user_login_authentication(Token, any)).
 
 test_command_json(_) ->
     Jwk = fixture_jwk(),
@@ -177,7 +177,7 @@ test_command_json(_) ->
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
 
-    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 
 test_command_pem_file(Config) ->
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
@@ -197,7 +197,7 @@ test_command_pem_file(Config) ->
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
 
-    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 
 
 test_command_pem_file_no_kid(Config) ->
@@ -222,7 +222,7 @@ test_command_pem_file_no_kid(Config) ->
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
 
-    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 
 test_command_pem(Config) ->
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
@@ -241,7 +241,7 @@ test_command_pem(Config) ->
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
 
-    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 
 
 test_command_pem_no_kid(Config) ->
@@ -265,7 +265,7 @@ test_command_pem_no_kid(Config) ->
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
 
-    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none).
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 
 
 test_own_scope(_) ->
