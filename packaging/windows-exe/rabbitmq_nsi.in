@@ -131,12 +131,20 @@ Section "RabbitMQ Service" RabbitService
   ExecDos::exec /DETAILED '"$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" start' ""
   ReadEnvStr $1 "HOMEDRIVE"
   ReadEnvStr $2 "HOMEPATH"
-  IfFileExists "$SYSDIR\config\systemprofile\.erlang.cookie" 0 +5
+  Delete "$1$2\.erlang.cookie"
+  ${If} ${RunningX64}
+    ${DisableX64FSRedirection}
+  ${EndIf}
+  IfFileExists "$SYSDIR\config\systemprofile\.erlang.cookie" 0 cookie_check_windir
     CopyFiles "$SYSDIR\config\systemprofile\.erlang.cookie" "$1$2\.erlang.cookie"
-    Goto cookie_copied
-  IfFileExists "$WINDIR\.erlang.cookie" 0 +3
+    Goto cookie_done
+  cookie_check_windir:
+  IfFileExists "$WINDIR\.erlang.cookie" 0 cookie_done
     CopyFiles "$WINDIR\.erlang.cookie" "$1$2\.erlang.cookie"
-  cookie_copied:
+  cookie_done:
+  ${If} ${RunningX64}
+    ${EnableX64FSRedirection}
+  ${EndIf}
 SectionEnd
 
 ;--------------------------------
