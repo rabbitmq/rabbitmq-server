@@ -12,7 +12,9 @@ all() ->
         test_validate_payload_resource_server_id_mismatch,
         test_validate_payload,
         test_successful_access_with_a_token,
-        test_unsuccessful_access_with_a_token,
+        test_unsuccessful_access_with_a_bogus_token,
+        test_restricted_vhost_access_with_a_valid_token,
+        test_insufficient_permissions_in_a_valid_token,
         test_command_json,
         test_command_pem,
         test_command_pem_no_kid
@@ -86,29 +88,43 @@ test_successful_access_with_a_token(_) ->
                          read,
                          #{routing_key => <<"#/foo">>})).
 
-test_unsuccessful_access_with_a_token(_) ->
+test_unsuccessful_access_with_a_bogus_token(_) ->
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
 
-    Jwk0   = fixture_jwk(),
-    Token0 = sign_token_hs(fixture_token(), Jwk0),
-
+    Jwk0 = fixture_jwk(),
     Jwk  = Jwk0#{<<"k">> => <<"bm90b2tlbmtleQ">>},
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     
     Token = sign_token_hs(fixture_token(), Jwk),
 
     ?assertMatch({refused, _, _},
-                 rabbit_auth_backend_uaa:user_login_authentication(<<"not a token">>, any)),
+                 rabbit_auth_backend_uaa:user_login_authentication(<<"not a token">>, any)).
 
-    %% temporarily switch to the "correct" signing key
-    application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk0}}),
-    %% this user can authenticate successfully and access certain vhosts
-    {ok, #auth_user{username = Token0} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token0, any),
+test_restricted_vhost_access_with_a_valid_token(_) ->
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+
+    Jwk   = fixture_jwk(),
+    Token = sign_token_hs(fixture_token(), Jwk),
+
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
 
+    %% this user can authenticate successfully and access certain vhosts
+    {ok, #auth_user{username = Token} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+
     %% access to a different vhost
-    ?assertEqual(false, rabbit_auth_backend_uaa:check_vhost_access(User, <<"different vhost">>, none)),
+    ?assertEqual(false, rabbit_auth_backend_uaa:check_vhost_access(User, <<"different vhost">>, none)).
+
+test_insufficient_permissions_in_a_valid_token(_) ->
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+
+    Jwk   = fixture_jwk(),
+    Token = sign_token_hs(fixture_token(), Jwk),
+
+    application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
+
+    {ok, #auth_user{username = Token} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
 
     %% access to these resources is not granted
     ?assertEqual(false, rabbit_auth_backend_uaa:check_resource_access(
@@ -230,8 +246,7 @@ test_command_pem(Config) ->
     Keyfile = filename:join([CertsDir, "client", "key.pem"]),
     Jwk = jose_jwk:from_pem_file(Keyfile),
 
-    PublicJwk  = jose_jwk:to_public(Jwk),
-    Pem = jose_jwk:to_pem(PublicJwk),
+    Pem = jose_jwk:to_pem(jose_jwk:to_public(Jwk)),
 
     'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
         [<<"token-key">>],
@@ -250,15 +265,13 @@ test_command_pem_no_kid(Config) ->
     Keyfile = filename:join([CertsDir, "client", "key.pem"]),
     Jwk = jose_jwk:from_pem_file(Keyfile),
 
-    PublicJwk  = jose_jwk:to_public(Jwk),
-    Pem = jose_jwk:to_pem(PublicJwk),
+    Pem = jose_jwk:to_pem(jose_jwk:to_public(Jwk)),
 
     'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
         [<<"token-key">>],
         #{node => node(), pem => Pem}),
 
-    %% Set default kid
-
+    %% This is the default key
     application:set_env(uaa_jwt, default_key, <<"token-key">>),
 
     Token = sign_token_no_kid(fixture_token(), Jwk),
