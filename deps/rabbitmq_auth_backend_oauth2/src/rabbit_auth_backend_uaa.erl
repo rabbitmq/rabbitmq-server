@@ -38,11 +38,10 @@ description() ->
 %%--------------------------------------------------------------------
 
 user_login_authentication(Username, _AuthProps) ->
-    rabbit_log:error("UAA AUTH ~n", []),
     case check_token(Username) of
         {error, _} = E  -> E;
         {refused, Err}  ->
-            {refused, "Denied by UAA plugin with error: ~p", [Err]};
+            {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
         {ok, UserData} -> {ok, #auth_user{username = Username,
                                            tags = [],
                                            impl = UserData}}

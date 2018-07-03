@@ -11,7 +11,8 @@ all() ->
         test_own_scope,
         test_validate_payload_resource_server_id_mismatch,
         test_validate_payload,
-        test_token_access,
+        test_successful_access_with_a_token,
+        test_unsuccessful_access_with_a_token,
         test_command_json,
         test_command_pem,
         test_command_pem_no_kid
@@ -32,7 +33,15 @@ end_per_suite(Config) ->
         Env),
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-test_token_access(_) ->
+
+%%
+%% Test Cases
+%%
+
+-define(EXPIRATION_TIME, 2000).
+-define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
+
+test_successful_access_with_a_token(_) ->
     %% Generate a token with JOSE
     %% Check authorization with the token
     %% Check user access granted by token
@@ -40,73 +49,87 @@ test_token_access(_) ->
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     Token = sign_token_hs(fixture_token(), Jwk),
-    WrongJwk = Jwk#{<<"k">> => <<"bm90b2tlbmtleQ">>},
-    WrongToken = sign_token_hs(fixture_token(), WrongJwk),
 
 
     {ok, #auth_user{username = Token} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Token, any),
-    {refused, _, _} =
-        rabbit_auth_backend_uaa:user_login_authentication(<<"not token">>, any),
-    {refused, _, _} =
-        rabbit_auth_backend_uaa:user_login_authentication(WrongToken, any),
-
     {ok, #{}} =
         rabbit_auth_backend_uaa:user_login_authorization(Token),
-    {refused, _, _} =
-        rabbit_auth_backend_uaa:user_login_authorization(<<"not token">>),
-    {refused, _, _} =
-        rabbit_auth_backend_uaa:user_login_authorization(WrongToken),
 
-    true = rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none),
-    false = rabbit_auth_backend_uaa:check_vhost_access(User, <<"non_vhost">>, none),
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)),
 
-    true = rabbit_auth_backend_uaa:check_resource_access(
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_resource_access(
              User,
              #resource{virtual_host = <<"vhost">>,
                        kind = queue,
                        name = <<"foo">>},
-             configure),
-    true = rabbit_auth_backend_uaa:check_resource_access(
-             User,
-             #resource{virtual_host = <<"vhost">>,
-                       kind = exchange,
-                       name = <<"foo">>},
-             write),
+             configure)),
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_resource_access(
+                         User,
+                         #resource{virtual_host = <<"vhost">>,
+                                   kind = exchange,
+                                   name = <<"foo">>},
+                         write)),
 
-    false = rabbit_auth_backend_uaa:check_resource_access(
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_resource_access(
+                         User,
+                         #resource{virtual_host = <<"vhost">>,
+                                   kind = custom,
+                                   name = <<"bar">>},
+                         read)),
+
+    ?assertEqual(true, rabbit_auth_backend_uaa:check_topic_access(
+                         User,
+                         #resource{virtual_host = <<"vhost">>,
+                                   kind = topic,
+                                   name = <<"bar">>},
+                         read,
+                         #{routing_key => <<"#/foo">>})).
+
+test_unsuccessful_access_with_a_token(_) ->
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+
+    Jwk0   = fixture_jwk(),
+    Token0 = sign_token_hs(fixture_token(), Jwk0),
+
+    Jwk  = Jwk0#{<<"k">> => <<"bm90b2tlbmtleQ">>},
+    application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
+    
+    Token = sign_token_hs(fixture_token(), Jwk),
+
+    ?assertMatch({refused, _, _},
+                 rabbit_auth_backend_uaa:user_login_authentication(<<"not a token">>, any)),
+
+    %% temporarily switch to the "correct" signing key
+    application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk0}}),
+    %% this user can authenticate successfully and access certain vhosts
+    {ok, #auth_user{username = Token0} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Token0, any),
+    application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
+
+    %% access to a different vhost
+    ?assertEqual(false, rabbit_auth_backend_uaa:check_vhost_access(User, <<"different vhost">>, none)),
+
+    %% access to these resources is not granted
+    ?assertEqual(false, rabbit_auth_backend_uaa:check_resource_access(
               User,
               #resource{virtual_host = <<"vhost">>,
                         kind = queue,
                         name = <<"foo1">>},
-              configure),
-    true = rabbit_auth_backend_uaa:check_resource_access(
+              configure)),
+    ?assertEqual(false, rabbit_auth_backend_uaa:check_resource_access(
               User,
               #resource{virtual_host = <<"vhost">>,
                         kind = custom,
                         name = <<"bar">>},
-              read),
-    false = rabbit_auth_backend_uaa:check_resource_access(
-              User,
-              #resource{virtual_host = <<"vhost">>,
-                        kind = custom,
-                        name = <<"bar">>},
-              write),
-
-    true = rabbit_auth_backend_uaa:check_topic_access(
+              write)),
+    ?assertEqual(false, rabbit_auth_backend_uaa:check_topic_access(
               User,
               #resource{virtual_host = <<"vhost">>,
                         kind = topic,
                         name = <<"bar">>},
               read,
-              #{routing_key => <<"#/foo">>}),
-    false = rabbit_auth_backend_uaa:check_topic_access(
-              User,
-              #resource{virtual_host = <<"vhost">>,
-                        kind = topic,
-                        name = <<"bar">>},
-              read,
-              #{routing_key => <<"foo/#">>}).
+              #{routing_key => <<"foo/#">>})).
 
 test_token_expiration(_) ->
     Jwk = fixture_jwk(),
@@ -129,7 +152,7 @@ test_token_expiration(_) ->
                        name = <<"foo">>},
              write),
 
-    wait_token_expired(),
+    wait_for_token_to_expire(),
     #{<<"exp">> := Exp} = TokenData,
     ExpectedError = "Auth token expired at unix time: " ++ integer_to_list(Exp),
     {error, ExpectedError} =
@@ -260,9 +283,6 @@ test_own_scope(_) ->
         end,
         Examples).
 
--define(EXPIRE_TIME, 2000).
--define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
-
 test_validate_payload_resource_server_id_mismatch(_) ->
     NoKnownResourceServerId = #{<<"aud">>   => [<<"foo">>, <<"bar">>],
                                 <<"scope">> => [<<"foo">>, <<"foo.bar">>,
@@ -289,10 +309,10 @@ test_validate_payload(_) ->
 
 expirable_token() ->
     TokenPayload = fixture_token(),
-    TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(?EXPIRE_TIME)}.
+    TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(?EXPIRATION_TIME)}.
 
-wait_token_expired() ->
-    timer:sleep(?EXPIRE_TIME).
+wait_for_token_to_expire() ->
+    timer:sleep(?EXPIRATION_TIME).
 
 sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk) ->
     sign_token_hs(Token, Jwk, TokenKey).
