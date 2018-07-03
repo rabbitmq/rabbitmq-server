@@ -297,7 +297,9 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
             {ok, empty, FState};
         {ok, {MsgId, {MsgHeader, Msg}}, FState} ->
             IsDelivered = maps:is_key(delivery_count, MsgHeader),
-            {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg}, FState}
+            {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg}, FState};
+        {timeout, _} ->
+            {error, timeout}
     end.
 
 basic_consume(#amqqueue{name = QName, type = quorum}, NoAck, ChPid,
