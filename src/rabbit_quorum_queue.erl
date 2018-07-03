@@ -349,7 +349,9 @@ stat(_Q) ->
     {ok, 0, 0}.  %% TODO length, consumers count
 
 purge(Node) ->
-    ra_fifo_client:purge(Node).
+    Reply = ra_fifo_client:purge(Node),
+    erlang:garbage_collect(),
+    Reply.
 
 cluster_state(Name) ->
     case whereis(Name) of
