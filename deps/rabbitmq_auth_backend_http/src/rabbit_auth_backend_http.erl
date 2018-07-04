@@ -22,7 +22,7 @@
 -behaviour(rabbit_authz_backend).
 
 -export([description/0, p/1, q/1]).
--export([user_login_authentication/2, user_login_authorization/1,
+-export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 %% If keepalive connection is closed, retry N times before failing.
@@ -52,8 +52,8 @@ user_login_authentication(Username, AuthProps) ->
         Other           -> {error, {bad_response, Other}}
     end.
 
-user_login_authorization(Username) ->
-    case user_login_authentication(Username, []) of
+user_login_authorization(Username, AuthProps) ->
+    case user_login_authentication(Username, AuthProps) of
         {ok, #auth_user{impl = Impl}} -> {ok, Impl};
         Else                          -> Else
     end.
