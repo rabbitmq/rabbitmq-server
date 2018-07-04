@@ -56,11 +56,12 @@ authentication_response(Config) ->
     {refused, FailErr, FailArgs} = rpc(Config,rabbit_auth_backend_cache, user_login_authentication, [<<"guest">>, [{password, <<"notguest">>}]]).
 
 authorization_response(Config) ->
-    {ok, #auth_user{impl = Impl, tags = Tags}} = rpc(Config,rabbit_auth_backend_internal, user_login_authentication, [<<"guest">>, [{password, <<"guest">>}]]),
-    {ok, Impl, Tags} = rpc(Config,rabbit_auth_backend_internal, user_login_authorization, [<<"guest">>]),
-    {ok, Impl, Tags} = rpc(Config,rabbit_auth_backend_cache, user_login_authorization, [<<"guest">>]),
-    {refused, FailErr, FailArgs} = rpc(Config,rabbit_auth_backend_internal, user_login_authorization, [<<"nonguest">>]),
-    {refused, FailErr, FailArgs} = rpc(Config,rabbit_auth_backend_cache, user_login_authorization, [<<"nonguest">>]).
+    AuthProps = [{password, <<"guest">>}],
+    {ok, #auth_user{impl = Impl, tags = Tags}} = rpc(Config,rabbit_auth_backend_internal, user_login_authentication, [<<"guest">>, AuthProps]),
+    {ok, Impl, Tags} = rpc(Config,rabbit_auth_backend_internal, user_login_authorization, [<<"guest">>, AuthProps]),
+    {ok, Impl, Tags} = rpc(Config,rabbit_auth_backend_cache, user_login_authorization, [<<"guest">>, AuthProps]),
+    {refused, FailErr, FailArgs} = rpc(Config,rabbit_auth_backend_internal, user_login_authorization, [<<"nonguest">>, AuthProps]),
+    {refused, FailErr, FailArgs} = rpc(Config,rabbit_auth_backend_cache, user_login_authorization, [<<"nonguest">>, AuthProps]).
 
 access_response(Config) ->
     AvailableVhost = <<"/">>,
