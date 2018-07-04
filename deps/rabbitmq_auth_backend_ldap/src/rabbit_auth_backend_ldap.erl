@@ -24,7 +24,7 @@
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
--export([user_login_authentication/2, user_login_authorization/1,
+-export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 -export([get_connections/0]).
@@ -89,8 +89,8 @@ user_login_authentication(Username, AuthProps) when is_list(AuthProps) ->
 user_login_authentication(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
 
-user_login_authorization(Username) ->
-    case user_login_authentication(Username, []) of
+user_login_authorization(Username, AuthProps) ->
+    case user_login_authentication(Username, AuthProps) of
         {ok, #auth_user{impl = Impl, tags = Tags}} -> {ok, Impl, Tags};
         Else                                       -> Else
     end.
