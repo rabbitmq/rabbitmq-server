@@ -33,7 +33,7 @@
 %%     Something went wrong. Log and die.
 %% {refused, Msg, Args}
 %%     User authorisation failed. Log and die.
--callback user_login_authorization(rabbit_types:username()) ->
+-callback user_login_authorization(rabbit_types:username(), [term()] | map()) ->
     {'ok', any()} |
     {'ok', any(), any()} |
     {'refused', string(), [any()]} |
