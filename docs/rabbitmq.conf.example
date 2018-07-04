@@ -605,7 +605,7 @@
 ##
 # mqtt.allow_anonymous = true
 
-## If you have multiple chosts, specify the one to which the
+## If you have multiple vhosts, specify the one to which the
 ## adapter connects.
 ##
 # mqtt.vhost = /
