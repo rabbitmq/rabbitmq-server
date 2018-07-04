@@ -20,7 +20,7 @@
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
--export([user_login_authentication/2, user_login_authorization/1,
+-export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 %% Implementation of rabbit_auth_backend
@@ -33,8 +33,8 @@ user_login_authentication(Username, AuthProps) ->
            (_)                -> unknown
         end).
 
-user_login_authorization(Username) ->
-    with_cache(authz, {user_login_authorization, [Username]},
+user_login_authorization(Username, AuthProps) ->
+    with_cache(authz, {user_login_authorization, [Username, AuthProps]},
         fun({ok, _})      -> success;
            ({ok, _, _})   -> success;
            ({refused, _, _})  -> refusal;
