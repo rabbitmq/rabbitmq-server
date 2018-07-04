@@ -233,7 +233,7 @@ i(context_switches, _State) ->
     Sw;
 i(ra_open_file_metrics, _State) ->
     [{ra_log_wal, ra_metrics(ra_log_wal)},
-     {ra_log_file_segment_writer, ra_metrics(ra_log_file_segment_writer)}].
+     {ra_log_segment_writer, ra_metrics(ra_log_segment_writer)}].
 
 ra_metrics(K) ->
     try
