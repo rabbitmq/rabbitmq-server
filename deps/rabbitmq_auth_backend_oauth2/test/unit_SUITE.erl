@@ -50,16 +50,16 @@ test_successful_access_with_a_token(_) ->
     Jwk = fixture_jwk(),
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
-    Token = sign_token_hs(fixture_token(), Jwk),
+    Username = <<"username">>,
+    Token    = sign_token_hs(fixture_token(), Jwk),
 
 
-    {ok, #auth_user{username = Token} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
-    {ok, #{}} =
-        rabbit_auth_backend_uaa:user_login_authorization(Token),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, Token}]),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
     ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)),
-
     ?assertEqual(true, rabbit_auth_backend_uaa:check_resource_access(
              User,
              #resource{virtual_host = <<"vhost">>,
@@ -89,6 +89,7 @@ test_successful_access_with_a_token(_) ->
                          #{routing_key => <<"#/foo">>})).
 
 test_unsuccessful_access_with_a_bogus_token(_) ->
+    Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
 
     Jwk0 = fixture_jwk(),
@@ -98,9 +99,10 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     Token = sign_token_hs(fixture_token(), Jwk),
 
     ?assertMatch({refused, _, _},
-                 rabbit_auth_backend_uaa:user_login_authentication(<<"not a token">>, any)).
+                 rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, <<"not a token">>}])).
 
 test_restricted_vhost_access_with_a_valid_token(_) ->
+    Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
 
     Jwk   = fixture_jwk(),
@@ -109,13 +111,14 @@ test_restricted_vhost_access_with_a_valid_token(_) ->
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
 
     %% this user can authenticate successfully and access certain vhosts
-    {ok, #auth_user{username = Token} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, Token}]),
 
     %% access to a different vhost
     ?assertEqual(false, rabbit_auth_backend_uaa:check_vhost_access(User, <<"different vhost">>, none)).
 
 test_insufficient_permissions_in_a_valid_token(_) ->
+    Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
 
     Jwk   = fixture_jwk(),
@@ -123,8 +126,8 @@ test_insufficient_permissions_in_a_valid_token(_) ->
 
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
 
-    {ok, #auth_user{username = Token} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, Token}]),
 
     %% access to these resources is not granted
     ?assertEqual(false, rabbit_auth_backend_uaa:check_resource_access(
@@ -148,13 +151,15 @@ test_insufficient_permissions_in_a_valid_token(_) ->
                           #{routing_key => <<"foo/#">>})).
 
 test_token_expiration(_) ->
+    Username = <<"username">>,
     Jwk = fixture_jwk(),
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     TokenData = expirable_token(),
-    Token = sign_token_hs(TokenData, Jwk),
-    {ok, #auth_user{username = Token} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+    Username  = <<"username">>,
+    Token     = sign_token_hs(TokenData, Jwk),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, Token}]),
     ?assertEqual(true, rabbit_auth_backend_uaa:check_resource_access(
              User,
              #resource{virtual_host = <<"vhost">>,
@@ -180,9 +185,10 @@ test_token_expiration(_) ->
                    configure)),
 
     ?assertMatch({refused, _, _},
-                 rabbit_auth_backend_uaa:user_login_authentication(Token, any)).
+                 rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, Token}])).
 
 test_command_json(_) ->
+    Username = <<"username">>,
     Jwk = fixture_jwk(),
     Json = rabbit_json:encode(Jwk),
     'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
@@ -190,12 +196,13 @@ test_command_json(_) ->
         #{node => node(), json => Json}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     Token = sign_token_hs(fixture_token(), Jwk),
-    {ok, #auth_user{username = Token} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
     ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 
 test_command_pem_file(Config) ->
+    Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     CertsDir = ?config(rmq_certsdir, Config),
     Keyfile = filename:join([CertsDir, "client", "key.pem"]),
@@ -210,13 +217,14 @@ test_command_pem_file(Config) ->
         #{node => node(), pem_file => PublicKeyFile}),
 
     Token = sign_token_rsa(fixture_token(), Jwk, <<"token-key">>),
-    {ok, #auth_user{username = Token} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
     ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 
 
 test_command_pem_file_no_kid(Config) ->
+    Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     CertsDir = ?config(rmq_certsdir, Config),
     Keyfile = filename:join([CertsDir, "client", "key.pem"]),
@@ -231,16 +239,16 @@ test_command_pem_file_no_kid(Config) ->
         #{node => node(), pem_file => PublicKeyFile}),
 
     %% Set default kid
-
     application:set_env(uaa_jwt, default_key, <<"token-key">>),
 
     Token = sign_token_no_kid(fixture_token(), Jwk),
-    {ok, #auth_user{username = Token} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
     ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 
 test_command_pem(Config) ->
+    Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     CertsDir = ?config(rmq_certsdir, Config),
     Keyfile = filename:join([CertsDir, "client", "key.pem"]),
@@ -253,13 +261,14 @@ test_command_pem(Config) ->
         #{node => node(), pem => Pem}),
 
     Token = sign_token_rsa(fixture_token(), Jwk, <<"token-key">>),
-    {ok, #auth_user{username = Token} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
     ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 
 
 test_command_pem_no_kid(Config) ->
+    Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     CertsDir = ?config(rmq_certsdir, Config),
     Keyfile = filename:join([CertsDir, "client", "key.pem"]),
@@ -275,8 +284,8 @@ test_command_pem_no_kid(Config) ->
     application:set_env(uaa_jwt, default_key, <<"token-key">>),
 
     Token = sign_token_no_kid(fixture_token(), Jwk),
-    {ok, #auth_user{username = Token} = User} =
-        rabbit_auth_backend_uaa:user_login_authentication(Token, any),
+    {ok, #auth_user{username = Username} = User} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
     ?assertEqual(true, rabbit_auth_backend_uaa:check_vhost_access(User, <<"vhost">>, none)).
 

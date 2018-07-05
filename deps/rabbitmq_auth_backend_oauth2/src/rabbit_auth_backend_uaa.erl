@@ -22,9 +22,11 @@
 -behaviour(rabbit_authz_backend).
 
 -export([description/0]).
--export([user_login_authentication/2, user_login_authorization/1,
+-export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/3,
          check_topic_access/4]).
+
+-import(rabbit_data_coercion, [to_map/1]).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -37,18 +39,22 @@ description() ->
 
 %%--------------------------------------------------------------------
 
-user_login_authentication(Username, _AuthProps) ->
-    case check_token(Username) of
+user_login_authentication(Username0, AuthProps0) ->
+    AuthProps = to_map(AuthProps0),
+    Token     = token_from_context(Username0, AuthProps),
+    case check_token(Token) of
         {error, _} = E  -> E;
         {refused, Err}  ->
             {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
-        {ok, UserData} -> {ok, #auth_user{username = Username,
-                                           tags = [],
-                                           impl = UserData}}
+        {ok, UserData} ->
+            Username = username_from(Username0, AuthProps),
+            {ok, #auth_user{username = Username,
+                            tags = [],
+                            impl = UserData}}
     end.
 
-user_login_authorization(Username) ->
-    case user_login_authentication(Username, []) of
+user_login_authorization(Username, AuthProps) ->
+    case user_login_authentication(Username, AuthProps) of
         {ok, #auth_user{impl = Impl}} -> {ok, Impl};
         Else                          -> Else
     end.
@@ -139,6 +145,40 @@ check_aud(Aud, ResourceServerId) ->
         _ -> {error, {badarg, {aud_is_not_a_list, Aud}}}
     end.
 
+%%--------------------------------------------------------------------
+
 get_scopes(#{<<"scope">> := Scope}) -> Scope.
 
-%%--------------------------------------------------------------------
+-spec token_from_context(binary(), map()) -> binary() | undefined.
+token_from_context(_Username, AuthProps) ->
+    maps:get(password, AuthProps, undefined).
+
+%% Decoded tokens look like this:
+%%
+%% #{<<"aud">>         => [<<"rabbitmq">>, <<"rabbit_client">>],
+%%   <<"authorities">> => [<<"rabbitmq.read:*/*">>, <<"rabbitmq.write:*/*">>, <<"rabbitmq.configure:*/*">>],
+%%   <<"azp">>         => <<"rabbit_client">>,
+%%   <<"cid">>         => <<"rabbit_client">>,
+%%   <<"client_id">>   => <<"rabbit_client">>,
+%%   <<"exp">>         => 1530849387,
+%%   <<"grant_type">>  => <<"client_credentials">>,
+%%   <<"iat">>         => 1530806187,
+%%   <<"iss">>         => <<"http://localhost:8080/uaa/oauth/token">>,
+%%   <<"jti">>         => <<"df5d50a1cdcb4fa6bf32e7e03acfc74d">>,
+%%   <<"rev_sig">>     => <<"2f880d5b">>,
+%%   <<"scope">>       => [<<"rabbitmq.read:*/*">>, <<"rabbitmq.write:*/*">>, <<"rabbitmq.configure:*/*">>],
+%%   <<"sub">>         => <<"rabbit_client">>,
+%%   <<"zid">>         => <<"uaa">>}
+
+-spec username_from(binary(), map()) -> binary() | undefined.
+username_from(ClientProvidedUsername, DecodedToken) ->
+    case maps:get(<<"client_id">>, DecodedToken, maps:get(<<"sub">>, DecodedToken, undefined)) of
+        undefined ->
+            case ClientProvidedUsername of
+                undefined -> undefined;
+                <<>>      -> undefined;
+                _Other    -> ClientProvidedUsername
+            end;
+        Value     ->
+            Value
+    end.
