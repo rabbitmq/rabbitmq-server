@@ -46,11 +46,12 @@ user_login_authentication(Username0, AuthProps0) ->
         {error, _} = E  -> E;
         {refused, Err}  ->
             {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
-        {ok, UserData} ->
-            Username = username_from(Username0, AuthProps),
+        {ok, DecodedToken} ->
+            Username = username_from(Username0, DecodedToken),
             {ok, #auth_user{username = Username,
+                            %% TODO: extract tags
                             tags = [],
-                            impl = UserData}}
+                            impl = DecodedToken}}
     end.
 
 user_login_authorization(Username, AuthProps) ->
