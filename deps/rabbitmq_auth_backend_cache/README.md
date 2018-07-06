@@ -21,7 +21,7 @@ use network requests.
 
 ## RabbitMQ Version Requirements
 
-As with all authentication plugins, this plugin requires requires 2.3.1 or later.
+As with all authentication plugins, this plugin requires 2.3.1 or later.
 
 As of 3.7.0, this plugin is distributed with RabbitMQ. Enable it like any other plugin.
 
