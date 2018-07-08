@@ -53,23 +53,25 @@ kubectl create -f examples/k8s_statefulsets/rabbitmq_statefulsets.yaml
 ```
 6. Check the cluster status:
 
-Wait few seconds....then 
+Wait few seconds....then run
 
 ```
 FIRST_POD=$(kubectl get pods --namespace test-rabbitmq -l 'app=rabbitmq' -o jsonpath='{.items[0].metadata.name }')
 kubectl exec --namespace=test-rabbitmq $FIRST_POD rabbitmqctl cluster_status
 ```
-as result you should have:
+
+The output should look something like this:
+
 ```
-# => Cluster status of node 'rabbit@172.17.0.2'
-# => [{nodes,[{disc,['rabbit@172.17.0.2','rabbit@172.17.0.4',
-# =>                 'rabbit@172.17.0.5']}]},
-# =>  {running_nodes,['rabbit@172.17.0.5','rabbit@172.17.0.4','rabbit@172.17.0.2']},
-# =>  {cluster_name,<<"rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local">>},
-# =>  {partitions,[]},
-# =>  {alarms,[{'rabbit@172.17.0.5',[]},
-# =>           {'rabbit@172.17.0.4',[]},
-# =>           {'rabbit@172.17.0.2',[]}]}]
+Cluster status of node 'rabbit@172.17.0.2'
+[{nodes,[{disc,['rabbit@172.17.0.2','rabbit@172.17.0.4',
+                'rabbit@172.17.0.5']}]},
+ {running_nodes,['rabbit@172.17.0.5','rabbit@172.17.0.4','rabbit@172.17.0.2']},
+ {cluster_name,<<"rabbit@rabbitmq-0.rabbitmq.test-rabbitmq.svc.cluster.local">>},
+ {partitions,[]},
+ {alarms,[{'rabbit@172.17.0.5',[]},
+          {'rabbit@172.17.0.4',[]},
+          {'rabbit@172.17.0.2',[]}]}]
 ```
 
 * Get your `minikube` ip:
