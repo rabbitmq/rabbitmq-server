@@ -2,13 +2,10 @@
 
 uaac token client get admin -s adminsecret
 
-uaac client delete rabbit_client
-
 uaac client add rabbit_client --name rabbit_client \
  --secret rabbit_secret \
  --authorized_grant_types client_credentials \
- # N.B. commas in the list of authorities are treated as separators
- --authorities 'rabbitmq.read:*/* rabbitmq.write:*/* rabbitmq.configure:*/* rabbitmq.tag:management rabbitmq.tag:administrator'
+ --authorities 'rabbitmq.read:*/* rabbitmq.write:*/* rabbitmq.configure:*/*'
 
 uaac token client get rabbit_client -s rabbit_secret
 
@@ -25,12 +22,10 @@ uaac user add rabbit_user -p rabbit_password --email rabbit_user@example.com
 uaac group add "rabbitmq.read:*/*"
 uaac group add "rabbitmq.write:*/*"
 uaac group add "rabbitmq.configure:*/*"
-uaac group add "rabbitmq.tag:administrator"
 
 uaac member add "rabbitmq.read:*/*" rabbit_user
 uaac member add "rabbitmq.write:*/*" rabbit_user
 uaac member add "rabbitmq.configure:*/*" rabbit_user
-uaac member add "rabbitmq.tag:administrator" rabbit_user
 
 uaac client add rabbit_user_client \
  --name rabbit_user_client \
