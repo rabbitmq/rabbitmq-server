@@ -48,9 +48,10 @@ user_login_authentication(Username0, AuthProps0) ->
             {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
         {ok, DecodedToken} ->
             Username = username_from(Username0, DecodedToken),
+            Tags     = tags_from(DecodedToken),
+
             {ok, #auth_user{username = Username,
-                            %% TODO: extract tags
-                            tags = [],
+                            tags = Tags,
                             impl = DecodedToken}}
     end.
 
@@ -117,26 +118,14 @@ validate_payload(#{<<"scope">> := _Scope, <<"aud">> := _Aud} = DecodedToken) ->
 
 validate_payload(#{<<"scope">> := Scope, <<"aud">> := Aud} = DecodedToken, ResourceServerId) ->
     case check_aud(Aud, ResourceServerId) of
-        ok           -> {ok, DecodedToken#{<<"scope">> => filter_scope(Scope, ResourceServerId)}};
+        ok           -> {ok, DecodedToken#{<<"scope">> => filter_scopes(Scope, ResourceServerId)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end.
 
-filter_scope(Scope, <<"">>) -> Scope;
-filter_scope(Scope, ResourceServerId)  ->
-    Pattern = <<ResourceServerId/binary, ".">>,
-    PatternLength = byte_size(Pattern),
-    lists:filtermap(
-        fun(ScopeEl) ->
-            case binary:match(ScopeEl, Pattern) of
-                {0, PatternLength} ->
-                    ElLength = byte_size(ScopeEl),
-                    {true,
-                     binary:part(ScopeEl,
-                                 {PatternLength, ElLength - PatternLength})};
-                _ -> false
-            end
-        end,
-        Scope).
+filter_scopes(Scopes, <<"">>) -> Scopes;
+filter_scopes(Scopes, ResourceServerId)  ->
+    PrefixPattern = <<ResourceServerId/binary, ".">>,
+    matching_scopes_without_prefix(Scopes, PrefixPattern).
 
 check_aud(_, <<>>)    -> ok;
 check_aud(Aud, ResourceServerId) ->
@@ -192,3 +181,24 @@ username_from(ClientProvidedUsername, DecodedToken) ->
         Value     ->
             Value
     end.
+
+-spec tags_from(map()) -> list(atom()).
+tags_from(DecodedToken) ->
+    Scopes    = maps:get(<<"scope">>, DecodedToken, []),
+    TagScopes = matching_scopes_without_prefix(Scopes, <<"tag:">>),
+    lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
+
+matching_scopes_without_prefix(Scopes, PrefixPattern) ->
+    PatternLength = byte_size(PrefixPattern),
+    lists:filtermap(
+        fun(ScopeEl) ->
+            case binary:match(ScopeEl, PrefixPattern) of
+                {0, PatternLength} ->
+                    ElLength = byte_size(ScopeEl),
+                    {true,
+                     binary:part(ScopeEl,
+                                 {PatternLength, ElLength - PatternLength})};
+                _ -> false
+            end
+        end,
+        Scopes).

@@ -12,6 +12,7 @@ all() ->
         test_validate_payload_resource_server_id_mismatch,
         test_validate_payload,
         test_successful_access_with_a_token,
+        test_successful_access_with_a_token_that_has_tag_scopes,
         test_unsuccessful_access_with_a_bogus_token,
         test_restricted_vhost_access_with_a_valid_token,
         test_insufficient_permissions_in_a_valid_token,
@@ -88,6 +89,17 @@ test_successful_access_with_a_token(_) ->
                          read,
                          #{routing_key => <<"#/foo">>})).
 
+test_successful_access_with_a_token_that_has_tag_scopes(_) ->
+    Jwk = fixture_jwk(),
+    application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
+    application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
+    Username = <<"username">>,
+    Token    = sign_token_hs(fixture_token([<<"rabbitmq.tag:management">>,
+                                            <<"rabbitmq.tag:policymaker">>]), Jwk),
+
+    {ok, #auth_user{username = Username, tags = [management, policymaker]}} =
+        rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, Token}]).
+
 test_unsuccessful_access_with_a_bogus_token(_) ->
     Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
@@ -96,8 +108,6 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     Jwk  = Jwk0#{<<"k">> => <<"bm90b2tlbmtleQ">>},
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     
-    Token = sign_token_hs(fixture_token(), Jwk),
-
     ?assertMatch({refused, _, _},
                  rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, <<"not a token">>}])).
 
@@ -301,7 +311,7 @@ test_own_scope(_) ->
     ],
     lists:map(
         fun({ResId, Src, Dest}) ->
-            Dest = rabbit_auth_backend_uaa:filter_scope(Src, ResId)
+            Dest = rabbit_auth_backend_uaa:filter_scopes(Src, ResId)
         end,
         Examples).
 
@@ -370,12 +380,14 @@ fixture_jwk() ->
       <<"value">> => <<"tokenkey">>}.
 
 fixture_token() ->
+    fixture_token([]).
+
+fixture_token(ExtraScopes) ->
     Scope = [<<"rabbitmq.configure:vhost/foo">>,
              <<"rabbitmq.write:vhost/foo">>,
              <<"rabbitmq.read:vhost/foo">>,
              <<"rabbitmq.read:vhost/bar">>,
-             <<"rabbitmq.read:vhost/bar/%23%2Ffoo">>],
-
+             <<"rabbitmq.read:vhost/bar/%23%2Ffoo">>] ++ ExtraScopes,
     #{<<"exp">> => os:system_time(seconds) + 3000,
       <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
