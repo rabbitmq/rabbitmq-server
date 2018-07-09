@@ -173,7 +173,7 @@ token_from_context(_Username, AuthProps) ->
 
 -spec username_from(binary(), map()) -> binary() | undefined.
 username_from(ClientProvidedUsername, DecodedToken) ->
-    case maps:get(<<"client_id">>, DecodedToken, maps:get(<<"sub">>, DecodedToken, undefined)) of
+    case uaa_jwt:client_id(DecodedToken, uaa_jwt:sub(DecodedToken, undefined)) of
         undefined ->
             case ClientProvidedUsername of
                 undefined -> undefined;
