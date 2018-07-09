@@ -2,10 +2,11 @@
 
 uaac token client get admin -s adminsecret
 
+uaac client delete rabbit_client
 uaac client add rabbit_client --name rabbit_client \
  --secret rabbit_secret \
  --authorized_grant_types client_credentials \
- --authorities 'rabbitmq.read:*/* rabbitmq.write:*/* rabbitmq.configure:*/*'
+ --authorities 'rabbitmq.read:*/* rabbitmq.write:*/* rabbitmq.configure:*/* rabbitmq.tag:management rabbitmq.tag:administrator'
  --access_token_validity 86400
 
 uaac token client get rabbit_client -s rabbit_secret
