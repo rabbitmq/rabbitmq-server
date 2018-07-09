@@ -87,17 +87,20 @@ check_topic_access(#auth_user{impl = DecodedToken},
 %%--------------------------------------------------------------------
 
 with_decoded_token(DecodedToken, Fun) ->
-    case validate_token_active(DecodedToken) of
+    case validate_token_expiry(DecodedToken) of
         ok               -> Fun();
-        {error, _} = Err -> Err
+        {error, Msg} = Err ->
+            rabbit_log:error(Msg),
+            Err
     end.
 
-validate_token_active(#{<<"exp">> := Exp}) when is_integer(Exp) ->
-    case Exp =< os:system_time(seconds) of
-        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~p", [Exp])};
+validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
+    Now = os:system_time(seconds),
+    case Exp =< Now of
+        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~p (validated at ~p)", [Exp, Now])};
         false -> ok
     end;
-validate_token_active(#{}) -> ok.
+validate_token_expiry(#{}) -> ok.
 
 -spec check_token(binary()) -> {ok, map()} | {error, term()}.
 check_token(Token) ->
@@ -107,14 +110,14 @@ check_token(Token) ->
         {false, _}      -> {refused, signature_invalid}
     end.
 
-validate_payload(#{<<"scope">> := _Scope, <<"aud">> := _Aud} = UserData) ->
+validate_payload(#{<<"scope">> := _Scope, <<"aud">> := _Aud} = DecodedToken) ->
     ResourceServerId = rabbit_data_coercion:to_binary(application:get_env(rabbitmq_auth_backend_uaa,
                                                                           resource_server_id, <<>>)),
-    validate_payload(UserData, ResourceServerId).
+    validate_payload(DecodedToken, ResourceServerId).
 
-validate_payload(#{<<"scope">> := Scope, <<"aud">> := Aud} = UserData, ResourceServerId) ->
+validate_payload(#{<<"scope">> := Scope, <<"aud">> := Aud} = DecodedToken, ResourceServerId) ->
     case check_aud(Aud, ResourceServerId) of
-        ok           -> {ok, UserData#{<<"scope">> => filter_scope(Scope, ResourceServerId)}};
+        ok           -> {ok, DecodedToken#{<<"scope">> => filter_scope(Scope, ResourceServerId)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end.
 
@@ -173,7 +176,13 @@ token_from_context(_Username, AuthProps) ->
 
 -spec username_from(binary(), map()) -> binary() | undefined.
 username_from(ClientProvidedUsername, DecodedToken) ->
-    case uaa_jwt:client_id(DecodedToken, uaa_jwt:sub(DecodedToken, undefined)) of
+    ClientId = uaa_jwt:client_id(DecodedToken, undefined),
+    Sub      = uaa_jwt:sub(DecodedToken, undefined),
+
+    rabbit_log:debug("Computing username from client's JWT token, client ID: '~s', sub: '~s'",
+                     [ClientId, Sub]),
+
+    case uaa_jwt:client_id(DecodedToken, Sub) of
         undefined ->
             case ClientProvidedUsername of
                 undefined -> undefined;
