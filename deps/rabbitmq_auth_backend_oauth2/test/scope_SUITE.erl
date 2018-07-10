@@ -100,34 +100,36 @@ permission_vhost(_Config) ->
 
     ExampleResources = [<<"foo">>, <<"foo/bar">>, <<"*">>, <<"*/*">>, <<"юникод"/utf8>>],
 
+    Tags = [<<"tag:management">>, <<"tag:policymaker">>],
+
     [ vhost_allowed(<<"foo">>, Scope) ||
         Scope <- FooReadScopes ++ FooWriteScopes ++ FooConfigureScopes ],
-    [ vhost_allowed(ComplexVHost, Scope) ||
+    [ vhost_allowed(ComplexVHost, [Scope] ++ Tags) ||
         Scope <- EncodedReadScopes ++ EncodedWriteScopes ++ EncodedConfigureScopes ],
 
-    [ read_allowed(<<"foo">>, Resource, Scope) ||
+    [ read_allowed(<<"foo">>, Resource, [Scope] ++ Tags) ||
         Scope <- FooReadScopes,
         Resource <- ExampleResources ],
 
-    [ write_allowed(<<"foo">>, Resource, Scope) ||
+    [ write_allowed(<<"foo">>, Resource, [Scope] ++ Tags) ||
         Scope <- FooWriteScopes,
         Resource <- ExampleResources ],
 
-    [ configure_allowed(<<"foo">>, Resource, Scope) ||
+    [ configure_allowed(<<"foo">>, Resource, [Scope] ++ Tags) ||
         Scope <- FooConfigureScopes,
         Resource <- ExampleResources ],
 
-    [ read_refused(<<"foo">>, Resource, Scope) ||
+    [ read_refused(<<"foo">>, Resource, [Scope] ++ Tags) ||
         Scope <- FooWriteScopes ++ FooConfigureScopes ++
                  EncodedWriteScopes ++ EncodedConfigureScopes,
         Resource <- ExampleResources ],
 
-    [ write_refused(<<"foo">>, Resource, Scope) ||
+    [ write_refused(<<"foo">>, Resource, [Scope] ++ Tags) ||
         Scope <- FooReadScopes ++ FooConfigureScopes ++
                  EncodedReadScopes ++ EncodedConfigureScopes,
         Resource <- ExampleResources ],
 
-    [ configure_refused(<<"foo">>, Resource, Scope) ||
+    [ configure_refused(<<"foo">>, Resource, [Scope] ++ Tags) ||
         Scope <- FooWriteScopes ++ FooReadScopes ++
                  EncodedWriteScopes ++ EncodedReadScopes,
         Resource <- ExampleResources ],
@@ -254,50 +256,81 @@ permission_topic(_Config) ->
         Resource <- ExampleResources,
         RoutingKey <- [<<"foo">>, <<"bar">>]].
 
+vhost_allowed(Vhost, Scopes) when is_list(Scopes) ->
+    ct:pal("Scopes: ~p, vhost: ~p, result: ~p", [Scopes, Vhost, rabbit_oauth2_scope:vhost_access(Vhost, Scopes)]),
+    ?assertEqual(true, rabbit_oauth2_scope:vhost_access(Vhost, Scopes));
 
 vhost_allowed(Vhost, Scope) ->
-    ct:pal(?LOW_IMPORTANCE, "Check vhost ~tp with permission ~tp", [Vhost, Scope]),
-    ?assertEqual(true, rabbit_oauth2_scope:vhost_access(Vhost, [Scope])).
+    vhost_allowed(Vhost, [Scope]).
+
+read_allowed(Vhost, Resource, Scopes) when is_list(Scopes) ->
+    resource_perm(Vhost, Resource, Scopes, read, true);
 
 read_allowed(Vhost, Resource, Scope) ->
     resource_perm(Vhost, Resource, Scope, read, true).
 
+read_refused(Vhost, Resource, Scopes) when is_list(Scopes) ->
+    resource_perm(Vhost, Resource, Scopes, read, false);
+
 read_refused(Vhost, Resource, Scope) ->
     resource_perm(Vhost, Resource, Scope, read, false).
+
+write_allowed(Vhost, Resource, Scopes) when is_list(Scopes) ->
+    resource_perm(Vhost, Resource, Scopes, write, true);
 
 write_allowed(Vhost, Resource, Scope) ->
     resource_perm(Vhost, Resource, Scope, write, true).
 
+write_refused(Vhost, Resource, Scopes) when is_list(Scopes) ->
+    resource_perm(Vhost, Resource, Scopes, write, false);
+
 write_refused(Vhost, Resource, Scope) ->
     resource_perm(Vhost, Resource, Scope, write, false).
+
+configure_allowed(Vhost, Resource, Scopes) when is_list(Scopes) ->
+    resource_perm(Vhost, Resource, Scopes, configure, true);
 
 configure_allowed(Vhost, Resource, Scope) ->
     resource_perm(Vhost, Resource, Scope, configure, true).
 
+configure_refused(Vhost, Resource, Scopes) when is_list(Scopes) ->
+    resource_perm(Vhost, Resource, Scopes, configure, false);
+
 configure_refused(Vhost, Resource, Scope) ->
     resource_perm(Vhost, Resource, Scope, configure, false).
 
-resource_perm(Vhost, Resource, Scope, Permission, Result) ->
-    ct:pal(?LOW_IMPORTANCE,
-           "Checking access for vhost ~tp resource ~tp scope ~tp with permission ~tp", [Vhost, Result, Scope, Permission]),
+
+resource_perm(Vhost, Resource, Scopes, Permission, Result) when is_list(Scopes) ->
     [ ?assertEqual(Result, rabbit_oauth2_scope:resource_access(
           #resource{virtual_host = Vhost,
                     kind = Kind,
                     name = Resource},
           Permission,
-          [Scope])) || Kind <- [queue, exchange] ].
+          Scopes)) || Kind <- [queue, exchange] ];
+
+resource_perm(Vhost, Resource, Scope, Permission, Result) ->
+    resource_perm(Vhost, Resource, [Scope], Permission, Result).
+
+topic_read_allowed(Vhost, Resource, RoutingKey, Scopes) when is_list(Scopes) ->
+    topic_perm(Vhost, Resource, RoutingKey, Scopes, read, true);
 
 topic_read_allowed(Vhost, Resource, RoutingKey, Scope) ->
     topic_perm(Vhost, Resource, RoutingKey, Scope, read, true).
 
+topic_read_refused(Vhost, Resource, RoutingKey, Scopes) when is_list(Scopes) ->
+    topic_perm(Vhost, Resource, RoutingKey, Scopes, read, false);
+
 topic_read_refused(Vhost, Resource, RoutingKey, Scope) ->
     topic_perm(Vhost, Resource, RoutingKey, Scope, read, false).
 
-topic_perm(Vhost, Resource, RoutingKey, Scope, Permission, Result) ->
+topic_perm(Vhost, Resource, RoutingKey, Scopes, Permission, Result) when is_list(Scopes) ->
     ?assertEqual(Result, rabbit_oauth2_scope:topic_access(
         #resource{virtual_host = Vhost,
                   kind = topic,
                   name = Resource},
         Permission,
         #{routing_key => RoutingKey},
-        [Scope])).
+        Scopes));
+
+topic_perm(Vhost, Resource, RoutingKey, Scope, Permission, Result) ->
+    topic_perm(Vhost, Resource, RoutingKey, [Scope], Permission, Result).

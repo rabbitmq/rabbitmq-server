@@ -121,7 +121,7 @@ test_restricted_vhost_access_with_a_valid_token(_) ->
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
 
     %% this user can authenticate successfully and access certain vhosts
-    {ok, #auth_user{username = Username} = User} =
+    {ok, #auth_user{username = Username, tags = []} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, Token}]),
 
     %% access to a different vhost
