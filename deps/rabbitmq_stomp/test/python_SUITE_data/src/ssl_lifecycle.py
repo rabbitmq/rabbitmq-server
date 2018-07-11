@@ -59,7 +59,7 @@ class TestSslClient(unittest.TestCase):
             d = "/topic/ssl.test"
             conn.subscribe(destination=d, ack="auto", id="ctag", receipt="sub")
 
-            self.assertTrue(listener.await(1))
+            self.assertTrue(listener.wait(1))
 
             self.assertEquals("sub",
                               listener.receipts[0]['headers']['receipt-id'])
@@ -67,7 +67,7 @@ class TestSslClient(unittest.TestCase):
             listener.reset(1)
             conn.send(body="Hello SSL!", destination=d)
 
-            self.assertTrue(listener.await())
+            self.assertTrue(listener.wait())
 
             self.assertEquals("Hello SSL!", listener.messages[0]['message'])
         finally:

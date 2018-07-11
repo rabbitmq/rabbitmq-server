@@ -22,7 +22,7 @@ class TestTopicPermissions(base.BaseTest):
         self.subscribe_dest(self.conn, self.authorised_topic, None)
         self.conn.send(self.authorised_topic, "authorised hello")
 
-        self.assertTrue(self.listener.await(), "Timeout, no message received")
+        self.assertTrue(self.listener.wait(), "Timeout, no message received")
 
         # assert no errors
         if len(self.listener.errors) > 0:
@@ -38,7 +38,7 @@ class TestTopicPermissions(base.BaseTest):
         # send on restricted topic
         self.conn.send(self.restricted_topic, "hello")
 
-        self.assertTrue(self.listener.await(), "Timeout, no message received")
+        self.assertTrue(self.listener.wait(), "Timeout, no message received")
 
         # assert errors
         self.assertGreater(len(self.listener.errors), 0)

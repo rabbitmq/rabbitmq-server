@@ -113,7 +113,7 @@ class TestLifecycle(base.BaseTest):
         try:
             new_conn.start()
             new_conn.connect(user, passcode)
-            self.assertTrue(listener.await())
+            self.assertTrue(listener.wait())
             self.assertEquals(expected, listener.errors[0]['message'])
         finally:
             if new_conn.is_connected():
@@ -123,7 +123,7 @@ class TestLifecycle(base.BaseTest):
         ''' Test disallowed header on SEND '''
         self.listener.reset(1)
         self.conn.send_frame("SEND", {"destination":"a", "message-id":"1"})
-        self.assertTrue(self.listener.await())
+        self.assertTrue(self.listener.wait())
         self.assertEquals(1, len(self.listener.errors))
         errorReceived = self.listener.errors[0]
         self.assertEquals("Invalid header", errorReceived['headers']['message'])
@@ -151,7 +151,7 @@ class TestLifecycle(base.BaseTest):
         time.sleep(3)
         self.listener.reset(1)
         self.conn.send_frame("DISCONNECT", {"receipt": "test"})
-        self.assertTrue(self.listener.await())
+        self.assertTrue(self.listener.wait())
         self.assertEquals(1, len(self.listener.receipts))
         receiptReceived = self.listener.receipts[0]['headers']['receipt-id']
         self.assertEquals("test", receiptReceived

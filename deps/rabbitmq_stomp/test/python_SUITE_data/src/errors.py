@@ -11,7 +11,7 @@ class TestErrorsAndCloseConnection(base.BaseTest):
         self.subscribe_dest(self.conn, destination, None,
                             headers = headers)
 
-        self.assertTrue(self.listener.await())
+        self.assertTrue(self.listener.wait())
 
         self.assertEquals(1, len(self.listener.errors))
         errorReceived = self.listener.errors[0]
@@ -58,7 +58,7 @@ class TestErrors(base.BaseTest):
         self.listener.reset()
         self.conn.send("/something/interesting", 'test_unknown_destination')
 
-        self.assertTrue(self.listener.await())
+        self.assertTrue(self.listener.wait())
         self.assertEquals(1, len(self.listener.errors))
 
         err = self.listener.errors[0]
@@ -74,7 +74,7 @@ class TestErrors(base.BaseTest):
         self.listener.reset()
         self.conn.send_frame(command)
 
-        self.assertTrue(self.listener.await())
+        self.assertTrue(self.listener.wait())
         self.assertEquals(1, len(self.listener.errors))
 
         err = self.listener.errors[0]
@@ -84,7 +84,7 @@ class TestErrors(base.BaseTest):
         self.listener.reset()
         self.conn.send("/" + dtype + content, '__test_invalid_destination:' + dtype + content)
 
-        self.assertTrue(self.listener.await())
+        self.assertTrue(self.listener.wait())
         self.assertEquals(1, len(self.listener.errors))
 
         err = self.listener.errors[0]

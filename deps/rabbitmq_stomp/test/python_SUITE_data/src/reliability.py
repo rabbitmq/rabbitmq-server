@@ -24,7 +24,7 @@ class TestReliability(base.BaseTest):
             time.sleep(2.0)
             pub_conn.disconnect()
 
-            if listener.await(30):
+            if listener.wait(30):
                 self.assertEquals(count, len(listener.messages))
             else:
                 listener.print_state("Final state of listener:")

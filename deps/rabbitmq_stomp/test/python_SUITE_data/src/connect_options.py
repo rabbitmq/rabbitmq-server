@@ -19,7 +19,7 @@ class TestConnectOptions(base.BaseTest):
                             receipt='implicit')
 
         try:
-            self.assertTrue(listener.await(5))
+            self.assertTrue(listener.wait(5))
             self.assertEquals(1, len(listener.receipts),
                               'Missing receipt. Likely not connected')
             self.assertEquals('implicit', listener.receipts[0]['headers']['receipt-id'])
@@ -37,7 +37,7 @@ class TestConnectOptions(base.BaseTest):
         new_conn.start()
         new_conn.connect()
         try:
-            self.assertFalse(listener.await(3)) # no error back
+            self.assertFalse(listener.wait(3)) # no error back
             self.assertTrue(new_conn.is_connected())
         finally:
             new_conn.disconnect()

@@ -67,7 +67,7 @@ class TestQueue(base.BaseTest):
             conn2.set_listener('', listener2)
 
             self.subscribe_dest(conn2, destination, None, ack="auto")
-            self.assertTrue(listener2.await(10), "no receive")
+            self.assertTrue(listener2.wait(10), "no receive")
         finally:
             conn2.disconnect()
 
@@ -77,7 +77,7 @@ class TestQueue(base.BaseTest):
 
         # send
         self.conn.send(destination, "hello thar", receipt="foo")
-        self.listener.await(3)
+        self.listener.wait(3)
         self.conn.disconnect()
 
         # now receive
@@ -87,7 +87,7 @@ class TestQueue(base.BaseTest):
             conn2.set_listener('', listener2)
 
             self.subscribe_dest(conn2, destination, None, ack="auto")
-            self.assertTrue(listener2.await(10), "no receive")
+            self.assertTrue(listener2.wait(10), "no receive")
         finally:
             conn2.disconnect()
 
@@ -106,10 +106,10 @@ class TestQueue(base.BaseTest):
             self.conn.send(destination, "test2")
 
             ## expect both consumers to get a message?
-            self.assertTrue(listener1.await(2))
+            self.assertTrue(listener1.wait(2))
             self.assertEquals(1, len(listener1.messages),
                               "unexpected message count")
-            self.assertTrue(listener2.await(2))
+            self.assertTrue(listener2.wait(2))
             self.assertEquals(1, len(listener2.messages),
                               "unexpected message count")
         finally:
@@ -129,7 +129,7 @@ class TestQueue(base.BaseTest):
             self.conn.begin(transaction=tx)
 
         def after():
-            self.assertFalse(self.listener.await(1))
+            self.assertFalse(self.listener.wait(1))
             self.conn.commit(transaction=tx)
 
         self.__test_send_receipt(destination, before, after, {'transaction': tx})
@@ -204,7 +204,7 @@ class TestQueue(base.BaseTest):
                            receipt=receipt, headers=headers)
         after()
 
-        self.assertTrue(self.listener.await(5))
+        self.assertTrue(self.listener.wait(5))
 
         missing_receipts = expected_receipts.difference(
                     self.__gather_receipts())
@@ -243,10 +243,10 @@ class TestTopic(base.BaseTest):
               self.conn.send(destination, "test2")
 
               ## expect both consumers to get both messages
-              self.assertTrue(listener1.await(5))
+              self.assertTrue(listener1.wait(5))
               self.assertEquals(2, len(listener1.messages),
                                 "unexpected message count")
-              self.assertTrue(listener2.await(5))
+              self.assertTrue(listener2.wait(5))
               self.assertEquals(2, len(listener2.messages),
                                 "unexpected message count")
           finally:
@@ -270,13 +270,13 @@ class TestTopic(base.BaseTest):
               self.conn.send(destination, message)
               self.conn.send(destination, message)
 
-              self.assertTrue(listener1.await(10))
+              self.assertTrue(listener1.wait(10))
               self.assertEquals(2, len(listener1.messages),
                                 "unexpected message count")
               self.assertTrue(len(listener2.messages[0]['message']) == s,
                               "unexpected message size")
 
-              self.assertTrue(listener2.await(10))
+              self.assertTrue(listener2.wait(10))
               self.assertEquals(2, len(listener2.messages),
                                 "unexpected message count")
           finally:
@@ -302,14 +302,14 @@ class TestReplyQueue(base.BaseTest):
             self.conn.send(known, "test",
                            headers = {"reply-to": reply})
 
-            self.assertTrue(listener2.await(5))
+            self.assertTrue(listener2.wait(5))
             self.assertEquals(1, len(listener2.messages))
 
             reply_to = listener2.messages[0]['headers']['reply-to']
             self.assertTrue(reply_to.startswith('/reply-queue/'))
 
             conn2.send(reply_to, "reply")
-            self.assertTrue(self.listener.await(5))
+            self.assertTrue(self.listener.wait(5))
             self.assertEquals("reply", self.listener.messages[0]['message'])
         finally:
             conn2.disconnect()
@@ -322,7 +322,7 @@ class TestReplyQueue(base.BaseTest):
         reply = '/temp-queue/foo'
 
         def respond(cntn, listna):
-            self.assertTrue(listna.await(5))
+            self.assertTrue(listna.wait(5))
             self.assertEquals(1, len(listna.messages))
             reply_to = listna.messages[0]['headers']['reply-to']
             self.assertTrue(reply_to.startswith('/reply-queue/'))
@@ -341,7 +341,7 @@ class TestReplyQueue(base.BaseTest):
             respond(conn2, listener2)
             respond(conn3, listener3)
 
-            self.assertTrue(self.listener.await(5))
+            self.assertTrue(self.listener.wait(5))
             self.assertEquals(2, len(self.listener.messages))
             self.assertEquals("reply", self.listener.messages[0]['message'])
             self.assertEquals("reply", self.listener.messages[1]['message'])
@@ -364,14 +364,14 @@ class TestReplyQueue(base.BaseTest):
             conn1.send(known, "test",
                        headers = {"reply-to": reply})
 
-            self.assertTrue(listener2.await(5))
+            self.assertTrue(listener2.wait(5))
             self.assertEquals(1, len(listener2.messages))
 
             reply_to = listener2.messages[0]['headers']['reply-to']
             self.assertTrue(reply_to == reply)
 
             conn2.send(reply_to, "reply")
-            self.assertTrue(listener1.await(5))
+            self.assertTrue(listener1.wait(5))
             self.assertEquals("reply", listener1.messages[0]['message'])
         finally:
             conn1.disconnect()
@@ -396,7 +396,7 @@ class TestDurableSubscription(base.BaseTest):
         if not listener:
             listener = self.listener
 
-        self.assertTrue(listener.await(5))
+        self.assertTrue(listener.wait(5))
         self.assertEquals(1, len(self.listener.receipts))
         if pos is not None:
             self.assertEquals(pos, self.listener.receipts[0]['msg_no'])
@@ -405,7 +405,7 @@ class TestDurableSubscription(base.BaseTest):
         if not listener:
             listener = self.listener
 
-        self.assertTrue(listener.await(5))
+        self.assertTrue(listener.wait(5))
         self.assertEquals(1, len(listener.messages))
         self.assertEquals(msg, listener.messages[0]['message'])
         if pos is not None:
@@ -445,7 +445,7 @@ class TestDurableSubscription(base.BaseTest):
 
         # resubscribe and expect no message
         self.__subscribe(destination)
-        self.assertTrue(self.listener.await(3))
+        self.assertTrue(self.listener.wait(3))
         self.assertEquals(0, len(self.listener.messages))
         self.assertEquals(1, len(self.listener.receipts))
 
@@ -474,7 +474,7 @@ class TestDurableSubscription(base.BaseTest):
             for x in range(0, 100):
                 self.conn.send(destination, "msg" + str(x))
 
-            self.assertTrue(self.listener.await(5))
+            self.assertTrue(self.listener.wait(5))
             self.assertEquals(100, len(self.listener.messages))
         finally:
             conn2.disconnect()
@@ -506,7 +506,7 @@ class TestDurableSubscription(base.BaseTest):
             self.__subscribe(destination, conn2, "other.id")
 
             for l in [self.listener, listener2]:
-                self.assertTrue(l.await(20))
+                self.assertTrue(l.wait(20))
                 self.assertTrue(len(l.messages) >= 90)
                 self.assertTrue(len(l.messages) <= 100)
 
@@ -518,7 +518,7 @@ class TestDurableSubscription(base.BaseTest):
 
         self.conn.send_frame('SUBSCRIBE',
             {'destination': destination, 'ack': 'auto', header: 'true'})
-        self.listener.await(3)
+        self.listener.wait(3)
         self.assertEquals(1, len(self.listener.errors))
         self.assertEquals("Missing Header", self.listener.errors[0]['headers']['message'])
 
