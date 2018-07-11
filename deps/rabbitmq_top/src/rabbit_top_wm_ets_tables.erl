@@ -55,9 +55,9 @@ ets_tables(Node, Sort, Order, RowCount) ->
     end.
 
 fmt(Info) ->
-    {owner, Pid} = lists:keyfind(owner, 1, Info),
-    %% OTP 21 introduced the 'id' element that contains a reference.
-    %% These cannot be serialised and must be removed from the proplist
-    Info1 = lists:keydelete(owner, 1,
-                            lists:keydelete(id, 1, Info)),
-    [{owner,  rabbit_top_util:fmt(Pid)} | Info1].
+    {owner, OPid} = lists:keyfind(owner, 1, Info),
+    {heir, HPid} = lists:keyfind(heir, 1, Info),
+    Info1 = lists:keydelete(owner, 1, Info),
+    Info2 = lists:keydelete(heir, 1, Info1),
+    [{owner,  rabbit_top_util:fmt(OPid)},
+     {heir, rabbit_top_util:fmt(HPid)} | Info2].

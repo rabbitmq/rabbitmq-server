@@ -29,6 +29,7 @@
     <th><%= fmt_sort_desc_by_default('Memory', 'memory') %></th>
     <th><%= fmt_sort_desc_by_default('Size', 'size') %></th>
     <th><%= fmt_sort_desc_by_default('Type', 'type') %></th>
+    <th><%= fmt_sort_desc_by_default('Named', 'named_table') %></th>
     <th>Protection</th>
     <th>Compressed</th>
   </tr>
@@ -44,6 +45,7 @@
     <td><%= fmt_bytes(table.memory * 1.0) %></td>
     <td><%= table.size %></td>
     <td><%= table.type %></td>
+    <td><%= table.named_table %></td>
     <td><%= table.protection %></td>
     <td><%= table.compressed %></td>
   </tr>

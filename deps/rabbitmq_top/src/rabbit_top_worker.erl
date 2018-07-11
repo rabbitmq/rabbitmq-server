@@ -122,13 +122,12 @@ ets_tables(_OldTables) ->
         end,
         ets:all()).
 
-table_info(Table) when not is_atom(Table) -> undefined;
-table_info(TableName) when is_atom(TableName) ->
+table_info(Table) ->
     Info = lists:map(fun
                         ({memory, MemWords}) -> {memory, bytes(MemWords)};
                         (Other) -> Other
                      end,
-                     ets:info(TableName)),
+                     ets:info(Table)),
     {owner, OwnerPid} = lists:keyfind(owner, 1, Info),
     case process_info(OwnerPid, registered_name) of
         []                           -> Info;
