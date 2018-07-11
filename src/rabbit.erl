@@ -74,11 +74,17 @@
                     {requires,    database},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({code_server_cache,
+                   [{description, "code_server cache server"},
+                    {mfa,         {rabbit_sup, start_child, [code_server_cache]}},
+                    {requires,    rabbit_alarm},
+                    {enables,     file_handle_cache}]}).
+
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
                     {mfa,         {rabbit, start_fhc, []}},
                     %% FHC needs memory monitor to be running
-                    {requires,    rabbit_alarm},
+                    {requires,    code_server_cache},
                     {enables,     worker_pool}]}).
 
 -rabbit_boot_step({worker_pool,
