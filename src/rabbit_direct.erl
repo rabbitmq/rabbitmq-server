@@ -135,20 +135,8 @@ maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos) ->
     Module = rabbit_data_coercion:to_atom(string:to_lower(
         "rabbit_" ++ rabbit_data_coercion:to_list(Protocol) ++ "_connection_info")
     ),
-    case code:get_object_code(Module) of
-        {_Module, _Binary, _Filename} ->
-            try
-                Module:additional_authn_params(Creds, VHost, Pid, Infos)
-            catch
-                _:Reason ->
-                    rabbit_log:error("Calling ~p:additional_authn_params/4 failed:~p~n", [Module, Reason]),
-                    []
-            end;
-        error ->
-            [];
-        _ ->
-            []
-    end.
+    Args = [Creds, VHost, Pid, Infos],
+    code_server_cache:maybe_call_mfa(Module, additional_authn_params, Args, []).
 
 is_vhost_alive(VHost, {Username, _Password}, Pid) ->
     PrintedUsername = case Username of
