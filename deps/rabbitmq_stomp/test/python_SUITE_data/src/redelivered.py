@@ -12,7 +12,7 @@ class TestRedelivered(base.BaseTest):
         self.subscribe_dest(self.conn, destination, None, ack='client')
         self.conn.send(destination, "test1")
         message_receive_timeout = 30
-        self.assertTrue(self.listener.await(message_receive_timeout), "Test message not received within {0} seconds".format(message_receive_timeout))
+        self.assertTrue(self.listener.wait(message_receive_timeout), "Test message not received within {0} seconds".format(message_receive_timeout))
         self.assertEquals(1, len(self.listener.messages))
         self.assertEquals('false', self.listener.messages[0]['headers']['redelivered'])
 
@@ -26,7 +26,7 @@ class TestRedelivered(base.BaseTest):
             listener2.reset(1)
             conn2.set_listener('', listener2)
             self.subscribe_dest(conn2, destination, None, ack='client')
-            self.assertTrue(listener2.await(), "message not received again")
+            self.assertTrue(listener2.wait(), "message not received again")
             self.assertEquals(1, len(listener2.messages))
             self.assertEquals('true', listener2.messages[0]['headers']['redelivered'])
         finally:

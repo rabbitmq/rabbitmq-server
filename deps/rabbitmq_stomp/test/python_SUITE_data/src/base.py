@@ -88,7 +88,7 @@ class BaseTest(unittest.TestCase):
        listener = WaitableListener()
        conn.set_listener('', listener)
        self.subscribe_dest(conn, dest, None, receipt="sub.receipt")
-       listener.await()
+       listener.wait()
        self.assertEquals(1, len(listener.receipts))
        listener.reset()
        return conn, listener
@@ -114,7 +114,7 @@ class BaseTest(unittest.TestCase):
         self.subscribe_dest(self.conn, dest, None)
         self.conn.send(dest, "foo", headers=headers)
 
-        self.assertTrue(self.listener.await(), "Timeout, no message received")
+        self.assertTrue(self.listener.wait(), "Timeout, no message received")
 
         # assert no errors
         if len(self.listener.errors) > 0:
@@ -128,9 +128,9 @@ class BaseTest(unittest.TestCase):
 
    def assertListener(self, errMsg, numMsgs=0, numErrs=0, numRcts=0, timeout=10):
         if numMsgs + numErrs + numRcts > 0:
-            self._assertTrue(self.listener.await(timeout), errMsg + " (#awaiting)")
+            self._assertTrue(self.listener.wait(timeout), errMsg + " (#awaiting)")
         else:
-            self._assertFalse(self.listener.await(timeout), errMsg + " (#awaiting)")
+            self._assertFalse(self.listener.wait(timeout), errMsg + " (#awaiting)")
         self._assertEquals(numMsgs, len(self.listener.messages), errMsg + " (#messages)")
         self._assertEquals(numErrs, len(self.listener.errors), errMsg + " (#errors)")
         self._assertEquals(numRcts, len(self.listener.receipts), errMsg + " (#receipts)")
@@ -203,8 +203,8 @@ class WaitableListener(object):
         if self.debug:
             self.print_state('(reset listener--new state)')
 
-    def await(self, timeout=10):
-        return self.latch.await(timeout)
+    def wait(self, timeout=10):
+        return self.latch.wait(timeout)
 
     def print_state(self, hdr="", full=False):
         print(hdr)
@@ -233,7 +233,7 @@ class Latch(object):
          self.cond.notify_all()
       self.cond.release()
 
-   def await(self, timeout=None):
+   def wait(self, timeout=None):
       try:
          self.cond.acquire()
          if self.count == 0:
