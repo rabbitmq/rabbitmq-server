@@ -12,7 +12,7 @@ namespace WebApiHttpAuthService.Controllers
     {
         // Note: the following is necessary to ensure that no
         // BOM is part of the response
-        private static readonly encoding = new UTF8Encoding(false);
+        private static readonly UTF8Encoding encoding = new UTF8Encoding(false);
 
         [Route("user")]
         [HttpPost]
