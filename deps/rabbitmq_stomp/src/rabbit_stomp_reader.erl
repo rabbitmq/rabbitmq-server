@@ -44,7 +44,6 @@
 start_link(SupHelperPid, Ref, Sock, Configuration) ->
     Pid = proc_lib:spawn_link(?MODULE, init,
                               [[SupHelperPid, Ref, Sock, Configuration]]),
-
     {ok, Pid}.
 
 info(Pid, InfoItems) ->
