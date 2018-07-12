@@ -431,6 +431,37 @@ to the node
 .Qq rabbit@cordelia
 .sp
 .Dl rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia
+.Pp
+Note that this command only changes the local database.
+It is also necessary to rename the local database directories,
+and to configure the new node name.
+For example:
+.sp
+.Bl -bullet -compact
+.It
+Stop the node:
+.sp
+.Dl rabbitmqctl stop rabbit@misshelpful
+.sp
+.It
+Rename the node in the local database:
+.sp
+.Dl rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia
+.sp
+.It
+Rename the local database directories:
+.sp
+.Dl mv /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful /var/lib/rabbitmq/mnesia/rabbit\\@cordelia
+.Dl mv /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-rename /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-rename
+.Dl mv /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-plugins-expand /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-plugins-expand
+.sp
+.It
+Rename the node in
+.Ar /etc/rabbitmq/rabbitmq-env.conf
+.sp
+.It
+Start the node when ready
+.El
 .\" ------------------------------------
 .It Cm update_cluster_nodes Ar clusternode
 .Bl -tag -width Ds
