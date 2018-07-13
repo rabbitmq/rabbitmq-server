@@ -53,11 +53,13 @@ defmodule CloseConnectionCommandTest do
 
   test "run: a close connection request on an existing connection", context do
     with_connection("/", fn(_) ->
+      Process.sleep(500)
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
-      [[pid: pid]] = fetch_connections_pids(node, nodes)
+      [[pid: pid]] = fetch_connection_pids(node, nodes)
       assert :ok == @command.run([:rabbit_misc.pid_to_string(pid), "test"], %{node: node})
-      assert fetch_connections_pids(node, nodes) == []
+      Process.sleep(500)
+      assert fetch_connection_pids(node, nodes) == []
     end)
   end
 
@@ -79,15 +81,29 @@ defmodule CloseConnectionCommandTest do
     assert s =~ ~r/<rabbit@bananas.1.2.3>/
   end
 
-  defp fetch_connections_pids(node, nodes) do
-      RpcStream.receive_list_items(node,
-                                   :rabbit_networking,
-                                   :emit_connection_info_all,
-                                   [nodes, [:pid]],
-                                   :infinity,
-                                   [:pid],
-                                   Kernel.length(nodes))
-      |> Enum.to_list
+  defp fetch_connection_pids(node, nodes) do
+    fetch_connection_pids(node, nodes, 10)
+  end
+
+  defp fetch_connection_pids(node, nodes, retries) do
+      stream = RpcStream.receive_list_items(node,
+                                            :rabbit_networking,
+                                            :emit_connection_info_all,
+                                            [nodes, [:pid]],
+                                            :infinity,
+                                            [:pid],
+                                            Kernel.length(nodes))
+      xs = Enum.to_list(stream)
+
+      case {xs, retries} do
+        {xs, 0} ->
+          xs
+        {[], n} when n >= 0 ->
+          Process.sleep(100)
+          fetch_connection_pids(node, nodes, retries - 1)
+        _ ->
+          xs
+      end
   end
 
 end
