@@ -36,7 +36,8 @@
 
 start_conn_ch(Fun, Upstream, UParams,
               XorQName = #resource{virtual_host = DownVHost}, State) ->
-    case open_monitor(#amqp_params_direct{virtual_host = DownVHost}, get_connection_name(Upstream, UParams)) of
+    ConnName = get_connection_name(Upstream, UParams),
+    case open_monitor(#amqp_params_direct{virtual_host = DownVHost}, ConnName) of
         {ok, DConn, DCh} ->
             case Upstream#upstream.ack_mode of
                 'on-confirm' ->
@@ -46,7 +47,7 @@ start_conn_ch(Fun, Upstream, UParams,
                 _ ->
                     ok
             end,
-            case open_monitor(UParams#upstream_params.params, get_connection_name(Upstream, UParams)) of
+            case open_monitor(UParams#upstream_params.params, ConnName) of
                 {ok, Conn, Ch} ->
                     %% Don't trap exits until we have established
                     %% connections so that if we try to delete
