@@ -351,6 +351,7 @@ rabbitmqctl_encode_encrypt_decrypt(Secret) ->
     .
 
 rabbit_direct_extract_extra_auth_props(_Config) ->
+    {ok, CSC} = code_server_cache:start_link(),
     % no protocol to extract
     [] = rabbit_direct:extract_extra_auth_props(
         {<<"guest">>, <<"guest">>}, <<"/">>, 1,
@@ -368,6 +369,7 @@ rabbit_direct_extract_extra_auth_props(_Config) ->
     [] = rabbit_direct:extract_extra_auth_props(
         {<<"guest">>, <<"guest">>}, <<"/">>, -1,
         [{protocol, {'DUMMY_PROTOCOL', "1.0"}}]),
+    gen_server:stop(CSC),
     ok.
 
 %% -------------------------------------------------------------------
