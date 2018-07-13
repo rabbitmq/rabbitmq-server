@@ -53,9 +53,9 @@ validate_arg(Name, Type, Args) ->
 
 fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
 
-name(                 #resource{name = XName})  -> XName;
-name(#exchange{name = #resource{name = XName}}) -> XName;
-name(#amqqueue{name = #resource{name = QName}}) -> QName.
+name(                 #resource{name = XorQName})  -> XorQName;
+name(#exchange{name = #resource{name = XName}})    -> XName;
+name(#amqqueue{name = #resource{name = QName}})    -> QName.
 
 vhost(                 #resource{virtual_host = VHost})  -> VHost;
 vhost(#exchange{name = #resource{virtual_host = VHost}}) -> VHost;
