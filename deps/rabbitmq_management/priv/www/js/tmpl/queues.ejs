@@ -213,6 +213,20 @@
           <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
         <tr>
+          <th><label>Type:</label></th>
+          <td>
+            <select name="queuetype" onchange="select_queue_type(queuetype)">
+              <option value="classic">Classic</option>
+              <% if (queue_type == "quorum") { %>
+               <option value="quorum" selected>Quorum</option>
+              <% } else { %>
+               <option value="quorum">Quorum</option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+        <% if (queue_type == "classic") { %>
+        <tr>
           <th><label>Durability:</label></th>
           <td>
             <select name="durable">
@@ -245,6 +259,7 @@
             </select>
           </td>
         </tr>
+        <% } %>
         <tr>
           <th><label>Arguments:</label></th>
           <td>
@@ -253,17 +268,22 @@
               <tr>
                 <td>Add</td>
                 <td>
+                <% if (queue_type == "classic") { %>
                   <span class="argument-link" field="arguments" key="x-message-ttl" type="number">Message TTL</span> <span class="help" id="queue-message-ttl"></span> |
                   <span class="argument-link" field="arguments" key="x-expires" type="number">Auto expire</span> <span class="help" id="queue-expires"></span> |
                   <span class="argument-link" field="arguments" key="x-max-length" type="number">Max length</span> <span class="help" id="queue-max-length"></span> |
                   <span class="argument-link" field="arguments" key="x-max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span> |
                   <span class="argument-link" field="arguments" key="x-overflow" type="string">Overflow behaviour</span> <span class="help" id="queue-overflow"></span><br/>
+                <% } %>
                   <span class="argument-link" field="arguments" key="x-dead-letter-exchange" type="string">Dead letter exchange</span> <span class="help" id="queue-dead-letter-exchange"></span> |
-                  <span class="argument-link" field="arguments" key="x-dead-letter-routing-key" type="string">Dead letter routing key</span> <span class="help" id="queue-dead-letter-routing-key"></span> |
-                  <span class="argument-link" field="arguments" key="x-max-priority" type="number">Maximum priority</span> <span class="help" id="queue-max-priority"></span><br/>
+                  <span class="argument-link" field="arguments" key="x-dead-letter-routing-key" type="string">Dead letter routing key</span> <span class="help" id="queue-dead-letter-routing-key"></span>
+                <% if (queue_type == "classic") { %>
+                 | <span class="argument-link" field="arguments" key="x-max-priority" type="number">Maximum priority</span> <span class="help" id="queue-max-priority"></span>
+                  <br/>
                   <span class="argument-link" field="arguments" key="x-queue-mode" type="string" value="lazy">Lazy mode</span> <span class="help" id="queue-lazy"></span>
                   <span class="argument-link" field="arguments" key="x-queue-master-locator" type="string" value="">Master locator</span> <span class="help" id="queue-master-locator"></span>
                   <span class="argument-link" field="arguments" key="x-queue-type" type="string" value="">Queue type</span> <span class="help" id="queue-type"></span>
+                <% } %>
                 </td>
               </tr>
             </table>

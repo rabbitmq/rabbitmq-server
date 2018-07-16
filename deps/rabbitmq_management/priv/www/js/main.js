@@ -1345,6 +1345,14 @@ function collapse_multifields(params0) {
             }
         }
     }
+    if (params.hasOwnProperty('queuetype')) {
+        delete params['queuetype'];
+        params['arguments']['x-queue-type'] = queue_type;
+        if (queue_type == 'quorum') {
+            params['durable'] = true;
+            params['auto_delete'] = false;
+        }
+    }
     return params;
 }
 
@@ -1525,4 +1533,9 @@ function rename_multifield(params, from, to) {
         }
     }
     return new_params;
+}
+
+function select_queue_type(queuetype) {
+    queue_type = queuetype.value;
+    update();
 }
