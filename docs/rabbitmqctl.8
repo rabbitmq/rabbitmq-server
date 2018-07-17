@@ -433,11 +433,11 @@ to the node
 .Dl rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia
 .Pp
 Note that this command only changes the local database.
-It is also necessary to rename the local database directories,
+It may also be necessary to rename the local database directories,
 and to configure the new node name.
 For example:
 .sp
-.Bl -bullet -compact
+.Bl -enum -compact
 .It
 Stop the node:
 .sp
@@ -449,15 +449,24 @@ Rename the node in the local database:
 .Dl rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia
 .sp
 .It
-Rename the local database directories:
+Rename the local database directories (note, you do not need to do this if you have set the RABBITMQ_MNESIA_DIR environment variable):
 .sp
-.Dl mv /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful /var/lib/rabbitmq/mnesia/rabbit\\@cordelia
-.Dl mv /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-rename /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-rename
-.Dl mv /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-plugins-expand /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-plugins-expand
+.Bd -literal -offset indent -compact
+mv \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@cordelia
+mv \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-rename \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-rename
+mv \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-plugins-expand \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-plugins-expand
+.Ed
 .sp
 .It
-Rename the node in
+If you have
 .Ar /etc/rabbitmq/rabbitmq-env.conf
+and configured the node name there, update this configuration.
 .sp
 .It
 Start the node when ready
