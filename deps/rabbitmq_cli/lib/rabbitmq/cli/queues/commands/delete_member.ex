@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule RabbitMQ.CLI.Queues.Commands.AddMember do
+defmodule RabbitMQ.CLI.Queues.Commands.DeleteMember do
 
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
   alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
@@ -41,16 +41,16 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMember do
   def run([name, node] = args, %{vhost: vhost, node: node_name}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_quorum_queue,
-      :add_member, [vhost, name, to_atom(node)])
+      :delete_member, [vhost, name, to_atom(node)])
   end
 
   use RabbitMQ.CLI.DefaultOutput
 
   def banner([name, node], _) do
-    "Adding member #{node} to quorum queue #{name} cluster..."
+    "Deleting member #{node} from quorum queue #{name} cluster..."
   end
 
-  def usage, do: "add_member [-p <vhost>] <queuename> <node>"
+  def usage, do: "delete_member [-p <vhost>] <queuename> <node>"
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
 end
