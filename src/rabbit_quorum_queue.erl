@@ -30,6 +30,7 @@
 -export([rpc_delete_metrics/1]).
 -export([format/1]).
 -export([open_files/1]).
+-export([add_member/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -375,6 +376,52 @@ status(Vhost, QueueName) ->
                     Info
             end;
         {error, not_found} = E ->
+            E
+    end.
+
+add_member(VHost, Name, Node) ->
+    QName = #resource{virtual_host = VHost, name = Name, kind = queue},
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, #amqqueue{type = classic}} ->
+            {error, classic_queue_not_supported};
+        {ok, #amqqueue{quorum_nodes = QNodes} = Q} ->
+            case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) of
+                false ->
+                    {error, node_not_running};
+                true ->
+                    case lists:member(Node, QNodes) of
+                        true ->
+                            {error, already_a_member};
+                        false ->
+                            add_member(Q, Node)
+                    end
+            end;
+        {error, not_found} = E ->
+                    E
+    end.
+
+add_member(#amqqueue{pid = {RaName, _} = ServerRef, name = QName,
+                     quorum_nodes = QNodes} = Q, Node) ->
+    %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
+    NodeId = {RaName, Node},
+    case ra:start_node(RaName, NodeId, ra_machine(Q),
+                       [{RaName, N} || N <- QNodes]) of
+        ok ->
+            case ra:add_node(ServerRef, NodeId) of
+                {ok, _, Leader} ->
+                    Fun = fun(Q1) ->
+                                  Q1#amqqueue{quorum_nodes =
+                                                  [Node | Q1#amqqueue.quorum_nodes],
+                                              pid = Leader}
+                          end,
+                    rabbit_misc:execute_mnesia_transaction(
+                      fun() -> rabbit_amqqueue:update(QName, Fun) end),
+                    ok;
+                E ->
+                    %% TODO should we stop the ra process here?
+                    E
+            end;
+        {error, _} = E ->
             E
     end.
 

@@ -25,14 +25,19 @@
 all() ->
     [
       {group, single_node},
-      {group, clustered}
+      {group, clustered},
+      {group, unclustered}
     ].
 
 groups() ->
     [
      {single_node, [], all_tests()},
      {clustered, [], [
-                      {cluster_size_2, [], all_tests()},
+                      {cluster_size_2, [], [add_member_not_running,
+                                            add_member_classic,
+                                            add_member_already_a_member,
+                                            add_member_not_found]
+                       ++ all_tests()},
                       {cluster_size_3, [], [recover_from_single_failure,
                                             recover_from_multiple_failures,
                                             leadership_takeover,
@@ -44,7 +49,10 @@ groups() ->
                                            ]},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent]}
-                     ]}
+                     ]},
+     {unclustered, [], [
+                        {cluster_size_2, [], [add_member]}
+                       ]}
     ].
 
 all_tests() ->
@@ -103,6 +111,8 @@ init_per_group(single_node, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 1}]);
 init_per_group(clustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
+init_per_group(unclustered, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]);
 init_per_group(cluster_size_3, Config) ->
@@ -1243,6 +1253,63 @@ declare_during_node_down(Config) ->
     rabbit_ct_broker_helpers:start_node(Config, DownNode),
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
     ok.
+
+add_member_not_running(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({error, node_not_running},
+                 rpc:call(Node, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, 'rabbit@burrow'])).
+
+add_member_classic(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    CQ = <<"classic-q">>,
+    ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
+    ?assertEqual({error, classic_queue_not_supported},
+                 rpc:call(Node, rabbit_quorum_queue, add_member,
+                          [<<"/">>, CQ, Node])).
+
+add_member_already_a_member(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({error, already_a_member},
+                 rpc:call(Node, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, Node])).
+
+add_member_not_found(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({error, not_found},
+                 rpc:call(Node, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, Node])).
+
+add_member(Config) ->
+    [Node0, Node1] = Nodes0 =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({error, node_not_running},
+                 rpc:call(Node0, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, Node1])),
+    ok = rabbit_control_helper:command(stop_app, Node1),
+    ok = rabbit_control_helper:command(join_cluster, Node1, [atom_to_list(Node0)], []),
+    rabbit_control_helper:command(start_app, Node1),
+    ?assertEqual(ok, rpc:call(Node0, rabbit_quorum_queue, add_member,
+                              [<<"/">>, QQ, Node1])),
+    Info = rpc:call(Node0, rabbit_quorum_queue, infos,
+                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    Nodes = lists:sort(Nodes0),
+    ?assertEqual(Nodes, lists:sort(proplists:get_value(online, Info, []))).
 
 %%----------------------------------------------------------------------------
 
