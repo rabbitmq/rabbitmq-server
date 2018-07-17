@@ -41,18 +41,18 @@ end_per_suite(Config) ->
 %% Test Cases
 %%
 
--define(EXPIRATION_TIME, 2000).
+-define(UTIL_MOD, rabbit_auth_backend_uaa_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
 
 test_successful_access_with_a_token(_) ->
     %% Generate a token with JOSE
     %% Check authorization with the token
     %% Check user access granted by token
-    Jwk = fixture_jwk(),
+    Jwk = ?UTIL_MOD:fixture_jwk(),
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     Username = <<"username">>,
-    Token    = sign_token_hs(fixture_token(), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
 
 
     {ok, #auth_user{username = Username} = User} =
@@ -90,12 +90,12 @@ test_successful_access_with_a_token(_) ->
                          #{routing_key => <<"#/foo">>})).
 
 test_successful_access_with_a_token_that_has_tag_scopes(_) ->
-    Jwk = fixture_jwk(),
+    Jwk = ?UTIL_MOD:fixture_jwk(),
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
     Username = <<"username">>,
-    Token    = sign_token_hs(fixture_token([<<"rabbitmq.tag:management">>,
-                                            <<"rabbitmq.tag:policymaker">>]), Jwk),
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token([<<"rabbitmq.tag:management">>,
+                                                                <<"rabbitmq.tag:policymaker">>]), Jwk),
 
     {ok, #auth_user{username = Username, tags = [management, policymaker]}} =
         rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, Token}]).
@@ -104,7 +104,7 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
 
-    Jwk0 = fixture_jwk(),
+    Jwk0 = ?UTIL_MOD:fixture_jwk(),
     Jwk  = Jwk0#{<<"k">> => <<"bm90b2tlbmtleQ">>},
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     
@@ -115,8 +115,8 @@ test_restricted_vhost_access_with_a_valid_token(_) ->
     Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
 
-    Jwk   = fixture_jwk(),
-    Token = sign_token_hs(fixture_token(), Jwk),
+    Jwk   = ?UTIL_MOD:fixture_jwk(),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
 
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
 
@@ -131,8 +131,8 @@ test_insufficient_permissions_in_a_valid_token(_) ->
     Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
 
-    Jwk   = fixture_jwk(),
-    Token = sign_token_hs(fixture_token(), Jwk),
+    Jwk   = ?UTIL_MOD:fixture_jwk(),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
 
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
 
@@ -162,12 +162,12 @@ test_insufficient_permissions_in_a_valid_token(_) ->
 
 test_token_expiration(_) ->
     Username = <<"username">>,
-    Jwk = fixture_jwk(),
+    Jwk = ?UTIL_MOD:fixture_jwk(),
     application:set_env(uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
-    TokenData = expirable_token(),
+    TokenData = ?UTIL_MOD:expirable_token(),
     Username  = <<"username">>,
-    Token     = sign_token_hs(TokenData, Jwk),
+    Token     = ?UTIL_MOD:sign_token_hs(TokenData, Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Username, [{password, Token}]),
     ?assertEqual(true, rabbit_auth_backend_uaa:check_resource_access(
@@ -183,7 +183,7 @@ test_token_expiration(_) ->
                        name = <<"foo">>},
              write)),
 
-    wait_for_token_to_expire(),
+    ?UTIL_MOD:wait_for_token_to_expire(),
     #{<<"exp">> := Exp} = TokenData,
     ExpectedError = "Auth token expired at unix time: " ++ integer_to_list(Exp),
     ?assertEqual({error, ExpectedError},
@@ -199,13 +199,13 @@ test_token_expiration(_) ->
 
 test_command_json(_) ->
     Username = <<"username">>,
-    Jwk = fixture_jwk(),
-    Json = rabbit_json:encode(Jwk),
+    Jwk      = ?UTIL_MOD:fixture_jwk(),
+    Json     = rabbit_json:encode(Jwk),
     'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
         [<<"token-key">>],
         #{node => node(), json => Json}),
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, <<"rabbitmq">>),
-    Token = sign_token_hs(fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
@@ -226,7 +226,7 @@ test_command_pem_file(Config) ->
         [<<"token-key">>],
         #{node => node(), pem_file => PublicKeyFile}),
 
-    Token = sign_token_rsa(fixture_token(), Jwk, <<"token-key">>),
+    Token = ?UTIL_MOD:sign_token_rsa(?UTIL_MOD:fixture_token(), Jwk, <<"token-key">>),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
@@ -251,7 +251,7 @@ test_command_pem_file_no_kid(Config) ->
     %% Set default kid
     application:set_env(uaa_jwt, default_key, <<"token-key">>),
 
-    Token = sign_token_no_kid(fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_no_kid(?UTIL_MOD:fixture_token(), Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
@@ -270,7 +270,7 @@ test_command_pem(Config) ->
         [<<"token-key">>],
         #{node => node(), pem => Pem}),
 
-    Token = sign_token_rsa(fixture_token(), Jwk, <<"token-key">>),
+    Token = ?UTIL_MOD:sign_token_rsa(?UTIL_MOD:fixture_token(), Jwk, <<"token-key">>),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
@@ -293,7 +293,7 @@ test_command_pem_no_kid(Config) ->
     %% This is the default key
     application:set_env(uaa_jwt, default_key, <<"token-key">>),
 
-    Token = sign_token_no_kid(fixture_token(), Jwk),
+    Token = ?UTIL_MOD:sign_token_no_kid(?UTIL_MOD:fixture_token(), Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_uaa:user_login_authentication(Username, #{password => Token}),
 
@@ -338,59 +338,3 @@ test_validate_payload(_) ->
     ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID],
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
                  rabbit_auth_backend_uaa:validate_payload(KnownResourceServerId, ?RESOURCE_SERVER_ID)).
-
-expirable_token() ->
-    TokenPayload = fixture_token(),
-    TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(?EXPIRATION_TIME)}.
-
-wait_for_token_to_expire() ->
-    timer:sleep(?EXPIRATION_TIME).
-
-sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk) ->
-    sign_token_hs(Token, Jwk, TokenKey).
-
-sign_token_hs(Token, Jwk, TokenKey) ->
-    Jws = #{
-      <<"alg">> => <<"HS256">>,
-      <<"kid">> => TokenKey
-    },
-    sign_token(Token, Jwk, Jws).
-
-sign_token_rsa(Token, Jwk, TokenKey) ->
-    Jws = #{
-      <<"alg">> => <<"RS256">>,
-      <<"kid">> => TokenKey
-    },
-    sign_token(Token, Jwk, Jws).
-
-sign_token_no_kid(Token, Jwk) ->
-    Signed = jose_jwt:sign(Jwk, Token),
-    jose_jws:compact(Signed).
-
-sign_token(Token, Jwk, Jws) ->
-    Signed = jose_jwt:sign(Jwk, Jws, Token),
-    jose_jws:compact(Signed).
-
-fixture_jwk() ->
-    #{<<"alg">> => <<"HS256">>,
-      <<"k">> => <<"dG9rZW5rZXk">>,
-      <<"kid">> => <<"token-key">>,
-      <<"kty">> => <<"oct">>,
-      <<"use">> => <<"sig">>,
-      <<"value">> => <<"tokenkey">>}.
-
-fixture_token() ->
-    fixture_token([]).
-
-fixture_token(ExtraScopes) ->
-    Scope = [<<"rabbitmq.configure:vhost/foo">>,
-             <<"rabbitmq.write:vhost/foo">>,
-             <<"rabbitmq.read:vhost/foo">>,
-             <<"rabbitmq.read:vhost/bar">>,
-             <<"rabbitmq.read:vhost/bar/%23%2Ffoo">>] ++ ExtraScopes,
-    #{<<"exp">> => os:system_time(seconds) + 3000,
-      <<"kid">> => <<"token-key">>,
-      <<"iss">> => <<"unit_test">>,
-      <<"foo">> => <<"bar">>,
-      <<"aud">> => [<<"rabbitmq">>],
-      <<"scope">> => Scope}.
