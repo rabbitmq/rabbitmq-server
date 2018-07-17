@@ -40,7 +40,7 @@ Dependencies are being resolved by `erlang.mk`
 ### Building Standalone Executables
 
 This repo produces a `rabbitmqctl` executable which can be used as different tools
-(`rabbitmq-plugins`, `rabbitmq-diagnostics`) by copying or symlinking it with different names.
+(`rabbitmq-plugins`, `rabbitmq-diagnostics`, `rabbitmq-queues`) by copying or symlinking it with different names.
 Depending on the name, a different set of commands will be loaded and available, including
 for `--help`.
 
@@ -95,7 +95,7 @@ There are also a number of optional callbacks:
  * `usage_additional`: extra values appended to the `usage` output
    to provide additional command-specific documentation.
  * `scopes`: what scopes this command appears in. Scopes associate
-   tools (e.g. `rabbitmqctl`, `rabbitmq-diagnostics`) with commands.
+   tools (e.g. `rabbitmqctl`, `rabbitmq-diagnostics`, `rabbitmq-queues`) with commands.
  * `distribution`: control erlang distribution.
    Can be `:cli` (default), `:none` or `{:fun, fun}`
 
