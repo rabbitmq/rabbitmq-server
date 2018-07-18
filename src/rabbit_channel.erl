@@ -1382,16 +1382,28 @@ handle_method(#'basic.recover_async'{requeue = true},
                              queue_states = QueueStates0}) ->
     OkFun = fun () -> ok end,
     UAMQL = queue:to_list(UAMQ),
-    foreach_per_queue(
-      fun (QPid, MsgIds, _Acc) ->
-              rabbit_misc:with_exit_handler(
-                OkFun,
-                fun () -> rabbit_amqqueue:requeue(QPid, MsgIds, self()) end)
-      end, lists:reverse(UAMQL), QueueStates0),
+    QueueStates =
+        foreach_per_queue(
+          fun ({QPid, CTag}, MsgIds, Acc0) ->
+                  rabbit_misc:with_exit_handler(
+                    OkFun,
+                    fun () ->
+                            {ok, Acc} = rabbit_amqqueue:requeue(QPid, {CTag, MsgIds}, self(), Acc0),
+                            Acc
+                    end);
+              (QPid, MsgIds, Acc0) ->
+                  rabbit_misc:with_exit_handler(
+                    OkFun,
+                    fun () ->
+                            _ = rabbit_amqqueue:requeue(QPid, MsgIds, self(), Acc0),
+                            Acc0
+                    end)
+          end, lists:reverse(UAMQL), QueueStates0),
     ok = notify_limiter(Limiter, UAMQL),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
-    {noreply, State#ch{unacked_message_q = queue:new()}};
+    {noreply, State#ch{unacked_message_q = queue:new(),
+                       queue_states = QueueStates}};
 
 handle_method(#'basic.recover_async'{requeue = false}, _, _State) ->
     rabbit_misc:protocol_error(not_implemented, "requeue=false", []);

@@ -97,7 +97,8 @@ all_tests() ->
      basic_cancel,
      purge,
      sync_queue,
-     cancel_sync_queue
+     cancel_sync_queue,
+     basic_recover
     ].
 
 %% -------------------------------------------------------------------
@@ -1356,6 +1357,23 @@ delete_member(Config) ->
                  rpc:call(Node, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, Node])).
 
+basic_recover(Config) ->
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
+    amqp_channel:cast(Ch, #'basic.recover'{requeue = true}),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->

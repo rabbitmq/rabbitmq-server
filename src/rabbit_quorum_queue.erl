@@ -32,6 +32,7 @@
 -export([open_files/1]).
 -export([add_member/3]).
 -export([delete_member/3]).
+-export([requeue/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -352,6 +353,9 @@ stat(_Q) ->
 
 purge(Node) ->
     ra_fifo_client:purge(Node).
+
+requeue(ConsumerTag, MsgIds, FState) ->
+    ra_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, FState).
 
 cluster_state(Name) ->
     case whereis(Name) of

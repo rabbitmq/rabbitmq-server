@@ -25,7 +25,7 @@
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, deliver/3, requeue/3, ack/4, reject/5]).
+         stat/1, deliver/2, deliver/3, requeue/4, ack/4, reject/5]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
@@ -159,7 +159,7 @@
 -spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery(), #{Name :: atom() => ra_fifo_client:state()} | 'untracked') ->
                         {qpids(), #{Name :: atom() => ra_fifo_client:state()}}.
 -spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery()) -> 'ok'.
--spec requeue(pid(), [msg_id()],  pid()) -> 'ok'.
+-spec requeue(pid(), [msg_id()],  pid(), #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
 -spec ack(pid(), [msg_id()], pid(), #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
 -spec reject(pid() | {atom(), node()}, [msg_id()], boolean(), pid(),
              #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
@@ -995,8 +995,17 @@ purge(#amqqueue{ pid = QPid, type = classic}) ->
 purge(#amqqueue{ pid = NodeId, type = quorum}) ->
     rabbit_quorum_queue:purge(NodeId).
 
-requeue(QPid, MsgIds, ChPid) ->
-    delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]}).
+requeue(QPid, MsgIds, ChPid, _QuorumStates) when is_pid(QPid) ->
+    delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]});
+requeue({Name, _}, {CTag, MsgIds}, _ChPid, QuorumStates) ->
+    case QuorumStates of
+        #{Name := QState0} ->
+            {ok, QState} = rabbit_quorum_queue:requeue(CTag, MsgIds, QState0),
+            {ok, maps:put(Name, QState, QuorumStates)};
+        _ ->
+            % queue was not found
+            {ok, QuorumStates}
+    end.
 
 ack(QPid, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]});
