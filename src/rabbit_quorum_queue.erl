@@ -31,6 +31,7 @@
 -export([format/1]).
 -export([open_files/1]).
 -export([add_member/3]).
+-export([delete_member/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -422,6 +423,42 @@ add_member(#amqqueue{pid = {RaName, _} = ServerRef, name = QName,
                     E
             end;
         {error, _} = E ->
+            E
+    end.
+
+delete_member(VHost, Name, Node) ->
+    QName = #resource{virtual_host = VHost, name = Name, kind = queue},
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, #amqqueue{type = classic}} ->
+            {error, classic_queue_not_supported};
+        {ok, #amqqueue{quorum_nodes = QNodes} = Q} ->
+            case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) of
+                false ->
+                    {error, node_not_running};
+                true ->
+                    case lists:member(Node, QNodes) of
+                        false ->
+                            {error, not_a_member};
+                        true ->
+                            delete_member(Q, Node)
+                    end
+            end;
+        {error, not_found} = E ->
+                    E
+    end.
+
+delete_member(#amqqueue{pid = {RaName, _}, name = QName}, Node) ->
+    NodeId = {RaName, Node},
+    case ra:leave_and_delete_node(NodeId) of
+        ok ->
+            Fun = fun(Q1) ->
+                          Q1#amqqueue{quorum_nodes =
+                                          lists:delete(Node, Q1#amqqueue.quorum_nodes)}
+                  end,
+            rabbit_misc:execute_mnesia_transaction(
+              fun() -> rabbit_amqqueue:update(QName, Fun) end),
+            ok;
+        E ->
             E
     end.
 
