@@ -8,13 +8,6 @@
 %% API
 %%
 
-expirable_token() ->
-    TokenPayload = fixture_token(),
-    TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(?EXPIRATION_TIME)}.
-
-wait_for_token_to_expire() ->
-    timer:sleep(?EXPIRATION_TIME).
-
 sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk) ->
     sign_token_hs(Token, Jwk, TokenKey).
 
@@ -48,8 +41,29 @@ fixture_jwk() ->
       <<"use">> => <<"sig">>,
       <<"value">> => <<"tokenkey">>}.
 
+full_permission_scopes() ->
+    [<<"rabbitmq.configure:*/*">>,
+     <<"rabbitmq.write:*/*">>,
+     <<"rabbitmq.read:*/*">>].
+
+expirable_token() ->
+    TokenPayload = fixture_token(),
+    TokenPayload#{<<"exp">> := os:system_time(seconds) + timer:seconds(?EXPIRATION_TIME)}.
+
+wait_for_token_to_expire() ->
+    timer:sleep(?EXPIRATION_TIME).
+
+expired_token() ->
+    expired_token_with_scopes(full_permission_scopes()).
+
+expired_token_with_scopes(Scopes) ->
+    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) - timer:seconds(10)).
+
 fixture_token_with_scopes(Scopes) ->
-    #{<<"exp">> => os:system_time(seconds) + 3000,
+    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) + timer:seconds(10)).
+
+token_with_scopes_and_expiration(Scopes, Expiration) ->
+    #{<<"exp">> => Expiration,
       <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
@@ -66,11 +80,6 @@ fixture_token(ExtraScopes) ->
               <<"rabbitmq.read:vhost/bar">>,
               <<"rabbitmq.read:vhost/bar/%23%2Ffoo">>] ++ ExtraScopes,
     fixture_token_with_scopes(Scopes).
-
-full_permission_scopes() ->
-    [<<"rabbitmq.configure:*/*">>,
-     <<"rabbitmq.write:*/*">>,
-     <<"rabbitmq.read:*/*">>].
 
 fixture_token_with_full_permissions() ->
     fixture_token_with_scopes(full_permission_scopes()).

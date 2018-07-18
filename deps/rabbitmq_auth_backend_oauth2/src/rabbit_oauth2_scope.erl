@@ -16,7 +16,7 @@
 
 -module(rabbit_oauth2_scope).
 
--export([vhost_access/2, resource_access/3, topic_access/4]).
+-export([vhost_access/2, resource_access/3, topic_access/4, concat_scopes/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -25,20 +25,22 @@
 %% API functions --------------------------------------------------------------
 -spec vhost_access(binary(), [binary()]) -> boolean().
 vhost_access(VHost, Scopes) ->
+    PermissionScopes = get_scope_permissions(Scopes),
     lists:any(
-        fun({ScopeVHost, _, _, _}) ->
-            wildcard:match(VHost, ScopeVHost)
+        fun({VHostPattern, _, _, _}) ->
+            wildcard:match(VHost, VHostPattern)
         end,
-        get_scope_permissions(Scopes)).
+        PermissionScopes).
 
 -spec resource_access(rabbit_types:r(atom()), permission(), [binary()]) -> boolean().
 resource_access(#resource{virtual_host = VHost, name = Name},
                 Permission, Scopes) ->
+    rabbit_log:info("VHost: '~s', scopes: ~p", [VHost, Scopes]),
     lists:any(
-        fun({ScopeVHost, ScopeName, _, ScopePermission}) ->
-            wildcard:match(VHost, ScopeVHost) andalso
-            wildcard:match(Name, ScopeName) andalso
-            Permission =:= ScopePermission
+        fun({VHostPattern, NamePattern, _, ScopeGrantedPermission}) ->
+            wildcard:match(VHost, VHostPattern) andalso
+            wildcard:match(Name, NamePattern) andalso
+            Permission =:= ScopeGrantedPermission
         end,
         get_scope_permissions(Scopes)).
 
@@ -47,12 +49,12 @@ topic_access(#resource{virtual_host = VHost, name = ExchangeName},
              #{routing_key := RoutingKey},
              Scopes) ->
     lists:any(
-        fun({ScopeVHost, ScopeExchangeName, ScopeRoutingKey, ScopePermission}) ->
-            is_binary(ScopeRoutingKey) andalso
-            wildcard:match(VHost, ScopeVHost) andalso
-            wildcard:match(ExchangeName, ScopeExchangeName) andalso
-            wildcard:match(RoutingKey, ScopeRoutingKey) andalso
-            Permission =:= ScopePermission
+        fun({VHostPattern, ExchangeNamePattern, RoutingKeyPattern, ScopeGrantedPermission}) ->
+            is_binary(RoutingKeyPattern) andalso
+            wildcard:match(VHost, VHostPattern) andalso
+            wildcard:match(ExchangeName, ExchangeNamePattern) andalso
+            wildcard:match(RoutingKey, RoutingKeyPattern) andalso
+            Permission =:= ScopeGrantedPermission
         end,
         get_scope_permissions(Scopes)).
 
@@ -68,6 +70,10 @@ get_scope_permissions(Scopes) when is_list(Scopes) ->
             end
         end,
         Scopes).
+
+-spec concat_scopes([binary()], string()) -> string().
+concat_scopes(Scopes, Separator) when is_list(Scopes) ->
+    lists:concat(lists:join(Separator, lists:map(fun rabbit_data_coercion:to_list/1, Scopes))).
 
 -spec parse_permission_pattern(binary()) -> {rabbit_types:r(pattern), permission()}.
 parse_permission_pattern(<<"read:", ResourcePatternBin/binary>>) ->
@@ -92,4 +98,3 @@ parse_resource_pattern(Pattern, Permission) ->
             {VhostPattern, NamePattern, RoutingKeyPattern, Permission};
         _Other -> ignore
     end.
-

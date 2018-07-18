@@ -65,7 +65,9 @@ check_vhost_access(#auth_user{impl = DecodedToken},
                    VHost, _Sock) ->
     with_decoded_token(DecodedToken,
         fun() ->
-            Scopes = get_scopes(DecodedToken),
+            Scopes      = get_scopes(DecodedToken),
+            ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
+            rabbit_log:debug("Matching virtual host '~s' against the following scopes: ~s", [VHost, ScopeString]),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
