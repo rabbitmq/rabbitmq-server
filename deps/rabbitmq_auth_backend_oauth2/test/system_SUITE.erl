@@ -41,7 +41,8 @@ groups() ->
                       ]},
      {unhappy_path, [], [
                        test_failed_connection_with_expired_token,
-                       test_failed_connection_with_a_non_token
+                       test_failed_connection_with_a_non_token,
+                       test_failed_connection_with_a_token_with_insufficient_permission
                       ]}
     ].
 
@@ -165,3 +166,10 @@ test_failed_connection_with_expired_token(Config) ->
 test_failed_connection_with_a_non_token(Config) ->
     ?assertMatch({error, {auth_failure, _}},
                  open_unmanaged_connection(Config, 0, <<"avhost">>, <<"username">>, <<"a-non-token-value">>)).
+
+test_failed_connection_with_a_token_with_insufficient_permission(Config) ->
+    {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:alt-vhost/*">>,
+                                                   <<"rabbitmq.write:alt-vhost/*">>,
+                                                   <<"rabbitmq.read:alt-vhost/*">>]),
+    ?assertEqual({error, not_allowed},
+                 open_unmanaged_connection(Config, 0, <<"off-limits-vhost">>, <<"username">>, Token)).
