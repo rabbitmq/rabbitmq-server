@@ -22,9 +22,6 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
--define(IGNORE_FIELDS, [delete_after]).
--define(EXTRA_KEYS, [add_forward_headers, add_timestamp_header]).
-
 resolve_module(amqp091) -> rabbit_amqp091_shovel;
 resolve_module(amqp10) -> rabbit_amqp10_shovel.
 
