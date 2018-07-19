@@ -35,7 +35,6 @@ vhost_access(VHost, Scopes) ->
 -spec resource_access(rabbit_types:r(atom()), permission(), [binary()]) -> boolean().
 resource_access(#resource{virtual_host = VHost, name = Name},
                 Permission, Scopes) ->
-    rabbit_log:info("VHost: '~s', scopes: ~p", [VHost, Scopes]),
     lists:any(
         fun({VHostPattern, NamePattern, _, ScopeGrantedPermission}) ->
             wildcard:match(VHost, VHostPattern) andalso

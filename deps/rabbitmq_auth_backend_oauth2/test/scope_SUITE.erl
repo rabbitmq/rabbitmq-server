@@ -257,7 +257,6 @@ permission_topic(_Config) ->
         RoutingKey <- [<<"foo">>, <<"bar">>]].
 
 vhost_allowed(Vhost, Scopes) when is_list(Scopes) ->
-    ct:pal("Scopes: ~p, vhost: ~p, result: ~p", [Scopes, Vhost, rabbit_oauth2_scope:vhost_access(Vhost, Scopes)]),
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(Vhost, Scopes));
 
 vhost_allowed(Vhost, Scope) ->

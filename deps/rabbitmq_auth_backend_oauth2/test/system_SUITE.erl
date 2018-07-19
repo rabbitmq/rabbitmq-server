@@ -42,7 +42,8 @@ groups() ->
      {unhappy_path, [], [
                        test_failed_connection_with_expired_token,
                        test_failed_connection_with_a_non_token,
-                       test_failed_connection_with_a_token_with_insufficient_permission
+                       test_failed_connection_with_a_token_with_insufficient_vhost_permission,
+                       test_failed_connection_with_a_token_with_insufficient_resource_permission
                       ]}
     ].
 
@@ -67,17 +68,23 @@ end_per_suite(Config) ->
 
 init_per_group(_Group, Config) ->
     %% The broker is managed by {init,end}_per_testcase().
-    rabbit_ct_broker_helpers:add_vhost(Config, <<"avhost">>),
+    lists:foreach(fun(Value) ->
+                          rabbit_ct_broker_helpers:add_vhost(Config, Value)
+                  end,
+                  [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>]),
     Config.
 
 end_per_group(_Group, Config) ->
     %% The broker is managed by {init,end}_per_testcase().
-    rabbit_ct_broker_helpers:delete_vhost(Config, <<"avhost">>),
+    lists:foreach(fun(Value) ->
+                          rabbit_ct_broker_helpers:delete_vhost(Config, Value)
+                  end,
+                  [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>]),
     Config.
 
 
 init_per_testcase(test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost = Testcase, Config) ->
-    rabbit_ct_broker_helpers:add_vhost(Config, <<"avhost">>),
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
@@ -86,12 +93,12 @@ init_per_testcase(Testcase, Config) ->
     Config.
 
 end_per_testcase(test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost = Testcase, Config) ->
-    rabbit_ct_broker_helpers:add_vhost(Config, <<"avhost">>),
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
 end_per_testcase(Testcase, Config) ->
-    rabbit_ct_broker_helpers:delete_vhost(Config, <<"avhost">>),
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
     rabbit_ct_helpers:testcase_finished(Config, Testcase),
     Config.
 
@@ -145,10 +152,10 @@ test_successful_connection_with_a_full_permission_token_and_all_defaults(Config)
     close_connection_and_channel(Conn, Ch).
 
 test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost(Config) ->
-    {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:avhost/*">>,
-                                                   <<"rabbitmq.write:avhost/*">>,
-                                                   <<"rabbitmq.read:avhost/*">>]),
-    Conn     = open_unmanaged_connection(Config, 0, <<"avhost">>, <<"username">>, Token),
+    {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
+                                                   <<"rabbitmq.write:vhost1/*">>,
+                                                   <<"rabbitmq.read:vhost1/*">>]),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
@@ -157,19 +164,29 @@ test_successful_connection_with_a_full_permission_token_and_explicitly_configure
 
 
 test_failed_connection_with_expired_token(Config) ->
-    {_Algo, Token} = generate_expired_token(Config, [<<"rabbitmq.configure:avhost/*">>,
-                                                     <<"rabbitmq.write:avhost/*">>,
-                                                     <<"rabbitmq.read:avhost/*">>]),
+    {_Algo, Token} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
+                                                     <<"rabbitmq.write:vhost1/*">>,
+                                                     <<"rabbitmq.read:vhost1/*">>]),
     ?assertEqual({error, not_allowed},
-                 open_unmanaged_connection(Config, 0, <<"avhost">>, <<"username">>, Token)).
+                 open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
 
 test_failed_connection_with_a_non_token(Config) ->
     ?assertMatch({error, {auth_failure, _}},
-                 open_unmanaged_connection(Config, 0, <<"avhost">>, <<"username">>, <<"a-non-token-value">>)).
+                 open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, <<"a-non-token-value">>)).
 
-test_failed_connection_with_a_token_with_insufficient_permission(Config) ->
+test_failed_connection_with_a_token_with_insufficient_vhost_permission(Config) ->
     {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:alt-vhost/*">>,
                                                    <<"rabbitmq.write:alt-vhost/*">>,
                                                    <<"rabbitmq.read:alt-vhost/*">>]),
     ?assertEqual({error, not_allowed},
                  open_unmanaged_connection(Config, 0, <<"off-limits-vhost">>, <<"username">>, Token)).
+
+test_failed_connection_with_a_token_with_insufficient_resource_permission(Config) ->
+    {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost2/jwt*">>,
+                                                   <<"rabbitmq.write:vhost2/jwt*">>,
+                                                   <<"rabbitmq.read:vhost2/jwt*">>]),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost2">>, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
+       amqp_channel:call(Ch, #'queue.declare'{queue = <<"alt-prefix.eq.1">>, exclusive = true})),
+    close_connection(Conn).
