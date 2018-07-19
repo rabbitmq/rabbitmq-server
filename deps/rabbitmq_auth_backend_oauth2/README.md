@@ -1,16 +1,17 @@
-# RabbitMQ authorisation Backend for [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa)
+# OAuth 2 (JWT) Token Authorisation Backend for RabbitMQ
 
-This [RabbitMQ authentication/authorisation backend](http://www.rabbitmq.com/access-control.html) plugin lets [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa)
-(OAuth 2.0) access tokens to be used by RabbitMQ client connections.
+This **experimental** [RabbitMQ authentication/authorisation backend](http://www.rabbitmq.com/access-control.html) plugin lets applications (clients)
+and users authenticate and authorize using JWT-encoded [OAuth 2 access tokens](https://tools.ietf.org/html/rfc6749#section-1.4).
 
-This plugin is **experimental** and targets RabbitMQ 3.7.0 only.
+It is not specific to but developed against [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa).
+
+OAuth 2 primers are available [elsewhere on the Web](https://auth0.com/blog/oauth2-the-complete-guide/).
+
 
 ## Supported RabbitMQ Versions
 
-This plugins is developed for RabbitMQ 3.7 (currently in development).
-This plugin **does not target** RabbitMQ 3.6.x release series.
-
-To test the plugin it has to be [built from source together with RabbitMQ](https://github.com/rabbitmq/rabbitmq-public-umbrella).
+This plugins is developed for RabbitMQ 3.8 (currently in development) and has to be built
+against compatible RabbitMQ server, e.g. using the [umbrella repository](https://github.com/rabbitmq/rabbitmq-public-umbrella).
 
 
 ## How it Works
@@ -235,12 +236,13 @@ RABBITMQCTL=<path_to_rabbitmqctl> demo/setup.sh
 
 Please refer to `demo/setup.sh` to get more info about configuring UAA permissions.
 
-The script will return an access tokens, which can be used to authorise
-in RabbitMQ. When authorising, you should use the token as a **username**.
+The script will return an access tokens, which can be used to authenticate and authorise
+in RabbitMQ. When connecting, pass the token in the **password** field. The username
+field will be ignored as long as the token provides a client ID.
 
 
 ## License and Copyright
 
-(c) 2016-2017 Pivotal Software Inc.
+(c) 2016-2018 Pivotal Software Inc.
 
 Released under the Mozilla Public License 1.1, same as RabbitMQ.
