@@ -11,10 +11,10 @@
 %% The Original Code is RabbitMQ HTTP authentication.
 %%
 %% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_auth_backend_uaa).
+-module(rabbit_auth_backend_oauth2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -114,7 +114,7 @@ check_token(Token) ->
     end.
 
 validate_payload(#{<<"scope">> := _Scope, <<"aud">> := _Aud} = DecodedToken) ->
-    ResourceServerId = rabbit_data_coercion:to_binary(application:get_env(rabbitmq_auth_backend_uaa,
+    ResourceServerId = rabbit_data_coercion:to_binary(application:get_env(rabbitmq_auth_backend_oauth2,
                                                                           resource_server_id, <<>>)),
     validate_payload(DecodedToken, ResourceServerId).
 

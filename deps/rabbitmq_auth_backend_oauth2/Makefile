@@ -1,4 +1,4 @@
-PROJECT = rabbitmq_auth_backend_uaa
+PROJECT = rabbitmq_auth_backend_oauth2
 PROJECT_DESCRIPTION = OAuth 2 and JWT-based AuthN and AuthZ backend
 
 BUILD_DEPS = rabbit_common

@@ -1,4 +1,4 @@
--module(rabbit_auth_backend_uaa_test_util).
+-module(rabbit_auth_backend_oauth2_test_util).
 
 -compile(export_all).
 

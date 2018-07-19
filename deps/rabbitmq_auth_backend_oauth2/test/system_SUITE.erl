@@ -51,7 +51,7 @@ groups() ->
 %% Setup and Teardown
 %%
 
--define(UTIL_MOD, rabbit_auth_backend_uaa_test_util).
+-define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
 
 init_per_suite(Config) ->
@@ -104,12 +104,12 @@ end_per_testcase(Testcase, Config) ->
 
 preconfigure_node(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                      [rabbit, auth_backends, [rabbit_auth_backend_uaa]]),
+                                      [rabbit, auth_backends, [rabbit_auth_backend_oauth2]]),
     Jwk   = ?UTIL_MOD:fixture_jwk(),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                      [rabbitmq_auth_backend_uaa, resource_server_id, ?RESOURCE_SERVER_ID]),
+                                      [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
 
     rabbit_ct_helpers:set_config(Config, {fixture_jwk, Jwk}).
 

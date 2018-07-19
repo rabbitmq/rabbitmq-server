@@ -30,7 +30,7 @@ of this plugin.
 To use this plugin
 
 1. A symmetrically encrypted JWT token containing a set of RabbitMQ permission scopes.
-2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_uaa` backend](http://www.rabbitmq.com/access-control.html)
+2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_oauth2` backend](http://www.rabbitmq.com/access-control.html)
 3. All RabbitMQ nodes must be configure with a resource service ID (`resource_server_id`) that matches the scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`).
 
 ### Authorization Flow
@@ -77,7 +77,7 @@ it will translate into the following configuration (in the [advanced RabbitMQ co
 [
   %% ...
   %% backend configuration
-  {rabbitmq_auth_backend_uaa, [{resource_server_id, <<"my_rabbit_server">>}]},
+  {rabbitmq_auth_backend_oauth2, [{resource_server_id, <<"my_rabbit_server">>}]},
   %% UAA signing key configuration
   {uaa_jwt, [
     {signing_keys, #{
@@ -100,7 +100,7 @@ VwIDAQAB
 If you are using a symmetric key, the configuration will look like this:
 
 ```erlang
-[ {rabbitmq_auth_backend_uaa, [{resource_server_id, <<"my_rabbit_server">>}]},
+[ {rabbitmq_auth_backend_oauth2, [{resource_server_id, <<"my_rabbit_server">>}]},
   {uaa_jwt, [
     {signing_keys, #{
         <<"a-key-ID">> => {map, #{<<"kty">> => <<"MAC">>,
@@ -206,7 +206,7 @@ RABBITMQ_CONFIG_FILE=<path_to_plugin>/demo/symmetric_keys/rabbitmq rabbitmq-serv
 make run-broker RABBITMQ_CONFIG_FILE=demo/symmetric_keys/rabbitmq
 ```
 
-The `rabbitmq_auth_backend_uaa` plugin must be enabled on the RabbitMQ node.
+The `rabbitmq_auth_backend_oauth2` plugin must be enabled on the RabbitMQ node.
 
 #### Asymmetric Key Example
 
