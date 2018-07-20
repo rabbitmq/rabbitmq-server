@@ -38,9 +38,7 @@ case "$erlang_version" in
     fi
     ;;
   21.0)
-    if test -z "$erlang_git_ref"; then
-      erlang_git_ref='OTP-21.0'
-    fi
+    readonly erlang_package_version="1:$erlang_version-1"
     ;;
   20.[1-3])
     readonly erlang_package_version="1:$erlang_version-1"
