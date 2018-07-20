@@ -60,14 +60,14 @@ uaac token owner get rabbit_client rabbit_nosuper -s rabbit_secret -p rabbit_nos
 echo "Auth info for rabbit_nosuper user
 This user will have read access to uaa_vhost resources,
 which name start with some and write access to all uaa_vhost resources.
-Use access_token as a RabbitMQ username"
+Use access_token as a RabbitMQ password, the username is ignored"
 echo
 uaac context rabbit_nosuper
 echo
 
 echo "Auth info for rabbit_super user
 This user will have full access to all rabbitmq vhosts.
-Use access_token as a RabbitMQ username"
+Use access_token as a RabbitMQ password, the username is ignored"
 echo
 uaac context rabbit_super
 echo

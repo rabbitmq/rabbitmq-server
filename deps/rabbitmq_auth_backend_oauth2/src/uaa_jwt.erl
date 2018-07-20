@@ -11,7 +11,6 @@
 
 -include_lib("jose/include/jose_jwk.hrl").
 
-
 -type key_type() :: json | pem | map.
 
 -spec add_signing_key(binary(), key_type(), binary() | map()) -> {ok, map()} | {error, term()}.
@@ -19,16 +18,30 @@
 add_signing_key(KeyId, Type, Value) ->
     case verify_signing_key(Type, Value) of
         ok ->
-            NewSigningKeys = maps:put(KeyId, {Type, Value}, signing_keys()),
-            {ok, application:set_env(uaa_jwt, signing_keys, NewSigningKeys)};
+            SigningKeys0 = signing_keys(),
+            SigningKeys1 = maps:put(KeyId, {Type, Value}, SigningKeys0),
+            ok = update_uaa_jwt_signing_keys(SigningKeys1),
+            {ok, SigningKeys1};
         {error, _} = Err ->
             Err
     end.
 
 remove_signing_key(KeyId) ->
-    Keys = application:get_env(uaa_jwt, signing_keys, #{}),
-    application:set_env(uaa_jwt, signing_keys, maps:remove(KeyId, Keys)).
+    UaaEnv = application:get_env(rabbitmq_auth_backend_oauth2, uaa_jwt, []),
+    Keys0 = proplists:get_value(signing_keys, UaaEnv),
+    Keys1 = maps:remove(KeyId, Keys0),
+    update_uaa_jwt_signing_keys(UaaEnv, Keys1).
 
+-spec update_uaa_jwt_signing_keys(map()) -> ok.
+update_uaa_jwt_signing_keys(SigningKeys) ->
+    UaaEnv0 = application:get_env(rabbitmq_auth_backend_oauth2, uaa_jwt, []),
+    update_uaa_jwt_signing_keys(UaaEnv0, SigningKeys).
+
+-spec update_uaa_jwt_signing_keys([term()], map()) -> ok.
+update_uaa_jwt_signing_keys(UaaEnv0, SigningKeys) ->
+    UaaEnv1 = proplists:delete(signing_keys, UaaEnv0),
+    UaaEnv2 = [{signing_keys, SigningKeys} | UaaEnv1],
+    application:set_env(rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv2).
 
 -spec decode_and_verify(binary()) -> {boolean(), map()} | {error, term()}.
 decode_and_verify(Token) ->
@@ -43,7 +56,6 @@ decode_and_verify(Token) ->
         {error, _} = Err ->
             Err
     end.
-
 
 -spec get_jwk(binary()) -> {ok, map()} | {error, term()}.
 get_jwk(KeyId) ->
@@ -79,8 +91,8 @@ verify_signing_key(Type, Value) ->
     end.
 
 signing_keys() ->
-    application:get_env(uaa_jwt, signing_keys, #{}).
-
+    UaaEnv = application:get_env(rabbitmq_auth_backend_oauth2, uaa_jwt, []),
+    proplists:get_value(signing_keys, UaaEnv).
 
 -spec client_id(map()) -> binary() | undefined.
 client_id(DecodedToken) ->

@@ -78,13 +78,14 @@ it will translate into the following configuration (in the [advanced RabbitMQ co
 [
   %% ...
   %% backend configuration
-  {rabbitmq_auth_backend_oauth2, [{resource_server_id, <<"my_rabbit_server">>}]},
-  %% UAA signing key configuration
-  {uaa_jwt, [
-    {signing_keys, #{
+  {rabbitmq_auth_backend_oauth2, [
+    {resource_server_id, <<"my_rabbit_server">>},
+    %% UAA signing key configuration
+    {uaa_jwt, [
+      {signing_keys, #{
         <<"a-key-ID">> => {map, #{<<"kty">> => <<"RSA">>,
-                                          <<"alg">> => <<"RS256">>,
-                                          <<"value">> => <<"-----BEGIN PUBLIC KEY-----
+                                  <<"alg">> => <<"RS256">>,
+                                  <<"value">> => <<"-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2dP+vRn+Kj+S/oGd49kq
 6+CKNAduCC1raLfTH7B3qjmZYm45yDl+XmgK9CNmHXkho9qvmhdksdzDVsdeDlhK
 IdcIWadhqDzdtn1hj/22iUwrhH0bd475hlKcsiZ+oy/sdgGgAzvmmTQmdMqEXqV2
@@ -93,22 +94,26 @@ B9q9KFBmo4Ahh/6+d4wM1rH9kxl0RvMAKLe+daoIHIjok8hCO4cKQQEw/ErBe4SF
 QAvkknWitpRK8KVLypEj5WKej6CF8nq30utn15FQg0JkHoqzwiCqqeen8GIPteI7
 VwIDAQAB
 -----END PUBLIC KEY-----">>}}
-        }}
-    ]}
+          }}
+      ]}
+    ]},
 ].
 ```
 
 If you are using a symmetric key, the configuration will look like this:
 
 ```erlang
-[ {rabbitmq_auth_backend_oauth2, [{resource_server_id, <<"my_rabbit_server">>}]},
-  {uaa_jwt, [
-    {signing_keys, #{
+[
+  {rabbitmq_auth_backend_oauth2, [
+    {resource_server_id, <<"my_rabbit_server">>}
+    {uaa_jwt, [
+      {signing_keys, #{
         <<"a-key-ID">> => {map, #{<<"kty">> => <<"MAC">>,
                                   <<"alg">> => <<"HS256">>,
                                   <<"value">> => <<"my_signing_key">>}}
-        }}
+      }}
     ]}
+  ]},
 ].
 ```
 
