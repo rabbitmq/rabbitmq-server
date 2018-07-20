@@ -266,7 +266,7 @@ function render(reqs, template, highlight) {
     }
     outstanding_reqs = [];
     current_highlight = highlight;
-    if(old_template !== current_template){
+    if (old_template !== current_template) {
         window.scrollTo(0, 0);
     }
     update();
