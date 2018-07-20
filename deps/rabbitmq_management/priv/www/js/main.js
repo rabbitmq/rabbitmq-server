@@ -258,6 +258,7 @@ function update_manual(div, query) {
 }
 
 function render(reqs, template, highlight) {
+    var old_template = current_template;
     current_template = template;
     current_reqs = reqs;
     for (var i in outstanding_reqs) {
@@ -265,6 +266,9 @@ function render(reqs, template, highlight) {
     }
     outstanding_reqs = [];
     current_highlight = highlight;
+    if (old_template !== current_template) {
+        window.scrollTo(0, 0);
+    }
     update();
 }
 
