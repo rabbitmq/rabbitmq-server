@@ -1,11 +1,11 @@
-# OAuth 2 (JWT) Token Authorisation Backend for RabbitMQ
+# OAuth 2.0 (JWT) Token Authorisation Backend for RabbitMQ
 
 This **experimental** [RabbitMQ authentication/authorisation backend](http://www.rabbitmq.com/access-control.html) plugin lets applications (clients)
-and users authenticate and authorize using JWT-encoded [OAuth 2 access tokens](https://tools.ietf.org/html/rfc6749#section-1.4).
+and users authenticate and authorize using JWT-encoded [OAuth 2.0 access tokens](https://tools.ietf.org/html/rfc6749#section-1.4).
 
 It is not specific to but developed against [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa).
 
-OAuth 2 primers are available [elsewhere on the Web](https://auth0.com/blog/oauth2-the-complete-guide/).
+OAuth 2.0 primers are available [elsewhere on the Web](https://auth0.com/blog/oauth2-the-complete-guide/).
 
 
 ## Supported RabbitMQ Versions
@@ -36,9 +36,9 @@ To use this plugin
 
 ### Authorization Flow
 
-1. Client authorize with UAA, requesting an `access_token` (using any grant type desired)
-2. Token scope returned by UAA must include RabbitMQ resource scopes that follow a convention used by this plugin: `configure:%2F/foo` means "configure permissions for 'foo' in vhost '/'")
-3. Client passes the token as username when connecting to a RabbitMQ node. The **password field is ignored**.
+1. Client authorize with OAuth 2.0 provider, requesting an `access_token` (using any grant type desired)
+2. Token scope returned by OAuth 2.0 provider must include RabbitMQ resource scopes that follow a convention used by this plugin: `configure:%2F/foo` means "configure permissions for 'foo' in vhost '/'")
+3. Client passes the token as password when connecting to a RabbitMQ node. **The username field is ignored**.
 
 
 ## Usage
@@ -148,7 +148,7 @@ There can be multiple wildcards in a pattern:
  * `start*middle*end`
  * `*before*after*`
 
-**If you want to use special characters like `*`, `%`, or `/` in a wildacrd pattern,
+**If you want to use special characters like `*`, `%`, or `/` in a wildcard pattern,
 the pattern must be [URL-encoded](https://en.wikipedia.org/wiki/Percent-encoding).**
 
 These are the typical permissions examples:
@@ -167,7 +167,7 @@ be `my_rabbit.read:*/*`.
 
 ### Using Tokens with Clients
 
-A client must present a valid `access_token` acquired from UAA as username
+A client must present a valid `access_token` acquired from an OAuth 2.0 provider (UAA) as the **password**
 in order to authenticate with RabbitMQ.
 
 To learn more about UAA/OAuth 2.0 clients see [UAA docs](https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id73).

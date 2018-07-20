@@ -3,7 +3,7 @@ PROJECT_DESCRIPTION = OAuth 2 and JWT-based AuthN and AuthZ backend
 
 BUILD_DEPS = rabbit_common
 DEPS = rabbit cowlib jose
-TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers
+TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 

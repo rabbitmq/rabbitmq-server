@@ -41,7 +41,7 @@ description() ->
 
 user_login_authentication(Username0, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
-    Token     = token_from_context(Username0, AuthProps),
+    Token     = token_from_context(AuthProps),
     case check_token(Token) of
         {error, _} = E  -> E;
         {refused, Err}  ->
@@ -144,8 +144,8 @@ check_aud(Aud, ResourceServerId) ->
 
 get_scopes(#{<<"scope">> := Scope}) -> Scope.
 
--spec token_from_context(binary(), map()) -> binary() | undefined.
-token_from_context(_Username, AuthProps) ->
+-spec token_from_context(map()) -> binary() | undefined.
+token_from_context(AuthProps) ->
     maps:get(password, AuthProps, undefined).
 
 %% Decoded tokens look like this:
