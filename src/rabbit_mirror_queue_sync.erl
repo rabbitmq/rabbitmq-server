@@ -148,12 +148,22 @@ master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent) ->
         {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}}
     end.
 
-master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent}, BQS) ->
+master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent} = I, BQS) ->
     receive
-        {next, Ref}              -> stop_syncer(Syncer, {done, Ref}),
-                                    {ok, BQS};
-        {'EXIT', Parent, Reason} -> {shutdown,  Reason, BQS};
-        {'EXIT', Syncer, Reason} -> {sync_died, Reason, BQS}
+        {'$gen_call', From,
+         cancel_sync_mirrors}    ->
+            stop_syncer(Syncer, {cancel, Ref}),
+            gen_server2:reply(From, ok),
+            {cancelled, BQS};
+        {cancelled, Ref} ->
+            {cancelled, BQS};
+        {next, Ref}              ->
+            stop_syncer(Syncer, {done, Ref}),
+            {ok, BQS};
+        {'EXIT', Parent, Reason} ->
+            {shutdown,  Reason, BQS};
+        {'EXIT', Syncer, Reason} ->
+            {sync_died, Reason, BQS}
     end.
 
 stop_syncer(Syncer, Msg) ->
@@ -230,7 +240,7 @@ syncer_check_resources(Ref, MPid, SPids) ->
             syncer_loop(Ref, MPid, SPids);
         true ->
             case wait_for_resources(Ref, SPids) of
-                cancel -> ok;
+                cancel -> MPid ! {cancelled, Ref};
                 SPids1 -> MPid ! {next, Ref},
                           syncer_loop(Ref, MPid, SPids1)
             end
@@ -240,7 +250,7 @@ syncer_loop(Ref, MPid, SPids) ->
     receive
         {conserve_resources, memory, true} ->
             case wait_for_resources(Ref, SPids) of
-                cancel -> ok;
+                cancel -> MPid ! {cancelled, Ref};
                 SPids1 -> syncer_loop(Ref, MPid, SPids1)
             end;
         {conserve_resources, _, _} ->
