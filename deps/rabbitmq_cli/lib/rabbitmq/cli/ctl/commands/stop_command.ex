@@ -17,7 +17,7 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  alias RabbitMQ.CLI.Core.OsPid, as: OsPid
+  alias RabbitMQ.CLI.Core.OsPid
 
   def merge_defaults(args, opts), do: {args, opts}
 

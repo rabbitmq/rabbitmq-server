@@ -14,8 +14,7 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
-  alias RabbitMQ.CLI.Core.Validators, as: Validators
-  alias RabbitMQ.CLI.Core.Distribution, as: Distribution
+  alias RabbitMQ.CLI.Core.{Distribution, Validators}
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour

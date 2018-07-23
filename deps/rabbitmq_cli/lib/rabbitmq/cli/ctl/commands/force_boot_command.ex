@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.Config, as: Config
+alias RabbitMQ.CLI.Core.Config
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour

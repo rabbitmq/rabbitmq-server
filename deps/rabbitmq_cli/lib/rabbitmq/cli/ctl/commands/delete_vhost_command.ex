@@ -15,19 +15,19 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts), do: {args, opts}
-  
+
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-  
+
   def run([arg], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :delete, [arg, Helpers.cli_acting_user()])
   end
@@ -36,4 +36,3 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
 
   def banner([arg], _), do: "Deleting vhost \"#{arg}\" ..."
 end
-

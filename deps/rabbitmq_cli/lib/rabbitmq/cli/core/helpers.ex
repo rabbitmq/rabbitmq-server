@@ -16,7 +16,7 @@
 
 # Small helper functions, mostly related to connecting to RabbitMQ and
 # handling memory units.
-alias RabbitMQ.CLI.Core.Config, as: Config
+alias RabbitMQ.CLI.Core.Config
 
 defmodule RabbitMQ.CLI.Core.Helpers do
   require Record

@@ -18,8 +18,7 @@ defmodule HelpCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
-  alias RabbitMQ.CLI.Core.ExitCodes,   as: ExitCodes
+  alias RabbitMQ.CLI.Core.{CommandModules, ExitCodes}
 
   @command RabbitMQ.CLI.Ctl.Commands.HelpCommand
 

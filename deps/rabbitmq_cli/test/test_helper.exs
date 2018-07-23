@@ -19,9 +19,7 @@ ExUnit.start()
 defmodule TestHelper do
   import ExUnit.Assertions
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.Config, as: Config
-  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.{CommandModules, Config, Helpers}
 
   def get_rabbit_hostname() do
     RabbitMQ.CLI.Core.Helpers.get_rabbit_hostname()

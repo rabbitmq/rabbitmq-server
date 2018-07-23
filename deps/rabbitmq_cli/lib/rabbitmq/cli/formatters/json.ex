@@ -17,7 +17,7 @@
 # collection using start/finish_collection.
 # Primary purpose is to translate stream from CTL,
 # so there is no need for multiple collection levels
-alias RabbitMQ.CLI.Formatters.FormatterHelpers, as: FormatterHelpers
+alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
 defmodule RabbitMQ.CLI.Formatters.Json do
   @behaviour RabbitMQ.CLI.FormatterBehaviour

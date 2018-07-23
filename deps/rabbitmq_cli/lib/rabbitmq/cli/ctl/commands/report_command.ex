@@ -15,17 +15,10 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
-  alias RabbitMQ.CLI.Ctl.Commands.StatusCommand,          as: StatusCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand,   as: ClusterStatusCommand
-  alias RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand,     as: EnvironmentCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand, as: ListConnectionsCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand,    as: ListChannelsCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand,      as: ListQueuesCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand,   as: ListExchangesCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand,    as: ListBindingsCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand, as: ListPermissionsCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand,    as: ListPoliciesCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListParametersCommand,  as: ListParametersCommand
+  alias RabbitMQ.CLI.Ctl.Commands.{ClusterStatusCommand, EnvironmentCommand,
+    ListBindingsCommand, ListChannelsCommand, ListConnectionsCommand,
+    ListExchangesCommand, ListParametersCommand, ListPermissionsCommand,
+    ListPoliciesCommand, ListQueuesCommand, StatusCommand}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput

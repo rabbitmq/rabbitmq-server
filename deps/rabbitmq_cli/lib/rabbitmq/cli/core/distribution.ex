@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.Config, as: Config
+alias RabbitMQ.CLI.Core.Config
 
 defmodule RabbitMQ.CLI.Core.Distribution do
 

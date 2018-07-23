@@ -15,8 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
-  alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
-  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
+  alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
