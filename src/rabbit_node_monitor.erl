@@ -22,6 +22,8 @@
 
 -behaviour(gen_server).
 
+-include("rabbit.hrl").
+
 -export([start_link/0]).
 -export([running_nodes_filename/0,
          cluster_status_filename/0, prepare_cluster_status_files/0,
@@ -736,10 +738,10 @@ register_outside_app_process(Fun, WaitForExistingProcess) ->
 do_run_outside_app_fun(Fun) ->
     try
         Fun()
-    catch _:E ->
+    catch ?EXCEPTION(_, E, Stacktrace) ->
             rabbit_log:error(
               "rabbit_outside_app_process:~n~p~n~p~n",
-              [E, erlang:get_stacktrace()])
+              [E, ?GET_STACK(Stacktrace)])
     end.
 
 wait_for_cluster_recovery(Condition) ->

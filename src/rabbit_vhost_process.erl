@@ -58,11 +58,11 @@ init([VHost]) ->
         Interval = interval(),
         timer:send_interval(Interval, check_vhost),
         {ok, VHost}
-    catch _:Reason ->
+    catch ?EXCEPTION(_, Reason, Stracktrace) ->
         rabbit_amqqueue:mark_local_durable_queues_stopped(VHost),
         rabbit_log:error("Unable to recover vhost ~p data. Reason ~p~n"
                          " Stacktrace ~p",
-                         [VHost, Reason, erlang:get_stacktrace()]),
+                         [VHost, Reason, ?GET_STACK(Stracktrace)]),
         {stop, Reason}
     end.
 

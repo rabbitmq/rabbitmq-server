@@ -1116,9 +1116,8 @@ handle_method0(MethodName, FieldsBin,
             throw({connection_closed_abruptly, State});
           exit:#amqp_error{method = none} = Reason ->
             handle_exception(State, 0, Reason#amqp_error{method = MethodName});
-          Type:Reason ->
-            Stack = erlang:get_stacktrace(),
-            handle_exception(State, 0, {Type, Reason, MethodName, Stack})
+          ?EXCEPTION(Type, Reason, Stacktrace) ->
+            handle_exception(State, 0, {Type, Reason, MethodName, ?GET_STACK(Stacktrace)})
     end.
 
 handle_method0(#'connection.start_ok'{mechanism = Mechanism,
