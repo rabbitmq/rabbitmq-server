@@ -16,8 +16,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
+  alias RabbitMQ.CLI.Core.{ExitCodes, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
+alias RabbitMQ.CLI.Core.ExitCodes
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour

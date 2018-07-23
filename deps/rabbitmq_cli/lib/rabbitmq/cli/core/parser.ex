@@ -13,8 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
-alias RabbitMQ.CLI.Core.Config, as: Config
+alias RabbitMQ.CLI.Core.{CommandModules, Config}
 
 defmodule RabbitMQ.CLI.Core.Parser do
 
@@ -210,7 +209,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
                         {command, {:redefining_global_aliases,
                                    command_aliases}}})
   end
-  
+
   defp apply_if_exported(mod, fun, args, default) do
     case function_exported?(mod, fun, length(args)) do
       true  -> apply(mod, fun, args);

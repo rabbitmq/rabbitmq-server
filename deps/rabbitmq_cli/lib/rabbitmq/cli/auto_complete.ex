@@ -15,8 +15,7 @@
 
 
 defmodule Rabbitmq.CLI.AutoComplete do
-  alias RabbitMQ.CLI.Core.Parser, as: Parser
-  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
+  alias RabbitMQ.CLI.Core.{CommandModules, Parser}
 
   @spec complete(String.t, [String.t]) :: [String.t]
   def complete(_, []) do

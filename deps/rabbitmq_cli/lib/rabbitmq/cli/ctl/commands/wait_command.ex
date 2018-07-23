@@ -14,8 +14,7 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
-  alias RabbitMQ.CLI.Core.Validators, as: Validators
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.{Helpers, Validators}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @default_timeout 10_000

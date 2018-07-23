@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.RpcStream do
-  alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
+  alias RabbitMQ.CLI.Ctl.InfoKeys
 
   def receive_list_items(node, mod, fun, args, timeout, info_keys) do
     receive_list_items(node, [{mod, fun, args}], timeout, info_keys, 1)

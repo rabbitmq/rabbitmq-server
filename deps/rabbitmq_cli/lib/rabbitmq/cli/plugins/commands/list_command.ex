@@ -17,8 +17,7 @@
 defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   import RabbitCommon.Records
 
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Core.Validators, as: Validators
+  alias RabbitMQ.CLI.Core.{Helpers, Validators}
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour

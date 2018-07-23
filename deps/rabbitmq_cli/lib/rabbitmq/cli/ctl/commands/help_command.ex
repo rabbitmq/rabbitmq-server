@@ -16,9 +16,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
-  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
-  alias RabbitMQ.CLI.Core.ExitCodes,      as: ExitCodes
-  alias RabbitMQ.CLI.Core.Config,         as: Config
+  alias RabbitMQ.CLI.Core.{CommandModules, Config, ExitCodes}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

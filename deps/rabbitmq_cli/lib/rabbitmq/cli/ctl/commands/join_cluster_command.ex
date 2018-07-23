@@ -15,7 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

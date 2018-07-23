@@ -16,9 +16,7 @@
 
 defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Core.Validators, as: Validators
-  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
+  alias RabbitMQ.CLI.Core.{ExitCodes, Helpers, Validators}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

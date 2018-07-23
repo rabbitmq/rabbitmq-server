@@ -15,7 +15,7 @@
 
 # Provides common validation functions.
 defmodule RabbitMQ.CLI.Core.Validators do
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Helpers
 
   def chain([validator | rest], args) do
     case apply(validator, args) do

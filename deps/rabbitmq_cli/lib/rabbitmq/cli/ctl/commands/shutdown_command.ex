@@ -17,7 +17,7 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
-  alias RabbitMQ.CLI.Core.OsPid, as: OsPid
+  alias RabbitMQ.CLI.Core.OsPid
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
 
