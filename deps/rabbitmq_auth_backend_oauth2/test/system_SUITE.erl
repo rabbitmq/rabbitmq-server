@@ -106,8 +106,9 @@ preconfigure_node(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbit, auth_backends, [rabbit_auth_backend_oauth2]]),
     Jwk   = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                      [uaa_jwt, signing_keys, #{<<"token-key">> => {map, Jwk}}]),
+                                      [rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
 
@@ -135,9 +136,7 @@ generate_expired_token(Config, Scopes) ->
 
 preconfigure_token(Config) ->
     Token = generate_valid_token(Config),
-
     rabbit_ct_helpers:set_config(Config, {fixture_jwt, Token}).
-
 
 %%
 %% Test Cases

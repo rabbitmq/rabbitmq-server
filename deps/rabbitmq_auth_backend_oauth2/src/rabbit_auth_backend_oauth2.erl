@@ -114,8 +114,8 @@ check_token(Token) ->
     end.
 
 validate_payload(#{<<"scope">> := _Scope, <<"aud">> := _Aud} = DecodedToken) ->
-    ResourceServerId = rabbit_data_coercion:to_binary(application:get_env(rabbitmq_auth_backend_oauth2,
-                                                                          resource_server_id, <<>>)),
+    ResourceServerEnv = application:get_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<>>),
+    ResourceServerId = rabbit_data_coercion:to_binary(ResourceServerEnv),
     validate_payload(DecodedToken, ResourceServerId).
 
 validate_payload(#{<<"scope">> := Scope, <<"aud">> := Aud} = DecodedToken, ResourceServerId) ->

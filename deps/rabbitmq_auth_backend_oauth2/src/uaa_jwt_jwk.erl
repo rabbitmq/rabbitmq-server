@@ -69,11 +69,10 @@ fix_alg(#{<<"alg">> := Alg} = Key) ->
 fix_alg(#{} = Key) -> Key.
 
 uaa_algs() ->
-    application:get_env(uaa_jwt_decoder, uaa_algs,
-                        #{
-                          <<"HMACSHA256">> => <<"HS256">>,
-                          <<"HMACSHA384">> => <<"HS384">>,
-                          <<"HMACSHA512">> => <<"HS512">>,
-                          <<"SHA256withRSA">> => <<"RS256">>,
-                          <<"SHA512withRSA">> => <<"RS512">>
-                        }).
+    UaaEnv = application:get_env(rabbitmq_auth_backend_oauth2, uaa_jwt_decoder, []),
+    DefaultAlgs = #{<<"HMACSHA256">> => <<"HS256">>,
+                    <<"HMACSHA384">> => <<"HS384">>,
+                    <<"HMACSHA512">> => <<"HS512">>,
+                    <<"SHA256withRSA">> => <<"RS256">>,
+                    <<"SHA512withRSA">> => <<"RS512">>},
+    proplists:get_value(uaa_algs, UaaEnv, DefaultAlgs).
