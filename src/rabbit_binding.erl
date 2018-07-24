@@ -102,7 +102,7 @@
                     routing_key, arguments,
                     vhost]).
 
-%% Global table recover
+%% Global table recovery
 recover() ->
     rabbit_misc:table_filter(
         fun (Route) ->
@@ -114,7 +114,7 @@ recover() ->
                 ok
         end, rabbit_durable_route).
 
-%% Per-vhost recover
+%% Virtual host-specific recovery
 recover(XNames, QNames) ->
     XNameSet = sets:from_list(XNames),
     QNameSet = sets:from_list(QNames),
