@@ -17,7 +17,7 @@
 -module(rabbit_binding).
 -include("rabbit.hrl").
 
--export([recover/2, exists/1, add/2, add/3, remove/1, remove/3, list/1]).
+-export([recover/0, recover/2, exists/1, add/2, add/3, remove/1, remove/3, list/1]).
 -export([list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
@@ -102,16 +102,20 @@
                     routing_key, arguments,
                     vhost]).
 
-recover(XNames, QNames) ->
+%% Global table recover
+recover() ->
     rabbit_misc:table_filter(
-      fun (Route) ->
-              mnesia:read({rabbit_semi_durable_route, Route}) =:= []
-      end,
-      fun (Route,  true) ->
-              ok = mnesia:write(rabbit_semi_durable_route, Route, write);
-          (_Route, false) ->
-              ok
-      end, rabbit_durable_route),
+        fun (Route) ->
+            mnesia:read({rabbit_semi_durable_route, Route}) =:= []
+        end,
+        fun (Route,  true) ->
+            ok = mnesia:write(rabbit_semi_durable_route, Route, write);
+            (_Route, false) ->
+                ok
+        end, rabbit_durable_route).
+
+%% Per-vhost recover
+recover(XNames, QNames) ->
     XNameSet = sets:from_list(XNames),
     QNameSet = sets:from_list(QNames),
     SelectSet = fun (#resource{kind = exchange}) -> XNameSet;
