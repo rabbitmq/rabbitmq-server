@@ -148,7 +148,7 @@ master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent) ->
         {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}}
     end.
 
-master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent} = I, BQS) ->
+master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent}, BQS) ->
     receive
         {'$gen_call', From,
          cancel_sync_mirrors}    ->
