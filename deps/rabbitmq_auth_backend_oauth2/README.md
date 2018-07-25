@@ -194,7 +194,7 @@ export the `CLOUD_FOUNDRY_CONFIG_PATH` environment variable. For example, to use
 see the UAA config files under the `demo/symmetric_keys` directory.
 
 `demo/symmetric_keys/rabbit.config` contains a RabbitMQ configuration file that
-sets up a matching signing key on the RbbitMQ end.
+sets up a matching signing key on the RabbitMQ end.
 
 ### Running UAA
 
