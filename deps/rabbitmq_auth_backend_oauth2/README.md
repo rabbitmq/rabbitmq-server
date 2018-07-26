@@ -72,7 +72,7 @@ VwIDAQAB
       HCkEBMPxKwXuEhdnK98EMAnxdalbuHgFTVX8X8v7hLxt0O8dNOT903CvkHGICcWr95YnLUouXcli4BkAL5JJ1oraUSvClS8qRI-Vino-ghfJ6t9LrZ9eRUINCZB6Ks8Igqqnnp_BiD7XiO1c
 ```
 
-it will translate into the following configuration (in the [advanced RabbitMQ config format](http://next.rabbitmq.com/configure.html)):
+it will translate into the following configuration (in the [advanced RabbitMQ config format](http://www.rabbitmq.com/configure.html)):
 
 ```erlang
 [
@@ -121,7 +121,7 @@ Key signature verification is implemented by the [UAA JWT library](https://githu
 
 ### Resource Server ID and Scope Prefixes
 
-OAuth 2.0 and (thus UAA-provided) tokens use scopes to communicate what set of permissions are particular
+OAuth 2.0 (and thus UAA-provided) tokens use scopes to communicate what set of permissions particular
 client has been granted. The scopes are free form strings.
 
 `resource_server_id` is a prefix used for scopes in UAA to avoid scope collisions (or unintended overlap).
@@ -134,7 +134,7 @@ Scopes are translated into permission grants to RabbitMQ resources for the provi
 The current scope format is `<permission>:<vhost_pattern>/<name_pattern>[/<routing_key_pattern>]` where
 
  * `<permission>` is an access permission (`configure`, `read`, or `write`)
- * `<vhost_pattern>` is a wildcard pattern for vhosts, token has access to.
+ * `<vhost_pattern>` is a wildcard pattern for vhosts token has access to.
  * `<name_pattern>` is a wildcard pattern for resource name
  * `<routing_key_pattern>` is an optional wildcard pattern for routing key in topic authorization
 
@@ -187,7 +187,7 @@ resources.
 #### UAA and RabbitMQ Config Files
 
 To run the demo you need to have a [UAA](https://github.com/cloudfoundry/uaa) node
-intalled or built from source.
+installed or built from source.
 
 To make UAA use a particular config file, such as those provided in the demo directory,
 export the `CLOUD_FOUNDRY_CONFIG_PATH` environment variable. For example, to use symmetric keys,
@@ -241,7 +241,7 @@ RABBITMQCTL=<path_to_rabbitmqctl> demo/setup.sh
 
 Please refer to `demo/setup.sh` to get more info about configuring UAA permissions.
 
-The script will return an access tokens, which can be used to authenticate and authorise
+The script will return access tokens which can be used to authenticate and authorise
 in RabbitMQ. When connecting, pass the token in the **password** field. The username
 field will be ignored as long as the token provides a client ID.
 
