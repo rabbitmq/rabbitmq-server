@@ -21,14 +21,14 @@
 -export([dispatcher/0, web_ui/0]).
 
 dispatcher() -> [{"/traces",                    rabbit_tracing_wm_traces, []},
-                 {"/traces/:node",              rabbit_tracing_wm_traces, []},
+                 {"/traces/n/:node",            rabbit_tracing_wm_traces, []},
                  {"/traces/:vhost",             rabbit_tracing_wm_traces, []},
-                 {"/traces/:node/:vhost",       rabbit_tracing_wm_traces, []},
+                 {"/traces/n/:node/:vhost",     rabbit_tracing_wm_traces, []},
                  {"/traces/:vhost/:name",       rabbit_tracing_wm_trace,  []},
-                 {"/traces/:node/:vhost/:name", rabbit_tracing_wm_trace,  []},
+                 {"/traces/n/:node/:vhost/:name", rabbit_tracing_wm_trace,  []},
                  {"/trace-files",               rabbit_tracing_wm_files,  []},
-                 {"/trace-files/:node",         rabbit_tracing_wm_files,  []},
+                 {"/trace-files/n/:node",       rabbit_tracing_wm_files,  []},
                  {"/trace-files/:name",         rabbit_tracing_wm_file,   []},
-                 {"/trace-files/:node/:name",   rabbit_tracing_wm_file,   []}].
+                 {"/trace-files/n/:node/:name", rabbit_tracing_wm_file,   []}].
 
 web_ui()     -> [{javascript, <<"tracing.js">>}].
