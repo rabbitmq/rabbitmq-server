@@ -19,6 +19,7 @@
                 <th>Payload limit</th>
                 <th>Rate</th>
                 <th>Queued</th>
+                <th>Consumer username</th>
                 <th></th>
               </tr>
             </thead>
@@ -48,6 +49,7 @@
                   <div class="status-red"><acronym title="The trace failed to start - check the server logs for details.">FAILED</acronym></div>
                 </td>
                 <% } %>
+                <td><%= fmt_string(trace.consumer_username) %></td>
                 <td>
                   <form action="#/traces" method="delete">
                     <input type="hidden" name="vhost" value="<%= fmt_string(trace.vhost) %>"/>
@@ -131,6 +133,16 @@
               <option value="text">Text</option>
               <option value="json">JSON</option>
             </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Consumer username:</label></th>
+          <td><input type="text" name="consumer_username"/></td>
+          <td><label>Consumer password:</label></td>
+          <td>
+            <div id="password-div">
+              <input type="password" name="consumer_password"/>
+            </div>
           </td>
         </tr>
         <tr>

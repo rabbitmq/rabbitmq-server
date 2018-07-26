@@ -49,8 +49,10 @@ Example for how to create a trace using [RabbitMQ HTTP API](http://www.rabbitmq.
 ```
 curl -i -u guest:guest -H "content-type:application/json" -XPUT \
      http://localhost:55672/api/traces/%2f/my-trace \
-     -d'{"format":"text","pattern":"#", "max_payload_bytes":1000}'
+     -d'{"format":"text","pattern":"#", "max_payload_bytes":1000,
+         "consumer_username":"guest", "consumer_password":"guest"}'
 ```
 
+`consumer_username` and `consumer_password` are optionals, defaults to the configured values in the app.
 `max_payload_bytes` is optional (omit it to prevent payload truncation),
 format and pattern are mandatory.
