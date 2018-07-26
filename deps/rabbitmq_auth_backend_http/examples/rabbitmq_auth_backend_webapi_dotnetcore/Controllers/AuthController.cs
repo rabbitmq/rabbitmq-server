@@ -1,5 +1,6 @@
 ﻿using System;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using RabbitMqAuthBackendHttp.Requests;
 
 namespace RabbitMqAuthBackendHttp.Controllers
@@ -8,6 +9,13 @@ namespace RabbitMqAuthBackendHttp.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
+        private readonly ILogger<AuthController> _logger;
+
+        public AuthController(ILogger<AuthController> logger)
+        {
+            _logger = logger;
+        }
+
         [HttpGet]
         public ActionResult<string> Get()
         {
@@ -23,7 +31,7 @@ namespace RabbitMqAuthBackendHttp.Controllers
             try
             {
                 var userlog = string.Format("user : {0}, password : {1}", request.UserName, request.Password);
-                Console.WriteLine(userlog);
+                _logger.LogInformation(userlog);
 
                 if (request.UserName == "authuser") //Sample check you can put your custom logic over here
                     return AuthResult.Deny();
@@ -44,7 +52,7 @@ namespace RabbitMqAuthBackendHttp.Controllers
             try
             {
                 var userlog = string.Format("user : {0}, ip : {1}", request.UserName, request.Ip);
-                Console.WriteLine(userlog);
+                _logger.LogInformation(userlog);
 
                 if (request.UserName == "authuser") //Sample checks you can put your custom logic over here
                     return AuthResult.Deny();
@@ -65,7 +73,7 @@ namespace RabbitMqAuthBackendHttp.Controllers
             {
                 var userlog = $"user : {request.UserName}, vhost : {request.Vhost}, resource : {request.Resource}, " +
                               $"name : {request.Name}, permission : {request.Permission}";
-                Console.WriteLine(userlog);
+                _logger.LogInformation(userlog);
 
                 if (request.UserName == "authuser") //Sample checks you can put your custom logic over here
                     return AuthResult.Deny();
@@ -85,8 +93,8 @@ namespace RabbitMqAuthBackendHttp.Controllers
             try
             {
                 var userlog = $"user : {request.UserName}, vhost : {request.Vhost}, resource : {request.Resource}, " +
-                              $"name : {request.Name}, permission : {request.Permission}";
-                Console.WriteLine(userlog);
+                              $"name : {request.Name}, routing key: {request.RoutingKey}, permission : {request.Permission}";
+                _logger.LogInformation(userlog);
 
                 if (request.UserName == "authuser") //Sample checks you can put your custom logic over here
                     return AuthResult.Deny();

@@ -14,7 +14,7 @@ namespace WebApiHttpAuthService.Controllers
         [HttpPost]
         public HttpResponseMessage user(FormDataCollection form)
         {
-            string content = "allow [administrator, management]";
+            string content = "allow administrator management";
             try
             {
                 if (form != null)
