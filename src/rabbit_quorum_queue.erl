@@ -79,7 +79,6 @@
          operator_policy,
          effective_policy_definition,
          consumers,
-         consumer_utilisation,
          memory,
          state,
          garbage_collection,
@@ -199,7 +198,11 @@ rpc_delete_metrics(QName) ->
 update_metrics(QName, {Name, MR, MU, M, C}) ->
     R = reductions(Name),
     rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
-    Infos = [{consumers, C} | infos(QName)],
+    Util = case C of
+               0 -> 0;
+               _ -> ra_fifo:usage(Name)
+           end,
+    Infos = [{consumers, C}, {consumer_utilisation, Util} | infos(QName)],
     rabbit_core_metrics:queue_stats(QName, Infos),
     rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
                                                {messages, M},
@@ -554,11 +557,6 @@ i(consumers,     #amqqueue{name               = QName}) ->
             proplists:get_value(consumers, M, 0);
         [] ->
             0
-    end;
-i(consumer_utilisation, #amqqueue{pid = {Name, _}}) ->
-    case ets:lookup(ra_customer_utilisation, Name) of
-        [{_, Utilisation}] -> Utilisation;
-        _ -> 0
     end;
 i(memory, #amqqueue{pid = {Name, _}}) ->
     try
