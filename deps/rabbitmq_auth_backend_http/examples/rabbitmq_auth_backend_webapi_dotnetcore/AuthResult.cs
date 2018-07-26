@@ -11,7 +11,7 @@ namespace RabbitMqAuthBackendHttp
 
         public static IActionResult Allow(params string[] tags)
         {
-            return new OkObjectResult($"allow [{string.Join(", ", tags)}]");
+            return new OkObjectResult($"allow {string.Join(" ", tags)}");
         }
 
         public static IActionResult Deny()
