@@ -95,9 +95,9 @@ put_vhost(Name, Trace, Username) ->
     Result = case rabbit_vhost:exists(Name) of
         true  -> ok;
         false -> rabbit_vhost:add(Name, Username),
-                 %% wait for up to 15 seconds for the vhost to initialise
+                 %% wait for up to 45 seconds for the vhost to initialise
                  %% on all nodes
-                 case rabbit_vhost:await_running_on_all_nodes(Name, 15000) of
+                 case rabbit_vhost:await_running_on_all_nodes(Name, 45000) of
                      ok               ->
                          maybe_grant_full_permissions(Name, Username);
                      {error, timeout} ->
