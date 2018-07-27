@@ -38,15 +38,15 @@ some other way.
 
 ```
 GET            /api/traces
-GET            /api/traces/<node>
+GET            /api/traces/n/<node>
 GET            /api/traces/<vhost>
-GET            /api/traces/<node>/<vhost>
+GET            /api/traces/n/<node>/<vhost>
 GET PUT DELETE /api/traces/<vhost>/<name>
-GET PUT DELETE /api/traces/<node>/<vhost>/<name>
+GET PUT DELETE /api/traces/n/<node>/<vhost>/<name>
 GET            /api/trace-files
-GET            /api/trace-files/<node>
+GET            /api/trace-files/n/<node>
 GET     DELETE /api/trace-files/<name>    (GET returns the file as text/plain)
-GET     DELETE /api/trace-files/<node>/<name>    (GET returns the file as text/plain)
+GET     DELETE /api/trace-files/n/<node>/<name>    (GET returns the file as text/plain)
 ```
 
 Example for how to create a trace using [RabbitMQ HTTP API](http://www.rabbitmq.com/management.html):
