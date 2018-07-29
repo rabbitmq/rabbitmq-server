@@ -1,5 +1,16 @@
 # RabbitMQ HTTP Authn/Authz Backend Examples
 
+## Overview
+
+This directory provides a number of community contributed example applications that target
+different platforms and frameworks:
+
+ * Python and Django
+ * Java and Spring Boot
+ * C# and ASP.NET Web API
+ * C# and ASP.NET Core 2.1
+
+
 ## Python Example
 
 `rabbitmq_auth_backend_django` is a very minimalistic [Django](https://www.djangoproject.com/) 1.10+ application
@@ -17,8 +28,8 @@ resources.
 
 ### HTTP Endpoint Examples
 
-If you're not familiar with Django, urls.py and auth/views.py may be
-most illuminating.
+`urls.py` and `auth/views.py` are the main modules that describe HTTP routes and
+views (endpoints).
 
 
 ## Spring Boot Example
