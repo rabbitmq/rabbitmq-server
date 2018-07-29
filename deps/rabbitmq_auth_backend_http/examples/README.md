@@ -27,7 +27,7 @@ most illuminating.
 application that rabbitmq-auth-backend-http can authenticate against. It's really
 not designed to be anything other than an example.
 
-## Running the Example
+### Running the Example
 
 Import the example as a Maven project in your favorite IDE or run it directly from the command line:
 
@@ -44,6 +44,7 @@ with the `guest` password. This implementation also checks the
 routing key starts with an `a` when publishing to a topic exchange
 or consuming from a topic. (an example of [topic authorisation](http://next.rabbitmq.com/access-control.html#topic-authorisation)).
 
+
 ## ASP.NET Web API Example
 
 `rabbitmq_auth_backend_webapi_dotnet` is a very minimalistic ASP.NET Web API application
@@ -54,8 +55,8 @@ the plugin can authenticate against. It's really
 
 Open the WebApiHttpAuthService.csproj in Visual Studio 2017, More details about prerequisites can be found below.
 
-First, configure RabbitMQ [authn and authz backend](http://www.rabbitmq.com/access-control.html) to use this
-plugin using the below config example.
+As with other examples, RabbitMQ [authentication and authorization backends](http://www.rabbitmq.com/access-control.html) must be configured
+to use this plugin and the endpoints provided by this example app.
 
 Then Build the solution and run it from Visual Studio.
 `Controllers/AuthController.cs` contains the authentication and authorization logic.
@@ -78,6 +79,39 @@ It is possible to build and run service from Visual Studio browse the endpoint w
 Port number may vary but will likely be `62190`.
 
 When the example is hosted on IIS, port 80 will be used by default.
+
+## ASP.NET Core 2.1 Example
+
+`rabbitmq_auth_backend_webapi_dotnetcore` is a modification of the `rabbitmq_auth_backend_webapi_dotnet` example
+designed for ASP.NET Core 2.1. It's very similar to the original version but it also adds some static typing
+for requests and responses.
+
+### Running the Example
+
+Open the solution file, WebApiHttpAuthService.sln` in Visual Studio 2017 or later.
+
+As with other examples, RabbitMQ [authentication and authorization backends](http://www.rabbitmq.com/access-control.html) must be configured
+to use this plugin and the endpoints provided by this example app.
+
+Then build the solution and run it from Visual Studio.
+`Controllers/AuthController.cs` contains the authentication and authorization logic.
+By default All users get access to all vhosts and resources.
+User "authuser" will be denied access.
+
+### HTTP Endpoint Examples
+
+Have a look at `AuthController`.
+
+### Development Environment
+
+This example was developed using
+
+ * ASP.NET Core 2.1
+ * Visual Studio 2017 (Visual Studio Code)
+ * Windows 10
+  
+It is possible to build and run service from Visual Studio using IIS or from Visual Studio or Visual Studio Code using cross-platform server Kestrel.
+
 
 ## PHP Boot Example
 
