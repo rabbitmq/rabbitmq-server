@@ -4,19 +4,19 @@ dispatcher_add(function(sammy) {
             go_to('#/traces/' + nodes[0].name);
         });
     sammy.get('#/traces/:node', function() {
-            render({'traces': '/traces/n/' + esc(this.params['node']),
+            render({'traces': '/traces/node/' + esc(this.params['node']),
                     'vhosts': '/vhosts',
                     'node': '/nodes/' + esc(this.params['node']),
                     'nodes': '/nodes',
-                    'files': '/trace-files/n/' + esc(this.params['node'])},
-                   'traces', '#/traces')
+                    'files': '/trace-files/node/' + esc(this.params['node'])},
+                   'traces', '#/traces');
     });
-    sammy.get('#/traces/n/:node/:vhost/:name', function() {
-            var path = '/traces/n/' + esc(this.params['node']) + '/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
+    sammy.get('#/traces/node/:node/:vhost/:name', function() {
+            var path = '/traces/node/' + esc(this.params['node']) + '/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'trace': path},
                 'trace', '#/traces');
         });
-    sammy.put('#/traces/n/:node', function() {
+    sammy.put('#/traces/node/:node', function() {
             if (this.params['max_payload_bytes'] === '') {
                 delete this.params['max_payload_bytes'];
             }
@@ -24,18 +24,18 @@ dispatcher_add(function(sammy) {
                 this.params['max_payload_bytes'] =
                     parseInt(this.params['max_payload_bytes']);
             }
-        if (sync_put(this, '/traces/n/' + esc(this.params['node']) + '/:vhost/:name'))
+        if (sync_put(this, '/traces/node/' + esc(this.params['node']) + '/:vhost/:name'))
                 update();
             return false;
         });
-    sammy.del('#/traces/n/:node', function() {
-        if (sync_delete(this, '/traces/n/' + esc(this.params['node'])
+    sammy.del('#/traces/node/:node', function() {
+        if (sync_delete(this, '/traces/node/' + esc(this.params['node'])
                         + '/:vhost/:name'))
                 partial_update();
             return false;
         });
-    sammy.del('#/trace-files/n/:node', function() {
-        if (sync_delete(this, '/trace-files/n/' + esc(this.params['node']) + '/:name'))
+    sammy.del('#/trace-files/node/:node', function() {
+        if (sync_delete(this, '/trace-files/node/' + esc(this.params['node']) + '/:name'))
                 partial_update();
             return false;
         });
@@ -52,7 +52,7 @@ $(document).on('change', 'select#traces-node', function() {
 });
 
 function link_trace(node, name) {
-    return _link_to(name, 'api/trace-files/n/' + esc(node) + '/' + esc(name));
+    return _link_to(name, 'api/trace-files/node/' + esc(node) + '/' + esc(name));
 }
 
 function link_trace_queue(trace) {
