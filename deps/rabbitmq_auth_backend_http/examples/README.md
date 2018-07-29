@@ -79,6 +79,37 @@ Port number may vary but will likely be `62190`.
 
 When the example is hosted on IIS, port 80 will be used by default.
 
+## ASP.NET Core 2.1 Example
+
+`rabbitmq_auth_backend_webapi_dotnetcore` is version of `rabbitmq_auth_backend_webapi_dotnet` designed for ASP.NET Core 2.1. It uses
+same concepts as parent project, but it also adds some static typing for requests and responses.
+
+### Running the Example
+
+Open the WebApiHttpAuthService.sln in Visual Studio 2017.
+
+First, configure RabbitMQ [authn and authz backend](http://www.rabbitmq.com/access-control.html) to use this
+plugin using the below config example.
+
+Then Build the solution and run it from Visual Studio.
+`Controllers/AuthController.cs` contains the authentication and authorization logic.
+By default All users get access to all vhosts and resources.
+User "authuser" will be denied access.
+
+### HTTP Endpoint Examples
+
+Have a look at `AuthController`.
+
+### Development Environment
+
+This example was developed using
+
+ * ASP.NET Core 2.1
+ * Visual Studio 2017 (Visual Studio Code)
+ * Windows 10
+  
+It is possible to build and run service from Visual Studio using IIS or from Visual Studio or Visual Studio Code using cross-platform server Kestrel.
+
 ## PHP Boot Example
 
 `rabbitmq_auth_backend_php` is a minimalistic PHP application that this plugin can authenticate against.
