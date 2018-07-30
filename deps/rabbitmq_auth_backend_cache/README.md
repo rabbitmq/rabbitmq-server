@@ -47,37 +47,51 @@ for the `rabbit` application to include `rabbit_auth_backend_cache`.
 `auth_backends` is a list of authentication providers to try in order.
 
 
-So a configuration fragment that enables this plugin *only* would look like:
+So a configuration fragment that enables this plugin *only* (this example is **intentionally incomplete**) would look like:
 
     auth_backends.1 = cache
 
-Or using the classic config for both parameters:
+In the [classic config format](http://www.rabbitmq.com/configure.html#config-file-formats):
 
-    [{rabbit, [{auth_backends, [rabbit_auth_backend_cache]}]}].
+``` erlang
+[
+  {rabbit, [
+            {auth_backends, [rabbit_auth_backend_cache]}
+            ]
+  }
+].
+```
 
-To configure upstream auth backend, you should use `cached_backend` configuration item
-for the `rabbitmq_auth_backend_cache` application.
+This plugin wraps another auth backend (an "upstream" one) to reduce load on it.
 
-Configuration that uses [LDAP auth backend](https://rabbitmq.com/ldap.html):
+To configure upstream auth backend, use the `auth_cache.cached_backend` configuration key
+(`rabbitmq_auth_backend_cache.cached_backend` in the classic config format).
+
+The following configuration uses the [LDAP backend]((https://rabbitmq.com/ldap.html)) for both authentication and authorization
+and wraps it with caching:
+
+    auth_backends.1 = cache
 
     auth_cache.cached_backend = ldap
 
-    [{rabbitmq_auth_backend_cache, [{cached_backend, rabbit_auth_backend_ldap}]}].
+In the classic config format:
 
-It is still possible to [use different backends for authorization and authentication](https://www.rabbitmq.com/access-control.html).
+``` erlang
+[
+  {rabbit, [
+    %% ...
+  ]},
+  {rabbitmq_auth_backend_cache, [
+                                  {cached_backend, rabbit_auth_backend_ldap}
+                                ]},
+  {rabbit_auth_backend_ldap, [
+    %% ...
+  ]},
+].
+```
 
-The following example configures plugin to use LDAP backend for authentication
-but internal backend for authorisation:
+The following example combines this backend with the [HTTP backend](https://github.com/rabbitmq/rabbitmq-auth-backend-http/tree/master) and its [example Spring Boot application](https://github.com/rabbitmq/rabbitmq-auth-backend-http/tree/master/examples):
 
-    auth_cache.cached_backend.authn = ldap
-    auth_cache.cached_backend.authz = internal
-
-Or using the classic config for both parameters:
-
-    [{rabbitmq_auth_backend_cache, [{cached_backend, {rabbit_auth_backend_ldap,
-                                                      rabbit_auth_backend_internal}}]}].
-
-Another example for the [HTTP backend](https://github.com/rabbitmq/rabbitmq-auth-backend-http)
 
     auth_backends.1 = cache
     auth_cache.cached_backend = http
@@ -86,6 +100,49 @@ Another example for the [HTTP backend](https://github.com/rabbitmq/rabbitmq-auth
     auth_http.user_path     = http://localhost:8080/auth/user
     auth_http.vhost_path    = http://localhost:8080/auth/vhost
     auth_http.resource_path = http://localhost:8080/auth/resource
+
+In the classic config format:
+
+``` erlang
+[
+ {rabbit, [
+           {auth_backends, [rabbit_auth_backend_cache]}
+          ]
+ },
+ {rabbitmq_auth_backend_cache, [
+                                {cached_backend, rabbit_auth_backend_http}
+                               ]
+  },
+  {rabbitmq_auth_backend_http, [{http_method,   post},
+                                {user_path,     "http://127.0.0.1:8080/auth/user"},
+                                {vhost_path,    "http://127.0.0.1:8080/auth/vhost"},
+                                {resource_path, "http://127.0.0.1:8080/auth/resource"}
+                               ]
+  }
+].
+```
+
+It is still possible to [use different backends for authorization and authentication](https://www.rabbitmq.com/access-control.html).
+
+The following example configures plugin to use LDAP backend for authentication
+but internal backend for authorisation:
+
+    auth_backends.1 = cache
+
+    auth_cache.cached_backend.authn = ldap
+    auth_cache.cached_backend.authz = internal
+
+In the classic config format:
+
+``` erlang
+[
+  {rabbit, [
+    %% ...
+  ]},
+  {rabbitmq_auth_backend_cache, [{cached_backend, {rabbit_auth_backend_ldap,
+                                                   rabbit_auth_backend_internal}}]}].
+```
+
 
 
 ## Cache Configuration
