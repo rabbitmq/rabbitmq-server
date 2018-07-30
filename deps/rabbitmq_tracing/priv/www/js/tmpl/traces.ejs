@@ -28,6 +28,7 @@
                 <th>Payload limit</th>
                 <th>Rate</th>
                 <th>Queued</th>
+                <th>Tracer connection username</th>
                 <th></th>
               </tr>
             </thead>
@@ -57,6 +58,7 @@
                   <div class="status-red"><acronym title="The trace failed to start - check the server logs for details.">FAILED</acronym></div>
                 </td>
                 <% } %>
+                <td><%= fmt_string(trace.tracer_connection_username) %></td>
                 <td>
                   <form action="#/traces/node/<%= node.name %>" method="delete">
                     <input type="hidden" name="vhost" value="<%= fmt_string(trace.vhost) %>"/>
@@ -140,6 +142,16 @@
               <option value="text">Text</option>
               <option value="json">JSON</option>
             </select>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Tracer connection username:</label></th>
+          <td><input type="text" name="tracer_connection_username"/></td>
+          <td><label>Tracer connection password:</label></td>
+          <td>
+            <div id="password-div">
+              <input type="password" name="tracer_connection_password"/>
+            </div>
           </td>
         </tr>
         <tr>

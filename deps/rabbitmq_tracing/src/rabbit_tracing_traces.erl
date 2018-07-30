@@ -116,7 +116,9 @@ vhost_tracing(VHost, Table) ->
 
 augment(Trace) ->
     Pid = pget(pid, Trace),
-    Trace1 = lists:keydelete(pid, 1, Trace),
+    Trace1 = lists:keydelete(tracer_connection_password, 1,
+                             lists:keydelete(<<"tracer_connection_password">>, 1,
+                                             lists:keydelete(pid, 1, Trace))),
     case Pid of
         undefined -> Trace1;
         _         -> rabbit_tracing_consumer:info_all(Pid) ++ Trace1
