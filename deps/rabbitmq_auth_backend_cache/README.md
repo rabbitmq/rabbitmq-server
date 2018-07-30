@@ -206,6 +206,7 @@ The above two snippets combined in the classic config format:
  {rabbitmq_auth_backend_cache, [{cache_module, rabbit_auth_backend_ets_segmented},
                                 {cache_module_args, [10000]}]}
 ].
+```
 
 The default values are `rabbit_auth_cache_ets` and `[]`, respectively.
 
