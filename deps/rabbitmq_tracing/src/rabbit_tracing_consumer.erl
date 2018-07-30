@@ -46,8 +46,9 @@ info_all(Pid) ->
 
 %%----------------------------------------------------------------------------
 
-init(Args) ->
+init(Args0) ->
     process_flag(trap_exit, true),
+    Args = filter_optional_user_pass(Args0),
     Name = pget(name, Args),
     VHost = pget(vhost, Args),
     Username = pget(tracer_connection_username, Args,
@@ -240,4 +241,16 @@ truncate(Payload, #state{max_payload = Max}) ->
         true  -> Payload;
         false -> <<Trunc:Max/binary, _/binary>> = Payload,
                  Trunc
+    end.
+
+filter_optional_user_pass(Args) ->
+    case lists:member({tracer_connection_username,<<>>}, Args) of
+        true ->
+            [{K, V} || {K, V} <- Args,
+                       not lists:member(K, [tracer_connection_username,
+                                            tracer_connection_password,
+                                            <<"tracer_connection_username">>,
+                                            <<"tracer_connection_password">>])];
+        _ ->
+            Args
     end.
