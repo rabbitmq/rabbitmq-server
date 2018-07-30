@@ -17,6 +17,7 @@
 
 -export([init/2, resource_exists/2, serve/2, content_types_provided/2,
          is_authorized/2, allowed_methods/2, delete_resource/2]).
+-export([serve/1]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
@@ -33,16 +34,26 @@ allowed_methods(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(name, ReqData),
-    {rabbit_tracing_files:exists(Name), ReqData, Context}.
+    Exists = rabbit_tracing_util:apply_on_node(ReqData, Context, rabbit_tracing_files,
+                                               exists, [Name]),
+    {Exists, ReqData, Context}.
 
 serve(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(name, ReqData),
-    {ok, Content} = file:read_file(rabbit_tracing_files:full_path(Name)),
+    Content = rabbit_tracing_util:apply_on_node(ReqData, Context,
+                                                rabbit_tracing_wm_file,
+                                                serve, [Name]),
     {Content, ReqData, Context}.
+
+serve(Name) ->
+    Path = rabbit_tracing_files:full_path(Name),
+    {ok, Content} = file:read_file(Path),
+    Content.
 
 delete_resource(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(name, ReqData),
-    ok = rabbit_tracing_files:delete(Name),
+    ok = rabbit_tracing_util:apply_on_node(ReqData, Context, rabbit_tracing_files,
+                                           delete, [Name]),
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->

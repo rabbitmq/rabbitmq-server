@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-304-g5a961bd
+ERLANG_MK_VERSION = 2.0.0-pre.2-311-gb20df2d
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -187,9 +187,11 @@ ERLANG_MK_BUILD_DIR ?= .erlang.mk.build
 
 erlang-mk: WITHOUT ?= $(ERLANG_MK_WITHOUT)
 erlang-mk:
-	git clone $(ERLANG_MK_REPO) $(ERLANG_MK_BUILD_DIR)
 ifdef ERLANG_MK_COMMIT
+	git clone $(ERLANG_MK_REPO) $(ERLANG_MK_BUILD_DIR)
 	cd $(ERLANG_MK_BUILD_DIR) && git checkout $(ERLANG_MK_COMMIT)
+else
+	git clone --depth 1 $(ERLANG_MK_REPO) $(ERLANG_MK_BUILD_DIR)
 endif
 	if [ -f $(ERLANG_MK_BUILD_CONFIG) ]; then cp $(ERLANG_MK_BUILD_CONFIG) $(ERLANG_MK_BUILD_DIR)/build.config; fi
 	$(MAKE) -C $(ERLANG_MK_BUILD_DIR) WITHOUT='$(strip $(WITHOUT))'
@@ -2880,6 +2882,14 @@ pkg_oauth2_fetch = git
 pkg_oauth2_repo = https://github.com/kivra/oauth2
 pkg_oauth2_commit = master
 
+PACKAGES += observer_cli
+pkg_observer_cli_name = observer_cli
+pkg_observer_cli_description = Visualize Erlang/Elixir Nodes On The Command Line
+pkg_observer_cli_homepage = http://zhongwencool.github.io/observer_cli
+pkg_observer_cli_fetch = git
+pkg_observer_cli_repo = https://github.com/zhongwencool/observer_cli
+pkg_observer_cli_commit = master
+
 PACKAGES += octopus
 pkg_octopus_name = octopus
 pkg_octopus_description = Small and flexible pool manager written in Erlang
@@ -4474,11 +4484,33 @@ define dep_autopatch_rebar.erl
 		end,
 		Write("\n")
 	end(),
+	GetHexVsn = fun(N) ->
+		case file:consult("$(call core_native_path,$(DEPS_DIR)/$1/rebar.lock)") of
+			{ok, Lock} ->
+				io:format("~p~n", [Lock]),
+				case lists:keyfind("1.1.0", 1, Lock) of
+					{_, LockPkgs} ->
+						io:format("~p~n", [LockPkgs]),
+						case lists:keyfind(atom_to_binary(N, latin1), 1, LockPkgs) of
+							{_, {pkg, _, Vsn}, _} ->
+								io:format("~p~n", [Vsn]),
+								{N, {hex, binary_to_list(Vsn)}};
+							_ ->
+								false
+						end;
+					_ ->
+						false
+				end;
+			_ ->
+				false
+		end
+	end,
 	fun() ->
 		File = case lists:keyfind(deps, 1, Conf) of
 			false -> [];
 			{_, Deps} ->
 				[begin case case Dep of
+							N when is_atom(N) -> GetHexVsn(N);
 							{N, S} when is_atom(N), is_list(S) -> {N, {hex, S}};
 							{N, S} when is_tuple(S) -> {N, S};
 							{N, _, S} -> {N, S};
@@ -6599,6 +6631,7 @@ distclean:: distclean-relx-rel
 # Plugin-specific targets.
 
 $(RELX):
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)
 	$(gen_verbose) $(call core_http_get,$(RELX),$(RELX_URL))
 	$(verbose) chmod +x $(RELX)
 

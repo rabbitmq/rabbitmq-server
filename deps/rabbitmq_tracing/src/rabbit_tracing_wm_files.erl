@@ -29,7 +29,9 @@ content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(rabbit_tracing_files:list(), ReqData, Context).
+    List = rabbit_tracing_util:apply_on_node(ReqData, Context,
+                                             rabbit_tracing_files, list, []),
+    rabbit_mgmt_util:reply(List, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
