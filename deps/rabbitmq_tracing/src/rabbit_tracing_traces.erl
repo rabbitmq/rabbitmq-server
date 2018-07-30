@@ -116,8 +116,8 @@ vhost_tracing(VHost, Table) ->
 
 augment(Trace) ->
     Pid = pget(pid, Trace),
-    Trace1 = lists:keydelete(consumer_password, 1,
-                             lists:keydelete(<<"consumer_password">>, 1,
+    Trace1 = lists:keydelete(tracer_connection_password, 1,
+                             lists:keydelete(<<"tracer_connection_password">>, 1,
                                              lists:keydelete(pid, 1, Trace))),
     case Pid of
         undefined -> Trace1;
