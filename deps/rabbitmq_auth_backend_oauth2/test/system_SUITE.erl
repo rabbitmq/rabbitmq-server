@@ -106,9 +106,9 @@ preconfigure_node(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbit, auth_backends, [rabbit_auth_backend_oauth2]]),
     Jwk   = ?UTIL_MOD:fixture_jwk(),
-    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    KeyConfig = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                      [rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv]),
+                                      [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
 

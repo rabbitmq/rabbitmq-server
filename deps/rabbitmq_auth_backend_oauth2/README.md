@@ -81,7 +81,7 @@ it will translate into the following configuration (in the [advanced RabbitMQ co
   {rabbitmq_auth_backend_oauth2, [
     {resource_server_id, <<"my_rabbit_server">>},
     %% UAA signing key configuration
-    {uaa_jwt, [
+    {key_config, [
       {signing_keys, #{
         <<"a-key-ID">> => {map, #{<<"kty">> => <<"RSA">>,
                                   <<"alg">> => <<"RS256">>,
@@ -106,7 +106,7 @@ If you are using a symmetric key, the configuration will look like this:
 [
   {rabbitmq_auth_backend_oauth2, [
     {resource_server_id, <<"my_rabbit_server">>}
-    {uaa_jwt, [
+    {key_config, [
       {signing_keys, #{
         <<"a-key-ID">> => {map, #{<<"kty">> => <<"MAC">>,
                                   <<"alg">> => <<"HS256">>,
