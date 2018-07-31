@@ -51,6 +51,8 @@
 %% Used internally in rpc calls
 -export([node_info/0, remove_node_if_mnesia_running/1]).
 
+-compile(nowarn_unused_function).
+
 -ifdef(TEST).
 -compile(export_all).
 -export([init_with_lock/3]).
@@ -74,26 +76,67 @@
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    case is_virgin_node() of
-        true  ->
-            rabbit_log:info("Node database directory at ~s is empty. "
-                            "Assuming we need to join an existing cluster or initialise from scratch...~n",
-                            [dir()]),
-            rabbit_peer_discovery:log_configured_backend(),
-            rabbit_peer_discovery:maybe_init(),
-            init_with_lock();
-        false ->
-            NodeType = node_type(),
-            init_db_and_upgrade(cluster_nodes(all), NodeType,
-                                NodeType =:= ram, _Retry = true),
-            rabbit_peer_discovery:maybe_init(),
-            rabbit_peer_discovery:maybe_register()
-    end,
+
+    %% Create schema on all nodes
+    ok = create_schema(),
+
+    ramnesia_node:start(),
+    ramnesia_node:trigger_election(),
+
+    {ok, _, _} = ra:members(ramnesia_node:node_id()),
+
+    io:format("~nDb nodes ~p~n", [ramnesia:db_nodes()]),
+
+    io:format("~nRunning Db nodes ~p~n", [ramnesia:running_db_nodes()]),
+
+    io:format("Get cluster status ~n"),
+    {ok, Status} = cluster_status_from_mnesia(),
+    io:format("Cluster status ~p~n", [Status]),
+
+    rabbit_node_monitor:write_cluster_status(Status),
+
+    % rabbit_node_monitor:update_cluster_status(),
+
+    % case is_virgin_node() of
+    %     true  ->
+
+    %         rabbit_log:info("Node database directory at ~s is empty. "
+    %                         "Assuming we need to join an existing cluster or initialise from scratch...~n",
+    %                         [dir()]),
+    %         rabbit_peer_discovery:log_configured_backend(),
+    %         rabbit_peer_discovery:maybe_init(),
+    %         init_with_lock();
+    %     false ->
+
+    %         NodeType = node_type(),
+    %         init_db_and_upgrade(cluster_nodes(all), NodeType,
+    %                             NodeType =:= ram, _Retry = true),
+    %         rabbit_peer_discovery:maybe_init(),
+    %         rabbit_peer_discovery:maybe_register()
+    % end,
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case -
     %% let's make it so.
     ok = rabbit_node_monitor:global_sync(),
     ok.
+
+wait_for_tables() ->
+    Tables = [T || {T, _D} <- rabbit_table:definitions()],
+    lists:foreach(fun(Table) ->
+        wait_for_table(Table)
+    end,
+    Tables),
+    ok.
+
+wait_for_table(Table) ->
+    rabbit_log:error("Waiting for table ~p~n", [Table]),
+    case lists:member(Table, mnesia:system_info(tables)) of
+        true -> ok;
+        false ->
+            timer:sleep(1000),
+            wait_for_table(Table)
+    end.
+
 
 init_with_lock() ->
     {Retries, Timeout} = rabbit_peer_discovery:retry_timeout(),
@@ -362,7 +405,7 @@ remove_node_offline_node(Node) ->
     %% want - we need to know the running nodes *now*.  If the current node is a
     %% RAM node it will return bogus results, but we don't care since we only do
     %% this operation from disc nodes.
-    case {mnesia:system_info(running_db_nodes) -- [Node], node_type()} of
+    case {ramnesia:running_db_nodes() -- [Node], node_type()} of
         {[], disc} ->
             start_mnesia(),
             try
@@ -460,23 +503,26 @@ cluster_status_from_mnesia() ->
             %% `init_db/3' hasn't been run yet. In other words, either
             %% we are a virgin node or a restarted RAM node. In both
             %% cases we're not interested in what mnesia has to say.
-            NodeType = case mnesia:system_info(use_dir) of
-                           true  -> disc;
-                           false -> ram
-                       end,
-            case rabbit_table:is_present() of
-                true  -> AllNodes = mnesia:system_info(db_nodes),
-                         DiscCopies = mnesia:table_info(schema, disc_copies),
-                         DiscNodes = case NodeType of
-                                         disc -> nodes_incl_me(DiscCopies);
-                                         ram  -> DiscCopies
-                                     end,
+            % NodeType = case mnesia:system_info(use_dir) of
+            %                true  -> disc;
+            %                false -> ram
+            %            end,
+            % case rabbit_table:is_present() of
+                % true  ->
+                AllNodes = ramnesia:db_nodes(),
+
+                         %% Ignoring disk node setting
+                         % DiscCopies = mnesia:table_info(schema, disc_copies),
+                         % DiscNodes = case NodeType of
+                                         % disc -> nodes_incl_me(DiscCopies);
+                                         % ram  -> DiscCopies
+                                     % end,
                          %% `mnesia:system_info(running_db_nodes)' is safe since
                          %% we know that mnesia is running
-                         RunningNodes = mnesia:system_info(running_db_nodes),
-                         {ok, {AllNodes, DiscNodes, RunningNodes}};
-                false -> {error, tables_not_present}
-            end
+                         RunningNodes = ramnesia:running_db_nodes(),
+                         {ok, {AllNodes, AllNodes, RunningNodes}}
+                % false -> {error, tables_not_present}
+            % end
     end.
 
 cluster_status(WhichNodes) ->
@@ -668,7 +714,9 @@ check_cluster_consistency() ->
     case lists:foldl(
            fun (Node,  {error, _})    -> check_cluster_consistency(Node, true);
                (_Node, {ok, Status})  -> {ok, Status}
-           end, {error, not_found}, nodes_excl_me(cluster_nodes(all)))
+           end,
+           {error, not_found},
+           nodes_excl_me(cluster_nodes(all)))
     of
         {ok, Status = {RemoteAllNodes, _, _}} ->
             case ordsets:is_subset(ordsets:from_list(cluster_nodes(all)),
@@ -676,6 +724,8 @@ check_cluster_consistency() ->
                 true  ->
                     ok;
                 false ->
+                    error({should_not_get_here, cluster_inconsistency}),
+
                     %% We delete the schema here since we think we are
                     %% clustered with nodes that are no longer in the
                     %% cluster and there is no other way to remove
@@ -789,11 +839,16 @@ schema_ok_or_move() ->
 %% We only care about disc nodes since ram nodes are supposed to catch
 %% up only
 create_schema() ->
+    io:format("Create schema ~n"),
     stop_mnesia(),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
     start_mnesia(),
+
+    io:format("Create tables ~n"),
     ok = rabbit_table:create(),
+    io:format("Check integrity ~n"),
     ensure_schema_integrity(),
+    io:format("Record version ~n"),
     ok = rabbit_version:record_desired().
 
 move_db() ->
@@ -857,11 +912,11 @@ wait_for(Condition) ->
     rabbit_log:info("Waiting for ~p...~n", [Condition]),
     timer:sleep(1000).
 
-start_mnesia(CheckConsistency) ->
-    case CheckConsistency of
-        true  -> check_cluster_consistency();
-        false -> ok
-    end,
+start_mnesia(_CheckConsistency) ->
+    % case CheckConsistency of
+        % true  -> check_cluster_consistency();
+        % false -> ok
+    % end,
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     ensure_mnesia_running().
 

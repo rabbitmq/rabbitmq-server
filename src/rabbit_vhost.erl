@@ -31,15 +31,19 @@
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
     %% faster than other nodes handled DOWN messages from us.
+    io:format("amqq on node down ~n"),
     rabbit_amqqueue:on_node_down(node()),
 
+    io:format("amqq warn limit ~n"),
     rabbit_amqqueue:warn_file_limit(),
 
     %% Prepare rabbit_semi_durable_route table
+    io:format("binding recover ~n"),
     rabbit_binding:recover(),
 
     %% rabbit_vhost_sup_sup will start the actual recovery.
     %% So recovery will be run every time a vhost supervisor is restarted.
+    io:format("vhost sup sup start ~n"),
     ok = rabbit_vhost_sup_sup:start(),
 
     [ ok = rabbit_vhost_sup_sup:init_vhost(VHost)

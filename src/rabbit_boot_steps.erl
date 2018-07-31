@@ -46,6 +46,7 @@ run_step(Attributes, AttributeName) ->
         [] ->
             ok;
         MFAs ->
+            io:format("Running boot steps ~p~n", [MFAs]),
             [case apply(M,F,A) of
                  ok              -> ok;
                  {error, Reason} -> exit({error, Reason})

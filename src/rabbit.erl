@@ -175,13 +175,13 @@
                    [{description, "core initialized"},
                     {requires,    kernel_ready}]}).
 
--rabbit_boot_step({upgrade_queues,
-                   [{description, "per-vhost message store migration"},
-                    {mfa,         {rabbit_upgrade,
-                                   maybe_migrate_queues_to_per_vhost_storage,
-                                   []}},
-                    {requires,    [core_initialized]},
-                    {enables,     recovery}]}).
+% -rabbit_boot_step({upgrade_queues,
+%                    [{description, "per-vhost message store migration"},
+%                     {mfa,         {rabbit_upgrade,
+%                                    maybe_migrate_queues_to_per_vhost_storage,
+%                                    []}},
+%                     {requires,    [core_initialized]},
+%                     {enables,     recovery}]}).
 
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
@@ -283,7 +283,7 @@ start() ->
                      Apps = load_all_apps(),
                      rabbit_feature_flags:initialize_registry(),
                      rabbit_node_monitor:prepare_cluster_status_files(),
-                     rabbit_mnesia:check_cluster_consistency(),
+                     % rabbit_mnesia:check_cluster_consistency(),
                      broker_start(Apps)
              end).
 
@@ -298,13 +298,18 @@ boot() ->
                      rabbit_hipe:log_hipe_result(HipeResult),
                      Apps = load_all_apps(),
                      rabbit_feature_flags:initialize_registry(),
-                     rabbit_node_monitor:prepare_cluster_status_files(),
-                     ok = rabbit_upgrade:maybe_upgrade_mnesia(),
-                     %% It's important that the consistency check happens after
-                     %% the upgrade, since if we are a secondary node the
-                     %% primary node will have forgotten us
-                     rabbit_mnesia:check_cluster_consistency(),
-                     broker_start(Apps)
+
+                     %% TODO: disable node monitor and mnesia upgrades
+
+                     % rabbit_node_monitor:prepare_cluster_status_files(),
+                     % ok = rabbit_upgrade:maybe_upgrade_mnesia(),
+                     % %% It's important that the consistency check happens after
+                     % %% the upgrade, since if we are a secondary node the
+                     % %% primary node will have forgotten us
+                     % rabbit_mnesia:check_cluster_consistency(),
+                     % broker_start(Apps)
+
+                     broker_start()
              end).
 
 ensure_config() ->
@@ -1022,14 +1027,22 @@ boot_delegate() ->
 -spec recover() -> 'ok'.
 
 recover() ->
+io:format("Recover policy ~n"),
     rabbit_policy:recover(),
+io:format("Recover vhost ~n"),
     rabbit_vhost:recover().
 
 -spec maybe_insert_default_data() -> 'ok'.
 
 maybe_insert_default_data() ->
     case rabbit_table:needs_default_data() of
-        true  -> insert_default_data();
+        true  ->
+            {ok, _, {_, Leader}} = ra:members(ramnesia_node:node_id()),
+            case Leader == node() of
+                true ->
+                    insert_default_data();
+                false -> ok
+            end;
         false -> ok
     end.
 

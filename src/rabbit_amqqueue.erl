@@ -1507,7 +1507,7 @@ forget_all_durable(Node) ->
     %% Note rabbit is not running so we avoid e.g. the worker pool. Also why
     %% we don't invoke the return from rabbit_binding:process_deletions/1.
     {atomic, ok} =
-        mnesia:sync_transaction(
+        ramnesia:transaction(
           fun () ->
                   Qs = mnesia:match_object(rabbit_durable_queue,
                                            amqqueue:pattern_match_all(), write),
@@ -1672,10 +1672,12 @@ delete_queues_on_node_down(Node) ->
     lists:unzip(lists:flatten([
         rabbit_misc:execute_mnesia_transaction(
           fun () -> [{Queue, delete_queue(Queue)} || Queue <- Queues] end
-        ) || Queues <- partition_queues(queues_to_delete_when_node_down(Node))
+        )
+        || Queues <- partition_queues(queues_to_delete_when_node_down(Node))
     ])).
 
 delete_queue(QueueName) ->
+io:format("Delete queue  ~p~n", [QueueName]),
     ok = mnesia:delete({rabbit_queue, QueueName}),
     rabbit_binding:remove_transient_for_destination(QueueName).
 
@@ -1694,13 +1696,27 @@ partition_queues(T) ->
 
 queues_to_delete_when_node_down(NodeDown) ->
     rabbit_misc:execute_mnesia_transaction(fun () ->
-        qlc:e(qlc:q([amqqueue:get_name(Q) ||
-            Q <- mnesia:table(rabbit_queue),
-                amqqueue:qnode(Q) == NodeDown andalso
-                not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q)) andalso
-                (not rabbit_amqqueue:is_replicated(Q) orelse
-                rabbit_amqqueue:is_dead_exclusive(Q))]
-        ))
+        % qlc:e(qlc:q([amqqueue:get_name(Q) ||
+        %     Q <- mnesia:table(rabbit_queue),
+        %         amqqueue:qnode(Q) == NodeDown andalso
+        %         not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q)) andalso
+        %         (not rabbit_amqqueue:is_replicated(Q) orelse
+        %         rabbit_amqqueue:is_dead_exclusive(Q))]
+        % ))
+        mnesia:foldl(fun(Q, Acc) ->
+            case amqqueue:qnode(Q) == NodeDown andalso
+                    not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q)) andalso
+                    (not rabbit_amqqueue:is_replicated(Q) orelse
+                    rabbit_amqqueue:is_dead_exclusive(Q)) of
+                true ->
+                    [amqqueue:get_name(Q) | Acc];
+                false ->
+                    Acc
+            end
+        end,
+        [],
+        rabbit_queue)
+
     end).
 
 notify_queue_binding_deletions(QueueDeletions) ->

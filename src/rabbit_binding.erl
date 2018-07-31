@@ -149,10 +149,10 @@ add(Binding, ActingUser) -> add(Binding, fun (_Src, _Dst) -> ok end, ActingUser)
 -spec add(rabbit_types:binding(), inner_fun(), rabbit_types:username()) -> bind_res().
 
 add(Binding, InnerFun, ActingUser) ->
-    binding_action(
+    Res = binding_action(
       Binding,
       fun (Src, Dst, B) ->
-              case rabbit_exchange:validate_binding(Src, B) of
+              Res1 = case rabbit_exchange:validate_binding(Src, B) of
                   ok ->
                       lock_resource(Src, read),
                       lock_resource(Dst, read),
@@ -170,8 +170,12 @@ add(Binding, InnerFun, ActingUser) ->
                       end;
                   {error, _} = Err ->
                       rabbit_misc:const(Err)
-              end
-      end, fun not_found_or_absent_errs/1).
+              end,
+              io:format("Inner action result ~p~n", [Res1]),
+              Res1
+      end, fun not_found_or_absent_errs/1),
+    io:format("Binding action result ~p~n", [Res]),
+    Res.
 
 add(Src, Dst, B, ActingUser) ->
     [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
