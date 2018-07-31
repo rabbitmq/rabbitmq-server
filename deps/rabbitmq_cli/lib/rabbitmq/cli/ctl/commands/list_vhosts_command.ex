@@ -15,7 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
-  alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
+  alias RabbitMQ.CLI.Ctl.InfoKeys
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput

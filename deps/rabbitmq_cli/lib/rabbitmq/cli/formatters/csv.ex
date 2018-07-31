@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Formatters.FormatterHelpers, as: FormatterHelpers
+alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
 defmodule RabbitMQ.CLI.Formatters.Csv do
 
@@ -117,4 +117,3 @@ defimpl CSV.Encode, for: Map do
     |> CSV.Encode.encode(env)
   end
 end
-

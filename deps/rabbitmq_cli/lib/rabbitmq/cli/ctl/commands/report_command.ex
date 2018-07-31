@@ -15,15 +15,10 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
-  alias RabbitMQ.CLI.Ctl.Commands.StatusCommand,          as: StatusCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand,   as: ClusterStatusCommand
-  alias RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand,     as: EnvironmentCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand, as: ListConnectionsCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand,    as: ListChannelsCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand,      as: ListQueuesCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand,   as: ListExchangesCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand,    as: ListBindingsCommand
-  alias RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand, as: ListPermissionsCommand
+  alias RabbitMQ.CLI.Ctl.Commands.{ClusterStatusCommand, EnvironmentCommand,
+    ListBindingsCommand, ListChannelsCommand, ListConnectionsCommand,
+    ListExchangesCommand, ListParametersCommand, ListPermissionsCommand,
+    ListPoliciesCommand, ListQueuesCommand, StatusCommand}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -64,7 +59,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
               [run_command(ListQueuesCommand, info_keys(ListQueuesCommand), opts),
                run_command(ListExchangesCommand, info_keys(ListExchangesCommand), opts),
                run_command(ListBindingsCommand, info_keys(ListBindingsCommand), opts),
-               run_command(ListPermissionsCommand, [], opts)]
+               run_command(ListPermissionsCommand, [], opts),
+               run_command(ListPoliciesCommand, [], opts),
+               run_command(ListParametersCommand, [], opts)]
             end)
         data ++ vhost_data
     end

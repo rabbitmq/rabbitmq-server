@@ -53,7 +53,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   end
 
   defmodule Formatter do
-    alias RabbitMQ.CLI.Formatters.FormatterHelpers, as: FormatterHelpers
+    alias RabbitMQ.CLI.Formatters.FormatterHelpers
     alias RabbitMQ.CLI.InformationUnit, as: IU
 
     @behaviour RabbitMQ.CLI.FormatterBehaviour

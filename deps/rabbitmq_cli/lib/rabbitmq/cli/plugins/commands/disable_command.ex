@@ -16,8 +16,7 @@
 
 defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Core.Validators, as: Validators
+  alias RabbitMQ.CLI.Core.{Helpers, Validators}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

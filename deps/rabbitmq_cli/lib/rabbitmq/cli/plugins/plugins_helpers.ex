@@ -13,8 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 alias RabbitMQ.CLI.Core.Helpers, as: CliHelpers
-alias RabbitMQ.CLI.Core.Config, as: Config
-alias RabbitMQ.CLI.Core.Validators, as: Validators
+alias RabbitMQ.CLI.Core.{Config, Validators}
 
 defmodule RabbitMQ.CLI.Plugins.Helpers do
   import Rabbitmq.Atom.Coerce

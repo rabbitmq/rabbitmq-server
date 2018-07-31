@@ -13,8 +13,8 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Formatters.FormatterHelpers, as: FormatterHelpers
-alias RabbitMQ.CLI.Core.Output, as: Output
+alias RabbitMQ.CLI.Formatters.FormatterHelpers
+alias RabbitMQ.CLI.Core.Output
 
 defmodule RabbitMQ.CLI.Formatters.Report do
   @behaviour RabbitMQ.CLI.FormatterBehaviour

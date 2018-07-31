@@ -15,16 +15,9 @@
 
 
 defmodule RabbitMQCtl do
-  alias RabbitMQ.CLI.Core.Distribution,  as: Distribution
+  alias RabbitMQ.CLI.Core.{CommandModules, Distribution, ExitCodes, Helpers, Output, Parser}
+  alias RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
-  alias RabbitMQ.CLI.Ctl.Commands.HelpCommand, as: HelpCommand
-  alias RabbitMQ.CLI.Core.Output, as: Output
-  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
-
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Core.Parser, as: Parser
-
-  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
   # Enable unit tests for private functions
   @compile if Mix.env == :test, do: :export_all

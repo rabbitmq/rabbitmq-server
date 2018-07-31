@@ -15,8 +15,8 @@
 
 ## Prints values from a command as strings(if possible)
 defmodule RabbitMQ.CLI.Formatters.String do
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Formatters.FormatterHelpers, as: FormatterHelpers
+  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 

@@ -17,7 +17,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Helpers
 
   @command RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand
 

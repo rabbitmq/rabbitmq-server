@@ -18,7 +18,7 @@ defmodule CloseAllConnectionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
+  alias RabbitMQ.CLI.Ctl.RpcStream
 
   @helpers RabbitMQ.CLI.Core.Helpers
 
