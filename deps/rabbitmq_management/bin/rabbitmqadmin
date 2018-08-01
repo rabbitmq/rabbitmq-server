@@ -539,13 +539,16 @@ class Management:
             headers["Content-Type"] = "application/json"
         try:
             conn.request(method, path, body, headers)
+        except ConnectionRefusedError as e:
+            die("Could not connect: {0}".format(e))
         except socket.error as e:
             traceback.print_exc()
             die("Could not connect: {0}".format(e))
         try:
             resp = conn.getresponse()
         except socket.timeout as e:
-            die("Timed out getting HTTP response")
+            die("Timed out getting HTTP response (request timeout: {0})".format(
+                self.options.request_timeout))
         except:
             e_fmt = traceback.format_exc()
             die("Error getting HTTP response:\n\n{0}".format(e_fmt))
