@@ -280,6 +280,7 @@ default_options = { "hostname"        : "localhost",
                     "username"        : "guest",
                     "password"        : "guest",
                     "ssl"             : False,
+                    "request_timeout" : 120,
                     "verbose"         : True,
                     "format"          : "table",
                     "depth"           : 1,
@@ -343,6 +344,8 @@ def make_parser():
         help="Disables peer hostname verification", default=False, action="store_true")
     add("-k", "--ssl-insecure", dest="ssl_insecure",
         help="Disables all SSL validations like curl's '-k' argument", default=False, action="store_true")
+    add("-t", "--request-timeout", dest="request_timeout",
+        help="HTTP request timeout in seconds", type="int")
     add("-f", "--format", dest="format",
         help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]")
     add("-S", "--sort", dest="sort", help="sort key for listing queries")
@@ -527,7 +530,8 @@ class Management:
                                                       self.options.port)
         else:
             conn = httplib.HTTPConnection(self.options.hostname,
-                                          self.options.port)
+                                          self.options.port,
+                                          timeout=self.options.request_timeout)
         auth = (self.options.username + ":" + self.options.password)
 
         headers = {"Authorization": "Basic " + b64(auth)}
@@ -535,10 +539,19 @@ class Management:
             headers["Content-Type"] = "application/json"
         try:
             conn.request(method, path, body, headers)
-        except socket.error as e:
-            traceback.print_exc(e)
+        except ConnectionRefusedError as e:
             die("Could not connect: {0}".format(e))
-        resp = conn.getresponse()
+        except socket.error as e:
+            traceback.print_exc()
+            die("Could not connect: {0}".format(e))
+        try:
+            resp = conn.getresponse()
+        except socket.timeout:
+            die("Timed out getting HTTP response (request timeout: {0} seconds)".format(
+                self.options.request_timeout))
+        except:
+            e_fmt = traceback.format_exc()
+            die("Error getting HTTP response:\n\n{0}".format(e_fmt))
         if resp.status == 400:
             die(json.loads(resp.read())['reason'])
         if resp.status == 401:
