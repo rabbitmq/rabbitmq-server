@@ -37,6 +37,6 @@ before_script:
   # Make sure we use Elixir from Erlang Solutions and not kiex.
   - |
     echo YES | kiex implode
-    elixir --version
+    elixir --version || :
 
 script: make tests
