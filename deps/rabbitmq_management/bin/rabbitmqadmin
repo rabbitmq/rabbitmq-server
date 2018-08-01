@@ -546,7 +546,7 @@ class Management:
             die("Could not connect: {0}".format(e))
         try:
             resp = conn.getresponse()
-        except socket.timeout as e:
+        except socket.timeout:
             die("Timed out getting HTTP response (request timeout: {0})".format(
                 self.options.request_timeout))
         except:
