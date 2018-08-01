@@ -345,7 +345,7 @@ def make_parser():
     add("-k", "--ssl-insecure", dest="ssl_insecure",
         help="Disables all SSL validations like curl's '-k' argument", default=False, action="store_true")
     add("-t", "--request-timeout", dest="request_timeout",
-        help="HTTP request timeout", type="int")
+        help="HTTP request timeout in seconds", type="int")
     add("-f", "--format", dest="format",
         help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]")
     add("-S", "--sort", dest="sort", help="sort key for listing queries")
