@@ -547,7 +547,7 @@ class Management:
         try:
             resp = conn.getresponse()
         except socket.timeout:
-            die("Timed out getting HTTP response (request timeout: {0})".format(
+            die("Timed out getting HTTP response (request timeout: {0} seconds)".format(
                 self.options.request_timeout))
         except:
             e_fmt = traceback.format_exc()
