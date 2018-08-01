@@ -540,9 +540,15 @@ class Management:
         try:
             conn.request(method, path, body, headers)
         except socket.error as e:
-            traceback.print_exc(e)
+            traceback.print_exc()
             die("Could not connect: {0}".format(e))
-        resp = conn.getresponse()
+        try:
+            resp = conn.getresponse()
+        except socket.timeout as e:
+            die("Timed out getting HTTP response")
+        except:
+            e_fmt = traceback.format_exc()
+            die("Error getting HTTP response:\n\n{0}".format(e_fmt))
         if resp.status == 400:
             die(json.loads(resp.read())['reason'])
         if resp.status == 401:
