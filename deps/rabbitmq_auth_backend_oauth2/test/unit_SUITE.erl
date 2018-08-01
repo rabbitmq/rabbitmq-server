@@ -49,7 +49,7 @@ test_successful_access_with_a_token(_) ->
     %% Check user access granted by token
     Jwk = ?UTIL_MOD:fixture_jwk(),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
-    application:set_env(rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     Username = <<"username">>,
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
@@ -91,7 +91,7 @@ test_successful_access_with_a_token(_) ->
 test_successful_access_with_a_token_that_has_tag_scopes(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
-    application:set_env(rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     Username = <<"username">>,
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token([<<"rabbitmq.tag:management">>,
@@ -107,7 +107,7 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     Jwk0 = ?UTIL_MOD:fixture_jwk(),
     Jwk  = Jwk0#{<<"k">> => <<"bm90b2tlbmtleQ">>},
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
-    application:set_env(rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     
     ?assertMatch({refused, _, _},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, <<"not a token">>}])).
@@ -119,7 +119,7 @@ test_restricted_vhost_access_with_a_valid_token(_) ->
     Jwk   = ?UTIL_MOD:fixture_jwk(),
     Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
-    application:set_env(rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
 
     %% this user can authenticate successfully and access certain vhosts
     {ok, #auth_user{username = Username, tags = []} = User} =
@@ -135,7 +135,7 @@ test_insufficient_permissions_in_a_valid_token(_) ->
     Jwk   = ?UTIL_MOD:fixture_jwk(),
     Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
-    application:set_env(rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
 
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
@@ -165,7 +165,7 @@ test_token_expiration(_) ->
     Username = <<"username">>,
     Jwk = ?UTIL_MOD:fixture_jwk(),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
-    application:set_env(rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     TokenData = ?UTIL_MOD:expirable_token(),
     Username  = <<"username">>,
@@ -251,10 +251,10 @@ test_command_pem_file_no_kid(Config) ->
         #{node => node(), pem_file => PublicKeyFile}),
 
     %% Set default key
-    {ok, UaaEnv0} = application:get_env(rabbitmq_auth_backend_oauth2, uaa_jwt),
+    {ok, UaaEnv0} = application:get_env(rabbitmq_auth_backend_oauth2, key_config),
     UaaEnv1 = proplists:delete(default_key, UaaEnv0),
     UaaEnv2 = [{default_key, <<"token-key">>} | UaaEnv1],
-    application:set_env(rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv2),
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv2),
 
     Token = ?UTIL_MOD:sign_token_no_kid(?UTIL_MOD:fixture_token(), Jwk),
     {ok, #auth_user{username = Username} = User} =
@@ -296,10 +296,10 @@ test_command_pem_no_kid(Config) ->
         #{node => node(), pem => Pem}),
 
     %% This is the default key
-    {ok, UaaEnv0} = application:get_env(rabbitmq_auth_backend_oauth2, uaa_jwt),
+    {ok, UaaEnv0} = application:get_env(rabbitmq_auth_backend_oauth2, key_config),
     UaaEnv1 = proplists:delete(default_key, UaaEnv0),
     UaaEnv2 = [{default_key, <<"token-key">>} | UaaEnv1],
-    application:set_env(rabbitmq_auth_backend_oauth2, uaa_jwt, UaaEnv2),
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv2),
 
     Token = ?UTIL_MOD:sign_token_no_kid(?UTIL_MOD:fixture_token(), Jwk),
     {ok, #auth_user{username = Username} = User} =

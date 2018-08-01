@@ -35,7 +35,7 @@ get_key_id(Token) ->
 
 
 get_default_key() ->
-    UaaEnv = application:get_env(rabbitmq_auth_backend_oauth2, uaa_jwt, []),
+    UaaEnv = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
     case proplists:get_value(default_key, UaaEnv, undefined) of
         undefined -> {error, no_key};
         Val       -> {ok, Val}
