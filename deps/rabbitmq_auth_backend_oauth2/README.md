@@ -1,5 +1,7 @@
 # OAuth 2.0 (JWT) Token Authorisation Backend for RabbitMQ
 
+[![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-auth-backend-oauth2.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-auth-backend-oauth2)
+
 This **experimental** [RabbitMQ authentication/authorisation backend](http://www.rabbitmq.com/access-control.html) plugin lets applications (clients)
 and users authenticate and authorize using JWT-encoded [OAuth 2.0 access tokens](https://tools.ietf.org/html/rfc6749#section-1.4).
 
