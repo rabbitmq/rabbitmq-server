@@ -1068,26 +1068,6 @@ end}.
     {datatype, {enum, [true, false]}}
 ]}.
 
-{translation, "rabbit.log.syslog.enabled",
-fun(Conf) ->
-    case cuttlefish:conf_get("log.syslog", Conf) of
-        true ->
-            case cuttlefish:conf_get("log.syslog.ip", Conf, undefined) of
-                undefined ->
-                    case cuttlefish:conf_get("log.syslog.host", Conf, undefined) of
-                        undefined ->
-                            cuttlefish:invalid("Either log.syslog.ip or log.syslog.host must be set");
-                        _Host ->
-                            true
-                    end;
-                _IpAddr ->
-                    true
-            end;
-        _ ->
-            []
-    end
-end}.
-
 {mapping, "log.syslog.level", "rabbit.log.syslog.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
