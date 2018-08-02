@@ -540,7 +540,7 @@ credential_validator.regexp = ^abc\\d+",
     log.syslog.identity = rabbitmq
     log.syslog.facility = user
     log.syslog.multiline_mode = true
-    log.syslog.host = 10.10.10.10
+    log.syslog.ip = 10.10.10.10
     log.syslog.port = 123",
    [
     {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
