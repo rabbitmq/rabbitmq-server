@@ -1067,6 +1067,27 @@ end}.
 {mapping, "log.syslog", "rabbit.log.syslog.enabled", [
     {datatype, {enum, [true, false]}}
 ]}.
+
+{translation, "rabbit.log.syslog.enabled",
+fun(Conf) ->
+    case cuttlefish:conf_get("log.syslog", Conf) of
+        true ->
+            case cuttlefish:conf_get("log.syslog.ip", Conf, undefined) of
+                undefined ->
+                    case cuttlefish:conf_get("log.syslog.host", Conf, undefined) of
+                        undefined ->
+                            cuttlefish:invalid("Either log.syslog.ip or log.syslog.host must be set");
+                        _Host ->
+                            true
+                    end;
+                _IpAddr ->
+                    true
+            end;
+        _ ->
+            []
+    end
+end}.
+
 {mapping, "log.syslog.level", "rabbit.log.syslog.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
@@ -1086,9 +1107,30 @@ end}.
     {datatype, {enum, [true, false]}}
 ]}.
 
+{mapping, "log.syslog.ip", "syslog.dest_host", [
+    {datatype, string},
+    {validators, ["is_ip"]}
+]}.
+
 {mapping, "log.syslog.host", "syslog.dest_host", [
     {datatype, string}
 ]}.
+
+{translation, "syslog.dest_host",
+fun(Conf) ->
+    case cuttlefish:conf_get("log.syslog", Conf) of
+        true ->
+            case cuttlefish:conf_get("log.syslog.ip", Conf, undefined) of
+                undefined ->
+                    % If log.syslog.ip is not set, then this must be set
+                    cuttlefish:conf_get("log.syslog.host", Conf);
+                IpAddr ->
+                    IpAddr
+            end;
+        _ ->
+            cuttlefish:invalid("log.syslog must be set to true to set log.syslog.host or log.syslog.ip")
+    end
+end}.
 
 {mapping, "log.syslog.port", "syslog.dest_port", [
     {datatype, integer}
@@ -1350,6 +1392,12 @@ end}.
 fun(File) ->
     ReadFile = file:read_file_info(File),
     element(1, ReadFile) == ok
+end}.
+
+{validator, "is_ip", "string is a valid IP address",
+fun(IpStr) ->
+    Res = inet:parse_address(IpStr),
+    element(1, Res) == ok
 end}.
 
 {validator, "non_negative_integer", "number should be greater or equal to zero",
