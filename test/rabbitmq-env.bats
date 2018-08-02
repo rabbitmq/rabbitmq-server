@@ -40,16 +40,16 @@ setup() {
 @test "default Erlang distribution buffer size" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
-    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +zdbbl 1280000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
-    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +zdbbl 1280000 "* ]]
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +zdbbl 128000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +zdbbl 128000 "* ]]
 }
 
 @test "can configure Erlang distribution buffer size via conf file" {
-    echo 'DISTRIBUTION_BUFFER_SIZE=1000000' > "$RABBITMQ_CONF_ENV_FILE"
+    echo 'DISTRIBUTION_BUFFER_SIZE=123123' > "$RABBITMQ_CONF_ENV_FILE"
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
-    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +zdbbl 1000000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
-    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +zdbbl 1000000 "* ]]
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +zdbbl 123123 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +zdbbl 123123 "* ]]
 }
 
 @test "can configure Erlang distribution buffer size via env" {
@@ -70,8 +70,8 @@ setup() {
 @test "default Erlang maximum number of processes" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
-    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +P 10485760 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
-    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +P 10485760 "* ]]
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +P 1048576 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +P 1048576 "* ]]
 }
 
 @test "can configure Erlang maximum number of processes via conf file" {
