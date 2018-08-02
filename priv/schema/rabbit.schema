@@ -1086,9 +1086,8 @@ end}.
     {datatype, {enum, [true, false]}}
 ]}.
 
-{mapping, "log.syslog.ip", "syslog.dest_host", [
-    {datatype, string},
-    {validators, ["is_ip"]}
+{mapping, "log.syslog.host", "syslog.dest_host", [
+    {datatype, string}
 ]}.
 
 {mapping, "log.syslog.port", "syslog.dest_port", [
@@ -1351,12 +1350,6 @@ end}.
 fun(File) ->
     ReadFile = file:read_file_info(File),
     element(1, ReadFile) == ok
-end}.
-
-{validator, "is_ip", "string is a valid IP address",
-fun(IpStr) ->
-    Res = inet:parse_address(IpStr),
-    element(1, Res) == ok
 end}.
 
 {validator, "non_negative_integer", "number should be greater or equal to zero",
