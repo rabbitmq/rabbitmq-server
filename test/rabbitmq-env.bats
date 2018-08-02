@@ -100,8 +100,8 @@ setup() {
 @test "default Erlang maximum number of atoms" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
-    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +t 500000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
-    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +t 500000 "* ]]
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +t 5000000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +t 5000000 "* ]]
 }
 
 @test "can configure Erlang maximum number of atoms via conf file" {
