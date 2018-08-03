@@ -114,9 +114,10 @@ declare(#amqqueue{name = QName,
     check_auto_delete(Q),
     check_exclusive(Q),
     check_non_durable(Q),
+    QuorumSize = get_quorum_cluster_size(Arguments),
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
     NewQ0 = Q#amqqueue{pid = Id,
                        quorum_nodes = Nodes},
     case rabbit_amqqueue:internal_declare(NewQ0, false) of
@@ -680,3 +681,26 @@ check_non_durable(#amqqueue{name = Name,
 
 queue_name(RaFifoState) ->
     ra_fifo_client:cluster_id(RaFifoState).
+
+get_quorum_cluster_size(Arguments) ->
+    case rabbit_misc:table_lookup(Arguments, <<"x-quorum-cluster-size">>) of
+        undefined -> application:get_env(rabbit, quorum_cluster_size);
+        {_Type, Val} -> Val
+    end.
+
+select_quorum_nodes(Size, All) when length(All) =< Size ->
+    All;
+select_quorum_nodes(Size, All) ->
+    Node = node(),
+    case lists:member(Node, All) of
+        true ->
+            select_quorum_nodes(Size - 1, lists:delete(Node, All), [Node]);
+        false ->
+            select_quorum_nodes(Size, All, [])
+    end.
+
+select_quorum_nodes(0, _, Selected) ->
+    Selected;
+select_quorum_nodes(Size, Rest, Selected) ->
+    S = lists:nth(rand:uniform(length(Rest)), Rest),
+    select_quorum_nodes(Size - 1, lists:delete(S, Rest), [S | Selected]).

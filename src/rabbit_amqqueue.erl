@@ -629,7 +629,8 @@ declare_args() ->
      {<<"x-max-priority">>,            fun check_max_priority_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
-     {<<"x-queue-type">>,              fun check_queue_type/2}].
+     {<<"x-queue-type">>,              fun check_queue_type/2},
+     {<<"x-quorum-cluster-size">>,     fun check_quorum_cluster_size_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -668,6 +669,13 @@ check_max_priority_arg({Type, Val}, Args) ->
         ok when Val =< ?MAX_SUPPORTED_PRIORITY -> ok;
         ok                                     -> {error, {max_value_exceeded, Val}};
         Error                                  -> Error
+    end.
+
+check_quorum_cluster_size_arg({Type, Val}, Args) ->
+    case check_non_neg_int_arg({Type, Val}, Args) of
+        ok when Val == 0 -> {error, {value_zero, Val}};
+        ok               -> ok;
+        Error            -> Error
     end.
 
 %% Note that the validity of x-dead-letter-exchange is already verified
