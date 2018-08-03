@@ -380,7 +380,7 @@ var HELP = {
         <dd>Rate at which queues write messages to disk.</dd>\
       </dl>\
       <p>\
-        Note that the last two items are originate in queues rather than \
+        Note that the last two items originate in queues rather than \
         channels; they may therefore be slightly out of sync with other \
         statistics.\
       </p>',
