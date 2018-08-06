@@ -155,5 +155,14 @@
                                                      {request_timeout,    789}]}]}
                          ]}
   ], [rabbitmq_management]
+ },
+
+ {server_opts_max_keepalive,
+  "management.listener.server.max_keepalive = 120",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                         ]}
+  ], [rabbitmq_management]
  }
 ].
