@@ -144,8 +144,10 @@ boot_ssl(NumAcceptors) ->
 ensure_ssl() ->
     {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
     ok = app_utils:start_applications(SslAppsConfig),
-    {ok, SslOptsConfig} = application:get_env(rabbit, ssl_options),
-    rabbit_ssl_options:fix(SslOptsConfig).
+    {ok, SslOptsConfig0} = application:get_env(rabbit, ssl_options),
+    SslOptsConfig = rabbit_ssl_options:fix(SslOptsConfig0),
+    rabbit_ssl_options:verify_certs(SslOptsConfig),
+    SslOptsConfig.
 
 poodle_check(Context) ->
     {ok, Vsn} = application:get_key(ssl, vsn),

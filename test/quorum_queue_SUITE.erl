@@ -52,7 +52,10 @@ groups() ->
                                             consume_in_minority
                                            ]},
                       {cluster_size_5, [], [start_queue,
-                                            start_queue_concurrent]}
+                                            start_queue_concurrent,
+                                            quorum_cluster_size_3,
+                                            quorum_cluster_size_7
+                                           ]}
                      ]},
      {unclustered, [], [
                         {cluster_size_2, [], [add_member]}
@@ -245,7 +248,19 @@ declare_invalid_args(Config) ->
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(rabbit_ct_client_helpers:open_channel(Config, Node),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-queue-mode">>, longstr, <<"lazy">>}])).
+                    {<<"x-queue-mode">>, longstr, <<"lazy">>}])),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-quorum-cluster-size">>, longstr, <<"hop">>}])),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-quorum-cluster-size">>, long, 0}])).
 
 start_queue(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -302,6 +317,26 @@ start_queue_concurrent(Config) ->
 
     ok.
 
+quorum_cluster_size_3(Config) ->
+    quorum_cluster_size_x(Config, 3, 3).
+
+quorum_cluster_size_7(Config) ->
+    quorum_cluster_size_x(Config, 7, 5).
+
+quorum_cluster_size_x(Config, Max, Expected) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-cluster-size">>, long, Max}])),
+    {ok, Members, _} = ra:members({'%2F_quorum-q', Node}),
+    ?assertEqual(Expected, length(Members)),
+    Info = rpc:call(Node, rabbit_quorum_queue, infos,
+                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    MembersQ = proplists:get_value(members, Info),
+    ?assertEqual(Expected, length(MembersQ)).
 
 stop_queue(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -1368,7 +1403,7 @@ basic_recover(Config) ->
     publish(Ch, QQ),
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
-    DeliveryTag = consume(Ch, QQ, false),
+    _ = consume(Ch, QQ, false),
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
     amqp_channel:cast(Ch, #'basic.recover'{requeue = true}),
