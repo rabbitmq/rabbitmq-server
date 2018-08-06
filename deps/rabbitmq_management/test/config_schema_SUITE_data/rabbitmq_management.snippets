@@ -116,5 +116,44 @@
                           {listener, [{cowboy_opts, [{compress, true}]}]}
                          ]}
   ], [rabbitmq_management]
+ },
+
+ {server_opts_compress_and_idle_timeout,
+  "management.listener.server.compress     = true
+   management.listener.server.idle_timeout = 123",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{compress,     true},
+                                                     {idle_timeout, 123}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {server_opts_compress_and_multiple_timeouts,
+  "management.listener.server.compress     = true
+   management.listener.server.idle_timeout = 123
+   management.listener.server.inactivity_timeout = 456
+   management.listener.server.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{compress,           true},
+                                                     {idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {server_opts_multiple_timeouts_only,
+  "management.listener.server.idle_timeout = 123
+   management.listener.server.inactivity_timeout = 456
+   management.listener.server.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
  }
 ].
