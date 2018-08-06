@@ -107,4 +107,71 @@
                           {cors_max_age, 3600}
                          ]}
   ], [rabbitmq_management]
- }].
+ },
+
+ {server_opts_compress,
+  "management.listener.server.compress = true",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{compress, true}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {server_opts_compress_and_idle_timeout,
+  "management.listener.server.compress     = true
+   management.listener.server.idle_timeout = 123",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{compress,     true},
+                                                     {idle_timeout, 123}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {server_opts_compress_and_multiple_timeouts,
+  "management.listener.server.compress     = true
+   management.listener.server.idle_timeout = 123
+   management.listener.server.inactivity_timeout = 456
+   management.listener.server.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{compress,           true},
+                                                     {idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {server_opts_multiple_timeouts_only,
+  "management.listener.server.idle_timeout = 123
+   management.listener.server.inactivity_timeout = 456
+   management.listener.server.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {server_opts_shutdown_timeout,
+  "management.listener.server.shutdown_timeout = 7000",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {server_opts_max_keepalive,
+  "management.listener.server.max_keepalive = 120",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ }
+].
