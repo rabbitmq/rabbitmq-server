@@ -157,6 +157,15 @@
   ], [rabbitmq_management]
  },
 
+ {server_opts_shutdown_timeout,
+  "management.listener.server.shutdown_timeout = 7000",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
  {server_opts_max_keepalive,
   "management.listener.server.max_keepalive = 120",
   [

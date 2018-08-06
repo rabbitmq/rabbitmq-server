@@ -56,6 +56,9 @@
 {mapping, "management.listener.server.request_timeout", "rabbitmq_management.listener.cowboy_opts.request_timeout",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 
+{mapping, "management.listener.server.shutdown_timeout", "rabbitmq_management.listener.cowboy_opts.shutdown_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
 {mapping, "management.listener.server.max_keepalive", "rabbitmq_management.listener.cowboy_opts.max_keepalive",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 
