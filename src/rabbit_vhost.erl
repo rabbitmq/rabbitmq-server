@@ -52,6 +52,10 @@ recover() ->
     rabbit_amqqueue:on_node_down(node()),
 
     rabbit_amqqueue:warn_file_limit(),
+
+    %% Prepare rabbit_semi_durable_route table
+    rabbit_binding:recover(),
+
     %% rabbit_vhost_sup_sup will start the actual recovery.
     %% So recovery will be run every time a vhost supervisor is restarted.
     ok = rabbit_vhost_sup_sup:start(),

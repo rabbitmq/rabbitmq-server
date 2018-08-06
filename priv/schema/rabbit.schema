@@ -1067,6 +1067,7 @@ end}.
 {mapping, "log.syslog", "rabbit.log.syslog.enabled", [
     {datatype, {enum, [true, false]}}
 ]}.
+
 {mapping, "log.syslog.level", "rabbit.log.syslog.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
@@ -1090,6 +1091,26 @@ end}.
     {datatype, string},
     {validators, ["is_ip"]}
 ]}.
+
+{mapping, "log.syslog.host", "syslog.dest_host", [
+    {datatype, string}
+]}.
+
+{translation, "syslog.dest_host",
+fun(Conf) ->
+    case cuttlefish:conf_get("log.syslog", Conf) of
+        true ->
+            case cuttlefish:conf_get("log.syslog.ip", Conf, undefined) of
+                undefined ->
+                    % If log.syslog.ip is not set, then this must be set
+                    cuttlefish:conf_get("log.syslog.host", Conf);
+                IpAddr ->
+                    IpAddr
+            end;
+        _ ->
+            cuttlefish:invalid("log.syslog must be set to true to set log.syslog.host or log.syslog.ip")
+    end
+end}.
 
 {mapping, "log.syslog.port", "syslog.dest_port", [
     {datatype, integer}

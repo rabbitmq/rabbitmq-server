@@ -554,10 +554,12 @@ credential_validator.regexp = ^abc\\d+",
   {log_syslog_tcp,
    "log.syslog = true
     log.syslog.transport = tcp
-    log.syslog.protocol = rfc5424",
+    log.syslog.protocol = rfc5424
+    log.syslog.host = syslog.my-network.com",
    [
     {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
-    {syslog, [{protocol, {rfc5424, tcp}}]}
+    {syslog, [{protocol, {rfc5424, tcp}},
+              {dest_host, "syslog.my-network.com"}]}
    ],
    []},
   {log_syslog_udp_default,
