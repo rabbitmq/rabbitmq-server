@@ -107,4 +107,14 @@
                           {cors_max_age, 3600}
                          ]}
   ], [rabbitmq_management]
- }].
+ },
+
+ {server_opts_compress,
+  "management.listener.server.compress = true",
+  [
+   {rabbitmq_management, [
+                          {listener, [{cowboy_opts, [{compress, true}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ }
+].

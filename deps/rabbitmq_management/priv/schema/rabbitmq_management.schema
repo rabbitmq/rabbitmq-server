@@ -42,8 +42,12 @@
 {mapping, "management.listener.ssl", "rabbitmq_management.listener.ssl",
     [{datatype, {enum, [true, false]}}]}.
 
+%% Cowboy (HTTP server) options ========================================================
 
-%% SSL options section ========================================================
+{mapping, "management.listener.server.compress", "rabbitmq_management.listener.cowboy_opts.compress",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% HTTPS (TLS) options ========================================================
 
 {mapping, "management.listener.ssl_opts", "rabbitmq_management.listener.ssl_opts", [
     {datatype, {enum, [none]}}
