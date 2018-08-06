@@ -456,8 +456,12 @@ strip_queue_pids(Item) ->
 
 strip_queue_pids([{_, unknown} | T], Acc) ->
     strip_queue_pids(T, Acc);
-strip_queue_pids([{pid, Pid} | T], Acc) when is_pid(Pid) ->
-    strip_queue_pids(T, [{node, node(Pid)} | Acc]);
+strip_queue_pids([{pid, Pid} | T], Acc0) when is_pid(Pid) ->
+    Acc = case proplists:is_defined(node, Acc0) of
+              false -> [{node, node(Pid)} | Acc0];
+              true  -> Acc0
+          end,
+    strip_queue_pids(T, Acc);
 strip_queue_pids([{pid, _} | T], Acc) ->
     strip_queue_pids(T, Acc);
 strip_queue_pids([{owner_pid, _} | T], Acc) ->
@@ -472,7 +476,7 @@ strip_queue_pids([], Acc) ->
 strip_pids(Item = [T | _]) when is_tuple(T) ->
     strip_pids(Item, []);
 
-strip_pids(Items) -> [strip_pids(I) || I <- Items].
+strip_pids(Items) -> [lists:usort(strip_pids(I)) || I <- Items].
 
 strip_pids([{_, unknown} | T], Acc) ->
     strip_pids(T, Acc);
