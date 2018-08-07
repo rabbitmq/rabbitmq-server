@@ -33,10 +33,6 @@
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
--spec headers_match
-        (rabbit_framing:amqp_table(), rabbit_framing:amqp_table()) ->
-            boolean().
-
 info(_X) -> [].
 info(_X, _) -> [].
 
@@ -51,8 +47,24 @@ route(#exchange{name = Name},
                   undefined -> [];
                   H         -> rabbit_misc:sort_field_table(H)
               end,
-    rabbit_router:match_bindings(
-      Name, fun (#binding{args = Spec}) -> headers_match(Spec, Headers) end).
+    CurrentBindings = case ets:lookup(rabbit_headers_bindings, Name) of
+        [] -> [];
+        [#headers_bindings{bindings = E}] -> E
+    end,
+    get_routes(Headers, CurrentBindings, ordsets:new()).
+
+get_routes(_, [], ResDests) -> ordsets:to_list(ResDests);
+get_routes(Headers, [ {BindingType, DAT, DAF, Args, _} | T ], ResDests) ->
+    case headers_match(BindingType, Args, Headers) of
+        true  -> get_routes(Headers, T, ordsets:union(DAT, ResDests));
+        _ -> get_routes(Headers, T, ordsets:union(DAF, ResDests))
+    end.
+
+headers_match(all, Args, Headers) ->
+    headers_match_all(Args, Headers);
+headers_match(any, Args, Headers) ->
+    headers_match_any(Args, Headers).
+
 
 validate_binding(_X, #binding{args = Args}) ->
     case rabbit_misc:table_lookup(Args, <<"x-match">>) of
@@ -95,45 +107,95 @@ parse_x_match({longstr, <<"all">>}) -> all;
 parse_x_match({longstr, <<"any">>}) -> any;
 parse_x_match(_)                    -> all. %% legacy; we didn't validate
 
-%% Horrendous matching algorithm. Depends for its merge-like
-%% (linear-time) behaviour on the lists:keysort
-%% (rabbit_misc:sort_field_table) that route/1 and
-%% rabbit_binding:{add,remove}/2 do.
 %%
-%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-%% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
-%%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+%% REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
+%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 %%
-headers_match(Args, Data) ->
-    MK = parse_x_match(rabbit_misc:table_lookup(Args, <<"x-match">>)),
-    headers_match(Args, Data, true, false, MK).
 
-% A bit less horrendous algorithm :)
-headers_match(_, _, false, _, all) -> false;
-headers_match(_, _, _, true, any) -> true;
+%% Binding type 'all' match
 
-% No more bindings, return current state
-headers_match([], _Data, AllMatch, _AnyMatch, all) -> AllMatch;
-headers_match([], _Data, _AllMatch, AnyMatch, any) -> AnyMatch;
+% No more match operator to check; return true
+headers_match_all([], _) -> true;
+% Purge nx op on no data as all these are true
+headers_match_all([{_, nx, _} | BNext], []) ->
+    headers_match_all(BNext, []);
+% No more message header but still match operator to check; return false
+headers_match_all(_, []) -> false;
+% Current header key not in match operators; go next header with current match operator
+headers_match_all(BCur = [{BK, _, _} | _], [{HK, _, _} | HNext])
+    when BK > HK -> headers_match_all(BCur, HNext);
+% Current binding key must not exist in data, go next binding
+headers_match_all([{BK, nx, _} | BNext], HCur = [{HK, _, _} | _])
+    when BK < HK -> headers_match_all(BNext, HCur);
+% Current match operator does not exist in message; return false
+headers_match_all([{BK, _, _} | _], [{HK, _, _} | _])
+    when BK < HK -> false;
+%
+% From here, BK == HK (keys are the same)
+%
+% Current values must match and do match; ok go next
+headers_match_all([{_, eq, BV} | BNext], [{_, _, HV} | HNext])
+    when BV == HV -> headers_match_all(BNext, HNext);
+% Current values must match but do not match; return false
+headers_match_all([{_, eq, _} | _], _) -> false;
+% Key must not exist, return false
+headers_match_all([{_, nx, _} | _], _) -> false;
+% Current header key must exist; ok go next
+headers_match_all([{_, ex, _} | BNext], [ _ | HNext]) ->
+    headers_match_all(BNext, HNext);
+% <= < = != > >=
+headers_match_all([{_, ne, BV} | BNext], HCur = [{_, _, HV} | _])
+    when BV /= HV -> headers_match_all(BNext, HCur);
+headers_match_all([{_, ne, _} | _], _) -> false;
+headers_match_all([{_, gt, BV} | BNext], HCur = [{_, _, HV} | _])
+    when HV > BV -> headers_match_all(BNext, HCur);
+headers_match_all([{_, gt, _} | _], _) -> false;
+headers_match_all([{_, ge, BV} | BNext], HCur = [{_, _, HV} | _])
+    when HV >= BV -> headers_match_all(BNext, HCur);
+headers_match_all([{_, ge, _} | _], _) -> false;
+headers_match_all([{_, lt, BV} | BNext], HCur = [{_, _, HV} | _])
+    when HV < BV -> headers_match_all(BNext, HCur);
+headers_match_all([{_, lt, _} | _], _) -> false;
+headers_match_all([{_, le, BV} | BNext], HCur = [{_, _, HV} | _])
+    when HV =< BV -> headers_match_all(BNext, HCur);
+headers_match_all([{_, le, _} | _], _) -> false.
 
-% Delete bindings starting with x-
-headers_match([{<<"x-", _/binary>>, _PT, _PV} | PRest], Data,
-              AllMatch, AnyMatch, MatchKind) ->
-    headers_match(PRest, Data, AllMatch, AnyMatch, MatchKind);
 
-% No more data, but still bindings, false with all
-headers_match(_Pattern, [], _AllMatch, AnyMatch, MatchKind) ->
-    headers_match([], [], false, AnyMatch, MatchKind);
 
-% Data key header not in binding, go next data
-headers_match(Pattern = [{PK, _PT, _PV} | _], [{DK, _DT, _DV} | DRest],
-              AllMatch, AnyMatch, MatchKind) when PK > DK ->
-    headers_match(Pattern, DRest, AllMatch, AnyMatch, MatchKind);
+%% Binding type 'any' match
 
-% Binding key header not in data, false with all, go next binding
-headers_match([{PK, _PT, _PV} | PRest], Data = [{DK, _DT, _DV} | _],
-              _AllMatch, AnyMatch, MatchKind) when PK < DK ->
-    headers_match(PRest, Data, false, AnyMatch, MatchKind);
+% No more match operator to check; return false
+headers_match_any([], _) -> false;
+% On no data left, only nx operator can return true
+headers_match_any([{_, nx, _} | _], []) -> true;
+% No more message header but still match operator to check; return false
+headers_match_any(_, []) -> false;
+% Current header key not in match operators; go next header with current match operator
+headers_match_any(BCur = [{BK, _, _} | _], [{HK, _, _} | HNext])
+    when BK > HK -> headers_match_any(BCur, HNext);
+% nx operator : current binding key must not exist in data, return true
+headers_match_any([{BK, nx, _} | _], [{HK, _, _} | _])
+    when BK < HK -> true;
+% Current binding key does not exist in message; go next binding
+headers_match_any([{BK, _, _} | BNext], HCur = [{HK, _, _} | _])
+    when BK < HK -> headers_match_any(BNext, HCur);
+%
+% From here, BK == HK
+%
+% Current values must match and do match; return true
+headers_match_any([{_, eq, BV} | _], [{_, _, HV} | _]) when BV == HV -> true;
+% Current header key must exist; return true
+headers_match_any([{_, ex, _} | _], _) -> true;
+headers_match_any([{_, ne, BV} | _], [{_, _, HV} | _]) when HV /= BV -> true;
+headers_match_any([{_, gt, BV} | _], [{_, _, HV} | _]) when HV > BV -> true;
+headers_match_any([{_, ge, BV} | _], [{_, _, HV} | _]) when HV >= BV -> true;
+headers_match_any([{_, lt, BV} | _], [{_, _, HV} | _]) when HV < BV -> true;
+headers_match_any([{_, le, BV} | _], [{_, _, HV} | _]) when HV =< BV -> true;
+% No match yet; go next
+headers_match_any([_ | BNext], HCur) ->
+    headers_match_any(BNext, HCur).
+
 
 get_match_operators(BindingArgs) ->
     MatchOperators = get_match_operators(BindingArgs, []),
@@ -144,21 +206,6 @@ get_match_operators([], Result) -> Result;
 %% pattern field is supposed to mean simple presence of
 %% the corresponding data field. I've interpreted that to
 %% mean a type of "void" for the pattern field.
-headers_match([{PK, void, _PV} | PRest], [{DK, _DT, _DV} | DRest],
-              AllMatch, _AnyMatch, MatchKind) when PK == DK ->
-    headers_match(PRest, DRest, AllMatch, true, MatchKind);
-
-% Complete match, true with any, go next
-headers_match([{PK, _PT, PV} | PRest], [{DK, _DT, DV} | DRest],
-              AllMatch, _AnyMatch, MatchKind) when PK == DK andalso PV == DV ->
-    headers_match(PRest, DRest, AllMatch, true, MatchKind);
-
-% Value does not match, false with all, go next
-headers_match([{PK, _PT, _PV} | PRest], [{DK, _DT, _DV} | DRest],
-              _AllMatch, AnyMatch, MatchKind) when PK == DK ->
-    headers_match(PRest, DRest, false, AnyMatch, MatchKind).
-
-
 %
 % Maybe should we consider instead a "no value" as beeing a real no value of type longstr ?
 % In other words, from where does the "void" type appears ?
