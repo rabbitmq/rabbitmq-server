@@ -115,6 +115,11 @@ headers_match([{PK, _PT, _PV} | PRest], Data = [{DK, _DT, _DV} | _],
               _AllMatch, AnyMatch, MatchKind) when PK < DK ->
     headers_match(PRest, Data, false, AnyMatch, MatchKind);
 
+get_match_operators(BindingArgs) ->
+    MatchOperators = get_match_operators(BindingArgs, []),
+    rabbit_misc:sort_field_table(MatchOperators).
+
+get_match_operators([], Result) -> Result;
 %% It's not properly specified, but a "no value" in a
 %% pattern field is supposed to mean simple presence of
 %% the corresponding data field. I've interpreted that to
@@ -134,11 +139,119 @@ headers_match([{PK, _PT, _PV} | PRest], [{DK, _DT, _DV} | DRest],
     headers_match(PRest, DRest, false, AnyMatch, MatchKind).
 
 
+%
+% Maybe should we consider instead a "no value" as beeing a real no value of type longstr ?
+% In other words, from where does the "void" type appears ?
+get_match_operators([ {K, void, _V} | T ], Res) ->
+    get_match_operators (T, [ {K, ex, nil} | Res]);
+% the new match operator is 'ex' (like in << must EXist >>)
+get_match_operators([ {<<"x-?ex">>, longstr, K} | Tail ], Res) ->
+    get_match_operators (Tail, [ {K, ex, nil} | Res]);
+% operator "key not exist"
+get_match_operators([ {<<"x-?nx">>, longstr, K} | Tail ], Res) ->
+    get_match_operators (Tail, [ {K, nx, nil} | Res]);
+% operators <= < = != > >=
+get_match_operators([ {<<"x-?<= ", K/binary>>, _, V} | Tail ], Res) ->
+    get_match_operators (Tail, [ {K, le, V} | Res]);
+get_match_operators([ {<<"x-?< ", K/binary>>, _, V} | Tail ], Res) ->
+    get_match_operators (Tail, [ {K, lt, V} | Res]);
+get_match_operators([ {<<"x-?= ", K/binary>>, _, V} | Tail ], Res) ->
+    get_match_operators (Tail, [ {K, eq, V} | Res]);
+get_match_operators([ {<<"x-?!= ", K/binary>>, _, V} | Tail ], Res) ->
+    get_match_operators (Tail, [ {K, ne, V} | Res]);
+get_match_operators([ {<<"x-?> ", K/binary>>, _, V} | Tail ], Res) ->
+    get_match_operators (Tail, [ {K, gt, V} | Res]);
+get_match_operators([ {<<"x-?>= ", K/binary>>, _, V} | Tail ], Res) ->
+    get_match_operators (Tail, [ {K, ge, V} | Res]);
+% skip all x-* args..
+get_match_operators([ {<<"x-", _/binary>>, _, _} | T ], Res) ->
+    get_match_operators (T, Res);
+% for all other cases, the match operator is 'eq'
+get_match_operators([ {K, _, V} | T ], Res) ->
+    get_match_operators (T, [ {K, eq, V} | Res]).
+
+
+%% DAT : Destinations to Add on True
+%% DAF : Destinations to Add on False
+get_dests_operators(VHost, Args) ->
+    get_dests_operators(VHost, Args, ordsets:new(), ordsets:new()).
+
+get_dests_operators(_, [], DAT,DAF) -> {DAT,DAF};
+get_dests_operators(VHost, [{<<"x-match-addq-ontrue">>, longstr, D} | T], DAT,DAF) ->
+    R = rabbit_misc:r(VHost, queue, D),
+    get_dests_operators(VHost, T, ordsets:add_element(R,DAT), DAF);
+get_dests_operators(VHost, [{<<"x-match-adde-ontrue">>, longstr, D} | T], DAT,DAF) ->
+    R = rabbit_misc:r(VHost, exchange, D),
+    get_dests_operators(VHost, T, ordsets:add_element(R,DAT), DAF);
+get_dests_operators(VHost, [{<<"x-match-addq-onfalse">>, longstr, D} | T], DAT,DAF) ->
+    R = rabbit_misc:r(VHost, queue, D),
+    get_dests_operators(VHost, T, DAT, ordsets:add_element(R,DAF));
+get_dests_operators(VHost, [{<<"x-match-adde-onfalse">>, longstr, D} | T], DAT,DAF) ->
+    R = rabbit_misc:r(VHost, exchange, D),
+    get_dests_operators(VHost, T, DAT, ordsets:add_element(R,DAF));
+get_dests_operators(VHost, [_ | T], DAT,DAF) ->
+    get_dests_operators(VHost, T, DAT,DAF).
+
+
+%% Flatten one level for list of values (array)
+flatten_binding_args(Args) ->
+        flatten_binding_args(Args, []).
+
+flatten_binding_args([], Result) -> Result;
+flatten_binding_args ([ {K, array, Vs} | Tail ], Result) ->
+        Res = [ { K, T, V } || {T, V} <- Vs ],
+        flatten_binding_args (Tail, lists:append ([ Res , Result ]));
+flatten_binding_args ([ {K, T, V} | Tail ], Result) ->
+        flatten_binding_args (Tail, [ {K, T, V} | Result ]).
+
+
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
-delete(_Tx, _X, _Bs) -> ok.
+
+delete(transaction, #exchange{name = XName}, _) ->
+    ok = mnesia:delete (rabbit_headers_bindings, XName, write);
+delete(_, _, _) -> ok.
+
 policy_changed(_X1, _X2) -> ok.
-add_binding(_Tx, _X, _B) -> ok.
-remove_bindings(_Tx, _X, _Bs) -> ok.
+
+add_binding(transaction, #exchange{name = #resource{virtual_host = VHost} = XName}, BindingToAdd = #binding{destination = Dest, args = BindingArgs}) ->
+% BindingId is used to track original binding definition so that it is used when deleting later
+    BindingId = crypto:hash(md5, term_to_binary(BindingToAdd)),
+% Let's doing that heavy lookup one time only
+    BindingType = parse_x_match(rabbit_misc:table_lookup(BindingArgs, <<"x-match">>)),
+    FlattenedBindindArgs = flatten_binding_args(BindingArgs),
+    MatchOperators = get_match_operators(FlattenedBindindArgs),
+    {DAT, DAF} = get_dests_operators(VHost, FlattenedBindindArgs),
+    CurrentBindings = case mnesia:read(rabbit_headers_bindings, XName, write) of
+        [] -> [];
+        [#headers_bindings{bindings = E}] -> E
+    end,
+    NewBinding = {BindingType, ordsets:add_element(Dest, DAT), DAF, MatchOperators, BindingId},
+    NewBindings = [NewBinding | CurrentBindings],
+    NewRecord = #headers_bindings{exchange_name = XName, bindings = NewBindings},
+    ok = mnesia:write(rabbit_headers_bindings, NewRecord, write);
+add_binding(_, _, _) ->
+    ok.
+
+remove_bindings(transaction, #exchange{name = XName}, BindingsToDelete) ->
+    CurrentBindings = case mnesia:read(rabbit_headers_bindings, XName, write) of
+        [] -> [];
+        [#headers_bindings{bindings = E}] -> E
+    end,
+    BindingIdsToDelete = [crypto:hash(md5, term_to_binary(B)) || B <- BindingsToDelete],
+    NewBindings = remove_bindings_ids(BindingIdsToDelete, CurrentBindings, []),
+    NewRecord = #headers_bindings{exchange_name = XName, bindings = NewBindings},
+    ok = mnesia:write(rabbit_headers_bindings, NewRecord, write);
+remove_bindings(_, _, _) ->
+    ok.
+
+remove_bindings_ids(_, [], Res) -> Res;
+remove_bindings_ids(BindingIdsToDelete, [Bind = {_,_,_,_,BId} | T], Res) ->
+    case lists:member(BId, BindingIdsToDelete) of
+        true -> remove_bindings_ids(BindingIdsToDelete, T, Res);
+        _    -> remove_bindings_ids(BindingIdsToDelete, T, lists:append(Res, [Bind]))
+    end.
+
+
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
