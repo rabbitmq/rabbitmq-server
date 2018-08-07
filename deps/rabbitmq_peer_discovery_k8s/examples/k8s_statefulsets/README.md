@@ -17,13 +17,12 @@ is critically important when making informed decisions about production systems.
 
 The example uses:
 
-* [RabbitMQ Docker image](https://hub.docker.com/_/rabbitmq/)
-* [StatefulSets controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/) K8S feature
+* [RabbitMQ Docker image](https://hub.docker.com/_/rabbitmq/) maintained [by from Docker, Inc](https://hub.docker.com/_/rabbitmq/)
+* Kubernetes [StatefulSets controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
 
 
 ## Usage
    
-
 * Install [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 
 
