@@ -37,6 +37,7 @@
 -rabbit_upgrade({exchange_scratch,      mnesia, [trace_exchanges]}).
 -rabbit_upgrade({mirrored_supervisor,   mnesia, []}).
 -rabbit_upgrade({topic_trie_node,       mnesia, []}).
+-rabbit_upgrade({headers_bindings,      mnesia, []}).
 -rabbit_upgrade({runtime_parameters,    mnesia, []}).
 -rabbit_upgrade({exchange_scratches,    mnesia, [exchange_scratch]}).
 -rabbit_upgrade({policy,                mnesia,
@@ -80,6 +81,7 @@
 -spec exchange_scratch() -> 'ok'.
 -spec mirrored_supervisor() -> 'ok'.
 -spec topic_trie_node() -> 'ok'.
+-spec headers_bindings() -> 'ok'.
 -spec runtime_parameters() -> 'ok'.
 -spec policy() -> 'ok'.
 -spec sync_slave_pids() -> 'ok'.
@@ -249,6 +251,12 @@ topic_trie_node() ->
            [{record_name, topic_trie_node},
             {attributes, [trie_node, edge_count, binding_count]},
             {type, ordered_set}]).
+
+headers_bindings() ->
+    create(rabbit_headers_bindings,
+           [{record_name, headers_bindings},
+            {attributes, [exchange_name, bindings]},
+            {type, ordered_set}] ).
 
 runtime_parameters() ->
     create(rabbit_runtime_parameters,
