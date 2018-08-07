@@ -56,8 +56,8 @@ route(#exchange{name = Name},
 
 validate_binding(_X, #binding{args = Args}) ->
     case rabbit_misc:table_lookup(Args, <<"x-match">>) of
-        {longstr, <<"all">>} -> ok;
-        {longstr, <<"any">>} -> ok;
+        {longstr, <<"all">>} -> validate_list_type_usage(all, Args);
+        {longstr, <<"any">>} -> validate_list_type_usage(any, Args);
         {longstr, Other}     -> {error,
                                  {binding_invalid,
                                   "Invalid x-match field value ~p; "
@@ -66,8 +66,28 @@ validate_binding(_X, #binding{args = Args}) ->
                                  {binding_invalid,
                                   "Invalid x-match field type ~p (value ~p); "
                                   "expected longstr", [Type, Other]}};
-        undefined            -> ok %% [0]
+        undefined            -> validate_list_type_usage(all, Args)
     end.
+
+%% We don't invalidate bindings having legacy headers keys of list "Type" because of backward compatibility..
+%% Maybe we should ?
+validate_list_type_usage(_BindingType, []) -> ok;
+validate_list_type_usage(_BindingType, [ {<<"x-?<= ", _/binary>>, array, _} | _ ]) ->
+    {error, {binding_invalid, "Invalid use of List type with <=, <, >= or > operators", []}};
+validate_list_type_usage(_BindingType, [ {<<"x-?< ", _/binary>>, array, _} | _ ]) ->
+    {error, {binding_invalid, "Invalid use of List type with <=, <, >= or > operators", []}};
+validate_list_type_usage(_BindingType, [ {<<"x-?>= ", _/binary>>, array, _} | _ ]) ->
+    {error, {binding_invalid, "Invalid use of List type with <=, <, >= or > operators", []}};
+validate_list_type_usage(_BindingType, [ {<<"x-?> ", _/binary>>, array, _} | _ ]) ->
+    {error, {binding_invalid, "Invalid use of List type with <=, <, >= or > operators", []}};
+validate_list_type_usage(all, [ {<<"x-?= ", _/binary>>, array, _} | _ ]) ->
+    {error, {binding_invalid, "Invalid use of List type with = operator with binding type 'all'", []}};
+validate_list_type_usage(any, [ {<<"x-?!= ", _/binary>>, array, _} | _ ]) ->
+    {error, {binding_invalid, "Invalid use of List type with != operator with binding type 'any'", []}};
+validate_list_type_usage(BindingType, [ _ | Tail ]) ->
+    validate_list_type_usage(BindingType, Tail).
+
+
 %% [0] spec is vague on whether it can be omitted but in practice it's
 %% useful to allow people to do this
 
