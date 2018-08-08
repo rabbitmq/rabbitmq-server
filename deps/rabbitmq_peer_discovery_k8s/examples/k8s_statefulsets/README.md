@@ -17,7 +17,7 @@ is critically important when making informed decisions about production systems.
 
 The example uses:
 
-* [RabbitMQ Docker image](https://hub.docker.com/_/rabbitmq/) maintained [by from Docker, Inc](https://hub.docker.com/_/rabbitmq/)
+* RabbitMQ [Docker image](https://hub.docker.com/_/rabbitmq/) (maintained [by Docker, Inc](https://hub.docker.com/_/rabbitmq/))
 * Kubernetes [StatefulSets controller](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
 
 
