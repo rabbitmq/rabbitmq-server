@@ -347,6 +347,10 @@ parse_uri(Uri) ->
         Err -> Err
     end.
 
+parse_usertoken(U) ->
+    [User, Pass] = string:tokens(U, ":"),
+    {plain, to_binary(User), to_binary(Pass)}.
+
 parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
     Query = lists:foldl(fun (W, Acc) ->
                                 [K, V] = string:tokens(W, "="),
@@ -355,14 +359,15 @@ parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
                         string:tokens(safe_substr(Query0, 2), "&")),
     Sasl = case Query of
                #{"sasl" := "anon"} -> anon;
-               #{"sasl" := "plain"} ->
+               #{"sasl" := "plain"} when length(UserInfo) =:= 0 ->
+                   throw(plain_sasl_missing_userinfo);
+               _ ->
                    case UserInfo of
-                       [] -> throw(plain_sasl_missing_userinfo);
+                       [] ->
+                           none;
                        U ->
-                           [User, Pass] = string:tokens(U, ":"),
-                           {plain, to_binary(User), to_binary(Pass)}
-                   end;
-               _ -> none
+                           parse_usertoken(U)
+                   end
            end,
     Ret0 = maps:fold(fun("idle_time_out", V, Acc) ->
                              Acc#{idle_time_out => list_to_integer(V)};
@@ -374,6 +379,7 @@ parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
                              Acc#{transfer_limit_margin => list_to_integer(V)};
                         (_, _, Acc) -> Acc
                      end, #{address => Host,
+                            hostname => to_binary(Host),
                             port => Port,
                             sasl => Sasl}, Query),
     case Scheme of
@@ -402,6 +408,10 @@ parse_tls_opt("verify", V, Acc)
     [{verify, to_atom(V)} | Acc];
 parse_tls_opt("verify", _V, _Acc) ->
     throw({invalid_option, verify});
+parse_tls_opt("versions", V, Acc) ->
+    Parts = string:split(V, ","),
+    Versions = [try_to_existing_atom(P) || P <- Parts],
+    [{versions, Versions} | Acc];
 parse_tls_opt("fail_if_no_peer_cert", V, Acc)
   when V =:= "true" orelse
        V =:= "false" ->
@@ -418,11 +428,22 @@ parse_tls_opt(_K, _V, Acc) ->
 to_atom(X) when is_list(X) -> list_to_atom(X).
 to_binary(X) when is_list(X) -> list_to_binary(X).
 
+try_to_existing_atom(L) when is_list(L) ->
+    try list_to_existing_atom(L) of
+        A -> A
+    catch
+        _:badarg ->
+            throw({non_existent_atom, L})
+    end.
+
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
 parse_uri_test_() ->
-    [?_assertEqual({ok, #{address => "my_host", port => 9876,
+    [?_assertEqual({ok, #{address => "my_host",
+                          port => 9876,
+                          hostname => <<"my_host">>,
                           sasl => none}}, parse_uri("amqp://my_host:9876")),
      ?_assertEqual({ok, #{address => "my_proxy",
                           port => 9876,
@@ -433,23 +454,38 @@ parse_uri_test_() ->
                           sasl => {plain, <<"fred">>, <<"passw">>}}},
                    parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
                              "hostname=my_host&max_frame_size=512&idle_time_out=60000")),
+     %% make sasl plain implicit when username and password is present
+     ?_assertEqual({ok, #{address => "my_proxy",
+                          port => 9876,
+                          hostname => <<"my_proxy">>,
+                          sasl => {plain, <<"fred">>, <<"passw">>}}},
+                   parse_uri("amqp://fred:passw@my_proxy:9876")),
      ?_assertEqual(
         {ok, #{address => "my_proxy", port => 9876,
+               hostname => <<"my_proxy">>,
                tls_opts => {secure_port, [{cacertfile, "/etc/cacertfile.pem"},
                                           {certfile, "/etc/certfile.pem"},
                                           {fail_if_no_peer_cert, true},
                                           {keyfile, "/etc/keyfile.key"},
                                           {server_name_indication, "frazzle"},
-                                          {verify, verify_none}
+                                          {verify, verify_none},
+                                          {versions, ['tlsv1.1', 'tlsv1.2']}
                                          ]},
                sasl => {plain, <<"fred">>, <<"passw">>}}},
         parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain"
                   "&cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem"
                   "&keyfile=/etc/keyfile.key&verify=verify_none"
                   "&fail_if_no_peer_cert=true"
-                  "&server_name_indication=frazzle")),
+                  "&server_name_indication=frazzle"
+                  "&versions=tlsv1.1,tlsv1.2")),
+     %% invalid tls version
+     ?_assertEqual({error, {non_existent_atom, "tlsv1.9999999"}},
+                   parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
+                  "versions=tlsv1.1,tlsv1.9999999")),
      ?_assertEqual(
-        {ok, #{address => "my_proxy", port => 9876,
+        {ok, #{address => "my_proxy",
+               port => 9876,
+               hostname => <<"my_proxy">>,
                tls_opts => {secure_port, [{server_name_indication, disable}]},
                sasl => {plain, <<"fred">>, <<"passw">>}}},
         parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain"
