@@ -42,16 +42,16 @@ legacy_erlang_term_config_used() ->
 
 get_confs() ->
     case init:get_argument(conf) of
-        {ok, Configs} -> Configs;
-        _             -> []
+        {ok, Confs} -> [ filename:rootname(Conf, ".conf") ++ ".conf"
+                         || Conf <- Confs ];
+        _           -> []
     end.
 
-prepare_config(Configs) ->
+prepare_config(Confs) ->
     case {init:get_argument(conf_dir), init:get_argument(conf_script_dir)} of
         {{ok, ConfDir}, {ok, ScriptDir}} ->
-            ConfFiles = [Config ++ ".conf" || [Config] <- Configs,
-                                            rabbit_file:is_file(Config ++
-                                                                    ".conf")],
+            ConfFiles = [Conf || Conf <- Confs,
+                                 rabbit_file:is_file(Conf)],
             case ConfFiles of
                 [] -> ok;
                 _  ->
@@ -192,25 +192,24 @@ prepare_plugin_schemas(SchemaDir) ->
         false -> ok
     end.
 
-
 config_files() ->
-    Abs = fun (F, Ex) -> filename:absname(filename:rootname(F, Ex) ++ Ex) end,
     case legacy_erlang_term_config_used() of
         true ->
             case init:get_argument(config) of
-                {ok, Files} -> [Abs(File, ".config") || [File] <- Files];
+                {ok, Files} -> [ filename:absname(filename:rootname(File) ++ ".config")
+                                 || [File] <- Files];
                 error       -> case config_setting() of
                                    none -> [];
-                                   File -> [Abs(File, ".config")
+                                   File -> [filename:absname(filename:rootname(F, ".config") ++ ".config")
                                             ++
                                             " (not found)"]
                                end
             end;
         false ->
-            ConfFiles = [Abs(File, ".conf") || File <- get_confs()],
+            ConfFiles = [filename:absname(File) || File <- get_confs()],
             AdvancedFiles = case get_advanced_config() of
                 none -> [];
-                FileName -> [Abs(FileName, ".config")]
+                FileName -> [filename:absname(FileName)]
             end,
             AdvancedFiles ++ ConfFiles
 
