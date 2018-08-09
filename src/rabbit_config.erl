@@ -178,9 +178,8 @@ get_advanced_config() ->
     case init:get_argument(conf_advanced) of
         %% There can be only one advanced.config
         {ok, [FileName | _]} ->
-            ConfigName = FileName ++ ".config",
-            case rabbit_file:is_file(ConfigName) of
-                true  -> ConfigName;
+            case rabbit_file:is_file(FileName) of
+                true  -> FileName;
                 false -> none
             end;
         _ -> none

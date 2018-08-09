@@ -131,10 +131,79 @@ if errorlevel 1 (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
+if not exist "!RABBITMQ_SCHEMA_DIR!" (
+    mkdir "!RABBITMQ_SCHEMA_DIR!"
+)
+
+if not exist "!RABBITMQ_GENERATED_CONFIG_DIR!" (
+    mkdir "!RABBITMQ_GENERATED_CONFIG_DIR!"
+)
+
+if not exist "!RABBITMQ_SCHEMA_DIR!\rabbit.schema" (
+    copy "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
+)
+
 CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
 
-if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config" (
-    set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!
+if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!" (
+    set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config
+) else if not "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config" (
+    echo "Warning: wrong extension for advanced config: !RABBITMQ_ADVANCED_CONFIG_FILE!"
+    exit /B 1
+)
+
+REM Try to create advanced config file, if it doesn't exist
+REM It still can fail to be created, but at least not for default install
+if not exist "!RABBITMQ_ADVANCED_CONFIG_FILE!" (
+    echo []. > !RABBITMQ_ADVANCED_CONFIG_FILE!
+)
+
+CALL :get_noex !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE_NOEX
+
+if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!" (
+    if exist "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
+        if exist "!RABBITMQ_CONFIG_FILE_NOEX!.conf" (
+            # Both files exist. Print a warning
+            echo "WARNING: Both old (.config) and new (.conf) format config files exist."
+            echo "WARNING: Using the old format config file: !RABBITMQ_CONFIG_FILE_NOEX!.config"
+            echo "WARNING: Please update your config files to the new format and remove the old file"
+        )
+        set RABBITMQ_CONFIG_FILE=!RABBITMQ_CONFIG_FILE_NOEX!.config
+    ) else if exist "!RABBITMQ_CONFIG_FILE_NOEX!.conf" (
+        set RABBITMQ_CONFIG_FILE=!RABBITMQ_CONFIG_FILE_NOEX!.conf
+    ) else (
+        echo "WARNING: Config file without extension does not exist"
+        echo "WARNING: Assuming the new config format is used"
+        rem No config file exist. Use advanced config for -config arg.
+        set RABBITMQ_CONFIG_ARG_FILE="!RABBITMQ_ADVANCED_CONFIG_FILE!"
+    )
+)
+
+rem Set the -config argument.
+rem The -config argument should not have extension.
+rem the file should exist
+rem the file should be a valid erlang term file
+
+rem Config file extension is .config
+if "!RABBITMQ_CONFIG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_FILE" (
+    set RABBITMQ_CONFIG_ARG_FILE=!RABBITMQ_CONFIG_FILE!
+) else if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE" (
+    set RABBITMQ_CONFIG_ARG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE!
+)
+
+rem Set -config if the file exists
+if exist !RABBITMQ_CONFIG_ARG_FILE! (
+    CALL :get_noex !RABBITMQ_CONFIG_ARG_FILE! RABBITMQ_CONFIG_ARG_FILE_NOEX
+    set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_ARG_FILE_NOEX!"
+)
+
+rem Set -conf and other generated config parameters
+if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE" (
+    set RABBITMQ_GENERATED_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
+                                      -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
+                                      -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
+                                      -conf_schema_dir "!RABBITMQ_SCHEMA_DIR!" ^
+                                      -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!"
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
@@ -181,57 +250,6 @@ if ERRORLEVEL 1 (
     set RABBITMQ_DEFAULT_ALLOC_ARGS=
 )
 
-if not exist "!RABBITMQ_SCHEMA_DIR!" (
-    mkdir "!RABBITMQ_SCHEMA_DIR!"
-)
-
-if not exist "!RABBITMQ_GENERATED_CONFIG_DIR!" (
-    mkdir "!RABBITMQ_GENERATED_CONFIG_DIR!"
-)
-
-if not exist "!RABBITMQ_SCHEMA_DIR!\rabbit.schema" (
-    copy "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
-)
-    REM Try to create advanced config file, if it doesn't exist
-    REM It still can fail to be created, but at least not for default install
-if not exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
-    echo []. > !RABBITMQ_ADVANCED_CONFIG_FILE!.config
-)
-
-CALL :get_noex !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE_NOEX
-
-if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
-    if exist "!RABBITMQ_CONFIG_FILE!" (
-        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE_NOEX!"
-    )
-) else if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.conf" (
-    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE_NOEX!" ^
-                            -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
-                            -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
-                            -conf_schema_dir "!RABBITMQ_SCHEMA_DIR!"
-    if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
-        set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
-                                -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
-                                -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
-    )
-) else (
-    if exist "!RABBITMQ_CONFIG_FILE!.config" (
-        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
-    ) else (
-        rem Always specify generated config arguments, we cannot
-        rem assume .conf file is available
-        set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
-                                -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
-                                -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
-                                -conf_schema_dir "!RABBITMQ_SCHEMA_DIR!"
-        if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
-            set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
-                                    -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
-                                    -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
-        )
-    )
-)
-
 
 set RABBITMQ_LISTEN_ARG=
 if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
@@ -273,6 +291,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -boot start_sasl ^
 !RABBITMQ_START_RABBIT! ^
 !RABBITMQ_CONFIG_ARG! ^
+!RABBITMQ_GENERATED_CONFIG_ARG! ^
 +W w ^
 +A "!RABBITMQ_IO_THREAD_POOL_SIZE!" ^
 !RABBITMQ_DEFAULT_ALLOC_ARGS! ^

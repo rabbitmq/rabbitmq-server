@@ -62,12 +62,84 @@ RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 
 [ "$NOTIFY_SOCKET" ] && RUNNING_UNDER_SYSTEMD=true
 
-set +e
-
-RABBITMQ_ADVANCED_CONFIG_FILE_NOEX="${RABBITMQ_ADVANCED_CONFIG_FILE%.*}"
-if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
-    RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}"
+if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
+    mkdir -p "${RABBITMQ_SCHEMA_DIR}"
 fi
+
+if [ ! -d ${RABBITMQ_GENERATED_CONFIG_DIR} ]; then
+    mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
+fi
+
+if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbit.schema" ]; then
+    cp "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
+fi
+
+# Check that advanced config file has the .config extension
+# Add .config extension if it's empty
+RABBITMQ_ADVANCED_CONFIG_FILE_NOEX="${RABBITMQ_ADVANCED_CONFIG_FILE%.*}"
+if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
+     -o "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
+    echo "Valid advanced config extension"
+    RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config"
+else
+    echo "Warning: wrong extension for advanced config: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+    exit 1
+fi
+
+
+RABBITMQ_CONFIG_FILE_NOEX="${RABBITMQ_CONFIG_FILE%.*}"
+
+# Extension is not specified.
+# Determine config type from file
+
+if [ "${RABBITMQ_CONFIG_FILE_NOEX}" = "${RABBITMQ_CONFIG_FILE}" ]; then
+    if [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.config" ]; then
+        if [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.conf" ]; then
+            # Both files exist. Print a warning
+            echo "WARNING: Both old (.config) and new (.conf) format config files exist."
+            echo "WARNING: Using the old format config file: ${RABBITMQ_CONFIG_FILE_NOEX}.config"
+            echo "WARNING: Please update your config files to the new format and remove the old file"
+        fi
+        RABBITMQ_CONFIG_FILE="${RABBITMQ_CONFIG_FILE_NOEX}.config"
+    elif [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.conf" ]; then
+        RABBITMQ_CONFIG_FILE="${RABBITMQ_CONFIG_FILE_NOEX}.conf"
+    else
+        echo "WARNING: Config file without extension does not exist"
+        echo "WARNING: Assuming the new config format is used"
+        # No config file exist. Use advanced config for -config arg.
+        RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
+    fi
+fi
+
+# Set the -config argument.
+# The -config argument should not have extension.
+# the file should exist
+# the file should be a valid erlang term file
+
+# Config file extension is .config
+if [ "${RABBITMQ_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_CONFIG_FILE}" ]; then
+    RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_CONFIG_FILE}"
+# Config file extension is .conf
+elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
+    RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
+fi
+
+# Set -config if the file exists
+if [ -f "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
+    RABBITMQ_CONFIG_ARG_FILE_NOEX="${RABBITMQ_CONFIG_ARG_FILE%.*}"
+    RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_ARG_FILE_NOEX}"
+fi
+
+# Set -conf and other generated config parameters
+if [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
+    RABBITMQ_GENERATED_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
+                                   -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
+                                   -conf_script_dir `dirname $0` \
+                                   -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}
+                                   -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+fi
+
+set +e
 
 # `net_kernel:start/1` will fail in `longnames` mode when erlang is
 # unable to determine FQDN of a node (with a dot in it). But `erl`
@@ -79,6 +151,10 @@ fi
 # matter what we actually put here. But `localhost` sounds good
 # enough.
 RABBITMQ_PRELAUNCH_NODENAME="rabbitmqprelaunch${$}@localhost"
+
+
+
+RABBITMQ_CONIG_ARGUMENT_FILE=
 
 # NOTIFY_SOCKET is needed here to prevent epmd from impersonating the
 # success of our startup sequence to systemd.
@@ -108,18 +184,6 @@ else
     exit ${PRELAUNCH_RESULT}
 fi
 
-if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
-    mkdir -p "${RABBITMQ_SCHEMA_DIR}"
-fi
-
-if [ ! -d ${RABBITMQ_GENERATED_CONFIG_DIR} ]; then
-    mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
-fi
-
-if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbit.schema" ]; then
-    cp "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
-fi
-
 # The default allocation strategy RabbitMQ is using was introduced
 # in Erlang/OTP 20.2.3. Earlier Erlang versions fail to start with
 # this configuration. We therefore need to ensure that erl accepts
@@ -140,38 +204,6 @@ if [ $? != 0 ] ; then
 fi
 
 set -e
-
-RABBITMQ_CONFIG_FILE_NOEX="${RABBITMQ_CONFIG_FILE%.*}"
-
-if [ "${RABBITMQ_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    if [ -f "${RABBITMQ_CONFIG_FILE}" ]; then
-        RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE_NOEX}"
-    fi
-elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE_NOEX} \
-                         -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
-                         -conf_script_dir `dirname $0` \
-                         -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}"
-    if [ -f "${RABBITMQ_ADVANCED_CONFIG_FILE}.config" ]; then
-        RABBITMQ_CONFIG_ARG="${RABBITMQ_CONFIG_ARG} \
-                             -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE} \
-                             -config ${RABBITMQ_ADVANCED_CONFIG_FILE}"
-    fi
-else
-    if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
-        RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
-    elif [ -f "${RABBITMQ_CONFIG_FILE}.conf" ]; then
-        RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
-                             -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
-                             -conf_script_dir `dirname $0` \
-                             -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}"
-        if [ -f "${RABBITMQ_ADVANCED_CONFIG_FILE}.config" ]; then
-            RABBITMQ_CONFIG_ARG="${RABBITMQ_CONFIG_ARG} \
-                                 -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE} \
-                                 -config ${RABBITMQ_ADVANCED_CONFIG_FILE}"
-        fi
-    fi
-fi
 
 RABBITMQ_LISTEN_ARG=
 [ "x" != "x$RABBITMQ_NODE_PORT" ] && [ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_LISTEN_ARG="-rabbit tcp_listeners [{\""${RABBITMQ_NODE_IP_ADDRESS}"\","${RABBITMQ_NODE_PORT}"}]"
@@ -225,11 +257,13 @@ start_rabbitmq_server() {
     ERL_MAX_ETS_TABLES=$ERL_MAX_ETS_TABLES \
     ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
     exec ${ERL_DIR}erl \
+        -init_debug \
         -pa ${RABBITMQ_SERVER_CODE_PATH} ${RABBITMQ_EBIN_ROOT} \
         ${RABBITMQ_START_RABBIT} \
         ${RABBITMQ_NAME_TYPE} ${RABBITMQ_NODENAME} \
         -boot "${SASL_BOOT_FILE}" \
         ${RABBITMQ_CONFIG_ARG} \
+        ${RABBITMQ_GENERATED_CONFIG_ARG} \
         +W w \
         +A ${RABBITMQ_IO_THREAD_POOL_SIZE} \
         ${RABBITMQ_DEFAULT_ALLOC_ARGS} \

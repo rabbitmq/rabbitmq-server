@@ -39,7 +39,7 @@ LOG_BASE=${SYS_PREFIX}/var/log/rabbitmq
 MNESIA_BASE=${SYS_PREFIX}/var/lib/rabbitmq/mnesia
 ENABLED_PLUGINS_FILE=${SYS_PREFIX}/etc/rabbitmq/enabled_plugins
 GENERATED_CONFIG_DIR=${SYS_PREFIX}/var/lib/rabbitmq/config
-ADVANCED_CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/advanced
+ADVANCED_CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/advanced.config
 SCHEMA_DIR=${SYS_PREFIX}/var/lib/rabbitmq/schema
 
 PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
