@@ -128,14 +128,19 @@ build_broker(ParsedUri, DefaultVHost) ->
                              end
             end,
     UserInfo = proplists:get_value(userinfo, ParsedUri),
-    set_user_info(case unescape_string(Host) of
-                      undefined -> #amqp_params_direct{virtual_host = VHost};
-                      Host1     -> Mech = mechanisms(ParsedUri),
-                                   #amqp_params_network{host            = Host1,
-                                                        port            = Port,
-                                                        virtual_host    = VHost,
-                                                        auth_mechanisms = Mech}
-                  end, UserInfo).
+    Record = case {unescape_string(Host), Port} of
+                 {undefined, undefined} ->
+                     #amqp_params_direct{virtual_host = VHost};
+                 {undefined, _Port} ->
+                     fail(port_requires_host);
+                 {Host1, Port1}     ->
+                     Mech = mechanisms(ParsedUri),
+                     #amqp_params_network{host            = Host1,
+                                          port            = Port1,
+                                          virtual_host    = VHost,
+                                          auth_mechanisms = Mech}
+             end,
+    set_user_info(Record, UserInfo).
 
 set_user_info(Ps, UserInfo) ->
     case UserInfo of

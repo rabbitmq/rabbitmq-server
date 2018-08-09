@@ -58,6 +58,14 @@ amqp_uri_parsing(_Config) ->
     ?assertMatch({ok, #amqp_params_direct{username     = <<"">>,
                                           virtual_host = <<"">>}},
                  amqp_uri:parse("amqp://:@/")),
+
+    % https://github.com/rabbitmq/rabbitmq-server/issues/1663
+    ?assertEqual({error,{port_requires_host,"amqp://:1234"}},
+                 amqp_uri:parse("amqp://:1234")),
+    ?assertMatch({ok, #amqp_params_network{host = "localhost",
+                                           port = 1234}},
+                 amqp_uri:parse("amqp://localhost:1234")),
+
     ?assertMatch({ok, #amqp_params_network{username     = <<"">>,
                                            password     = <<"">>,
                                            virtual_host = <<"">>,
@@ -126,6 +134,12 @@ amqp_uri_parsing(_Config) ->
                  amqp_uri:parse("amqp://user:pass@[::1]:100")),
 
     %% TLS options
+    ?assertEqual({error,{port_requires_host,"amqps://:5671"}},
+                 amqp_uri:parse("amqps://:5671")),
+    ?assertMatch({ok, #amqp_params_network{host = "localhost",
+                                           port = 5671}},
+                 amqp_uri:parse("amqps://localhost:5671")),
+
     {ok, #amqp_params_network{host = "host1", ssl_options = TLSOpts1}} =
         amqp_uri:parse("amqps://host1/%2f?cacertfile=/path/to/cacertfile.pem"),
     Exp1 = [{cacertfile,"/path/to/cacertfile.pem"}],
