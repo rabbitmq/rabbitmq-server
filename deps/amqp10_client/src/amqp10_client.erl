@@ -334,10 +334,6 @@ parse_uri(Uri) ->
         Err -> Err
     end.
 
-parse_usertoken(U) ->
-    [User, Pass] = string:tokens(U, ":"),
-    {plain, to_binary(User), to_binary(Pass)}.
-
 parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
     Query = lists:foldl(fun (W, Acc) ->
                                 [K, V] = string:tokens(W, "="),
@@ -375,6 +371,12 @@ parse_result({Scheme, UserInfo, Host, Port, "/", Query0}) ->
             TlsOpts = parse_tls_opts(Query),
             Ret0#{tls_opts => {secure_port, TlsOpts}}
     end.
+
+parse_usertoken(U) ->
+    [User, Pass] = string:tokens(U, ":"),
+    {plain,
+     to_binary(http_uri:decode(User)),
+     to_binary(http_uri:decode(Pass))}.
 
 
 safe_substr(Str, Start) when length(Str) >= Start ->
@@ -441,6 +443,12 @@ parse_uri_test_() ->
                           sasl => {plain, <<"fred">>, <<"passw">>}}},
                    parse_uri("amqps://fred:passw@my_proxy:9876?sasl=plain&" ++
                              "hostname=my_host&max_frame_size=512&idle_time_out=60000")),
+     %% ensure URI encoded usernames and passwords are decodeded
+     ?_assertEqual({ok, #{address => "my_proxy",
+                          port => 9876,
+                          hostname => <<"my_proxy">>,
+                          sasl => {plain, <<"fr/ed">>, <<"pa/ssw">>}}},
+                   parse_uri("amqp://fr%2Fed:pa%2Fssw@my_proxy:9876")),
      %% make sasl plain implicit when username and password is present
      ?_assertEqual({ok, #{address => "my_proxy",
                           port => 9876,
