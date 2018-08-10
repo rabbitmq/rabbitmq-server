@@ -79,10 +79,10 @@ fi
 RABBITMQ_ADVANCED_CONFIG_FILE_NOEX="${RABBITMQ_ADVANCED_CONFIG_FILE%.*}"
 if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
      -o "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
-    echo "Valid advanced config extension"
     RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config"
 else
-    echo "Warning: wrong extension for advanced config: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+    echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+    echo "ERROR: should be .config"
     exit 1
 fi
 
@@ -108,6 +108,7 @@ if [ "${RABBITMQ_CONFIG_FILE_NOEX}" = "${RABBITMQ_CONFIG_FILE}" ]; then
         echo "WARNING: Assuming the new config format is used"
         # No config file exist. Use advanced config for -config arg.
         RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
+        RABBITMQ_CONFIG_FILE=""
     fi
 fi
 
@@ -122,6 +123,12 @@ if [ "${RABBITMQ_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_CONFIG_FILE}" ]; then
 # Config file extension is .conf
 elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
     RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
+elif [ "x" != "x${RABBITMQ_CONFIG_FILE}" \
+       -a  "${RABBITMQ_CONFIG_FILE_NOEX}" != "${RABBITMQ_CONFIG_FILE}" ]; then
+    # Config file has an extension, but it's neither .conf or .config
+    echo "ERROR: Wrong extension for RABBITMQ_CONFIG_FILE: ${RABBITMQ_CONFIG_FILE}"
+    echo "ERROR: should be either .conf or .config"
+    exit 1
 fi
 
 # Set -config if the file exists
@@ -257,7 +264,6 @@ start_rabbitmq_server() {
     ERL_MAX_ETS_TABLES=$ERL_MAX_ETS_TABLES \
     ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
     exec ${ERL_DIR}erl \
-        -init_debug \
         -pa ${RABBITMQ_SERVER_CODE_PATH} ${RABBITMQ_EBIN_ROOT} \
         ${RABBITMQ_START_RABBIT} \
         ${RABBITMQ_NAME_TYPE} ${RABBITMQ_NODENAME} \

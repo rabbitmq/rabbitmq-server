@@ -313,6 +313,11 @@ boot() ->
              end).
 
 ensure_config() ->
+    case rabbit_config:validate_config_files() of
+        ok -> ok;
+        {error, {ErrFmt, ErrArgs}} ->
+            log_boot_error_and_exit(check_config_file, ErrFmt, ErrArgs)
+    end,
     case rabbit_config:prepare_and_use_config() of
         {error, Reason} ->
             {Format, Arg} = case Reason of

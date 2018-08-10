@@ -7,7 +7,8 @@
          update_app_config/1,
          schema_dir/0,
          config_files/0,
-         get_advanced_config/0
+         get_advanced_config/0,
+         validate_config_files/0
         ]).
 
 prepare_and_use_config() ->
@@ -200,7 +201,7 @@ config_files() ->
                                  || [File] <- Files];
                 error       -> case config_setting() of
                                    none -> [];
-                                   File -> [filename:absname(filename:rootname(F, ".config") ++ ".config")
+                                   File -> [filename:absname(filename:rootname(File, ".config") ++ ".config")
                                             ++
                                             " (not found)"]
                                end
@@ -230,5 +231,64 @@ config_setting() ->
                            false -> none;
                            File2 -> File2
                        end
+    end.
+
+-spec validate_config_files() -> ok | {error, {Fmt :: string(), Args :: list()}}.
+validate_config_files() ->
+    ConfigFile = os:getenv("RABBITMQ_CONFIG_FILE"),
+    AdvancedConfigFile = get_advanced_config(),
+    AssertConfig = case filename:extension(ConfigFile) of
+        ".config" -> assert_config(ConfigFile, "RABBITMQ_CONFIG_FILE");
+        ".conf"   -> assert_conf(ConfigFile, "RABBITMQ_CONFIG_FILE");
+        _ -> ok
+    end,
+    case AssertConfig of
+        ok ->
+            assert_config(AdvancedConfigFile, "RABBITMQ_ADVANCED_CONFIG_FILE");
+        {error, Err} ->
+            {error, Err}
+    end.
+
+assert_config("", _) -> ok;
+assert_config(none, _) -> ok;
+assert_config(Filename, Env) ->
+    ".config" = filename:extension(Filename),
+    case filelib:is_regular(Filename) of
+        true ->
+            case file:consult(Filename) of
+                {ok, _} -> ok;
+                {error, {1, erl_parse, Err}} ->
+                    {error, {"ERROR: Unable to parse erlang terms from ~s file: ~s~n"
+                             "Error: ~p~n"
+                             "Check that the file has the correct format. "
+                             "If you are using the new ini-style format, the file "
+                             "extension should be '.conf'~n",
+                             [Env, Filename, Err]}};
+                {error, Err} ->
+                    {error, {"ERROR Unable to parse erlang terms from  ~s file: ~s~n"
+                             "Error: ~p~n",
+                             [Env, Filename, Err]}}
+            end;
+        false ->
+            ok
+    end.
+
+assert_conf("", _) -> ok;
+assert_conf(Filename, Env) ->
+    ".conf" = filename:extension(Filename),
+    case filelib:is_regular(Filename) of
+        true ->
+            case file:read_file(Filename) of
+                {ok, <<"[", _/binary>>} ->
+                    {error, {"ERROR: wrong format of the config file ~s: ~s~n"
+                             "Check that the file is in the new ini-style config format "
+                             "If you are using the old format the file extension should"
+                             "be .config~n",
+                             [Env, Filename]}};
+                _ ->
+                    ok
+            end;
+        false ->
+            ok
     end.
 
