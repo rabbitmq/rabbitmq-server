@@ -148,7 +148,8 @@ CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOE
 if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!" (
     set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config
 ) else if not "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config" (
-    echo "Warning: wrong extension for advanced config: !RABBITMQ_ADVANCED_CONFIG_FILE!"
+    echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: !RABBITMQ_ADVANCED_CONFIG_FILE!"
+    echo "ERROR: should be .config"
     exit /B 1
 )
 
@@ -189,6 +190,13 @@ if "!RABBITMQ_CONFIG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_FILE" (
     set RABBITMQ_CONFIG_ARG_FILE=!RABBITMQ_CONFIG_FILE!
 ) else if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE" (
     set RABBITMQ_CONFIG_ARG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE!
+) else if not "" == "!RABBITMQ_CONFIG_FILE!" (
+    if not "!RABBITMQ_CONFIG_FILE_NOEX!" == "!RABBITMQ_CONFIG_FILE!" (
+        rem Config file has an extension, but it's neither .conf or .config
+        echo "ERROR: Wrong extension for RABBITMQ_CONFIG_FILE: !RABBITMQ_CONFIG_FILE!"
+        echo "ERROR: should be either .conf or .config"
+        exit /B 1
+    )
 )
 
 rem Set -config if the file exists
