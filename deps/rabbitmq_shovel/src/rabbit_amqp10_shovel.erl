@@ -45,6 +45,7 @@
 -import(rabbit_misc, [pget/2, pget/3]).
 
 -define(INFO(Text, Args), error_logger:info_msg(Text, Args)).
+-define(LINK_CREDIT_TIMEOUT, 5000).
 
 -type state() :: rabbit_shovel_behaviour:state().
 -type uri() :: rabbit_shovel_behaviour:uri().
@@ -81,7 +82,7 @@ connect_source(State = #{name := Name,
                          source := #{uris := [Uri | _],
                                      source_address := Addr} = Src}) ->
     AttachFun = fun amqp10_client:attach_receiver_link/5,
-    {Conn, Sess, LinkRef} = connect(Name, AckMode, Uri, "-receiver", Addr, Src,
+    {Conn, Sess, LinkRef} = connect(Name, AckMode, Uri, "receiver", Addr, Src,
                                     AttachFun),
     State#{source => Src#{current => #{conn => Conn,
                                        session => Sess,
@@ -94,8 +95,16 @@ connect_dest(State = #{name := Name,
                        dest := #{uris := [Uri | _],
                                  target_address := Addr} = Dst}) ->
     AttachFun = fun amqp10_client:attach_sender_link_sync/5,
-    {Conn, Sess, LinkRef} = connect(Name, AckMode, Uri, "-sender", Addr, Dst,
+    {Conn, Sess, LinkRef} = connect(Name, AckMode, Uri, "sender", Addr, Dst,
                                     AttachFun),
+    %% wait for link credit here as if there are messages waiting we may try
+    %% to forward before we've received credit
+    receive
+        {amqp10_event, {link, LinkRef, credited}} ->
+            ok
+    after ?LINK_CREDIT_TIMEOUT ->
+              exit(link_credit_timeout)
+    end,
     State#{dest => Dst#{current => #{conn => Conn,
                                      session => Sess,
                                      link => LinkRef,
