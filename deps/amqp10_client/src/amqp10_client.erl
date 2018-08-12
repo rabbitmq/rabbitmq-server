@@ -411,7 +411,7 @@ parse_tls_opt("verify", V, Acc)
 parse_tls_opt("verify", _V, _Acc) ->
     throw({invalid_option, verify});
 parse_tls_opt("versions", V, Acc) ->
-    Parts = string:split(V, ","),
+    Parts = string:tokens(V, ","),
     Versions = [try_to_existing_atom(P) || P <- Parts],
     [{versions, Versions} | Acc];
 parse_tls_opt("fail_if_no_peer_cert", V, Acc)
