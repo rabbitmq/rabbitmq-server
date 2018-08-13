@@ -86,19 +86,15 @@ get_noex() {
 
 # Check that advanced config file has the .config extension
 # Add .config extension if it's empty
+
 RABBITMQ_ADVANCED_CONFIG_FILE_NOEX=$(get_noex ${RABBITMQ_ADVANCED_CONFIG_FILE})
 if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
      -o "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
     RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config"
-else
-    echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
-    echo "ERROR: should be .config"
-    exit 1
 fi
 
 
 RABBITMQ_CONFIG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_FILE})
-
 # Extension is not specified.
 # Determine config type from file
 
@@ -114,8 +110,9 @@ if [ "${RABBITMQ_CONFIG_FILE_NOEX}" = "${RABBITMQ_CONFIG_FILE}" ]; then
     elif [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.conf" ]; then
         RABBITMQ_CONFIG_FILE="${RABBITMQ_CONFIG_FILE_NOEX}.conf"
     else
-        echo "WARNING: Config file without extension does not exist"
-        echo "WARNING: Assuming the new config format is used"
+        if [ -f ${RABBITMQ_ADVANCED_CONFIG_FILE} ]; then
+            echo "WARNING: Using RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+        fi
         # No config file exist. Use advanced config for -config arg.
         RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
         RABBITMQ_CONFIG_FILE=""
@@ -137,11 +134,25 @@ elif [ "x" != "x${RABBITMQ_CONFIG_FILE}" \
        -a  "${RABBITMQ_CONFIG_FILE_NOEX}" != "${RABBITMQ_CONFIG_FILE}" ]; then
     # Config file has an extension, but it's neither .conf or .config
     echo "ERROR: Wrong extension for RABBITMQ_CONFIG_FILE: ${RABBITMQ_CONFIG_FILE}"
-    echo "ERROR: should be either .conf or .config"
+    echo "ERROR: extension should be either .conf or .config"
     exit 1
 fi
 
+
 # Set -config if the file exists
+if [ "${RABBITMQ_CONFIG_ARG_FILE_NOEX}.config" != "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
+    if [ "${RABBITMQ_CONFIG_ARG_FILE}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
+        echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+        echo "ERROR: extension should be .config"
+        exit 1
+    else
+        # We should never got here, but still there should be some explanation
+        echo "ERROR: Wrong extension for ${RABBITMQ_CONFIG_ARG_FILE}"
+        echo "ERROR: extension should be .config"
+        exit 1
+    fi
+fi
+
 if [ -f "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
     RABBITMQ_CONFIG_ARG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_ARG_FILE})
     RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_ARG_FILE_NOEX}"
