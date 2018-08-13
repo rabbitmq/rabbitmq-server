@@ -74,9 +74,19 @@ if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbit.schema" ]; then
     cp "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
 fi
 
+get_noex() {
+    if [ "x" = "x${1}" ]; then
+        echo ""
+    else
+        local BASENAME=$(basename $1)
+        local DIRNAME=$(dirname $1)
+        echo "${DIRNAME}/${BASENAME%.*}"
+    fi
+}
+
 # Check that advanced config file has the .config extension
 # Add .config extension if it's empty
-RABBITMQ_ADVANCED_CONFIG_FILE_NOEX="${RABBITMQ_ADVANCED_CONFIG_FILE%.*}"
+RABBITMQ_ADVANCED_CONFIG_FILE_NOEX=$(get_noex ${RABBITMQ_ADVANCED_CONFIG_FILE})
 if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
      -o "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
     RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config"
@@ -87,7 +97,7 @@ else
 fi
 
 
-RABBITMQ_CONFIG_FILE_NOEX="${RABBITMQ_CONFIG_FILE%.*}"
+RABBITMQ_CONFIG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_FILE})
 
 # Extension is not specified.
 # Determine config type from file
@@ -133,7 +143,7 @@ fi
 
 # Set -config if the file exists
 if [ -f "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
-    RABBITMQ_CONFIG_ARG_FILE_NOEX="${RABBITMQ_CONFIG_ARG_FILE%.*}"
+    RABBITMQ_CONFIG_ARG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_ARG_FILE})
     RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_ARG_FILE_NOEX}"
 fi
 
