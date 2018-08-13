@@ -257,7 +257,9 @@ assert_config(Filename, Env) ->
     case filelib:is_regular(Filename) of
         true ->
             case file:consult(Filename) of
-                {ok, _} -> ok;
+                {ok, []}    -> {error, "ERROR: Config file ~s should not be empty: ~s"};
+                {ok, [_]}   -> ok;
+                {ok, [_|_]} -> {error, "ERROR: Config file ~s must contain ONE list ended by <dot>: ~s"};
                 {error, {1, erl_parse, Err}} ->
                     {error, {"ERROR: Unable to parse erlang terms from ~s file: ~s~n"
                              "ERROR: Reason: ~p~n"
@@ -283,8 +285,9 @@ assert_conf(Filename, Env) ->
     ".conf" = filename:extension(Filename),
     case filelib:is_regular(Filename) of
         true ->
-            case file:read_file(Filename) of
-                {ok, <<"[", _/binary>>} ->
+            case file:consult(Filename) of
+                {ok, []} -> ok;
+                {ok, _}  ->
                     {error, {"ERROR: Wrong format of the config file ~s: ~s~n"
                              "ERROR: Check that the file is in the new ini-style config format "
                              "If you are using the old format the file extension should "
