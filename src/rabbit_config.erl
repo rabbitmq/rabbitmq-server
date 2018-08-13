@@ -260,10 +260,14 @@ assert_config(Filename, Env) ->
                 {ok, _} -> ok;
                 {error, {1, erl_parse, Err}} ->
                     {error, {"ERROR: Unable to parse erlang terms from ~s file: ~s~n"
-                             "Error: ~p~n"
-                             "Check that the file has the correct format. "
-                             "If you are using the new ini-style format, the file "
-                             "extension should be '.conf'~n",
+                             "ERROR: Reason: ~p~n"
+                             "ERROR: Check that the file is in the erlang terms format. " ++
+                             case Env of
+                                "RABBITMQ_CONFIG_FILE" ->
+                                    "If you are using the new ini-style format, the file "
+                                    "extension should be '.conf'~n";
+                                _ -> ""
+                             end,
                              [Env, Filename, Err]}};
                 {error, Err} ->
                     {error, {"ERROR Unable to parse erlang terms from  ~s file: ~s~n"
@@ -281,9 +285,9 @@ assert_conf(Filename, Env) ->
         true ->
             case file:read_file(Filename) of
                 {ok, <<"[", _/binary>>} ->
-                    {error, {"ERROR: wrong format of the config file ~s: ~s~n"
-                             "Check that the file is in the new ini-style config format "
-                             "If you are using the old format the file extension should"
+                    {error, {"ERROR: Wrong format of the config file ~s: ~s~n"
+                             "ERROR: Check that the file is in the new ini-style config format "
+                             "If you are using the old format the file extension should "
                              "be .config~n",
                              [Env, Filename]}};
                 _ ->
