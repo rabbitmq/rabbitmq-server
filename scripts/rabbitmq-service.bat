@@ -172,7 +172,7 @@ if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!" (
         if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!" (
             echo "WARNING: Using RABBITMQ_ADVANCED_CONFIG_FILE: !RABBITMQ_ADVANCED_CONFIG_FILE!"
         )
-        set RABBITMQ_CONFIG_ARG_FILE="!RABBITMQ_ADVANCED_CONFIG_FILE!"
+        set RABBITMQ_CONFIG_ARG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE!
     )
 )
 
@@ -182,9 +182,9 @@ rem the file should exist
 rem the file should be a valid erlang term file
 
 rem Config file extension is .config
-if "!RABBITMQ_CONFIG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_FILE" (
+if "!RABBITMQ_CONFIG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_FILE!" (
     set RABBITMQ_CONFIG_ARG_FILE=!RABBITMQ_CONFIG_FILE!
-) else if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE" (
+) else if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE!" (
     set RABBITMQ_CONFIG_ARG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE!
 ) else if not "" == "!RABBITMQ_CONFIG_FILE!" (
     if not "!RABBITMQ_CONFIG_FILE_NOEX!" == "!RABBITMQ_CONFIG_FILE!" (
@@ -197,7 +197,7 @@ if "!RABBITMQ_CONFIG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_FILE" (
 
 CALL :get_noex !RABBITMQ_CONFIG_ARG_FILE! RABBITMQ_CONFIG_ARG_FILE_NOEX
 
-if not "$!RABBITMQ_CONFIG_ARG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_ARG_FILE!" (
+if not "!RABBITMQ_CONFIG_ARG_FILE_NOEX!.config" == "!RABBITMQ_CONFIG_ARG_FILE!" (
     if "!RABBITMQ_CONFIG_ARG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE!" (
         echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: !RABBITMQ_ADVANCED_CONFIG_FILE!"
         echo "ERROR: extension should be .config"
@@ -216,7 +216,7 @@ if exist !RABBITMQ_CONFIG_ARG_FILE! (
 )
 
 rem Set -conf and other generated config parameters
-if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE" (
+if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE!" (
     set RABBITMQ_GENERATED_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
                                       -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
                                       -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^

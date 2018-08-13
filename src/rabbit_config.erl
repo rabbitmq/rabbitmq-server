@@ -257,9 +257,13 @@ assert_config(Filename, Env) ->
     case filelib:is_regular(Filename) of
         true ->
             case file:consult(Filename) of
-                {ok, []}    -> {error, "ERROR: Config file ~s should not be empty: ~s"};
+                {ok, []}    -> {error,
+                                {"ERROR: Config file ~s should not be empty: ~s",
+                                 [Env, Filename]}};
                 {ok, [_]}   -> ok;
-                {ok, [_|_]} -> {error, "ERROR: Config file ~s must contain ONE list ended by <dot>: ~s"};
+                {ok, [_|_]} -> {error,
+                                {"ERROR: Config file ~s must contain ONE list ended by <dot>: ~s",
+                                 [Env, Filename]}};
                 {error, {1, erl_parse, Err}} ->
                     {error, {"ERROR: Unable to parse erlang terms from ~s file: ~s~n"
                              "ERROR: Reason: ~p~n"
