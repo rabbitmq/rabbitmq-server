@@ -49,20 +49,28 @@
     {utf8, binary()} |
     {symbol, binary()} |
     {binary, binary()} |
-    {list, [amqp10_prim()]} |
+    {list, [amqp10_type()]} |
     {map, [{amqp10_prim(), amqp10_prim()}]} | %% TODO: make map a map
     {array, amqp10_ctor(), [amqp10_type()]}.
 
--type amqp10_type() ::
-    amqp10_prim() |
+-type amqp10_described() ::
     {described, amqp10_type(), amqp10_prim()}.
 
--spec build_frame(integer(), iolist()) -> iolist().
+-type amqp10_type() ::
+    amqp10_prim() | amqp10_described().
+
+-export_type([
+              amqp10_ctor/0,
+              amqp10_type/0,
+              amqp10_described/0
+             ]).
+
 
 -define(AMQP_FRAME_TYPE, 0).
 -define(DOFF, 2).
 -define(VAR_1_LIMIT, 16#FF).
 
+-spec build_frame(integer(), iolist()) -> iolist().
 build_frame(Channel, Payload) ->
     build_frame(Channel, ?AMQP_FRAME_TYPE, Payload).
 
