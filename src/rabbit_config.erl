@@ -207,7 +207,8 @@ config_files() ->
                                end
             end;
         false ->
-            ConfFiles = [filename:absname(File) || File <- get_confs()],
+            ConfFiles = [filename:absname(File) || File <- get_confs(),
+                                                   filelib:is_regular(File)],
             AdvancedFiles = case get_advanced_config() of
                 none -> [];
                 FileName -> [filename:absname(FileName)]
