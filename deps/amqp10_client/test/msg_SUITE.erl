@@ -45,7 +45,11 @@ groups() ->
                           set_delivery_annotations,
                           set_message_annotations,
                           to_amqp_records,
-                          set_handle
+                          set_handle,
+                          body_bin_data,
+                          body_bin_amqp_value,
+                          body_bin_amqp_sequence
+
                          ]}
     ].
 
@@ -283,6 +287,35 @@ to_amqp_records(_Config) ->
      #'v1_0.header'{durable = true},
      #'v1_0.data'{content = <<"data">>}] =
      amqp10_msg:to_amqp_records(Msg).
+
+body_bin_data(_) ->
+    Body = [
+            #'v1_0.data'{content = <<"one">>},
+            #'v1_0.data'{content = <<"two">>}
+           ],
+    Msg = amqp10_msg:new(55, Body),
+    Bin = amqp10_msg:body_bin(Msg),
+    Body = amqp10_framing:decode_bin(Bin),
+    ok.
+
+body_bin_amqp_value(_) ->
+    Body = #'v1_0.amqp_value'{content = {utf8, <<"one">>}},
+    Msg = amqp10_msg:new(55, Body),
+    Bin = amqp10_msg:body_bin(Msg),
+    [Body] = amqp10_framing:decode_bin(Bin),
+    ok.
+
+body_bin_amqp_sequence(_) ->
+    Body = [
+            #'v1_0.amqp_sequence'{content = [{utf8, <<"one">>},
+                                             {utf8, <<"blah">>}]},
+            #'v1_0.amqp_sequence'{content = [{utf8, <<"two">>}]}
+           ],
+    Msg = amqp10_msg:new(55, Body),
+    Bin = amqp10_msg:body_bin(Msg),
+    Body = amqp10_framing:decode_bin(Bin),
+    ok.
+
 %% -------------------------------------------------------------------
 %% Utilities
 %% -------------------------------------------------------------------

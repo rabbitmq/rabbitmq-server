@@ -30,6 +30,7 @@
          properties/1,
          application_properties/1,
          body/1,
+         body_bin/1,
          footer/1,
          % "write" api
          new/2,
@@ -239,6 +240,18 @@ body(#amqp10_msg{body = [#'v1_0.data'{} | _] = Data}) ->
     [Content || #'v1_0.data'{content = Content} <- Data];
 body(#amqp10_msg{body = Body}) -> Body.
 
+%% @doc Returns the binary representation
+-spec body_bin(amqp10_msg()) -> binary().
+body_bin(#amqp10_msg{body = [#'v1_0.data'{content = Bin}]})
+  when is_binary(Bin) ->
+    Bin;
+body_bin(#amqp10_msg{body = Data}) when is_list(Data) ->
+    iolist_to_binary([amqp10_framing:encode_bin(D) || D <- Data]);
+body_bin(#amqp10_msg{body = #'v1_0.amqp_value'{} = Body}) ->
+    %% TODO: to avoid unnecessary decoding and re-encoding we could amend
+    %% the parse to provide the body in a lazy fashion, only decoding when
+    %% reading. For now we just re-encode it.
+    iolist_to_binary(amqp10_framing:encode_bin(Body)).
 
 %% @doc Create a new amqp10 message using the specified delivery tag, body
 %% and settlement state. Settled=true means the message is considered settled
