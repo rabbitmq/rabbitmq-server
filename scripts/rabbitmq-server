@@ -80,7 +80,11 @@ get_noex() {
     else
         local BASENAME=$(basename $1)
         local DIRNAME=$(dirname $1)
-        echo "${DIRNAME}/${BASENAME%.*}"
+        if [ "x." = "x${DIRNAME}" ]; then
+            echo "${BASENAME%.*}"
+        else
+            echo "${DIRNAME}/${BASENAME%.*}"
+        fi
     fi
 }
 
@@ -138,8 +142,8 @@ elif [ "x" != "x${RABBITMQ_CONFIG_FILE}" \
     exit 1
 fi
 
+RABBITMQ_CONFIG_ARG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_ARG_FILE})
 
-# Set -config if the file exists
 if [ "${RABBITMQ_CONFIG_ARG_FILE_NOEX}.config" != "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
     if [ "${RABBITMQ_CONFIG_ARG_FILE}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
         echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
@@ -153,8 +157,8 @@ if [ "${RABBITMQ_CONFIG_ARG_FILE_NOEX}.config" != "${RABBITMQ_CONFIG_ARG_FILE}" 
     fi
 fi
 
+# Set -config if the file exists
 if [ -f "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
-    RABBITMQ_CONFIG_ARG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_ARG_FILE})
     RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_ARG_FILE_NOEX}"
 fi
 
