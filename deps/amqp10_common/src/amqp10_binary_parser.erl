@@ -20,7 +20,7 @@
 
 -include("amqp10_framing.hrl").
 
--spec parse(binary()) -> tuple().
+% -spec parse(binary()) -> tuple().
 
 parse_all(ValueBin) when is_binary(ValueBin) ->
     lists:reverse(parse_all([], parse(ValueBin))).
@@ -28,6 +28,8 @@ parse_all(ValueBin) when is_binary(ValueBin) ->
 parse_all(Acc, {Value, <<>>}) -> [Value | Acc];
 parse_all(Acc, {Value, Rest}) -> parse_all([Value | Acc], parse(Rest)).
 
+-spec parse(binary()) ->
+    {amqp10_binary_generator:amqp10_type(), binary()}.
 parse(<<?DESCRIBED,Rest/binary>>) ->
     parse_described(Rest);
 parse(Rest) ->

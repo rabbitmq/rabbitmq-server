@@ -17,6 +17,7 @@
 /xrefr
 
 /amqp10_common.d
+/*.plt
 
 # Generated source files.
 /include/amqp10_framing.hrl
