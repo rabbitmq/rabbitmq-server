@@ -62,28 +62,28 @@ RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 
 [ "$NOTIFY_SOCKET" ] && RUNNING_UNDER_SYSTEMD=true
 
-if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
-    mkdir -p "${RABBITMQ_SCHEMA_DIR}"
+if [ ! -d "$RABBITMQ_SCHEMA_DIR" ]; then
+    mkdir -p "$RABBITMQ_SCHEMA_DIR"
 fi
 
-if [ ! -d ${RABBITMQ_GENERATED_CONFIG_DIR} ]; then
-    mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
+if [ ! -d "$RABBITMQ_GENERATED_CONFIG_DIR" ]; then
+    mkdir -p "$RABBITMQ_GENERATED_CONFIG_DIR"
 fi
 
-if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbit.schema" ]; then
-    cp "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
+if [ ! -f "$RABBITMQ_SCHEMA_DIR/rabbit.schema" ]; then
+    cp "$RABBITMQ_HOME/priv/schema/rabbit.schema" "$RABBITMQ_SCHEMA_DIR"
 fi
 
 get_noex() {
     if [ "x" = "x${1}" ]; then
         echo ""
     else
-        local BASENAME=$(basename $1)
-        local DIRNAME=$(dirname $1)
-        if [ "x." = "x${DIRNAME}" ]; then
-            echo "${BASENAME%.*}"
+        _get_noex_basename="$(basename "$1")"
+        _get_noex_dirname="$(dirname "$1")"
+        if [ "x." = "x${_get_noex_dirname}" ]; then
+            echo "${_get_noex_basename%.*}"
         else
-            echo "${DIRNAME}/${BASENAME%.*}"
+            echo "$_get_noex_dirname/${_get_noex_basename%.*}"
         fi
     fi
 }
@@ -91,34 +91,33 @@ get_noex() {
 # Check that advanced config file has the .config extension
 # Add .config extension if it's empty
 
-RABBITMQ_ADVANCED_CONFIG_FILE_NOEX=$(get_noex ${RABBITMQ_ADVANCED_CONFIG_FILE})
-if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
-     -o "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
-    RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config"
+RABBITMQ_ADVANCED_CONFIG_FILE_NOEX="$(get_noex "$RABBITMQ_ADVANCED_CONFIG_FILE")"
+if [ "$RABBITMQ_ADVANCED_CONFIG_FILE_NOEX.config" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ] || \
+    [ "$RABBITMQ_ADVANCED_CONFIG_FILE_NOEX" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
+    RABBITMQ_ADVANCED_CONFIG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE_NOEX.config"
 fi
 
+RABBITMQ_CONFIG_FILE_NOEX="$(get_noex "$RABBITMQ_CONFIG_FILE")"
 
-RABBITMQ_CONFIG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_FILE})
 # Extension is not specified.
 # Determine config type from file
-
-if [ "${RABBITMQ_CONFIG_FILE_NOEX}" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    if [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.config" ]; then
-        if [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.conf" ]; then
+if [ "$RABBITMQ_CONFIG_FILE_NOEX" = "$RABBITMQ_CONFIG_FILE" ]; then
+    if [ -f "$RABBITMQ_CONFIG_FILE_NOEX.config" ]; then
+        if [ -f "$RABBITMQ_CONFIG_FILE_NOEX.conf" ]; then
             # Both files exist. Print a warning
             echo "WARNING: Both old (.config) and new (.conf) format config files exist."
-            echo "WARNING: Using the old format config file: ${RABBITMQ_CONFIG_FILE_NOEX}.config"
+            echo "WARNING: Using the old format config file: $RABBITMQ_CONFIG_FILE_NOEX.config"
             echo "WARNING: Please update your config files to the new format and remove the old file"
         fi
-        RABBITMQ_CONFIG_FILE="${RABBITMQ_CONFIG_FILE_NOEX}.config"
-    elif [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.conf" ]; then
-        RABBITMQ_CONFIG_FILE="${RABBITMQ_CONFIG_FILE_NOEX}.conf"
+        RABBITMQ_CONFIG_FILE="$RABBITMQ_CONFIG_FILE_NOEX.config"
+    elif [ -f "$RABBITMQ_CONFIG_FILE_NOEX.conf" ]; then
+        RABBITMQ_CONFIG_FILE="$RABBITMQ_CONFIG_FILE_NOEX.conf"
     else
-        if [ -f ${RABBITMQ_ADVANCED_CONFIG_FILE} ]; then
-            echo "WARNING: Using RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+        if [ -f "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
+            echo "WARNING: Using RABBITMQ_ADVANCED_CONFIG_FILE: $RABBITMQ_ADVANCED_CONFIG_FILE"
         fi
         # No config file exist. Use advanced config for -config arg.
-        RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
+        RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE"
         RABBITMQ_CONFIG_FILE=""
     fi
 fi
@@ -129,46 +128,46 @@ fi
 # the file should be a valid erlang term file
 
 # Config file extension is .config
-if [ "${RABBITMQ_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_CONFIG_FILE}"
+if [ "$RABBITMQ_CONFIG_FILE_NOEX.config" = "$RABBITMQ_CONFIG_FILE" ]; then
+    RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_CONFIG_FILE"
 # Config file extension is .conf
-elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
-elif [ "x" != "x${RABBITMQ_CONFIG_FILE}" \
-       -a  "${RABBITMQ_CONFIG_FILE_NOEX}" != "${RABBITMQ_CONFIG_FILE}" ]; then
+elif [ "$RABBITMQ_CONFIG_FILE_NOEX.conf" = "$RABBITMQ_CONFIG_FILE" ]; then
+    RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE"
+elif [ "x" != "x$RABBITMQ_CONFIG_FILE" ] && \
+    [ "$RABBITMQ_CONFIG_FILE_NOEX" != "$RABBITMQ_CONFIG_FILE" ]; then
     # Config file has an extension, but it's neither .conf or .config
-    echo "ERROR: Wrong extension for RABBITMQ_CONFIG_FILE: ${RABBITMQ_CONFIG_FILE}"
-    echo "ERROR: extension should be either .conf or .config"
+    echo "ERROR: Wrong extension for RABBITMQ_CONFIG_FILE: $RABBITMQ_CONFIG_FILE" 2>&1
+    echo "ERROR: extension should be either .conf or .config" 2>&1
     exit 1
 fi
 
-RABBITMQ_CONFIG_ARG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_ARG_FILE})
+RABBITMQ_CONFIG_ARG_FILE_NOEX="$(get_noex "$RABBITMQ_CONFIG_ARG_FILE")"
 
-if [ "${RABBITMQ_CONFIG_ARG_FILE_NOEX}.config" != "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
-    if [ "${RABBITMQ_CONFIG_ARG_FILE}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
-        echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
-        echo "ERROR: extension should be .config"
+if [ "$RABBITMQ_CONFIG_ARG_FILE_NOEX.config" != "$RABBITMQ_CONFIG_ARG_FILE" ]; then
+    if [ "$RABBITMQ_CONFIG_ARG_FILE" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
+        echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: $RABBITMQ_ADVANCED_CONFIG_FILE" 2>&1
+        echo "ERROR: extension should be .config" 2>&1
         exit 1
     else
         # We should never got here, but still there should be some explanation
-        echo "ERROR: Wrong extension for ${RABBITMQ_CONFIG_ARG_FILE}"
-        echo "ERROR: extension should be .config"
+        echo "ERROR: Wrong extension for $RABBITMQ_CONFIG_ARG_FILE" 2>&1
+        echo "ERROR: extension should be .config" 2>&1
         exit 1
     fi
 fi
 
 # Set -config if the file exists
-if [ -f "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
-    RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_ARG_FILE_NOEX}"
+if [ -f "$RABBITMQ_CONFIG_ARG_FILE" ]; then
+    RABBITMQ_CONFIG_ARG="-config $RABBITMQ_CONFIG_ARG_FILE_NOEX"
 fi
 
 # Set -conf and other generated config parameters
-if [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
-    RABBITMQ_GENERATED_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
-                                   -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
-                                   -conf_script_dir `dirname $0` \
-                                   -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}
-                                   -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+if [ "$RABBITMQ_CONFIG_FILE_NOEX.conf" = "$RABBITMQ_CONFIG_FILE" ]; then
+    RABBITMQ_GENERATED_CONFIG_ARG="-conf $RABBITMQ_CONFIG_FILE \
+                                   -conf_dir $RABBITMQ_GENERATED_CONFIG_DIR \
+                                   -conf_script_dir $(dirname "$0") \
+                                   -conf_schema_dir $RABBITMQ_SCHEMA_DIR
+                                   -conf_advanced $RABBITMQ_ADVANCED_CONFIG_FILE"
 fi
 
 set +e
@@ -186,7 +185,7 @@ RABBITMQ_PRELAUNCH_NODENAME="rabbitmqprelaunch${$}@localhost"
 
 # NOTIFY_SOCKET is needed here to prevent epmd from impersonating the
 # success of our startup sequence to systemd.
-NOTIFY_SOCKET= \
+NOTIFY_SOCKET='' \
 RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
 ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
 RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
