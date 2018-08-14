@@ -9,4 +9,6 @@ ebin/
 logs/
 plugins/
 
+test/config_schema_SUITE_data/schema/rabbit.schema
+
 rabbitmq_event_exchange.d
