@@ -184,10 +184,6 @@ set +e
 # enough.
 RABBITMQ_PRELAUNCH_NODENAME="rabbitmqprelaunch${$}@localhost"
 
-
-
-RABBITMQ_CONIG_ARGUMENT_FILE=
-
 # NOTIFY_SOCKET is needed here to prevent epmd from impersonating the
 # success of our startup sequence to systemd.
 NOTIFY_SOCKET= \
