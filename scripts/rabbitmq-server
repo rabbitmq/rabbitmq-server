@@ -21,10 +21,6 @@ set -e
 # Non-empty defaults should be set in rabbitmq-env
 . "$(dirname "$0")"/rabbitmq-env
 
-RABBITMQ_START_RABBIT=
-[ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
-[ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s $RABBITMQ_BOOT_MODULE boot "
-
 case "$(uname -s)" in
   CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait
            # will not be able to make sense of it anyway
@@ -117,23 +113,11 @@ else
     exit ${PRELAUNCH_RESULT}
 fi
 
-# The default allocation strategy RabbitMQ is using was introduced
-# in Erlang/OTP 20.2.3. Earlier Erlang versions fail to start with
-# this configuration. We therefore need to ensure that erl accepts
-# these values before we can use them.
-#
-# The defaults are meant to reduce RabbitMQ's memory usage and help
-# it reclaim memory at the cost of a slight decrease in performance
-# (due to an increase in memory operations). These defaults can be
-# overriden using the RABBITMQ_SERVER_ERL_ARGS variable.
-RABBITMQ_DEFAULT_ALLOC_ARGS="+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30"
-
-${ERL_DIR}erl ${RABBITMQ_DEFAULT_ALLOC_ARGS} \
+${ERL_DIR}erl ${RABBITMQ_ALLOC_ARGS} \
     -boot "${CLEAN_BOOT_FILE}" \
     -noinput -eval 'halt(0)' 2>/dev/null
-
-if [ $? != 0 ] ; then
-    RABBITMQ_DEFAULT_ALLOC_ARGS=
+if [ $? != 0 ]; then
+    RABBITMQ_ALLOC_ARGS=''
 fi
 
 set -e
@@ -191,14 +175,14 @@ start_rabbitmq_server() {
     ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
     exec ${ERL_DIR}erl \
         -pa ${RABBITMQ_SERVER_CODE_PATH} ${RABBITMQ_EBIN_ROOT} \
-        ${RABBITMQ_START_RABBIT} \
+        $_rabbitmq_start_rabbit \
         ${RABBITMQ_NAME_TYPE} ${RABBITMQ_NODENAME} \
         -boot "${SASL_BOOT_FILE}" \
         ${RABBITMQ_CONFIG_ARG} \
         ${RABBITMQ_GENERATED_CONFIG_ARG} \
         +W w \
         +A ${RABBITMQ_IO_THREAD_POOL_SIZE} \
-        ${RABBITMQ_DEFAULT_ALLOC_ARGS} \
+        ${RABBITMQ_ALLOC_ARGS} \
         ${RABBITMQ_SERVER_ERL_ARGS} \
         +K true \
         -kernel inet_default_connect_options "[{nodelay,true}]" \

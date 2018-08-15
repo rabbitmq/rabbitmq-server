@@ -81,24 +81,74 @@ ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 [ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
 [ -f ${RABBITMQ_CONF_ENV_FILE} ] && . ${RABBITMQ_CONF_ENV_FILE} || true
 
-DEFAULT_SCHEDULER_BIND_TYPE="db"
-[ -n "$SCHEDULER_BIND_TYPE" ] || SCHEDULER_BIND_TYPE="$DEFAULT_SCHEDULER_BIND_TYPE"
-[ -n "$RABBITMQ_SCHEDULER_BIND_TYPE" ] || RABBITMQ_SCHEDULER_BIND_TYPE="$SCHEDULER_BIND_TYPE"
+config_process_limit_arg()
+{
+    _default_max_number_of_processes=1048576
+    [ -n "$MAX_NUMBER_OF_PROCESSES" ] || MAX_NUMBER_OF_PROCESSES="$_default_max_number_of_processes"
+    [ -n "$RABBITMQ_MAX_NUMBER_OF_PROCESSES" ] || RABBITMQ_MAX_NUMBER_OF_PROCESSES="$MAX_NUMBER_OF_PROCESSES"
+}
 
-DEFAULT_DISTRIBUTION_BUFFER_SIZE=128000
-[ -n "$DISTRIBUTION_BUFFER_SIZE" ] || DISTRIBUTION_BUFFER_SIZE="$DEFAULT_DISTRIBUTION_BUFFER_SIZE"
-[ -n "$RABBITMQ_DISTRIBUTION_BUFFER_SIZE" ] || RABBITMQ_DISTRIBUTION_BUFFER_SIZE="$DISTRIBUTION_BUFFER_SIZE"
+config_atom_limit_arg()
+{
+    _default_max_number_of_atoms=5000000
+    [ -n "$MAX_NUMBER_OF_ATOMS" ] || MAX_NUMBER_OF_ATOMS="$_default_max_number_of_atoms"
+    [ -n "$RABBITMQ_MAX_NUMBER_OF_ATOMS" ] || RABBITMQ_MAX_NUMBER_OF_ATOMS="$MAX_NUMBER_OF_ATOMS"
+}
 
-DEFAULT_MAX_NUMBER_OF_PROCESSES=1048576
-[ -n "$MAX_NUMBER_OF_PROCESSES" ] || MAX_NUMBER_OF_PROCESSES="$DEFAULT_MAX_NUMBER_OF_PROCESSES"
-[ -n "$RABBITMQ_MAX_NUMBER_OF_PROCESSES" ] || RABBITMQ_MAX_NUMBER_OF_PROCESSES="$MAX_NUMBER_OF_PROCESSES"
+config_scheduler_bind_type_arg()
+{
+    _default_scheduler_bind_type='db'
+    [ -n "$SCHEDULER_BIND_TYPE" ] || SCHEDULER_BIND_TYPE="$_default_scheduler_bind_type"
+    [ -n "$RABBITMQ_SCHEDULER_BIND_TYPE" ] || RABBITMQ_SCHEDULER_BIND_TYPE="$SCHEDULER_BIND_TYPE"
+}
 
-DEFAULT_MAX_NUMBER_OF_ATOMS=5000000
-[ -n "$MAX_NUMBER_OF_ATOMS" ] || MAX_NUMBER_OF_ATOMS="$DEFAULT_MAX_NUMBER_OF_ATOMS"
-[ -n "$RABBITMQ_MAX_NUMBER_OF_ATOMS" ] || RABBITMQ_MAX_NUMBER_OF_ATOMS="$MAX_NUMBER_OF_ATOMS"
+config_distribution_buffer_arg()
+{
+    _default_distribution_buffer_size=128000
+    [ -n "$DISTRIBUTION_BUFFER_SIZE" ] || DISTRIBUTION_BUFFER_SIZE="$_default_distribution_buffer_size"
+    [ -n "$RABBITMQ_DISTRIBUTION_BUFFER_SIZE" ] || RABBITMQ_DISTRIBUTION_BUFFER_SIZE="$DISTRIBUTION_BUFFER_SIZE"
+}
 
-## Common server defaults
-SERVER_ERL_ARGS=" +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES +t $RABBITMQ_MAX_NUMBER_OF_ATOMS +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE "
+config_server_erl_args()
+{
+    config_process_limit_arg
+    config_atom_limit_arg
+    config_scheduler_bind_type_arg
+    config_distribution_buffer_arg
+
+    ## Common server defaults
+    _default_server_erl_args=" +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES +t $RABBITMQ_MAX_NUMBER_OF_ATOMS +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE "
+    [ -n "$SERVER_ERL_ARGS" ] || SERVER_ERL_ARGS="$_default_server_erl_args"
+    [ -n "$RABBITMQ_SERVER_ERL_ARGS" ] || RABBITMQ_SERVER_ERL_ARGS="$SERVER_ERL_ARGS"
+}
+
+config_start_args()
+{
+    [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && _noinput_arg='-noinput'
+    [ "x" = "x$RABBITMQ_NODE_ONLY" ] && _node_only_arg="-s $RABBITMQ_BOOT_MODULE boot"
+    [ -n "$_noinput_arg" ] && [ -n "${_node_only_arg}" ] && _maybe_space=' '
+    # shellcheck disable=SC2034
+    _rabbitmq_start_rabbit="${_noinput_arg}${_maybe_space}${_node_only_arg}"
+}
+
+config_alloc_args()
+{
+    # The default allocation strategy RabbitMQ is using was introduced
+    # in Erlang/OTP 20.2.3. Earlier Erlang versions fail to start with
+    # this configuration. We therefore need to ensure that erl accepts
+    # these values before we can use them.
+    #
+    # The defaults are meant to reduce RabbitMQ's memory usage and help
+    # it reclaim memory at the cost of a slight decrease in performance
+    # (due to an increase in memory operations). These defaults can be
+    # overriden using the RABBITMQ_SERVER_ERL_ARGS variable.
+    # shellcheck disable=SC2034
+    _default_alloc_args="+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30"
+    [ -n "$ALLOC_ARGS" ] || ALLOC_ARGS="$_default_alloc_args"
+    [ -n "$RABBITMQ_ALLOC_ARGS" ] || RABBITMQ_ALLOC_ARGS="$ALLOC_ARGS"
+}
+
+config_server_erl_args
 
 # We save the current value of $RABBITMQ_PID_FILE in case it was set by
 # an init script. If $CONF_ENV_FILE overrides it again, we must ignore
@@ -125,8 +175,6 @@ else
     [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
     [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME%%.*}
 fi
-
-##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
 rmq_normalize_path() {
     local path=$1
@@ -188,6 +236,8 @@ rmq_check_if_shared_with_mnesia() {
     fi
 }
 
+##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
+
 DEFAULT_NODE_IP_ADDRESS=auto
 DEFAULT_NODE_PORT=5672
 
@@ -209,7 +259,6 @@ DEFAULT_NODE_PORT=5672
 
 [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 [ "x" = "x$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE=${IO_THREAD_POOL_SIZE}
-[ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
 [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
 [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
@@ -465,6 +514,9 @@ rabbitmq_config()
                                     -conf_schema_dir $RABBITMQ_SCHEMA_DIR
                                     -conf_advanced $RABBITMQ_ADVANCED_CONFIG_FILE"
     fi
+
+    config_start_args
+    config_alloc_args
 }
 
 RABBITMQ_ENV_LOADED=1
