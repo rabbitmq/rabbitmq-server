@@ -19,7 +19,7 @@ set -e
 
 # Get default settings with user overrides for (RABBITMQ_)<var_name>
 # Non-empty defaults should be set in rabbitmq-env
-. `dirname $0`/rabbitmq-env
+. "$(dirname "$0")"/rabbitmq-env
 
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
@@ -74,103 +74,9 @@ if [ ! -f "$RABBITMQ_SCHEMA_DIR/rabbit.schema" ]; then
     cp "$RABBITMQ_HOME/priv/schema/rabbit.schema" "$RABBITMQ_SCHEMA_DIR"
 fi
 
-get_noex() {
-    if [ "x" = "x${1}" ]; then
-        echo ""
-    else
-        _get_noex_basename="$(basename "$1")"
-        _get_noex_dirname="$(dirname "$1")"
-        if [ "x." = "x${_get_noex_dirname}" ]; then
-            echo "${_get_noex_basename%.*}"
-        else
-            echo "$_get_noex_dirname/${_get_noex_basename%.*}"
-        fi
-    fi
-}
-
-# Check that advanced config file has the .config extension
-# Add .config extension if it's empty
-
-RABBITMQ_ADVANCED_CONFIG_FILE_NOEX="$(get_noex "$RABBITMQ_ADVANCED_CONFIG_FILE")"
-if [ "$RABBITMQ_ADVANCED_CONFIG_FILE_NOEX.config" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ] || \
-    [ "$RABBITMQ_ADVANCED_CONFIG_FILE_NOEX" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
-    RABBITMQ_ADVANCED_CONFIG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE_NOEX.config"
-fi
-
-RABBITMQ_CONFIG_FILE_NOEX="$(get_noex "$RABBITMQ_CONFIG_FILE")"
-
-# Extension is not specified.
-# Determine config type from file
-if [ "$RABBITMQ_CONFIG_FILE_NOEX" = "$RABBITMQ_CONFIG_FILE" ]; then
-    if [ -f "$RABBITMQ_CONFIG_FILE_NOEX.config" ]; then
-        if [ -f "$RABBITMQ_CONFIG_FILE_NOEX.conf" ]; then
-            # Both files exist. Print a warning
-            echo "WARNING: Both old (.config) and new (.conf) format config files exist."
-            echo "WARNING: Using the old format config file: $RABBITMQ_CONFIG_FILE_NOEX.config"
-            echo "WARNING: Please update your config files to the new format and remove the old file"
-        fi
-        RABBITMQ_CONFIG_FILE="$RABBITMQ_CONFIG_FILE_NOEX.config"
-    elif [ -f "$RABBITMQ_CONFIG_FILE_NOEX.conf" ]; then
-        RABBITMQ_CONFIG_FILE="$RABBITMQ_CONFIG_FILE_NOEX.conf"
-    else
-        if [ -f "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
-            echo "WARNING: Using RABBITMQ_ADVANCED_CONFIG_FILE: $RABBITMQ_ADVANCED_CONFIG_FILE"
-        fi
-        # No config file exist. Use advanced config for -config arg.
-        RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE"
-        RABBITMQ_CONFIG_FILE=""
-    fi
-fi
-
-# Set the -config argument.
-# The -config argument should not have extension.
-# the file should exist
-# the file should be a valid erlang term file
-
-# Config file extension is .config
-if [ "$RABBITMQ_CONFIG_FILE_NOEX.config" = "$RABBITMQ_CONFIG_FILE" ]; then
-    RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_CONFIG_FILE"
-# Config file extension is .conf
-elif [ "$RABBITMQ_CONFIG_FILE_NOEX.conf" = "$RABBITMQ_CONFIG_FILE" ]; then
-    RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE"
-elif [ "x" != "x$RABBITMQ_CONFIG_FILE" ] && \
-    [ "$RABBITMQ_CONFIG_FILE_NOEX" != "$RABBITMQ_CONFIG_FILE" ]; then
-    # Config file has an extension, but it's neither .conf or .config
-    echo "ERROR: Wrong extension for RABBITMQ_CONFIG_FILE: $RABBITMQ_CONFIG_FILE" 2>&1
-    echo "ERROR: extension should be either .conf or .config" 2>&1
-    exit 1
-fi
-
-RABBITMQ_CONFIG_ARG_FILE_NOEX="$(get_noex "$RABBITMQ_CONFIG_ARG_FILE")"
-
-if [ "$RABBITMQ_CONFIG_ARG_FILE_NOEX.config" != "$RABBITMQ_CONFIG_ARG_FILE" ]; then
-    if [ "$RABBITMQ_CONFIG_ARG_FILE" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
-        echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: $RABBITMQ_ADVANCED_CONFIG_FILE" 2>&1
-        echo "ERROR: extension should be .config" 2>&1
-        exit 1
-    else
-        # We should never got here, but still there should be some explanation
-        echo "ERROR: Wrong extension for $RABBITMQ_CONFIG_ARG_FILE" 2>&1
-        echo "ERROR: extension should be .config" 2>&1
-        exit 1
-    fi
-fi
-
-# Set -config if the file exists
-if [ -f "$RABBITMQ_CONFIG_ARG_FILE" ]; then
-    RABBITMQ_CONFIG_ARG="-config $RABBITMQ_CONFIG_ARG_FILE_NOEX"
-fi
-
-# Set -conf and other generated config parameters
-if [ "$RABBITMQ_CONFIG_FILE_NOEX.conf" = "$RABBITMQ_CONFIG_FILE" ]; then
-    RABBITMQ_GENERATED_CONFIG_ARG="-conf $RABBITMQ_CONFIG_FILE \
-                                   -conf_dir $RABBITMQ_GENERATED_CONFIG_DIR \
-                                   -conf_script_dir $(dirname "$0") \
-                                   -conf_schema_dir $RABBITMQ_SCHEMA_DIR
-                                   -conf_advanced $RABBITMQ_ADVANCED_CONFIG_FILE"
-fi
-
 set +e
+
+rabbitmq_config
 
 # `net_kernel:start/1` will fail in `longnames` mode when erlang is
 # unable to determine FQDN of a node (with a dot in it). But `erl`

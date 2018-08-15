@@ -166,8 +166,8 @@ ifeq ($(strip $(BATS)),)
 BATS := $(ERLANG_MK_TMP)/bats/bin/bats
 endif
 
-BATS_GIT ?= https://github.com/sstephenson/bats
-BATS_COMMIT ?= v0.4.0
+BATS_GIT ?= https://github.com/bats-core/bats-core.git
+BATS_COMMIT ?= v1.0.0
 
 $(BATS):
 	$(verbose) mkdir -p $(ERLANG_MK_TMP)
