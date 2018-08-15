@@ -453,7 +453,7 @@ log_connection_exception_with_severity(Severity, Fmt, Args) ->
         debug   -> rabbit_log_connection:debug(Fmt, Args);
         info    -> rabbit_log_connection:info(Fmt, Args);
         warning -> rabbit_log_connection:warning(Fmt, Args);
-        error   -> rabbit_log_connection:warning(Fmt, Args)
+        error   -> rabbit_log_connection:error(Fmt, Args)
     end.
 
 run({M, F, A}) ->
