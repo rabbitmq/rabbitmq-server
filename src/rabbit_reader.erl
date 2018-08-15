@@ -430,7 +430,7 @@ log_connection_exception(Severity, Name, {connection_closed_abruptly, _}) ->
     log_connection_exception_with_severity(Severity,
         "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
         [self(), Name]);
-%% e.g. failed parameter negotiations
+%% failed connection.tune negotiations
 log_connection_exception(Severity, Name, {handshake_error, tuning, _Channel,
                                           {exit, #amqp_error{explanation = Explanation},
                                            _Method, _Stacktrace}}) ->
