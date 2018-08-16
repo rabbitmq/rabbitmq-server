@@ -222,12 +222,12 @@ _rmq_env_config_names()
     if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ]; then
         # shellcheck disable=SC2034
         RABBITMQ_NAME_TYPE='-name'
-        [ -n "$HOSTNAME" ] || HOSTNAME="$(env hostname -f)"
+        [ -n "$HOSTNAME" ] || HOSTNAME="$(hostname -f)"
         [ -n "$NODENAME" ] || NODENAME="rabbit@$HOSTNAME"
     else
         # shellcheck disable=SC2034
         RABBITMQ_NAME_TYPE='-sname'
-        [ -n "$HOSTNAME" ] || HOSTNAME="$(env hostname)"
+        [ -n "$HOSTNAME" ] || HOSTNAME="$(hostname)"
         [ -n "$NODENAME" ] || NODENAME="rabbit@${HOSTNAME%%.*}"
     fi
     [ -n "$RABBITMQ_NODENAME" ] || RABBITMQ_NODENAME="$NODENAME"
@@ -510,11 +510,11 @@ _rmq_env_config_erl_libs()
         if _rmq_env_path_contains_existing_directory "$RABBITMQ_PLUGINS_DIR"; then
             # RabbitMQ was started from its install directory. Take
             # rabbit_common from the plugins directory.
-            ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
+            ERL_LIBS="$RABBITMQ_PLUGINS_DIR:$ERL_LIBS"
         fi
     fi
 
-    ERL_LIBS=${ERL_LIBS%:}
+    ERL_LIBS="${ERL_LIBS%:}"
     if [ -n "$ERL_LIBS" ]; then
         export ERL_LIBS
     fi
