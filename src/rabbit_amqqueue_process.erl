@@ -289,6 +289,13 @@ terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(normal,            State) -> %% delete case
     terminate_shutdown(terminate_delete(true, normal, State), State);
+terminate(auto_delete, State) -> %% auto_delete case
+    %% To increase performance we want to avoid a mnesia_sync:sync call
+    %% after every transaction, as we could be deleting simultaneously
+    %% thousands of queues. A optimisation introduced by server#1513
+    %% needs to be reverted by this case, avoiding to guard the delete
+    %% operation on `rabbit_durable_queue`
+    terminate_shutdown(terminate_delete(true, auto_delete, State), State);
 %% If we crashed don't try to clean up the BQS, probably best to leave it.
 terminate(_Reason,           State = #q{q = Q}) ->
     terminate_shutdown(fun (BQS) ->
@@ -300,12 +307,16 @@ terminate(_Reason,           State = #q{q = Q}) ->
                                BQS
                        end, State).
 
-terminate_delete(EmitStats, Reason,
+terminate_delete(EmitStats, Reason0,
                  State = #q{q = #amqqueue{name          = QName},
                             backing_queue = BQ,
                             status = Status}) ->
     ActingUser = terminated_by(Status),
     fun (BQS) ->
+        Reason = case Reason0 of
+                     auto_delete -> normal;
+                     Any -> Any
+                 end,
         BQS1 = BQ:delete_and_terminate(Reason, BQS),
         if EmitStats -> rabbit_event:if_enabled(State, #q.stats_timer,
                                                 fun() -> emit_stats(State) end);
@@ -315,7 +326,7 @@ terminate_delete(EmitStats, Reason,
         %% logged.
         try
             %% don't care if the internal delete doesn't return 'ok'.
-            rabbit_amqqueue:internal_delete(QName, ActingUser)
+            rabbit_amqqueue:internal_delete(QName, ActingUser, Reason0)
         catch
             {error, Reason} -> error(Reason)
         end,
@@ -1167,7 +1178,7 @@ handle_call({notify_down, ChPid}, _From, State) ->
     %% gen_server2 *before* the reply is sent.
     case handle_ch_down(ChPid, State) of
         {ok, State1}   -> reply(ok, State1);
-        {stop, State1} -> stop(ok, State1)
+        {stop, State1} -> {stop, auto_delete, ok, State1}
     end;
 
 handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
