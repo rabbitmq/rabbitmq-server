@@ -279,11 +279,14 @@ _rmq_env_config_server_erl_args()
 
 _rmq_env_config_start_args()
 {
-    [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && _rmq_env_noinput_arg='-noinput'
-    [ "x" = "x$RABBITMQ_NODE_ONLY" ] && _rmq_env_node_only_arg="-s $RABBITMQ_BOOT_MODULE boot"
+    [ -n "$RBBITMQ_BOOT_MODULE" ] || RABBITMQ_BOOT_MODULE="$BOOT_MODULE"
+    [ -n "$RABBITMQ_ALLOW_INPUT" ] || _rmq_env_noinput_arg='-noinput'
+    [ -n "$RABBITMQ_NODE_ONLY" ] || _rmq_env_node_only_arg="-s $RABBITMQ_BOOT_MODULE boot"
     [ -n "$_rmq_env_noinput_arg" ] && [ -n "${_rmq_env_node_only_arg}" ] && _rmq_env_maybe_space=' '
+
     # shellcheck disable=SC2034
     _rmq_env_start_rabbit="${_rmq_env_noinput_arg}${_rmq_env_maybe_space}${_rmq_env_node_only_arg}"
+
     unset _rmq_env_noinput_arg
     unset _rmq_env_node_only_arg
     unset _rmq_env_maybe_space
@@ -388,8 +391,6 @@ _rmq_env_TODO()
         RABBITMQ_LOG_BASE \
         RABBITMQ_MNESIA_BASE \
         RABBITMQ_MNESIA_DIR
-
-    [ "x" = "x$RABBITMQ_BOOT_MODULE" ] && RABBITMQ_BOOT_MODULE=${BOOT_MODULE}
 
     [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${PLUGINS_EXPAND_DIR}
     [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-plugins-expand
@@ -647,9 +648,13 @@ rabbitmq_config()
 _rmq_env_initialize "$0"
 
 # Note: this is to emulate the expected behavior of rabbitmq-env, which is to
-# run all configuration when sourced. Setting _rabbitmq_env_load prior to sourcing
-# facilitates unit testing individual functions in this file without running them all
-[ "$_rabbitmq_env_load" == 'false' ] || rabbitmq_config "$0"
+# run all configuration when sourced. Setting _rabbitmq_env_load to false prior
+# to sourcing facilitates unit testing individual functions in this file without
+# running them all
+if [ "${_rabbitmq_env_load:-true}" = 'true' ]
+then
+    rabbitmq_config "$0"
+fi
 
 RABBITMQ_ENV_LOADED=1
 
