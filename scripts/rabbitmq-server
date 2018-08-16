@@ -72,8 +72,6 @@ fi
 
 set +e
 
-rabbitmq_config
-
 # `net_kernel:start/1` will fail in `longnames` mode when erlang is
 # unable to determine FQDN of a node (with a dot in it). But `erl`
 # itself has some magic that still allow it to start when you
