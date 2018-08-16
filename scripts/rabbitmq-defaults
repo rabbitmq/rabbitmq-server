@@ -24,7 +24,7 @@ ERL_DIR=
 CLEAN_BOOT_FILE=start_clean
 SASL_BOOT_FILE=start_sasl
 
-if [ -f "${RABBITMQ_HOME}/erlang.mk" ]; then
+if [ -f "$RABBITMQ_HOME/erlang.mk" ]; then
     # RabbitMQ is executed from its source directory. The plugins
     # directory and ERL_LIBS are tuned based on this.
     RABBITMQ_DEV_ENV=1
@@ -34,15 +34,15 @@ fi
 
 BOOT_MODULE="rabbit"
 
-CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq
-LOG_BASE=${SYS_PREFIX}/var/log/rabbitmq
-MNESIA_BASE=${SYS_PREFIX}/var/lib/rabbitmq/mnesia
-ENABLED_PLUGINS_FILE=${SYS_PREFIX}/etc/rabbitmq/enabled_plugins
-GENERATED_CONFIG_DIR=${SYS_PREFIX}/var/lib/rabbitmq/config
-ADVANCED_CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/advanced.config
-SCHEMA_DIR=${SYS_PREFIX}/var/lib/rabbitmq/schema
+CONFIG_FILE="$SYS_PREFIX"/etc/rabbitmq/rabbitmq
+LOG_BASE="$SYS_PREFIX"/var/log/rabbitmq
+MNESIA_BASE="$SYS_PREFIX"/var/lib/rabbitmq/mnesia
+ENABLED_PLUGINS_FILE="$SYS_PREFIX"/etc/rabbitmq/enabled_plugins
+GENERATED_CONFIG_DIR="$SYS_PREFIX"/var/lib/rabbitmq/config
+ADVANCED_CONFIG_FILE="$SYS_PREFIX"/etc/rabbitmq/advanced.config
+SCHEMA_DIR="$SYS_PREFIX"/var/lib/rabbitmq/schema
 
-PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
+PLUGINS_DIR="$RABBITMQ_HOME/plugins"
 
 # RABBIT_HOME can contain a version number, so default plugins
 # directory can be hard to find if we want to package some plugin
@@ -55,4 +55,4 @@ case "$RABBITMQ_HOME" in
         ;;
 esac
 
-CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
+CONF_ENV_FILE="$SYS_PREFIX"/etc/rabbitmq/rabbitmq-env.conf

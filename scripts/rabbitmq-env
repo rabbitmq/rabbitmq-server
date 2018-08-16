@@ -279,7 +279,7 @@ _rmq_env_config_server_erl_args()
 
 _rmq_env_config_start_args()
 {
-    [ -n "$RBBITMQ_BOOT_MODULE" ] || RABBITMQ_BOOT_MODULE="$BOOT_MODULE"
+    [ -n "$RABBITMQ_BOOT_MODULE" ] || RABBITMQ_BOOT_MODULE="$BOOT_MODULE"
     [ -n "$RABBITMQ_ALLOW_INPUT" ] || _rmq_env_noinput_arg='-noinput'
     [ -n "$RABBITMQ_NODE_ONLY" ] || _rmq_env_node_only_arg="-s $RABBITMQ_BOOT_MODULE boot"
     [ -n "$_rmq_env_noinput_arg" ] && [ -n "${_rmq_env_node_only_arg}" ] && _rmq_env_maybe_space=' '
@@ -365,23 +365,23 @@ _rmq_env_TODO()
 
     unset _rmq_env_default_node_port
 
-    [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
-    [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=${CTL_DIST_PORT_MIN}
-    [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=${CTL_DIST_PORT_MAX}
+    [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=$CTL_ERL_ARGS
+    [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=$CTL_DIST_PORT_MIN
+    [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=$CTL_DIST_PORT_MAX
     [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=$((RABBITMQ_DIST_PORT + 10000))
     [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=$((RABBITMQ_DIST_PORT + 10010))
 
-    [ "x" = "x$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE=${IO_THREAD_POOL_SIZE}
-    [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
-    [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
-    [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
-    [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
-    [ "x" = "x$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=${SERVER_ADDITIONAL_ERL_ARGS}
-    [ "x" = "x$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH=${SERVER_CODE_PATH}
+    [ "x" = "x$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE=$IO_THREAD_POOL_SIZE
+    [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=$CONFIG_FILE
+    [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=$LOG_BASE
+    [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=$MNESIA_BASE
+    [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=$SERVER_START_ARGS
+    [ "x" = "x$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=$SERVER_ADDITIONAL_ERL_ARGS
+    [ "x" = "x$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH=$SERVER_CODE_PATH
 
-    [ "x" = "x$RABBITMQ_GENERATED_CONFIG_DIR" ] && RABBITMQ_GENERATED_CONFIG_DIR=${GENERATED_CONFIG_DIR}
-    [ "x" = "x$RABBITMQ_ADVANCED_CONFIG_FILE" ] && RABBITMQ_ADVANCED_CONFIG_FILE=${ADVANCED_CONFIG_FILE}
-    [ "x" = "x$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR=${SCHEMA_DIR}
+    [ "x" = "x$RABBITMQ_GENERATED_CONFIG_DIR" ] && RABBITMQ_GENERATED_CONFIG_DIR=$GENERATED_CONFIG_DIR
+    [ "x" = "x$RABBITMQ_ADVANCED_CONFIG_FILE" ] && RABBITMQ_ADVANCED_CONFIG_FILE=$ADVANCED_CONFIG_FILE
+    [ "x" = "x$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR=$SCHEMA_DIR
     [ "x" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT="true"
     # shellcheck disable=SC2034
     [ "xtrue" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
@@ -392,24 +392,27 @@ _rmq_env_TODO()
         RABBITMQ_MNESIA_BASE \
         RABBITMQ_MNESIA_DIR
 
-    [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${PLUGINS_EXPAND_DIR}
-    [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-plugins-expand
+    [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=$PLUGINS_EXPAND_DIR
+    [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=$RABBITMQ_MNESIA_BASE/$RABBITMQ_NODENAME-plugins-expand
     _rmq_env_normalize_path_var RABBITMQ_PLUGINS_EXPAND_DIR
 
     [ "x" != "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
-    [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
+    [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=$ENABLED_PLUGINS_FILE
     _rmq_env_normalize_path_var RABBITMQ_ENABLED_PLUGINS_FILE
 
     [ "x" != "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR_source=environment
-    [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
+    [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=$PLUGINS_DIR
     _rmq_env_normalize_path_var RABBITMQ_PLUGINS_DIR
 
     ## Log rotation
-    [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
+    [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=$LOGS
     [ "x" != "x$RABBITMQ_LOGS" ] && export RABBITMQ_LOGS_source=environment
-    [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
-    [ "x" = "x$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log"
-    [ "x" = "x$ERL_CRASH_DUMP" ] && ERL_CRASH_DUMP="${RABBITMQ_LOG_BASE}/erl_crash.dump"
+    [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="$RABBITMQ_LOG_BASE/$RABBITMQ_NODENAME.log"
+
+    # shellcheck disable=SC2154
+    [ "x" = "x$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="$RABBITMQ_LOG_BASE/$RABBITMQ_NODENAME_upgrade.log"
+
+    [ "x" = "x$ERL_CRASH_DUMP" ] && ERL_CRASH_DUMP="$RABBITMQ_LOG_BASE/erl_crash.dump"
 
     _rmq_env_normalize_path_var RABBITMQ_LOGS
     _rmq_env_normalize_path_var RABBITMQ_UPGRADE_LOG
@@ -446,17 +449,16 @@ _rmq_env_config_erl_libs()
             _rmq_env_enabled_plugins_file=''
             _rmq_env_mnesia_base=''
             _rmq_env_mnesia_dir=''
-            eval $( ("$RABBITMQ_SCRIPTS_DIR"/rabbitmqctl eval \
+            _rmq_env_tmp="$("$RABBITMQ_SCRIPTS_DIR/rabbitmqctl" eval \
                 '{ok, P} = application:get_env(rabbit, plugins_dir),
-                {ok, E} = application:get_env(rabbit, enabled_plugins_file),
-                B = os:getenv("RABBITMQ_MNESIA_BASE"),
-                M = os:getenv("RABBITMQ_MNESIA_DIR"),
-                io:format(
-                "_rmq_env_plugins_dir=\"~s\"~n"
-                "_rmq_env_enabled_plugins_file=\"~s\"~n"
-                "_rmq_env_mnesia_base=\"~s\"~n"
-                "_rmq_env_mnesia_dir=\"~s\"~n", [P, E, B, M]).' \
-                2>/dev/null | grep -E '^(_rmq_env_plugins_dir|_rmq_env_enabled_plugins_file|_rmq_env_mnesia_base|_rmq_env_mnesia_dir)=') || :)
+                 {ok, E} = application:get_env(rabbit, enabled_plugins_file),
+                 B = os:getenv("RABBITMQ_MNESIA_BASE"),
+                 M = os:getenv("RABBITMQ_MNESIA_DIR"),
+                 ok = io:format("_rmq_env_plugins_dir=\"~s\"~n"
+                                "_rmq_env_enabled_plugins_file=\"~s\"~n"
+                                "_rmq_env_mnesia_base=\"~s\"~n"
+                                "_rmq_env_mnesia_dir=\"~s\"~n", [P, E, B, M]).' 2>/dev/null | grep -E '^_rmq_env' || :)"
+            eval "$_rmq_env_tmp"
             if [ -n "$_rmq_env_plugins_dir" ] &&  \
                 [ "$RABBITMQ_PLUGINS_DIR_source" != 'environment' ]; then
                 RABBITMQ_PLUGINS_DIR="$_rmq_env_plugins_dir"
@@ -465,10 +467,12 @@ _rmq_env_config_erl_libs()
                 [ "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
                 RABBITMQ_ENABLED_PLUGINS_FILE="$_rmq_env_enabled_plugins_file"
             fi
+            # shellcheck disable=SC2154
             if [ -n "$_rmq_env_mnesia_base" ] && \
                 [ "$RABBITMQ_MNESIA_BASE_source" != 'environment' ]; then
                 RABBITMQ_MNESIA_BASE="$_rmq_env_mnesia_base"
             fi
+            # shellcheck disable=SC2154
             if [ -n "$_rmq_env_mnesia_dir" ] && \
                 [ "$RABBITMQ_MNESIA_DIR_source" != 'environment' ]; then
                 RABBITMQ_MNESIA_DIR="$_rmq_env_mnesia_dir"
@@ -477,6 +481,7 @@ _rmq_env_config_erl_libs()
             unset _rmq_env_enabled_plugins_file
             unset _rmq_env_mnesia_base
             unset _rmq_env_mnesia_dir
+            unset _rmq_env_tmp
         fi
 
         if _rmq_env_path_contains_existing_directory "$RABBITMQ_PLUGINS_DIR"; then
