@@ -173,7 +173,7 @@ start_rabbitmq_server() {
     ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
     exec ${ERL_DIR}erl \
         -pa ${RABBITMQ_SERVER_CODE_PATH} ${RABBITMQ_EBIN_ROOT} \
-        $_rabbitmq_start_rabbit \
+        $_rmq_env_start_rabbit \
         ${RABBITMQ_NAME_TYPE} ${RABBITMQ_NODENAME} \
         -boot "${SASL_BOOT_FILE}" \
         ${RABBITMQ_CONFIG_ARG} \

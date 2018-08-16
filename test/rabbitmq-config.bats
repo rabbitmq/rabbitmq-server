@@ -5,47 +5,51 @@ export RABBITMQ_ENV_LOAD='false'
 
 setup() {
     export RABBITMQ_CONF_ENV_FILE="$BATS_TMPDIR/rabbitmq-config.$BATS_TEST_NAME.conf"
+    if [[ -f $RABBITMQ_CONF_ENV_FILE ]]
+    then
+    	rm -f "$RABBITMQ_CONF_ENV_FILE"
+    fi
 }
 
-@test "default _rabbitmq_start_rabbit" {
+@test "default _rmq_env_start_rabbit" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
-    _config_start_args
+    _rmq_env_config_start_args
 
-    echo "expected _rabbitmq_start_rabbit to be '', but got: \"$_rabbitmq_start_rabbit\""
-    [[ $_rabbitmq_start_rabbit == '-noinput -s rabbit boot' ]]
+    echo "expected _rmq_env_start_rabbit to be '', but got: \"$_rmq_env_start_rabbit\""
+    [[ $_rmq_env_start_rabbit == '-noinput -s rabbit boot' ]]
 }
 
 @test "can configure RabbitMQ to allow input via env" {
     RABBITMQ_ALLOW_INPUT=true
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
-    _config_start_args
+    _rmq_env_config_start_args
 
-    echo "expected _rabbitmq_start_rabbit to be '-s rabbit boot', but got: \"$_rabbitmq_start_rabbit\""
-    [[ $_rabbitmq_start_rabbit == '-s rabbit boot' ]]
+    echo "expected _rmq_env_start_rabbit to be '-s rabbit boot', but got: \"$_rmq_env_start_rabbit\""
+    [[ $_rmq_env_start_rabbit == '-s rabbit boot' ]]
 }
 
 @test "can configure RabbitMQ to be node only via env" {
     RABBITMQ_NODE_ONLY=true
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
-    _config_start_args
+    _rmq_env_config_start_args
 
-    echo "expected _rabbitmq_start_rabbit to be '-noinput -s TODO boot', but got: \"$_rabbitmq_start_rabbit\""
-    [[ $_rabbitmq_start_rabbit == '-noinput' ]]
+    echo "expected _rmq_env_start_rabbit to be '-noinput -s TODO boot', but got: \"$_rmq_env_start_rabbit\""
+    [[ $_rmq_env_start_rabbit == '-noinput' ]]
 }
 
 @test "can configure RabbitMQ to allow input and be node only via env" {
     RABBITMQ_ALLOW_INPUT=true
     RABBITMQ_NODE_ONLY=true
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
-    _config_start_args
+    _rmq_env_config_start_args
 
-    echo "expected _rabbitmq_start_rabbit to be '', but got: \"$_rabbitmq_start_rabbit\""
-    [[ $_rabbitmq_start_rabbit == '' ]]
+    echo "expected _rmq_env_start_rabbit to be '', but got: \"$_rmq_env_start_rabbit\""
+    [[ $_rmq_env_start_rabbit == '' ]]
 }
 
 @test "default Erlang allocator arguments" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
-    _config_alloc_args
+    _rmq_env_config_alloc_args
 
     echo "expected RABBITMQ_ALLOC_ARGS to be '+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30', but got: \"$RABBITMQ_ALLOC_ARGS\""
     [[ $RABBITMQ_ALLOC_ARGS == '+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30' ]]
@@ -54,7 +58,7 @@ setup() {
 @test "can configure Erlang allocator arguments via env" {
     RABBITMQ_ALLOC_ARGS='foo bar baz'
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
-    _config_alloc_args
+    _rmq_env_config_alloc_args
 
     echo "expected RABBITMQ_ALLOC_ARGS to be 'foo bar baz', but got: \"$RABBITMQ_ALLOC_ARGS\""
     [[ $RABBITMQ_ALLOC_ARGS == 'foo bar baz' ]]
@@ -63,7 +67,7 @@ setup() {
 @test "can configure Erlang allocator arguments via rabbitmq-env.conf file" {
     echo "ALLOC_ARGS='foo bar baz'" > "$RABBITMQ_CONF_ENV_FILE"
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
-    _config_alloc_args
+    _rmq_env_config_alloc_args
 
     echo "expected RABBITMQ_ALLOC_ARGS to be 'foo bar baz', but got: \"$RABBITMQ_ALLOC_ARGS\""
     [[ $RABBITMQ_ALLOC_ARGS == 'foo bar baz' ]]
