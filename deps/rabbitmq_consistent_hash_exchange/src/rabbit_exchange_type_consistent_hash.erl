@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Consistent Hash Exchange.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_consistent_hash).
@@ -27,7 +27,26 @@
 -export([init/0]).
 -export([info/1, info/2]).
 
--record(bucket, {source_number, destination, binding}).
+-record(bucket, {
+          %% a {resource, bucket} pair
+          %% where bucket is a non-negative integer
+          id,
+          %% a resource
+          queue
+}).
+
+-record(bucket_count, {
+          exchange,
+          count
+}).
+
+-record(binding_buckets, {
+          %% an {exchange, queue} pair because we
+          %% assume that there's only one binding between
+          %% a consistent hash exchange and a queue
+          id,
+          bucket_numbers = []
+}).
 
 -rabbit_boot_step(
    {rabbit_exchange_type_consistent_hash_registry,
@@ -41,13 +60,18 @@
 
 -rabbit_boot_step(
    {rabbit_exchange_type_consistent_hash_mnesia,
-    [{description, "exchange type x-consistent-hash: mnesia"},
+    [{description, "exchange type x-consistent-hash: shared state"},
      {mfa,         {?MODULE, init, []}},
      {requires,    database},
      {enables,     external_infrastructure}]}).
 
--define(TABLE, ?MODULE).
--define(PHASH2_RANGE, 134217728). %% 2^27
+%% maps buckets to queues
+-define(BUCKET_TABLE, rabbit_exchange_type_consistent_hash_bucket_queue).
+%% maps exchange to total the number of buckets
+-define(BUCKET_COUNT_TABLE, rabbit_exchange_type_consistent_hash_bucket_count).
+%% maps {exchange, queue} pairs to a list of buckets
+-define(BINDING_BUCKET_TABLE, rabbit_exchange_type_consistent_hash_binding_bucket).
+
 -define(PROPERTIES, [<<"correlation_id">>, <<"message_id">>, <<"timestamp">>]).
 
 info(_X) -> [].
@@ -61,32 +85,18 @@ serialise_events() -> false.
 route(#exchange { name      = Name,
                   arguments = Args },
       #delivery { message = Msg }) ->
-    %% Yes, we're being exceptionally naughty here, by using ets on an
-    %% mnesia table. However, RabbitMQ-server itself is just as
-    %% naughty, and for good reasons.
-
-    %% Note that given the nature of this select, it will force mnesia
-    %% to do a linear scan of the entries in the table that have the
-    %% correct exchange name. More sophisticated solutions include,
-    %% for example, having some sort of tree as the value of a single
-    %% mnesia entry for each exchange. However, such values tend to
-    %% end up as relatively deep data structures which cost a lot to
-    %% continually copy to the process heap. Consequently, such
-    %% approaches have not been found to be much faster, if at all.
-    H = erlang:phash2(hash(hash_on(Args), Msg), ?PHASH2_RANGE),
-    case ets:select(?TABLE, [{#bucket { source_number = {Name, '$2'},
-                                        destination   = '$1',
-                                        _             = '_' },
-                              [{'>=', '$2', H}],
-                              ['$1']}], 1) of
-        '$end_of_table' ->
-            case ets:match_object(?TABLE, #bucket { source_number = {Name, '_'},
-                                                    _ = '_' }, 1) of
-                {[Bucket], _Cont} -> [Bucket#bucket.destination];
-                _                 -> []
-            end;
-        {Destinations, _Continuation} ->
-            Destinations
+    rabbit_log:warning("Routing. Exchange: ~p, message: ~p",
+                              [Name, Msg]),
+    case ets:lookup(?BUCKET_COUNT_TABLE, Name) of
+        []  ->
+            [];
+        [N] ->
+            K              = value_to_hash(hash_on(Args), Msg),
+            SelectedBucket = jump_consistent_hash(K, N),
+            [Bucket]       = mnesia:read({?BUCKET_TABLE, {Name, SelectedBucket}}),
+            rabbit_log:warning("Routing. Exchange: ~p, message: ~p, K: ~p, SelectedBucket: ~p, Bucket: ~p, queue: ~p",
+                              [Name, Msg, K, SelectedBucket, Bucket, Bucket#bucket.queue]),
+            [Bucket#bucket.queue]
     end.
 
 validate(#exchange { arguments = Args }) ->
@@ -122,80 +132,148 @@ validate_binding(_X, #binding { key = K }) ->
 
 create(_Tx, _X) -> ok.
 
-delete(transaction, #exchange { name = Name }, _Bs) ->
-    ok = mnesia:write_lock_table(?TABLE),
-    [ok = mnesia:delete_object(?TABLE, R, write) ||
-        R <- mnesia:match_object(
-               ?TABLE, #bucket{source_number = {Name, '_'}, _ = '_'}, write)],
+delete(transaction, #exchange{name = Name}, _Bs) ->
+    ok = mnesia:write_lock_table(?BUCKET_TABLE),
+    ok = mnesia:write_lock_table(?BUCKET_COUNT_TABLE),
+
+    Numbers = mnesia:select(?BUCKET_TABLE, [{
+                               #bucket{id = {Name, $1}, _ = '_'},
+                               [],
+                               [$1]
+                             }]),
+    [mnesia:delete({?BUCKET_TABLE, {Name, N}})
+     || N <- Numbers],
+
+    mnesia:delete({?BUCKET_COUNT_TABLE, Name}),
     ok;
 delete(_Tx, _X, _Bs) -> ok.
 
 policy_changed(_X1, _X2) -> ok.
 
 add_binding(transaction, _X,
-            #binding { source = S, destination = D, key = K } = B) ->
-    %% Use :select rather than :match_object so that we can limit the
-    %% number of results and not bother copying results over to this
-    %% process.
-    case mnesia:select(?TABLE,
-                       [{#bucket { binding = B, _ = '_' }, [], [ok]}],
-                       1, read) of
-        '$end_of_table' ->
-            ok = mnesia:write_lock_table(?TABLE),
-            BucketCount = lists:min([list_to_integer(binary_to_list(K)),
-                                     ?PHASH2_RANGE]),
-            [ok = mnesia:write(?TABLE,
-                               #bucket { source_number = {S, N},
-                                         destination   = D,
-                                         binding       = B },
-                               write) || N <- find_numbers(S, D, BucketCount, [])],
-            ok;
-        _ ->
-            ok
-    end;
+            #binding{source = S, destination = D, key = K}) ->
+    Weight = rabbit_data_coercion:to_integer(K),
+
+    mnesia:write_lock_table(?BUCKET_TABLE),
+    mnesia:write_lock_table(?BUCKET_COUNT_TABLE),
+
+    LastBucketNum = bucket_count_of(S),
+    NewBucketCount = LastBucketNum + Weight,
+
+    Numbers = lists:seq(LastBucketNum, (NewBucketCount - 1)),
+    Buckets = [#bucket{id = {S, I}, queue = D} || I <- Numbers],
+    
+    [mnesia:write(?BUCKET_TABLE, B, write) || B <- Buckets],
+
+    mnesia:write(?BINDING_BUCKET_TABLE, #binding_buckets{id = {S, D},
+                                                          bucket_numbers = Numbers}, write),
+    mnesia:write(?BUCKET_COUNT_TABLE, #bucket_count{exchange = S,
+                                                    count    = NewBucketCount}, write),
+
+    ok;
 add_binding(none, _X, _B) ->
     ok.
 
 remove_bindings(transaction, _X, Bindings) ->
-    ok = mnesia:write_lock_table(?TABLE),
-    [ok = mnesia:delete(?TABLE, Key, write) ||
-        Binding <- Bindings,
-        Key <- mnesia:select(?TABLE,
-                             [{#bucket { source_number = '$1',
-                                         binding       = Binding,
-                                         _             = '_' }, [], ['$1']}],
-                             write)],
+    mnesia:write_lock_table(?BUCKET_TABLE),
+    mnesia:write_lock_table(?BUCKET_COUNT_TABLE),
+
+    [remove_binding(B) || B <- Bindings],
+    
     ok;
 remove_bindings(none, _X, _Bs) ->
     ok.
 
+remove_binding(#binding{source = S, destination = D, key = K}) ->
+    Weight = rabbit_data_coercion:to_integer(K),
+
+    [#binding_buckets{bucket_numbers = Numbers}] = mnesia:read(?BINDING_BUCKET_TABLE, {S, D}),
+    LastNum = lists:last(Numbers),
+
+    %% Buckets with lower numbers stay as is; buckets that
+    %% belong to this binding are removed; buckets with
+    %% greater numbers are updated (their numbers are adjusted downwards by weight)
+    BucketsToUpdate = mnesia:select(?BUCKET_TABLE, [{
+                                                      #bucket{id = {'_', $1}, _ = '_'},
+                                                      [{'>', '$1', LastNum}],
+                                                      ['$_']
+                                                    }]),
+
+    [begin
+         mnesia:delete(?BUCKET_TABLE, B),
+         mnesia:write(?BUCKET_TABLE, B#bucket{id = {X, N - Weight}}, write)
+     end || B = #bucket{id = {X, N}} <- BucketsToUpdate],
+
+    %% Delete all buckets for this {exchange, queue} pair
+    [mnesia:delete(?BUCKET_TABLE, {S, N}) || N <- Numbers],
+    mnesia:delete(?BINDING_BUCKET_TABLE, {S, D}, write),
+
+    %% Update the counter
+    TotalBucketsForX = bucket_count_of(S),
+    mnesia:write(?BUCKET_COUNT_TABLE, #bucket_count{exchange = S,
+                                                    count    = TotalBucketsForX - Weight}, write),
+
+    ok.
+
+
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
 
+bucket_count_of(X) ->
+    case ets:lookup(?BUCKET_COUNT_TABLE, X) of
+        []  -> 0;
+        [#bucket_count{count = N}] -> N
+    end.
+
 init() ->
-    mnesia:create_table(?TABLE, [{record_name, bucket},
+    mnesia:create_table(?BUCKET_TABLE, [{record_name, bucket},
                                  {attributes, record_info(fields, bucket)},
                                  {type, ordered_set}]),
-    mnesia:add_table_copy(?TABLE, node(), ram_copies),
-    mnesia:wait_for_tables([?TABLE], 30000),
+    mnesia:create_table(?BUCKET_COUNT_TABLE, [{record_name, bucket_count},
+                                 {attributes, record_info(fields, bucket_count)},
+                                 {type, ordered_set}]),
+    mnesia:create_table(?BINDING_BUCKET_TABLE, [{record_name, binding_buckets},
+                                 {attributes, record_info(fields, binding_buckets)},
+                                 {type, ordered_set}]),
+
+    mnesia:add_table_copy(?BUCKET_TABLE, node(), ram_copies),
+    mnesia:add_table_copy(?BUCKET_COUNT_TABLE, node(), ram_copies),
+    mnesia:add_table_copy(?BINDING_BUCKET_TABLE, node(), ram_copies),
+
+    mnesia:wait_for_tables([?BUCKET_TABLE], 30000),
     ok.
 
-find_numbers(_Source, _Destination, 0, Acc) ->
-    Acc;
-find_numbers(Source, Destination, N, Acc) ->
-    Term = {Source, Destination, N},
-    Number = erlang:phash2(Term, ?PHASH2_RANGE),
-    find_numbers(Source, Destination, N-1, [Number | Acc]).
+%%
+%% Jump-consistent hashing.
+%%
 
-hash(undefined, #basic_message { routing_keys = Routes }) ->
+jump_consistent_hash(_Key, 1) ->
+    0;
+jump_consistent_hash(KeyList, NumberOfBuckets) when is_list(KeyList) ->
+    jump_consistent_hash(hd(KeyList), NumberOfBuckets);
+jump_consistent_hash(KeyBin, NumberOfBuckets) when is_binary(KeyBin) ->
+    Key = rabbit_data_coercion:to_integer(KeyBin),
+    SeedState = rand:seed_s(exs1024s, {Key, Key, Key}),
+    jump_consistent_hash_value(-1, 0, NumberOfBuckets, SeedState).
+
+jump_consistent_hash_value(B, J, NumberOfBuckets, _SeedState) when J >= NumberOfBuckets ->
+    B;
+
+jump_consistent_hash_value(_B0, J0, NumberOfBuckets, SeedState0) ->
+    B = J0,
+    {R, SeedState} = rand:uniform_s(SeedState0),
+    J = math:floor((B + 1) / (R + 1)),
+    jump_consistent_hash_value(B, J, NumberOfBuckets, SeedState).
+
+value_to_hash(undefined, #basic_message { routing_keys = Routes }) ->
     Routes;
-hash({header, Header}, #basic_message { content = Content }) ->
+value_to_hash({header, Header}, #basic_message { content = Content }) ->
     Headers = rabbit_basic:extract_headers(Content),
     case Headers of
         undefined -> undefined;
         _         -> rabbit_misc:table_lookup(Headers, Header)
     end;
-hash({property, Property}, #basic_message { content = Content }) ->
+value_to_hash({property, Property}, #basic_message { content = Content }) ->
     #content{properties = #'P_basic'{ correlation_id = CorrId,
                                       message_id     = MsgId,
                                       timestamp      = Timestamp }} =
