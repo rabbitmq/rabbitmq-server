@@ -521,7 +521,7 @@
 ## Related doc guide: http://rabbitmq.com/shovel.html
 ## ----------------------------------------------------------------------------
 
-## Shovel plugin config example is defined in additional.config file
+## See advanced.config.example for a Shovel plugin example
 
 
 ## ----------------------------------------------------------------------------

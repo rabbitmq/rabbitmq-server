@@ -430,6 +430,13 @@ log_connection_exception(Severity, Name, {connection_closed_abruptly, _}) ->
     log_connection_exception_with_severity(Severity,
         "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
         [self(), Name]);
+%% failed connection.tune negotiations
+log_connection_exception(Severity, Name, {handshake_error, tuning, _Channel,
+                                          {exit, #amqp_error{explanation = Explanation},
+                                           _Method, _Stacktrace}}) ->
+    log_connection_exception_with_severity(Severity,
+        "closing AMQP connection ~p (~s):~nfailed to negotiate connection parameters: ~s~n",
+        [self(), Name, Explanation]);
 %% old exception structure
 log_connection_exception(Severity, Name, connection_closed_abruptly) ->
     log_connection_exception_with_severity(Severity,
@@ -446,7 +453,7 @@ log_connection_exception_with_severity(Severity, Fmt, Args) ->
         debug   -> rabbit_log_connection:debug(Fmt, Args);
         info    -> rabbit_log_connection:info(Fmt, Args);
         warning -> rabbit_log_connection:warning(Fmt, Args);
-        error   -> rabbit_log_connection:warning(Fmt, Args)
+        error   -> rabbit_log_connection:error(Fmt, Args)
     end.
 
 run({M, F, A}) ->
@@ -1298,9 +1305,10 @@ fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
                    min -> {lower,  minimum};
                    max -> {higher, maximum}
                end,
+    ClientValueDetail = get_client_value_detail(Field, ClientValue),
     rabbit_misc:protocol_error(
-      not_allowed, "negotiated ~w = ~w is ~w than the ~w allowed value (~w)",
-      [Field, ClientValue, S1, S2, ServerValue], 'connection.tune').
+      not_allowed, "negotiated ~w = ~w~s is ~w than the ~w allowed value (~w)",
+      [Field, ClientValue, ClientValueDetail, S1, S2, ServerValue], 'connection.tune').
 
 get_env(Key) ->
     {ok, Value} = application:get_env(rabbit, Key),
@@ -1722,3 +1730,9 @@ dynamic_connection_name(Default) ->
 handle_uncontrolled_channel_close(ChPid) ->
     rabbit_core_metrics:channel_closed(ChPid),
     rabbit_event:notify(channel_closed, [{pid, ChPid}]).
+
+-spec get_client_value_detail(atom(), integer()) -> string().
+get_client_value_detail(channel_max, 0) ->
+    " (no limit)";
+get_client_value_detail(_Field, _ClientValue) ->
+    "".
