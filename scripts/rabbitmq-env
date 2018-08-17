@@ -222,19 +222,25 @@ _rmq_env_config_addr_ports()
 {
     _rmq_env_default_node_port=5672
 
-    [ -n "$RABBITMQ_NODE_PORT" ] ||  RABBITMQ_NODE_PORT="$NODE_PORT"
-    [ -n "$RABBITMQ_DIST_PORT" ] ||  RABBITMQ_DIST_PORT="$DIST_PORT"
-    [ -n "$RABBITMQ_DIST_PORT" ] ||  [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_DIST_PORT=$((_rmq_env_default_node_port + 20000))
-    [ -n "$RABBITMQ_DIST_PORT" ] ||  [ "x" != "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_DIST_PORT=$((RABBITMQ_NODE_PORT + 20000))
+    [ -z "$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT="$NODE_PORT"
+    [ -z "$RABBITMQ_DIST_PORT" ] && RABBITMQ_DIST_PORT="$DIST_PORT"
 
-    [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=$CTL_DIST_PORT_MIN
-    [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=$CTL_DIST_PORT_MAX
-    [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN=$((RABBITMQ_DIST_PORT + 10000))
-    [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX=$((RABBITMQ_DIST_PORT + 10010))
+    [ -z "$RABBITMQ_DIST_PORT" ] && [ -z "$RABBITMQ_NODE_PORT" ] && \
+        RABBITMQ_DIST_PORT="$((_rmq_env_default_node_port + 20000))"
+    [ -z "$RABBITMQ_DIST_PORT" ] && [ -n "$RABBITMQ_NODE_PORT" ] && \
+        RABBITMQ_DIST_PORT="$((RABBITMQ_NODE_PORT + 20000))"
 
-    [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS="$NODE_IP_ADDRESS"
-    [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && [ "x" != "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_IP_ADDRESS='auto'
-    [ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_NODE_PORT="$_rmq_env_default_node_port"
+    [ -z "$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN="$CTL_DIST_PORT_MIN"
+    [ -z "$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX="$CTL_DIST_PORT_MAX"
+    [ -z "$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN="$((RABBITMQ_DIST_PORT + 10000))"
+    [ -z "$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX="$((RABBITMQ_DIST_PORT + 10010))"
+
+    [ -z "$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS="$NODE_IP_ADDRESS"
+
+    [ -z "$RABBITMQ_NODE_IP_ADDRESS" ] && [ -n "$RABBITMQ_NODE_PORT" ] && \
+        RABBITMQ_NODE_IP_ADDRESS='auto'
+    [ -n "$RABBITMQ_NODE_IP_ADDRESS" ] && [ -z "$RABBITMQ_NODE_PORT" ] && \
+        RABBITMQ_NODE_PORT="$_rmq_env_default_node_port"
 
     unset _rmq_env_default_node_port
 }
@@ -242,6 +248,7 @@ _rmq_env_config_addr_ports()
 _rmq_env_config_names()
 {
     [ -n "$RABBITMQ_USE_LONGNAME" ] || RABBITMQ_USE_LONGNAME="$USE_LONGNAME"
+
     if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ]; then
         # shellcheck disable=SC2034
         RABBITMQ_NAME_TYPE='-name'
@@ -253,6 +260,7 @@ _rmq_env_config_names()
         [ -n "$HOSTNAME" ] || HOSTNAME="$(hostname)"
         [ -n "$NODENAME" ] || NODENAME="rabbit@${HOSTNAME%%.*}"
     fi
+
     [ -n "$RABBITMQ_NODENAME" ] || RABBITMQ_NODENAME="$NODENAME"
 }
 
