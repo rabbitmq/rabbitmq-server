@@ -34,3 +34,4 @@ callgrind.out*
 callgraph.dot*
 
 PACKAGES/*
+erl_crash.dump
