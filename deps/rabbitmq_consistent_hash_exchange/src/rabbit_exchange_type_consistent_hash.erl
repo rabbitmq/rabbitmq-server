@@ -249,8 +249,12 @@ jump_consistent_hash(KeyList, NumberOfBuckets) when is_list(KeyList) ->
     jump_consistent_hash(hd(KeyList), NumberOfBuckets);
 jump_consistent_hash(KeyBin, NumberOfBuckets) when is_binary(KeyBin) ->
     Key = rabbit_data_coercion:to_integer(KeyBin),
+    jump_consistent_hash(Key, NumberOfBuckets);
+jump_consistent_hash(Key, NumberOfBuckets) when is_integer(Key) ->
     SeedState = rand:seed_s(exs1024s, {Key, Key, Key}),
-    jump_consistent_hash_value(-1, 0, NumberOfBuckets, SeedState).
+    jump_consistent_hash_value(-1, 0, NumberOfBuckets, SeedState);
+jump_consistent_hash(Key, NumberOfBuckets) ->
+    jump_consistent_hash(erlang:phash2(Key), NumberOfBuckets).
 
 jump_consistent_hash_value(B, J, NumberOfBuckets, _SeedState) when J >= NumberOfBuckets ->
     B;
