@@ -206,7 +206,16 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
              M
          end || Q <- Queues],
     Count = lists:sum(Counts), %% All messages got routed
-    [true = C > 0.01 * Count || C <- Counts], %% We are not *grossly* unfair
+
+    %% Chi-square test
+    %% Ho: routing keys are not evenly distributed according to weight
+    Expected = [Count div 6, Count div 6, (Count div 6) * 2, (Count div 6) * 2],
+    Obs = lists:zip(Counts, Expected),
+    Chi = lists:sum([((O - E) * (O - E)) / E || {O, E} <- Obs]),
+    ct:pal("Chi-square test for 3 degrees of freedom is ~p, p = 0.01 is 11.35",
+           [Chi]),
+    ?assert(Chi < 11.35),
+
     amqp_channel:call(Chan, #'exchange.delete' {exchange = <<"e">>}),
     [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
 
