@@ -85,17 +85,13 @@ serialise_events() -> false.
 route(#exchange { name      = Name,
                   arguments = Args },
       #delivery { message = Msg }) ->
-    rabbit_log:warning("Routing. Exchange: ~p, message: ~p",
-                              [Name, Msg]),
     case ets:lookup(?BUCKET_COUNT_TABLE, Name) of
         []  ->
             [];
-        [N] ->
+        [#bucket_count{count = N}] ->
             K              = value_to_hash(hash_on(Args), Msg),
             SelectedBucket = jump_consistent_hash(K, N),
-            [Bucket]       = mnesia:read({?BUCKET_TABLE, {Name, SelectedBucket}}),
-            rabbit_log:warning("Routing. Exchange: ~p, message: ~p, K: ~p, SelectedBucket: ~p, Bucket: ~p, queue: ~p",
-                              [Name, Msg, K, SelectedBucket, Bucket, Bucket#bucket.queue]),
+            [Bucket]       = mnesia:dirty_read({?BUCKET_TABLE, {Name, SelectedBucket}}),
             [Bucket#bucket.queue]
     end.
 
@@ -262,7 +258,7 @@ jump_consistent_hash_value(B, J, NumberOfBuckets, _SeedState) when J >= NumberOf
 jump_consistent_hash_value(_B0, J0, NumberOfBuckets, SeedState0) ->
     B = J0,
     {R, SeedState} = rand:uniform_s(SeedState0),
-    J = math:floor((B + 1) / (R + 1)),
+    J = math:floor((B + 1) / R),
     jump_consistent_hash_value(B, J, NumberOfBuckets, SeedState).
 
 value_to_hash(undefined, #basic_message { routing_keys = Routes }) ->
