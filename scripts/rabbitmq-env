@@ -110,7 +110,7 @@ _rmq_env_realpath()
 
 _rmq_env_get_noex()
 {
-    if [ "x" = "x${1}" ]; then
+    if [ "x" = "x$1" ]; then
         echo ""
     else
         _rmq_env_basename="$(basename "$1")"
@@ -269,10 +269,10 @@ _rmq_env_config_server_erl_args()
     _rmq_env_config_distribution_buffer_arg
 
     # Note: default value is
-    # +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES
-    # +t $RABBITMQ_MAX_NUMBER_OF_ATOMS
-    # +stbt $RABBITMQ_SCHEDULER_BIND_TYPE
-    # +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE
+    #   +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES
+    #   +t $RABBITMQ_MAX_NUMBER_OF_ATOMS
+    #   +stbt $RABBITMQ_SCHEDULER_BIND_TYPE
+    #   +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE
     [ -n "$SERVER_ERL_ARGS" ] || SERVER_ERL_ARGS=" +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES +t $RABBITMQ_MAX_NUMBER_OF_ATOMS +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE "
     [ -n "$RABBITMQ_SERVER_ERL_ARGS" ] || RABBITMQ_SERVER_ERL_ARGS="$SERVER_ERL_ARGS"
 }
@@ -306,11 +306,11 @@ _rmq_env_config_alloc_args()
     # shellcheck disable=SC2034
     #
     # Note: the default value is
-    # +MBas ageffcbf
-    # +MHas ageffcbf
-    # +MBlmbcs 512
-    # +MHlmbcs 512
-    # +MMmcs 30
+    #   +MBas ageffcbf
+    #   +MHas ageffcbf
+    #   +MBlmbcs 512
+    #   +MHlmbcs 512
+    #   +MMmcs 30
     [ -n "$ALLOC_ARGS" ] || ALLOC_ARGS="+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30"
     [ -n "$RABBITMQ_ALLOC_ARGS" ] || RABBITMQ_ALLOC_ARGS="$ALLOC_ARGS"
 }
