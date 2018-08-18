@@ -299,7 +299,7 @@ _rmq_env_config_distribution_buffer_arg()
     return 0
 }
 
-_rmq_env_config_server_erl_args()
+_rmq_env_config_erl_args()
 {
     _rmq_env_config_process_limit_arg
     _rmq_env_config_atom_limit_arg
@@ -313,6 +313,11 @@ _rmq_env_config_server_erl_args()
     #   +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE
     [ -z "$SERVER_ERL_ARGS" ] && SERVER_ERL_ARGS=" +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES +t $RABBITMQ_MAX_NUMBER_OF_ATOMS +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE "
     [ -z "$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS="$SERVER_ERL_ARGS"
+
+    [ -z "$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS="$CTL_ERL_ARGS"
+    [ -z "$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS="$SERVER_START_ARGS"
+    [ -z "$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="$SERVER_ADDITIONAL_ERL_ARGS"
+
     return 0
 }
 
@@ -489,13 +494,9 @@ _rmq_env_config_config_files()
 
 _rmq_env_TODO()
 {
-    [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=$CTL_ERL_ARGS
-
     [ "x" = "x$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE=$IO_THREAD_POOL_SIZE
     [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=$LOG_BASE
     [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=$MNESIA_BASE
-    [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=$SERVER_START_ARGS
-    [ "x" = "x$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=$SERVER_ADDITIONAL_ERL_ARGS
     [ "x" = "x$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH=$SERVER_CODE_PATH
 
     [ "x" = "x$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR=$SCHEMA_DIR
@@ -677,7 +678,7 @@ rabbitmq_config()
 
     _rmq_env_config_start_args
     _rmq_env_config_alloc_args
-    _rmq_env_config_server_erl_args
+    _rmq_env_config_erl_args
     _rmq_env_config_mnesia_dir
     _rmq_env_config_pid_file
 

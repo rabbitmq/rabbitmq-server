@@ -5,10 +5,7 @@ export _rabbitmq_env_load='false'
 
 setup() {
     export RABBITMQ_CONF_ENV_FILE="$BATS_TMPDIR/rabbitmq-env.$BATS_TEST_NAME.conf"
-    if [[ -f $RABBITMQ_CONF_ENV_FILE ]]
-    then
-    	rm -f "$RABBITMQ_CONF_ENV_FILE"
-    fi
+    rm -f "$RABBITMQ_CONF_ENV_FILE"
 }
 
 @test "default Erlang scheduler bind type" {
