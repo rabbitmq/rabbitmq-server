@@ -15,6 +15,7 @@
 %%
 
 -module(rabbit_exchange_type_headers).
+-include_lib("stdlib/include/qlc.hrl").
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
@@ -25,6 +26,7 @@
          create/2, delete/3, policy_changed/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -export([info/1, info/2]).
+-export([upgrade_headers_bindings/0]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange type headers"},
@@ -322,3 +324,21 @@ remove_bindings_ids(BindingIdsToDelete, [Bind = {_,_,_,_,BId} | T], Res) ->
 
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
+
+
+
+upgrade_headers_bindings() ->
+    MatchHeadersExchanges = #exchange{type = headers, name = '$1', _ = '_'},
+    Transaction = fun() ->
+    HeadersExchanges = mnesia:select(rabbit_exchange, [{MatchHeadersExchanges ,[],['$1']}]),
+    Query = qlc:q([RR || RR <- mnesia:table(rabbit_route), lists:member(RR#route.binding#binding.source, HeadersExchanges)]),
+    BindingsToUpgrade = qlc:eval(Query),
+    UpgradeBindingFun = fun(BindingToUpgrade) ->
+        Bind = BindingToUpgrade#route.binding,
+        Exch = #exchange{name = Bind#binding.source },
+        rabbit_exchange_type_headers:add_binding(transaction, Exch, Bind)
+        end,
+    lists:foreach (UpgradeBindingFun, BindingsToUpgrade)
+    end,
+    mnesia:transaction(Transaction).
+
