@@ -133,7 +133,7 @@ If pseudo-random or unique values such as client/session/request identifiers
 are used for routing keys (or another property used for hashing) then
 reasonably uniform distribution should be observed.
 
-### Python
+### Code Example in Python
 
 This version of the example uses [Pika](https://pika.readthedocs.io/en/stable/), the most widely used
 Ruby client for RabbitMQ:
@@ -147,24 +147,22 @@ import time
 conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
 ch   = conn.channel()
 
-ch.exchange_declare(exchange = "e", exchange_type = "x-consistent-hash", durable = True)
+ch.exchange_declare(exchange="e", exchange_type="x-consistent-hash", durable=True)
 
 for q in ["q1", "q2", "q3", "q4"]:
-    ch.queue_declare(queue = q, durable = True)
-    ch.queue_purge(queue = q)
+    ch.queue_declare(queue=q, durable=True)
+    ch.queue_purge(queue=q)
 
 for q in ["q1", "q2"]:
-    ch.queue_bind(exchange = "e", queue = q, routing_key = "1")
+    ch.queue_bind(exchange="e", queue=q, routing_key="1")
 
 for q in ["q3", "q4"]:
-    ch.queue_bind(exchange = "e", queue = q, routing_key = "2")
+    ch.queue_bind(exchange="e", queue=q, routing_key="2")
 
 n = 100000
 
 for rk in list(map(lambda s: str(s), range(0, n))):
-    ch.basic_publish(exchange    = "e",
-                     routing_key = rk,
-                     body        = "")
+    ch.basic_publish(exchange="e", routing_key=rk, body="")
 print("Done publishing.")
 
 print("Waiting for routing to finish...")
@@ -176,7 +174,7 @@ print("Done.")
 conn.close()
 ```
 
-### Ruby
+### Code Example in Ruby
 
 Below is a version that uses [Bunny](http://rubybunny.info), the most widely used
 Ruby client for RabbitMQ:
@@ -219,7 +217,7 @@ puts "Done"
 ```
 
 
-### Erlang
+### Code Example in Erlang
 
 Below is a version of the example that uses
 the [RabbitMQ Erlang client](https://www.rabbitmq.com/erlang-client-user-guide.html):
@@ -232,26 +230,24 @@ test() ->
     {ok, Chan} = amqp_connection:open_channel(Conn),
     Queues = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
     amqp_channel:call(Chan,
-                  #'exchange.declare' {
+                  #'exchange.declare'{
                     exchange = <<"e">>, type = <<"x-consistent-hash">>
                   }),
-    [amqp_channel:call(Chan, #'queue.declare' { queue = Q }) || Q <- Queues],
-    [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
-                                             exchange = <<"e">>,
-                                             routing_key = <<"1">> })
+    [amqp_channel:call(Chan, #'queue.declare'{queue = Q}) || Q <- Queues],
+    [amqp_channel:call(Chan, #'queue.bind'{queue = Q,
+                                           exchange = <<"e">>,
+                                           routing_key = <<"1">>})
         || Q <- [<<"q0">>, <<"q1">>]],
-    [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
-                                             exchange = <<"e">>,
-                                             routing_key = <<"2">> })
+    [amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                            exchange = <<"e">>,
+                                            routing_key = <<"2">>})
         || Q <- [<<"q2">>, <<"q3">>]],
-    Msg = #amqp_msg { props = #'P_basic'{}, payload = <<>> },
+    Msg = #amqp_msg{props = #'P_basic'{}, payload = <<>>},
     [amqp_channel:call(Chan,
                    #'basic.publish'{
                      exchange = <<"e">>,
-                     routing_key = list_to_binary(
-                                     integer_to_list(
-                                       random:uniform(1000000)))
-                   }, Msg) || _ <- lists:seq(1,100000)],
+                     routing_key = list_to_binary(integer_to_list(random:uniform(1000000)))
+                   }, Msg) || _ <- lists:seq(1, 100000)],
 amqp_connection:close(Conn),
 ok.
 ```
@@ -261,24 +257,139 @@ ok.
 ### Routing on a Header
 
 Under most circumstances the routing key is a good choice for something to
-hash. However, in some cases you need to use the routing key for some other
+hash. However, in some cases it is necessary to use the routing key for some other
 purpose (for example with more complex routing involving exchange to
-exchange bindings). In this case you can configure the consistent hash
+exchange bindings). In this case it is possible to configure the consistent hash
 exchange to route based on a named header instead. To do this, declare the
 exchange with a string argument called "hash-header" naming the header to
-be used. For example using the Erlang client as above:
+be used.
 
-``` erlang
-    amqp_channel:call(
-      Chan, #'exchange.declare' {
-              exchange  = <<"e">>,
-              type      = <<"x-consistent-hash">>,
-              arguments = [{<<"hash-header">>, longstr, <<"hash-me">>}]
-            }).
+#### Code Example in Python
+
+``` python
+#!/usr/bin/env python
+
+import pika
+import time
+
+conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+ch   = conn.channel()
+
+args = {u'hash-header': u'hash-on'}
+ch.exchange_declare(exchange='e2',
+                    exchange_type='x-consistent-hash',
+                    arguments=args,
+                    durable=True)
+
+for q in ['q1', 'q2', 'q3', 'q4']:
+    ch.queue_declare(queue=q, durable=True)
+    ch.queue_purge(queue=q)
+
+for q in ['q1', 'q2']:
+    ch.queue_bind(exchange='e2', queue=q, routing_key='1')
+
+for q in ['q3', 'q4']:
+    ch.queue_bind(exchange='e2', queue=q, routing_key='2')
+
+n = 100000
+
+for rk in list(map(lambda s: str(s), range(0, n))):
+    hdrs = {u'hash-on': rk}
+    ch.basic_publish(exchange='e2',
+                     routing_key='',
+                     body='',
+                     properties=pika.BasicProperties(content_type='text/plain',
+                                                     delivery_mode=2,
+                                                     headers=hdrs))
+print('Done publishing.')
+
+print('Waiting for routing to finish...')
+# in order to keep this example simpler and focused,
+# wait for a few seconds instead of using publisher confirms and waiting for those
+time.sleep(5)
+
+print('Done.')
+conn.close()
 ```
 
-If you specify "hash-header" and then publish messages without the named
-header, they will all get routed to the same (arbitrarily-chosen) queue.
+#### Code Example in Ruby
+
+``` ruby
+#!/usr/bin/env ruby
+
+require 'bundler'
+Bundler.setup(:default, :test)
+require 'bunny'
+
+conn = Bunny.new
+conn.start
+
+ch = conn.create_channel
+ch.confirm_select
+
+q1 = ch.queue("q1", durable: true)
+q2 = ch.queue("q2", durable: true)
+q3 = ch.queue("q3", durable: true)
+q4 = ch.queue("q4", durable: true)
+
+[q1, q2, q3, q4]. each(&:purge)
+
+x  = ch.exchange("x2", type: "x-consistent-hash", durable: true, arguments: {"hash-header" => "hash-on"})
+
+[q1, q2].each { |q| q.bind(x, routing_key: "1") }
+[q3, q4].each { |q| q.bind(x, routing_key: "2") }
+
+n = 100_000
+(0..n).map(&:to_s).each do |i|
+  x.publish(i.to_s, routing_key: rand.to_s, headers: {"hash-on": i})
+end
+
+ch.wait_for_confirms
+puts "Done publishing!"
+
+sleep 5
+puts "Done"
+```
+
+#### Code Example in Erlang
+
+With RabbitMQ Erlang client:
+
+``` erlang
+-include_lib("amqp_client/include/amqp_client.hrl").
+
+test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Queues = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
+    amqp_channel:call(
+      Chan, #'exchange.declare'{
+              exchange  = <<"e">>,
+              type      = <<"x-consistent-hash">>,
+              arguments = [{<<"hash-header">>, longstr, <<"hash-on">>}]
+            }),
+    [amqp_channel:call(Chan, #'queue.declare'{queue = Q}) || Q <- Queues],
+    [amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                            exchange = <<"e">>,
+                                            routing_key = <<"1">>})
+        || Q <- [<<"q0">>, <<"q1">>]],
+    [amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                            exchange = <<"e">>,
+                                            routing_key = <<"2">>})
+        || Q <- [<<"q2">>, <<"q3">>]],
+    RK = list_to_binary(integer_to_list(random:uniform(1000000))),
+    Msg = #amqp_msg {props = #'P_basic'{headers = [{<<"hash-on">>, longstr, RK}]}, payload = <<>>},
+    [amqp_channel:call(Chan,
+                   #'basic.publish'{
+                     exchange = <<"e">>,
+                     routing_key = RK,
+                   }, Msg) || _ <- lists:seq(1, 100000)],
+amqp_connection:close(Conn),
+ok.
+```
+
+Note that when a `"hash-header"` is specified but published messages do not contain the named
+header, they will all get routed to the same (arbitrarily chosen) queue.
 
 ### Routing on a Message Property
 
