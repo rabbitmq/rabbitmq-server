@@ -3,9 +3,9 @@
 ## Introduction
 
 This plugin adds a consistent-hash exchange type to RabbitMQ. This
-exchange type uses consistent hashing ([intro blog post 1](http://www.martinbroadhurst.com/Consistent-Hash-Ring.html), [intro blog post 2](http://michaelnielsen.org/blog/consistent-hashing/)) to distribute
+exchange type uses consistent hashing (intro blog posts: [one](http://www.martinbroadhurst.com/Consistent-Hash-Ring.html), [two](http://michaelnielsen.org/blog/consistent-hashing/), [three](https://akshatm.svbtle.com/consistent-hash-rings-theory-and-implementation)) to distribute
 messages between the bound queues. It is recommended to get a basic understanding of the
-concept before evaluating this plugin.
+concept before evaluating this plugin and its alternatives.
 
 [rabbitmq-sharding](https://github.com/rabbitmq/rabbitmq-sharding) is another plugin
 that provides a way to partition a stream of messages among a set of consumers
@@ -13,23 +13,22 @@ while trading off total stream ordering for processing parallelism.
 
 ## Problem Definition
 
-In various scenarios, you may wish to ensure that messages sent to an
-exchange are consistently and equally distributed across a number of
-different queues based on the routing key of the message, a nominated
-header  (see "Routing on a header" below), or a message property (see
-"Routing on a message property" below). You could arrange for this to
-occur yourself by using a  direct  or topic exchange, binding queues
-to that exchange and then publishing messages to that exchange that
+In various scenarios it may be desired to ensure that messages sent to an
+exchange are reasonably [uniformly distributed](https://en.wikipedia.org/wiki/Uniform_distribution_(discrete)) across a number of
+queues based on the routing key of the message, a [nominated
+header](#routing-on-a-header), or a [message property](#routing-on-a-header).
+Technically this can be accomplished using a direct or topic exchange,
+binding queues to that exchange and then publishing messages to that exchange that
 match the various binding keys.
 
 However, arranging things this way can be problematic:
 
 1. It is difficult to ensure that all queues bound to the exchange
-will receive a (roughly) equal number of messages without baking in to
-the publishers quite a lot of knowledge about the number of queues and
+will receive a (roughly) equal number of messages (distribution uniformity)
+without baking in to the publishers quite a lot of knowledge about the number of queues and
 their bindings.
 
-2. If the number of queues changes, it is not easy to ensure that the
+2. When the number of queues changes, it is not easy to ensure that the
 new topology still distributes messages between the different queues
 evenly.
 
@@ -41,20 +40,33 @@ to the computed hash (and the hash space wraps around). The effect of
 this is that when a new bucket is added or an existing bucket removed,
 only a very few hashes change which bucket they are routed to.
 
-## How Consistent Hashing Routing Works
+## Supported RabbitMQ Versions
+
+This plugin supports RabbitMQ 3.3.x and later versions.
+
+## Supported Erlang Versions
+
+This plugin supports the same [Erlang versions](https://rabbitmq.com/which-erlang.html) as RabbitMQ core.
+
+
+## How It Works
 
 In the case of Consistent Hashing as an exchange type, the hash is
-calculated from the hash of the routing key of each message
-received. Thus messages that have the same routing key will have the
-same hash computed, and thus will be routed to the same queue,
+calculated from a message property (most commonly the routing key).
+Thus messages that have the same routing key will have the
+same hash value computed for them, and thus will be routed to the same queue,
 assuming no bindings have changed.
 
-When you bind a queue to a consistent-hash exchange, the binding key
-is a number-as-a-string which indicates the number of points in the
-hash space at which you wish the queue to appear. The actual points
-are generated randomly.
+### Binding Weights
 
-The hashing distributes *routing keys* among queues, not *messages*
+When a queue is bound to a Consistent Hash exchange, the binding key
+is a number-as-a-string which indicates the binding weight: the number
+of buckets (sections of the range) that will be associated with the
+target queue.
+
+### Consistent Hashing-based Routing
+
+The hashing distributes *routing keys* among queues, not *message payloads*
 among queues; all messages with the same routing key will go the
 same queue.  So, if you wish for queue A to receive twice as many
 routing keys routed to it than are routed to queue B, then you bind
@@ -75,14 +87,33 @@ deletion/death of that queue that does permit the possibility of the
 message being sent to a queue which then disappears before the message
 is processed. Hence in general, at most one queue.
 
-The exchange type is "x-consistent-hash".
-
-## Supported RabbitMQ Versions
-
-This plugin supports RabbitMQ 3.3.x and later versions.
+The exchange type is `"x-consistent-hash"`.
 
 
-## Examples
+## Usage Examples
+
+### Overview
+
+In the below example the queues `q0` and `q1` get bound each with the weight of 1
+in the hash space to the exchange `e` which means they'll each get
+roughly the same number of routing keys. The queues `q2` and `q3`
+however, get 2 buckets each (their weight is 2) which means they'll each get roughly the
+same number of routing keys too, but that will be approximately twice
+as many as `q0` and `q1`. The example then publishes 100,000 messages to our
+exchange with random routing keys, the queues will get their share of
+messages roughly equal to the binding keys ratios. After this has
+completed, running `rabbitmqctl list_queues` should show that the
+messages have been distributed approximately as desired.
+
+Note the `routing_key`s in the bindings are numbers-as-strings. This
+is because AMQP 0-9-1 specifies the `routing_key` field must be a string.
+
+It is important to ensure that the messages being published
+to the exchange have a range of different `routing_key`s: if a very
+small set of routing keys are being used then there's a possibility of
+messages not being evenly distributed between the various queues. If
+the routing key is a pseudo-random session ID or such, then good
+results should follow.
 
 ### Erlang
 
@@ -102,11 +133,11 @@ test() ->
     [amqp_channel:call(Chan, #'queue.declare' { queue = Q }) || Q <- Queues],
     [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
                                              exchange = <<"e">>,
-                                             routing_key = <<"10">> })
+                                             routing_key = <<"1">> })
         || Q <- [<<"q0">>, <<"q1">>]],
     [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
                                              exchange = <<"e">>,
-                                             routing_key = <<"20">> })
+                                             routing_key = <<"2">> })
         || Q <- [<<"q2">>, <<"q3">>]],
     Msg = #amqp_msg { props = #'P_basic'{}, payload = <<>> },
     [amqp_channel:call(Chan,
@@ -120,34 +151,7 @@ amqp_connection:close(Conn),
 ok.
 ```
 
-As you can see, the queues `q0` and `q1` get bound each with 10 points
-in the hash space to the exchange `e` which means they'll each get
-roughly the same number of routing keys. The queues `q2` and `q3`
-however, get 20 points each which means they'll each get roughly the
-same number of routing keys too, but that will be approximately twice
-as many as `q0` and `q1`. We then publish 100,000 messages to our
-exchange with random routing keys, the queues will get their share of
-messages roughly equal to the binding keys ratios. After this has
-completed, running `rabbitmqctl list_queues` should show that the
-messages have been distributed approximately as desired.
-
-Note the `routing_key`s in the bindings are numbers-as-strings. This
-is because AMQP specifies the routing_key must be a string.
-
-The more points in the hash space each binding has, the closer the
-actual distribution will be to the desired distribution (as indicated
-by the ratio of points by binding). However, large numbers of points
-(many thousands) will substantially decrease performance of the
-exchange type.
-
-Equally, it is important to ensure that the messages being published
-to the exchange have a range of different `routing_key`s: if a very
-small set of routing keys are being used then there's a possibility of
-messages not being evenly distributed between the various queues. If
-the routing key is a pseudo-random session ID or such, then good
-results should follow.
-
-## Routing on a header
+## Routing on a Header
 
 Under most circumstances the routing key is a good choice for something to
 hash. However, in some cases you need to use the routing key for some other
@@ -169,7 +173,7 @@ be used. For example using the Erlang client as above:
 If you specify "hash-header" and then publish messages without the named
 header, they will all get routed to the same (arbitrarily-chosen) queue.
 
-## Routing on a message property
+## Routing on a Message Property
 
 In addition to a value in the header property, you can also route on the
 ``message_id``, ``correlation_id``, or ``timestamp`` message property. To do so,
@@ -185,15 +189,36 @@ property to be used. For example using the Erlang client as above:
             }).
 ```
 
-Note that you can not declare an exchange that routes on both "hash-header" and
-"hash-property". If you specify "hash-property" and then publish messages without
-a value in the named property, they will all get routed to the same
+Note that you declaring an exchange that routes on both "hash-header" and
+"hash-property" is not allowed. When "hash-property" is specified, and a message
+is published without a value in the named property, they will all get routed to the same
 (arbitrarily-chosen) queue.
+
 
 ## Getting Help
 
 Any comments or feedback welcome, to the
 [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
+
+
+## Implementation Details
+
+The hash function used in this plugin as of RabbitMQ 3.7.8
+is [A Fast, Minimal Memory, Consistent Hash Algorithm](https://arxiv.org/abs/1406.2294) by Lamping and Veach.
+
+When a queue is bound to a consistent hash exchange, the protocol method, `queue.bind`,
+carries a weight in the routing (binding) key. The binding is given
+a number of buckets on the hash ring (hash space) equal to the weight.
+When a queue is unbound, the buckets added for the binding are deleted.
+These two operations use linear algorithms to update the ring.
+
+To perform routing the exchange extract the appropriate value for hashing,
+hashes it and retrieves a bucket number from the ring, then the bucket and
+its associated queue.
+
+The implementation assumes there is only one binding between a consistent hash
+exchange and a queue. Having more than one bunding is unnecessary because
+queue weight can be provided at the time of binding.
 
 ## Continuous Integration
 
@@ -201,7 +226,7 @@ Any comments or feedback welcome, to the
 
 ## Copyright and License
 
-(c) 2013-2015 Pivotal Software Inc.
+(c) 2013-2018 Pivotal Software Inc.
 
 Released under the Mozilla Public License 1.1, same as RabbitMQ.
 See [LICENSE](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange/blob/master/LICENSE) for
