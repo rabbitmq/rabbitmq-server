@@ -133,11 +133,98 @@ If pseudo-random or unique values such as client/session/request identifiers
 are used for routing keys (or another property used for hashing) then
 reasonably uniform distribution should be observed.
 
+### Python
+
+This version of the example uses [Pika](https://pika.readthedocs.io/en/stable/), the most widely used
+Ruby client for RabbitMQ:
+
+``` python
+#!/usr/bin/env python
+
+import pika
+import time
+
+conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+ch   = conn.channel()
+
+ch.exchange_declare(exchange = "e", exchange_type = "x-consistent-hash", durable = True)
+
+for q in ["q1", "q2", "q3", "q4"]:
+    ch.queue_declare(queue = q, durable = True)
+    ch.queue_purge(queue = q)
+
+for q in ["q1", "q2"]:
+    ch.queue_bind(exchange = "e", queue = q, routing_key = "1")
+
+for q in ["q3", "q4"]:
+    ch.queue_bind(exchange = "e", queue = q, routing_key = "2")
+
+n = 100000
+
+for rk in list(map(lambda s: str(s), range(0, n))):
+    ch.basic_publish(exchange    = "e",
+                     routing_key = rk,
+                     body        = "")
+print("Done publishing.")
+
+print("Waiting for routing to finish...")
+# in order to keep this example simpler and focused,
+# wait for a few seconds instead of using publisher confirms and waiting for those
+time.sleep(5)
+
+print("Done.")
+conn.close()
+```
+
+### Ruby
+
+Below is a version that uses [Bunny](http://rubybunny.info), the most widely used
+Ruby client for RabbitMQ:
+
+``` ruby
+#!/usr/bin/env ruby
+
+require 'bunny'
+
+conn = Bunny.new
+conn.start
+
+ch = conn.create_channel
+ch.confirm_select
+
+q1 = ch.queue("q1", durable: true)
+q2 = ch.queue("q2", durable: true)
+q3 = ch.queue("q3", durable: true)
+q4 = ch.queue("q4", durable: true)
+
+[q1, q2, q3, q4]. each(&:purge)
+
+x  = ch.exchange("chx", type: "x-consistent-hash", durable: true)
+
+[q1, q2].each { |q| q.bind(x, routing_key: "1") }
+[q3, q4].each { |q| q.bind(x, routing_key: "2") }
+
+n = 100_000
+n.times do |i|
+  x.publish(i.to_s, routing_key: i.to_s)
+end
+
+ch.wait_for_confirms
+
+# wait for queue stats to be emitted so that management UI numbers
+# are up-to-date
+sleep 5
+conn.close
+puts "Done"
+```
+
+
 ### Erlang
 
-Below is a version of the example that uses [RabbitMQ Erlang client](https://www.rabbitmq.com/erlang-client-user-guide.html):
+Below is a version of the example that uses
+the [RabbitMQ Erlang client](https://www.rabbitmq.com/erlang-client-user-guide.html):
 
-```erlang
+``` erlang
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 test() ->
@@ -217,7 +304,7 @@ is published without a value in the named property, they will all get routed to 
 
 ## Getting Help
 
-Any comments or feedback welcome, to the
+If you have questions or need help, feel free to ask on the
 [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
 
 
