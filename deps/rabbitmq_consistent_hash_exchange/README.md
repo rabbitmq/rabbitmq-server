@@ -42,11 +42,19 @@ only a very few hashes change which bucket they are routed to.
 
 ## Supported RabbitMQ Versions
 
-This plugin supports RabbitMQ 3.3.x and later versions.
+This plugin ships with RabbitMQ.
 
 ## Supported Erlang Versions
 
 This plugin supports the same [Erlang versions](https://rabbitmq.com/which-erlang.html) as RabbitMQ core.
+
+## Installation
+
+This plugin ships with RabbitMQ. Like all other [RabbitMQ plugins](http://www.rabbitmq.com/plugins.html), it has to be enabled before it can be used:
+
+``` sh
+rabbitmq-plugins enable rabbitmq_consistent_hash_exchange
+```
 
 
 ## How It Works
@@ -242,11 +250,12 @@ test() ->
                                             exchange = <<"e">>,
                                             routing_key = <<"2">>})
         || Q <- [<<"q2">>, <<"q3">>]],
+    RK = list_to_binary(integer_to_list(random:uniform(1000000))),
     Msg = #amqp_msg{props = #'P_basic'{}, payload = <<>>},
     [amqp_channel:call(Chan,
                    #'basic.publish'{
                      exchange = <<"e">>,
-                     routing_key = list_to_binary(integer_to_list(random:uniform(1000000)))
+                     routing_key = RK
                    }, Msg) || _ <- lists:seq(1, 100000)],
 amqp_connection:close(Conn),
 ok.
@@ -263,6 +272,10 @@ exchange bindings). In this case it is possible to configure the consistent hash
 exchange to route based on a named header instead. To do this, declare the
 exchange with a string argument called "hash-header" naming the header to
 be used.
+
+When a `"hash-header"` is specified, the chosen header **must be provided**.
+If published messages do not contain the header, they will all get
+routed to the same **arbitrarily chosen** queue.
 
 #### Code Example in Python
 
@@ -382,35 +395,157 @@ test() ->
     [amqp_channel:call(Chan,
                    #'basic.publish'{
                      exchange = <<"e">>,
-                     routing_key = RK,
+                     routing_key = <<"">>,
                    }, Msg) || _ <- lists:seq(1, 100000)],
 amqp_connection:close(Conn),
 ok.
 ```
 
-Note that when a `"hash-header"` is specified but published messages do not contain the named
-header, they will all get routed to the same (arbitrarily chosen) queue.
 
 ### Routing on a Message Property
 
 In addition to a value in the header property, you can also route on the
-``message_id``, ``correlation_id``, or ``timestamp`` message property. To do so,
-declare the exchange with a string argument called "hash-property" naming the
-property to be used. For example using the Erlang client as above:
+``message_id``, ``correlation_id``, or ``timestamp`` message properties. To do so,
+declare the exchange with a string argument called ``"hash-property"`` naming the
+property to be used.
 
-``` erlang
-    amqp_channel:call(
-      Chan, #'exchange.declare' {
-              exchange  = <<"e">>,
-              type      = <<"x-consistent-hash">>,
-              arguments = [{<<"hash-property">>, longstr, <<"message_id">>}]
-            }).
+When a `"hash-property"` is specified, the chosen property **must be provided**.
+If published messages do not contain the property, they will all get
+routed to the same **arbitrarily chosen** queue.
+
+### Code Example in Python
+
+``` python
+#!/usr/bin/env python
+
+import pika
+import time
+
+conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+ch   = conn.channel()
+
+args = {u'hash-property': u'message_id'}
+ch.exchange_declare(exchange='e3',
+                    exchange_type='x-consistent-hash',
+                    arguments=args,
+                    durable=True)
+
+for q in ['q1', 'q2', 'q3', 'q4']:
+    ch.queue_declare(queue=q, durable=True)
+    ch.queue_purge(queue=q)
+
+for q in ['q1', 'q2']:
+    ch.queue_bind(exchange='e3', queue=q, routing_key='1')
+
+for q in ['q3', 'q4']:
+    ch.queue_bind(exchange='e3', queue=q, routing_key='2')
+
+n = 100000
+
+for rk in list(map(lambda s: str(s), range(0, n))):
+    ch.basic_publish(exchange='e3',
+                     routing_key='',
+                     body='',
+                     properties=pika.BasicProperties(content_type='text/plain',
+                                                     delivery_mode=2,
+                                                     message_id=rk))
+print('Done publishing.')
+
+print('Waiting for routing to finish...')
+# in order to keep this example simpler and focused,
+# wait for a few seconds instead of using publisher confirms and waiting for those
+time.sleep(5)
+
+print('Done.')
+conn.close()
 ```
 
-Note that you declaring an exchange that routes on both "hash-header" and
-"hash-property" is not allowed. When "hash-property" is specified, and a message
-is published without a value in the named property, they will all get routed to the same
-(arbitrarily-chosen) queue.
+### Code Example in Ruby
+
+``` ruby
+#!/usr/bin/env ruby
+
+require 'bundler'
+Bundler.setup(:default, :test)
+require 'bunny'
+
+conn = Bunny.new
+conn.start
+
+ch = conn.create_channel
+ch.confirm_select
+
+q1 = ch.queue("q1", durable: true)
+q2 = ch.queue("q2", durable: true)
+q3 = ch.queue("q3", durable: true)
+q4 = ch.queue("q4", durable: true)
+
+[q1, q2, q3, q4].each(&:purge)
+
+x  = ch.exchange("x3", type: "x-consistent-hash", durable: true, arguments: {"hash-property" => "message_id"})
+
+[q1, q2].each { |q| q.bind(x, routing_key: "1") }
+[q3, q4].each { |q| q.bind(x, routing_key: "2") }
+
+n = 100_000
+(0..n).map(&:to_s).each do |i|
+  x.publish(i.to_s, routing_key: rand.to_s, message_id: i)
+end
+
+ch.wait_for_confirms
+puts "Done publishing!"
+
+sleep 5
+
+puts "Evaluating results..."
+
+def format_as_percent(count, total)
+  ((count.to_f/total).floor(4) * 100).to_f.floor(2)
+end
+
+puts "Q1 has #{q1.message_count} messages ready (#{format_as_percent(q1.message_count, n)}%)"
+puts "Q2 has #{q2.message_count} messages ready (#{format_as_percent(q2.message_count, n)}%)"
+puts "Q3 has #{q3.message_count} messages ready (#{format_as_percent(q3.message_count, n)}%)"
+puts "Q4 has #{q4.message_count} messages ready (#{format_as_percent(q4.message_count, n)}%)"
+puts
+
+conn.close
+```
+
+### Code Example in Erlang
+
+``` erlang
+-include_lib("amqp_client/include/amqp_client.hrl").
+
+test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Queues = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
+    amqp_channel:call(Chan,
+                  #'exchange.declare'{
+                    exchange = <<"e">>, type = <<"x-consistent-hash">>,
+                    arguments = {<<"hash-property">>, longstr, <<"message_id">>}                    
+                  }),
+    [amqp_channel:call(Chan, #'queue.declare'{queue = Q}) || Q <- Queues],
+    [amqp_channel:call(Chan, #'queue.bind'{queue = Q,
+                                           exchange = <<"e">>,
+                                           routing_key = <<"1">>})
+        || Q <- [<<"q0">>, <<"q1">>]],
+    [amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                            exchange = <<"e">>,
+                                            routing_key = <<"2">>})
+        || Q <- [<<"q2">>, <<"q3">>]],
+    RK = list_to_binary(integer_to_list(random:uniform(1000000)),
+    Msg = #amqp_msg{props = #'P_basic'{message_id = RK}, payload = <<>>},
+    [amqp_channel:call(Chan,
+                   #'basic.publish'{
+                     exchange = <<"e">>,
+                     routing_key = <<"">>,
+                     )
+                   }, Msg) || _ <- lists:seq(1, 100000)],
+amqp_connection:close(Conn),
+ok.
+```
 
 
 ## Getting Help
