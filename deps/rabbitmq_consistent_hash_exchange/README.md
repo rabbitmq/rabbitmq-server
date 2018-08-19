@@ -90,34 +90,52 @@ is processed. Hence in general, at most one queue.
 The exchange type is `"x-consistent-hash"`.
 
 
-## Usage Examples
+## Usage Example
 
-### Overview
+### The Topology
 
 In the below example the queues `q0` and `q1` get bound each with the weight of 1
 in the hash space to the exchange `e` which means they'll each get
 roughly the same number of routing keys. The queues `q2` and `q3`
 however, get 2 buckets each (their weight is 2) which means they'll each get roughly the
 same number of routing keys too, but that will be approximately twice
-as many as `q0` and `q1`. The example then publishes 100,000 messages to our
-exchange with random routing keys, the queues will get their share of
-messages roughly equal to the binding keys ratios. After this has
-completed, running `rabbitmqctl list_queues` should show that the
-messages have been distributed approximately as desired.
+as many as `q0` and `q1`.
 
 Note the `routing_key`s in the bindings are numbers-as-strings. This
 is because AMQP 0-9-1 specifies the `routing_key` field must be a string.
 
+### Choosing Appropriate Weight Values
+
+The example uses low weight values intentionally.
+Higher values will reduce throughput of the exchange, primarily for
+workloads that experience a high binding churn (queues are bound to
+and unbound from a consistent hash exchange frequently).
+Single digit weight values are recommended (and usually sufficient).
+
+### Inspecting Message Counts
+
+The example then publishes 100,000 messages to our
+exchange with random routing keys, the queues will get their share of
+messages roughly equal to the binding keys ratios. After this has
+completed, message distribution between queues can be inspected using
+RabbitMQ's management UI and `rabbitmqctl list_queues`.
+
+## Routing Keys and Uniformity of Distribution
+
 It is important to ensure that the messages being published
-to the exchange have a range of different `routing_key`s: if a very
+to the exchange have varying routing keys: if a very
 small set of routing keys are being used then there's a possibility of
-messages not being evenly distributed between the various queues. If
-the routing key is a pseudo-random session ID or such, then good
-results should follow.
+messages not being evenly distributed between the bound queues. With a
+large number of bound queues some queues may get no messages routed to
+them at all.
+
+If pseudo-random or unique values such as client/session/request identifiers
+are used for routing keys (or another property used for hashing) then
+reasonably uniform distribution should be observed.
 
 ### Erlang
 
-Here is an example using the Erlang client:
+Below is a version of the example that uses [RabbitMQ Erlang client](https://www.rabbitmq.com/erlang-client-user-guide.html):
 
 ```erlang
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -151,7 +169,9 @@ amqp_connection:close(Conn),
 ok.
 ```
 
-## Routing on a Header
+## Configuration
+
+### Routing on a Header
 
 Under most circumstances the routing key is a good choice for something to
 hash. However, in some cases you need to use the routing key for some other
@@ -161,7 +181,7 @@ exchange to route based on a named header instead. To do this, declare the
 exchange with a string argument called "hash-header" naming the header to
 be used. For example using the Erlang client as above:
 
-```erlang
+``` erlang
     amqp_channel:call(
       Chan, #'exchange.declare' {
               exchange  = <<"e">>,
@@ -173,14 +193,14 @@ be used. For example using the Erlang client as above:
 If you specify "hash-header" and then publish messages without the named
 header, they will all get routed to the same (arbitrarily-chosen) queue.
 
-## Routing on a Message Property
+### Routing on a Message Property
 
 In addition to a value in the header property, you can also route on the
 ``message_id``, ``correlation_id``, or ``timestamp`` message property. To do so,
 declare the exchange with a string argument called "hash-property" naming the
 property to be used. For example using the Erlang client as above:
 
-```erlang
+``` erlang
     amqp_channel:call(
       Chan, #'exchange.declare' {
               exchange  = <<"e">>,
