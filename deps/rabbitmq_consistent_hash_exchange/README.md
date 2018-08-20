@@ -741,6 +741,33 @@ If you have questions or need help, feel free to ask on the
 The hash function used in this plugin as of RabbitMQ 3.7.8
 is [A Fast, Minimal Memory, Consistent Hash Algorithm](https://arxiv.org/abs/1406.2294) by Lamping and Veach.
 
+A Chi-squared test was used to evaluate distribution uniformity. Below are the
+results for 18 bucket counts and how they compare to two commonly used `p-value`
+thresholds:
+
+|Number of buckets|Chi-squared test result|Degrees of freedom|p-value = 0.05|p-value = 0.01|
+|-|-----------|------------------|--------|--------|
+|2|0.5|1|3.84|6.64|
+|3|0.946|2|5.99|9.21|
+|4|2.939|3|7.81|11.35|
+|5|2.163|4|3.49|13.28|
+|6|2.592|5|11.07|15.09|
+|7|4.654|6|12.59|16.81|
+|8|7.566|7|14.07|18.48|
+|9|5.847|8|15.51|20.09|
+|10|9.790|9|16.92|21.67|
+|11|13.448|10|18.31|23.21|
+|12|12.432|11|19.68|24.73|
+|13|12.338|12|21.02|26.22|
+|14|9.898|13|22.36|27.69|
+|15|8.513|14|23.69|29.14|
+|16|6.997|15|24.99|30.58|
+|17|6.279|16|26.30|32.00|
+|18|10.373|17|28.87|34.81|
+|19|12.935|18|30.14|36.19|
+|20|11.895|19|31.41|37.57|
+
+
 When a queue is bound to a consistent hash exchange, the protocol method, `queue.bind`,
 carries a weight in the routing (binding) key. The binding is given
 a number of buckets on the hash ring (hash space) equal to the weight.
