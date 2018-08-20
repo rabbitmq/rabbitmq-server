@@ -197,7 +197,7 @@ _rmq_check_if_shared_with_mnesia()
 
     if [ "$_rmq_env_mnesia_dirs_configured" != 'true' ]
     then
-        _rmq_env_perr '_rmq_env_config_mnesia_dirs is not true (_rmq_check_if_shared_with_mnesia)'
+        _rmq_env_perr '_rmq_env_mnesia_dirs_configured is not true (_rmq_check_if_shared_with_mnesia)'
         return 1
     fi
 
@@ -373,11 +373,17 @@ _rmq_env_misc()
     [ -z "$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE="$IO_THREAD_POOL_SIZE"
 
     [ -z "$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH="$SERVER_CODE_PATH"
+    _rmq_env_normalize_path_var RABBITMQ_SERVER_CODE_PATH
 
     [ -z "$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT='true'
     # shellcheck disable=SC2034
     [ 'xtrue' = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
 
+    if [ "$_rmq_env_logs_configured" != 'true' ]
+    then
+        _rmq_env_perr '_rmq_env_logs_configured is not true (_rmq_env_misc)'
+        return 1
+    fi
     [ -z "$ERL_CRASH_DUMP" ] && ERL_CRASH_DUMP="$RABBITMQ_LOG_BASE/erl_crash.dump"
 }
 
@@ -479,7 +485,7 @@ _rmq_env_config_pid_file()
 {
     if [ "$_rmq_env_mnesia_dirs_configured" != 'true' ]
     then
-        _rmq_env_perr '_rmq_env_config_mnesia_dirs is not true (_rmq_env_config_pid_file)'
+        _rmq_env_perr '_rmq_env_mnesia_dirs_configured is not true (_rmq_env_config_pid_file)'
         return 1
     fi
 
@@ -512,7 +518,7 @@ _rmq_env_config_erl_libs()
 
             if [ "$_rmq_env_mnesia_dirs_configured" != 'true' ]
             then
-                _rmq_env_perr '_rmq_env_config_mnesia_dirs is not true (_rmq_env_config_erl_libs)'
+                _rmq_env_perr '_rmq_env_mnesia_dirs_configured is not true (_rmq_env_config_erl_libs)'
                 return 1
             fi
 
@@ -729,7 +735,7 @@ run_escript()
 
     if [ "$_rmq_env_mnesia_dirs_configured" != 'true' ]
     then
-        _rmq_env_perr '_rmq_env_config_mnesia_dirs is not true (run_escript)'
+        _rmq_env_perr '_rmq_env_mnesia_dirs_configured is not true (run_escript)'
         return 1
     fi
 
