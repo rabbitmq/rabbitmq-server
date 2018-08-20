@@ -143,8 +143,7 @@ reasonably uniform distribution should be observed.
 
 ### Code Example in Python
 
-This version of the example uses [Pika](https://pika.readthedocs.io/en/stable/), the most widely used
-Ruby client for RabbitMQ:
+This version of the example uses [Pika](https://pika.readthedocs.io/en/stable/), the most widely used Python client for RabbitMQ:
 
 ``` python
 #!/usr/bin/env python
