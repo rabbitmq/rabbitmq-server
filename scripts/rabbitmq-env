@@ -363,6 +363,7 @@ _rmq_env_config_logs()
 _rmq_env_config_schema_dir()
 {
     [ -z "$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR="$SCHEMA_DIR"
+    _rmq_env_normalize_path_var RABBITMQ_SCHEMA_DIR
     _rmq_env_schema_dir_configured='true'
     return 0
 }
