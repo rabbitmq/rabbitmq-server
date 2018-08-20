@@ -95,16 +95,16 @@ routing_test0(Config, Qs) ->
 %% -------------------------------------------------------------------
 
 test_with_rk(Config, Qs) ->
-    test0(Config, fun () ->
-                  #'basic.publish'{exchange = <<"e">>, routing_key = rnd()}
+    test0(Config, fun (E) ->
+                  #'basic.publish'{exchange = E, routing_key = rnd()}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
           end, [], Qs).
 
 test_with_header(Config, Qs) ->
-    test0(Config, fun () ->
-                  #'basic.publish'{exchange = <<"e">>}
+    test0(Config, fun (E) ->
+                  #'basic.publish'{exchange = E}
           end,
           fun() ->
                   H = [{<<"hashme">>, longstr, rnd()}],
@@ -113,24 +113,24 @@ test_with_header(Config, Qs) ->
 
 
 test_with_correlation_id(Config, Qs) ->
-    test0(Config, fun() ->
-                  #'basic.publish'{exchange = <<"e">>}
+    test0(Config, fun(E) ->
+                  #'basic.publish'{exchange = E}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{correlation_id = rnd()}, payload = <<>>}
           end, [{<<"hash-property">>, longstr, <<"correlation_id">>}], Qs).
 
 test_with_message_id(Config, Qs) ->
-    test0(Config, fun() ->
-                  #'basic.publish'{exchange = <<"e">>}
+    test0(Config, fun(E) ->
+                  #'basic.publish'{exchange = E}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{message_id = rnd()}, payload = <<>>}
           end, [{<<"hash-property">>, longstr, <<"message_id">>}], Qs).
 
 test_with_timestamp(Config, Qs) ->
-    test0(Config, fun() ->
-                  #'basic.publish'{exchange = <<"e">>}
+    test0(Config, fun(E) ->
+                  #'basic.publish'{exchange = E}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{timestamp = rndint()}, payload = <<>>}
@@ -174,11 +174,17 @@ rndint() ->
 test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     Count = 10000,
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+    #'confirm.select_ok'{} = amqp_channel:call(Chan, #'confirm.select'{}),
+
+    E = <<"e">>,
+
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = E}),
+    [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
 
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
                           #'exchange.declare' {
-                            exchange = <<"e">>,
+                            exchange = E,
                             type = <<"x-consistent-hash">>,
                             auto_delete = true,
                             arguments = DeclareArgs
@@ -188,19 +194,21 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
                              queue = Q, exclusive = true }) || Q <- Queues],
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind' {queue = Q,
-                                                exchange = <<"e">>,
+                                                exchange = E,
                                                 routing_key = <<"10">>})
      || Q <- [Q1, Q2]],
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind' {queue = Q,
-                                                exchange = <<"e">>,
+                                                exchange = E,
                                                 routing_key = <<"20">>})
      || Q <- [Q3, Q4]],
-    #'tx.select_ok'{} = amqp_channel:call(Chan, #'tx.select'{}),
+
     [amqp_channel:call(Chan,
-                       MakeMethod(),
+                       MakeMethod(E),
                        MakeMsg()) || _ <- lists:duplicate(Count, const)],
-    amqp_channel:call(Chan, #'tx.commit'{}),
+    amqp_channel:wait_for_confirms(Chan, 5000),
+    timer:sleep(500),
+
     Counts =
         [begin
              #'queue.declare_ok'{message_count = M} =
@@ -219,7 +227,7 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
            [Chi]),
     ?assert(Chi < 11.35),
 
-    amqp_channel:call(Chan, #'exchange.delete' {exchange = <<"e">>}),
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = E}),
     [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
 
     rabbit_ct_client_helpers:close_channel(Chan),
@@ -227,8 +235,10 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
 
 test_binding_with_negative_routing_key(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+    X = <<"bind-fail">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
 
-    Declare1 = #'exchange.declare'{exchange = <<"bind-fail">>,
+    Declare1 = #'exchange.declare'{exchange = X,
                                    type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
     Q = <<"test-queue">>,
@@ -247,8 +257,10 @@ test_binding_with_negative_routing_key(Config) ->
 
 test_binding_with_non_numeric_routing_key(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+    X = <<"bind-fail">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
 
-    Declare1 = #'exchange.declare'{exchange = <<"bind-fail">>,
+    Declare1 = #'exchange.declare'{exchange = X,
                                    type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
     Q = <<"test-queue">>,
@@ -269,6 +281,8 @@ test_binding_queue_cleanup(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
 
     X = <<"test_binding_cleanup">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
     Declare = #'exchange.declare'{exchange = X,
                                   type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
@@ -310,6 +324,8 @@ test_binding_exchange_cleanup(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
 
     X = <<"test_binding_cleanup">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
     Declare = #'exchange.declare'{exchange = X,
                                   type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
@@ -348,6 +364,8 @@ test_bucket_sizes(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
 
     X = <<"test_bucket_sizes">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
     Declare = #'exchange.declare'{exchange = X,
                                   type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
