@@ -199,7 +199,7 @@ import java.util.concurrent.TimeoutException;
 public class ConsistentHashExchangeExample1 {
   private static String CONSISTENT_HASH_EXCHANGE_TYPE = "x-consistent-hash";
 
-  public static void main(String[] args) throws IOException, TimeoutException, InterruptedException {
+  public static void main(String[] argv) throws IOException, TimeoutException, InterruptedException {
     ConnectionFactory cf = new ConnectionFactory();
     Connection conn = cf.newConnection();
     Channel ch = conn.createChannel();
@@ -383,6 +383,69 @@ print('Done.')
 conn.close()
 ```
 
+#### Code Example in Java
+
+``` java
+package com.rabbitmq.examples;
+
+import com.rabbitmq.client.*;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeoutException;
+
+public class ConsistentHashExchangeExample2 {
+  public static final String EXCHANGE = "e2";
+  private static String EXCHANGE_TYPE = "x-consistent-hash";
+
+  public static void main(String[] argv) throws IOException, TimeoutException, InterruptedException {
+    ConnectionFactory cf = new ConnectionFactory();
+    Connection conn = cf.newConnection();
+    Channel ch = conn.createChannel();
+
+    for (String q : Arrays.asList("q1", "q2", "q3", "q4")) {
+      ch.queueDeclare(q, true, false, false, null);
+      ch.queuePurge(q);
+    }
+
+    Map<String, Object> args = new HashMap<>();
+    args.put("hash-header", "hash-on");
+    ch.exchangeDeclare(EXCHANGE, EXCHANGE_TYPE, true, false, args);
+
+    for (String q : Arrays.asList("q1", "q2")) {
+      ch.queueBind(q, EXCHANGE, "1");
+    }
+
+    for (String q : Arrays.asList("q3", "q4")) {
+      ch.queueBind(q, EXCHANGE, "2");
+    }
+
+    ch.confirmSelect();
+
+
+    for (int i = 0; i < 100000; i++) {
+      AMQP.BasicProperties.Builder bldr = new AMQP.BasicProperties.Builder();
+      Map<String, Object> hdrs = new HashMap<>();
+      hdrs.put("hash-on", String.valueOf(i));
+      ch.basicPublish(EXCHANGE, "", bldr.headers(hdrs).build(), "".getBytes("UTF-8"));
+    }
+
+    ch.waitForConfirmsOrDie(10000);
+
+    System.out.println("Done publishing!");
+    System.out.println("Evaluating results...");
+    // wait for one stats emission interval so that queue counters
+    // are up-to-date in the management UI
+    Thread.sleep(5);
+
+    System.out.println("Done.");
+    conn.close();
+  }
+}
+```
+
 #### Code Example in Ruby
 
 ``` ruby
@@ -471,7 +534,7 @@ When a `"hash-property"` is specified, the chosen property **must be provided**.
 If published messages do not contain the property, they will all get
 routed to the same **arbitrarily chosen** queue.
 
-### Code Example in Python
+#### Code Example in Python
 
 ``` python
 #!/usr/bin/env python
@@ -518,7 +581,68 @@ print('Done.')
 conn.close()
 ```
 
-### Code Example in Ruby
+#### Code Example in Java
+
+``` java
+package com.rabbitmq.examples;
+
+import com.rabbitmq.client.*;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeoutException;
+
+public class ConsistentHashExchangeExample3 {
+  public static final String EXCHANGE = "e3";
+  private static String EXCHANGE_TYPE = "x-consistent-hash";
+
+  public static void main(String[] argv) throws IOException, TimeoutException, InterruptedException {
+    ConnectionFactory cf = new ConnectionFactory();
+    Connection conn = cf.newConnection();
+    Channel ch = conn.createChannel();
+
+    for (String q : Arrays.asList("q1", "q2", "q3", "q4")) {
+      ch.queueDeclare(q, true, false, false, null);
+      ch.queuePurge(q);
+    }
+
+    Map<String, Object> args = new HashMap<>();
+    args.put("hash-property", "message_id");
+    ch.exchangeDeclare(EXCHANGE, EXCHANGE_TYPE, true, false, args);
+
+    for (String q : Arrays.asList("q1", "q2")) {
+      ch.queueBind(q, EXCHANGE, "1");
+    }
+
+    for (String q : Arrays.asList("q3", "q4")) {
+      ch.queueBind(q, EXCHANGE, "2");
+    }
+
+    ch.confirmSelect();
+
+
+    for (int i = 0; i < 100000; i++) {
+      AMQP.BasicProperties.Builder bldr = new AMQP.BasicProperties.Builder();
+      ch.basicPublish(EXCHANGE, "", bldr.messageId(String.valueOf(i)).build(), "".getBytes("UTF-8"));
+    }
+
+    ch.waitForConfirmsOrDie(10000);
+
+    System.out.println("Done publishing!");
+    System.out.println("Evaluating results...");
+    // wait for one stats emission interval so that queue counters
+    // are up-to-date in the management UI
+    Thread.sleep(5);
+
+    System.out.println("Done.");
+    conn.close();
+  }
+}
+```
+
+#### Code Example in Ruby
 
 ``` ruby
 #!/usr/bin/env ruby
@@ -570,7 +694,7 @@ puts
 conn.close
 ```
 
-### Code Example in Erlang
+#### Code Example in Erlang
 
 ``` erlang
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -628,8 +752,11 @@ hashes it and retrieves a bucket number from the ring, then the bucket and
 its associated queue.
 
 The implementation assumes there is only one binding between a consistent hash
-exchange and a queue. Having more than one bunding is unnecessary because
+exchange and a queue. Having more than one binding is unnecessary because
 queue weight can be provided at the time of binding.
+
+The state of the hash space is distributed across all cluster nodes.
+
 
 ## Continuous Integration
 
@@ -640,5 +767,4 @@ queue weight can be provided at the time of binding.
 (c) 2013-2018 Pivotal Software Inc.
 
 Released under the Mozilla Public License 1.1, same as RabbitMQ.
-See [LICENSE](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange/blob/master/LICENSE) for
-details.
+See [LICENSE](./LICENSE) for details.
