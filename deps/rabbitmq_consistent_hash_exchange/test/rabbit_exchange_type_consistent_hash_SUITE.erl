@@ -211,7 +211,7 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     Count = lists:sum(Counts), %% All messages got routed
 
     %% Chi-square test
-    %% Ho: routing keys are not evenly distributed according to weight
+    %% H0: routing keys are not evenly distributed according to weight
     Expected = [Count div 6, Count div 6, (Count div 6) * 2, (Count div 6) * 2],
     Obs = lists:zip(Counts, Expected),
     Chi = lists:sum([((O - E) * (O - E)) / E || {O, E} <- Obs]),
