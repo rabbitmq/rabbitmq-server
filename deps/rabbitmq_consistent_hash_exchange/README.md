@@ -3,9 +3,9 @@
 ## Introduction
 
 This plugin adds a consistent-hash exchange type to RabbitMQ. This
-exchange type uses consistent hashing ([intro blog post 1](http://www.martinbroadhurst.com/Consistent-Hash-Ring.html), [intro blog post 2](http://michaelnielsen.org/blog/consistent-hashing/)) to distribute
+exchange type uses consistent hashing (intro blog posts: [one](http://www.martinbroadhurst.com/Consistent-Hash-Ring.html), [two](http://michaelnielsen.org/blog/consistent-hashing/), [three](https://akshatm.svbtle.com/consistent-hash-rings-theory-and-implementation)) to distribute
 messages between the bound queues. It is recommended to get a basic understanding of the
-concept before evaluating this plugin.
+concept before evaluating this plugin and its alternatives.
 
 [rabbitmq-sharding](https://github.com/rabbitmq/rabbitmq-sharding) is another plugin
 that provides a way to partition a stream of messages among a set of consumers
@@ -13,23 +13,22 @@ while trading off total stream ordering for processing parallelism.
 
 ## Problem Definition
 
-In various scenarios, you may wish to ensure that messages sent to an
-exchange are consistently and equally distributed across a number of
-different queues based on the routing key of the message, a nominated
-header  (see "Routing on a header" below), or a message property (see
-"Routing on a message property" below). You could arrange for this to
-occur yourself by using a  direct  or topic exchange, binding queues
-to that exchange and then publishing messages to that exchange that
+In various scenarios it may be desired to ensure that messages sent to an
+exchange are reasonably [uniformly distributed](https://en.wikipedia.org/wiki/Uniform_distribution_(discrete)) across a number of
+queues based on the routing key of the message, a [nominated
+header](#routing-on-a-header), or a [message property](#routing-on-a-header).
+Technically this can be accomplished using a direct or topic exchange,
+binding queues to that exchange and then publishing messages to that exchange that
 match the various binding keys.
 
 However, arranging things this way can be problematic:
 
 1. It is difficult to ensure that all queues bound to the exchange
-will receive a (roughly) equal number of messages without baking in to
-the publishers quite a lot of knowledge about the number of queues and
+will receive a (roughly) equal number of messages (distribution uniformity)
+without baking in to the publishers quite a lot of knowledge about the number of queues and
 their bindings.
 
-2. If the number of queues changes, it is not easy to ensure that the
+2. When the number of queues changes, it is not easy to ensure that the
 new topology still distributes messages between the different queues
 evenly.
 
@@ -41,20 +40,41 @@ to the computed hash (and the hash space wraps around). The effect of
 this is that when a new bucket is added or an existing bucket removed,
 only a very few hashes change which bucket they are routed to.
 
-## How Consistent Hashing Routing Works
+## Supported RabbitMQ Versions
+
+This plugin ships with RabbitMQ.
+
+## Supported Erlang Versions
+
+This plugin supports the same [Erlang versions](https://rabbitmq.com/which-erlang.html) as RabbitMQ core.
+
+## Installation
+
+This plugin ships with RabbitMQ. Like all other [RabbitMQ plugins](http://www.rabbitmq.com/plugins.html), it has to be enabled before it can be used:
+
+``` sh
+rabbitmq-plugins enable rabbitmq_consistent_hash_exchange
+```
+
+
+## How It Works
 
 In the case of Consistent Hashing as an exchange type, the hash is
-calculated from the hash of the routing key of each message
-received. Thus messages that have the same routing key will have the
-same hash computed, and thus will be routed to the same queue,
+calculated from a message property (most commonly the routing key).
+Thus messages that have the same routing key will have the
+same hash value computed for them, and thus will be routed to the same queue,
 assuming no bindings have changed.
 
-When you bind a queue to a consistent-hash exchange, the binding key
-is a number-as-a-string which indicates the number of points in the
-hash space at which you wish the queue to appear. The actual points
-are generated randomly.
+### Binding Weights
 
-The hashing distributes *routing keys* among queues, not *messages*
+When a queue is bound to a Consistent Hash exchange, the binding key
+is a number-as-a-string which indicates the binding weight: the number
+of buckets (sections of the range) that will be associated with the
+target queue.
+
+### Consistent Hashing-based Routing
+
+The hashing distributes *routing keys* among queues, not *message payloads*
 among queues; all messages with the same routing key will go the
 same queue.  So, if you wish for queue A to receive twice as many
 routing keys routed to it than are routed to queue B, then you bind
@@ -75,20 +95,200 @@ deletion/death of that queue that does permit the possibility of the
 message being sent to a queue which then disappears before the message
 is processed. Hence in general, at most one queue.
 
-The exchange type is "x-consistent-hash".
-
-## Supported RabbitMQ Versions
-
-This plugin supports RabbitMQ 3.3.x and later versions.
+The exchange type is `"x-consistent-hash"`.
 
 
-## Examples
+## Usage Example
 
-### Erlang
+### The Topology
 
-Here is an example using the Erlang client:
+In the below example the queues `q0` and `q1` get bound each with the weight of 1
+in the hash space to the exchange `e` which means they'll each get
+roughly the same number of routing keys. The queues `q2` and `q3`
+however, get 2 buckets each (their weight is 2) which means they'll each get roughly the
+same number of routing keys too, but that will be approximately twice
+as many as `q0` and `q1`.
 
-```erlang
+Note the `routing_key`s in the bindings are numbers-as-strings. This
+is because AMQP 0-9-1 specifies the `routing_key` field must be a string.
+
+### Choosing Appropriate Weight Values
+
+The example uses low weight values intentionally.
+Higher values will reduce throughput of the exchange, primarily for
+workloads that experience a high binding churn (queues are bound to
+and unbound from a consistent hash exchange frequently).
+Single digit weight values are recommended (and usually sufficient).
+
+### Inspecting Message Counts
+
+The example then publishes 100,000 messages to our
+exchange with random routing keys, the queues will get their share of
+messages roughly equal to the binding keys ratios. After this has
+completed, message distribution between queues can be inspected using
+RabbitMQ's management UI and `rabbitmqctl list_queues`.
+
+## Routing Keys and Uniformity of Distribution
+
+It is important to ensure that the messages being published
+to the exchange have varying routing keys: if a very
+small set of routing keys are being used then there's a possibility of
+messages not being evenly distributed between the bound queues. With a
+large number of bound queues some queues may get no messages routed to
+them at all.
+
+If pseudo-random or unique values such as client/session/request identifiers
+are used for routing keys (or another property used for hashing) then
+reasonably uniform distribution should be observed.
+
+### Code Example in Python
+
+This version of the example uses [Pika](https://pika.readthedocs.io/en/stable/), the most widely used
+Ruby client for RabbitMQ:
+
+``` python
+#!/usr/bin/env python
+
+import pika
+import time
+
+conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+ch   = conn.channel()
+
+ch.exchange_declare(exchange="e", exchange_type="x-consistent-hash", durable=True)
+
+for q in ["q1", "q2", "q3", "q4"]:
+    ch.queue_declare(queue=q, durable=True)
+    ch.queue_purge(queue=q)
+
+for q in ["q1", "q2"]:
+    ch.queue_bind(exchange="e", queue=q, routing_key="1")
+
+for q in ["q3", "q4"]:
+    ch.queue_bind(exchange="e", queue=q, routing_key="2")
+
+n = 100000
+
+for rk in list(map(lambda s: str(s), range(0, n))):
+    ch.basic_publish(exchange="e", routing_key=rk, body="")
+print("Done publishing.")
+
+print("Waiting for routing to finish...")
+# in order to keep this example simpler and focused,
+# wait for a few seconds instead of using publisher confirms and waiting for those
+time.sleep(5)
+
+print("Done.")
+conn.close()
+```
+
+### Code Example in Java
+
+Below is a version of the example that uses
+the official [RabbitMQ Java client](https://www.rabbitmq.com/api-guide.html):
+
+``` java
+package com.rabbitmq.examples;
+
+import com.rabbitmq.client.*;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.concurrent.TimeoutException;
+
+public class ConsistentHashExchangeExample1 {
+  private static String CONSISTENT_HASH_EXCHANGE_TYPE = "x-consistent-hash";
+
+  public static void main(String[] argv) throws IOException, TimeoutException, InterruptedException {
+    ConnectionFactory cf = new ConnectionFactory();
+    Connection conn = cf.newConnection();
+    Channel ch = conn.createChannel();
+
+    for (String q : Arrays.asList("q1", "q2", "q3", "q4")) {
+      ch.queueDeclare(q, true, false, false, null);
+      ch.queuePurge(q);
+    }
+
+    ch.exchangeDeclare("e1", CONSISTENT_HASH_EXCHANGE_TYPE, true, false, null);
+
+    for (String q : Arrays.asList("q1", "q2")) {
+      ch.queueBind(q, "e1", "1");
+    }
+
+    for (String q : Arrays.asList("q3", "q4")) {
+      ch.queueBind(q, "e1", "2");
+    }
+
+    ch.confirmSelect();
+
+    AMQP.BasicProperties.Builder bldr = new AMQP.BasicProperties.Builder();
+    for (int i = 0; i < 100000; i++) {
+      ch.basicPublish("e1", String.valueOf(i), bldr.build(), "".getBytes("UTF-8"));
+    }
+
+    ch.waitForConfirmsOrDie(10000);
+
+    System.out.println("Done publishing!");
+    System.out.println("Evaluating results...");
+    // wait for one stats emission interval so that queue counters
+    // are up-to-date in the management UI
+    Thread.sleep(5);
+
+    System.out.println("Done.");
+    conn.close();
+  }
+}
+```
+
+### Code Example in Ruby
+
+Below is a version that uses [Bunny](http://rubybunny.info), the most widely used
+Ruby client for RabbitMQ:
+
+``` ruby
+#!/usr/bin/env ruby
+
+require 'bunny'
+
+conn = Bunny.new
+conn.start
+
+ch = conn.create_channel
+ch.confirm_select
+
+q1 = ch.queue("q1", durable: true)
+q2 = ch.queue("q2", durable: true)
+q3 = ch.queue("q3", durable: true)
+q4 = ch.queue("q4", durable: true)
+
+[q1, q2, q3, q4]. each(&:purge)
+
+x  = ch.exchange("chx", type: "x-consistent-hash", durable: true)
+
+[q1, q2].each { |q| q.bind(x, routing_key: "1") }
+[q3, q4].each { |q| q.bind(x, routing_key: "2") }
+
+n = 100_000
+n.times do |i|
+  x.publish(i.to_s, routing_key: i.to_s)
+end
+
+ch.wait_for_confirms
+
+# wait for queue stats to be emitted so that management UI numbers
+# are up-to-date
+sleep 5
+conn.close
+puts "Done"
+```
+
+
+### Code Example in Erlang
+
+Below is a version of the example that uses
+the [RabbitMQ Erlang client](https://www.rabbitmq.com/erlang-client-user-guide.html):
+
+``` erlang
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 test() ->
@@ -96,104 +296,467 @@ test() ->
     {ok, Chan} = amqp_connection:open_channel(Conn),
     Queues = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
     amqp_channel:call(Chan,
-                  #'exchange.declare' {
+                  #'exchange.declare'{
                     exchange = <<"e">>, type = <<"x-consistent-hash">>
                   }),
-    [amqp_channel:call(Chan, #'queue.declare' { queue = Q }) || Q <- Queues],
-    [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
-                                             exchange = <<"e">>,
-                                             routing_key = <<"10">> })
+    [amqp_channel:call(Chan, #'queue.declare'{queue = Q}) || Q <- Queues],
+    [amqp_channel:call(Chan, #'queue.bind'{queue = Q,
+                                           exchange = <<"e">>,
+                                           routing_key = <<"1">>})
         || Q <- [<<"q0">>, <<"q1">>]],
-    [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
-                                             exchange = <<"e">>,
-                                             routing_key = <<"20">> })
+    [amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                            exchange = <<"e">>,
+                                            routing_key = <<"2">>})
         || Q <- [<<"q2">>, <<"q3">>]],
-    Msg = #amqp_msg { props = #'P_basic'{}, payload = <<>> },
+    RK = list_to_binary(integer_to_list(random:uniform(1000000))),
+    Msg = #amqp_msg{props = #'P_basic'{}, payload = <<>>},
     [amqp_channel:call(Chan,
                    #'basic.publish'{
                      exchange = <<"e">>,
-                     routing_key = list_to_binary(
-                                     integer_to_list(
-                                       random:uniform(1000000)))
-                   }, Msg) || _ <- lists:seq(1,100000)],
+                     routing_key = RK
+                   }, Msg) || _ <- lists:seq(1, 100000)],
 amqp_connection:close(Conn),
 ok.
 ```
 
-As you can see, the queues `q0` and `q1` get bound each with 10 points
-in the hash space to the exchange `e` which means they'll each get
-roughly the same number of routing keys. The queues `q2` and `q3`
-however, get 20 points each which means they'll each get roughly the
-same number of routing keys too, but that will be approximately twice
-as many as `q0` and `q1`. We then publish 100,000 messages to our
-exchange with random routing keys, the queues will get their share of
-messages roughly equal to the binding keys ratios. After this has
-completed, running `rabbitmqctl list_queues` should show that the
-messages have been distributed approximately as desired.
+## Configuration
 
-Note the `routing_key`s in the bindings are numbers-as-strings. This
-is because AMQP specifies the routing_key must be a string.
-
-The more points in the hash space each binding has, the closer the
-actual distribution will be to the desired distribution (as indicated
-by the ratio of points by binding). However, large numbers of points
-(many thousands) will substantially decrease performance of the
-exchange type.
-
-Equally, it is important to ensure that the messages being published
-to the exchange have a range of different `routing_key`s: if a very
-small set of routing keys are being used then there's a possibility of
-messages not being evenly distributed between the various queues. If
-the routing key is a pseudo-random session ID or such, then good
-results should follow.
-
-## Routing on a header
+### Routing on a Header
 
 Under most circumstances the routing key is a good choice for something to
-hash. However, in some cases you need to use the routing key for some other
+hash. However, in some cases it is necessary to use the routing key for some other
 purpose (for example with more complex routing involving exchange to
-exchange bindings). In this case you can configure the consistent hash
+exchange bindings). In this case it is possible to configure the consistent hash
 exchange to route based on a named header instead. To do this, declare the
 exchange with a string argument called "hash-header" naming the header to
-be used. For example using the Erlang client as above:
+be used.
 
-```erlang
-    amqp_channel:call(
-      Chan, #'exchange.declare' {
-              exchange  = <<"e">>,
-              type      = <<"x-consistent-hash">>,
-              arguments = [{<<"hash-header">>, longstr, <<"hash-me">>}]
-            }).
+When a `"hash-header"` is specified, the chosen header **must be provided**.
+If published messages do not contain the header, they will all get
+routed to the same **arbitrarily chosen** queue.
+
+#### Code Example in Python
+
+``` python
+#!/usr/bin/env python
+
+import pika
+import time
+
+conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+ch   = conn.channel()
+
+args = {u'hash-header': u'hash-on'}
+ch.exchange_declare(exchange='e2',
+                    exchange_type='x-consistent-hash',
+                    arguments=args,
+                    durable=True)
+
+for q in ['q1', 'q2', 'q3', 'q4']:
+    ch.queue_declare(queue=q, durable=True)
+    ch.queue_purge(queue=q)
+
+for q in ['q1', 'q2']:
+    ch.queue_bind(exchange='e2', queue=q, routing_key='1')
+
+for q in ['q3', 'q4']:
+    ch.queue_bind(exchange='e2', queue=q, routing_key='2')
+
+n = 100000
+
+for rk in list(map(lambda s: str(s), range(0, n))):
+    hdrs = {u'hash-on': rk}
+    ch.basic_publish(exchange='e2',
+                     routing_key='',
+                     body='',
+                     properties=pika.BasicProperties(content_type='text/plain',
+                                                     delivery_mode=2,
+                                                     headers=hdrs))
+print('Done publishing.')
+
+print('Waiting for routing to finish...')
+# in order to keep this example simpler and focused,
+# wait for a few seconds instead of using publisher confirms and waiting for those
+time.sleep(5)
+
+print('Done.')
+conn.close()
 ```
 
-If you specify "hash-header" and then publish messages without the named
-header, they will all get routed to the same (arbitrarily-chosen) queue.
+#### Code Example in Java
 
-## Routing on a message property
+``` java
+package com.rabbitmq.examples;
+
+import com.rabbitmq.client.*;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeoutException;
+
+public class ConsistentHashExchangeExample2 {
+  public static final String EXCHANGE = "e2";
+  private static String EXCHANGE_TYPE = "x-consistent-hash";
+
+  public static void main(String[] argv) throws IOException, TimeoutException, InterruptedException {
+    ConnectionFactory cf = new ConnectionFactory();
+    Connection conn = cf.newConnection();
+    Channel ch = conn.createChannel();
+
+    for (String q : Arrays.asList("q1", "q2", "q3", "q4")) {
+      ch.queueDeclare(q, true, false, false, null);
+      ch.queuePurge(q);
+    }
+
+    Map<String, Object> args = new HashMap<>();
+    args.put("hash-header", "hash-on");
+    ch.exchangeDeclare(EXCHANGE, EXCHANGE_TYPE, true, false, args);
+
+    for (String q : Arrays.asList("q1", "q2")) {
+      ch.queueBind(q, EXCHANGE, "1");
+    }
+
+    for (String q : Arrays.asList("q3", "q4")) {
+      ch.queueBind(q, EXCHANGE, "2");
+    }
+
+    ch.confirmSelect();
+
+
+    for (int i = 0; i < 100000; i++) {
+      AMQP.BasicProperties.Builder bldr = new AMQP.BasicProperties.Builder();
+      Map<String, Object> hdrs = new HashMap<>();
+      hdrs.put("hash-on", String.valueOf(i));
+      ch.basicPublish(EXCHANGE, "", bldr.headers(hdrs).build(), "".getBytes("UTF-8"));
+    }
+
+    ch.waitForConfirmsOrDie(10000);
+
+    System.out.println("Done publishing!");
+    System.out.println("Evaluating results...");
+    // wait for one stats emission interval so that queue counters
+    // are up-to-date in the management UI
+    Thread.sleep(5);
+
+    System.out.println("Done.");
+    conn.close();
+  }
+}
+```
+
+#### Code Example in Ruby
+
+``` ruby
+#!/usr/bin/env ruby
+
+require 'bundler'
+Bundler.setup(:default, :test)
+require 'bunny'
+
+conn = Bunny.new
+conn.start
+
+ch = conn.create_channel
+ch.confirm_select
+
+q1 = ch.queue("q1", durable: true)
+q2 = ch.queue("q2", durable: true)
+q3 = ch.queue("q3", durable: true)
+q4 = ch.queue("q4", durable: true)
+
+[q1, q2, q3, q4]. each(&:purge)
+
+x  = ch.exchange("x2", type: "x-consistent-hash", durable: true, arguments: {"hash-header" => "hash-on"})
+
+[q1, q2].each { |q| q.bind(x, routing_key: "1") }
+[q3, q4].each { |q| q.bind(x, routing_key: "2") }
+
+n = 100_000
+(0..n).map(&:to_s).each do |i|
+  x.publish(i.to_s, routing_key: rand.to_s, headers: {"hash-on": i})
+end
+
+ch.wait_for_confirms
+puts "Done publishing!"
+
+sleep 5
+puts "Done"
+```
+
+#### Code Example in Erlang
+
+With RabbitMQ Erlang client:
+
+``` erlang
+-include_lib("amqp_client/include/amqp_client.hrl").
+
+test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Queues = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
+    amqp_channel:call(
+      Chan, #'exchange.declare'{
+              exchange  = <<"e">>,
+              type      = <<"x-consistent-hash">>,
+              arguments = [{<<"hash-header">>, longstr, <<"hash-on">>}]
+            }),
+    [amqp_channel:call(Chan, #'queue.declare'{queue = Q}) || Q <- Queues],
+    [amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                            exchange = <<"e">>,
+                                            routing_key = <<"1">>})
+        || Q <- [<<"q0">>, <<"q1">>]],
+    [amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                            exchange = <<"e">>,
+                                            routing_key = <<"2">>})
+        || Q <- [<<"q2">>, <<"q3">>]],
+    RK = list_to_binary(integer_to_list(random:uniform(1000000))),
+    Msg = #amqp_msg {props = #'P_basic'{headers = [{<<"hash-on">>, longstr, RK}]}, payload = <<>>},
+    [amqp_channel:call(Chan,
+                   #'basic.publish'{
+                     exchange = <<"e">>,
+                     routing_key = <<"">>,
+                   }, Msg) || _ <- lists:seq(1, 100000)],
+amqp_connection:close(Conn),
+ok.
+```
+
+
+### Routing on a Message Property
 
 In addition to a value in the header property, you can also route on the
-``message_id``, ``correlation_id``, or ``timestamp`` message property. To do so,
-declare the exchange with a string argument called "hash-property" naming the
-property to be used. For example using the Erlang client as above:
+``message_id``, ``correlation_id``, or ``timestamp`` message properties. To do so,
+declare the exchange with a string argument called ``"hash-property"`` naming the
+property to be used.
 
-```erlang
-    amqp_channel:call(
-      Chan, #'exchange.declare' {
-              exchange  = <<"e">>,
-              type      = <<"x-consistent-hash">>,
-              arguments = [{<<"hash-property">>, longstr, <<"message_id">>}]
-            }).
+When a `"hash-property"` is specified, the chosen property **must be provided**.
+If published messages do not contain the property, they will all get
+routed to the same **arbitrarily chosen** queue.
+
+#### Code Example in Python
+
+``` python
+#!/usr/bin/env python
+
+import pika
+import time
+
+conn = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+ch   = conn.channel()
+
+args = {u'hash-property': u'message_id'}
+ch.exchange_declare(exchange='e3',
+                    exchange_type='x-consistent-hash',
+                    arguments=args,
+                    durable=True)
+
+for q in ['q1', 'q2', 'q3', 'q4']:
+    ch.queue_declare(queue=q, durable=True)
+    ch.queue_purge(queue=q)
+
+for q in ['q1', 'q2']:
+    ch.queue_bind(exchange='e3', queue=q, routing_key='1')
+
+for q in ['q3', 'q4']:
+    ch.queue_bind(exchange='e3', queue=q, routing_key='2')
+
+n = 100000
+
+for rk in list(map(lambda s: str(s), range(0, n))):
+    ch.basic_publish(exchange='e3',
+                     routing_key='',
+                     body='',
+                     properties=pika.BasicProperties(content_type='text/plain',
+                                                     delivery_mode=2,
+                                                     message_id=rk))
+print('Done publishing.')
+
+print('Waiting for routing to finish...')
+# in order to keep this example simpler and focused,
+# wait for a few seconds instead of using publisher confirms and waiting for those
+time.sleep(5)
+
+print('Done.')
+conn.close()
 ```
 
-Note that you can not declare an exchange that routes on both "hash-header" and
-"hash-property". If you specify "hash-property" and then publish messages without
-a value in the named property, they will all get routed to the same
-(arbitrarily-chosen) queue.
+#### Code Example in Java
+
+``` java
+package com.rabbitmq.examples;
+
+import com.rabbitmq.client.*;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeoutException;
+
+public class ConsistentHashExchangeExample3 {
+  public static final String EXCHANGE = "e3";
+  private static String EXCHANGE_TYPE = "x-consistent-hash";
+
+  public static void main(String[] argv) throws IOException, TimeoutException, InterruptedException {
+    ConnectionFactory cf = new ConnectionFactory();
+    Connection conn = cf.newConnection();
+    Channel ch = conn.createChannel();
+
+    for (String q : Arrays.asList("q1", "q2", "q3", "q4")) {
+      ch.queueDeclare(q, true, false, false, null);
+      ch.queuePurge(q);
+    }
+
+    Map<String, Object> args = new HashMap<>();
+    args.put("hash-property", "message_id");
+    ch.exchangeDeclare(EXCHANGE, EXCHANGE_TYPE, true, false, args);
+
+    for (String q : Arrays.asList("q1", "q2")) {
+      ch.queueBind(q, EXCHANGE, "1");
+    }
+
+    for (String q : Arrays.asList("q3", "q4")) {
+      ch.queueBind(q, EXCHANGE, "2");
+    }
+
+    ch.confirmSelect();
+
+
+    for (int i = 0; i < 100000; i++) {
+      AMQP.BasicProperties.Builder bldr = new AMQP.BasicProperties.Builder();
+      ch.basicPublish(EXCHANGE, "", bldr.messageId(String.valueOf(i)).build(), "".getBytes("UTF-8"));
+    }
+
+    ch.waitForConfirmsOrDie(10000);
+
+    System.out.println("Done publishing!");
+    System.out.println("Evaluating results...");
+    // wait for one stats emission interval so that queue counters
+    // are up-to-date in the management UI
+    Thread.sleep(5);
+
+    System.out.println("Done.");
+    conn.close();
+  }
+}
+```
+
+#### Code Example in Ruby
+
+``` ruby
+#!/usr/bin/env ruby
+
+require 'bundler'
+Bundler.setup(:default, :test)
+require 'bunny'
+
+conn = Bunny.new
+conn.start
+
+ch = conn.create_channel
+ch.confirm_select
+
+q1 = ch.queue("q1", durable: true)
+q2 = ch.queue("q2", durable: true)
+q3 = ch.queue("q3", durable: true)
+q4 = ch.queue("q4", durable: true)
+
+[q1, q2, q3, q4].each(&:purge)
+
+x  = ch.exchange("x3", type: "x-consistent-hash", durable: true, arguments: {"hash-property" => "message_id"})
+
+[q1, q2].each { |q| q.bind(x, routing_key: "1") }
+[q3, q4].each { |q| q.bind(x, routing_key: "2") }
+
+n = 100_000
+(0..n).map(&:to_s).each do |i|
+  x.publish(i.to_s, routing_key: rand.to_s, message_id: i)
+end
+
+ch.wait_for_confirms
+puts "Done publishing!"
+
+sleep 5
+
+puts "Evaluating results..."
+
+def format_as_percent(count, total)
+  ((count.to_f/total).floor(4) * 100).to_f.floor(2)
+end
+
+puts "Q1 has #{q1.message_count} messages ready (#{format_as_percent(q1.message_count, n)}%)"
+puts "Q2 has #{q2.message_count} messages ready (#{format_as_percent(q2.message_count, n)}%)"
+puts "Q3 has #{q3.message_count} messages ready (#{format_as_percent(q3.message_count, n)}%)"
+puts "Q4 has #{q4.message_count} messages ready (#{format_as_percent(q4.message_count, n)}%)"
+puts
+
+conn.close
+```
+
+#### Code Example in Erlang
+
+``` erlang
+-include_lib("amqp_client/include/amqp_client.hrl").
+
+test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Queues = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
+    amqp_channel:call(Chan,
+                  #'exchange.declare'{
+                    exchange = <<"e">>, type = <<"x-consistent-hash">>,
+                    arguments = {<<"hash-property">>, longstr, <<"message_id">>}                    
+                  }),
+    [amqp_channel:call(Chan, #'queue.declare'{queue = Q}) || Q <- Queues],
+    [amqp_channel:call(Chan, #'queue.bind'{queue = Q,
+                                           exchange = <<"e">>,
+                                           routing_key = <<"1">>})
+        || Q <- [<<"q0">>, <<"q1">>]],
+    [amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                            exchange = <<"e">>,
+                                            routing_key = <<"2">>})
+        || Q <- [<<"q2">>, <<"q3">>]],
+    RK = list_to_binary(integer_to_list(random:uniform(1000000)),
+    Msg = #amqp_msg{props = #'P_basic'{message_id = RK}, payload = <<>>},
+    [amqp_channel:call(Chan,
+                   #'basic.publish'{
+                     exchange = <<"e">>,
+                     routing_key = <<"">>,
+                     )
+                   }, Msg) || _ <- lists:seq(1, 100000)],
+amqp_connection:close(Conn),
+ok.
+```
+
 
 ## Getting Help
 
-Any comments or feedback welcome, to the
+If you have questions or need help, feel free to ask on the
 [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
+
+
+## Implementation Details
+
+The hash function used in this plugin as of RabbitMQ 3.7.8
+is [A Fast, Minimal Memory, Consistent Hash Algorithm](https://arxiv.org/abs/1406.2294) by Lamping and Veach.
+
+When a queue is bound to a consistent hash exchange, the protocol method, `queue.bind`,
+carries a weight in the routing (binding) key. The binding is given
+a number of buckets on the hash ring (hash space) equal to the weight.
+When a queue is unbound, the buckets added for the binding are deleted.
+These two operations use linear algorithms to update the ring.
+
+To perform routing the exchange extract the appropriate value for hashing,
+hashes it and retrieves a bucket number from the ring, then the bucket and
+its associated queue.
+
+The implementation assumes there is only one binding between a consistent hash
+exchange and a queue. Having more than one binding is unnecessary because
+queue weight can be provided at the time of binding.
+
+The state of the hash space is distributed across all cluster nodes.
+
 
 ## Continuous Integration
 
@@ -201,8 +764,7 @@ Any comments or feedback welcome, to the
 
 ## Copyright and License
 
-(c) 2013-2015 Pivotal Software Inc.
+(c) 2013-2018 Pivotal Software Inc.
 
 Released under the Mozilla Public License 1.1, same as RabbitMQ.
-See [LICENSE](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange/blob/master/LICENSE) for
-details.
+See [LICENSE](./LICENSE) for details.
