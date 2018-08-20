@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
 
-export RABBITMQ_SCRIPTS_DIR="$BATS_TEST_DIRNAME/../scripts"
-export _rabbitmq_env_load='false'
+RABBITMQ_SCRIPTS_DIR="$BATS_TEST_DIRNAME/../scripts"
+_rabbitmq_env_load='false'
 
 setup() {
-    export RABBITMQ_CONF_ENV_FILE="$BATS_TMPDIR/rabbitmq-config.$BATS_TEST_NAME.conf"
+    RABBITMQ_CONF_ENV_FILE="$BATS_TMPDIR/rabbitmq-config.$BATS_TEST_NAME.conf"
     rm -f "$RABBITMQ_CONF_ENV_FILE"
 }
 

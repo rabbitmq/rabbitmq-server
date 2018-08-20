@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
 
-export RABBITMQ_SCRIPTS_DIR="$BATS_TEST_DIRNAME/../scripts"
-export _rabbitmq_env_load='false'
+RABBITMQ_SCRIPTS_DIR="$BATS_TEST_DIRNAME/../scripts"
+_rabbitmq_env_load='false'
 
 setup() {
-    export RABBITMQ_CONF_ENV_FILE="$BATS_TMPDIR/rabbitmq-config.$BATS_TEST_NAME.conf"
+    RABBITMQ_CONF_ENV_FILE="$BATS_TMPDIR/rabbitmq-config.$BATS_TEST_NAME.conf"
     rm -f "$RABBITMQ_CONF_ENV_FILE"
 }
 
@@ -14,9 +14,9 @@ setup() {
 
     if [[ -n $HOSTNAME ]]
     then
-	_want="rabbit@$HOSTNAME"
+        _want="rabbit@$HOSTNAME"
     else
-	_want="rabbit@$(hostname)"
+        _want="rabbit@$(hostname)"
     fi
 
     echo "expected RABBITMQ_NODENAME to be \"$_want\", but got: \"$RABBITMQ_NODENAME\""
@@ -31,9 +31,9 @@ setup() {
 
     if [[ -n $HOSTNAME ]]
     then
-	_want="rabbit@$HOSTNAME"
+        _want="rabbit@$HOSTNAME"
     else
-	_want="rabbit@$(hostname -f)"
+        _want="rabbit@$(hostname -f)"
     fi
 
     echo "expected RABBITMQ_NODENAME to be \"$_want\", but got: \"$RABBITMQ_NODENAME\""

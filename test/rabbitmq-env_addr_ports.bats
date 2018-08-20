@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
-export RABBITMQ_SCRIPTS_DIR="$BATS_TEST_DIRNAME/../scripts"
-export _rabbitmq_env_load='false'
+RABBITMQ_SCRIPTS_DIR="$BATS_TEST_DIRNAME/../scripts"
+_rabbitmq_env_load='false'
 
 readonly _default_rmq_node_port=''
 readonly _default_rmq_dist_port=25672
@@ -10,7 +10,7 @@ readonly _default_ctl_dist_port_max=35682
 readonly _default_rmq_node_ip=''
 
 setup() {
-    export RABBITMQ_CONF_ENV_FILE="$BATS_TMPDIR/rabbitmq-config.$BATS_TEST_NAME.conf"
+    RABBITMQ_CONF_ENV_FILE="$BATS_TMPDIR/rabbitmq-config.$BATS_TEST_NAME.conf"
     rm -f "$RABBITMQ_CONF_ENV_FILE"
 }
 
@@ -38,13 +38,13 @@ _validate()
     [[ $RABBITMQ_NODE_IP_ADDRESS == "$_want_rmq_node_ip" ]]
 }
 
-@test "default ip address and port arguments" {
+@test "default RABBITMQ_NODE_IP_ADDRESS and port arguments" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
     _rmq_env_config_addr_ports
     _validate
 }
 
-@test "can configure ip address via rabbitmq-env.conf file" {
+@test "can configure RABBITMQ_NODE_IP_ADDRESS via rabbitmq-env.conf file" {
     _want_rmq_node_port=5672
     _want_ip_address='127.1.1.1'
 
@@ -54,13 +54,13 @@ _validate()
     _rmq_env_config_addr_ports
 
     _validate "$_want_rmq_node_port" \
-    	      "$_default_rmq_dist_port" \
-    	      "$_default_ctl_dist_port_min" \
-    	      "$_default_ctl_dist_port_max" \
-	      "$_want_ip_address"
+              "$_default_rmq_dist_port" \
+              "$_default_ctl_dist_port_min" \
+              "$_default_ctl_dist_port_max" \
+              "$_want_ip_address"
 }
 
-@test "can configure ip address and AMQP port via rabbitmq-env.conf file" {
+@test "can configure RABBITMQ_NODE_IP_ADDRESS and RABBITMQ_NODE_PORT via rabbitmq-env.conf file" {
     _want_rmq_node_port=5671
     _want_rmq_dist_port=25671
     _want_ctl_dist_port_min=35671
@@ -74,13 +74,13 @@ _validate()
     _rmq_env_config_addr_ports
 
     _validate "$_want_rmq_node_port" \
-    	      "$_want_rmq_dist_port" \
-    	      "$_want_ctl_dist_port_min" \
-    	      "$_want_ctl_dist_port_max" \
-	      "$_want_ip_address"
+              "$_want_rmq_dist_port" \
+              "$_want_ctl_dist_port_min" \
+              "$_want_ctl_dist_port_max" \
+          "$_want_ip_address"
 }
 
-@test "can configure AMQP port via rabbitmq-env.conf file" {
+@test "can configure RABBITMQ_NODE_PORT via rabbitmq-env.conf file" {
     _want_rmq_node_port=10000
     _want_rmq_dist_port=30000
     _want_ctl_dist_port_min=40000
@@ -93,13 +93,13 @@ _validate()
     _rmq_env_config_addr_ports
 
     _validate "$_want_rmq_node_port" \
-    	      "$_want_rmq_dist_port" \
-    	      "$_want_ctl_dist_port_min" \
-    	      "$_want_ctl_dist_port_max" \
-	      "$_want_ip_address"
+              "$_want_rmq_dist_port" \
+              "$_want_ctl_dist_port_min" \
+              "$_want_ctl_dist_port_max" \
+          "$_want_ip_address"
 }
 
-@test "can configure disterl port via rabbitmq-env.conf file" {
+@test "can configure RABBITMQ_DIST_PORT, RABBITMQ_CTL_DIST_PORT_(MIN|MAX) via rabbitmq-env.conf file" {
     _want_rmq_dist_port=1234
     _want_ctl_dist_port_min=11234
     _want_ctl_dist_port_max=11244
@@ -110,13 +110,13 @@ _validate()
     _rmq_env_config_addr_ports
 
     _validate "$_default_rmq_node_port" \
-    	      "$_want_rmq_dist_port" \
-    	      "$_want_ctl_dist_port_min" \
-    	      "$_want_ctl_dist_port_max" \
-	      "$_default_ip_address"
+              "$_want_rmq_dist_port" \
+              "$_want_ctl_dist_port_min" \
+              "$_want_ctl_dist_port_max" \
+          "$_default_ip_address"
 }
 
-@test "can configure ctl dist port min and max via env" {
+@test "can configure RABBITMQ_CTL_DIST_PORT_(MIN|MAX) via env" {
     _want_ctl_dist_port_min=10000
     _want_ctl_dist_port_max=11000
 
@@ -127,13 +127,13 @@ _validate()
     _rmq_env_config_addr_ports
 
     _validate "$_default_rmq_node_port" \
-    	      "$_default_rmq_dist_port" \
-    	      "$_want_ctl_dist_port_min" \
-    	      "$_want_ctl_dist_port_max" \
-	      "$_default_ip_address"
+              "$_default_rmq_dist_port" \
+              "$_want_ctl_dist_port_min" \
+              "$_want_ctl_dist_port_max" \
+          "$_default_ip_address"
 }
 
-@test "can configure ctl dist port min and max via rabbitmq-env.conf file" {
+@test "can configure  RABBITMQ_CTL_DIST_PORT_(MIN|MAX) via rabbitmq-env.conf file" {
     _want_ctl_dist_port_min=10000
     _want_ctl_dist_port_max=11000
 
@@ -144,8 +144,8 @@ _validate()
     _rmq_env_config_addr_ports
 
     _validate "$_default_rmq_node_port" \
-    	      "$_default_rmq_dist_port" \
-    	      "$_want_ctl_dist_port_min" \
-    	      "$_want_ctl_dist_port_max" \
-	      "$_default_ip_address"
+              "$_default_rmq_dist_port" \
+              "$_want_ctl_dist_port_min" \
+              "$_want_ctl_dist_port_max" \
+              "$_default_ip_address"
 }
