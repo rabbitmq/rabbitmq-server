@@ -95,6 +95,13 @@ _rmq_env_initialize()
         # shellcheck source=/dev/null
         . "$RABBITMQ_CONF_ENV_FILE"
     fi
+
+    # We save the current value of $RABBITMQ_PID_FILE in case it was set by
+    # an init script. If $CONF_ENV_FILE overrides it again, we must ignore
+    # it and warn the user.
+    _rmq_env_saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
+    unset RABBITMQ_PID_FILE
+
     return 0
 }
 
@@ -255,7 +262,7 @@ _rmq_env_config_names()
 {
     [ -z "$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_USE_LONGNAME="$USE_LONGNAME"
 
-    if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ]; then
+    if [ 'xtrue' = "x$RABBITMQ_USE_LONGNAME" ]; then
         # shellcheck disable=SC2034
         RABBITMQ_NAME_TYPE='-name'
         [ -z "$HOSTNAME" ] && HOSTNAME="$(hostname -f)"
@@ -386,12 +393,6 @@ _rmq_env_config_pid_file()
 
     [ -z "$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE="$PID_FILE"
     [ -z "$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE="$RABBITMQ_MNESIA_DIR.pid"
-    _rmq_env_normalize_path_var RABBITMQ_PID_FILE
-
-    # We save the current value of $RABBITMQ_PID_FILE in case it was set by
-    # an init script. If $CONF_ENV_FILE overrides it again, we must ignore
-    # it and warn the user.
-    _rmq_env_saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
 
     if [ -n "$_rmq_env_saved_RABBITMQ_PID_FILE" ] && \
         [ "$_rmq_env_saved_RABBITMQ_PID_FILE" != "$RABBITMQ_PID_FILE" ]; then
@@ -402,6 +403,9 @@ _rmq_env_config_pid_file()
 
         RABBITMQ_PID_FILE="$_rmq_env_saved_RABBITMQ_PID_FILE"
     fi
+
+    _rmq_env_normalize_path_var RABBITMQ_PID_FILE
+
     unset _rmq_env_saved_RABBITMQ_PID_FILE
     return 0
 }
