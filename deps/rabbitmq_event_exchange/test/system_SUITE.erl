@@ -16,6 +16,7 @@
 
 -module(system_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -463,14 +464,16 @@ resource_alarm(Config) ->
 unregister(Config) ->
     X = rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.event">>),
 
-    {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange,
-                                           lookup, [X]),
+    ?assertMatch({ok, _},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange,
+                                              lookup, [X])),
 
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange_type_event,
                                  unregister, []),
 
-    {error, not_found} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange,
-                                                      lookup, [X]),
+    ?assertEqual({error, not_found},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange,
+                                              lookup, [X])),
     ok.
 
 %% -------------------------------------------------------------------
