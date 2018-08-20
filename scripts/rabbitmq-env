@@ -20,8 +20,6 @@ if [ "$RABBITMQ_ENV_LOADED" = 1 ]; then
     return 0;
 fi
 
-# internal functions start
-
 _rmq_env_now()
 {
     date '+%Y-%m-%d %H:%M:%S'
@@ -34,8 +32,6 @@ _rmq_env_perr()
 
 _rmq_env_initialize()
 {
-    readonly _rmq_env_0="$1"
-
     if [ -z "$RABBITMQ_SCRIPTS_DIR" ]; then
         # We set +e here since since our test for "readlink -f" below needs to
         # be able to fail.
@@ -118,7 +114,8 @@ _rmq_env_cleanup()
     unset _rmq_env_logs_configured
 
     # _rmq_env_config_mnesia_dirs vars
-    unset _rmq_env_mnesia_dirs_configured
+    # Note: do *not* unset _rmq_env_mnesia_dirs_configured
+    # as the run_escript function depends on it
 
     # _rmq_env_initialize vars
     unset _rmq_env_saved_RABBITMQ_PID_FILE
@@ -251,10 +248,6 @@ _rmq_env_path_contains_existing_directory()
     return 1
 }
 
-# internal functions end
-
-# configuration functions start
-
 _rmq_env_config_addr_ports()
 {
     _rmq_env_default_node_port=5672
@@ -300,6 +293,130 @@ _rmq_env_config_names()
     fi
 
     [ -z "$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME="$NODENAME"
+    return 0
+}
+
+_rmq_env_config_mnesia_dirs()
+{
+    [ -z "$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE="$MNESIA_BASE"
+    [ -z "$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR="$MNESIA_DIR"
+    [ -z "$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR="$RABBITMQ_MNESIA_BASE/$RABBITMQ_NODENAME"
+
+    _rmq_env_normalize_path_var \
+        RABBITMQ_MNESIA_BASE \
+        RABBITMQ_MNESIA_DIR
+
+    _rmq_env_mnesia_dirs_configured='true'
+    return 0
+}
+
+_rmq_env_config_plugins()
+{
+    # NOTE: requires RABBITMQ_MNESIA_BASE
+    if [ "$_rmq_env_mnesia_dirs_configured" != 'true' ]
+    then
+        _rmq_env_perr '_rmq_env_config_mnesia_dirs is not true (_rmq_env_config_plugins)'
+        return 1
+    fi
+
+    [ -z "$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="$PLUGINS_EXPAND_DIR"
+    [ -z "$RABBITMQ_PLUGINS_EXPAND_DIR" ] && \
+        RABBITMQ_PLUGINS_EXPAND_DIR="$RABBITMQ_MNESIA_BASE/${RABBITMQ_NODENAME}-plugins-expand"
+
+    [ -n "$RABBITMQ_ENABLED_PLUGINS_FILE" ] && _rmq_env_enabled_plugins_file_source='environment'
+    [ -z "$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE="$ENABLED_PLUGINS_FILE"
+
+    [ -n "$RABBITMQ_PLUGINS_DIR" ] && _rmq_env_plugins_dir_source='environment'
+    [ -z "$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="$PLUGINS_DIR"
+
+    _rmq_env_normalize_path_var RABBITMQ_PLUGINS_EXPAND_DIR \
+        RABBITMQ_ENABLED_PLUGINS_FILE \
+        RABBITMQ_PLUGINS_DIR
+
+    _rmq_env_plugins_configured='true'
+    return 0
+}
+
+_rmq_env_config_logs()
+{
+    [ -z "$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE="$LOG_BASE"
+    _rmq_env_normalize_path_var RABBITMQ_LOG_BASE
+
+    ## Log rotation
+    [ -z "$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="$LOGS"
+
+    # NOTE: RABBITMQ_LOGS_source is read by sub-processes which is
+    # why it is exported
+    [ -n "$RABBITMQ_LOGS" ] && export RABBITMQ_LOGS_source='environment'
+    [ -z "$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="$RABBITMQ_LOG_BASE/$RABBITMQ_NODENAME.log"
+
+    # shellcheck disable=SC2154
+    [ -z "$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="$RABBITMQ_LOG_BASE/${RABBITMQ_NODENAME}_upgrade.log"
+
+    _rmq_env_normalize_path_var RABBITMQ_LOGS \
+        RABBITMQ_UPGRADE_LOG
+
+    _rmq_env_logs_configured='true'
+    return 0
+}
+
+_rmq_env_config_schema_dir()
+{
+    [ -z "$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR="$SCHEMA_DIR"
+    _rmq_env_schema_dir_configured='true'
+    return 0
+}
+
+_rmq_env_misc()
+{
+    [ -z "$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE="$IO_THREAD_POOL_SIZE"
+
+    [ -z "$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH="$SERVER_CODE_PATH"
+
+    [ -z "$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT='true'
+    # shellcheck disable=SC2034
+    [ 'xtrue' = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
+
+    [ -z "$ERL_CRASH_DUMP" ] && ERL_CRASH_DUMP="$RABBITMQ_LOG_BASE/erl_crash.dump"
+}
+
+_rmq_env_config_start_args()
+{
+    [ -z "$RABBITMQ_BOOT_MODULE" ] && RABBITMQ_BOOT_MODULE="$BOOT_MODULE"
+    [ -z "$RABBITMQ_ALLOW_INPUT" ] && _rmq_env_noinput_arg='-noinput'
+    [ -z "$RABBITMQ_NODE_ONLY" ] && _rmq_env_node_only_arg="-s $RABBITMQ_BOOT_MODULE boot"
+    [ -n "$_rmq_env_noinput_arg" ] && [ -n "$_rmq_env_node_only_arg" ] && _rmq_env_maybe_space=' '
+
+    # shellcheck disable=SC2034
+    _rmq_env_start_rabbit="${_rmq_env_noinput_arg}${_rmq_env_maybe_space}${_rmq_env_node_only_arg}"
+
+    unset _rmq_env_noinput_arg
+    unset _rmq_env_node_only_arg
+    unset _rmq_env_maybe_space
+    return 0
+}
+
+_rmq_env_config_alloc_args()
+{
+    # The default allocation strategy RabbitMQ is using was introduced
+    # in Erlang/OTP 20.2.3. Earlier Erlang versions fail to start with
+    # this configuration. We therefore need to ensure that erl accepts
+    # these values before we can use them.
+    #
+    # The defaults are meant to reduce RabbitMQ's memory usage and help
+    # it reclaim memory at the cost of a slight decrease in performance
+    # (due to an increase in memory operations). These defaults can be
+    # overriden using the RABBITMQ_SERVER_ERL_ARGS variable.
+    # shellcheck disable=SC2034
+    #
+    # Note: the default value is
+    #   +MBas ageffcbf
+    #   +MHas ageffcbf
+    #   +MBlmbcs 512
+    #   +MHlmbcs 512
+    #   +MMmcs 30
+    [ -z "$ALLOC_ARGS" ] && ALLOC_ARGS="+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30"
+    [ -z "$RABBITMQ_ALLOC_ARGS" ] && RABBITMQ_ALLOC_ARGS="$ALLOC_ARGS"
     return 0
 }
 
@@ -357,60 +474,6 @@ _rmq_env_config_erl_args()
     return 0
 }
 
-_rmq_env_config_start_args()
-{
-    [ -z "$RABBITMQ_BOOT_MODULE" ] && RABBITMQ_BOOT_MODULE="$BOOT_MODULE"
-    [ -z "$RABBITMQ_ALLOW_INPUT" ] && _rmq_env_noinput_arg='-noinput'
-    [ -z "$RABBITMQ_NODE_ONLY" ] && _rmq_env_node_only_arg="-s $RABBITMQ_BOOT_MODULE boot"
-    [ -n "$_rmq_env_noinput_arg" ] && [ -n "$_rmq_env_node_only_arg" ] && _rmq_env_maybe_space=' '
-
-    # shellcheck disable=SC2034
-    _rmq_env_start_rabbit="${_rmq_env_noinput_arg}${_rmq_env_maybe_space}${_rmq_env_node_only_arg}"
-
-    unset _rmq_env_noinput_arg
-    unset _rmq_env_node_only_arg
-    unset _rmq_env_maybe_space
-    return 0
-}
-
-_rmq_env_config_alloc_args()
-{
-    # The default allocation strategy RabbitMQ is using was introduced
-    # in Erlang/OTP 20.2.3. Earlier Erlang versions fail to start with
-    # this configuration. We therefore need to ensure that erl accepts
-    # these values before we can use them.
-    #
-    # The defaults are meant to reduce RabbitMQ's memory usage and help
-    # it reclaim memory at the cost of a slight decrease in performance
-    # (due to an increase in memory operations). These defaults can be
-    # overriden using the RABBITMQ_SERVER_ERL_ARGS variable.
-    # shellcheck disable=SC2034
-    #
-    # Note: the default value is
-    #   +MBas ageffcbf
-    #   +MHas ageffcbf
-    #   +MBlmbcs 512
-    #   +MHlmbcs 512
-    #   +MMmcs 30
-    [ -z "$ALLOC_ARGS" ] && ALLOC_ARGS="+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30"
-    [ -z "$RABBITMQ_ALLOC_ARGS" ] && RABBITMQ_ALLOC_ARGS="$ALLOC_ARGS"
-    return 0
-}
-
-_rmq_env_config_mnesia_dirs()
-{
-    [ -z "$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE="$MNESIA_BASE"
-    [ -z "$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR="$MNESIA_DIR"
-    [ -z "$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR="$RABBITMQ_MNESIA_BASE/$RABBITMQ_NODENAME"
-
-    _rmq_env_normalize_path_var \
-        RABBITMQ_MNESIA_BASE \
-        RABBITMQ_MNESIA_DIR
-
-    _rmq_env_mnesia_dirs_configured='true'
-    return 0
-}
-
 _rmq_env_config_pid_file()
 {
     if [ "$_rmq_env_mnesia_dirs_configured" != 'true' ]
@@ -423,203 +486,20 @@ _rmq_env_config_pid_file()
     [ -z "$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE="$RABBITMQ_MNESIA_DIR.pid"
 
     if [ -n "$_rmq_env_saved_RABBITMQ_PID_FILE" ] && \
-        [ "$_rmq_env_saved_RABBITMQ_PID_FILE" != "$RABBITMQ_PID_FILE" ]; then
-        echo "WARNING: RABBITMQ_PID_FILE was already set by the init script to:" 1>&2
-        echo "           $_rmq_env_saved_RABBITMQ_PID_FILE" 1>&2
-        echo "         The value set in rabbitmq-env.conf is ignored because it" 1>&2
-        echo "         would break the init script." 1>&2
-
+        [ "$_rmq_env_saved_RABBITMQ_PID_FILE" != "$RABBITMQ_PID_FILE" ]
+    then
+        if [ -z "$RABBITMQ_DEV_ENV" ]
+        then
+            echo "$(_rmq_env_now) [warning]: RABBITMQ_PID_FILE was already set in the environment to:" 1>&2
+            echo "                               '$_rmq_env_saved_RABBITMQ_PID_FILE'" 1>&2
+            echo '                               Ignoring the default value and/or the value set in rabbitmq-env.conf' 1>&2
+        fi
         RABBITMQ_PID_FILE="$_rmq_env_saved_RABBITMQ_PID_FILE"
     fi
 
     _rmq_env_normalize_path_var RABBITMQ_PID_FILE
 
     return 0
-}
-
-_rmq_env_config_config_files()
-{
-    if [ "$_rmq_env_schema_dir_configured" != 'true' ]
-    then
-        _rmq_env_perr '_rmq_env_schema_dir_configured is not true (_rmq_env_config_config_files)'
-        return 1
-    fi
-
-    [ -z "$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE="$CONFIG_FILE"
-    [ -z "$RABBITMQ_GENERATED_CONFIG_DIR" ] && RABBITMQ_GENERATED_CONFIG_DIR="$GENERATED_CONFIG_DIR"
-    [ -z "$RABBITMQ_ADVANCED_CONFIG_FILE" ] && RABBITMQ_ADVANCED_CONFIG_FILE="$ADVANCED_CONFIG_FILE"
-
-    _rmq_env_normalize_path_var RABBITMQ_CONFIG_FILE
-
-    # Check that advanced config file has the .config extension
-    # Add .config extension if it's empty
-    RABBITMQ_ADVANCED_CONFIG_FILE_NOEX="$(_rmq_env_get_noex "$RABBITMQ_ADVANCED_CONFIG_FILE")"
-    if [ "$RABBITMQ_ADVANCED_CONFIG_FILE_NOEX.config" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ] || \
-        [ "$RABBITMQ_ADVANCED_CONFIG_FILE_NOEX" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
-        RABBITMQ_ADVANCED_CONFIG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE_NOEX.config"
-    fi
-
-    RABBITMQ_CONFIG_FILE_NOEX="$(_rmq_env_get_noex "$RABBITMQ_CONFIG_FILE")"
-
-    # Extension is not specified.
-    # Determine config type from file
-    if [ "$RABBITMQ_CONFIG_FILE_NOEX" = "$RABBITMQ_CONFIG_FILE" ]; then
-        if [ -f "$RABBITMQ_CONFIG_FILE_NOEX.config" ]; then
-            if [ -f "$RABBITMQ_CONFIG_FILE_NOEX.conf" ]; then
-                # Both files exist. Print a warning
-                echo "WARNING: Both old (.config) and new (.conf) format config files exist."
-                echo "WARNING: Using the old format config file: $RABBITMQ_CONFIG_FILE_NOEX.config"
-                echo "WARNING: Please update your config files to the new format and remove the old file"
-            fi
-            RABBITMQ_CONFIG_FILE="$RABBITMQ_CONFIG_FILE_NOEX.config"
-        elif [ -f "$RABBITMQ_CONFIG_FILE_NOEX.conf" ]; then
-            RABBITMQ_CONFIG_FILE="$RABBITMQ_CONFIG_FILE_NOEX.conf"
-        else
-            if [ -f "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
-                echo "WARNING: Using RABBITMQ_ADVANCED_CONFIG_FILE: $RABBITMQ_ADVANCED_CONFIG_FILE"
-            fi
-            # No config file exist. Use advanced config for -config arg.
-            RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE"
-            RABBITMQ_CONFIG_FILE=""
-        fi
-    fi
-
-    # Set the -config argument.
-    # The -config argument should not have extension.
-    # the file should exist
-    # the file should be a valid erlang term file
-    # Config file extension is .config
-    if [ "$RABBITMQ_CONFIG_FILE_NOEX.config" = "$RABBITMQ_CONFIG_FILE" ]; then
-        RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_CONFIG_FILE"
-    # Config file extension is .conf
-    elif [ "$RABBITMQ_CONFIG_FILE_NOEX.conf" = "$RABBITMQ_CONFIG_FILE" ]; then
-        RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE"
-    elif [ "x" != "x$RABBITMQ_CONFIG_FILE" ] && \
-        [ "$RABBITMQ_CONFIG_FILE_NOEX" != "$RABBITMQ_CONFIG_FILE" ]; then
-        # Config file has an extension, but it's neither .conf or .config
-        echo "ERROR: Wrong extension for RABBITMQ_CONFIG_FILE: $RABBITMQ_CONFIG_FILE" 2>&1
-        echo "ERROR: extension should be either .conf or .config" 2>&1
-        return 1
-    fi
-
-    RABBITMQ_CONFIG_ARG_FILE_NOEX="$(_rmq_env_get_noex "$RABBITMQ_CONFIG_ARG_FILE")"
-
-    if [ "$RABBITMQ_CONFIG_ARG_FILE_NOEX.config" != "$RABBITMQ_CONFIG_ARG_FILE" ]; then
-        if [ "$RABBITMQ_CONFIG_ARG_FILE" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
-            echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: $RABBITMQ_ADVANCED_CONFIG_FILE" 2>&1
-            echo "ERROR: extension should be .config" 2>&1
-            return 1
-        else
-            # We should never got here, but still there should be some explanation
-            echo "ERROR: Wrong extension for $RABBITMQ_CONFIG_ARG_FILE" 2>&1
-            echo "ERROR: extension should be .config" 2>&1
-            return 1
-        fi
-    fi
-
-    # Set -config if the file exists
-    if [ -f "$RABBITMQ_CONFIG_ARG_FILE" ]; then
-        # shellcheck disable=SC2034
-        RABBITMQ_CONFIG_ARG="-config $RABBITMQ_CONFIG_ARG_FILE_NOEX"
-    fi
-
-    # Set -conf and other generated config parameters
-    if [ "$RABBITMQ_CONFIG_FILE_NOEX.conf" = "$RABBITMQ_CONFIG_FILE" ]; then
-        # shellcheck disable=SC2034
-        RABBITMQ_GENERATED_CONFIG_ARG="-conf $RABBITMQ_CONFIG_FILE \
-                                    -conf_dir $RABBITMQ_GENERATED_CONFIG_DIR \
-                                    -conf_script_dir $(dirname "$_rmq_env_0") \
-                                    -conf_schema_dir $RABBITMQ_SCHEMA_DIR
-                                    -conf_advanced $RABBITMQ_ADVANCED_CONFIG_FILE"
-    fi
-
-    return 0
-}
-
-_rmq_env_config_plugins()
-{
-    # NOTE: requires RABBITMQ_MNESIA_BASE
-    if [ "$_rmq_env_mnesia_dirs_configured" != 'true' ]
-    then
-        _rmq_env_perr '_rmq_env_config_mnesia_dirs is not true (_rmq_env_config_plugins)'
-        return 1
-    fi
-
-    [ -z "$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="$PLUGINS_EXPAND_DIR"
-    [ -z "$RABBITMQ_PLUGINS_EXPAND_DIR" ] && \
-        RABBITMQ_PLUGINS_EXPAND_DIR="$RABBITMQ_MNESIA_BASE/${RABBITMQ_NODENAME}-plugins-expand"
-
-    [ -n "$RABBITMQ_ENABLED_PLUGINS_FILE" ] && _rmq_env_enabled_plugins_file_source='environment'
-    [ -z "$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE="$ENABLED_PLUGINS_FILE"
-
-    [ -n "$RABBITMQ_PLUGINS_DIR" ] && _rmq_env_plugins_dir_source='environment'
-    [ -z "$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="$PLUGINS_DIR"
-
-    _rmq_env_normalize_path_var RABBITMQ_PLUGINS_EXPAND_DIR \
-        RABBITMQ_ENABLED_PLUGINS_FILE \
-        RABBITMQ_PLUGINS_DIR
-
-    _rmq_env_plugins_configured='true'
-    return 0
-}
-
-_rmq_env_config_logs()
-{
-    [ -z "$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE="$LOG_BASE"
-    _rmq_env_normalize_path_var RABBITMQ_LOG_BASE
-
-    ## Log rotation
-    [ -z "$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="$LOGS"
-
-    # NOTE: RABBITMQ_LOGS_source is read by sub-processes which is
-    # why it is exported
-    [ -n "$RABBITMQ_LOGS" ] && export RABBITMQ_LOGS_source='environment'
-    [ -z "$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="$RABBITMQ_LOG_BASE/$RABBITMQ_NODENAME.log"
-
-    # shellcheck disable=SC2154
-    [ -z "$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="$RABBITMQ_LOG_BASE/$RABBITMQ_NODENAME_upgrade.log"
-
-    _rmq_env_normalize_path_var RABBITMQ_LOGS \
-        RABBITMQ_UPGRADE_LOG
-
-    _rmq_env_logs_configured='true'
-    return 0
-}
-
-_rmq_env_config_schema_dir()
-{
-    [ -z "$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR="$SCHEMA_DIR"
-    _rmq_env_schema_dir_configured='true'
-    return 0
-}
-
-_rmq_env_misc()
-{
-    [ -z "$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE="$IO_THREAD_POOL_SIZE"
-
-    [ -z "$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH="$SERVER_CODE_PATH"
-
-    [ -z "$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT='true'
-    # shellcheck disable=SC2034
-    [ 'xtrue' = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
-
-    [ -z "$ERL_CRASH_DUMP" ] && ERL_CRASH_DUMP="$RABBITMQ_LOG_BASE/erl_crash.dump"
-}
-
-_rmq_env_validate()
-{
-    # Check if files and directories non-related to Mnesia are configured
-    # to be in $RABBITMQ_MNESIA_DIR. If this is the case, issue a warning
-    # because it will prevent auto-clustering from working (the node will be
-    # considered non-virgin).
-    # TODO: add other config file paths?
-    if ! _rmq_check_if_shared_with_mnesia RABBITMQ_CONFIG_FILE RABBITMQ_LOG_BASE \
-                                          RABBITMQ_PID_FILE RABBITMQ_PLUGINS_EXPAND_DIR \
-                                          RABBITMQ_ENABLED_PLUGINS_FILE RABBITMQ_PLUGINS_DIR \
-                                          RABBITMQ_LOGS RABBITMQ_UPGRADE_LOG
-    then
-        return 1
-    fi
 }
 
 _rmq_env_config_erl_libs()
@@ -721,6 +601,124 @@ _rmq_env_config_erl_libs()
     return 0
 }
 
+_rmq_env_config_config_files()
+{
+    if [ "$_rmq_env_schema_dir_configured" != 'true' ]
+    then
+        _rmq_env_perr '_rmq_env_schema_dir_configured is not true (_rmq_env_config_config_files)'
+        return 1
+    fi
+
+    [ -z "$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE="$CONFIG_FILE"
+    [ -z "$RABBITMQ_GENERATED_CONFIG_DIR" ] && RABBITMQ_GENERATED_CONFIG_DIR="$GENERATED_CONFIG_DIR"
+    [ -z "$RABBITMQ_ADVANCED_CONFIG_FILE" ] && RABBITMQ_ADVANCED_CONFIG_FILE="$ADVANCED_CONFIG_FILE"
+
+    _rmq_env_normalize_path_var RABBITMQ_CONFIG_FILE
+
+    # Check that advanced config file has the .config extension
+    # Add .config extension if it's empty
+    _rmq_env_advanced_config_file_noex="$(_rmq_env_get_noex "$RABBITMQ_ADVANCED_CONFIG_FILE")"
+    if [ "$_rmq_env_advanced_config_file_noex.config" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ] || \
+        [ "$_rmq_env_advanced_config_file_noex" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
+        RABBITMQ_ADVANCED_CONFIG_FILE="$_rmq_env_advanced_config_file_noex.config"
+    fi
+
+    _rmq_env_config_file_noex="$(_rmq_env_get_noex "$RABBITMQ_CONFIG_FILE")"
+
+    # Extension is not specified.
+    # Determine config type from file
+    if [ "$_rmq_env_config_file_noex" = "$RABBITMQ_CONFIG_FILE" ]; then
+        if [ -f "$_rmq_env_config_file_noex.config" ]; then
+            if [ -f "$_rmq_env_config_file_noex.conf" ]; then
+                # Both files exist. Print a warning
+                echo "WARNING: Both old (.config) and new (.conf) format config files exist."
+                echo "WARNING: Using the old format config file: $_rmq_env_config_file_noex.config"
+                echo "WARNING: Please update your config files to the new format and remove the old file"
+            fi
+            RABBITMQ_CONFIG_FILE="$_rmq_env_config_file_noex.config"
+        elif [ -f "$_rmq_env_config_file_noex.conf" ]; then
+            RABBITMQ_CONFIG_FILE="$_rmq_env_config_file_noex.conf"
+        else
+            if [ -f "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
+                echo "WARNING: Using RABBITMQ_ADVANCED_CONFIG_FILE: $RABBITMQ_ADVANCED_CONFIG_FILE"
+            fi
+            # No config file exist. Use advanced config for -config arg.
+            RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE"
+            RABBITMQ_CONFIG_FILE=""
+        fi
+    fi
+
+    # Set the -config argument.
+    # The -config argument should not have extension.
+    # the file should exist
+    # the file should be a valid erlang term file
+    # Config file extension is .config
+    if [ "$_rmq_env_config_file_noex.config" = "$RABBITMQ_CONFIG_FILE" ]; then
+        RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_CONFIG_FILE"
+    # Config file extension is .conf
+    elif [ "$_rmq_env_config_file_noex.conf" = "$RABBITMQ_CONFIG_FILE" ]; then
+        RABBITMQ_CONFIG_ARG_FILE="$RABBITMQ_ADVANCED_CONFIG_FILE"
+    elif [ "x" != "x$RABBITMQ_CONFIG_FILE" ] && \
+        [ "$_rmq_env_config_file_noex" != "$RABBITMQ_CONFIG_FILE" ]; then
+        # Config file has an extension, but it's neither .conf or .config
+        echo "ERROR: Wrong extension for RABBITMQ_CONFIG_FILE: $RABBITMQ_CONFIG_FILE" 2>&1
+        echo "ERROR: extension should be either .conf or .config" 2>&1
+        return 1
+    fi
+
+    _rmq_env_config_arg_file_noex="$(_rmq_env_get_noex "$RABBITMQ_CONFIG_ARG_FILE")"
+
+    if [ "$_rmq_env_config_arg_file_noex.config" != "$RABBITMQ_CONFIG_ARG_FILE" ]; then
+        if [ "$RABBITMQ_CONFIG_ARG_FILE" = "$RABBITMQ_ADVANCED_CONFIG_FILE" ]; then
+            echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: $RABBITMQ_ADVANCED_CONFIG_FILE" 2>&1
+            echo "ERROR: extension should be .config" 2>&1
+            return 1
+        else
+            # We should never got here, but still there should be some explanation
+            echo "ERROR: Wrong extension for $RABBITMQ_CONFIG_ARG_FILE" 2>&1
+            echo "ERROR: extension should be .config" 2>&1
+            return 1
+        fi
+    fi
+
+    # Set -config if the file exists
+    if [ -f "$RABBITMQ_CONFIG_ARG_FILE" ]; then
+        # shellcheck disable=SC2034
+        RABBITMQ_CONFIG_ARG="-config $_rmq_env_config_arg_file_noex"
+    fi
+
+    # Set -conf and other generated config parameters
+    if [ "$_rmq_env_config_file_noex.conf" = "$RABBITMQ_CONFIG_FILE" ]; then
+        # shellcheck disable=SC2034
+        RABBITMQ_GENERATED_CONFIG_ARG="-conf $RABBITMQ_CONFIG_FILE \
+                                    -conf_dir $RABBITMQ_GENERATED_CONFIG_DIR \
+                                    -conf_script_dir $(dirname "$_rmq_env_0") \
+                                    -conf_schema_dir $RABBITMQ_SCHEMA_DIR
+                                    -conf_advanced $RABBITMQ_ADVANCED_CONFIG_FILE"
+    fi
+
+    unset _rmq_env_advanced_config_file_noex
+    unset _rmq_env_config_file_noex
+    unset _rmq_env_config_arg_file_noex
+    return 0
+}
+
+_rmq_env_validate()
+{
+    # Check if files and directories non-related to Mnesia are configured
+    # to be in $RABBITMQ_MNESIA_DIR. If this is the case, issue a warning
+    # because it will prevent auto-clustering from working (the node will be
+    # considered non-virgin).
+    # TODO: add other config file paths?
+    if ! _rmq_check_if_shared_with_mnesia RABBITMQ_CONFIG_FILE RABBITMQ_LOG_BASE \
+                                          RABBITMQ_PID_FILE RABBITMQ_PLUGINS_EXPAND_DIR \
+                                          RABBITMQ_ENABLED_PLUGINS_FILE RABBITMQ_PLUGINS_DIR \
+                                          RABBITMQ_LOGS RABBITMQ_UPGRADE_LOG
+    then
+        return 1
+    fi
+}
+
 run_escript()
 {
     escript_main="${1:?escript_main must be defined}"
@@ -769,7 +767,8 @@ rmq_env_config()
 }
 
 # Note: this function must always be run
-_rmq_env_initialize "$0"
+_rmq_env_0="$0"
+_rmq_env_initialize
 
 # Note: this is to emulate the expected behavior of rabbitmq-env, which is to
 # run all configuration when sourced. Setting _rabbitmq_env_load to false prior
