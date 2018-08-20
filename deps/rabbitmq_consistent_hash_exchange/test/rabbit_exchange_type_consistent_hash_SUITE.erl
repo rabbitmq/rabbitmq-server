@@ -30,7 +30,9 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-                                routing_test
+                                routing_test,
+                                test_binding_queue_cleanup,
+                                test_binding_exchange_cleanup
                                ]}
     ].
 
@@ -259,5 +261,114 @@ test_binding_with_non_numeric_routing_key(Config) ->
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
     amqp_channel:call(Ch2, #'queue.delete'{queue = Q}),
 
+    rabbit_ct_client_helpers:close_channel(Chan),
+    ok.
+
+test_binding_queue_cleanup(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    X = <<"test_binding_cleanup">>,
+    Declare = #'exchange.declare'{exchange = X,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Queues = [<<"q1">>, <<"q2">>, <<"q3">>, <<"q4">>, <<"q5">>, <<"q6">>],
+    [#'queue.declare_ok'{} =
+         amqp_channel:call(Chan, #'queue.declare' {
+                             queue = Q, exclusive = true }) || Q <- Queues],
+    [#'queue.bind_ok'{} =
+         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                                exchange = X,
+                                                routing_key = <<"3">>})
+     || Q <- Queues],
+
+    ?assertMatch([{_, _, 18}],
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, lookup,
+                   [rabbit_exchange_type_consistent_hash_bucket_count,
+                    rabbit_misc:r(<<"/">>, exchange, X)])),
+    Q1 = <<"q1">>,
+    ?assertMatch([_],
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, lookup,
+                   [rabbit_exchange_type_consistent_hash_binding_bucket,
+                    {rabbit_misc:r(<<"/">>, exchange, X),
+                     rabbit_misc:r(<<"/">>, queue, Q1)}])),
+    ?assertMatch(18,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, info,
+                   [rabbit_exchange_type_consistent_hash_bucket_queue, size])),
+
+    amqp_channel:call(Chan, #'queue.delete' {queue = Q1}),
+
+    ?assertMatch([{_, _, 15}],
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, lookup,
+                   [rabbit_exchange_type_consistent_hash_bucket_count,
+                    rabbit_misc:r(<<"/">>, exchange, X)])),
+    ?assertMatch([],
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, lookup,
+                   [rabbit_exchange_type_consistent_hash_binding_bucket,
+                    {rabbit_misc:r(<<"/">>, exchange, X),
+                     rabbit_misc:r(<<"/">>, queue, Q1)}])),
+    ?assertMatch(15,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, info,
+                   [rabbit_exchange_type_consistent_hash_bucket_queue, size])),
+
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
+    rabbit_ct_client_helpers:close_channel(Chan),
+    ok.
+
+test_binding_exchange_cleanup(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    X = <<"test_binding_cleanup">>,
+    Declare = #'exchange.declare'{exchange = X,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Queues = [<<"q1">>, <<"q2">>, <<"q3">>, <<"q4">>, <<"q5">>, <<"q6">>],
+    [#'queue.declare_ok'{} =
+         amqp_channel:call(Chan, #'queue.declare' {
+                             queue = Q, exclusive = true }) || Q <- Queues],
+    [#'queue.bind_ok'{} =
+         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                                exchange = X,
+                                                routing_key = <<"3">>})
+     || Q <- Queues],
+
+    ?assertEqual(1,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, info,
+                   [rabbit_exchange_type_consistent_hash_bucket_count, size])),
+    ?assertEqual(6,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, info,
+                   [rabbit_exchange_type_consistent_hash_binding_bucket, size])),
+    ?assertEqual(18,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, info,
+                   [rabbit_exchange_type_consistent_hash_bucket_queue, size])),
+
+    {'exchange.delete_ok'} = amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    ?assertEqual(0,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, info,
+                   [rabbit_exchange_type_consistent_hash_bucket_count, size])),
+    ?assertEqual(0,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, info,
+                   [rabbit_exchange_type_consistent_hash_binding_bucket, size])),
+    ?assertEqual(0,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ets, info,
+                   [rabbit_exchange_type_consistent_hash_bucket_queue, size])),
+
+    [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
     rabbit_ct_client_helpers:close_channel(Chan),
     ok.
