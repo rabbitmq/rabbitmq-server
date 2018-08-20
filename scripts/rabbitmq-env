@@ -620,7 +620,8 @@ _rmq_env_config_config_files()
     [ -z "$RABBITMQ_GENERATED_CONFIG_DIR" ] && RABBITMQ_GENERATED_CONFIG_DIR="$GENERATED_CONFIG_DIR"
     [ -z "$RABBITMQ_ADVANCED_CONFIG_FILE" ] && RABBITMQ_ADVANCED_CONFIG_FILE="$ADVANCED_CONFIG_FILE"
 
-    _rmq_env_normalize_path_var RABBITMQ_CONFIG_FILE
+    _rmq_env_normalize_path_var RABBITMQ_CONFIG_FILE \
+        RABBITMQ_ADVANCED_CONFIG_FILE
 
     # Check that advanced config file has the .config extension
     # Add .config extension if it's empty
