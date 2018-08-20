@@ -133,16 +133,26 @@ delete(transaction, #exchange{name = Name}, _Bs) ->
     ok = mnesia:write_lock_table(?BUCKET_COUNT_TABLE),
 
     Numbers = mnesia:select(?BUCKET_TABLE, [{
-                               #bucket{id = {Name, $1}, _ = '_'},
+                               #bucket{id = {Name, '$1'}, _ = '_'},
                                [],
-                               [$1]
+                               ['$1']
                              }]),
     [mnesia:delete({?BUCKET_TABLE, {Name, N}})
      || N <- Numbers],
 
+    Queues = mnesia:select(?BINDING_BUCKET_TABLE,
+                           [{
+                              #binding_buckets{id = {Name, '$1'}, _ = '_'},
+                              [],
+                              ['$1']
+                            }]),
+    [mnesia:delete({?BINDING_BUCKET_TABLE, {Name, Q}})
+     || Q <- Queues],
+
     mnesia:delete({?BUCKET_COUNT_TABLE, Name}),
     ok;
-delete(_Tx, _X, _Bs) -> ok.
+delete(_Tx, _X, _Bs) ->
+    ok.
 
 policy_changed(_X1, _X2) -> ok.
 
@@ -190,18 +200,17 @@ remove_binding(#binding{source = S, destination = D, key = K}) ->
     %% belong to this binding are removed; buckets with
     %% greater numbers are updated (their numbers are adjusted downwards by weight)
     BucketsToUpdate = mnesia:select(?BUCKET_TABLE, [{
-                                                      #bucket{id = {'_', $1}, _ = '_'},
+                                                      #bucket{id = {'_', '$1'}, _ = '_'},
                                                       [{'>', '$1', LastNum}],
                                                       ['$_']
                                                     }]),
-
     [begin
-         mnesia:delete(?BUCKET_TABLE, B),
+         mnesia:delete(?BUCKET_TABLE, B, write),
          mnesia:write(?BUCKET_TABLE, B#bucket{id = {X, N - Weight}}, write)
      end || B = #bucket{id = {X, N}} <- BucketsToUpdate],
 
     %% Delete all buckets for this {exchange, queue} pair
-    [mnesia:delete(?BUCKET_TABLE, {S, N}) || N <- Numbers],
+    [mnesia:delete(?BUCKET_TABLE, {S, N}, write) || N <- Numbers],
     mnesia:delete(?BINDING_BUCKET_TABLE, {S, D}, write),
 
     %% Update the counter
