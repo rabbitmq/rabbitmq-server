@@ -14,9 +14,9 @@ setup() {
 
     if [[ -n $HOSTNAME ]]
     then
-        _want="rabbit@$HOSTNAME"
+        local -r _want="rabbit@$HOSTNAME"
     else
-        _want="rabbit@$(hostname)"
+        local -r _want="rabbit@$(hostname)"
     fi
 
     echo "expected RABBITMQ_NODENAME to be \"$_want\", but got: \"$RABBITMQ_NODENAME\""
@@ -31,9 +31,9 @@ setup() {
 
     if [[ -n $HOSTNAME ]]
     then
-        _want="rabbit@$HOSTNAME"
+        local -r _want="rabbit@$HOSTNAME"
     else
-        _want="rabbit@$(hostname -f)"
+        local -r _want="rabbit@$(hostname -f)"
     fi
 
     echo "expected RABBITMQ_NODENAME to be \"$_want\", but got: \"$RABBITMQ_NODENAME\""
@@ -42,7 +42,7 @@ setup() {
 }
 
 @test "can configure short RABBITMQ_NODENAME via rabbitmq-env.conf" {
-    _want="rabbit@foobarbaz"
+    local -r _want="rabbit@foobarbaz"
 
     echo 'USE_LONGNAME=false' > "$RABBITMQ_CONF_ENV_FILE"
     echo "NODENAME=$_want" >> "$RABBITMQ_CONF_ENV_FILE"
@@ -56,7 +56,7 @@ setup() {
 }
 
 @test "can configure long RABBITMQ_NODENAME via rabbitmq-env.conf" {
-    _want="rabbit@foo.bar.bat.com"
+    local -r _want="rabbit@foo.bar.bat.com"
 
     echo 'USE_LONGNAME=true' > "$RABBITMQ_CONF_ENV_FILE"
     echo "NODENAME=$_want" >> "$RABBITMQ_CONF_ENV_FILE"

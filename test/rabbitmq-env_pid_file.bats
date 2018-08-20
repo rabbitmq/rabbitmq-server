@@ -10,7 +10,7 @@ setup() {
 }
 
 @test "default RABBITMQ_PID_FILE" {
-    _want="$RABBITMQ_MNESIA_DIR.pid"
+    local -r _want="$RABBITMQ_MNESIA_DIR.pid"
 
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
     _rmq_env_config_mnesia_dirs
@@ -21,7 +21,7 @@ setup() {
 }
 
 @test "can configure RABBITMQ_PID_FILE via env" {
-    _want="/var/run/rabbitmq.pid"
+    local -r _want="/var/run/rabbitmq.pid"
     RABBITMQ_PID_FILE="$_want"
 
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
@@ -33,7 +33,7 @@ setup() {
 }
 
 @test "can configure RABBITMQ_PID_FILE via rabbitmq-env.conf" {
-    _want="/var/run/rabbitmq.pid"
+    local -r _want="/var/run/rabbitmq.pid"
     echo "PID_FILE='$_want'" > "$RABBITMQ_CONF_ENV_FILE"
 
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
@@ -45,7 +45,7 @@ setup() {
 }
 
 @test "RABBITMQ_PID_FILE via env overrides rabbitmq-env.conf" {
-    _want="/var/run/rabbitmq.pid"
+    local -r _want="/var/run/rabbitmq.pid"
     RABBITMQ_PID_FILE="$_want"
     echo "PID_FILE='/var/run/do-not-want-this.pid'" > "$RABBITMQ_CONF_ENV_FILE"
 

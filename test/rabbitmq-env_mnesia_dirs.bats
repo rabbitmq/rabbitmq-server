@@ -11,7 +11,7 @@ setup() {
 
 @test "default RABBITMQ_MNESIA_DIR" {
     MNESIA_BASE='/var/lib/rabbitmq/mnesia'
-    _want="$MNESIA_BASE/$RABBITMQ_NODENAME"
+    local -r _want="$MNESIA_BASE/$RABBITMQ_NODENAME"
 
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
     _rmq_env_config_mnesia_dirs
@@ -24,7 +24,7 @@ setup() {
 @test "RABBITMQ_MNESIA_DIR overrides RABBITMQ_MNESIA_BASE" {
     RABBITMQ_MNESIA_BASE='/var/lib/do-not-want/mnesia'
     RABBITMQ_MNESIA_DIR='/var/lib/this-is-correct/mnesia'
-    _want="$RABBITMQ_MNESIA_DIR"
+    local -r _want="$RABBITMQ_MNESIA_DIR"
 
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
     _rmq_env_config_mnesia_dirs
@@ -35,7 +35,7 @@ setup() {
 }
 
 @test "MNESIA_DIR overrides MNESIA_BASE via rabbitmq-env.conf" {
-    _want="/var/lib/this-is-correct/mnesia"
+    local -r _want="/var/lib/this-is-correct/mnesia"
 
     echo "MNESIA_BASE='/var/lib/do-not-want/mnesia'" > "$RABBITMQ_CONF_ENV_FILE"
     echo "MNESIA_DIR='$_want'" >> "$RABBITMQ_CONF_ENV_FILE"
@@ -50,7 +50,7 @@ setup() {
 
 @test "RABBITMQ_MNESIA_DIR is normalized via env" {
     RABBITMQ_MNESIA_BASE='//var//lib//rabbitmq//mnesia/'
-    _want="/var/lib/rabbitmq/mnesia/$RABBITMQ_NODENAME"
+    local -r _want="/var/lib/rabbitmq/mnesia/$RABBITMQ_NODENAME"
 
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
     _rmq_env_config_mnesia_dirs
@@ -61,7 +61,7 @@ setup() {
 }
 
 @test "RABBITMQ_MNESIA_DIR is normalized via rabbitmq-env.conf" {
-    _want="/var/lib/this-is-correct/mnesia"
+    local -r _want="/var/lib/this-is-correct/mnesia"
 
     # Note leading and trailing slash
     echo "MNESIA_DIR='/$_want/'" >> "$RABBITMQ_CONF_ENV_FILE"
