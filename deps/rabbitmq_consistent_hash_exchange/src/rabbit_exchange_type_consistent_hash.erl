@@ -268,7 +268,7 @@ jump_consistent_hash_value(B, J, NumberOfBuckets, _SeedState) when J >= NumberOf
 jump_consistent_hash_value(_B0, J0, NumberOfBuckets, SeedState0) ->
     B = J0,
     {R, SeedState} = rand:uniform_s(SeedState0),
-    J = math:floor((B + 1) / R),
+    J = trunc((B + 1) / R),
     jump_consistent_hash_value(B, J, NumberOfBuckets, SeedState).
 
 value_to_hash(undefined, #basic_message { routing_keys = Routes }) ->
