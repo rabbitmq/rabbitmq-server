@@ -364,7 +364,7 @@ _rmq_env_config_alloc_args()
 _rmq_env_config_mnesia_dir()
 {
     [ -z "$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR="$MNESIA_DIR"
-    [ -z "$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR="$RABBITMQ_MNESIA_BASE}/$RABBITMQ_NODENAME"
+    [ -z "$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR="${RABBITMQ_MNESIA_BASE}/$RABBITMQ_NODENAME"
     _rmq_env_mnesia_dir_configured='true'
     return 0
 }
