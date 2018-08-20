@@ -16,6 +16,7 @@
 
 -module(system_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -46,7 +47,8 @@ all() ->
      audit_user_tags,
      audit_permission,
      audit_topic_permission,
-     resource_alarm
+     resource_alarm,
+     unregister
     ].
 
 %% -------------------------------------------------------------------
@@ -457,6 +459,21 @@ resource_alarm(Config) ->
                                  [{resource_limit, Source, Node}]),
     receive_event(<<"alarm.cleared">>),
     rabbit_ct_client_helpers:close_channel(Ch),
+    ok.
+
+unregister(Config) ->
+    X = rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.event">>),
+
+    ?assertMatch({ok, _},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange,
+                                              lookup, [X])),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange_type_event,
+                                 unregister, []),
+
+    ?assertEqual({error, not_found},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange,
+                                              lookup, [X])),
     ok.
 
 %% -------------------------------------------------------------------

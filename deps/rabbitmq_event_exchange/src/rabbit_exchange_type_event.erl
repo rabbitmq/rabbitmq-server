@@ -46,6 +46,7 @@ register() ->
     gen_event:add_handler(rabbit_event, ?MODULE, []).
 
 unregister() ->
+    rabbit_exchange:delete(exchange(), false, ?INTERNAL_USER),
     gen_event:delete_handler(rabbit_event, ?MODULE, []).
 
 exchange() ->
