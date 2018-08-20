@@ -10,7 +10,7 @@ setup() {
 
 @test "default RABBITMQ_CONFIG_ARG" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
-    rabbitmq_config
+    rmq_env_config
 
     echo "expected RABBITMQ_CONFIG_ARG to be '', but got: $RABBITMQ_CONFIG_ARG"
     [[ $RABBITMQ_CONFIG_ARG == '' ]]
@@ -18,7 +18,7 @@ setup() {
 
 @test "default RABBITMQ_GENERATED_CONFIG_ARG" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
-    rabbitmq_config
+    rmq_env_config
 
     echo "expected RABBITMQ_GENERATED_CONFIG_ARG to be '', but got: $RABBITMQ_GENERATED_CONFIG_ARG"
     [[ $RABBITMQ_GENERATED_CONFIG_ARG == '' ]]
