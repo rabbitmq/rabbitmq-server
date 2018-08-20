@@ -72,6 +72,7 @@ _rmq_env_initialize()
     unset _rmq_env_0
 
     RABBITMQ_HOME="$(_rmq_env_realpath "$RABBITMQ_SCRIPTS_DIR/..")"
+
     # shellcheck disable=SC2034
     ESCRIPT_DIR="$RABBITMQ_HOME/escript"
 
@@ -506,25 +507,15 @@ _rmq_env_config_config_files()
     return 0
 }
 
-_rmq_env_TODO()
+_rmq_env_config_plugins()
 {
-    [ -z "$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE="$IO_THREAD_POOL_SIZE"
-    [ -z "$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE="$LOG_BASE"
-    [ -z "$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH="$SERVER_CODE_PATH"
-
-    [ -z "$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR="$SCHEMA_DIR"
-
-    [ -z "$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT='true'
-    # shellcheck disable=SC2034
-    [ 'xtrue' = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
-
-    _rmq_env_normalize_path_var RABBITMQ_LOG_BASE
-
     # NOTE: requires RABBITMQ_MNESIA_BASE
     [ "$_rmq_env_mnesia_dirs_configured" = 'true' ] || \
-        _rmq_env_errexit '_rmq_env_config_mnesia_dirs is not true (_rmq_env_TODO)'
+        _rmq_env_errexit '_rmq_env_config_mnesia_dirs is not true (_rmq_env_config_plugins)'
+
     [ -z "$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="$PLUGINS_EXPAND_DIR"
-    [ -z "$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR="$RABBITMQ_MNESIA_BASE/${RABBITMQ_NODENAME}-plugins-expand"
+    [ -z "$RABBITMQ_PLUGINS_EXPAND_DIR" ] && \
+        RABBITMQ_PLUGINS_EXPAND_DIR="$RABBITMQ_MNESIA_BASE/${RABBITMQ_NODENAME}-plugins-expand"
     _rmq_env_normalize_path_var RABBITMQ_PLUGINS_EXPAND_DIR
 
     [ -n "$RABBITMQ_ENABLED_PLUGINS_FILE" ] && _rmq_env_enabled_plugins_file_source='environment'
@@ -534,6 +525,26 @@ _rmq_env_TODO()
     [ -n "$RABBITMQ_PLUGINS_DIR" ] && _rmq_env_plugins_dir_source='environment'
     [ -z "$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR="$PLUGINS_DIR"
     _rmq_env_normalize_path_var RABBITMQ_PLUGINS_DIR
+
+    _rmq_env_plugins_configured='true'
+    return 0
+}
+
+_rmq_env_TODO()
+{
+    [ -z "$RABBITMQ_IO_THREAD_POOL_SIZE" ] && RABBITMQ_IO_THREAD_POOL_SIZE="$IO_THREAD_POOL_SIZE"
+
+    [ -z "$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE="$LOG_BASE"
+
+    [ -z "$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH="$SERVER_CODE_PATH"
+
+    [ -z "$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR="$SCHEMA_DIR"
+
+    [ -z "$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT='true'
+    # shellcheck disable=SC2034
+    [ 'xtrue' = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
+
+    _rmq_env_normalize_path_var RABBITMQ_LOG_BASE
 
     ## Log rotation
     [ -z "$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="$LOGS"
@@ -583,6 +594,9 @@ _rmq_env_config_erl_libs()
             [ "$_rmq_env_mnesia_dirs_configured" = 'true' ] || \
                 _rmq_env_errexit '_rmq_env_config_mnesia_dirs is not true (_rmq_env_config_erl_libs)'
 
+            [ "$_rmq_env_plugins_configured" = 'true' ] || \
+                _rmq_env_errexit '_rmq_env_plugins_configured is not true (_rmq_env_config_erl_libs)'
+
             # We need to query the running node for the plugins directory
             # and the "enabled plugins" file, which is why the RABBITMQ_MNESIA_*
             # variables are not exported here
@@ -623,8 +637,6 @@ _rmq_env_config_erl_libs()
             unset _rmq_env_mnesia_base
             unset _rmq_env_mnesia_dir
             unset _rmq_env_tmp
-            unset _rmq_env_plugins_dir_source
-            unset _rmq_env_enabled_plugins_file_source
         fi
 
         if _rmq_env_path_contains_existing_directory "$RABBITMQ_PLUGINS_DIR"; then
@@ -661,6 +673,11 @@ _rmq_env_config_erl_libs()
     if [ -n "$ERL_LIBS" ]; then
         export ERL_LIBS
     fi
+
+    unset _rmq_env_plugins_configured
+    unset _rmq_env_plugins_dir_source
+    unset _rmq_env_enabled_plugins_file_source
+
     return 0
 }
 
@@ -700,6 +717,7 @@ rabbitmq_config()
     _rmq_env_config_addr_ports
     _rmq_env_config_names
     _rmq_env_config_mnesia_dirs
+    _rmq_env_config_plugins
 
     _rmq_env_TODO
 

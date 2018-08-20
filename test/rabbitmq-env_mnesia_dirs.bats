@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-RABBITMQ_NODENAME='frazzle'
+RABBITMQ_NODENAME='rabbit@frazzle'
 RABBITMQ_SCRIPTS_DIR="$BATS_TEST_DIRNAME/../scripts"
 _rabbitmq_env_load='false'
 
