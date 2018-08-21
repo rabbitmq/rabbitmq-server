@@ -732,7 +732,10 @@ If you have questions or need help, feel free to ask on the
 ## Implementation Details
 
 The hash function used in this plugin as of RabbitMQ 3.7.8
-is [A Fast, Minimal Memory, Consistent Hash Algorithm](https://arxiv.org/abs/1406.2294) by Lamping and Veach.
+is [A Fast, Minimal Memory, Consistent Hash Algorithm](https://arxiv.org/abs/1406.2294) by Lamping and Veach. Erlang's `phash2` function is used to convert non-integer values to
+an integer one that can be used by the jump consistent hash function by Lamping and Veach.
+
+### Distribution Uniformity
 
 A Chi-squared test was used to evaluate distribution uniformity. Below are the
 results for 18 bucket counts and how they compare to two commonly used `p-value`
@@ -760,6 +763,7 @@ thresholds:
 |19|12.935|18|30.14|36.19|
 |20|11.895|19|31.41|37.57|
 
+### Binding Operations and Bucket Management
 
 When a queue is bound to a consistent hash exchange, the protocol method, `queue.bind`,
 carries a weight in the routing (binding) key. The binding is given
@@ -774,6 +778,8 @@ its associated queue.
 The implementation assumes there is only one binding between a consistent hash
 exchange and a queue. Having more than one binding is unnecessary because
 queue weight can be provided at the time of binding.
+
+### Clustered Environments
 
 The state of the hash space is distributed across all cluster nodes.
 
