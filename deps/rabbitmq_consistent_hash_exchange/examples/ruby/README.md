@@ -1,6 +1,6 @@
-# RabbitMQ Consistent Hash Exchange Examples in Python
+# RabbitMQ Consistent Hash Exchange Examples in Ruby
 
-This directory contains runnable Python examples for the [RabbitMQ Consistent Hash Exchange plugin](../..).
+This directory contains runnable Ruby examples for the [RabbitMQ Consistent Hash Exchange plugin](../..).
 They are the same examples as in the [plugin's README](../../README.md) file.
 
 ## Prerequisites
@@ -12,18 +12,18 @@ were not deleted.
 ## Dependency Installation
 
 ``` sh
-pip install -r ./requirements.txt
+bundle install
 ```
 
 ## Running the Example
 
 ``` sh
 # hashing on the routing key
-python ./example1.py
+bundle exec ruby ./example1.rb
 
 # hashing on a custom header
-python ./example2.py
+bundle exec ruby ./example2.rb
 
 # hashing on a message property
-python ./example3.py
+bundle exec ruby ./example3.rb
 ```
