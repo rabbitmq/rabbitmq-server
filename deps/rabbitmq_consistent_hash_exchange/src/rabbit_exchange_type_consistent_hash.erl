@@ -74,6 +74,9 @@
 
 -define(PROPERTIES, [<<"correlation_id">>, <<"message_id">>, <<"timestamp">>]).
 
+%% OTP 19.3 does not support exs1024s
+-define(SEED_ALGORITHM, exs1024).
+
 info(_X) -> [].
 info(_X, _) -> [].
 
@@ -257,7 +260,7 @@ jump_consistent_hash(_Key, 1) ->
 jump_consistent_hash(KeyList, NumberOfBuckets) when is_list(KeyList) ->
     jump_consistent_hash(hd(KeyList), NumberOfBuckets);
 jump_consistent_hash(Key, NumberOfBuckets) when is_integer(Key) ->
-    SeedState = rand:seed_s(exs1024s, {Key, Key, Key}),
+    SeedState = rand:seed_s(?SEED_ALGORITHM, {Key, Key, Key}),
     jump_consistent_hash_value(-1, 0, NumberOfBuckets, SeedState);
 jump_consistent_hash(Key, NumberOfBuckets) ->
     jump_consistent_hash(erlang:phash2(Key), NumberOfBuckets).
