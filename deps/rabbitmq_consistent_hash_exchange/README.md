@@ -273,6 +273,7 @@ n.times do |i|
 end
 
 ch.wait_for_confirms
+puts "Done publishing!"
 
 # wait for queue stats to be emitted so that management UI numbers
 # are up-to-date
@@ -480,7 +481,10 @@ end
 ch.wait_for_confirms
 puts "Done publishing!"
 
+# wait for queue stats to be emitted so that management UI numbers
+# are up-to-date
 sleep 5
+conn.close
 puts "Done"
 ```
 
@@ -676,21 +680,11 @@ end
 ch.wait_for_confirms
 puts "Done publishing!"
 
+# wait for queue stats to be emitted so that management UI numbers
+# are up-to-date
 sleep 5
-
-puts "Evaluating results..."
-
-def format_as_percent(count, total)
-  ((count.to_f/total).floor(4) * 100).to_f.floor(2)
-end
-
-puts "Q1 has #{q1.message_count} messages ready (#{format_as_percent(q1.message_count, n)}%)"
-puts "Q2 has #{q2.message_count} messages ready (#{format_as_percent(q2.message_count, n)}%)"
-puts "Q3 has #{q3.message_count} messages ready (#{format_as_percent(q3.message_count, n)}%)"
-puts "Q4 has #{q4.message_count} messages ready (#{format_as_percent(q4.message_count, n)}%)"
-puts
-
 conn.close
+puts "Done"
 ```
 
 #### Code Example in Erlang
