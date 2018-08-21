@@ -141,6 +141,10 @@ If pseudo-random or unique values such as client/session/request identifiers
 are used for routing keys (or another property used for hashing) then
 reasonably uniform distribution should be observed.
 
+### Executable Versions
+
+Executable versions of some of the code examples can be found under [./examples](./examples).
+
 ### Code Example in Python
 
 This version of the example uses [Pika](https://pika.readthedocs.io/en/stable/), the most widely used Python client for RabbitMQ:
