@@ -65,6 +65,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    clean_up_test_topology(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -72,11 +73,8 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 routing_test(Config) ->
-    %% Run the test twice to test we clean up correctly
     routing_test0(Config, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]),
-    routing_test0(Config, [<<"q4">>, <<"q5">>, <<"q6">>, <<"q7">>]),
-
-    passed.
+    ok.
 
 routing_test0(Config, Qs) ->
     ok = test_with_rk(Config, Qs),
@@ -172,14 +170,13 @@ rndint() ->
     rand:uniform(1000000).
 
 test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
-    Count = 10000,
+    Count = 100000,
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
     #'confirm.select_ok'{} = amqp_channel:call(Chan, #'confirm.select'{}),
 
     CHX = <<"e">>,
 
-    amqp_channel:call(Chan, #'exchange.delete' {exchange = CHX}),
-    [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
+    clean_up_test_topology(Config, CHX, Queues),
 
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
@@ -195,12 +192,12 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind' {queue = Q,
                                                 exchange = CHX,
-                                                routing_key = <<"10">>})
+                                                routing_key = <<"1">>})
      || Q <- [Q1, Q2]],
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind' {queue = Q,
                                                 exchange = CHX,
-                                                routing_key = <<"20">>})
+                                                routing_key = <<"2">>})
      || Q <- [Q3, Q4]],
 
     [amqp_channel:call(Chan,
@@ -225,10 +222,9 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     Chi = lists:sum([((O - E) * (O - E)) / E || {O, E} <- Obs]),
     ct:pal("Chi-square test for 3 degrees of freedom is ~p, p = 0.01 is 11.35",
            [Chi]),
+    ?assert(Chi < 11.35),
 
-    amqp_channel:call(Chan, #'exchange.delete' {exchange = CHX}),
-    [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
-
+    clean_up_test_topology(Config, CHX, Queues),
     rabbit_ct_client_helpers:close_channel(Chan),
     ok.
 
@@ -435,3 +431,15 @@ count_all_queue_buckets(Config) ->
     rabbit_ct_broker_helpers:rpc(
       Config, 0, ets, info,
       [rabbit_exchange_type_consistent_hash_bucket_queue, size]).
+
+clean_up_test_topology(Config) ->
+    Qs = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
+    clean_up_test_topology(Config, <<"e">>, Qs).
+
+clean_up_test_topology(Config, X, Qs) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    amqp_channel:call(Ch, #'exchange.delete' {exchange = X}),
+    [amqp_channel:call(Ch, #'queue.delete' {queue = Q}) || Q <- Qs],
+
+    rabbit_ct_client_helpers:close_channel(Ch).
