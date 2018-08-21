@@ -30,7 +30,12 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-                                routing_test,
+                                routing_key_hashing_test,
+                                custom_header_hashing_test,
+                                message_id_hashing_test,
+                                correlation_id_hashing_test,
+                                timestamp_hashing_test,
+                                other_routing_test,
                                 test_binding_queue_cleanup,
                                 test_binding_exchange_cleanup,
                                 test_bucket_sizes
@@ -72,21 +77,33 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
-routing_test(Config) ->
-    routing_test0(Config, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]),
-    ok.
+-define(Qs, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]).
+%% N.B. lowering this value below 100K increases the probability
+%% of failing the Chi squared test in some environments
+-define(DEFAULT_SAMPLE_COUNT, 150000).
 
-routing_test0(Config, Qs) ->
-    ok = test_with_rk(Config, Qs),
-    ok = test_with_header(Config, Qs),
+routing_key_hashing_test(Config) ->
+    ok = test_with_rk(Config, ?Qs).
+
+custom_header_hashing_test(Config) ->
+    ok = test_with_header(Config, ?Qs).
+
+message_id_hashing_test(Config) ->
+    ok = test_with_message_id(Config, ?Qs).
+
+correlation_id_hashing_test(Config) ->
+    ok = test_with_correlation_id(Config, ?Qs).
+
+timestamp_hashing_test(Config) ->
+    ok = test_with_timestamp(Config, ?Qs).
+
+other_routing_test(Config) ->
     ok = test_binding_with_negative_routing_key(Config),
     ok = test_binding_with_non_numeric_routing_key(Config),
-    ok = test_with_correlation_id(Config, Qs),
-    ok = test_with_message_id(Config, Qs),
-    ok = test_with_timestamp(Config, Qs),
     ok = test_non_supported_property(Config),
     ok = test_mutually_exclusive_arguments(Config),
     ok.
+
 
 %% -------------------------------------------------------------------
 %% Implementation
@@ -109,7 +126,6 @@ test_with_header(Config, Qs) ->
                   #amqp_msg{props = #'P_basic'{headers = H}, payload = <<>>}
           end, [{<<"hash-header">>, longstr, <<"hashme">>}], Qs).
 
-
 test_with_correlation_id(Config, Qs) ->
     test0(Config, fun(E) ->
                   #'basic.publish'{exchange = E}
@@ -131,7 +147,7 @@ test_with_timestamp(Config, Qs) ->
                   #'basic.publish'{exchange = E}
           end,
           fun() ->
-                  #amqp_msg{props = #'P_basic'{timestamp = rndint()}, payload = <<>>}
+                  #amqp_msg{props = #'P_basic'{timestamp = rnd_int()}, payload = <<>>}
           end, [{<<"hash-property">>, longstr, <<"timestamp">>}], Qs).
 
 test_mutually_exclusive_arguments(Config) ->
@@ -164,13 +180,15 @@ test_non_supported_property(Config) ->
     ok.
 
 rnd() ->
-    list_to_binary(integer_to_list(rndint())).
+    list_to_binary(integer_to_list(rnd_int())).
 
-rndint() ->
-    rand:uniform(1000000).
+rnd_int() ->
+    rand:uniform(10000000).
 
 test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
-    Count = 100000,
+    test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, ?DEFAULT_SAMPLE_COUNT).
+
+test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, IterationCount) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
     #'confirm.select_ok'{} = amqp_channel:call(Chan, #'confirm.select'{}),
 
@@ -202,7 +220,7 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
 
     [amqp_channel:call(Chan,
                        MakeMethod(CHX),
-                       MakeMsg()) || _ <- lists:duplicate(Count, const)],
+                       MakeMsg()) || _ <- lists:duplicate(IterationCount, const)],
     amqp_channel:wait_for_confirms(Chan, 5000),
     timer:sleep(500),
 
@@ -213,15 +231,17 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
                                                            exclusive = true}),
              M
          end || Q <- Queues],
-    Count = lists:sum(Counts), %% All messages got routed
+    IterationCount = lists:sum(Counts), %% All messages got routed
 
     %% Chi-square test
     %% H0: routing keys are not evenly distributed according to weight
-    Expected = [Count div 6, Count div 6, (Count div 6) * 2, (Count div 6) * 2],
+    Expected = [IterationCount div 6, IterationCount div 6, (IterationCount div 6) * 2, (IterationCount div 6) * 2],
     Obs = lists:zip(Counts, Expected),
     Chi = lists:sum([((O - E) * (O - E)) / E || {O, E} <- Obs]),
-    ct:pal("Chi-square test for 3 degrees of freedom is ~p, p = 0.01 is 11.35",
-           [Chi]),
+    ct:pal("Chi-square test for 3 degrees of freedom is ~p, p = 0.01 is 11.35, observations (counts, expected): ~p",
+           [Chi, Obs]),
+    %% N.B. we need at least 100K iterations to reliably pass this test in multiple different
+    %%      environments
     ?assert(Chi < 11.35),
 
     clean_up_test_topology(Config, CHX, Queues),
@@ -433,8 +453,7 @@ count_all_queue_buckets(Config) ->
       [rabbit_exchange_type_consistent_hash_bucket_queue, size]).
 
 clean_up_test_topology(Config) ->
-    Qs = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
-    clean_up_test_topology(Config, <<"e">>, Qs).
+    clean_up_test_topology(Config, <<"e">>, ?Qs).
 
 clean_up_test_topology(Config, X, Qs) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
