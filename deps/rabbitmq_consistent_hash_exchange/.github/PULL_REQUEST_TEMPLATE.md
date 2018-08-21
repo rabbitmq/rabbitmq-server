@@ -16,7 +16,7 @@ As long as we can understand the intent, it's all good.
 What types of changes does your code introduce to this project?
 _Put an `x` in the boxes that apply_
 
-- [ ] Bugfix (non-breaking change which fixes issue #NNNN)
+- [ ] Bug fix (non-breaking change which fixes issue #NNNN)
 - [ ] New feature (non-breaking change which adds functionality)
 - [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
 - [ ] Documentation (correction or otherwise)
