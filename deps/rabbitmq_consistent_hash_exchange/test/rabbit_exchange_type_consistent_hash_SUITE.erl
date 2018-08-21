@@ -176,15 +176,15 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
     #'confirm.select_ok'{} = amqp_channel:call(Chan, #'confirm.select'{}),
 
-    E = <<"e">>,
+    CHX = <<"e">>,
 
-    amqp_channel:call(Chan, #'exchange.delete' {exchange = E}),
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = CHX}),
     [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
 
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
                           #'exchange.declare' {
-                            exchange = E,
+                            exchange = CHX,
                             type = <<"x-consistent-hash">>,
                             auto_delete = true,
                             arguments = DeclareArgs
@@ -194,17 +194,17 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
                              queue = Q, exclusive = true }) || Q <- Queues],
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind' {queue = Q,
-                                                exchange = E,
+                                                exchange = CHX,
                                                 routing_key = <<"10">>})
      || Q <- [Q1, Q2]],
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind' {queue = Q,
-                                                exchange = E,
+                                                exchange = CHX,
                                                 routing_key = <<"20">>})
      || Q <- [Q3, Q4]],
 
     [amqp_channel:call(Chan,
-                       MakeMethod(E),
+                       MakeMethod(CHX),
                        MakeMsg()) || _ <- lists:duplicate(Count, const)],
     amqp_channel:wait_for_confirms(Chan, 5000),
     timer:sleep(500),
@@ -226,7 +226,7 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     ct:pal("Chi-square test for 3 degrees of freedom is ~p, p = 0.01 is 11.35",
            [Chi]),
 
-    amqp_channel:call(Chan, #'exchange.delete' {exchange = E}),
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = CHX}),
     [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
 
     rabbit_ct_client_helpers:close_channel(Chan),
