@@ -1,6 +1,6 @@
 # RabbitMQ Consistent Hash Exchange Examples in Python
 
-This directory contains runnable Python examples for the [RabbitMQ Consistent Hash Exchange plugin](../..).
+This directory contains runnable Python examples for the [RabbitMQ Consistent Hash Exchange plugin](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange/).
 They are the same examples as in the [plugin's README](../../README.md) file.
 
 ## Prerequisites
