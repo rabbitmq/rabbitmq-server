@@ -432,10 +432,10 @@ delivery_qos(Tag, Headers,   #proc_state{ consumer_tags = {_, Tag} }) ->
     end.
 
 maybe_clean_sess(PState = #proc_state { clean_sess = false,
-                                        channels   = {Channel, _},
+                                        connection = Conn,
                                         client_id  = ClientId }) ->
+    SessionPresent = session_present(Conn, ClientId),
     {_Queue, PState1} = ensure_queue(?QOS_1, PState),
-    SessionPresent = session_present(Channel, ClientId),
     {SessionPresent, PState1};
 maybe_clean_sess(PState = #proc_state { clean_sess = true,
                                         connection = Conn,
@@ -449,13 +449,17 @@ maybe_clean_sess(PState = #proc_state { clean_sess = true,
     end,
     {false, PState}.
 
-session_present(Channel, ClientId)  ->
+session_present(Conn, ClientId)  ->
     {_, QueueQ1} = rabbit_mqtt_util:subcription_queue_name(ClientId),
     Declare = #'queue.declare'{queue   = QueueQ1,
                                passive = true},
-    case amqp_channel:call(Channel, Declare) of
-        #'queue.declare_ok'{} -> true;
-        _                     -> false
+    {ok, Channel} = amqp_connection:open_channel(Conn),
+    try
+        amqp_channel:call(Channel, Declare),
+        amqp_channel:close(Channel),
+        true
+    catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
+            false
     end.
 
 make_will_msg(#mqtt_frame_connect{ will_flag   = false }) ->
