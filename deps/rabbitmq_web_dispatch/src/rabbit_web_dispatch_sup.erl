@@ -38,9 +38,9 @@ ensure_listener(Listener) ->
         _ ->
             {Transport, TransportOpts, ProtoOpts} = preprocess_config(Listener),
             ProtoOptsMap = maps:from_list(ProtoOpts),
-            rabbit_log:debug("Starting HTTP[S] listener with transport ~s, options ~p and protocol options ~p",
-                             [Transport, TransportOpts, ProtoOptsMap]),
             StreamHandlers = stream_handlers_config(ProtoOpts),
+            rabbit_log:debug("Starting HTTP[S] listener with transport ~s, options ~p and protocol options ~p, stream handlers ~p",
+                             [Transport, TransportOpts, ProtoOptsMap, StreamHandlers]),
             CowboyOptsMap =
                 maps:merge(#{env =>
                                 #{rabbit_listener => Listener},
