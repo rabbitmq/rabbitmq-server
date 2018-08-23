@@ -40,13 +40,13 @@ ensure_listener(Listener) ->
             ProtoOptsMap = maps:from_list(ProtoOpts),
             rabbit_log:debug("Starting HTTP[S] listener with transport ~s, options ~p and protocol options ~p",
                              [Transport, TransportOpts, ProtoOptsMap]),
+            StreamHandlers = stream_handlers_config(ProtoOpts),
             CowboyOptsMap =
                 maps:merge(#{env =>
                                 #{rabbit_listener => Listener},
                              middlewares =>
                                 [rabbit_cowboy_middleware, cowboy_router, cowboy_handler],
-                             stream_handlers =>
-                                [rabbit_cowboy_stream_h, cowboy_stream_h]},
+                             stream_handlers => StreamHandlers},
                            ProtoOptsMap),
             Child = ranch:child_spec(name(Listener), 100,
                 Transport, TransportOpts,
@@ -122,11 +122,15 @@ transport_config(Options0) ->
     end.
 
 protocol_config(Options) ->
-    ProtoOpts = proplists:get_value(cowboy_opts, Options, []),
-    %% Compress responses by default.
-    case lists:keyfind(compress, 1, ProtoOpts) of
-        false -> [{compress, true}|ProtoOpts];
-        _ -> ProtoOpts
+    proplists:get_value(cowboy_opts, Options, []).
+
+stream_handlers_config(Options) ->
+    case lists:keyfind(compress, 1, Options) of
+        {compress, false} -> [rabbit_cowboy_stream_h, cowboy_stream_h];
+        %% Compress by default. Since 2.0 the compress option in cowboys
+        %% has been replaced by the cowboy_compress_h handler
+        %% Compress is not applied if data < 300 bytes
+        _ -> [rabbit_cowboy_stream_h, cowboy_compress_h, cowboy_stream_h]
     end.
 
 check_error(Listener, Error) ->
