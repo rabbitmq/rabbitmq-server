@@ -99,7 +99,7 @@ route(#exchange { name      = Name,
                 []       -> rabbit_log:warning("Bucket ~p not found", [SelectedBucket]),
                             []
             end
-            
+
     end.
 
 validate(#exchange { arguments = Args }) ->
@@ -165,7 +165,6 @@ policy_changed(_X1, _X2) -> ok.
 
 add_binding(transaction, _X,
             #binding{source = S, destination = D, key = K}) ->
-    rabbit_log:info("Adding a binding between ~p and ~p", [S, D]),
     Weight = rabbit_data_coercion:to_integer(K),
 
     mnesia:write_lock_table(?BUCKET_TABLE),
@@ -176,11 +175,8 @@ add_binding(transaction, _X,
 
     Numbers = lists:seq(LastBucketNum, (NewBucketCount - 1)),
     Buckets = [#bucket{id = {S, I}, queue = D} || I <- Numbers],
-    
-    [begin
-         mnesia:write(?BUCKET_TABLE, B, write),
-         rabbit_log:warning("About to upsert a bucket ~p", [B])
-     end|| B <- Buckets],
+
+    [ok = mnesia:write(?BUCKET_TABLE, B, write) || B <- Buckets],
 
     mnesia:write(?BINDING_BUCKET_TABLE, #binding_buckets{id = {S, D},
                                                           bucket_numbers = Numbers}, write),
@@ -192,12 +188,11 @@ add_binding(none, _X, _B) ->
     ok.
 
 remove_bindings(transaction, _X, Bindings) ->
-    [rabbit_log:info("Removing binding ~p", [B]) || B <- Bindings],
     mnesia:write_lock_table(?BUCKET_TABLE),
     mnesia:write_lock_table(?BUCKET_COUNT_TABLE),
 
     [remove_binding(B) || B <- Bindings],
-    
+
     ok;
 remove_bindings(none, _X, _Bs) ->
     ok.
@@ -207,25 +202,9 @@ remove_binding(#binding{source = S, destination = D, key = K}) ->
 
     [#binding_buckets{bucket_numbers = Numbers}] = mnesia:read(?BINDING_BUCKET_TABLE, {S, D}),
     LastNum = lists:last(Numbers),
-    rabbit_log:info("Bucket numbers for the binding to delete: ~p, LastNum: ~p", [Numbers, LastNum]),
-
-    lists:foreach(fun(M) ->
-                          rabbit_log:info("AT THE TOP of remove_binding/1 bucket_queue row: ~p~n", [M])
-                  end,
-                  ets:tab2list(rabbit_exchange_type_consistent_hash_bucket_queue)),
 
     %% Delete all buckets for this {exchange, queue} pair
-    [
-     begin
-         Id = {S, N},
-         mnesia:delete(?BUCKET_TABLE, Id, write),
-         rabbit_log:info("Deleted a bucket for TARGET binding with id = ~p", [Id])
-     end|| N <- Numbers],
-
-    lists:foreach(fun(M) ->
-                          rabbit_log:info("After DELETION of all buckets of the TARGET binding, bucket_queue row: ~p~n", [M])
-                  end,
-                  ets:tab2list(rabbit_exchange_type_consistent_hash_bucket_queue)),
+    [ok = mnesia:delete(?BUCKET_TABLE, {S, N}, write) || N <- Numbers],
 
     %% Buckets with lower numbers stay as is; buckets that
     %% belong to this binding are removed; buckets with
@@ -237,26 +216,13 @@ remove_binding(#binding{source = S, destination = D, key = K}) ->
                                                       ],
                                                       ['$_']
                                                     }]),
-    QueuesWithUpdatedBuckets = [Q || #bucket{queue = Q} <- BucketsToUpdate],    
-    
-
-    [rabbit_log:info("Selected bucket ~p for updating", [BTU]) || BTU <- BucketsToUpdate],
-    [begin
-         ok = mnesia:delete(?BUCKET_TABLE, Id, write),
-         rabbit_log:info("Deleted a bucket-to-update with id = ~p", [Id])
-     end || #bucket{id = Id} <- BucketsToUpdate],
-
-    lists:foreach(fun(M) ->
-                          rabbit_log:info("After DELETION of buckets-to-update, bucket_queue row: ~p~n", [M])
-                  end,
-                  ets:tab2list(rabbit_exchange_type_consistent_hash_bucket_queue)),
+    QueuesWithUpdatedBuckets = lists:usort([Q || #bucket{queue = Q} <- BucketsToUpdate]),
+    [ok = mnesia:delete(?BUCKET_TABLE, Id, write) || #bucket{id = Id} <- BucketsToUpdate],
 
     UpdatedBuckets = [B#bucket{id = {X, N - Weight}} || B = #bucket{id = {X, N}} <- BucketsToUpdate],
-    [begin
-         rabbit_log:info("Inserting an UPDATED bucket-to-update ~p", [B]),
-         ok = mnesia:write(?BUCKET_TABLE, B, write)
-     end || B <- UpdatedBuckets],
+    [ok = mnesia:write(?BUCKET_TABLE, B, write) || B <- UpdatedBuckets],
 
+    %% There will be no buckets for this {exchange, queue} pair to track
     ok = mnesia:delete(?BINDING_BUCKET_TABLE, {S, D}, write),
 
     %% Update the counter
