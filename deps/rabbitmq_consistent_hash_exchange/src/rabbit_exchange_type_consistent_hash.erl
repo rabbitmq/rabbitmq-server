@@ -263,9 +263,10 @@ remove_binding(#binding{source = S, destination = D, key = K}) ->
                                                     count    = TotalBucketsForX - Weight}, write),
 
     %% Update bucket numbers
-    %% TODO: Bucket numbers have to be updated for all {Exchange, Queue} pairs.
-    %%       We should delete the rows if there are no buckets left for a queue (e.g. when it is deleted)
-    mnesia:write(?BINDING_BUCKET_TABLE, #binding_buckets{id = {S, D}, bucket_numbers = NewNumbers}, write),
+    %% TODO: Bucket numbers have to be updated for all the {Exchange, Queue} pairs affected above
+    %%       (BucketsToUpdate).
+    %%       Then delete the binding_bucket row for the pair.
+    %% mnesia:write(?BINDING_BUCKET_TABLE, #binding_buckets{id = {S, D}, bucket_numbers = NewNumbers}, write),
 
     ok.
 
