@@ -237,6 +237,8 @@ remove_binding(#binding{source = S, destination = D, key = K}) ->
                                                       ],
                                                       ['$_']
                                                     }]),
+    QueuesWithUpdatedBuckets = [Q || #bucket{queue = Q} <- BucketsToUpdate],    
+    
 
     [rabbit_log:info("Selected bucket ~p for updating", [BTU]) || BTU <- BucketsToUpdate],
     [begin
@@ -255,7 +257,7 @@ remove_binding(#binding{source = S, destination = D, key = K}) ->
          ok = mnesia:write(?BUCKET_TABLE, B, write)
      end || B <- UpdatedBuckets],
 
-    mnesia:delete(?BINDING_BUCKET_TABLE, {S, D}, write),
+    ok = mnesia:delete(?BINDING_BUCKET_TABLE, {S, D}, write),
 
     %% Update the counter
     TotalBucketsForX = bucket_count_of(S),
@@ -263,10 +265,15 @@ remove_binding(#binding{source = S, destination = D, key = K}) ->
                                                     count    = TotalBucketsForX - Weight}, write),
 
     %% Update bucket numbers
-    %% TODO: Bucket numbers have to be updated for all the {Exchange, Queue} pairs affected above
-    %%       (BucketsToUpdate).
-    %%       Then delete the binding_bucket row for the pair.
-    %% mnesia:write(?BINDING_BUCKET_TABLE, #binding_buckets{id = {S, D}, bucket_numbers = NewNumbers}, write),
+    [begin
+         case mnesia:read(?BINDING_BUCKET_TABLE, {S, Q}) of
+             [] -> ok;
+             [Val = #binding_buckets{bucket_numbers = BNs}] ->
+                 NewBNs = [N - Weight || N <- BNs],
+                 ok = mnesia:write(?BINDING_BUCKET_TABLE, Val#binding_buckets{bucket_numbers = NewBNs}, write)
+         end
+     end || Q <- QueuesWithUpdatedBuckets],
+    ok = mnesia:delete(?BINDING_BUCKET_TABLE, {S, D}, write),
 
     ok.
 
