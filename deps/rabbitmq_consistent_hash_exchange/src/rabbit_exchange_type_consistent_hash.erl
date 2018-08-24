@@ -65,6 +65,12 @@
      {requires,    database},
      {enables,     external_infrastructure}]}).
 
+%% This data model allows for efficient routing and exchange deletion
+%% but not efficient binding management. This is a future area of improvement.
+%% A couple of alternatives were considered, e.g. storing the entire ring state
+%% in a single map. Without an additional structure such as a balanced tree
+%% ring updates would be even less efficient (but easier to follow).
+
 %% maps buckets to queues
 -define(BUCKET_TABLE, rabbit_exchange_type_consistent_hash_bucket_queue).
 %% maps exchange to total the number of buckets
