@@ -70,8 +70,8 @@ headers_match(any, Args, Headers) ->
 
 validate_binding(_X, #binding{args = Args}) ->
     case rabbit_misc:table_lookup(Args, <<"x-match">>) of
-        {longstr, <<"all">>} -> validate_list_type_usage(all, Args);
-        {longstr, <<"any">>} -> validate_list_type_usage(any, Args);
+        {longstr, <<"all">>} -> validate_list_type_usage(all, Args, Args);
+        {longstr, <<"any">>} -> validate_list_type_usage(any, Args, Args);
         {longstr, Other}     -> {error,
                                  {binding_invalid,
                                   "Invalid x-match field value ~p; "
@@ -80,26 +80,44 @@ validate_binding(_X, #binding{args = Args}) ->
                                  {binding_invalid,
                                   "Invalid x-match field type ~p (value ~p); "
                                   "expected longstr", [Type, Other]}};
-        undefined            -> validate_list_type_usage(all, Args)
+        undefined            -> validate_list_type_usage(all, Args, Args)
     end.
 
 %% We don't invalidate bindings having legacy headers keys of list "Type" because of backward compatibility..
 %% Maybe we should ?
-validate_list_type_usage(_BindingType, []) -> ok;
-validate_list_type_usage(_BindingType, [ {<<"x-?<= ", _/binary>>, array, _} | _ ]) ->
+validate_list_type_usage(_BindingType, [], Args) -> validate_keys_used_once([], Args);
+validate_list_type_usage(_BindingType, [ {<<"x-?<= ", _/binary>>, array, _} | _ ], _) ->
     {error, {binding_invalid, "Invalid use of List type with <=, <, >= or > operators", []}};
-validate_list_type_usage(_BindingType, [ {<<"x-?< ", _/binary>>, array, _} | _ ]) ->
+validate_list_type_usage(_BindingType, [ {<<"x-?< ", _/binary>>, array, _} | _ ], _) ->
     {error, {binding_invalid, "Invalid use of List type with <=, <, >= or > operators", []}};
-validate_list_type_usage(_BindingType, [ {<<"x-?>= ", _/binary>>, array, _} | _ ]) ->
+validate_list_type_usage(_BindingType, [ {<<"x-?>= ", _/binary>>, array, _} | _ ], _) ->
     {error, {binding_invalid, "Invalid use of List type with <=, <, >= or > operators", []}};
-validate_list_type_usage(_BindingType, [ {<<"x-?> ", _/binary>>, array, _} | _ ]) ->
+validate_list_type_usage(_BindingType, [ {<<"x-?> ", _/binary>>, array, _} | _ ], _) ->
     {error, {binding_invalid, "Invalid use of List type with <=, <, >= or > operators", []}};
-validate_list_type_usage(all, [ {<<"x-?= ", _/binary>>, array, _} | _ ]) ->
+validate_list_type_usage(all, [ {<<"x-?= ", _/binary>>, array, _} | _ ], _) ->
     {error, {binding_invalid, "Invalid use of List type with = operator with binding type 'all'", []}};
-validate_list_type_usage(any, [ {<<"x-?!= ", _/binary>>, array, _} | _ ]) ->
+validate_list_type_usage(any, [ {<<"x-?!= ", _/binary>>, array, _} | _ ], _) ->
     {error, {binding_invalid, "Invalid use of List type with != operator with binding type 'any'", []}};
-validate_list_type_usage(BindingType, [ _ | Tail ]) ->
-    validate_list_type_usage(BindingType, Tail).
+validate_list_type_usage(BindingType, [ _ | Tail ], Args) ->
+    validate_list_type_usage(BindingType, Tail, Args).
+
+%% We must ensure the binding's rules define header key only once
+validate_keys_used_once(_, []) -> ok;
+validate_keys_used_once(CurrentKeys, [ {<< Rule/binary >>, _ , _} | Tail ]) ->
+    case string:tokens(binary_to_list(Rule), " ") of
+    [OpMatch, Key] ->
+        case lists:member(OpMatch, ["x-?<=", "x-?<", "x-?=", "x-?!=", "x-?>", "x-?>="]) of
+        true ->
+            case lists:member(Key, CurrentKeys) of
+            true -> {error, {binding_invalid, "Key '~s' used more than once.", [Key]}};
+            _ -> validate_keys_used_once([Key | CurrentKeys], Tail)
+            end;
+        _ -> validate_keys_used_once(CurrentKeys, Tail)
+        end;
+    _ -> validate_keys_used_once(CurrentKeys, Tail)
+    end;
+validate_keys_used_once(CurrentKeys, [ _ | Tail ]) ->
+    validate_keys_used_once(CurrentKeys, Tail).
 
 
 %% [0] spec is vague on whether it can be omitted but in practice it's
