@@ -1,6 +1,3 @@
-HOSTNAME=localhost
-hostname=$ENV::HOSTNAME
-
 [ ca ]
 default_ca = testca
 
@@ -61,5 +58,5 @@ extendedKeyUsage = 1.3.6.1.5.5.7.3.1
 subjectAltName   = @server_alt_names
 
 [ server_alt_names ]
-DNS.1 = $hostname
+DNS.1 = @HOSTNAME@
 DNS.2 = localhost
