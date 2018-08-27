@@ -17,8 +17,8 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
   alias RabbitMQ.CLI.Ctl.Commands.{ClusterStatusCommand, EnvironmentCommand,
     ListBindingsCommand, ListChannelsCommand, ListConnectionsCommand,
-    ListExchangesCommand, ListParametersCommand, ListPermissionsCommand,
-    ListPoliciesCommand, ListQueuesCommand, StatusCommand}
+    ListExchangesCommand, ListGlobalParametersCommand, ListParametersCommand,
+    ListPermissionsCommand, ListPoliciesCommand, ListQueuesCommand, StatusCommand}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -61,6 +61,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
                run_command(ListBindingsCommand, info_keys(ListBindingsCommand), opts),
                run_command(ListPermissionsCommand, [], opts),
                run_command(ListPoliciesCommand, [], opts),
+               run_command(ListGlobalParametersCommand, [], opts),
                run_command(ListParametersCommand, [], opts)]
             end)
         data ++ vhost_data
