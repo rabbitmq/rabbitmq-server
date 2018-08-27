@@ -4,12 +4,12 @@
 set -e
 
 usage() {
-  echo "Syntax: $(basename "$0") [-Dh] [-c <instance_count>] [-s <ssh_key>] <erlang_version> [<erlang_app_dir> ...]"
+  echo "Syntax: $(basename "$0") [-Dh] [-c <instance_count>] [-e <elixir_version>] [-s <ssh_key>] <erlang_version> [<erlang_app_dir> ...]"
 }
 
 instance_count=1
 
-while getopts "c:Dhs:" opt; do
+while getopts "c:e:Dhs:" opt; do
   case $opt in
     h)
       usage
@@ -17,6 +17,9 @@ while getopts "c:Dhs:" opt; do
       ;;
     c)
       instance_count=$OPTARG
+      ;;
+    e)
+      elixir_version=$OPTARG
       ;;
     D)
       destroy=yes
@@ -48,6 +51,10 @@ fi
 shift
 
 terraform_dir=$(cd "$(dirname "$0")" && pwd)
+
+erlang_nodename=control
+dirs_archive=dirs-archive.tar.xz
+instance_name_prefix="[$(basename "$0")/$USER] "
 
 canonicalize_erlang_version() {
   version=$1
@@ -96,20 +103,12 @@ list_dirs_to_upload() {
     grep -q "^$dir/" "$sorted_manifest" || echo "$dir"
   done < "$sorted_manifest" > "$manifest"
 
-  awk '
-  BEGIN {
-    printf "[";
-  }
-  {
-    if (NR > 1) {
-      printf ",";
-    }
-    printf "\"" $0 "\"";
-  }
-  END {
-    printf "]";
-  }
-  ' "$manifest"
+  tar cf - -P \
+    --exclude '.terraform*' \
+    --exclude 'dirs-archive-*' \
+    --exclude "$erlang_nodename@*" \
+    -T "$manifest" \
+    | xz --threads=0 > "$dirs_archive"
 
   rm "$manifest" "$sorted_manifest"
 }
@@ -122,11 +121,13 @@ start_vms() {
   terraform apply \
     -auto-approve=true \
     -var="erlang_version=$erlang_branch" \
+    -var="elixir_version=$elixir_version" \
     -var="erlang_cookie=$erlang_cookie" \
-    -var="erlang_nodename=control" \
+    -var="erlang_nodename=$erlang_nodename" \
     -var="ssh_key=$ssh_key" \
     -var="instance_count=$instance_count" \
-    -var='dirs_to_upload='"$dirs_to_upload" \
+    -var="instance_name_prefix=\"$instance_name_prefix\"" \
+    -var="upload_dirs_archive=$dirs_archive" \
     "$terraform_dir"
 }
 
@@ -134,11 +135,13 @@ destroy_vms() {
   terraform destroy \
     -force \
     -var="erlang_version=$erlang_branch" \
+    -var="elixir_version=$elixir_version" \
     -var="erlang_cookie=$erlang_cookie" \
-    -var="erlang_nodename=control" \
+    -var="erlang_nodename=$erlang_nodename" \
     -var="ssh_key=$ssh_key" \
     -var="instance_count=$instance_count" \
-    -var='dirs_to_upload='"$dirs_to_upload" \
+    -var="instance_name_prefix=\"$instance_name_prefix\"" \
+    -var="upload_dirs_archive=$dirs_archive" \
     "$terraform_dir"
 }
 
@@ -161,8 +164,8 @@ if test -z "$ssh_key" || ! test -f "$ssh_key" || ! test -f "$ssh_key.pub"; then
 fi
 
 erlang_cookie=$(cat ~/.erlang.cookie)
-dirs_to_upload=$(list_dirs_to_upload "$@")
 
+list_dirs_to_upload "$@"
 init_terraform
 
 case "$destroy" in

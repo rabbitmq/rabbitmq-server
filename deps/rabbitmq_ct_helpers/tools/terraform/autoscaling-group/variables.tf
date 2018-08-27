@@ -7,6 +7,13 @@ the underlying OS.
 EOF
 }
 
+variable "elixir_version" {
+  default     = ""
+  description = <<EOF
+Elixir version to deploy on VMs. Default to the latest available.
+EOF
+}
+
 variable "erlang_cookie" {
   description = <<EOF
 Erlang cookie to deploy on VMs.

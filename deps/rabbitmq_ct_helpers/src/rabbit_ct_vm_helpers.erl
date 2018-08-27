@@ -32,6 +32,7 @@
          ensure_terraform_cmd/1,
          determine_erlang_version/1,
          determine_erlang_git_ref/1,
+         determine_elixir_version/1,
          compute_code_path/1,
          find_terraform_ssh_key/1,
          set_terraform_files_suffix/1,
@@ -71,6 +72,7 @@ setup_steps() ->
      fun ensure_terraform_cmd/1,
      fun determine_erlang_version/1,
      fun determine_erlang_git_ref/1,
+     fun determine_elixir_version/1,
      fun compute_code_path/1,
      fun find_terraform_ssh_key/1,
      fun set_terraform_files_suffix/1,
@@ -158,6 +160,27 @@ determine_erlang_git_ref(Config) ->
     ct:pal(?LOW_IMPORTANCE, "Erlang Git reference: ~s", [GitRef]),
     rabbit_ct_helpers:set_config(
       Config, {erlang_git_ref, GitRef}).
+
+determine_elixir_version(Config) ->
+    Version = case rabbit_ct_helpers:get_config(Config, elixir_version) of
+                  undefined ->
+                      case os:getenv("ELIXIR_VERSION") of
+                          false ->
+                              Cmd = ["elixir", "-e", "IO.puts System.version"],
+                              case rabbit_ct_helpers:exec(Cmd) of
+                                  {ok, Output} ->
+                                      string:strip(Output, right, $\n);
+                                  _ ->
+                                      ""
+                              end;
+                          V ->
+                              V
+                      end;
+                  V ->
+                      V
+              end,
+    ct:pal(?LOW_IMPORTANCE, "Elixir version: ~s", [Version]),
+    rabbit_ct_helpers:set_config(Config, {elixir_version, Version}).
 
 compute_code_path(Config) ->
     EntireCodePath = code:get_path(),
@@ -480,6 +503,7 @@ destroy_terraform_vms(Config) ->
 terraform_var_flags(Config) ->
     ErlangVersion = ?config(erlang_version, Config),
     GitRef = ?config(erlang_git_ref, Config),
+    ElixirVersion = ?config(elixir_version, Config),
     SshKey = ?config(terraform_ssh_key, Config),
     Suffix = ?config(terraform_files_suffix, Config),
     EC2Region = ?config(terraform_aws_ec2_region, Config),
@@ -508,6 +532,7 @@ terraform_var_flags(Config) ->
     [
      {"-var=erlang_version=~s", [ErlangVersion]},
      {"-var=erlang_git_ref=~s", [GitRef]},
+     {"-var=elixir_version=~s", [ElixirVersion]},
      {"-var=erlang_cookie=~s", [erlang:get_cookie()]},
      {"-var=erlang_nodename=~s", [?ERLANG_REMOTE_NODENAME]},
      {"-var=ssh_key=~s", [SshKey]},

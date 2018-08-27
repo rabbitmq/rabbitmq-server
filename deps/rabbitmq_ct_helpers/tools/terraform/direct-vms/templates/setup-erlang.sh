@@ -19,6 +19,8 @@ readonly erlang_version='${erlang_version}'
 # shellcheck disable=SC2016
 erlang_git_ref='${erlang_git_ref}'
 # shellcheck disable=SC2016
+readonly elixir_version='${elixir_version}'
+# shellcheck disable=SC2016
 readonly erlang_nodename='${erlang_nodename}'
 # shellcheck disable=SC2016
 readonly default_user='${default_user}'
@@ -67,6 +69,38 @@ EOF
 # Functions to take Erlang and Elixir from Debian packages.
 # --------------------------------------------------------------------
 
+determine_version_to_pin() {
+  package=$1
+  min_version=$2
+
+  apt-cache policy "$package" | \
+    awk '
+BEGIN {
+  version_to_pin = "";
+}
+/^ (   |\*\*\*) [^ ]/ {
+  if ($1 == "***") {
+    version = $2;
+  } else {
+    version = $1;
+  }
+
+  if (version_to_pin) {
+    exit;
+  } else if (match(version, /^'$min_version'([-.]|$)/)) {
+    version_to_pin = version;
+  }
+}
+END {
+  if (version_to_pin) {
+    print version_to_pin;
+    exit;
+  } else {
+    exit 1;
+  }
+}'
+}
+
 setup_erlang_deb_repository() {
   # Setup repository to get Erlang.
   readonly esl_package=/tmp/erlang-solutions_1.0_all.deb
@@ -89,6 +123,17 @@ apt_install_erlang() {
 }
 
 apt_install_elixir() {
+  if test "$elixir_version"; then
+    # Configure Elixir version pinning.
+    elixir_package_version=$(determine_version_to_pin elixir "$elixir_version")
+
+    cat >/etc/apt/preferences.d/elixir <<EOF
+Package: elixir
+Pin: version $elixir_package_version
+Pin-Priority: 1000
+EOF
+  fi
+
   case "$debian_codename" in
     wheezy)
       # We don't install Elixir because we only use Debian Wheezy to

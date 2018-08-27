@@ -4,12 +4,12 @@
 set -e
 
 usage() {
-  echo "Syntax: $(basename "$0") [-Dh] [-c <instance_count>] [-s <ssh_key>] <erlang_version> [<erlang_app_dir> ...]"
+  echo "Syntax: $(basename "$0") [-Dh] [-c <instance_count>] [-e <elixir_version>] [-s <ssh_key>] <erlang_version> [<erlang_app_dir> ...]"
 }
 
 instance_count=1
 
-while getopts "c:Dhs:" opt; do
+while getopts "c:e:Dhs:" opt; do
   case $opt in
     h)
       usage
@@ -17,6 +17,9 @@ while getopts "c:Dhs:" opt; do
       ;;
     c)
       instance_count=$OPTARG
+      ;;
+    e)
+      elixir_version=$OPTARG
       ;;
     D)
       destroy=yes
@@ -118,6 +121,7 @@ start_vms() {
   terraform apply \
     -auto-approve=true \
     -var="erlang_version=$erlang_branch" \
+    -var="elixir_version=$elixir_version" \
     -var="erlang_git_ref=$erlang_git_ref" \
     -var="erlang_cookie=$erlang_cookie" \
     -var="erlang_nodename=$erlang_nodename" \
@@ -132,6 +136,7 @@ destroy_vms() {
   terraform destroy \
     -force \
     -var="erlang_version=$erlang_branch" \
+    -var="elixir_version=$elixir_version" \
     -var="erlang_git_ref=$erlang_git_ref" \
     -var="erlang_cookie=$erlang_cookie" \
     -var="erlang_nodename=$erlang_nodename" \
