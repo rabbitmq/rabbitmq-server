@@ -5,6 +5,8 @@ endif
 PASSWORD ?= changeme
 HOSTNAME := $(shell if [ "$$(uname)" = Darwin ]; then hostname -s; else hostname; fi)
 
+export HOSTNAME
+
 # Verbosity.
 
 V ?= 0
