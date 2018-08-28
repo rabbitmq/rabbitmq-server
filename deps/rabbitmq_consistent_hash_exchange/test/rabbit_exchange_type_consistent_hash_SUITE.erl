@@ -83,27 +83,29 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
--define(Qs, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>, <<"q4">>, <<"q5">>, <<"q6">>,
-             <<"e-q0">>, <<"e-q1">>, <<"e-q2">>, <<"e-q3">>, <<"e-q4">>, <<"e-q5">>, <<"e-q6">>,
-             <<"d-q0">>, <<"d-q1">>, <<"d-q2">>, <<"d-q3">>, <<"d-q4">>, <<"d-q5">>, <<"d-q6">>]).
+-define(AllQs, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>, <<"q4">>, <<"q5">>, <<"q6">>,
+                <<"e-q0">>, <<"e-q1">>, <<"e-q2">>, <<"e-q3">>, <<"e-q4">>, <<"e-q5">>, <<"e-q6">>,
+                <<"d-q0">>, <<"d-q1">>, <<"d-q2">>, <<"d-q3">>, <<"d-q4">>, <<"d-q5">>, <<"d-q6">>]).
+-define(RoutingTestQs, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]).
+
 %% N.B. lowering this value below 100K increases the probability
 %% of failing the Chi squared test in some environments
 -define(DEFAULT_SAMPLE_COUNT, 150000).
 
 routing_key_hashing_test(Config) ->
-    ok = test_with_rk(Config, ?Qs).
+    ok = test_with_rk(Config, ?RoutingTestQs).
 
 custom_header_hashing_test(Config) ->
-    ok = test_with_header(Config, ?Qs).
+    ok = test_with_header(Config, ?RoutingTestQs).
 
 message_id_hashing_test(Config) ->
-    ok = test_with_message_id(Config, ?Qs).
+    ok = test_with_message_id(Config, ?RoutingTestQs).
 
 correlation_id_hashing_test(Config) ->
-    ok = test_with_correlation_id(Config, ?Qs).
+    ok = test_with_correlation_id(Config, ?RoutingTestQs).
 
 timestamp_hashing_test(Config) ->
-    ok = test_with_timestamp(Config, ?Qs).
+    ok = test_with_timestamp(Config, ?RoutingTestQs).
 
 other_routing_test(Config) ->
     ok = test_binding_with_negative_routing_key(Config),
@@ -193,8 +195,8 @@ rnd() ->
 rnd_int() ->
     rand:uniform(10000000).
 
-test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
-    test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, ?DEFAULT_SAMPLE_COUNT).
+test0(Config, MakeMethod, MakeMsg, DeclareArgs, Queues) ->
+    test0(Config, MakeMethod, MakeMsg, DeclareArgs, Queues, ?DEFAULT_SAMPLE_COUNT).
 
 test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, IterationCount) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
@@ -343,9 +345,6 @@ test_hash_ring_updates_when_multiple_queues_are_deleted(Config) ->
                                   type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
 
-    ct:pal("all hash ring rows before declaration: ~p",
-           [hash_ring_rows(Config)]),
-
     Queues = [<<"d-q1">>, <<"d-q2">>, <<"d-q3">>],
     [#'queue.declare_ok'{} =
          amqp_channel:call(Chan, #'queue.declare'{
@@ -355,8 +354,6 @@ test_hash_ring_updates_when_multiple_queues_are_deleted(Config) ->
                                                exchange = X,
                                                routing_key = <<"3">>})
      || Q <- Queues],
-
-    ct:pal("all hash ring rows: ~p", [hash_ring_rows(Config)]),
 
     ?assertEqual(9, count_buckets_of_exchange(Config, X)),
     assert_ring_consistency(Config, X),
@@ -394,10 +391,14 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
                                                 routing_key = <<"3">>})
      || Q <- Queues],
 
+    ct:pal("all hash ring rows: ~p", [hash_ring_rows(Config)]),
+
     ?assertEqual(18, count_buckets_of_exchange(Config, X)),
     assert_ring_consistency(Config, X),
     ok = amqp_connection:close(Conn),
     timer:sleep(500),
+
+    ct:pal("all hash ring rows after connection closure: ~p", [hash_ring_rows(Config)]),
 
     ?assertEqual(0, count_buckets_of_exchange(Config, X)),
     clean_up_test_topology(Config, X, []),
@@ -504,7 +505,7 @@ count_all_hash_ring_buckets(Config) ->
     lists:foldl(fun(#chx_hash_ring{bucket_map = M}, Acc) -> Acc + maps:size(M) end, 0, Rows).
 
 clean_up_test_topology(Config) ->
-    clean_up_test_topology(Config, none, ?Qs).
+    clean_up_test_topology(Config, none, ?AllQs).
 
 clean_up_test_topology(Config, none, Qs) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
