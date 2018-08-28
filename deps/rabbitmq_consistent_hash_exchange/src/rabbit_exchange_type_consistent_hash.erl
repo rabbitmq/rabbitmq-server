@@ -18,6 +18,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
+-include("rabbitmq_consistent_hash_exchange.hrl").
+
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, serialise_events/0, route/2]).
@@ -26,14 +28,6 @@
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 -export([init/0]).
 -export([info/1, info/2]).
-
--record(chx_hash_ring, {
-  %% a resource
-  exchange,
-  %% a map of bucket => queue | exchange
-  bucket_map,
-  next_bucket_number
-}).
 
 -rabbit_boot_step(
    {rabbit_exchange_type_consistent_hash_registry,
@@ -92,7 +86,7 @@ route(#exchange {name      = Name,
             end
     end.
 
-validate(#exchange { arguments = Args }) ->
+validate(#exchange{arguments = Args}) ->
     case hash_args(Args) of
         {undefined, undefined} ->
             ok;
@@ -123,7 +117,9 @@ validate_binding(_X, #binding { key = K }) ->
             {error, {binding_invalid, "The binding key must be an integer: ~p", [K]}}
     end.
 
-maybe_initialise_hash_ring_state(transaction, X) ->
+maybe_initialise_hash_ring_state(transaction, #exchange{name = Name}) ->
+    maybe_initialise_hash_ring_state(transaction, Name);
+maybe_initialise_hash_ring_state(transaction, X = #resource{}) ->
     case mnesia:read(?HASH_RING_STATE_TABLE, X) of
         [_] -> ok;
         []  ->
@@ -185,7 +181,9 @@ remove_bindings(transaction, _X, Bindings) ->
     [remove_binding(B) || B <- Bindings],
 
     ok;
-remove_bindings(none, _X, _Bs) ->
+remove_bindings(none, X, Bindings) ->
+    rabbit_misc:execute_mnesia_transaction(
+     fun() -> remove_bindings(transaction, X, Bindings) end),
     ok.
 
 remove_binding(#binding{source = S, destination = D, key = RK}) ->
@@ -200,24 +198,26 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
             %% belong to this binding are removed; buckets with
             %% greater numbers are updated (their numbers are adjusted downwards by weight)
             BucketsOfThisBinding = maps:filter(fun (_K, V) -> V =:= D end, BM0),
-            LastBucket           = lists:last(maps:keys(BucketsOfThisBinding)),
-            BucketsDownTheRing   = maps:filter(fun (K, _) -> K > LastBucket end, BM0),
+            case maps:size(BucketsOfThisBinding) of
+                0             -> ok;
+                N when N >= 1 ->
+                    LastBucket         = lists:last(maps:keys(BucketsOfThisBinding)),
+                    BucketsDownTheRing = maps:filter(fun (K, _) -> K > LastBucket end, BM0),
 
-            %% hash ring state without the buckets of this binding
-            BM1 = maps:fold(fun(K, _, Acc) -> maps:remove(K, Acc) end, BM0, BucketsOfThisBinding),
-            %% final state with "down the ring" buckets updated
-            BM2 = maps:fold(fun(K0, V, Acc)  ->
-                                    M = maps:remove(K0, Acc),
-                                    maps:put(K0 - Weight, V, M)
-                              end, BM1, BucketsDownTheRing),
+                    %% hash ring state without the buckets of this binding
+                    BM1 = maps:fold(fun(K, _, Acc) -> maps:remove(K, Acc) end, BM0, BucketsOfThisBinding),
+                    %% final state with "down the ring" buckets updated
+                    BM2 = maps:fold(fun(K0, V, Acc)  ->
+                                            M = maps:remove(K0, Acc),
+                                            maps:put(K0 - Weight, V, M)
+                                    end, BM1, BucketsDownTheRing),
 
-            NextN = NexN0 - Weight,
-            State = State0#chx_hash_ring{bucket_map = BM2,
-                                         next_bucket_number = NextN},
+                    NextN = NexN0 - Weight,
+                    State = State0#chx_hash_ring{bucket_map = BM2,
+                                                 next_bucket_number = NextN},
 
-            ok = mnesia:write(?HASH_RING_STATE_TABLE, State, write),
-
-            ok;
+                    ok = mnesia:write(?HASH_RING_STATE_TABLE, State, write)
+            end;
         [] ->
             rabbit_log:warning("Can't remove binding: hash ring state for exchange ~s wasn't found",
                                [rabbit_misc:rs(S)]),
