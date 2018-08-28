@@ -93,7 +93,7 @@ contribution.
 If something isn't clear, feel free to ask on our [mailing list][rmq-users].
 
 [rmq-collect-env]: https://github.com/rabbitmq/support-tools/blob/master/scripts/rabbitmq-collect-env
-[git-commit-msgs]: https://goo.gl/xwWq
+[git-commit-msgs]: https://chris.beams.io/posts/git-commit/
 [rmq-users]: https://groups.google.com/forum/#!forum/rabbitmq-users
 [ca-agreement]: https://cla.pivotal.io/sign/rabbitmq
 [github-fork]: https://help.github.com/articles/fork-a-repo/
