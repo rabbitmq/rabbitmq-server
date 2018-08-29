@@ -73,20 +73,19 @@ dist:
 	rm -rf $(RLS_DIR)/lib/rabbit-$(VERSION)/plugins/expand
 	rm $(RLS_DIR)/releases/rabbit.rel
 
-# add minimal boot file
+# add boot files
 	cp $(ERTS_ROOT_DIR)/bin/start_clean.boot $(RLS_DIR)/releases/$(VERSION)
 	cp $(ERTS_ROOT_DIR)/bin/start_sasl.boot $(RLS_DIR)/releases/$(VERSION)
+	cp $(ERTS_ROOT_DIR)/bin/no_dot_erlang.boot $(RLS_DIR)/releases/$(VERSION)
 
 # add OTP_VERSION file
 	mkdir -p $(RLS_DIR)/releases/$(OTP_RELEASE)
 	cp $(ERTS_ROOT_DIR)/releases/$(OTP_RELEASE)/OTP_VERSION $(RLS_DIR)/releases/$(OTP_RELEASE)/OTP_VERSION
 
-# copy start.boot to bin folder as Erlang does.
-# Required by rabbit_nodes:ensure_epmd/0
+# copy boot scripts to bin folder as Erlang does.
+# Required by rabbit_nodes:ensure_epmd/0 or escript(1).
 	mkdir -p $(RLS_DIR)/bin/
-	cp $(ERTS_ROOT_DIR)/bin/start.boot $(RLS_DIR)/bin/
-# We also copy `start_clean.boot` which is required by escript(1).
-	cp $(ERTS_ROOT_DIR)/bin/start_clean.boot $(RLS_DIR)/bin/
+	cp $(RLS_DIR)/releases/$(VERSION)/*.boot $(RLS_DIR)/bin
 
 # move rabbitmq files to top level folder
 	mv $(RLS_DIR)/lib/rabbit-$(VERSION)/* $(RLS_DIR)
