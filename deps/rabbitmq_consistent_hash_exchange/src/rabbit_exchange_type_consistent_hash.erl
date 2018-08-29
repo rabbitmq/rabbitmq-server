@@ -201,19 +201,20 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
             case maps:size(BucketsOfThisBinding) of
                 0             -> ok;
                 N when N >= 1 ->
-                    LastBucket         = lists:last(maps:keys(BucketsOfThisBinding)),
+                    KeysOfThisBinding  = maps:keys(BucketsOfThisBinding),
+                    LastBucket         = lists:last(KeysOfThisBinding),
+                    FirstBucket        = hd(KeysOfThisBinding),
                     BucketsDownTheRing = maps:filter(fun (K, _) -> K > LastBucket end, BM0),
+                    UnchangedBuckets = maps:filter(fun (K, _) -> K < FirstBucket end, BM0),
 
-                    %% hash ring state without the buckets of this binding
-                    BM1 = maps:fold(fun(K, _, Acc) -> maps:remove(K, Acc) end, BM0, BucketsOfThisBinding),
                     %% final state with "down the ring" buckets updated
-                    BM2 = maps:fold(fun(K0, V, Acc)  ->
-                                            M = maps:remove(K0, Acc),
-                                            maps:put(K0 - Weight, V, M)
-                                    end, BM1, BucketsDownTheRing),
-
+                    NewBucketsDownTheRing = maps:fold(
+                                              fun(K0, V, Acc)  ->
+                                                      maps:put(K0 - Weight, V, Acc)
+                                              end, #{}, BucketsDownTheRing),
+                    BM1 = maps:merge(UnchangedBuckets, NewBucketsDownTheRing),
                     NextN = NexN0 - Weight,
-                    State = State0#chx_hash_ring{bucket_map = BM2,
+                    State = State0#chx_hash_ring{bucket_map = BM1,
                                                  next_bucket_number = NextN},
 
                     ok = mnesia:write(?HASH_RING_STATE_TABLE, State, write)
