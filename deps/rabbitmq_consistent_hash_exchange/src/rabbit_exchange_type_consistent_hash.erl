@@ -152,8 +152,6 @@ add_binding(transaction, X,
             B = #binding{source = S, destination = D, key = K}) ->
     Weight = rabbit_data_coercion:to_integer(K),
 
-    mnesia:write_lock_table(?HASH_RING_STATE_TABLE),
-
     case mnesia:read(?HASH_RING_STATE_TABLE, S) of
         [State0 = #chx_hash_ring{bucket_map = BM0,
                                  next_bucket_number = NexN0}] ->
@@ -176,8 +174,6 @@ add_binding(none, _X, _B) ->
     ok.
 
 remove_bindings(transaction, _X, Bindings) ->
-    mnesia:write_lock_table(?HASH_RING_STATE_TABLE),
-
     [remove_binding(B) || B <- Bindings],
 
     ok;
@@ -188,8 +184,6 @@ remove_bindings(none, X, Bindings) ->
 
 remove_binding(#binding{source = S, destination = D, key = RK}) ->
     Weight = rabbit_data_coercion:to_integer(RK),
-
-    mnesia:write_lock_table(?HASH_RING_STATE_TABLE),
 
     case mnesia:read(?HASH_RING_STATE_TABLE, S) of
         [State0 = #chx_hash_ring{bucket_map = BM0,
