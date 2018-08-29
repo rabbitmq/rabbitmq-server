@@ -49,7 +49,7 @@
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
-	 emit_consumers_local/3]).
+	 emit_consumers_local/3, internal_delete/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -1132,13 +1132,27 @@ notify_sent_queue_down(QPid) ->
 resume(QPid, ChPid) -> delegate:invoke_no_result(QPid, {gen_server2, cast, [{resume, ChPid}]}).
 
 internal_delete1(QueueName, OnlyDurable) ->
+    internal_delete1(QueueName, OnlyDurable, normal).
+
+internal_delete1(QueueName, OnlyDurable, Reason) ->
     ok = mnesia:delete({rabbit_queue, QueueName}),
-    mnesia:delete({rabbit_durable_queue, QueueName}),
+    case Reason of
+        auto_delete ->
+            case mnesia:wread({rabbit_durable_queue, QueueName}) of
+                []  -> ok;
+                [_] -> ok = mnesia:delete({rabbit_durable_queue, QueueName})
+            end;
+        _ ->
+            mnesia:delete({rabbit_durable_queue, QueueName})
+    end,
     %% we want to execute some things, as decided by rabbit_exchange,
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName, OnlyDurable).
 
 internal_delete(QueueName, ActingUser) ->
+    internal_delete(QueueName, ActingUser, normal).
+
+internal_delete(QueueName, ActingUser, Reason) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               case {mnesia:wread({rabbit_queue, QueueName}),
@@ -1146,7 +1160,7 @@ internal_delete(QueueName, ActingUser) ->
                   {[], []} ->
                       rabbit_misc:const({error, not_found});
                   _ ->
-                      Deletions = internal_delete1(QueueName, false),
+                      Deletions = internal_delete1(QueueName, false, Reason),
                       T = rabbit_binding:process_deletions(Deletions,
                                                            ?INTERNAL_USER),
                       fun() ->
