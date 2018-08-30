@@ -444,10 +444,7 @@ remove_for_destination(DstName, OnlyDurable, Fun) ->
                         lists:keysort(#binding.source, Bindings), OnlyDurable).
 
 %% Instead of locking entire table on remove operations we can lock the
-%% affected resource only. This will allow us to use dirty_match_object for
-%% do faster search of records to delete.
-%% This works better when there are multiple resources deleted at once, for
-%% example when exclusive queues are deleted.
+%% affected resource only.
 lock_resource(Name) ->
     mnesia:lock({global, Name, mnesia:table_info(rabbit_route, where_to_write)},
                 write).
