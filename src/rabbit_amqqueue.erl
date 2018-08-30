@@ -178,11 +178,9 @@
 -spec notify_decorators(rabbit_types:amqqueue()) -> 'ok'.
 -spec resume(pid(), pid()) -> 'ok'.
 -spec internal_delete(name(), rabbit_types:username()) ->
-          rabbit_types:ok_or_error('not_found') |
-          rabbit_types:connection_exit() |
+          'ok' | rabbit_types:connection_exit() |
           fun (() ->
-              rabbit_types:ok_or_error('not_found') |
-              rabbit_types:connection_exit()).
+              'ok' | rabbit_types:connection_exit()).
 -spec run_backing_queue
         (pid(), atom(), (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) ->
             'ok'.
@@ -995,7 +993,7 @@ internal_delete(QueueName, ActingUser, Reason) ->
               case {mnesia:wread({rabbit_queue, QueueName}),
                     mnesia:wread({rabbit_durable_queue, QueueName})} of
                   {[], []} ->
-                      rabbit_misc:const({error, not_found});
+                      rabbit_misc:const(ok);
                   _ ->
                       Deletions = internal_delete1(QueueName, false, Reason),
                       T = rabbit_binding:process_deletions(Deletions,
