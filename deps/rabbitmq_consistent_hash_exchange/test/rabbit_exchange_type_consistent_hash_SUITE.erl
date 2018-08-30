@@ -18,27 +18,33 @@
 
 -compile(export_all).
 
+-include("rabbitmq_consistent_hash_exchange.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, routing_tests},
+      {group, hash_ring_management_tests}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
+      {routing_tests, [], [
                                 routing_key_hashing_test,
                                 custom_header_hashing_test,
                                 message_id_hashing_test,
                                 correlation_id_hashing_test,
                                 timestamp_hashing_test,
-                                other_routing_test,
-                                test_binding_queue_cleanup,
-                                test_binding_exchange_cleanup,
-                                test_bucket_sizes
+                                other_routing_test
+                               ]},
+      {hash_ring_management_tests, [], [
+                                test_hash_ring_updates_when_queue_is_deleted,
+                                test_hash_ring_updates_when_multiple_queues_are_deleted,
+                                test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure,
+                                test_hash_ring_updates_when_exchange_is_deleted,
+                                test_hash_ring_updates_when_queue_is_unbound
                                ]}
     ].
 
@@ -67,35 +73,39 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
+    clean_up_test_topology(Config),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    clean_up_test_topology(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
 %% Test cases
 %% -------------------------------------------------------------------
 
--define(Qs, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]).
+-define(AllQs, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>, <<"q4">>, <<"q5">>, <<"q6">>,
+                <<"e-q0">>, <<"e-q1">>, <<"e-q2">>, <<"e-q3">>, <<"e-q4">>, <<"e-q5">>, <<"e-q6">>,
+                <<"d-q0">>, <<"d-q1">>, <<"d-q2">>, <<"d-q3">>, <<"d-q4">>, <<"d-q5">>, <<"d-q6">>]).
+-define(RoutingTestQs, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]).
+
 %% N.B. lowering this value below 100K increases the probability
 %% of failing the Chi squared test in some environments
 -define(DEFAULT_SAMPLE_COUNT, 150000).
 
 routing_key_hashing_test(Config) ->
-    ok = test_with_rk(Config, ?Qs).
+    ok = test_with_rk(Config, ?RoutingTestQs).
 
 custom_header_hashing_test(Config) ->
-    ok = test_with_header(Config, ?Qs).
+    ok = test_with_header(Config, ?RoutingTestQs).
 
 message_id_hashing_test(Config) ->
-    ok = test_with_message_id(Config, ?Qs).
+    ok = test_with_message_id(Config, ?RoutingTestQs).
 
 correlation_id_hashing_test(Config) ->
-    ok = test_with_correlation_id(Config, ?Qs).
+    ok = test_with_correlation_id(Config, ?RoutingTestQs).
 
 timestamp_hashing_test(Config) ->
-    ok = test_with_timestamp(Config, ?Qs).
+    ok = test_with_timestamp(Config, ?RoutingTestQs).
 
 other_routing_test(Config) ->
     ok = test_binding_with_negative_routing_key(Config),
@@ -185,8 +195,8 @@ rnd() ->
 rnd_int() ->
     rand:uniform(10000000).
 
-test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
-    test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, ?DEFAULT_SAMPLE_COUNT).
+test0(Config, MakeMethod, MakeMsg, DeclareArgs, Queues) ->
+    test0(Config, MakeMethod, MakeMsg, DeclareArgs, Queues, ?DEFAULT_SAMPLE_COUNT).
 
 test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, IterationCount) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
@@ -292,173 +302,218 @@ test_binding_with_non_numeric_routing_key(Config) ->
     rabbit_ct_client_helpers:close_channel(Chan),
     ok.
 
-test_binding_queue_cleanup(Config) ->
+%%
+%% Hash Ring management
+%%
+
+test_hash_ring_updates_when_queue_is_deleted(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
 
-    X = <<"test_binding_cleanup">>,
+    X = <<"test_hash_ring_updates_when_queue_is_deleted">>,
     amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
 
     Declare = #'exchange.declare'{exchange = X,
                                   type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
 
-    Queues = [<<"q1">>, <<"q2">>, <<"q3">>, <<"q4">>, <<"q5">>, <<"q6">>],
-    [#'queue.declare_ok'{} =
-         amqp_channel:call(Chan, #'queue.declare' {
-                             queue = Q, exclusive = true }) || Q <- Queues],
-    [#'queue.bind_ok'{} =
-         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
-                                                exchange = X,
-                                                routing_key = <<"3">>})
-     || Q <- Queues],
-
-    ?assertMatch([{_, _, 18}],
-                 count_buckets_of_exchange(Config, X)),
-    Q1 = <<"q1">>,
-    ?assertMatch([_],
-                 count_buckets_for_pair(Config, X, Q1)),
-    ?assertMatch(18,
-                 count_hash_buckets(Config)),
-
-    amqp_channel:call(Chan, #'queue.delete' {queue = Q1}),
-
-    ?assertMatch([{_, _, 15}],
-                 count_buckets_of_exchange(Config, X)),
-    ?assertMatch([],
-                 count_buckets_for_pair(Config, X, Q1)),
-    ?assertMatch(15,
-                 count_hash_buckets(Config)),
-
-    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
-
-    [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
-    rabbit_ct_client_helpers:close_channel(Chan),
-    ok.
-
-test_binding_exchange_cleanup(Config) ->
-    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
-
-    X = <<"test_binding_cleanup">>,
-    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
-
-    Declare = #'exchange.declare'{exchange = X,
-                                  type = <<"x-consistent-hash">>},
-    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
-
-    Queues = [<<"q1">>, <<"q2">>, <<"q3">>, <<"q4">>, <<"q5">>, <<"q6">>],
-    [#'queue.declare_ok'{} =
-         amqp_channel:call(Chan, #'queue.declare' {
-                             queue = Q, exclusive = true }) || Q <- Queues],
-    [#'queue.bind_ok'{} =
-         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
-                                                exchange = X,
-                                                routing_key = <<"3">>})
-     || Q <- Queues],
-
-    ?assertEqual(1,
-                 count_all_hash_buckets(Config)),
-    ?assertEqual(6,
-                 count_all_binding_buckets(Config)),
-    ?assertEqual(18,
-                 count_all_queue_buckets(Config)),
-
-    {'exchange.delete_ok'} = amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
-
-    ?assertEqual(0,
-                 count_all_hash_buckets(Config)),
-    ?assertEqual(0,
-                 count_all_binding_buckets(Config)),
-    ?assertEqual(0,
-                 count_all_queue_buckets(Config)),
-
-    [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
-    rabbit_ct_client_helpers:close_channel(Chan),
-    ok.
-
-test_bucket_sizes(Config) ->
-    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
-
-    X = <<"test_bucket_sizes">>,
-    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
-
-    Declare = #'exchange.declare'{exchange = X,
-                                  type = <<"x-consistent-hash">>},
-    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
-
-    Queues = [<<"q1">>, <<"q2">>, <<"q3">>],
-    [#'queue.declare_ok'{} =
-         amqp_channel:call(Chan, #'queue.declare' {
-                             queue = Q, exclusive = true }) || Q <- Queues],
+    Q = <<"d-q">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Chan, #'queue.declare'{
+                                    queue = Q, durable = true, exclusive = false}),
     #'queue.bind_ok'{} =
-        amqp_channel:call(Chan, #'queue.bind' {queue = <<"q1">>,
-                                               exchange = X,
-                                               routing_key = <<"3">>}),
-    ?assertMatch([{_, _, 3}], count_buckets_of_exchange(Config, X)),
-    ?assertMatch(3, count_all_queue_buckets(Config)),
-
-    #'queue.bind_ok'{} =
-        amqp_channel:call(Chan, #'queue.bind' {queue = <<"q2">>,
+        amqp_channel:call(Chan, #'queue.bind'{queue = Q,
                                                exchange = X,
                                                routing_key = <<"1">>}),
-    ?assertMatch([{_, _, 4}], count_buckets_of_exchange(Config, X)),
-    ?assertMatch(4, count_all_queue_buckets(Config)),
 
-    #'queue.bind_ok'{} =
-        amqp_channel:call(Chan, #'queue.bind' {queue = <<"q3">>,
-                                               exchange = X,
-                                               routing_key = <<"2">>}),
-    ?assertMatch([{_, _, 6}], count_buckets_of_exchange(Config, X)),
-    ?assertMatch(6, count_all_queue_buckets(Config)),
+    ?assertEqual(1, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
 
-    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
-    [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
+    amqp_channel:call(Chan, #'queue.delete' {queue = Q}),
+    ?assertEqual(0, count_buckets_of_exchange(Config, X)),
+
+    clean_up_test_topology(Config, X, [Q]),
     rabbit_ct_client_helpers:close_channel(Chan),
     ok.
+
+test_hash_ring_updates_when_multiple_queues_are_deleted(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    X = <<"test_hash_ring_updates_when_multiple_queues_are_deleted">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare = #'exchange.declare'{exchange = X,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Queues = [<<"d-q1">>, <<"d-q2">>, <<"d-q3">>],
+    [#'queue.declare_ok'{} =
+         amqp_channel:call(Chan, #'queue.declare'{
+                                    queue = Q, durable = true, exclusive = false}) || Q <- Queues],
+    [#'queue.bind_ok'{} =
+         amqp_channel:call(Chan, #'queue.bind'{queue = Q,
+                                               exchange = X,
+                                               routing_key = <<"3">>})
+     || Q <- Queues],
+
+    ?assertEqual(9, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    amqp_channel:call(Chan, #'queue.delete' {queue = <<"d-q1">>}),
+    ?assertEqual(6, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    amqp_channel:call(Chan, #'queue.delete' {queue = <<"d-q2">>}),
+    amqp_channel:call(Chan, #'queue.delete' {queue = <<"d-q3">>}),
+    ?assertEqual(0, count_buckets_of_exchange(Config, X)),
+
+    clean_up_test_topology(Config, X, Queues),
+    rabbit_ct_client_helpers:close_channel(Chan),
+    ok.
+
+test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+
+    X = <<"test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare = #'exchange.declare'{exchange = X,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Queues = [<<"e-q1">>, <<"e-q2">>, <<"e-q3">>, <<"e-q4">>, <<"e-q5">>, <<"e-q6">>],
+    [#'queue.declare_ok'{} =
+         amqp_channel:call(Chan, #'queue.declare' {
+                             queue = Q, exclusive = true }) || Q <- Queues],
+    [#'queue.bind_ok'{} =
+         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                                exchange = X,
+                                                routing_key = <<"3">>})
+     || Q <- Queues],
+
+    ct:pal("all hash ring rows: ~p", [hash_ring_rows(Config)]),
+
+    ?assertEqual(18, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+    ok = amqp_connection:close(Conn),
+    timer:sleep(500),
+
+    ct:pal("all hash ring rows after connection closure: ~p", [hash_ring_rows(Config)]),
+
+    ?assertEqual(0, count_buckets_of_exchange(Config, X)),
+    clean_up_test_topology(Config, X, []),
+    ok.
+
+test_hash_ring_updates_when_exchange_is_deleted(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    X = <<"test_hash_ring_updates_when_exchange_is_deleted">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare = #'exchange.declare'{exchange = X,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Queues = [<<"e-q1">>, <<"e-q2">>, <<"e-q3">>, <<"e-q4">>, <<"e-q5">>, <<"e-q6">>],
+    [#'queue.declare_ok'{} =
+         amqp_channel:call(Chan, #'queue.declare' {
+                             queue = Q, exclusive = true }) || Q <- Queues],
+    [#'queue.bind_ok'{} =
+         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                                exchange = X,
+                                                routing_key = <<"2">>})
+     || Q <- Queues],
+
+    ?assertEqual(12, count_buckets_of_exchange(Config, X)),
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    ?assertEqual(0, count_buckets_of_exchange(Config, X)),
+
+    amqp_channel:call(Chan, #'queue.delete' {queue = <<"e-q1">>}),
+    ?assertEqual(0, count_buckets_of_exchange(Config, X)),
+
+    clean_up_test_topology(Config, X, Queues),
+    rabbit_ct_client_helpers:close_channel(Chan),
+    ok.
+
+test_hash_ring_updates_when_queue_is_unbound(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    X = <<"test_hash_ring_updates_when_queue_is_unbound">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare = #'exchange.declare'{exchange = X,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Queues = [<<"e-q1">>, <<"e-q2">>, <<"e-q3">>, <<"e-q4">>, <<"e-q5">>, <<"e-q6">>],
+    [#'queue.declare_ok'{} =
+         amqp_channel:call(Chan, #'queue.declare' {
+                             queue = Q, exclusive = true }) || Q <- Queues],
+    [#'queue.bind_ok'{} =
+         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                                exchange = X,
+                                                routing_key = <<"2">>})
+     || Q <- Queues],
+
+    ?assertEqual(12, count_buckets_of_exchange(Config, X)),
+    amqp_channel:call(Chan, #'queue.unbind'{exchange = X,
+                                            queue = <<"e-q2">>,
+                                            routing_key = <<"2">>}),
+
+    ?assertEqual(10, count_buckets_of_exchange(Config, X)),
+    amqp_channel:call(Chan, #'queue.unbind'{exchange = X,
+                                            queue = <<"e-q6">>,
+                                            routing_key = <<"2">>}),
+    ?assertEqual(8, count_buckets_of_exchange(Config, X)),
+
+    clean_up_test_topology(Config, X, Queues),
+    rabbit_ct_client_helpers:close_channel(Chan),
+    ok.
+
 
 %%
 %% Helpers
 %%
 
-count_buckets_of_exchange(Config, X) ->
+hash_ring_state(Config, X) ->
     rabbit_ct_broker_helpers:rpc(
       Config, 0, ets, lookup,
-      [rabbit_exchange_type_consistent_hash_bucket_count,
+      [rabbit_exchange_type_consistent_hash_ring_state,
        rabbit_misc:r(<<"/">>, exchange, X)]).
 
-count_buckets_for_pair(Config, X, Q) ->
+hash_ring_rows(Config) ->
     rabbit_ct_broker_helpers:rpc(
-      Config, 0, ets, lookup,
-      [rabbit_exchange_type_consistent_hash_binding_bucket,
-       {rabbit_misc:r(<<"/">>, exchange, X),
-        rabbit_misc:r(<<"/">>, queue, Q)}]).
+      Config, 0, ets, tab2list, [rabbit_exchange_type_consistent_hash_ring_state]).
 
-count_hash_buckets(Config) ->
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0, ets, info,
-      [rabbit_exchange_type_consistent_hash_bucket_queue, size]).
+assert_ring_consistency(Config, X) ->
+    [#chx_hash_ring{bucket_map = M}] = hash_ring_state(Config, X),
+    Buckets = maps:keys(M),
+    Hi      = lists:last(Buckets),
 
-count_all_hash_buckets(Config) ->
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0, ets, info,
-      [rabbit_exchange_type_consistent_hash_bucket_count, size]).
+    %% bucket numbers form a sequence without gaps or duplicates
+    ?assertEqual(lists:seq(0, Hi), lists:usort(Buckets)).
 
-count_all_binding_buckets(Config) ->
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0, ets, info,
-      [rabbit_exchange_type_consistent_hash_binding_bucket, size]).
+count_buckets_of_exchange(Config, X) ->
+    case hash_ring_state(Config, X) of
+        [#chx_hash_ring{bucket_map = M}] -> maps:size(M);
+        []                               -> 0
+    end.
 
-count_all_queue_buckets(Config) ->
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0, ets, info,
-      [rabbit_exchange_type_consistent_hash_bucket_queue, size]).
+count_all_hash_ring_buckets(Config) ->
+    Rows = hash_ring_rows(Config),
+    lists:foldl(fun(#chx_hash_ring{bucket_map = M}, Acc) -> Acc + maps:size(M) end, 0, Rows).
 
 clean_up_test_topology(Config) ->
-    clean_up_test_topology(Config, <<"e">>, ?Qs).
+    clean_up_test_topology(Config, none, ?AllQs).
+
+clean_up_test_topology(Config, none, Qs) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    [amqp_channel:call(Ch, #'queue.delete' {queue = Q}) || Q <- Qs],
+    rabbit_ct_client_helpers:close_channel(Ch);
 
 clean_up_test_topology(Config, X, Qs) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-
     amqp_channel:call(Ch, #'exchange.delete' {exchange = X}),
     [amqp_channel:call(Ch, #'queue.delete' {queue = Q}) || Q <- Qs],
-
     rabbit_ct_client_helpers:close_channel(Ch).
