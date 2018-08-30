@@ -883,7 +883,7 @@ is_clustered_with()
     if [ "$rc" -ne 0 ]; then
         ocf_log err "${LH} Failed to check whether '$node_name' is partitioned with us"
         # We had a transient local error; that doesn't mean the remote node is
-        # not partitioned with us, so ignore this
+        # partitioned with us, so ignore this
     elif [ "$seen_as_partitioned" != false ]; then
         ocf_log info "${LH} Node $node_name is partitioned from us"
         return 1
