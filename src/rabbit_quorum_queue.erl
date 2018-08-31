@@ -25,7 +25,7 @@
 -export([dead_letter_publish/5]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
--export([cancel_customer_handler/3, cancel_customer/3]).
+-export([cancel_consumer_handler/3, cancel_consumer/3]).
 -export([become_leader/2, update_metrics/2]).
 -export([rpc_delete_metrics/1]).
 -export([format/1]).
@@ -151,21 +151,21 @@ declare(#amqqueue{name = QName,
 ra_machine(Q = #amqqueue{name = QName}) ->
     {module, rabbit_fifo,
      #{dead_letter_handler => dlx_mfa(Q),
-       cancel_customer_handler => {?MODULE, cancel_customer, [QName]},
+       cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
        become_leader_handler => {?MODULE, become_leader, [QName]},
        metrics_handler => {?MODULE, update_metrics, [QName]}}}.
 
-cancel_customer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
+cancel_consumer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
     Node = node(ChPid),
     % QName = queue_name(Name),
     case Node == node() of
-        true -> cancel_customer(QName, ChPid, ConsumerTag);
+        true -> cancel_consumer(QName, ChPid, ConsumerTag);
         false -> rabbit_misc:rpc_call(Node, rabbit_quorum_queue,
-                                      cancel_customer,
+                                      cancel_consumer,
                                       [QName, ChPid, ConsumerTag])
     end.
 
-cancel_customer(QName, ChPid, ConsumerTag) ->
+cancel_consumer(QName, ChPid, ConsumerTag) ->
     rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},

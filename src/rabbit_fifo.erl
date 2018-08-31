@@ -24,7 +24,7 @@
          query_messages_checked_out/1,
          query_processes/1,
          query_ra_indexes/1,
-         query_customer_count/1,
+         query_consumer_count/1,
          usage/1,
 
          %% misc
@@ -45,7 +45,7 @@
 % in the unassigned messages map
 
 -type msg_id() :: non_neg_integer().
-%% A customer-scoped monotonically incrementing integer included with a
+%% A consumer-scoped monotonically incrementing integer included with a
 %% {@link delivery/0.}. Used to settle deliveries using
 %% {@link rabbit_fifo_client:settle/3.}
 
@@ -67,15 +67,15 @@
 -type delivery_msg() :: {msg_id(), msg()}.
 %% A tuple consisting of the message id and the headered message.
 
--type customer_tag() :: binary().
-%% An arbitrary binary tag used to distinguish between different customers
+-type consumer_tag() :: binary().
+%% An arbitrary binary tag used to distinguish between different consumers
 %% set up by the same process. See: {@link rabbit_fifo_client:checkout/3.}
 
--type delivery() :: {delivery, customer_tag(), [delivery_msg()]}.
+-type delivery() :: {delivery, consumer_tag(), [delivery_msg()]}.
 %% Represents the delivery of one or more rabbit_fifo messages.
 
--type customer_id() :: {customer_tag(), pid()}.
-%% The entity that receives messages. Uniquely identifies a customer.
+-type consumer_id() :: {consumer_tag(), pid()}.
+%% The entity that receives messages. Uniquely identifies a consumer.
 
 -type checkout_spec() :: {once | auto, Num :: non_neg_integer()} |
                          {dequeue, settled | unsettled} |
@@ -84,17 +84,17 @@
 -type protocol() ::
     {enqueue, Sender :: maybe(pid()), MsgSeq :: maybe(msg_seqno()),
      Msg :: raw_msg()} |
-    {checkout, Spec :: checkout_spec(), Customer :: customer_id()} |
-    {settle, MsgIds :: [msg_id()], Customer :: customer_id()} |
-    {return, MsgIds :: [msg_id()], Customer :: customer_id()} |
-    {discard, MsgIds :: [msg_id()], Customer :: customer_id()} |
+    {checkout, Spec :: checkout_spec(), Consumer :: consumer_id()} |
+    {settle, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
+    {return, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
+    {discard, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
     purge.
 
 -type command() :: protocol() | ra_machine:builtin_command().
 %% all the command types suppored by ra fifo
 
 -type client_msg() :: delivery().
-%% the messages `rabbit_fifo' can send to customers.
+%% the messages `rabbit_fifo' can send to consumers.
 
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
@@ -104,7 +104,7 @@
 % {Key, Ready, Pending, Total}
 -define(USE_AVG_HALF_LIFE, 10000.0).
 
--record(customer,
+-record(consumer,
         {checked_out = #{} :: #{msg_id() => {msg_in_id(), indexed_msg()}},
          next_msg_id = 0 :: msg_id(), % part of snapshot data
          num = 0 :: non_neg_integer(), % part of snapshot data
@@ -147,14 +147,14 @@
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations - backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
-         % customers need to reflect customer state at time of snapshot
+         % consumers need to reflect consumer state at time of snapshot
          % needs to be part of snapshot
-         customers = #{} :: #{customer_id() => #customer{}},
-         % customers that require further service are queued here
+         consumers = #{} :: #{consumer_id() => #consumer{}},
+         % consumers that require further service are queued here
          % needs to be part of snapshot
-         service_queue = queue:new() :: queue:queue(customer_id()),
+         service_queue = queue:new() :: queue:queue(consumer_id()),
          dead_letter_handler :: maybe(applied_mfa()),
-         cancel_customer_handler :: maybe(applied_mfa()),
+         cancel_consumer_handler :: maybe(applied_mfa()),
          become_leader_handler :: maybe(applied_mfa()),
          metrics_handler :: maybe(applied_mfa()),
          prefix_msg_count = 0 :: non_neg_integer()
@@ -165,15 +165,15 @@
 -type config() :: #{name := atom(),
                     dead_letter_handler => applied_mfa(),
                     become_leader_handler => applied_mfa(),
-                    cancel_customer_handler => applied_mfa(),
+                    cancel_consumer_handler => applied_mfa(),
                     metrics_handler => applied_mfa(),
                     shadow_copy_interval => non_neg_integer()}.
 
 -export_type([protocol/0,
               delivery/0,
               command/0,
-              customer_tag/0,
-              customer_id/0,
+              consumer_tag/0,
+              consumer_id/0,
               client_msg/0,
               msg/0,
               msg_id/0,
@@ -185,20 +185,20 @@
 -spec init(config()) -> {state(), ra_machine:effects()}.
 init(#{name := Name} = Conf) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
-    CCH = maps:get(cancel_customer_handler, Conf, undefined),
+    CCH = maps:get(cancel_consumer_handler, Conf, undefined),
     BLH = maps:get(become_leader_handler, Conf, undefined),
     MH = maps:get(metrics_handler, Conf, undefined),
     SHI = maps:get(shadow_copy_interval, Conf, ?SHADOW_COPY_INTERVAL),
     {#state{name = Name,
             dead_letter_handler = DLH,
-            cancel_customer_handler = CCH,
+            cancel_consumer_handler = CCH,
             become_leader_handler = BLH,
             metrics_handler = MH,
             shadow_copy_interval = SHI}, []}.
 
 
 
-% msg_ids are scoped per customer
+% msg_ids are scoped per consumer
 % ra_indexes holds all raft indexes for enqueues currently on queue
 -spec apply(ra_machine:command_meta_data(), command(),
             ra_machine:effects(), state()) ->
@@ -211,37 +211,37 @@ apply(#{index := RaftIdx}, {enqueue, From, Seq, RawMsg}, Effects0, State00) ->
         {duplicate, State, Effects} ->
             {State, Effects}
     end;
-apply(#{index := RaftIdx}, {settle, MsgIds, CustomerId}, Effects0,
-      #state{customers = Custs0} = State) ->
-    case Custs0 of
-        #{CustomerId := Cust0} ->
+apply(#{index := RaftIdx}, {settle, MsgIds, ConsumerId}, Effects0,
+      #state{consumers = Cons0} = State) ->
+    case Cons0 of
+        #{ConsumerId := Con0} ->
             % need to increment metrics before completing as any snapshot
             % states taken need to includ them
-            complete_and_checkout(RaftIdx, MsgIds, CustomerId,
-                                  Cust0, Effects0, State);
+            complete_and_checkout(RaftIdx, MsgIds, ConsumerId,
+                                  Con0, Effects0, State);
         _ ->
             {State, Effects0}
     end;
-apply(#{index := RaftIdx}, {discard, MsgIds, CustomerId}, Effects0,
-      #state{customers = Custs0} = State0) ->
-    case Custs0 of
-        #{CustomerId := Cust0} ->
+apply(#{index := RaftIdx}, {discard, MsgIds, ConsumerId}, Effects0,
+      #state{consumers = Cons0} = State0) ->
+    case Cons0 of
+        #{ConsumerId := Con0} ->
             {State, Effects} = complete_and_checkout(RaftIdx, MsgIds,
-                                                     CustomerId, Cust0,
+                                                     ConsumerId, Con0,
                                                      Effects0, State0),
-            Discarded = maps:with(MsgIds, Cust0#customer.checked_out),
+            Discarded = maps:with(MsgIds, Con0#consumer.checked_out),
             {State, dead_letter_effects(Discarded, State, Effects)};
         _ ->
             {State0, Effects0}
     end;
-apply(_, {return, MsgIds, CustomerId}, Effects0,
-      #state{customers = Custs0} = State) ->
-    case Custs0 of
-        #{CustomerId := Cust0 = #customer{checked_out = Checked0}} ->
+apply(_, {return, MsgIds, ConsumerId}, Effects0,
+      #state{consumers = Cons0} = State) ->
+    case Cons0 of
+        #{ConsumerId := Con0 = #consumer{checked_out = Checked0}} ->
             Checked = maps:without(MsgIds, Checked0),
             Returned = maps:with(MsgIds, Checked0),
             MsgNumMsgs = [M || M <- maps:values(Returned)],
-            return(CustomerId, MsgNumMsgs, Cust0, Checked, Effects0, State);
+            return(ConsumerId, MsgNumMsgs, Con0, Checked, Effects0, State);
         _ ->
             {State, Effects0}
     end;
@@ -250,19 +250,19 @@ apply(_, {checkout, {dequeue, _}, {_Tag, _Pid}}, Effects0,
              prefix_msg_count = 0} = State0) when map_size(M) == 0 ->
     %% TODO do we need metric visibility of empty get requests?
     {State0, Effects0, {dequeue, empty}};
-apply(Meta, {checkout, {dequeue, settled}, CustomerId},
+apply(Meta, {checkout, {dequeue, settled}, ConsumerId},
       Effects0, State0) ->
     % TODO: this clause could probably be optimised
-    State1 = update_customer(CustomerId, {once, 1}, State0),
+    State1 = update_consumer(ConsumerId, {once, 1}, State0),
     % turn send msg effect into reply
     {success, _, MsgId, Msg, State2} = checkout_one(State1),
     % immediately settle
-    {State, Effects} = apply(Meta, {settle, [MsgId], CustomerId},
+    {State, Effects} = apply(Meta, {settle, [MsgId], ConsumerId},
                              Effects0, State2),
     {State, Effects, {dequeue, {MsgId, Msg}}};
-apply(_, {checkout, {dequeue, unsettled}, {_Tag, Pid} = Customer},
+apply(_, {checkout, {dequeue, unsettled}, {_Tag, Pid} = Consumer},
       Effects0, State0) ->
-    State1 = update_customer(Customer, {once, 1}, State0),
+    State1 = update_consumer(Consumer, {once, 1}, State0),
     Effects1 = [{monitor, process, Pid} | Effects0],
     {State, Reply, Effects} = case checkout_one(State1) of
                                   {success, _, MsgId, Msg, S} ->
@@ -273,29 +273,29 @@ apply(_, {checkout, {dequeue, unsettled}, {_Tag, Pid} = Customer},
                                       {S, empty, Effects1}
                               end,
     {State, Effects, {dequeue, Reply}};
-apply(_, {checkout, cancel, CustomerId}, Effects0, State0) ->
-    {CancelEffects, State1} = cancel_customer(CustomerId, {Effects0, State0}),
+apply(_, {checkout, cancel, ConsumerId}, Effects0, State0) ->
+    {CancelEffects, State1} = cancel_consumer(ConsumerId, {Effects0, State0}),
     {State, Effects} = checkout(State1, CancelEffects),
     % TODO: here we should really demonitor the pid but _only_ if it has no
-    % other customers or enqueuers.
+    % other consumers or enqueuers.
     {State, Effects};
-apply(_, {checkout, Spec, {_Tag, Pid} = CustomerId}, Effects0, State0) ->
-    State1 = update_customer(CustomerId, Spec, State0),
+apply(_, {checkout, Spec, {_Tag, Pid} = ConsumerId}, Effects0, State0) ->
+    State1 = update_consumer(ConsumerId, Spec, State0),
     {State, Effects} = checkout(State1, Effects0),
     {State, [{monitor, process, Pid} | Effects]};
 apply(#{index := RaftIdx}, purge, Effects0,
-      #state{customers = Custs0, ra_indexes = Indexes } = State0) ->
+      #state{consumers = Cons0, ra_indexes = Indexes } = State0) ->
     Total = rabbit_fifo_index:size(Indexes),
     {State1, Effects1} =
         maps:fold(
-          fun(CustomerId, C = #customer{checked_out = Checked0},
+          fun(ConsumerId, C = #consumer{checked_out = Checked0},
               {StateAcc0, EffectsAcc0}) ->
                   MsgRaftIdxs = [RIdx || {_MsgInId, {RIdx, _}}
                                              <- maps:values(Checked0)],
-                  {StateAcc, EffectsAcc} = complete(CustomerId, MsgRaftIdxs, C,
+                  {StateAcc, EffectsAcc} = complete(ConsumerId, MsgRaftIdxs, C,
                                                  #{}, EffectsAcc0, StateAcc0),
                   {StateAcc, EffectsAcc}
-          end, {State0, Effects0}, Custs0),
+          end, {State0, Effects0}, Cons0),
     {State, Effects} = update_smallest_raft_index(
                          RaftIdx, Indexes,
                          State1#state{ra_indexes = rabbit_fifo_index:empty(),
@@ -303,29 +303,29 @@ apply(#{index := RaftIdx}, purge, Effects0,
                                       returns = queue:new(),
                                       low_msg_num = undefined}, Effects1),
     {State, [garbage_collection | Effects], {purge, Total}};
-apply(_, {down, CustomerPid, noconnection},
-      Effects0, #state{customers = Custs0,
+apply(_, {down, ConsumerPid, noconnection},
+      Effects0, #state{consumers = Cons0,
                        enqueuers = Enqs0} = State0) ->
-    Node = node(CustomerPid),
-    % mark all customers and enqueuers as suspect
+    Node = node(ConsumerPid),
+    % mark all consumers and enqueuers as suspect
     % and monitor the node
-    Custs = maps:map(fun({_, P}, C) when node(P) =:= Node ->
-                             C#customer{suspected_down = true};
+    Cons = maps:map(fun({_, P}, C) when node(P) =:= Node ->
+                             C#consumer{suspected_down = true};
                         (_, C) -> C
-                     end, Custs0),
+                     end, Cons0),
     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
                             E#enqueuer{suspected_down = true};
                        (_, E) -> E
                     end, Enqs0),
-    Effects = case maps:size(Custs) of
+    Effects = case maps:size(Cons) of
                   0 ->
                       [{aux, inactive}, {monitor, node, Node} | Effects0];
                   _ ->
                       [{monitor, node, Node} | Effects0]
               end,
-    {State0#state{customers = Custs, enqueuers = Enqs}, Effects};
+    {State0#state{consumers = Cons, enqueuers = Enqs}, Effects};
 apply(_, {down, Pid, _Info}, Effects0,
-      #state{customers = Custs0,
+      #state{consumers = Cons0,
              enqueuers = Enqs0} = State0) ->
     % remove any enqueuer for the same pid
     % TODO: if there are any pending enqueuers these should be enqueued
@@ -339,26 +339,26 @@ apply(_, {down, Pid, _Info}, Effects0,
                      State0
              end,
     % return checked out messages to main queue
-    % Find the customers for the down pid
-    DownCustomers = maps:keys(
-                      maps:filter(fun({_, P}, _) -> P =:= Pid end, Custs0)),
-    {Effects1, State2} = lists:foldl(fun cancel_customer/2, {Effects0, State1},
-                                     DownCustomers),
+    % Find the consumers for the down pid
+    DownConsumers = maps:keys(
+                      maps:filter(fun({_, P}, _) -> P =:= Pid end, Cons0)),
+    {Effects1, State2} = lists:foldl(fun cancel_consumer/2, {Effects0, State1},
+                                     DownConsumers),
     checkout(State2, Effects1);
 apply(_, {nodeup, Node}, Effects0,
-      #state{customers = Custs0,
+      #state{consumers = Cons0,
              enqueuers = Enqs0} = State0) ->
-    Custs = maps:fold(fun({_, P}, #customer{suspected_down = true}, Acc)
+    Cons = maps:fold(fun({_, P}, #consumer{suspected_down = true}, Acc)
                             when node(P) =:= Node ->
                               [P | Acc];
                          (_, _, Acc) -> Acc
-                      end, [], Custs0),
+                      end, [], Cons0),
     Enqs = maps:fold(fun(P, #enqueuer{suspected_down = true}, Acc)
                            when node(P) =:= Node ->
                              [P | Acc];
                         (_, _, Acc) -> Acc
                      end, [], Enqs0),
-    Monitors = [{monitor, process, P} || P <- Custs ++ Enqs],
+    Monitors = [{monitor, process, P} || P <- Cons ++ Enqs],
     % TODO: should we unsuspect these processes here?
     % TODO: avoid list concat
     {State0, Monitors ++ Effects0};
@@ -366,11 +366,11 @@ apply(_, {nodedown, _Node}, Effects, State) ->
     {State, Effects}.
 
 -spec leader_effects(state()) -> ra_machine:effects().
-leader_effects(#state{customers = Custs,
+leader_effects(#state{consumers = Cons,
                       name = Name,
                       become_leader_handler = BLH}) ->
-    % return effects to monitor all current customers
-    Effects = [{monitor, process, P} || {_, P} <- maps:keys(Custs)],
+    % return effects to monitor all current consumers
+    Effects = [{monitor, process, P} || {_, P} <- maps:keys(Cons)],
     case BLH of
         undefined ->
             Effects;
@@ -379,21 +379,21 @@ leader_effects(#state{customers = Custs,
     end.
 
 -spec eol_effects(state()) -> ra_machine:effects().
-eol_effects(#state{enqueuers = Enqs, customers = Custs0}) ->
-    Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
-    [{send_msg, P, eol} || P <- maps:keys(maps:merge(Enqs, Custs))].
+eol_effects(#state{enqueuers = Enqs, consumers = Cons0}) ->
+    Cons = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Cons0),
+    [{send_msg, P, eol} || P <- maps:keys(maps:merge(Enqs, Cons))].
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
 tick(_Ts, #state{name = Name,
                  messages = Messages,
                  ra_indexes = Indexes,
                  metrics_handler = MH,
-                 customers = Custs} = State) ->
+                 consumers = Cons} = State) ->
     Metrics = {Name,
                maps:size(Messages), % Ready
                num_checked_out(State), % checked out
                rabbit_fifo_index:size(Indexes), %% Total
-               maps:size(Custs)}, % Customers
+               maps:size(Cons)}, % Consumers
     case MH of
         undefined ->
             [{aux, emit}];
@@ -402,22 +402,22 @@ tick(_Ts, #state{name = Name,
     end.
 
 -spec overview(state()) -> map().
-overview(#state{customers = Custs,
+overview(#state{consumers = Cons,
                 enqueuers = Enqs,
                 messages = Messages,
                 ra_indexes = Indexes} = State) ->
     #{type => ?MODULE,
-      num_customers => maps:size(Custs),
+      num_consumers => maps:size(Cons),
       num_checked_out => num_checked_out(State),
       num_enqueuers => maps:size(Enqs),
       num_ready_messages => maps:size(Messages),
       num_messages => rabbit_fifo_index:size(Indexes)}.
 
--spec get_checked_out(customer_id(), msg_id(), msg_id(), state()) ->
+-spec get_checked_out(consumer_id(), msg_id(), msg_id(), state()) ->
     [delivery_msg()].
-get_checked_out(Cid, From, To, #state{customers = Customers}) ->
-    case Customers of
-        #{Cid := #customer{checked_out = Checked}} ->
+get_checked_out(Cid, From, To, #state{consumers = Consumers}) ->
+    case Consumers of
+        #{Cid := #consumer{checked_out = Checked}} ->
             [{K, snd(snd(maps:get(K, Checked)))} || K <- lists:seq(From, To)];
         _ ->
             []
@@ -447,21 +447,21 @@ handle_aux(_, cast, Cmd, {Name, Use0}, Log, _) ->
 query_messages_ready(#state{messages = M}) ->
     M.
 
-query_messages_checked_out(#state{customers = Customers}) ->
-    maps:fold(fun (_, #customer{checked_out = C}, S) ->
+query_messages_checked_out(#state{consumers = Consumers}) ->
+    maps:fold(fun (_, #consumer{checked_out = C}, S) ->
                       maps:merge(S, maps:from_list(maps:values(C)))
-              end, #{}, Customers).
+              end, #{}, Consumers).
 
-query_processes(#state{enqueuers = Enqs, customers = Custs0}) ->
-    Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
-    maps:keys(maps:merge(Enqs, Custs)).
+query_processes(#state{enqueuers = Enqs, consumers = Cons0}) ->
+    Cons = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Cons0),
+    maps:keys(maps:merge(Enqs, Cons)).
 
 
 query_ra_indexes(#state{ra_indexes = RaIndexes}) ->
     RaIndexes.
 
-query_customer_count(#state{customers = Customers}) ->
-    maps:size(Customers).
+query_consumer_count(#state{consumers = Consumers}) ->
+    maps:size(Consumers).
 
 %% other
 
@@ -502,24 +502,24 @@ moving_average(Time, HalfLife, Next, Current) ->
     Weight = math:exp(Time * math:log(0.5) / HalfLife),
     Next * (1 - Weight) + Current * Weight.
 
-num_checked_out(#state{customers = Custs}) ->
-    lists:foldl(fun (#customer{checked_out = C}, Acc) ->
+num_checked_out(#state{consumers = Cons}) ->
+    lists:foldl(fun (#consumer{checked_out = C}, Acc) ->
                         maps:size(C) + Acc
-                end, 0, maps:values(Custs)).
+                end, 0, maps:values(Cons)).
 
-cancel_customer(CustomerId,
-                {Effects0, #state{customers = C0, name = Name} = S0}) ->
-    case maps:take(CustomerId, C0) of
-        {#customer{checked_out = Checked0}, Custs} ->
+cancel_consumer(ConsumerId,
+                {Effects0, #state{consumers = C0, name = Name} = S0}) ->
+    case maps:take(ConsumerId, C0) of
+        {#consumer{checked_out = Checked0}, Cons} ->
             S = maps:fold(fun (_, {MsgNum, Msg}, S) ->
                                   return_one(MsgNum, Msg, S)
                           end, S0, Checked0),
-            Effects = cancel_customer_effects(CustomerId, Name, S, Effects0),
-            case maps:size(Custs) of
+            Effects = cancel_consumer_effects(ConsumerId, Name, S, Effects0),
+            case maps:size(Cons) of
                 0 ->
-                    {[{aux, inactive} | Effects], S#state{customers = Custs}};
+                    {[{aux, inactive} | Effects], S#state{consumers = Cons}};
                 _ ->
-                    {Effects, S#state{customers = Custs}}
+                    {Effects, S#state{consumers = Cons}}
                 end;
         error ->
             % already removed - do nothing
@@ -594,47 +594,47 @@ maybe_enqueue(RaftIdx, From, MsgSeqNo, RawMsg, Effects0,
 snd(T) ->
     element(2, T).
 
-return(CustomerId, MsgNumMsgs, #customer{lifetime = Life} = Cust0, Checked,
-       Effects0, #state{customers = Custs0, service_queue = SQ0} = State0) ->
-    Cust = case Life of
+return(ConsumerId, MsgNumMsgs, #consumer{lifetime = Life} = Con0, Checked,
+       Effects0, #state{consumers = Cons0, service_queue = SQ0} = State0) ->
+    Con = case Life of
               auto ->
                    Num = length(MsgNumMsgs),
-                   Cust0#customer{checked_out = Checked,
-                          seen = Cust0#customer.seen - Num};
+                   Con0#consumer{checked_out = Checked,
+                          seen = Con0#consumer.seen - Num};
                once ->
-                   Cust0#customer{checked_out = Checked}
+                   Con0#consumer{checked_out = Checked}
            end,
-    {Custs, SQ, Effects} = update_or_remove_sub(CustomerId, Cust, Custs0,
+    {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
                                                  SQ0, Effects0),
     State1 = lists:foldl(fun(dummy, #state{prefix_msg_count = MsgCount} = S0) ->
                                  S0#state{prefix_msg_count = MsgCount + 1};
                             ({MsgNum, Msg}, S0) ->
                                  return_one(MsgNum, Msg, S0)
                          end, State0, MsgNumMsgs),
-    checkout(State1#state{customers = Custs,
+    checkout(State1#state{consumers = Cons,
                           service_queue = SQ},
              Effects).
 
 % used to processes messages that are finished
-complete(CustomerId, MsgRaftIdxs, Cust0, Checked, Effects0,
-       #state{customers = Custs0, service_queue = SQ0,
+complete(ConsumerId, MsgRaftIdxs, Con0, Checked, Effects0,
+       #state{consumers = Cons0, service_queue = SQ0,
               ra_indexes = Indexes0} = State0) ->
-    Cust = Cust0#customer{checked_out = Checked},
-    {Custs, SQ, Effects} = update_or_remove_sub(CustomerId, Cust, Custs0,
+    Con = Con0#consumer{checked_out = Checked},
+    {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
                                                 SQ0, Effects0),
     Indexes = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes0, MsgRaftIdxs),
-    {State0#state{customers = Custs,
+    {State0#state{consumers = Cons,
                   ra_indexes = Indexes,
                   service_queue = SQ}, Effects}.
 
-complete_and_checkout(IncomingRaftIdx, MsgIds, CustomerId,
-                      #customer{checked_out = Checked0} = Cust0,
+complete_and_checkout(IncomingRaftIdx, MsgIds, ConsumerId,
+                      #consumer{checked_out = Checked0} = Con0,
                       Effects0, #state{ra_indexes = Indexes0} = State0) ->
     Checked = maps:without(MsgIds, Checked0),
     Discarded = maps:with(MsgIds, Checked0),
     MsgRaftIdxs = [RIdx || {_, {RIdx, _}} <- maps:values(Discarded)],
-    {State1, Effects1}  = complete(CustomerId, MsgRaftIdxs,
-                                   Cust0, Checked, Effects0, State0),
+    {State1, Effects1}  = complete(ConsumerId, MsgRaftIdxs,
+                                   Con0, Checked, Effects0, State0),
     {State, Effects} = checkout(State1, Effects1),
     % settle metrics are incremented separately
     update_smallest_raft_index(IncomingRaftIdx, Indexes0, State, Effects).
@@ -651,11 +651,11 @@ dead_letter_effects(Discarded,
                             end, [], Discarded),
     [{mod_call, Mod, Fun, Args ++ [DeadLetters]} | Effects].
 
-cancel_customer_effects(_, _, #state{cancel_customer_handler = undefined},
+cancel_consumer_effects(_, _, #state{cancel_consumer_handler = undefined},
                         Effects) ->
     Effects;
-cancel_customer_effects(Pid, Name,
-                        #state{cancel_customer_handler = {Mod, Fun, Args}},
+cancel_consumer_effects(Pid, Name,
+                        #state{cancel_consumer_handler = {Mod, Fun, Args}},
                         Effects) ->
     [{mod_call, Mod, Fun, Args ++ [Pid, Name]} | Effects].
 
@@ -705,9 +705,9 @@ return_one(MsgNum, {RaftId, {Header0, RawMsg}},
 checkout(State, Effects) ->
     checkout0(checkout_one(State), Effects, #{}).
 
-checkout0({success, CustomerId, MsgId, Msg, State}, Effects, Acc0) ->
+checkout0({success, ConsumerId, MsgId, Msg, State}, Effects, Acc0) ->
     DelMsg = {MsgId, Msg},
-    Acc = maps:update_with(CustomerId,
+    Acc = maps:update_with(ConsumerId,
                            fun (M) -> [DelMsg | M] end,
                            [DelMsg], Acc0),
     checkout0(checkout_one(State), Effects, Acc);
@@ -768,36 +768,36 @@ send_msg_effect({CTag, CPid}, Msgs) ->
 
 checkout_one(#state{service_queue = SQ0,
                     messages = Messages0,
-                    customers = Custs0} = InitState) ->
+                    consumers = Cons0} = InitState) ->
     case queue:peek(SQ0) of
-        {value, CustomerId} ->
+        {value, ConsumerId} ->
             case take_next_msg(InitState) of
-                {CustomerMsg, State0, Messages, PrefMsgC} ->
+                {ConsumerMsg, State0, Messages, PrefMsgC} ->
                     SQ1 = queue:drop(SQ0),
-                    %% there are customers waiting to be serviced
-                    %% process customer checkout
-                    case maps:find(CustomerId, Custs0) of
-                        {ok, #customer{checked_out = Checked0,
+                    %% there are consumers waiting to be serviced
+                    %% process consumer checkout
+                    case maps:find(ConsumerId, Cons0) of
+                        {ok, #consumer{checked_out = Checked0,
                                        next_msg_id = Next,
-                                       seen = Seen} = Cust0} ->
-                            Checked = maps:put(Next, CustomerMsg, Checked0),
-                            Cust = Cust0#customer{checked_out = Checked,
+                                       seen = Seen} = Con0} ->
+                            Checked = maps:put(Next, ConsumerMsg, Checked0),
+                            Con = Con0#consumer{checked_out = Checked,
                                                   next_msg_id = Next+1,
                                                   seen = Seen+1},
-                            {Custs, SQ, []} = % we expect no effects
-                                update_or_remove_sub(CustomerId, Cust,
-                                                     Custs0, SQ1, []),
+                            {Cons, SQ, []} = % we expect no effects
+                                update_or_remove_sub(ConsumerId, Con,
+                                                     Cons0, SQ1, []),
                             State = State0#state{service_queue = SQ,
                                                  messages = Messages,
                                                  prefix_msg_count = PrefMsgC,
-                                                 customers = Custs},
-                            Msg = case CustomerMsg of
+                                                 consumers = Cons},
+                            Msg = case ConsumerMsg of
                                       dummy -> dummy;
                                       {_, {_, M}} -> M
                                   end,
-                            {success, CustomerId, Next, Msg, State};
+                            {success, ConsumerId, Next, Msg, State};
                         error ->
-                            %% customer did not exist but was queued, recurse
+                            %% consumer did not exist but was queued, recurse
                             checkout_one(InitState#state{service_queue = SQ1})
                     end;
                 error ->
@@ -811,38 +811,38 @@ checkout_one(#state{service_queue = SQ0,
     end.
 
 
-update_or_remove_sub(CustomerId, #customer{lifetime = auto,
+update_or_remove_sub(ConsumerId, #consumer{lifetime = auto,
                                            checked_out = Checked,
-                                           num = Num} = Cust,
-                     Custs, ServiceQueue, Effects) ->
+                                           num = Num} = Con,
+                     Cons, ServiceQueue, Effects) ->
     case maps:size(Checked) < Num of
         true ->
-            {maps:put(CustomerId, Cust, Custs),
-             uniq_queue_in(CustomerId, ServiceQueue), Effects};
+            {maps:put(ConsumerId, Con, Cons),
+             uniq_queue_in(ConsumerId, ServiceQueue), Effects};
         false ->
-            {maps:put(CustomerId, Cust, Custs), ServiceQueue, Effects}
+            {maps:put(ConsumerId, Con, Cons), ServiceQueue, Effects}
     end;
-update_or_remove_sub(CustomerId, #customer{lifetime = once,
+update_or_remove_sub(ConsumerId, #consumer{lifetime = once,
                                            checked_out = Checked,
-                                           num = N, seen = N} = Cust,
-                     Custs, ServiceQueue, Effects) ->
+                                           num = N, seen = N} = Con,
+                     Cons, ServiceQueue, Effects) ->
     case maps:size(Checked)  of
         0 ->
-            % we're done with this customer
-            {maps:remove(CustomerId, Custs), ServiceQueue,
-             [{demonitor, process, CustomerId} | Effects]};
+            % we're done with this consumer
+            {maps:remove(ConsumerId, Cons), ServiceQueue,
+             [{demonitor, process, ConsumerId} | Effects]};
         _ ->
             % there are unsettled items so need to keep around
-            {maps:put(CustomerId, Cust, Custs), ServiceQueue, Effects}
+            {maps:put(ConsumerId, Con, Cons), ServiceQueue, Effects}
     end;
-update_or_remove_sub(CustomerId, #customer{lifetime = once} = Cust,
-                     Custs, ServiceQueue, Effects) ->
-    {maps:put(CustomerId, Cust, Custs),
-     uniq_queue_in(CustomerId, ServiceQueue), Effects}.
+update_or_remove_sub(ConsumerId, #consumer{lifetime = once} = Con,
+                     Cons, ServiceQueue, Effects) ->
+    {maps:put(ConsumerId, Con, Cons),
+     uniq_queue_in(ConsumerId, ServiceQueue), Effects}.
 
 uniq_queue_in(Key, Queue) ->
     % TODO: queue:member could surely be quite expensive, however the practical
-    % number of unique customers may not be large enough for it to matter
+    % number of unique consumers may not be large enough for it to matter
     case queue:member(Key, Queue) of
         true ->
             Queue;
@@ -851,29 +851,29 @@ uniq_queue_in(Key, Queue) ->
     end.
 
 
-update_customer(CustomerId, {Life, Num},
-                #state{customers = Custs0,
+update_consumer(ConsumerId, {Life, Num},
+                #state{consumers = Cons0,
                        service_queue = ServiceQueue0} = State0) ->
-    Init = #customer{lifetime = Life, num = Num},
-    Custs = maps:update_with(CustomerId,
+    Init = #consumer{lifetime = Life, num = Num},
+    Cons = maps:update_with(ConsumerId,
                              fun(S) ->
-                                     S#customer{lifetime = Life, num = Num}
-                             end, Init, Custs0),
-    ServiceQueue = maybe_queue_customer(CustomerId, maps:get(CustomerId, Custs),
+                                     S#consumer{lifetime = Life, num = Num}
+                             end, Init, Cons0),
+    ServiceQueue = maybe_queue_consumer(ConsumerId, maps:get(ConsumerId, Cons),
                                         ServiceQueue0),
 
-    State0#state{customers = Custs, service_queue = ServiceQueue}.
+    State0#state{consumers = Cons, service_queue = ServiceQueue}.
 
-maybe_queue_customer(CustomerId, #customer{checked_out = Checked, num = Num},
+maybe_queue_consumer(ConsumerId, #consumer{checked_out = Checked, num = Num},
                      ServiceQueue0) ->
     case maps:size(Checked) of
         Size when Size < Num ->
-            % customerect needs service - check if already on service queue
-            case queue:member(CustomerId, ServiceQueue0) of
+            % consumerect needs service - check if already on service queue
+            case queue:member(ConsumerId, ServiceQueue0) of
                 true ->
                     ServiceQueue0;
                 false ->
-                    queue:in(CustomerId, ServiceQueue0)
+                    queue:in(ConsumerId, ServiceQueue0)
             end;
         _ ->
             ServiceQueue0
@@ -881,14 +881,14 @@ maybe_queue_customer(CustomerId, #customer{checked_out = Checked, num = Num},
 
 
 dehydrate_state(#state{messages = Messages0,
-                       customers = Customers,
+                       consumers = Consumers,
                        prefix_msg_count = MsgCount} = State) ->
     State#state{messages = #{},
                 ra_indexes = rabbit_fifo_index:empty(),
                 low_msg_num = undefined,
-                customers = maps:map(fun (_, C) ->
-                                             C#customer{checked_out = #{}}
-                                     end, Customers),
+                consumers = maps:map(fun (_, C) ->
+                                             C#consumer{checked_out = #{}}
+                                     end, Consumers),
                 returns = queue:new(),
                 prefix_msg_count = maps:size(Messages0) + MsgCount}.
 
@@ -1082,8 +1082,8 @@ cancelled_checkout_out_test() ->
         apply(meta(3), {checkout, {dequeue, settled}, Cid}, [], State3),
     ok.
 
-down_with_noproc_customer_returns_unsettled_test() ->
-    Cid = {<<"down_customer_returns_unsettled_test">>, self()},
+down_with_noproc_consumer_returns_unsettled_test() ->
+    Cid = {<<"down_consumer_returns_unsettled_test">>, self()},
     {State0, [_, _]} = enq(1, 1, second, test_init(test)),
     {State1, [{monitor, process, Pid} | _]} = check(Cid, 2, State0),
     {State2, [_, _]} = apply(meta(3), {down, Pid, noproc}, [], State1),
@@ -1100,7 +1100,7 @@ down_with_noconnection_marks_suspect_and_node_is_monitored_test() ->
     ?ASSERT_EFF({monitor, process, P}, P =:= Self, Effects0),
     {State1, Effects1} = check(Cid, 2, State0),
     ?ASSERT_EFF({monitor, process, P}, P =:= Pid, Effects1),
-    % monitor both enqueuer and customer
+    % monitor both enqueuer and consumer
     % because we received a noconnection we now need to monitor the node
     {State2a, _Effects2a} = apply(meta(3), {down, Pid, noconnection}, [], State1),
     {State2, Effects2} = apply(meta(3), {down, Self, noconnection}, [], State2a),
@@ -1124,8 +1124,8 @@ down_with_noproc_enqueuer_is_cleaned_up_test() ->
     ?assert(0 =:= maps:size(State1#state.enqueuers)),
     ok.
 
-completed_customer_yields_demonitor_effect_test() ->
-    Cid = {<<"completed_customer_yields_demonitor_effect_test">>, self()},
+completed_consumer_yields_demonitor_effect_test() ->
+    Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
     {State0, [_, _]} = enq(1, 1, second, test_init(test)),
     {State1, [{monitor, process, _} |  _]} = check(Cid, 2, State0),
     {_, Effects} = settle(Cid, 3, 0, State1),
@@ -1135,7 +1135,7 @@ completed_customer_yields_demonitor_effect_test() ->
     ok.
 
 discarded_message_without_dead_letter_handler_is_removed_test() ->
-    Cid = {<<"completed_customer_yields_demonitor_effect_test">>, self()},
+    Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({send_msg, _,
@@ -1148,7 +1148,7 @@ discarded_message_without_dead_letter_handler_is_removed_test() ->
     ok.
 
 discarded_message_with_dead_letter_handler_emits_mod_call_effect_test() ->
-    Cid = {<<"completed_customer_yields_demonitor_effect_test">>, self()},
+    Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
     {State00, _} = init(#{name => test,
                           dead_letter_handler =>
                           {somemod, somefun, [somearg]}}),
@@ -1356,7 +1356,7 @@ purge_with_checkout_test() ->
     {State1, _} = enq(2, 1, first, State0),
     {State2, _} = enq(3, 2, second, State1),
     {State3, _, {purge, 2}} = apply(meta(2), purge, [], State2),
-    #customer{checked_out = Checked} = maps:get(Cid, State3#state.customers),
+    #consumer{checked_out = Checked} = maps:get(Cid, State3#state.consumers),
     ?assertEqual(0, maps:size(Checked)),
     ok.
 

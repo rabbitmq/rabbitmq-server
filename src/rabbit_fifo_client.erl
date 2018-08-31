@@ -36,12 +36,12 @@
                 next_enqueue_seq = 1 :: seq(),
                 %% indicates that we've exceeded the soft limit
                 slow = false :: boolean(),
-                unsent_commands = #{} :: #{rabbit_fifo:customer_id() =>
+                unsent_commands = #{} :: #{rabbit_fifo:consumer_id() =>
                                            {[seq()], [seq()], [seq()]}},
                 soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
                 pending = #{} :: #{seq() =>
                                    {maybe(term()), rabbit_fifo:command()}},
-                customer_deliveries = #{} :: #{rabbit_fifo:customer_tag() =>
+                consumer_deliveries = #{} :: #{rabbit_fifo:consumer_tag() =>
                                                seq()},
                 priority = high :: high | normal,
                 block_handler = fun() -> ok end :: fun(() -> ok),
@@ -148,20 +148,20 @@ enqueue(Msg, State) ->
 %% This is a syncronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
 %%
-%% @param CustomerTag a unique tag to identify this particular customer.
+%% @param ConsumerTag a unique tag to identify this particular consumer.
 %% @param Settlement either `settled' or `unsettled'. When `settled' no
 %% further settlement needs to be done.
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, IdMsg, State}' or `{error | timeout, term()}'
--spec dequeue(rabbit_fifo:customer_tag(),
+-spec dequeue(rabbit_fifo:consumer_tag(),
               Settlement :: settled | unsettled, state()) ->
     {ok, rabbit_fifo:delivery_msg() | empty, state()} | {error | timeout, term()}.
-dequeue(CustomerTag, Settlement, #state{timeout = Timeout} = State0) ->
+dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
     Node = pick_node(State0),
-    CustomerId = customer_id(CustomerTag),
+    ConsumerId = consumer_id(ConsumerTag),
     case ra:send_and_await_consensus(Node, {checkout, {dequeue, Settlement},
-                                            CustomerId}, Timeout) of
+                                            ConsumerId}, Timeout) of
         {ok, {dequeue, Reply}, Leader} ->
             {ok, Reply, State0#state{leader = Leader}};
         Err ->
@@ -169,7 +169,7 @@ dequeue(CustomerTag, Settlement, #state{timeout = Timeout} = State0) ->
     end.
 
 %% @doc Settle a message. Permanently removes message from the queue.
-%% @param CustomerTag the tag uniquely identifying the customer.
+%% @param ConsumerTag the tag uniquely identifying the consumer.
 %% @param MsgIds the message ids received with the {@link rabbit_fifo:delivery/0.}
 %% @param State the {@module} state
 %% @returns
@@ -181,11 +181,11 @@ dequeue(CustomerTag, Settlement, #state{timeout = Timeout} = State0) ->
 %% have been successfully applied by ra has reached the maximum limit.
 %% If this happens the caller should either discard or cache the requested
 %% enqueue until at least one <code>ra_event</code> has been processes.
--spec settle(rabbit_fifo:customer_tag(), [rabbit_fifo:msg_id()], state()) ->
+-spec settle(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {ok, state()}.
-settle(CustomerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
+settle(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_node(State0),
-    Cmd = {settle, MsgIds, customer_id(CustomerTag)},
+    Cmd = {settle, MsgIds, consumer_id(ConsumerTag)},
     case send_command(Node, undefined, Cmd, high, State0) of
         {slow, S} ->
             % turn slow into ok for this function
@@ -193,19 +193,19 @@ settle(CustomerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
         {ok, _} = Ret ->
             Ret
     end;
-settle(CustomerTag, [_|_] = MsgIds,
+settle(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
-    CustomerId = customer_id(CustomerTag),
+    ConsumerId = consumer_id(ConsumerTag),
     %% we've reached the soft limit so will stash the command to be
     %% sent once we have seen enough notifications
-    Unsent = maps:update_with(CustomerId,
+    Unsent = maps:update_with(ConsumerId,
                               fun ({Settles, Returns, Discards}) ->
                                       {Settles ++ MsgIds, Returns, Discards}
                               end, {MsgIds, [], []}, Unsent0),
     {ok, State0#state{unsent_commands = Unsent}}.
 
 %% @doc Return a message to the queue.
-%% @param CustomerTag the tag uniquely identifying the customer.
+%% @param ConsumerTag the tag uniquely identifying the consumer.
 %% @param MsgIds the message ids to return received
 %% from {@link rabbit_fifo:delivery/0.}
 %% @param State the {@module} state
@@ -218,12 +218,12 @@ settle(CustomerTag, [_|_] = MsgIds,
 %% have been successfully applied by ra has reached the maximum limit.
 %% If this happens the caller should either discard or cache the requested
 %% enqueue until at least one <code>ra_event</code> has been processes.
--spec return(rabbit_fifo:customer_tag(), [rabbit_fifo:msg_id()], state()) ->
+-spec return(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {ok, state()}.
-return(CustomerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
+return(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_node(State0),
     % TODO: make rabbit_fifo return support lists of message ids
-    Cmd = {return, MsgIds, customer_id(CustomerTag)},
+    Cmd = {return, MsgIds, consumer_id(ConsumerTag)},
     case send_command(Node, undefined, Cmd, high, State0) of
         {slow, S} ->
             % turn slow into ok for this function
@@ -231,12 +231,12 @@ return(CustomerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
         {ok, _} = Ret ->
             Ret
     end;
-return(CustomerTag, [_|_] = MsgIds,
+return(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
-    CustomerId = customer_id(CustomerTag),
+    ConsumerId = consumer_id(ConsumerTag),
     %% we've reached the soft limit so will stash the command to be
     %% sent once we have seen enough notifications
-    Unsent = maps:update_with(CustomerId,
+    Unsent = maps:update_with(ConsumerId,
                               fun ({Settles, Returns, Discards}) ->
                                       {Settles, Returns ++ MsgIds, Discards}
                               end, {[], MsgIds, []}, Unsent0),
@@ -244,7 +244,7 @@ return(CustomerTag, [_|_] = MsgIds,
 
 %% @doc Discards a checked out message.
 %% If the queue has a dead_letter_handler configured this will be called.
-%% @param CustomerTag the tag uniquely identifying the customer.
+%% @param ConsumerTag the tag uniquely identifying the consumer.
 %% @param MsgIds the message ids to discard
 %% from {@link rabbit_fifo:delivery/0.}
 %% @param State the {@module} state
@@ -257,11 +257,11 @@ return(CustomerTag, [_|_] = MsgIds,
 %% have been successfully applied by ra has reached the maximum limit.
 %% If this happens the caller should either discard or cache the requested
 %% enqueue until at least one <code>ra_event</code> has been processes.
--spec discard(rabbit_fifo:customer_tag(), [rabbit_fifo:msg_id()], state()) ->
+-spec discard(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {ok | slow, state()} | {error, stop_sending}.
-discard(CustomerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
+discard(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_node(State0),
-    Cmd = {discard, MsgIds, customer_id(CustomerTag)},
+    Cmd = {discard, MsgIds, consumer_id(ConsumerTag)},
     case send_command(Node, undefined, Cmd, high, State0) of
         {slow, S} ->
             % turn slow into ok for this function
@@ -269,12 +269,12 @@ discard(CustomerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
         {ok, _} = Ret ->
             Ret
     end;
-discard(CustomerTag, [_|_] = MsgIds,
+discard(ConsumerTag, [_|_] = MsgIds,
         #state{unsent_commands = Unsent0} = State0) ->
-    CustomerId = customer_id(CustomerTag),
+    ConsumerId = consumer_id(ConsumerTag),
     %% we've reached the soft limit so will stash the command to be
     %% sent once we have seen enough notifications
-    Unsent = maps:update_with(CustomerId,
+    Unsent = maps:update_with(ConsumerId,
                               fun ({Settles, Returns, Discards}) ->
                                       {Settles, Returns, Discards ++ MsgIds}
                               end, {[], [], MsgIds}, Unsent0),
@@ -287,37 +287,37 @@ discard(CustomerTag, [_|_] = MsgIds,
 %% This is a syncronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
 %%
-%% @param CustomerTag a unique tag to identify this particular customer.
+%% @param ConsumerTag a unique tag to identify this particular consumer.
 %% @param NumUnsettled the maximum number of in-flight messages. Once this
 %% number of messages has been received but not settled no further messages
-%% will be delivered to the customer.
+%% will be delivered to the consumer.
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
--spec checkout(rabbit_fifo:customer_tag(), NumUnsettled :: non_neg_integer(),
+-spec checkout(rabbit_fifo:consumer_tag(), NumUnsettled :: non_neg_integer(),
                state()) -> {ok, state()} | {error | timeout, term()}.
-checkout(CustomerTag, NumUnsettled, State0) ->
+checkout(ConsumerTag, NumUnsettled, State0) ->
     Nodes = sorted_nodes(State0),
-    CustomerId = {CustomerTag, self()},
-    Cmd = {checkout, {auto, NumUnsettled}, CustomerId},
+    ConsumerId = {ConsumerTag, self()},
+    Cmd = {checkout, {auto, NumUnsettled}, ConsumerId},
     try_send_and_await_consensus(Nodes, Cmd, State0).
 
-%% @doc Cancels a checkout with the rabbit_fifo queue  for the customer tag
+%% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%
 %% This is a syncronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
 %%
-%% @param CustomerTag a unique tag to identify this particular customer.
+%% @param ConsumerTag a unique tag to identify this particular consumer.
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
--spec cancel_checkout(rabbit_fifo:customer_tag(), state()) ->
+-spec cancel_checkout(rabbit_fifo:consumer_tag(), state()) ->
     {ok, state()} | {error | timeout, term()}.
-cancel_checkout(CustomerTag, #state{customer_deliveries = CDels} = State0) ->
+cancel_checkout(ConsumerTag, #state{consumer_deliveries = CDels} = State0) ->
     Nodes = sorted_nodes(State0),
-    CustomerId = {CustomerTag, self()},
-    Cmd = {checkout, cancel, CustomerId},
-    State = State0#state{customer_deliveries = maps:remove(CustomerTag, CDels)},
+    ConsumerId = {ConsumerTag, self()},
+    Cmd = {checkout, cancel, ConsumerId},
+    State = State0#state{consumer_deliveries = maps:remove(ConsumerTag, CDels)},
     try_send_and_await_consensus(Nodes, Cmd, State).
 
 %% @doc Purges all the messages from a rabbit_fifo queue and returns the number
@@ -351,7 +351,7 @@ cluster_id(#state{cluster_id = ClusterId}) ->
 %%     {ra_event, From, Evt} ->
 %%         case rabbit_fifo_client:handle_ra_event(From, Evt, State0) of
 %%             {internal, _Seq, State} -> State;
-%%             {{delivery, _CustomerTag, Msgs}, State} ->
+%%             {{delivery, _ConsumerTag, Msgs}, State} ->
 %%                  handle_messages(Msgs),
 %%                  ...
 %%         end
@@ -373,10 +373,10 @@ cluster_id(#state{cluster_id = ClusterId}) ->
 %%
 %% The type of `rabbit_fifo' client messages that can be received are:
 %%
-%% `{delivery, CustomerTag, [{MsgId, {MsgHeader, Msg}}]}'
+%% `{delivery, ConsumerTag, [{MsgId, {MsgHeader, Msg}}]}'
 %%
-%% <li>`CustomerTag' the binary tag passed to {@link checkout/3.}</li>
-%% <li>`MsgId' is a customer scoped monotonically incrementing id that can be
+%% <li>`ConsumerTag' the binary tag passed to {@link checkout/3.}</li>
+%% <li>`MsgId' is a consumer scoped monotonically incrementing id that can be
 %% used to {@link settle/3.} (roughly: AMQP 0.9.1 ack) message once finished
 %% with them.</li>
 -spec handle_ra_event(ra_node_id(), ra_node_proc:ra_event_body(), state()) ->
@@ -416,7 +416,7 @@ handle_ra_event(From, {applied, Seqs},
         _ ->
             {internal, lists:reverse(Corrs), State1}
     end;
-handle_ra_event(Leader, {machine, {delivery, _CustomerTag, _} = Del}, State0) ->
+handle_ra_event(Leader, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
     handle_delivery(Leader, Del, State0);
 handle_ra_event(_From, {rejected, {not_leader, undefined, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
@@ -499,16 +499,16 @@ resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
     end.
 
 handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
-                #state{customer_deliveries = CDels0} = State0) ->
+                #state{consumer_deliveries = CDels0} = State0) ->
     {LastId, _} = lists:last(IdMsgs),
     case maps:get(Tag, CDels0, -1) of
         Prev when FstId =:= Prev+1 ->
-            {Del0, State0#state{customer_deliveries =
+            {Del0, State0#state{consumer_deliveries =
                                 maps:put(Tag, LastId, CDels0)}};
         Prev when FstId > Prev+1 ->
             Missing = get_missing_deliveries(Leader, Prev+1, FstId-1, Tag),
             Del = {delivery, Tag, Missing ++ IdMsgs},
-            {Del, State0#state{customer_deliveries =
+            {Del, State0#state{consumer_deliveries =
                                maps:put(Tag, LastId, CDels0)}};
         Prev when FstId =< Prev ->
             case lists:dropwhile(fun({Id, _}) -> Id =< Prev end, IdMsgs) of
@@ -519,16 +519,16 @@ handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
             end;
         _ when FstId =:= 0 ->
             % the very first delivery
-            {Del0, State0#state{customer_deliveries =
+            {Del0, State0#state{consumer_deliveries =
                                 maps:put(Tag, LastId, CDels0)}}
     end.
 
-get_missing_deliveries(Leader, From, To, CustomerTag) ->
-    CustomerId = customer_id(CustomerTag),
+get_missing_deliveries(Leader, From, To, ConsumerTag) ->
+    ConsumerId = consumer_id(ConsumerTag),
     % ?INFO("get_missing_deliveries for ~w from ~b to ~b",
-    %       [CustomerId, From, To]),
+    %       [ConsumerId, From, To]),
     Query = fun (State) ->
-                    rabbit_fifo:get_checked_out(CustomerId, From, To, State)
+                    rabbit_fifo:get_checked_out(ConsumerId, From, To, State)
             end,
     {ok, {_, Missing}, _} = ra:local_query(Leader, Query),
     Missing.
@@ -550,8 +550,8 @@ next_seq(#state{next_seq = Seq} = State) ->
 next_enqueue_seq(#state{next_enqueue_seq = Seq} = State) ->
     {Seq, State#state{next_enqueue_seq = Seq + 1}}.
 
-customer_id(CustomerTag) ->
-    {CustomerTag, self()}.
+consumer_id(ConsumerTag) ->
+    {ConsumerTag, self()}.
 
 send_command(Node, Correlation, Command, Priority,
              #state{pending = Pending,
