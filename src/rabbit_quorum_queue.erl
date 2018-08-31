@@ -41,32 +41,32 @@
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(), rabbit_types:message()}.
 
--spec handle_event({'ra_event', ra_node_id(), any()}, ra_fifo_client:state()) ->
-                          {'internal', Correlators :: [term()], ra_fifo_client:state()} |
-                          {ra_fifo:client_msg(), ra_fifo_client:state()}.
--spec declare(rabbit_types:amqqueue()) -> {'new', rabbit_types:amqqueue(), ra_fifo_client:state()}.
+-spec handle_event({'ra_event', ra_node_id(), any()}, rabbit_fifo_client:state()) ->
+                          {'internal', Correlators :: [term()], rabbit_fifo_client:state()} |
+                          {rabbit_fifo:client_msg(), rabbit_fifo_client:state()}.
+-spec declare(rabbit_types:amqqueue()) -> {'new', rabbit_types:amqqueue(), rabbit_fifo_client:state()}.
 -spec recover([rabbit_types:amqqueue()]) -> [rabbit_types:amqqueue() |
                                              {'absent', rabbit_types:amqqueue(), atom()}].
 -spec stop(rabbit_types:vhost()) -> 'ok'.
 -spec delete(rabbit_types:amqqueue(), boolean(), boolean(), rabbit_types:username()) ->
                     {'ok', QLen :: non_neg_integer()}.
--spec ack(rabbit_types:ctag(), [msg_id()], ra_fifo_client:state()) ->
-                 {'ok', ra_fifo_client:state()}.
--spec reject(Confirm :: boolean(), rabbit_types:ctag(), [msg_id()], ra_fifo_client:state()) ->
-                    {'ok', ra_fifo_client:state()}.
+-spec ack(rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
+                 {'ok', rabbit_fifo_client:state()}.
+-spec reject(Confirm :: boolean(), rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
+                    {'ok', rabbit_fifo_client:state()}.
 -spec basic_get(rabbit_types:amqqueue(), NoAck :: boolean(), rabbit_types:ctag(),
-                ra_fifo_client:state()) ->
-                       {'ok', 'empty', ra_fifo_client:state()} |
-                       {'ok', QLen :: non_neg_integer(), qmsg(), ra_fifo_client:state()}.
+                rabbit_fifo_client:state()) ->
+                       {'ok', 'empty', rabbit_fifo_client:state()} |
+                       {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()}.
 -spec basic_consume(rabbit_types:amqqueue(), NoAck :: boolean(), ChPid :: pid(),
                     ConsumerPrefetchCount :: non_neg_integer(), rabbit_types:ctag(),
                     ExclusiveConsume :: boolean(), Args :: rabbit_framing:amqp_table(),
-                    any(), ra_fifo_client:state()) -> {'ok', ra_fifo_client:state()}.
--spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), ra_fifo_client:state()) ->
-                          {'ok', ra_fifo_client:state()}.
+                    any(), rabbit_fifo_client:state()) -> {'ok', rabbit_fifo_client:state()}.
+-spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
+                          {'ok', rabbit_fifo_client:state()}.
 -spec stateless_deliver(ra_node_id(), rabbit_types:delivery()) -> 'ok'.
--spec deliver(Confirm :: boolean(), rabbit_types:delivery(), ra_fifo_client:state()) ->
-                     ra_fifo_client:state().
+-spec deliver(Confirm :: boolean(), rabbit_types:delivery(), rabbit_fifo_client:state()) ->
+                     rabbit_fifo_client:state().
 -spec info(rabbit_types:amqqueue()) -> rabbit_types:infos().
 -spec info(rabbit_types:amqqueue(), rabbit_types:info_keys()) -> rabbit_types:infos().
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
@@ -91,18 +91,18 @@
 %%----------------------------------------------------------------------------
 
 -spec init_state(ra_node_id(), rabbit_types:r('queue')) ->
-    ra_fifo_client:state().
+    rabbit_fifo_client:state().
 init_state({Name, _}, QName) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} = rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
     Nodes = [Leader | lists:delete(Leader, Nodes0)],
-    ra_fifo_client:init(QName, Nodes, SoftLimit,
-                        fun() -> credit_flow:block(Name), ok end,
-                        fun() -> credit_flow:unblock(Name), ok end).
+    rabbit_fifo_client:init(QName, Nodes, SoftLimit,
+                            fun() -> credit_flow:block(Name), ok end,
+                            fun() -> credit_flow:unblock(Name), ok end).
 
 handle_event({ra_event, From, Evt}, FState) ->
-    ra_fifo_client:handle_ra_event(From, Evt, FState).
+    rabbit_fifo_client:handle_ra_event(From, Evt, FState).
 
 declare(#amqqueue{name = QName,
                   durable = Durable,
@@ -149,7 +149,7 @@ declare(#amqqueue{name = QName,
 
 
 ra_machine(Q = #amqqueue{name = QName}) ->
-    {module, ra_fifo,
+    {module, rabbit_fifo,
      #{dead_letter_handler => dlx_mfa(Q),
        cancel_customer_handler => {?MODULE, cancel_customer, [QName]},
        become_leader_handler => {?MODULE, become_leader, [QName]},
@@ -201,7 +201,7 @@ update_metrics(QName, {Name, MR, MU, M, C}) ->
     rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
     Util = case C of
                0 -> 0;
-               _ -> ra_fifo:usage(Name)
+               _ -> rabbit_fifo:usage(Name)
            end,
     Infos = [{consumers, C}, {consumer_utilisation, Util} | infos(QName)],
     rabbit_core_metrics:queue_stats(QName, Infos),
@@ -283,12 +283,12 @@ delete_immediately({Name, _} = QPid) ->
     ok.
 
 ack(CTag, MsgIds, FState) ->
-    ra_fifo_client:settle(quorum_ctag(CTag), MsgIds, FState).
+    rabbit_fifo_client:settle(quorum_ctag(CTag), MsgIds, FState).
 
 reject(true, CTag, MsgIds, FState) ->
-    ra_fifo_client:return(quorum_ctag(CTag), MsgIds, FState);
+    rabbit_fifo_client:return(quorum_ctag(CTag), MsgIds, FState);
 reject(false, CTag, MsgIds, FState) ->
-    ra_fifo_client:discard(quorum_ctag(CTag), MsgIds, FState).
+    rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, FState).
 
 basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
           CTag0, FState0) ->
@@ -299,7 +299,7 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
                      false ->
                          unsettled
                  end,
-    case ra_fifo_client:dequeue(CTag, Settlement, FState0) of
+    case rabbit_fifo_client:dequeue(CTag, Settlement, FState0) of
         {ok, empty, FState} ->
             {ok, empty, FState};
         {ok, {MsgId, {MsgHeader, Msg}}, FState} ->
@@ -317,7 +317,7 @@ basic_consume(#amqqueue{name = QName, type = quorum}, NoAck, ChPid,
                    0 -> 2000;
                    Other -> Other
                end,
-    {ok, FState} = ra_fifo_client:checkout(quorum_ctag(ConsumerTag), Prefetch, FState0),
+    {ok, FState} = rabbit_fifo_client:checkout(quorum_ctag(ConsumerTag), Prefetch, FState0),
     %% TODO maybe needs to be handled by ra? how can we manage the consumer deleted?
     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                          not NoAck, QName, ConsumerPrefetchCount, Args),
@@ -325,16 +325,16 @@ basic_consume(#amqqueue{name = QName, type = quorum}, NoAck, ChPid,
 
 basic_cancel(ConsumerTag, ChPid, OkMsg, FState0) ->
     maybe_send_reply(ChPid, OkMsg),
-    ra_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), FState0).
+    rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), FState0).
 
 stateless_deliver({Name, _} = Pid, Delivery) ->
-    ok = ra_fifo_client:untracked_enqueue(Name, [Pid],
+    ok = rabbit_fifo_client:untracked_enqueue(Name, [Pid],
                                           Delivery#delivery.message).
 
 deliver(false, Delivery, FState0) ->
-    ra_fifo_client:enqueue(Delivery#delivery.message, FState0);
+    rabbit_fifo_client:enqueue(Delivery#delivery.message, FState0);
 deliver(true, Delivery, FState0) ->
-    ra_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
+    rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
                            Delivery#delivery.message, FState0).
 
 info(Q) ->
@@ -356,10 +356,10 @@ stat(_Q) ->
     {ok, 0, 0}.  %% TODO length, consumers count
 
 purge(Node) ->
-    ra_fifo_client:purge(Node).
+    rabbit_fifo_client:purge(Node).
 
 requeue(ConsumerTag, MsgIds, FState) ->
-    ra_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, FState).
+    rabbit_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, FState).
 
 cluster_state(Name) ->
     case whereis(Name) of
@@ -680,7 +680,7 @@ check_non_durable(#amqqueue{name = Name,
       [rabbit_misc:rs(Name)]).
 
 queue_name(RaFifoState) ->
-    ra_fifo_client:cluster_id(RaFifoState).
+    rabbit_fifo_client:cluster_id(RaFifoState).
 
 get_quorum_cluster_size(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-quorum-cluster-size">>) of

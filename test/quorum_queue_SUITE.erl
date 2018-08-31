@@ -1508,10 +1508,10 @@ wait_for_cleanup(Node, Channel, Number, N) ->
 
 
 wait_for_messages_ready(Nodes, QName, Ready) ->
-    wait_for_messages(Nodes, QName, Ready, fun ra_fifo:query_messages_ready/1, 60).
+    wait_for_messages(Nodes, QName, Ready, fun rabbit_fifo:query_messages_ready/1, 60).
 
 wait_for_messages_pending_ack(Nodes, QName, Ready) ->
-    wait_for_messages(Nodes, QName, Ready, fun ra_fifo:query_messages_checked_out/1, 60).
+    wait_for_messages(Nodes, QName, Ready, fun rabbit_fifo:query_messages_checked_out/1, 60).
 
 wait_for_messages(Nodes, QName, Number, Fun, 0) ->
     Msgs = dirty_query(Nodes, QName, Fun),
@@ -1530,7 +1530,7 @@ wait_for_messages(Nodes, QName, Number, Fun, N) ->
 dirty_query(Nodes, QName, Fun) ->
     lists:map(
       fun(N) ->
-              {ok, {_, Msgs}, _} = rpc:call(N, ra, committed_query, [{QName, N}, Fun]),
+              {ok, {_, Msgs}, _} = rpc:call(N, ra, local_query, [{QName, N}, Fun]),
               Msgs
       end, Nodes).
 

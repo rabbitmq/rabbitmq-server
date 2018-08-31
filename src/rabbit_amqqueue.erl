@@ -84,13 +84,13 @@
          rabbit_types:maybe(pid()), rabbit_types:username()) ->
             {'new' | 'existing' | 'absent' | 'owner_died',
              rabbit_types:amqqueue()} |
-            {'new', rabbit_types:amqqueue(), ra_fifo_client:state()} |
+            {'new', rabbit_types:amqqueue(), rabbit_fifo_client:state()} |
             rabbit_types:channel_exit().
 -spec declare
         (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
          rabbit_types:maybe(pid()), rabbit_types:username(), node()) ->
             {'new' | 'existing' | 'owner_died', rabbit_types:amqqueue()} |
-            {'new', rabbit_types:amqqueue(), ra_fifo_client:state()} |
+            {'new', rabbit_types:amqqueue(), rabbit_fifo_client:state()} |
             {'absent', rabbit_types:amqqueue(), absent_reason()} |
             rabbit_types:channel_exit().
 -spec internal_declare(rabbit_types:amqqueue(), boolean()) ->
@@ -156,19 +156,19 @@
 -spec delete_crashed_internal(rabbit_types:amqqueue(), rabbit_types:username()) -> 'ok'.
 -spec purge(rabbit_types:amqqueue()) -> {ok, qlen()}.
 -spec forget_all_durable(node()) -> 'ok'.
--spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery(), #{Name :: atom() => ra_fifo_client:state()} | 'untracked') ->
-                        {qpids(), #{Name :: atom() => ra_fifo_client:state()}}.
+-spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery(), #{Name :: atom() => rabbit_fifo_client:state()} | 'untracked') ->
+                        {qpids(), #{Name :: atom() => rabbit_fifo_client:state()}}.
 -spec deliver([rabbit_types:amqqueue()], rabbit_types:delivery()) -> 'ok'.
--spec requeue(pid(), [msg_id()],  pid(), #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
--spec ack(pid(), [msg_id()], pid(), #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
+-spec requeue(pid(), [msg_id()],  pid(), #{Name :: atom() => rabbit_fifo_client:state()}) -> 'ok'.
+-spec ack(pid(), [msg_id()], pid(), #{Name :: atom() => rabbit_fifo_client:state()}) -> 'ok'.
 -spec reject(pid() | {atom(), node()}, [msg_id()], boolean(), pid(),
-             #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
+             #{Name :: atom() => rabbit_fifo_client:state()}) -> 'ok'.
 -spec notify_down_all(qpids(), pid()) -> ok_or_errors().
 -spec notify_down_all(qpids(), pid(), non_neg_integer()) ->
           ok_or_errors().
 -spec activate_limit_all(qpids(), pid()) -> ok_or_errors().
 -spec basic_get(rabbit_types:amqqueue(), pid(), boolean(), pid(), rabbit_types:ctag(),
-                #{Name :: atom() => ra_fifo_client:state()}) ->
+                #{Name :: atom() => rabbit_fifo_client:state()}) ->
           {'ok', non_neg_integer(), qmsg()} | 'empty'.
 -spec credit
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), non_neg_integer(),
@@ -178,12 +178,12 @@
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
          non_neg_integer(), rabbit_types:ctag(), boolean(),
          rabbit_framing:amqp_table(), any(), rabbit_types:username(),
-         #{Name :: atom() => ra_fifo_client:state()}) ->
+         #{Name :: atom() => rabbit_fifo_client:state()}) ->
             rabbit_types:ok_or_error('exclusive_consume_unavailable').
 -spec basic_cancel
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), any(),
-         rabbit_types:username(), #{Name :: atom() => ra_fifo_client:state()}) ->
-                          'ok' | {'ok', #{Name :: atom() => ra_fifo_client:state()}}.
+         rabbit_types:username(), #{Name :: atom() => rabbit_fifo_client:state()}) ->
+                          'ok' | {'ok', #{Name :: atom() => rabbit_fifo_client:state()}}.
 -spec notify_decorators(rabbit_types:amqqueue()) -> 'ok'.
 -spec resume(pid(), pid()) -> 'ok'.
 -spec internal_delete(name(), rabbit_types:username()) ->
