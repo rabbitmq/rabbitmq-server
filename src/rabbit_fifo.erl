@@ -8,7 +8,6 @@
 
 -include_lib("ra/include/ra.hrl").
 
--include_lib("eunit/include/eunit.hrl").
 -export([
          init/1,
          apply/4,
@@ -26,17 +25,11 @@
          query_processes/1,
          query_ra_indexes/1,
          query_customer_count/1,
-
          usage/1,
 
          %% misc
          dehydrate_state/1,
-         size_test/2,
-         perf_test/2,
          read_log/0
-
-         % profile/1
-         %
         ]).
 
 -ifdef(TEST).
@@ -903,55 +896,6 @@ maybe_queue_customer(CustomerId, #customer{checked_out = Checked, num = Num},
     end.
 
 
-size_test(NumMsg, NumCust) ->
-    EnqGen = fun(N) -> {N, {enqueue, N}} end,
-    CustGen = fun(N) -> {N, {checkout, {auto, 100},
-                             spawn(fun() -> ok end)}} end,
-    S0 = run_log(1, NumMsg, EnqGen, init(#{name => size_test})),
-    S = run_log(NumMsg, NumMsg + NumCust, CustGen, S0),
-    S2 = S#state{ra_indexes = rabbit_fifo_index:map(fun(_, _) -> undefined end,
-                                                S#state.ra_indexes)},
-    {erts_debug:size(S), erts_debug:size(S2)}.
-
-perf_test(NumMsg, NumCust) ->
-    timer:tc(
-      fun () ->
-              EnqGen = fun(N) -> {N, {enqueue, self(), N, N}} end,
-              Pid = spawn(fun() -> ok end),
-              CustGen = fun(N) -> {N, {checkout, {auto, NumMsg}, Pid}} end,
-              SetlGen = fun(N) ->
-                                {N, {settle, N - NumMsg - NumCust - 1, Pid}}
-                        end,
-              S0 = run_log(1, NumMsg, EnqGen,
-                           element(1, init(#{name => size_test}))),
-              S1 = run_log(NumMsg, NumMsg + NumCust, CustGen, S0),
-              _ = run_log(NumMsg, NumMsg + NumCust + NumMsg, SetlGen, S1),
-              ok
-      end).
-
-% profile(File) ->
-%     GzFile = atom_to_list(File) ++ ".gz",
-%     lg:trace([rabbit_fifo, maps, queue, rabbit_fifo_index], lg_file_tracer,
-%              GzFile, #{running => false, mode => profile}),
-%     NumMsg = 10000,
-%     NumCust = 500,
-%     EnqGen = fun(N) -> {N, {enqueue, self(), N, N}} end,
-%     Pid = spawn(fun() -> ok end),
-%     CustGen = fun(N) -> {N, {checkout, {auto, NumMsg},
-%     {term_to_binary(N), Pid}}} end,
-%     SetlGen = fun(N) -> {N, {settle, N - NumMsg - NumCust - 1, Pid}} end,
-%     S0 = run_log(1, NumMsg, EnqGen, element(1, init(#{name => size_test}))),
-%     S1 = run_log(NumMsg, NumMsg + NumCust, CustGen, S0),
-%     _ = run_log(NumMsg, NumMsg + NumCust + NumMsg, SetlGen, S1),
-%     lg:stop().
-
-
-run_log(Num, Num, _Gen, State) ->
-    State;
-run_log(Num, Max, Gen, State0) ->
-    {_, E} = Gen(Num),
-    run_log(Num+1, Max, Gen, element(1, apply(meta(Num), E, [], State0))).
-
 dehydrate_state(#state{messages = Messages0,
                        customers = Customers,
                        prefix_msg_count = MsgCount} = State) ->
@@ -1410,14 +1354,6 @@ leader_effects_test() ->
     S0 = element(1, init(#{name => the_name,
                            become_leader_handler => {m, f, [a]}})),
     [{mod_call, m, f, [a, the_name]}] = leader_effects(S0),
-    ok.
-
-performance_test() ->
-    % just under ~200ms on my machine [Karl]
-    NumMsgs = 100000,
-    {Taken, _} = perf_test(NumMsgs, 0),
-    ?debugFmt("performance_test took ~p ms for ~p messages",
-              [Taken / 1000, NumMsgs]),
     ok.
 
 purge_test() ->
