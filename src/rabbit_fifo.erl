@@ -28,8 +28,7 @@
          usage/1,
 
          %% misc
-         dehydrate_state/1,
-         read_log/0
+         dehydrate_state/1
         ]).
 
 -ifdef(TEST).
@@ -471,21 +470,6 @@ usage(Name) when is_atom(Name) ->
     case ets:lookup(rabbit_fifo_usage, Name) of
         [] -> 0.0;
         [{_, Use}] -> Use
-    end.
-
-read_log() ->
-    fun({_, _, {'$usr', _, {enqueue, _, _, _}, _}}, {E, C, S, D, R}) ->
-            {E + 1, C, S, D, R};
-       ({_, _, {'$usr', _, {settle, _, _}, _}}, {E, C, S, D, R}) ->
-            {E, C, S + 1, D, R};
-       ({_, _, {'$usr', _, {discard, _, _}, _}}, {E, C, S, D, R}) ->
-            {E, C, S, D + 1, R};
-       ({_, _, {'$usr', _, {return, _, _}, _}}, {E, C, S, D, R}) ->
-            {E, C, S, D, R + 1};
-       ({_, _, {'$usr', _, {checkout, _, _}, _}}, {E, C, S, D, R}) ->
-            {E, C + 1, S, D, R};
-       (_, Acc) ->
-            Acc
     end.
 
 %%% Internal
