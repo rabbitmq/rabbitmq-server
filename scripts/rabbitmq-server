@@ -62,18 +62,6 @@ RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 
 [ "$NOTIFY_SOCKET" ] && RUNNING_UNDER_SYSTEMD=true
 
-if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
-    mkdir -p "${RABBITMQ_SCHEMA_DIR}"
-fi
-
-if [ ! -d ${RABBITMQ_GENERATED_CONFIG_DIR} ]; then
-    mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
-fi
-
-if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbit.schema" ]; then
-    cp "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
-fi
-
 get_noex() {
     if [ "x" = "x${1}" ]; then
         echo ""
@@ -164,6 +152,18 @@ fi
 
 # Set -conf and other generated config parameters
 if [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
+    if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
+        mkdir -p "${RABBITMQ_SCHEMA_DIR}"
+    fi
+
+    if [ ! -d ${RABBITMQ_GENERATED_CONFIG_DIR} ]; then
+        mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
+    fi
+
+    if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbit.schema" ]; then
+        cp "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
+    fi
+
     RABBITMQ_GENERATED_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
                                    -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
                                    -conf_script_dir `dirname $0` \

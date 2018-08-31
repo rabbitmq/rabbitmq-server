@@ -48,18 +48,6 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
-if not exist "!RABBITMQ_SCHEMA_DIR!" (
-    mkdir "!RABBITMQ_SCHEMA_DIR!"
-)
-
-if not exist "!RABBITMQ_GENERATED_CONFIG_DIR!" (
-    mkdir "!RABBITMQ_GENERATED_CONFIG_DIR!"
-)
-
-if not exist "!RABBITMQ_SCHEMA_DIR!\rabbit.schema" (
-    copy "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
-)
-
 CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
 
 if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!" (
@@ -134,6 +122,18 @@ if exist !RABBITMQ_CONFIG_ARG_FILE! (
 
 rem Set -conf and other generated config parameters
 if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE!" (
+    if not exist "!RABBITMQ_SCHEMA_DIR!" (
+        mkdir "!RABBITMQ_SCHEMA_DIR!"
+    )
+
+    if not exist "!RABBITMQ_GENERATED_CONFIG_DIR!" (
+        mkdir "!RABBITMQ_GENERATED_CONFIG_DIR!"
+    )
+
+    if not exist "!RABBITMQ_SCHEMA_DIR!\rabbit.schema" (
+        copy "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
+    )
+
     set RABBITMQ_GENERATED_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
                                       -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
                                       -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
