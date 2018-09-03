@@ -42,6 +42,13 @@
              {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
              {password,"changeme"}]}]}],
   [rabbitmq_web_mqtt]},
+
+ {websocket_endpoint,
+  "web_mqtt.ws_path = /rmq/ws",
+  [{rabbitmq_web_mqtt,
+    [{ws_path, "/rmq/ws"}]}],
+  [rabbitmq_web_mqtt]},
+
  {cowboy_max_keepalive,
   "web_mqtt.cowboy_opts.max_keepalive = 10",
   [{rabbitmq_web_mqtt,[{cowboy_opts,[{max_keepalive,10}]}]}],
