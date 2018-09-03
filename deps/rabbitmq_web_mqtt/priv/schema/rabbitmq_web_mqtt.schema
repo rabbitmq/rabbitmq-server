@@ -1,6 +1,6 @@
-{mapping, "web_mqtt.num_acceptors.tcp", "rabbitmq_web_mqtt.num_tcp_acceptors", 
+{mapping, "web_mqtt.num_acceptors.tcp", "rabbitmq_web_mqtt.num_tcp_acceptors",
     [{datatype, integer}]}.
-{mapping, "web_mqtt.num_acceptors.ssl", "rabbitmq_web_mqtt.num_ssl_acceptors", 
+{mapping, "web_mqtt.num_acceptors.ssl", "rabbitmq_web_mqtt.num_ssl_acceptors",
     [{datatype, integer}]}.
 
 {mapping, "web_mqtt.tcp.backlog", "rabbitmq_web_mqtt.tcp_config.backlog",
@@ -11,6 +11,8 @@
     [{datatype, string}, {validators, ["is_ip"]}]}.
 {mapping, "web_mqtt.tcp.port", "rabbitmq_web_mqtt.tcp_config.port",
     [{datatype, integer}]}.
+{mapping, "web_mqtt.ws_path", "rabbitmq_web_mqtt.ws_path",
+    [{datatype, string}]}.
 
 {translation,
     "rabbitmq_web_mqtt.tcp_config",
@@ -67,4 +69,3 @@
     [{datatype, integer}]}.
 {mapping, "web_mqtt.cowboy_opts.timeout", "rabbitmq_web_mqtt.cowboy_opts.timeout",
     [{datatype, integer}]}.
-

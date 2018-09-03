@@ -48,7 +48,7 @@ mqtt_init() ->
     CowboyOpts0 = get_env(cowboy_opts, []),
 
     Routes = cowboy_router:compile([{'_', [
-        {"/ws", rabbit_web_mqtt_handler, []}
+        {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, []}
     ]}]),
     CowboyOpts = maps:from_list([
         {env, #{dispatch => Routes}},
