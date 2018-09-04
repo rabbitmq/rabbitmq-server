@@ -19,6 +19,9 @@
 {mapping, "web_stomp.tcp.listener", "rabbitmq_web_stomp.tcp_config",
     [{datatype, ip}]}.
 
+{mapping, "web_stomp.ws_path", "rabbitmq_web_stomp.ws_path",
+    [{datatype, string}]}.
+
 {translation,
     "rabbitmq_web_stomp.tcp_config",
     fun(Conf) ->
