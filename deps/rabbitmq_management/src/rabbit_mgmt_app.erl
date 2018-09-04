@@ -44,9 +44,13 @@ reset_dispatcher(IgnoreApps) ->
     {ok, Listener} = application:get_env(rabbitmq_management, listener),
     register_context(Listener, IgnoreApps).
 
-register_context(Listener, IgnoreApps) ->
+register_context(Listener0, IgnoreApps) ->
+    M0 = maps:from_list(Listener0),
+    %% include default port if it's not provided in the config
+    %% as Cowboy won't start if the port is missing
+    M1 = maps:merge(#{port => 15672}, M0),
     rabbit_web_dispatch:register_context_handler(
-      ?CONTEXT, Listener, "",
+      ?CONTEXT, maps:to_list(M1), "",
       rabbit_mgmt_dispatcher:build_dispatcher(IgnoreApps),
       "RabbitMQ Management").
 
