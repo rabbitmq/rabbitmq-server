@@ -34,6 +34,13 @@
              {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
              {password,"changeme"}]}]}],
   [rabbitmq_web_stomp]},
+
+ {websocket_endpoint,
+  "web_stomp.ws_path = /rmq/ws",
+  [{rabbitmq_web_stomp,
+    [{ws_path, "/rmq/ws"}]}],
+  [rabbitmq_web_stomp]},
+
  {ws_frame,
   "web_stomp.ws_frame = binary",
   [{rabbitmq_web_stomp,[{ws_frame,binary}]}],
