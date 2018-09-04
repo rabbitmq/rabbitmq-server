@@ -379,6 +379,7 @@
 %% [Marandi et al 2010] Ring Paxos: A High-Throughput Atomic Broadcast
 %% Protocol
 
+-include("rabbit.hrl").
 
 -behaviour(gen_server2).
 
@@ -386,7 +387,7 @@
          confirmed_broadcast/2, info/1, validate_members/2, forget_group/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3, prioritise_info/3]).
+         code_change/3, prioritise_info/3, handle_pre_hibernate/1]).
 
 %% For INSTR_MOD callbacks
 -export([call/3, cast/2, monitor/1, demonitor/1]).
@@ -396,7 +397,7 @@
 -define(GROUP_TABLE, gm_group).
 -define(MAX_BUFFER_SIZE, 100000000). %% 100MB
 -define(BROADCAST_TIMER, 25).
--define(FORCE_GC_TIMER, 250).
+-define(FORCE_GC_TIMER, 2000).
 -define(VERSION_START, 0).
 -define(SETS, ordsets).
 
@@ -553,7 +554,8 @@ init([GroupName, Module, Args, TxnFun]) ->
                   broadcast_timer     = undefined,
                   force_gc_timer      = undefined,
                   txn_executor        = TxnFun,
-                  shutting_down       = false }}.
+                  shutting_down       = false },
+     hibernate, {backoff, 200, 200, ?DESIRED_HIBERNATE}, ?MODULE}.
 
 
 handle_call({confirmed_broadcast, _Msg}, _From,
@@ -774,6 +776,14 @@ handle_info(_, State) ->
     %% we now need to update our state. see rabbitmq-server#914.
     noreply(State).
 
+handle_pre_hibernate(State) ->
+    {hibernate, stop_timers(State)}.
+
+stop_timers(State = #state{force_gc_timer = GTRef, broadcast_timer = BTRef}) -> 
+    maybe_cancel_timer(GTRef),
+    maybe_cancel_timer(BTRef),
+    State#state{force_gc_timer = undefined, broadcast_timer = undefined}.
+
 terminate(Reason, #state { module = Module, callback_args = Args }) ->
     Module:handle_terminate(Args, Reason).
 
@@ -886,17 +896,24 @@ handle_msg({activity, _NotLeft, _Activity}, State) ->
     {ok, State}.
 
 
+noreply(State = #state{broadcast_buffer = [],
+                       broadcast_timer = TRef}) ->
+    maybe_cancel_timer(TRef),
+    {noreply, reset_force_gc_timer(State#state{broadcast_timer = undefined}),
+     hibernate};
 noreply(State) ->
-    {noreply, ensure_timers(State), flush_timeout(State)}.
+    {noreply, ensure_timers(State), 0}.
 
+reply(Reply, State = #state{broadcast_buffer = [],
+                            broadcast_timer = TRef}) ->
+    maybe_cancel_timer(TRef),
+    {reply, Reply, reset_force_gc_timer(State#state{broadcast_timer = undefined}),
+     hibernate};
 reply(Reply, State) ->
-    {reply, Reply, ensure_timers(State), flush_timeout(State)}.
+    {reply, Reply, ensure_timers(State), 0}.
 
 ensure_timers(State) ->
     ensure_force_gc_timer(ensure_broadcast_timer(State)).
-
-flush_timeout(#state{broadcast_buffer = []}) -> infinity;
-flush_timeout(_)                             -> 0.
 
 ensure_force_gc_timer(State = #state { force_gc_timer = TRef })
   when is_reference(TRef) ->
@@ -904,6 +921,13 @@ ensure_force_gc_timer(State = #state { force_gc_timer = TRef })
 ensure_force_gc_timer(State = #state { force_gc_timer = undefined }) ->
     TRef = erlang:send_after(?FORCE_GC_TIMER, self(), force_gc),
     State #state { force_gc_timer = TRef }.
+
+reset_force_gc_timer(State = #state { force_gc_timer = TRef })
+  when is_reference(TRef) ->
+    erlang:cancel_timer(TRef),
+    ensure_force_gc_timer(State#state{force_gc_timer = undefined});
+reset_force_gc_timer(State) ->
+    ensure_force_gc_timer(State).
 
 ensure_broadcast_timer(State = #state { broadcast_buffer = [],
                                         broadcast_timer  = undefined }) ->
@@ -1650,3 +1674,8 @@ check_group({error, not_found}) ->
     throw(lost_membership);
 check_group(Any) ->
     Any.
+
+maybe_cancel_timer(undefined) ->
+    ok;
+maybe_cancel_timer(TRef) ->
+    _ = erlang:cancel_timer(TRef).
