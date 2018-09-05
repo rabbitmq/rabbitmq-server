@@ -253,7 +253,9 @@ validate_config_files() ->
 assert_config("", _) -> ok;
 assert_config(none, _) -> ok;
 assert_config(Filename, Env) ->
-    ".config" = filename:extension(Filename),
+    assert_config(filename:extension(Filename), Filename, Env).
+
+assert_config(".config", Filename, Env) ->
     case filelib:is_regular(Filename) of
         true ->
             case file:consult(Filename) of
@@ -282,11 +284,15 @@ assert_config(Filename, Env) ->
             end;
         false ->
             ok
-    end.
+    end;
+assert_config(BadExt, Filename, Env) ->
+    {error, {"ERROR: '~s': Expected extension '.config', got extension '~s' for file '~s'~n", [Env, BadExt, Filename]}}.
 
 assert_conf("", _) -> ok;
 assert_conf(Filename, Env) ->
-    ".conf" = filename:extension(Filename),
+    assert_conf(filename:extension(Filename), Filename, Env).
+
+assert_conf(".conf", Filename, Env) ->
     case filelib:is_regular(Filename) of
         true ->
             case file:consult(Filename) of
@@ -302,5 +308,6 @@ assert_conf(Filename, Env) ->
             end;
         false ->
             ok
-    end.
-
+    end;
+assert_conf(BadExt, Filename, Env) ->
+    {error, {"ERROR: '~s': Expected extension '.config', got extension '~s' for file '~s'~n", [Env, BadExt, Filename]}}.
