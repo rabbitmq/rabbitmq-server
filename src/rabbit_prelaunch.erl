@@ -26,6 +26,7 @@
 -define(SET_DIST_PORT, 0).
 -define(ERROR_CODE, 1).
 -define(DO_NOT_SET_DIST_PORT, 2).
+-define(EX_USAGE, 64).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -62,9 +63,12 @@ stop() ->
 config_file_check() ->
     case rabbit_config:validate_config_files() of
         ok -> ok;
-        {error, {Err, Args}} ->
-            io:format(Err, Args),
-            rabbit_misc:quit(?ERROR_CODE)
+        {error, {ErrFmt, ErrArgs}} ->
+            ErrMsg = io_lib:format(ErrFmt, ErrArgs),
+            {{Year, Month, Day}, {Hour, Minute, Second, Milli}} = lager_util:localtime_ms(),
+            io:format(standard_error, "~b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b.~b [error] ~s",
+                      [Year, Month, Day, Hour, Minute, Second, Milli, ErrMsg]),
+            rabbit_misc:quit(?EX_USAGE)
     end.
 
 %% Check whether a node with the same name is already running
