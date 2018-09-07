@@ -11,10 +11,18 @@ Group=rabbitmq
 UMask=0027
 NotifyAccess=all
 TimeoutStartSec=3600
-# Un-comment this setting if you need to increase RabbitMQ's
-# open files limit
-# LimitNOFILE=16384
+
+# To override LimitNOFILE, create the following file:
 #
+# /etc/systemd/system/rabbitmq-server.service.d/limits.conf
+#
+# with the following content:
+#
+# [Service]
+# LimitNOFILE=65536
+
+LimitNOFILE=32768
+
 # The following setting will automatically restart RabbitMQ
 # in the event of a failure. systemd service restarts are not a
 # replacement for service monitoring. Please see
