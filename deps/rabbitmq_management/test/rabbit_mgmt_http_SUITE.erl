@@ -33,6 +33,7 @@
                                 http_delete/3, http_delete/5,
                                 http_put_raw/4, http_post_accept_json/4,
                                 req/4, auth_header/2,
+                                assert_permanent_redirect/3,
                                 amqp_port/1]).
 
 -import(rabbit_misc, [pget/2]).
@@ -55,6 +56,8 @@ groups() ->
     ].
 
 all_tests() -> [
+    cli_redirect_test,
+    api_redirect_test,
     overview_test,
     auth_test,
     cluster_name_test,
@@ -2789,6 +2792,14 @@ rates_test(Config) ->
     close_channel(Ch),
     close_connection(Conn),
     http_delete(Config, "/queues/%2F/myqueue", ?NO_CONTENT),
+    passed.
+
+cli_redirect_test(Config) ->
+    assert_permanent_redirect(Config, "cli", "/cli/index.html"),
+    passed.
+
+api_redirect_test(Config) ->
+    assert_permanent_redirect(Config, "api", "/api/index.html"),
     passed.
 
 %% -------------------------------------------------------------------
