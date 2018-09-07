@@ -431,6 +431,47 @@ to the node
 .Qq rabbit@cordelia
 .sp
 .Dl rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia
+.Pp
+Note that this command only changes the local database.
+It may also be necessary to rename the local database directories,
+and to configure the new node name.
+For example:
+.sp
+.Bl -enum -compact
+.It
+Stop the node:
+.sp
+.Dl rabbitmqctl stop rabbit@misshelpful
+.sp
+.It
+Rename the node in the local database:
+.sp
+.Dl rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia
+.sp
+.It
+Rename the local database directories (note, you do not need to do this
+if you have set the RABBITMQ_MNESIA_DIR environment variable):
+.sp
+.Bd -literal -offset indent -compact
+mv \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@cordelia
+mv \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-rename \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-rename
+mv \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-plugins-expand \\
+  /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-plugins-expand
+.Ed
+.sp
+.It
+If you have
+.Ar /etc/rabbitmq/rabbitmq-env.conf
+and configured the node name there, update this configuration.
+.sp
+.It
+Start the node when ready
+.El
 .\" ------------------------------------
 .It Cm update_cluster_nodes Ar clusternode
 .Bl -tag -width Ds
@@ -937,13 +978,13 @@ In most shells you are very likely to need to quote this.
 .El
 .Pp
 For example, this command sets the parameter
-.Qq local_username
+.Qq node01
 for the
-.Qq federation
-component in the default virtual host to the JSON term
+.Qq federation-upstream
+component in the default virtual host to the following JSON
 .Qq guest :
 .sp
-.Dl rabbitmqctl set_parameter federation local_username Qq guest
+.Dl rabbitmqctl set_parameter federation-upstream node01 '{"uri":"amqp://user:password@server/%2F","ack-mode":"on-publish"}'
 .\" ------------------------------------
 .It Cm clear_parameter Oo Fl p Ar vhost Oc Ar component_name Ar key
 Clears a parameter.
@@ -955,12 +996,12 @@ The name of the parameter being cleared.
 .El
 .Pp
 For example, this command clears the parameter
-.Qq local_username
+.Qq node01
 for the
-.Qq federation
+.Qq federation-upstream
 component in the default virtual host:
 .sp
-.Dl rabbitmqctl clear_parameter federation local_username
+.Dl rabbitmqctl clear_parameter federation-upstream node01
 .\" ------------------------------------
 .It Cm list_parameters Op Fl p Ar vhost
 Lists all parameters for a virtual host.

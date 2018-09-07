@@ -24,7 +24,8 @@ define PROJECT_ENV
 	    %% 0 ("no limit") would make a better default, but that
 	    %% breaks the QPid Java client
 	    {frame_max, 131072},
-	    {channel_max, 0},
+	    %% see rabbitmq-server#1593
+	    {channel_max, 2047},
 	    {connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
@@ -62,7 +63,7 @@ define PROJECT_ENV
 	                         ]},
 	    {halt_on_upgrade_failure, true},
 	    {hipe_compile, false},
-	    %% see bug 24513 for how this list was created
+	    %% see bug 24513 [in legacy Bugzilla] for how this list was created
 	    {hipe_modules,
 	     [rabbit_reader, rabbit_channel, gen_server2, rabbit_exchange,
 	      rabbit_command_assembler, rabbit_framing_amqp_0_9_1, rabbit_basic,
@@ -96,6 +97,7 @@ define PROJECT_ENV
 	    %% rabbitmq-server#949, rabbitmq-server#1098
 	    {credit_flow_default_credit, {400, 200}},
 	    {quorum_commands_soft_limit, 1024},
+	    {quorum_cluster_size, 7},
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
@@ -134,8 +136,10 @@ endef
 
 LOCAL_DEPS = sasl mnesia os_mon inets
 BUILD_DEPS = rabbitmq_cli
-DEPS = ranch lager rabbit_common ra
+DEPS = ranch syslog lager rabbit_common ra
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
+
+dep_syslog = git https://github.com/schlagert/syslog 3.4.3
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))

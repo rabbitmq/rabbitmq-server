@@ -213,7 +213,7 @@
 ## * http://rabbitmq.com/heartbeats.html
 ## * http://rabbitmq.com/networking.html
 ##
-# heartbeat = 600
+# heartbeat = 60
 
 ## Set the max permissible size of an AMQP frame (in bytes).
 ##
@@ -521,7 +521,7 @@
 ## Related doc guide: http://rabbitmq.com/shovel.html
 ## ----------------------------------------------------------------------------
 
-## Shovel plugin config example is defined in additional.config file
+## See advanced.config.example for a Shovel plugin example
 
 
 ## ----------------------------------------------------------------------------
@@ -605,7 +605,7 @@
 ##
 # mqtt.allow_anonymous = true
 
-## If you have multiple chosts, specify the one to which the
+## If you have multiple vhosts, specify the one to which the
 ## adapter connects.
 ##
 # mqtt.vhost = /

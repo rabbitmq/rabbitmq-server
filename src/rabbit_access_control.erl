@@ -64,7 +64,8 @@ check_user_login(Username, AuthProps) ->
                   %% passwordless (i.e pre-authenticated) login with authZ.
                   case try_authenticate(ModN, Username, AuthProps) of
                       {ok, ModNUser = #auth_user{username = Username2}} ->
-                          user(ModNUser, try_authorize(ModZs, Username2));
+                          rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, ModN]),
+                          user(ModNUser, try_authorize(ModZs, Username2, AuthProps));
                       Else ->
                           Else
                   end;
@@ -72,7 +73,8 @@ check_user_login(Username, AuthProps) ->
                   %% Same module for authN and authZ. Just take the result
                   %% it gives us
                   case try_authenticate(Mod, Username, AuthProps) of
-                      {ok, ModNUser = #auth_user{impl = Impl}} ->
+                      {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
+                          rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
                           user(ModNUser, {ok, [{Mod, Impl}], []});
                       Else ->
                           Else
@@ -93,10 +95,10 @@ try_authenticate(Module, Username, AuthProps) ->
         {refused, F, A} -> {refused, Username, F, A}
     end.
 
-try_authorize(Modules, Username) ->
+try_authorize(Modules, Username, AuthProps) ->
     lists:foldr(
       fun (Module, {ok, ModsImpls, ModsTags}) ->
-              case Module:user_login_authorization(Username) of
+              case Module:user_login_authorization(Username, AuthProps) of
                   {ok, Impl, Tags}-> {ok, [{Module, Impl} | ModsImpls], ModsTags ++ Tags};
                   {ok, Impl}      -> {ok, [{Module, Impl} | ModsImpls], ModsTags};
                   {error, E}      -> {refused, Username,

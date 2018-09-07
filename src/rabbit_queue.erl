@@ -25,7 +25,8 @@
 
 -export_type([
               state/0,
-              rq_state/0
+              rq_state/0,
+              pid_or_id/0
               ]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").

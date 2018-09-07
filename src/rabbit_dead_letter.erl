@@ -27,7 +27,7 @@
 
 -spec publish(rabbit_types:message(), reason(), rabbit_types:exchange(),
               'undefined' | binary(), rabbit_amqqueue:name(),
-              #{Name :: atom() => ra_fifo_client:state()}) -> 'ok'.
+              #{Name :: atom() => rabbit_fifo_client:state()}) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 

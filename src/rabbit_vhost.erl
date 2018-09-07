@@ -22,7 +22,7 @@
 
 -export([recover/0, recover/1]).
 -export([add/2, delete/2, exists/1, list/0, with/2, with_user_and_vhost/3, assert/1, update/2,
-         set_limits/2, limits_of/1]).
+         set_limits/2, limits_of/1, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
 -export([delete_storage/1]).
@@ -52,6 +52,10 @@ recover() ->
     rabbit_amqqueue:on_node_down(node()),
 
     rabbit_amqqueue:warn_file_limit(),
+
+    %% Prepare rabbit_semi_durable_route table
+    rabbit_binding:recover(),
+
     %% rabbit_vhost_sup_sup will start the actual recovery.
     %% So recovery will be run every time a vhost supervisor is restarted.
     ok = rabbit_vhost_sup_sup:start(),
@@ -93,7 +97,7 @@ add(VHostPath, ActingUser) ->
           fun (ok, true) ->
                   ok;
               (ok, false) ->
-                  [rabbit_exchange:declare(
+                  [_ = rabbit_exchange:declare(
                      rabbit_misc:r(VHostPath, exchange, Name),
                      Type, true, false, Internal, [], ActingUser) ||
                       {Name, Type, Internal} <-
@@ -147,6 +151,45 @@ delete(VHostPath, ActingUser) ->
     %% on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHostPath),
     ok.
+
+%% 50 ms
+-define(AWAIT_SAMPLE_INTERVAL, 50).
+
+-spec await_running_on_all_nodes(rabbit_types:vhost(), integer()) -> ok | {error, timeout}.
+await_running_on_all_nodes(VHost, Timeout) ->
+    Attempts = round(Timeout / ?AWAIT_SAMPLE_INTERVAL),
+    await_running_on_all_nodes0(VHost, Attempts).
+
+await_running_on_all_nodes0(_VHost, 0) ->
+    {error, timeout};
+await_running_on_all_nodes0(VHost, Attempts) ->
+    case is_running_on_all_nodes(VHost) of
+        true  -> ok;
+        _     ->
+            timer:sleep(?AWAIT_SAMPLE_INTERVAL),
+            await_running_on_all_nodes0(VHost, Attempts - 1)
+    end.
+
+-spec is_running_on_all_nodes(rabbit_types:vhost()) -> boolean().
+is_running_on_all_nodes(VHost) ->
+    States = vhost_cluster_state(VHost),
+    lists:all(fun ({_Node, State}) -> State =:= running end,
+              States).
+
+-spec vhost_cluster_state(rabbit_types:vhost()) -> [{atom(), atom()}].
+vhost_cluster_state(VHost) ->
+    Nodes = rabbit_nodes:all_running(),
+    lists:map(fun(Node) ->
+        State = case rabbit_misc:rpc_call(Node,
+                                          rabbit_vhost_sup_sup, is_vhost_alive,
+                                          [VHost]) of
+            {badrpc, nodedown} -> nodedown;
+            true               -> running;
+            false              -> stopped
+        end,
+        {Node, State}
+    end,
+    Nodes).
 
 vhost_down(VHostPath) ->
     ok = rabbit_event:notify(vhost_down,
@@ -264,19 +307,7 @@ infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
 
 i(name,    VHost) -> VHost;
 i(tracing, VHost) -> rabbit_trace:enabled(VHost);
-i(cluster_state, VHost) ->
-    Nodes = rabbit_nodes:all_running(),
-    lists:map(fun(Node) ->
-        State = case rabbit_misc:rpc_call(Node,
-                                          rabbit_vhost_sup_sup, is_vhost_alive,
-                                          [VHost]) of
-            {badrpc, nodedown} -> nodedown;
-            true               -> running;
-            false              -> stopped
-        end,
-        {Node, State}
-    end,
-    Nodes);
+i(cluster_state, VHost) -> vhost_cluster_state(VHost);
 i(Item, _)        -> throw({bad_argument, Item}).
 
 info(VHost)        -> infos(?INFO_KEYS, VHost).

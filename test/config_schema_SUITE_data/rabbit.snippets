@@ -534,5 +534,56 @@ credential_validator.regexp = ^abc\\d+",
    [{kernel, [
       {net_ticktime, 20}
      ]}],
-   []}
+   []},
+  {log_syslog_settings,
+   "log.syslog = true
+    log.syslog.identity = rabbitmq
+    log.syslog.facility = user
+    log.syslog.multiline_mode = true
+    log.syslog.ip = 10.10.10.10
+    log.syslog.port = 123",
+   [
+    {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
+    {syslog, [{app_name, "rabbitmq"},
+              {facility, user},
+              {multiline_mode, true},
+              {dest_host, "10.10.10.10"},
+              {dest_port, 123}]}
+   ],
+   []},
+  {log_syslog_tcp,
+   "log.syslog = true
+    log.syslog.transport = tcp
+    log.syslog.protocol = rfc5424
+    log.syslog.host = syslog.my-network.com",
+   [
+    {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
+    {syslog, [{protocol, {rfc5424, tcp}},
+              {dest_host, "syslog.my-network.com"}]}
+   ],
+   []},
+  {log_syslog_udp_default,
+   "log.syslog = true
+    log.syslog.protocol = rfc3164",
+   [
+    {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
+    {syslog, [{protocol, {rfc3164, udp}}]}
+   ],
+   []},
+  {log_syslog_tls,
+  "log.syslog = true
+   log.syslog.transport = tls
+   log.syslog.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   log.syslog.ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
+   log.syslog.ssl_options.keyfile = test/config_schema_SUITE_data/certs/key.pem
+   log.syslog.ssl_options.verify = verify_peer
+   log.syslog.ssl_options.fail_if_no_peer_cert = false",
+  [{rabbit, [{log, [{syslog, [{enabled, true}]}]}]},
+   {syslog, [{protocol, {rfc5424, tls,
+              [{verify,verify_peer},
+               {fail_if_no_peer_cert,false},
+               {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+               {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+               {keyfile,"test/config_schema_SUITE_data/certs/key.pem"}]}}]}],
+  []}
 ].

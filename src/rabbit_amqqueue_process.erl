@@ -15,8 +15,8 @@
 %%
 
 -module(rabbit_amqqueue_process).
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -behaviour(gen_server2).
 
@@ -195,7 +195,7 @@ init_it2(Recover, From, State = #q{q                   = Q,
                                    backing_queue_state = undefined}) ->
     {Barrier, TermsOrNew} = recovery_status(Recover),
     case rabbit_amqqueue:internal_declare(Q, Recover /= new) of
-        #amqqueue{} = Q1 ->
+        {Res, #amqqueue{} = Q1} when Res == created orelse Res == existing ->
             case matches(Recover, Q, Q1) of
                 true ->
                     ok = file_handle_cache:register_callback(
@@ -287,6 +287,14 @@ terminate({shutdown, missing_owner} = Reason, State) ->
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     rabbit_core_metrics:queue_deleted(qname(State)),
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
+terminate(normal, State = #q{status = {terminated_by, auto_delete}}) ->
+    %% auto_delete case
+    %% To increase performance we want to avoid a mnesia_sync:sync call
+    %% after every transaction, as we could be deleting simultaneously
+    %% thousands of queues. A optimisation introduced by server#1513
+    %% needs to be reverted by this case, avoiding to guard the delete
+    %% operation on `rabbit_durable_queue`
+    terminate_shutdown(terminate_delete(true, auto_delete, State), State);
 terminate(normal,            State) -> %% delete case
     terminate_shutdown(terminate_delete(true, normal, State), State);
 %% If we crashed don't try to clean up the BQS, probably best to leave it.
@@ -300,22 +308,34 @@ terminate(_Reason,           State = #q{q = Q}) ->
                                BQS
                        end, State).
 
-terminate_delete(EmitStats, Reason,
+terminate_delete(EmitStats, Reason0,
                  State = #q{q = #amqqueue{name          = QName},
                             backing_queue = BQ,
                             status = Status}) ->
     ActingUser = terminated_by(Status),
     fun (BQS) ->
+        Reason = case Reason0 of
+                     auto_delete -> normal;
+                     Any -> Any
+                 end,
         BQS1 = BQ:delete_and_terminate(Reason, BQS),
         if EmitStats -> rabbit_event:if_enabled(State, #q.stats_timer,
                                                 fun() -> emit_stats(State) end);
            true      -> ok
         end,
-        %% don't care if the internal delete doesn't return 'ok'.
-        rabbit_amqqueue:internal_delete(QName, ActingUser),
+        %% This try-catch block transforms throws to errors since throws are not
+        %% logged.
+        try
+            %% don't care if the internal delete doesn't return 'ok'.
+            rabbit_amqqueue:internal_delete(QName, ActingUser, Reason0)
+        catch
+            {error, ReasonE} -> error(ReasonE)
+        end,
         BQS1
     end.
 
+terminated_by({terminated_by, auto_delete}) ->
+    ?INTERNAL_USER;
 terminated_by({terminated_by, ActingUser}) ->
     ActingUser;
 terminated_by(_) ->
@@ -1163,7 +1183,7 @@ handle_call({notify_down, ChPid}, _From, State) ->
     %% gen_server2 *before* the reply is sent.
     case handle_ch_down(ChPid, State) of
         {ok, State1}   -> reply(ok, State1);
-        {stop, State1} -> stop(ok, State1)
+        {stop, State1} -> stop(ok, State1#q{status = {terminated_by, auto_delete}})
     end;
 
 handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
@@ -1180,7 +1200,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
                                 ChPid, LimiterPid, AckTag);
                 false -> ok
             end,
-            Msg = {QName, self(), AckTag, IsDelivered, Message},
+            Msg = {{QName, classic}, self(), AckTag, IsDelivered, Message},
             reply({ok, BQ:len(BQS), Msg}, State2)
     end;
 

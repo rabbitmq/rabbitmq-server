@@ -3,9 +3,9 @@
 [RabbitMQ](https://rabbitmq.com) is a [feature rich](https://rabbitmq.com/documentation.html), multi-protocol messaging broker. It supports:
 
  * AMQP 0-9-1
+ * AMQP 1.0
  * STOMP 1.0 through 1.2
  * MQTT 3.1.1
- * AMQP 1.0
 
 
 ## Installation
@@ -20,12 +20,13 @@
  * [Documentation Source Code](https://github.com/rabbitmq/rabbitmq-website/)
  * [Client libraries and tools](https://rabbitmq.com/devtools.html)
  * [Tutorials Source Code](https://github.com/rabbitmq/rabbitmq-tutorials/)
- 
+
 ## Getting Help
 
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
+ * [Commercial support](https://rabbitmq.com/services.html) from [Pivotal](http://pivotal.io) for open source RabbitMQ
+ * [Community Slack](https://rabbitmq-slack.herokuapp.com/)
  * `#rabbitmq` on Freenode
- * [Commercial RabbitMQ support](https://rabbitmq.com/services.html) from [Pivotal](http://pivotal.io)
 
 
 ## Contributing
@@ -33,9 +34,9 @@
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](https://rabbitmq.com/github.html).
 
 
-## License
+## Licensing
 
-RabbitMQ server is [licensed under the MPL](LICENSE-MPL-RabbitMQ).
+RabbitMQ server is [licensed under the MPL 1.1](LICENSE-MPL-RabbitMQ).
 
 
 ## Building From Source and Packaging
@@ -46,4 +47,4 @@ RabbitMQ server is [licensed under the MPL](LICENSE-MPL-RabbitMQ).
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2017.
+(c) Pivotal Software Inc., 2007-2018.

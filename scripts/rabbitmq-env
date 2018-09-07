@@ -85,11 +85,11 @@ DEFAULT_SCHEDULER_BIND_TYPE="db"
 [ -n "$SCHEDULER_BIND_TYPE" ] || SCHEDULER_BIND_TYPE="$DEFAULT_SCHEDULER_BIND_TYPE"
 [ -n "$RABBITMQ_SCHEDULER_BIND_TYPE" ] || RABBITMQ_SCHEDULER_BIND_TYPE="$SCHEDULER_BIND_TYPE"
 
-DEFAULT_DISTRIBUTION_BUFFER_SIZE=1280000
+DEFAULT_DISTRIBUTION_BUFFER_SIZE=128000
 [ -n "$DISTRIBUTION_BUFFER_SIZE" ] || DISTRIBUTION_BUFFER_SIZE="$DEFAULT_DISTRIBUTION_BUFFER_SIZE"
 [ -n "$RABBITMQ_DISTRIBUTION_BUFFER_SIZE" ] || RABBITMQ_DISTRIBUTION_BUFFER_SIZE="$DISTRIBUTION_BUFFER_SIZE"
 
-DEFAULT_MAX_NUMBER_OF_PROCESSES=10485760
+DEFAULT_MAX_NUMBER_OF_PROCESSES=1048576
 [ -n "$MAX_NUMBER_OF_PROCESSES" ] || MAX_NUMBER_OF_PROCESSES="$DEFAULT_MAX_NUMBER_OF_PROCESSES"
 [ -n "$RABBITMQ_MAX_NUMBER_OF_PROCESSES" ] || RABBITMQ_MAX_NUMBER_OF_PROCESSES="$MAX_NUMBER_OF_PROCESSES"
 
@@ -294,7 +294,7 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
                "enabled_plugins_file=\"~s\"~n"
                "mnesia_base=\"~s\"~n"
                "mnesia_dir=\"~s\"~n", [P, E, B, M]).' \
-            2>/dev/null | head -n 4) || :)
+            2>/dev/null | grep -E '^(plugins_dir|enabled_plugins_file|mnesia_base|mnesia_dir)=') || :)
         if [ "${plugins_dir}" -a \
              "$RABBITMQ_PLUGINS_DIR_source" != 'environment' ]; then
             RABBITMQ_PLUGINS_DIR="${plugins_dir}"

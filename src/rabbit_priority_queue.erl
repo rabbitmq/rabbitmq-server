@@ -128,11 +128,14 @@ collapse_recovery(QNames, DupNames, Recovery) ->
 priorities(#amqqueue{arguments = Args}) ->
     Ints = [long, short, signedint, byte, unsignedbyte, unsignedshort, unsignedint],
     case rabbit_misc:table_lookup(Args, <<"x-max-priority">>) of
-        {Type, Max} -> case lists:member(Type, Ints) of
-                           false -> none;
-                           true  -> lists:reverse(lists:seq(0, Max))
-                       end;
-        _           -> none
+        {Type, RequestedMax} ->
+            case lists:member(Type, Ints) of
+                false -> none;
+                true  ->
+                    Max = min(RequestedMax, ?MAX_SUPPORTED_PRIORITY),
+                    lists:reverse(lists:seq(0, Max))
+            end;
+        _                    -> none
     end.
 
 %%----------------------------------------------------------------------------
@@ -663,8 +666,8 @@ cse(_, lazy)                -> lazy;
 cse(lazy, _)                -> lazy;
 %% numerical stats
 cse(A, B) when is_number(A) -> A + B;
-cse({delta, _, _, _, _}, _)    -> {delta, todo, todo, todo, todo};
-cse(A, B)                   -> exit({A, B}).
+cse({delta, _, _, _, _}, _) -> {delta, todo, todo, todo, todo};
+cse(_, _)                   -> undefined.
 
 %% When asked about 'head_message_timestamp' fro this priority queue, we
 %% walk all the backing queues, starting by the highest priority. Once a

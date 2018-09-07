@@ -7,7 +7,8 @@
          update_app_config/1,
          schema_dir/0,
          config_files/0,
-         get_advanced_config/0
+         get_advanced_config/0,
+         validate_config_files/0
         ]).
 
 prepare_and_use_config() ->
@@ -42,16 +43,16 @@ legacy_erlang_term_config_used() ->
 
 get_confs() ->
     case init:get_argument(conf) of
-        {ok, Configs} -> Configs;
-        _             -> []
+        {ok, Confs} -> [ filename:rootname(Conf, ".conf") ++ ".conf"
+                         || Conf <- Confs ];
+        _           -> []
     end.
 
-prepare_config(Configs) ->
+prepare_config(Confs) ->
     case {init:get_argument(conf_dir), init:get_argument(conf_script_dir)} of
         {{ok, ConfDir}, {ok, ScriptDir}} ->
-            ConfFiles = [Config ++ ".conf" || [Config] <- Configs,
-                                            rabbit_file:is_file(Config ++
-                                                                    ".conf")],
+            ConfFiles = [Conf || Conf <- Confs,
+                                 rabbit_file:is_file(Conf)],
             case ConfFiles of
                 [] -> ok;
                 _  ->
@@ -178,9 +179,8 @@ get_advanced_config() ->
     case init:get_argument(conf_advanced) of
         %% There can be only one advanced.config
         {ok, [FileName | _]} ->
-            ConfigName = FileName ++ ".config",
-            case rabbit_file:is_file(ConfigName) of
-                true  -> ConfigName;
+            case rabbit_file:is_file(FileName) of
+                true  -> FileName;
                 false -> none
             end;
         _ -> none
@@ -193,25 +193,25 @@ prepare_plugin_schemas(SchemaDir) ->
         false -> ok
     end.
 
-
 config_files() ->
-    Abs = fun (F, Ex) -> filename:absname(filename:rootname(F, Ex) ++ Ex) end,
     case legacy_erlang_term_config_used() of
         true ->
             case init:get_argument(config) of
-                {ok, Files} -> [Abs(File, ".config") || [File] <- Files];
+                {ok, Files} -> [ filename:absname(filename:rootname(File) ++ ".config")
+                                 || [File] <- Files];
                 error       -> case config_setting() of
                                    none -> [];
-                                   File -> [Abs(File, ".config")
+                                   File -> [filename:absname(filename:rootname(File, ".config") ++ ".config")
                                             ++
                                             " (not found)"]
                                end
             end;
         false ->
-            ConfFiles = [Abs(File, ".conf") || File <- get_confs()],
+            ConfFiles = [filename:absname(File) || File <- get_confs(),
+                                                   filelib:is_regular(File)],
             AdvancedFiles = case get_advanced_config() of
                 none -> [];
-                FileName -> [Abs(FileName, ".config")]
+                FileName -> [filename:absname(FileName)]
             end,
             AdvancedFiles ++ ConfFiles
 
@@ -232,5 +232,75 @@ config_setting() ->
                            false -> none;
                            File2 -> File2
                        end
+    end.
+
+-spec validate_config_files() -> ok | {error, {Fmt :: string(), Args :: list()}}.
+validate_config_files() ->
+    ConfigFile = os:getenv("RABBITMQ_CONFIG_FILE"),
+    AdvancedConfigFile = get_advanced_config(),
+    AssertConfig = case filename:extension(ConfigFile) of
+        ".config" -> assert_config(ConfigFile, "RABBITMQ_CONFIG_FILE");
+        ".conf"   -> assert_conf(ConfigFile, "RABBITMQ_CONFIG_FILE");
+        _ -> ok
+    end,
+    case AssertConfig of
+        ok ->
+            assert_config(AdvancedConfigFile, "RABBITMQ_ADVANCED_CONFIG_FILE");
+        {error, Err} ->
+            {error, Err}
+    end.
+
+assert_config("", _) -> ok;
+assert_config(none, _) -> ok;
+assert_config(Filename, Env) ->
+    ".config" = filename:extension(Filename),
+    case filelib:is_regular(Filename) of
+        true ->
+            case file:consult(Filename) of
+                {ok, []}    -> {error,
+                                {"ERROR: Config file ~s should not be empty: ~s",
+                                 [Env, Filename]}};
+                {ok, [_]}   -> ok;
+                {ok, [_|_]} -> {error,
+                                {"ERROR: Config file ~s must contain ONE list ended by <dot>: ~s",
+                                 [Env, Filename]}};
+                {error, {1, erl_parse, Err}} ->
+                    {error, {"ERROR: Unable to parse erlang terms from ~s file: ~s~n"
+                             "ERROR: Reason: ~p~n"
+                             "ERROR: Check that the file is in the erlang terms format. " ++
+                             case Env of
+                                "RABBITMQ_CONFIG_FILE" ->
+                                    "If you are using the new ini-style format, the file "
+                                    "extension should be '.conf'~n";
+                                _ -> ""
+                             end,
+                             [Env, Filename, Err]}};
+                {error, Err} ->
+                    {error, {"ERROR Unable to parse erlang terms from  ~s file: ~s~n"
+                             "Error: ~p~n",
+                             [Env, Filename, Err]}}
+            end;
+        false ->
+            ok
+    end.
+
+assert_conf("", _) -> ok;
+assert_conf(Filename, Env) ->
+    ".conf" = filename:extension(Filename),
+    case filelib:is_regular(Filename) of
+        true ->
+            case file:consult(Filename) of
+                {ok, []} -> ok;
+                {ok, _}  ->
+                    {error, {"ERROR: Wrong format of the config file ~s: ~s~n"
+                             "ERROR: Check that the file is in the new ini-style config format "
+                             "If you are using the old format the file extension should "
+                             "be .config~n",
+                             [Env, Filename]}};
+                _ ->
+                    ok
+            end;
+        false ->
+            ok
     end.
 

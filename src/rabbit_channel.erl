@@ -16,6 +16,10 @@
 
 -module(rabbit_channel).
 
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 %% rabbit_channel processes represent an AMQP 0-9-1 channels.
 %%
 %% Connections parse protocol frames coming from clients and
@@ -1389,16 +1393,28 @@ handle_method(#'basic.recover_async'{requeue = true},
                              queue_states = QueueStates0}) ->
     OkFun = fun () -> ok end,
     UAMQL = queue:to_list(UAMQ),
-    foreach_per_queue(
-      fun (QPid, MsgIds, _Acc) ->
-              rabbit_misc:with_exit_handler(
-                OkFun,
-                fun () -> rabbit_amqqueue:requeue(QPid, MsgIds, self()) end)
-      end, lists:reverse(UAMQL), QueueStates0),
+    QueueStates =
+        foreach_per_queue(
+          fun ({QPid, CTag}, MsgIds, Acc0) ->
+                  rabbit_misc:with_exit_handler(
+                    OkFun,
+                    fun () ->
+                            {ok, Acc} = rabbit_amqqueue:requeue(QPid, {CTag, MsgIds}, self(), Acc0),
+                            Acc
+                    end);
+              (QPid, MsgIds, Acc0) ->
+                  rabbit_misc:with_exit_handler(
+                    OkFun,
+                    fun () ->
+                            _ = rabbit_amqqueue:requeue(QPid, MsgIds, self(), Acc0),
+                            Acc0
+                    end)
+          end, lists:reverse(UAMQL), QueueStates0),
     ok = notify_limiter(Limiter, UAMQL),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
-    {noreply, State#ch{unacked_message_q = queue:new()}};
+    {noreply, State#ch{unacked_message_q = queue:new(),
+                       queue_states = QueueStates}};
 
 handle_method(#'basic.recover_async'{requeue = false}, _, _State) ->
     rabbit_misc:protocol_error(not_implemented, "requeue=false", []);
@@ -1639,7 +1655,8 @@ monitor_delivering_queue(NoAck, QPid, QNameType,
                                  end}.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
-                                                       mandatory   = Mand}) ->
+                                                       mandatory   = Mand})
+  when is_pid(QPid) ->
     {MMsgs, Mand1} = dtree:take(QPid, Mand),
     [basic_return(Msg, State, no_route) || {_, Msg} <- MMsgs],
     State1 = State#ch{mandatory = Mand1},
@@ -1647,9 +1664,12 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
         true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
                  send_nacks(MXs, State1#ch{unconfirmed = UC1});
         false -> {MXs, UC1} = dtree:take(QPid, UC),
-                              record_confirms(MXs, State1#ch{unconfirmed = UC1})
+                 record_confirms(MXs, State1#ch{unconfirmed = UC1})
 
-    end.
+    end;
+handle_publishing_queue_down(_QPid, _Reason, State) ->
+    %% for quorum queues we cannot infer anything from a queue down
+    State.
 
 handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
                                               queue_names      = QNames}) ->

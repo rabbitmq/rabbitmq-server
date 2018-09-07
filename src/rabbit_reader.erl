@@ -16,6 +16,10 @@
 
 -module(rabbit_reader).
 
+%% Transitional step until we can require Erlang/OTP 21 and
+%% use the now recommended try/catch syntax for obtaining the stack trace.
+-compile(nowarn_deprecated_function).
+
 %% This is an AMQP 0-9-1 connection implementation. If AMQP 1.0 plugin is enabled,
 %% this module passes control of incoming AMQP 1.0 connections to it.
 %%
@@ -180,15 +184,6 @@
 
 start_link(HelperSup, Ref, Sock) ->
     Pid = proc_lib:spawn_link(?MODULE, init, [self(), HelperSup, Ref, Sock]),
-
-    %% In the event that somebody floods us with connections, the
-    %% reader processes can spew log events at error_logger faster
-    %% than it can keep up, causing its mailbox to grow unbounded
-    %% until we eat all the memory available and crash. So here is a
-    %% meaningless synchronous call to the underlying gen_event
-    %% mechanism. When it returns the mailbox is drained, and we
-    %% return to our caller to accept more connections.
-    gen_event:which_handlers(error_logger),
 
     {ok, Pid}.
 
@@ -387,10 +382,24 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         %% socket w/o delay before termination.
         rabbit_net:fast_close(RealSocket),
         rabbit_networking:unregister_connection(self()),
-	rabbit_core_metrics:connection_closed(self()),
-        rabbit_event:notify(connection_closed, [{name, Name},
-                                                {pid, self()},
-                                                {node, node()}])
+        rabbit_core_metrics:connection_closed(self()),
+        ClientProperties = case get(client_properties) of
+            undefined ->
+                [];
+            Properties ->
+                Properties
+        end,
+        EventProperties = [{name, Name},
+                           {pid, self()},
+                           {node, node()},
+                           {client_properties, ClientProperties}],
+        EventProperties1 = case get(connection_user_provided_name) of
+           undefined ->
+               EventProperties;
+           ConnectionUserProvidedName ->
+               [{user_provided_name, ConnectionUserProvidedName} | EventProperties]
+        end,
+        rabbit_event:notify(connection_closed, EventProperties1)
     end,
     done.
 
@@ -421,6 +430,13 @@ log_connection_exception(Severity, Name, {connection_closed_abruptly, _}) ->
     log_connection_exception_with_severity(Severity,
         "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
         [self(), Name]);
+%% failed connection.tune negotiations
+log_connection_exception(Severity, Name, {handshake_error, tuning, _Channel,
+                                          {exit, #amqp_error{explanation = Explanation},
+                                           _Method, _Stacktrace}}) ->
+    log_connection_exception_with_severity(Severity,
+        "closing AMQP connection ~p (~s):~nfailed to negotiate connection parameters: ~s~n",
+        [self(), Name, Explanation]);
 %% old exception structure
 log_connection_exception(Severity, Name, connection_closed_abruptly) ->
     log_connection_exception_with_severity(Severity,
@@ -437,7 +453,7 @@ log_connection_exception_with_severity(Severity, Fmt, Args) ->
         debug   -> rabbit_log_connection:debug(Fmt, Args);
         info    -> rabbit_log_connection:info(Fmt, Args);
         warning -> rabbit_log_connection:warning(Fmt, Args);
-        error   -> rabbit_log_connection:warning(Fmt, Args)
+        error   -> rabbit_log_connection:error(Fmt, Args)
     end.
 
 run({M, F, A}) ->
@@ -607,7 +623,9 @@ handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
   when ?IS_RUNNING(State) ->
     rabbit_event:notify(
       connection_created,
-      [{type, network} | infos(?CREATION_EVENT_KEYS, State)], Ref),
+      augment_infos_with_user_provided_connection_name(
+          [{type, network} | infos(?CREATION_EVENT_KEYS, State)], State),
+      Ref),
     rabbit_event:init_stats_timer(State, #v1.stats_timer);
 handle_other({'$gen_cast', {force_event_refresh, _Ref}}, State) ->
     %% Ignore, we will emit a created event once we start running.
@@ -1130,6 +1148,15 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
     Connection2 = augment_connection_log_name(Connection1),
     State = State0#v1{connection_state = securing,
                       connection       = Connection2},
+    % adding client properties to process dictionary to send them later
+    % in the connection_closed event
+    put(client_properties, ClientProperties),
+    case user_provided_connection_name(Connection2) of
+        undefined ->
+            undefined;
+        UserProvidedConnectionName ->
+            put(connection_user_provided_name, UserProvidedConnectionName)
+    end,
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
@@ -1202,7 +1229,10 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                         connection          = NewConnection,
                         channel_sup_sup_pid = ChannelSupSupPid,
                         throttle            = Throttle1}),
-    Infos = [{type, network} | infos(?CREATION_EVENT_KEYS, State1)],
+    Infos = augment_infos_with_user_provided_connection_name(
+        [{type, network} | infos(?CREATION_EVENT_KEYS, State1)],
+        State1
+    ),
     rabbit_core_metrics:connection_created(proplists:get_value(pid, Infos),
                                            Infos),
     rabbit_event:notify(connection_created, Infos),
@@ -1275,9 +1305,10 @@ fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
                    min -> {lower,  minimum};
                    max -> {higher, maximum}
                end,
+    ClientValueDetail = get_client_value_detail(Field, ClientValue),
     rabbit_misc:protocol_error(
-      not_allowed, "negotiated ~w = ~w is ~w than the ~w allowed value (~w)",
-      [Field, ClientValue, S1, S2, ServerValue], 'connection.tune').
+      not_allowed, "negotiated ~w = ~w~s is ~w than the ~w allowed value (~w)",
+      [Field, ClientValue, ClientValueDetail, S1, S2, ServerValue], 'connection.tune').
 
 get_env(Key) ->
     {ok, Value} = application:get_env(rabbit, Key),
@@ -1661,16 +1692,31 @@ control_throttle(State = #v1{connection_state = CS,
         _       -> State1
     end.
 
-augment_connection_log_name(#connection{client_properties = ClientProperties,
-                                        name = Name} = Connection) ->
-    case rabbit_misc:table_lookup(ClientProperties, <<"connection_name">>) of
-        {longstr, UserSpecifiedName} ->
+augment_connection_log_name(#connection{name = Name} = Connection) ->
+    case user_provided_connection_name(Connection) of
+        undefined ->
+            Connection;
+        UserSpecifiedName ->
             LogName = <<Name/binary, " - ", UserSpecifiedName/binary>>,
             rabbit_log_connection:info("Connection ~p (~s) has a client-provided name: ~s~n", [self(), Name, UserSpecifiedName]),
             ?store_proc_name(LogName),
-            Connection#connection{log_name = LogName};
+            Connection#connection{log_name = LogName}
+    end.
+
+augment_infos_with_user_provided_connection_name(Infos, #v1{connection = Connection}) ->
+    case user_provided_connection_name(Connection) of
+     undefined ->
+         Infos;
+     UserProvidedConnectionName ->
+         [{user_provided_name, UserProvidedConnectionName} | Infos]
+    end.
+
+user_provided_connection_name(#connection{client_properties = ClientProperties}) ->
+    case rabbit_misc:table_lookup(ClientProperties, <<"connection_name">>) of
+        {longstr, UserSpecifiedName} ->
+            UserSpecifiedName;
         _ ->
-            Connection
+            undefined
     end.
 
 dynamic_connection_name(Default) ->
@@ -1684,3 +1730,9 @@ dynamic_connection_name(Default) ->
 handle_uncontrolled_channel_close(ChPid) ->
     rabbit_core_metrics:channel_closed(ChPid),
     rabbit_event:notify(channel_closed, [{pid, ChPid}]).
+
+-spec get_client_value_detail(atom(), integer()) -> string().
+get_client_value_detail(channel_max, 0) ->
+    " (no limit)";
+get_client_value_detail(_Field, _ClientValue) ->
+    "".

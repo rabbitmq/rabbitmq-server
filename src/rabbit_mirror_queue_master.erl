@@ -165,6 +165,8 @@ sync_mirrors(HandleInfo, EmitStats,
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
     case rabbit_mirror_queue_sync:master_go(
            Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, BQ, BQS) of
+        {cancelled, BQS1}      -> Log(" synchronisation cancelled ", []),
+                                  {ok, S(BQS1)};
         {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
         {sync_died, R, BQS1}   -> Log("~p", [R]),
                                   {ok, S(BQS1)};

@@ -25,28 +25,48 @@
 all() ->
     [
       {group, single_node},
-      {group, clustered}
+      {group, clustered},
+      {group, unclustered}
     ].
 
 groups() ->
     [
      {single_node, [], all_tests()},
      {clustered, [], [
-                      {cluster_size_2, [], all_tests()},
+                      {cluster_size_2, [], [add_member_not_running,
+                                            add_member_classic,
+                                            add_member_already_a_member,
+                                            add_member_not_found,
+                                            delete_member_not_running,
+                                            delete_member_classic,
+                                            delete_member_not_found,
+                                            delete_member]
+                       ++ all_tests()},
                       {cluster_size_3, [], [recover_from_single_failure,
                                             recover_from_multiple_failures,
                                             leadership_takeover,
                                             delete_declare,
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
-                                            declare_during_node_down]}
-                     ]}
+                                            declare_during_node_down,
+                                            consume_in_minority
+                                           ]},
+                      {cluster_size_5, [], [start_queue,
+                                            start_queue_concurrent,
+                                            quorum_cluster_size_3,
+                                            quorum_cluster_size_7
+                                           ]}
+                     ]},
+     {unclustered, [], [
+                        {cluster_size_2, [], [add_member]}
+                       ]}
     ].
 
 all_tests() ->
     [
      declare_args,
      declare_invalid_args,
+     declare_invalid_properties,
      start_queue,
      stop_queue,
      restart_queue,
@@ -80,7 +100,8 @@ all_tests() ->
      basic_cancel,
      purge,
      sync_queue,
-     cancel_sync_queue
+     cancel_sync_queue,
+     basic_recover
     ].
 
 %% -------------------------------------------------------------------
@@ -98,10 +119,14 @@ init_per_group(single_node, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 1}]);
 init_per_group(clustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
+init_per_group(unclustered, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]);
 init_per_group(cluster_size_3, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]).
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]);
+init_per_group(cluster_size_5, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 5}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -110,9 +135,11 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+    TcpPortsBase = TestNumber * ClusterSize,
+    ct:pal("TcpPortsBase ~w~n", [TcpPortsBase]),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Testcase},
-        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
+        {tcp_ports_base, {skip_n_nodes, ClusterSize}}
       ]),
     Config2 = rabbit_ct_helpers:run_steps(Config1,
                                           [fun merge_app_env/1 ] ++
@@ -151,6 +178,34 @@ declare_args(Config) ->
     DQ2 = <<"classic-q2">>,
     declare(Ch, DQ2),
     assert_queue_type(Node, DQ2, rabbit_classic_queue).
+
+declare_invalid_properties(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    LQ = <<"quorum-q">>,
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       amqp_channel:call(
+         rabbit_ct_client_helpers:open_channel(Config, Node),
+         #'queue.declare'{queue     = LQ,
+                          auto_delete = true,
+                          durable   = true,
+                          arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]})),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       amqp_channel:call(
+         rabbit_ct_client_helpers:open_channel(Config, Node),
+         #'queue.declare'{queue     = LQ,
+                          exclusive = true,
+                          durable   = true,
+                          arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]})),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       amqp_channel:call(
+         rabbit_ct_client_helpers:open_channel(Config, Node),
+         #'queue.declare'{queue     = LQ,
+                          durable   = false,
+                          arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]})).
 
 declare_invalid_args(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -193,7 +248,19 @@ declare_invalid_args(Config) ->
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(rabbit_ct_client_helpers:open_channel(Config, Node),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-queue-mode">>, longstr, <<"lazy">>}])).
+                    {<<"x-queue-mode">>, longstr, <<"lazy">>}])),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-quorum-cluster-size">>, longstr, <<"hop">>}])),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-quorum-cluster-size">>, long, 0}])).
 
 start_queue(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -212,6 +279,10 @@ start_queue(Config) ->
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
+    %% Test declare with same arguments
+    ?assertEqual({'queue.declare_ok', LQ, 0, 0},
+                 declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
     %% Test declare an existing queue with different arguments
     ?assertExit(_, declare(Ch, LQ, [])),
 
@@ -219,6 +290,53 @@ start_queue(Config) ->
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Node, application, which_applications, []))),
     ?assertMatch([_], rpc:call(Node, supervisor, which_children, [ra_nodes_sup])).
+
+start_queue_concurrent(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    LQ = <<"quorum-q">>,
+    Self = self(),
+    [begin
+         _ = spawn_link(fun () ->
+                                {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Node),
+                                %% Test declare an existing queue
+                                ?assertEqual({'queue.declare_ok', LQ, 0, 0},
+                                             declare(Ch, LQ,
+                                                     [{<<"x-queue-type">>,
+                                                       longstr,
+                                                       <<"quorum">>}])),
+                                Self ! {done, Node}
+                        end)
+     end || Node <- Nodes],
+
+    [begin
+         receive {done, Node} -> ok
+         after 5000 -> exit({await_done_timeout, Node})
+         end
+     end || Node <- Nodes],
+
+
+    ok.
+
+quorum_cluster_size_3(Config) ->
+    quorum_cluster_size_x(Config, 3, 3).
+
+quorum_cluster_size_7(Config) ->
+    quorum_cluster_size_x(Config, 7, 5).
+
+quorum_cluster_size_x(Config, Max, Expected) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-cluster-size">>, long, Max}])),
+    {ok, Members, _} = ra:members({'%2F_quorum-q', Node}),
+    ?assertEqual(Expected, length(Members)),
+    Info = rpc:call(Node, rabbit_quorum_queue, infos,
+                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    MembersQ = proplists:get_value(members, Info),
+    ?assertEqual(Expected, length(MembersQ)).
 
 stop_queue(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -380,6 +498,21 @@ consume(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
     wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
+
+consume_in_minority(Config) ->
+    [Node0, Node1, Node2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Node1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Node2),
+
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
+                amqp_channel:call(Ch, #'basic.get'{queue = QQ,
+                                                   no_ack = false})).
 
 consume_and_autoack(Config) ->
     [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1161,6 +1294,121 @@ declare_during_node_down(Config) ->
     wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
     ok.
 
+add_member_not_running(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({error, node_not_running},
+                 rpc:call(Node, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, 'rabbit@burrow'])).
+
+add_member_classic(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    CQ = <<"classic-q">>,
+    ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
+    ?assertEqual({error, classic_queue_not_supported},
+                 rpc:call(Node, rabbit_quorum_queue, add_member,
+                          [<<"/">>, CQ, Node])).
+
+add_member_already_a_member(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({error, already_a_member},
+                 rpc:call(Node, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, Node])).
+
+add_member_not_found(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({error, not_found},
+                 rpc:call(Node, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, Node])).
+
+add_member(Config) ->
+    [Node0, Node1] = Nodes0 =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({error, node_not_running},
+                 rpc:call(Node0, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, Node1])),
+    ok = rabbit_control_helper:command(stop_app, Node1),
+    ok = rabbit_control_helper:command(join_cluster, Node1, [atom_to_list(Node0)], []),
+    rabbit_control_helper:command(start_app, Node1),
+    ?assertEqual(ok, rpc:call(Node0, rabbit_quorum_queue, add_member,
+                              [<<"/">>, QQ, Node1])),
+    Info = rpc:call(Node0, rabbit_quorum_queue, infos,
+                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    Nodes = lists:sort(Nodes0),
+    ?assertEqual(Nodes, lists:sort(proplists:get_value(online, Info, []))).
+
+delete_member_not_running(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({error, node_not_running},
+                 rpc:call(Node, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, 'rabbit@burrow'])).
+
+delete_member_classic(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    CQ = <<"classic-q">>,
+    ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
+    ?assertEqual({error, classic_queue_not_supported},
+                 rpc:call(Node, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, CQ, Node])).
+
+delete_member_not_found(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({error, not_found},
+                 rpc:call(Node, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, Node])).
+
+delete_member(Config) ->
+    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    timer:sleep(100),
+    ?assertEqual(ok,
+                 rpc:call(Node, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, Node])),
+    ?assertEqual({error, not_a_member},
+                 rpc:call(Node, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, Node])).
+
+basic_recover(Config) ->
+    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    QQ = <<"quorum-q">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    publish(Ch, QQ),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0),
+    _ = consume(Ch, QQ, false),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 0),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 1),
+    amqp_channel:cast(Ch, #'basic.recover'{requeue = true}),
+    wait_for_messages_ready(Nodes, '%2F_quorum-q', 1),
+    wait_for_messages_pending_ack(Nodes, '%2F_quorum-q', 0).
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->
@@ -1169,6 +1417,7 @@ declare(Ch, Q) ->
 declare(Ch, Q, Args) ->
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
+                                           auto_delete = false,
                                            arguments = Args}).
 
 assert_queue_type(Node, Q, Expected) ->
@@ -1259,10 +1508,10 @@ wait_for_cleanup(Node, Channel, Number, N) ->
 
 
 wait_for_messages_ready(Nodes, QName, Ready) ->
-    wait_for_messages(Nodes, QName, Ready, fun ra_fifo:query_messages_ready/1, 60).
+    wait_for_messages(Nodes, QName, Ready, fun rabbit_fifo:query_messages_ready/1, 60).
 
 wait_for_messages_pending_ack(Nodes, QName, Ready) ->
-    wait_for_messages(Nodes, QName, Ready, fun ra_fifo:query_messages_checked_out/1, 60).
+    wait_for_messages(Nodes, QName, Ready, fun rabbit_fifo:query_messages_checked_out/1, 60).
 
 wait_for_messages(Nodes, QName, Number, Fun, 0) ->
     Msgs = dirty_query(Nodes, QName, Fun),
@@ -1281,7 +1530,7 @@ wait_for_messages(Nodes, QName, Number, Fun, N) ->
 dirty_query(Nodes, QName, Fun) ->
     lists:map(
       fun(N) ->
-              {ok, {_, Msgs}, _} = rpc:call(N, ra, dirty_query, [{QName, N}, Fun]),
+              {ok, {_, Msgs}, _} = rpc:call(N, ra, local_query, [{QName, N}, Fun]),
               Msgs
       end, Nodes).
 

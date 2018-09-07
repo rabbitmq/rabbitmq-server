@@ -10,9 +10,9 @@ set TDP0=%~dp0
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
-call "!TDP0!\rabbitmq-env.bat" %~n0
+call "%TDP0%\rabbitmq-env.bat" %~n0
 
-if "%1"=="" goto fail
+if "%1"=="" goto argfail
 
 :: set timeout vars ::
 set TIMEOUT=10
@@ -47,9 +47,11 @@ echo %PID%
 endlocal
 EXIT /B 0
 
+:: argument is required ::
+:argfail
+echo Please provide your RabbitMQ node name as the argument to this script.
+
 :: something went wrong ::
 :fail
 endlocal
 EXIT /B 1
-
-
