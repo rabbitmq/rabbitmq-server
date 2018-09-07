@@ -39,7 +39,6 @@ http_get_from_node(Config, Node, Path) ->
     assert_code(?OK, CodeAct, "GET", Path, ResBody),
     decode(?OK, Headers, ResBody).
 
-
 http_get(Config, Path) ->
     http_get(Config, Path, ?OK).
 
@@ -77,6 +76,16 @@ http_post_accept_json(Config, Path, List, User, Pass, CodeExp) ->
     http_post_raw(Config, Path, format_for_upload(List), User, Pass, CodeExp,
           [{"Accept", "application/json"}]).
 
+assert_permanent_redirect(Config, Path, ExpectedLocation) ->
+    Node = 0,
+    Uri = uri_base_from(Config, Node, Path),
+    ExpectedResponseCode = 301,
+    {ok, {{_, ExpectedResponseCode, _}, Headers, _}} =
+        httpc:request(get, {Uri, []}, ?HTTPC_OPTS, []),
+    Prefix = get_uri_prefix(Config),
+    ?assertEqual(Prefix ++ ExpectedLocation,
+                 proplists:get_value("location", Headers)).
+
 req(Config, Type, Path, Headers) ->
     req(Config, 0, Type, Path, Headers).
 
@@ -88,9 +97,11 @@ req(Config, Node, Type, Path, Headers, Body) ->
                   ?HTTPC_OPTS, []).
 
 uri_base_from(Config, Node) ->
+    uri_base_from(Config, Node, "api").
+uri_base_from(Config, Node, Base) ->
     Port = mgmt_port(Config, Node),
     Prefix = get_uri_prefix(Config),
-    Uri = rabbit_mgmt_format:print("http://localhost:~w~s/api", [Port, Prefix]),
+    Uri = rabbit_mgmt_format:print("http://localhost:~w~s/~s", [Port, Prefix, Base]),
     binary_to_list(Uri).
 
 get_uri_prefix(Config) ->
