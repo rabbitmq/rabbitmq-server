@@ -29,14 +29,14 @@ build_routes(Ignore) ->
     ManagementApp = module_app(?MODULE),
     Prefix = rabbit_mgmt_util:get_path_prefix(),
     RootIdxRtes = build_root_index_routes(Prefix, ManagementApp),
-    ApiIdxRte = {"/api", cowboy_static, {priv_file, ManagementApp, "www/api/index.html"}},
-    CliIdxRte = {"/cli", cowboy_static, {priv_file, ManagementApp, "www/cli/index.html"}},
+    ApiRdrRte = build_static_index_html_route(Prefix, "/api"),
+    CliRdrRte = build_static_index_html_route(Prefix, "/cli"),
     MgmtRdrRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
     LocalPaths = [{module_app(M), "www"} || M <- modules(Ignore)],
     LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
     % NB: order is significant in the routing list
     Routes0 = build_module_routes(Ignore) ++
-        [ApiIdxRte, CliIdxRte, MgmtRdrRte, LocalStaticRte],
+        [ApiRdrRte, CliRdrRte, MgmtRdrRte, LocalStaticRte],
     Routes1 = maybe_add_path_prefix(Routes0, Prefix),
     % NB: ensure the root routes are first
     Routes2 = RootIdxRtes ++ Routes1,
@@ -47,6 +47,11 @@ build_root_index_routes("", ManagementApp) ->
 build_root_index_routes(Prefix, ManagementApp) ->
     [{"/", rabbit_mgmt_wm_redirect, Prefix ++ "/"},
      {Prefix, cowboy_static, root_idx_file(ManagementApp)}].
+
+build_static_index_html_route("", Path) ->
+    {Path, rabbit_mgmt_wm_redirect, Path ++ "/index.html"};
+build_static_index_html_route(Prefix, Path) ->
+    {Path, rabbit_mgmt_wm_redirect, Prefix ++ Path ++ "/index.html"}.
 
 root_idx_file(ManagementApp) ->
     {priv_file, ManagementApp, "www/index.html"}.
