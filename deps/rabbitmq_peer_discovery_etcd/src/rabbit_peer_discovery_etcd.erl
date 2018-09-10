@@ -190,7 +190,11 @@ node_path(Map) ->
 extract_nodes([], Nodes) -> Nodes;
 extract_nodes([H|T], Nodes) ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-  extract_nodes(T, lists:append(Nodes, [get_node_from_key(maps:get(<<"key">>, H), M)])).
+  ToAppend = case get_node_from_key(maps:get(<<"key">>, H), M) of
+                 {error, none} -> [];
+                 Name          -> [Name]
+             end,
+  extract_nodes(T, lists:append(Nodes, ToAppend)).
 
 %% @doc Return the list of erlang nodes
 %% @end

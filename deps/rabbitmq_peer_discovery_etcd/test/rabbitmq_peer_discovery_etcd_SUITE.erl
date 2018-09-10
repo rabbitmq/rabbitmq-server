@@ -39,7 +39,8 @@ groups() ->
                  get_node_from_key_case2_test,
                  get_node_from_key_case3_test,
                  list_nodes_without_existing_directory_test,
-                 issue14_extract_nodes_test
+                 issue14_extract_nodes_case1_test,
+                 issue14_extract_nodes_case2_test
                 ]}
     ].
 
@@ -150,7 +151,7 @@ list_nodes_without_existing_directory_test(_Config) ->
     rabbit_peer_discovery_etcd:list_nodes(),
     ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
-issue14_extract_nodes_test(_Config) ->
+issue14_extract_nodes_case1_test(_Config) ->
     Values = #{<<"action">> => <<"get">>,
                <<"node">> =>
                    #{<<"createdIndex">> => 1031,<<"dir">> => true,
@@ -165,3 +166,35 @@ issue14_extract_nodes_test(_Config) ->
                             <<"value">> => <<"enabled">>}]}},
     Expectation = ['rabbit@devops35-2'],
     ?assertEqual(Expectation, rabbit_peer_discovery_etcd:extract_nodes(Values)).
+
+issue14_extract_nodes_case2_test(_Config) ->
+    Values = #{<<"action">> => <<"get">>,
+               <<"node">> =>
+                   #{<<"createdIndex">> => 1031,<<"dir">> => true,
+                     <<"key">> => <<"/nct/co/12.0.4/config/mq/co/nodes">>,
+                     <<"modifiedIndex">> => 1031,
+                     <<"nodes">> =>
+                         [
+                          #{<<"createdIndex">> => 1418809,
+                            <<"expiration">> => <<"2018-08-20T11:53:58.944379602Z">>,
+                            <<"key">> =>
+                                <<"/nct/co/12.0.4/config/mq/co/nodes/rabbit@devops35-1">>,
+                            <<"modifiedIndex">> => 1418809,<<"ttl">> => 26,
+                            <<"value">> => <<"enabled">>},
+
+                          #{<<"createdIndex">> => 1418809,
+                            <<"expiration">> => <<"2018-08-20T11:53:58.944379602Z">>,
+                            <<"key">> =>
+                                <<"/nct/co/12.0.4/config/mq/co/nodes/rabbit@devops35-2">>,
+                            <<"modifiedIndex">> => 1418809,<<"ttl">> => 26,
+                            <<"value">> => <<"enabled">>},
+
+                         #{<<"createdIndex">> => 1418809,
+                            <<"expiration">> => <<"2018-08-20T11:53:58.944379602Z">>,
+                            <<"key">> =>
+                                <<"/nct/co/12.0.4/config/mq/co/no/matches/found/here">>,
+                            <<"modifiedIndex">> => 1418809,<<"ttl">> => 26,
+                            <<"value">> => <<"enabled">>}]}},
+    Expectation = ['rabbit@devops35-1', 'rabbit@devops35-2'],
+    ?assertEqual(lists:usort(Expectation),
+                 lists:usort(rabbit_peer_discovery_etcd:extract_nodes(Values))).
