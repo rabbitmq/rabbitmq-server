@@ -36,8 +36,10 @@ groups() ->
                  nodes_path_defaults_test,
                  nodes_path_with_custom_prefix_and_cluster_name_test,
                  get_node_from_key_case1_test,
+                 get_node_from_key_case2_test,
+                 get_node_from_key_case3_test,
                  list_nodes_without_existing_directory_test,
-                 issue14_test
+                 issue14_extract_nodes_test
                 ]}
     ].
 
@@ -115,9 +117,19 @@ nodes_path_with_custom_prefix_and_cluster_name_test(_Config) ->
                  rabbit_peer_discovery_etcd:nodes_path(C)).
 
 get_node_from_key_case1_test(_Config) ->
+    Key = <<"/project/rabbitmq/nodes/rabbit@devops35-2">>,
+    ?assertEqual('rabbit@devops35-2', rabbit_peer_discovery_etcd:get_node_from_key(Key, #{})).
+
+get_node_from_key_case2_test(_Config) ->
     C = #{etcd_prefix => <<"project/prefix/mq">>,
         cluster_name => <<"test_cluster">>},
     Key = <<"/nct/co/12.0.4/config/mq/co/nodes/rabbit@devops35-2">>,
+    ?assertEqual('rabbit@devops35-2', rabbit_peer_discovery_etcd:get_node_from_key(Key, C)).
+
+get_node_from_key_case3_test(_Config) ->
+    C = #{etcd_prefix => <<"project/prefix/mq">>,
+        cluster_name => <<"test_cluster">>},
+    Key = <<"/nct/co/12.0.4/config/mq/co/nodes/etc/nodes/rabbit@devops35-2">>,
     ?assertEqual('rabbit@devops35-2', rabbit_peer_discovery_etcd:get_node_from_key(Key, C)).
 
 list_nodes_without_existing_directory_test(_Config) ->

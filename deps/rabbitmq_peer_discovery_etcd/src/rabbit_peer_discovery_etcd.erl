@@ -208,22 +208,24 @@ extract_nodes(Nodes) ->
 %% @doc Given an etcd key, return the erlang node name
 %% @end
 %%
--spec get_node_from_key(binary(), Map :: #{atom() => peer_discovery_config_value()}) -> node().
+-spec get_node_from_key(binary(), Map :: #{atom() => peer_discovery_config_value()}) -> node() | rabbit_types:error('none').
 get_node_from_key(<<"/", V/binary>>, Map) -> get_node_from_key(V, Map);
-get_node_from_key(V, Map) ->
-  %% nodes path is /v2/keys/<etcd-prefix>/<cluster-name>/nodes
-  %% etcd returns node keys as /<etcd-prefix>/<cluster-name>/nodes/<nodename>
-  %% We are mapping path components from "<etcd-prefix>" up to "nodes",
-  %% and discarding the same number of characters from the key returned by etcd.
-  Path = string:concat(?HTTPC_MODULE:build_path(lists:sublist(nodes_path(Map), 3, 3)), "/"),
-  ?UTIL_MODULE:node_name(string:substr(binary_to_list(V), length(Path))).
-
-%% @doc Generate random string. We are using it for compare-and-change
-%% operations in etcd.
-%% @end
-%% -spec generate_unique_string() -> string().
-%% generate_unique_string() ->
-%%     [ $a - 1 + rand:uniform(26) || _ <- lists:seq(1, 32) ].
+get_node_from_key(V, _Map) ->
+  %% Nodes path is /v2/keys/{etcd-prefix}/{cluster-name}/nodes and
+  %% etcd returns node keys as /{etcd-prefix}/{cluster-name}/nodes/{nodename}.
+  %%
+  %% Note that both the prefix and the cluster name might contain slashes,
+  %% and so will the resulting key. It is, however, significantly less
+  %% likely that any of those will contains a /nodes/{name} sequence,
+  %% so that's what we extract.
+  %%
+  %% See rabbitmq/rabbitmq-peer-discovery-etcd#14 for details.
+  case re:run(V, <<"/nodes/([^/]+)$">>, [{capture, first, binary}]) of
+      nomatch          -> {error, none};
+      {match, [Match]} ->
+          Name = binary:replace(Match, <<"/nodes/">>, <<"">>),
+          ?UTIL_MODULE:node_name(Name)
+  end.
 
 -spec etcd_delete(Path, Query, Map)
                  -> {ok, term()} | {error, string()} when
