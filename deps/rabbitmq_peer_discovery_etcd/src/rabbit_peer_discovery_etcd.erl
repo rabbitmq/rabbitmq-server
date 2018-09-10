@@ -220,10 +220,9 @@ get_node_from_key(V, _Map) ->
   %% so that's what we extract.
   %%
   %% See rabbitmq/rabbitmq-peer-discovery-etcd#14 for details.
-  case re:run(V, <<"/nodes/([^/]+)$">>, [{capture, first, binary}]) of
+  case re:run(V, <<"/nodes/([^/]+)$">>, [{capture, all_but_first, binary}]) of
       nomatch          -> {error, none};
-      {match, [Match]} ->
-          Name = binary:replace(Match, <<"/nodes/">>, <<"">>),
+      {match, [Name]} ->
           ?UTIL_MODULE:node_name(Name)
   end.
 
