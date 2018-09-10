@@ -21,7 +21,6 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-
 all() ->
     [
      {group, unit}
@@ -33,8 +32,10 @@ groups() ->
                  extract_nodes_test,
                  base_path_defaults_test,
                  base_path_custom_test,
+                 base_path_custom_test_with_slash,
                  nodes_path_defaults_test,
                  nodes_path_with_custom_prefix_and_cluster_name_test,
+                 nodes_path_with_custom_prefix_and_cluster_name_with_slash_test,
                  get_node_from_key_case1_test,
                  get_node_from_key_case2_test,
                  get_node_from_key_case3_test,
@@ -42,7 +43,6 @@ groups() ->
                  issue14_extract_nodes_test
                 ]}
     ].
-
 
 reset() ->
     meck:unload(),
@@ -65,8 +65,6 @@ init_per_testcase(_TC, Config) ->
 end_per_testcase(_TC, Config) ->
     reset(),
     Config.
-
-
 
 %%
 %% Test cases
@@ -93,18 +91,21 @@ extract_nodes_test(_Config) ->
     Expectation = ['rabbit@172.17.0.7', 'rabbit@172.17.0.5'],
   ?assertEqual(Expectation, rabbit_peer_discovery_etcd:extract_nodes(Values)).
 
-
 base_path_defaults_test(_Config) ->
     ?assertEqual([v2, keys, "rabbitmq", "default"],
                  rabbit_peer_discovery_etcd:base_path(#{})).
 
-
 base_path_custom_test(_Config) ->
-  C = #{etcd_prefix => <<"example/com/1.2.3/config/mq">>,
-        cluster_name => <<"test_cluster">>},
+    C = #{etcd_prefix => <<"example/com/1.2.3/config/mq">>,
+          cluster_name => <<"test_cluster">>},
     ?assertEqual([v2, keys, "example/com/1.2.3/config/mq", "test_cluster"],
                  rabbit_peer_discovery_etcd:base_path(C)).
 
+base_path_custom_test_with_slash(_Config) ->
+    C = #{etcd_prefix => <<"example/com/1.2.3/config/mq">>,
+          cluster_name => <<"test/cluster">>},
+    ?assertEqual([v2, keys, "example/com/1.2.3/config/mq", "test/cluster"],
+                 rabbit_peer_discovery_etcd:base_path(C)).
 
 nodes_path_defaults_test(_Config) ->
     ?assertEqual([v2, keys, "rabbitmq", "default", nodes, rabbit_data_coercion:to_list(node())],
@@ -112,8 +113,14 @@ nodes_path_defaults_test(_Config) ->
 
 nodes_path_with_custom_prefix_and_cluster_name_test(_Config) ->
     C = #{etcd_prefix => <<"project/prefix/mq">>,
-        cluster_name => <<"test_cluster">>},
+          cluster_name => <<"test_cluster">>},
     ?assertEqual([v2, keys, "project/prefix/mq", "test_cluster", nodes],
+                 rabbit_peer_discovery_etcd:nodes_path(C)).
+
+nodes_path_with_custom_prefix_and_cluster_name_with_slash_test(_Config) ->
+    C = #{etcd_prefix => <<"project/prefix/mq">>,
+          cluster_name => <<"test/cluster">>},
+    ?assertEqual([v2, keys, "project/prefix/mq", "test/cluster", nodes],
                  rabbit_peer_discovery_etcd:nodes_path(C)).
 
 get_node_from_key_case1_test(_Config) ->
@@ -122,13 +129,13 @@ get_node_from_key_case1_test(_Config) ->
 
 get_node_from_key_case2_test(_Config) ->
     C = #{etcd_prefix => <<"project/prefix/mq">>,
-        cluster_name => <<"test_cluster">>},
+          cluster_name => <<"test_cluster">>},
     Key = <<"/nct/co/12.0.4/config/mq/co/nodes/rabbit@devops35-2">>,
     ?assertEqual('rabbit@devops35-2', rabbit_peer_discovery_etcd:get_node_from_key(Key, C)).
 
 get_node_from_key_case3_test(_Config) ->
     C = #{etcd_prefix => <<"project/prefix/mq">>,
-        cluster_name => <<"test_cluster">>},
+          cluster_name => <<"test_cluster">>},
     Key = <<"/nct/co/12.0.4/config/mq/co/nodes/etc/nodes/rabbit@devops35-2">>,
     ?assertEqual('rabbit@devops35-2', rabbit_peer_discovery_etcd:get_node_from_key(Key, C)).
 
