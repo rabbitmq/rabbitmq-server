@@ -30,7 +30,8 @@
 -export([lock_ttl_update_callback/1]).
 
 %% for tests
--export([extract_nodes/1, base_path/1, node_path/1]).
+-export([extract_nodes/1, base_path/1, node_path/1, nodes_path/1,
+         get_node_from_key/2]).
 
 
 %%
