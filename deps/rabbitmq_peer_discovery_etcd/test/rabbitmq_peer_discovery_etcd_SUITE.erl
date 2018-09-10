@@ -21,7 +21,6 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-
 all() ->
     [
      {group, unit}
@@ -33,11 +32,18 @@ groups() ->
                  extract_nodes_test,
                  base_path_defaults_test,
                  base_path_custom_test,
+                 base_path_custom_test_with_slash,
                  nodes_path_defaults_test,
-                 list_nodes_without_existing_directory_test
+                 nodes_path_with_custom_prefix_and_cluster_name_test,
+                 nodes_path_with_custom_prefix_and_cluster_name_with_slash_test,
+                 get_node_from_key_case1_test,
+                 get_node_from_key_case2_test,
+                 get_node_from_key_case3_test,
+                 list_nodes_without_existing_directory_test,
+                 issue14_extract_nodes_case1_test,
+                 issue14_extract_nodes_case2_test
                 ]}
     ].
-
 
 reset() ->
     meck:unload(),
@@ -60,8 +66,6 @@ init_per_testcase(_TC, Config) ->
 end_per_testcase(_TC, Config) ->
     reset(),
     Config.
-
-
 
 %%
 %% Test cases
@@ -88,23 +92,53 @@ extract_nodes_test(_Config) ->
     Expectation = ['rabbit@172.17.0.7', 'rabbit@172.17.0.5'],
   ?assertEqual(Expectation, rabbit_peer_discovery_etcd:extract_nodes(Values)).
 
-
 base_path_defaults_test(_Config) ->
-  ?assertEqual([v2, keys, "rabbitmq", "default"],
-               rabbit_peer_discovery_etcd:base_path(#{})).
-
+    ?assertEqual([v2, keys, "rabbitmq", "default"],
+                 rabbit_peer_discovery_etcd:base_path(#{})).
 
 base_path_custom_test(_Config) ->
-  C = #{etcd_prefix => <<"example/com/1.2.3/config/mq">>,
-        cluster_name => <<"test_cluster">>},
-  ?assertEqual([v2, keys, "example/com/1.2.3/config/mq", "test_cluster"],
-               rabbit_peer_discovery_etcd:base_path(C)).
+    C = #{etcd_prefix => <<"example/com/1.2.3/config/mq">>,
+          cluster_name => <<"test_cluster">>},
+    ?assertEqual([v2, keys, "example/com/1.2.3/config/mq", "test_cluster"],
+                 rabbit_peer_discovery_etcd:base_path(C)).
 
+base_path_custom_test_with_slash(_Config) ->
+    C = #{etcd_prefix => <<"example/com/1.2.3/config/mq">>,
+          cluster_name => <<"test/cluster">>},
+    ?assertEqual([v2, keys, "example/com/1.2.3/config/mq", "test/cluster"],
+                 rabbit_peer_discovery_etcd:base_path(C)).
 
 nodes_path_defaults_test(_Config) ->
-  ?assertEqual([v2, keys, "rabbitmq", "default", nodes, rabbit_data_coercion:to_list(node())],
-               rabbit_peer_discovery_etcd:node_path(#{})).
+    ?assertEqual([v2, keys, "rabbitmq", "default", nodes, rabbit_data_coercion:to_list(node())],
+                 rabbit_peer_discovery_etcd:node_path(#{})).
 
+nodes_path_with_custom_prefix_and_cluster_name_test(_Config) ->
+    C = #{etcd_prefix => <<"project/prefix/mq">>,
+          cluster_name => <<"test_cluster">>},
+    ?assertEqual([v2, keys, "project/prefix/mq", "test_cluster", nodes],
+                 rabbit_peer_discovery_etcd:nodes_path(C)).
+
+nodes_path_with_custom_prefix_and_cluster_name_with_slash_test(_Config) ->
+    C = #{etcd_prefix => <<"project/prefix/mq">>,
+          cluster_name => <<"test/cluster">>},
+    ?assertEqual([v2, keys, "project/prefix/mq", "test/cluster", nodes],
+                 rabbit_peer_discovery_etcd:nodes_path(C)).
+
+get_node_from_key_case1_test(_Config) ->
+    Key = <<"/project/rabbitmq/nodes/rabbit@devops35-2">>,
+    ?assertEqual('rabbit@devops35-2', rabbit_peer_discovery_etcd:get_node_from_key(Key, #{})).
+
+get_node_from_key_case2_test(_Config) ->
+    C = #{etcd_prefix => <<"project/prefix/mq">>,
+          cluster_name => <<"test_cluster">>},
+    Key = <<"/nct/co/12.0.4/config/mq/co/nodes/rabbit@devops35-2">>,
+    ?assertEqual('rabbit@devops35-2', rabbit_peer_discovery_etcd:get_node_from_key(Key, C)).
+
+get_node_from_key_case3_test(_Config) ->
+    C = #{etcd_prefix => <<"project/prefix/mq">>,
+          cluster_name => <<"test_cluster">>},
+    Key = <<"/nct/co/12.0.4/config/mq/co/nodes/etc/nodes/rabbit@devops35-2">>,
+    ?assertEqual('rabbit@devops35-2', rabbit_peer_discovery_etcd:get_node_from_key(Key, C)).
 
 list_nodes_without_existing_directory_test(_Config) ->
     meck:new(rabbit_peer_discovery_httpc, [passthrough]),
@@ -123,3 +157,51 @@ list_nodes_without_existing_directory_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put, fun (_, _, _, _, _, _) -> {ok, ok} end),
     rabbit_peer_discovery_etcd:list_nodes(),
     ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+issue14_extract_nodes_case1_test(_Config) ->
+    Values = #{<<"action">> => <<"get">>,
+               <<"node">> =>
+                   #{<<"createdIndex">> => 1031,<<"dir">> => true,
+                     <<"key">> => <<"/nct/co/12.0.4/config/mq/co/nodes">>,
+                     <<"modifiedIndex">> => 1031,
+                     <<"nodes">> =>
+                         [#{<<"createdIndex">> => 1418809,
+                            <<"expiration">> => <<"2018-08-20T11:53:58.944379602Z">>,
+                            <<"key">> =>
+                                <<"/nct/co/12.0.4/config/mq/co/nodes/rabbit@devops35-2">>,
+                            <<"modifiedIndex">> => 1418809,<<"ttl">> => 26,
+                            <<"value">> => <<"enabled">>}]}},
+    Expectation = ['rabbit@devops35-2'],
+    ?assertEqual(Expectation, rabbit_peer_discovery_etcd:extract_nodes(Values)).
+
+issue14_extract_nodes_case2_test(_Config) ->
+    Values = #{<<"action">> => <<"get">>,
+               <<"node">> =>
+                   #{<<"createdIndex">> => 1031,<<"dir">> => true,
+                     <<"key">> => <<"/nct/co/12.0.4/config/mq/co/nodes">>,
+                     <<"modifiedIndex">> => 1031,
+                     <<"nodes">> =>
+                         [
+                          #{<<"createdIndex">> => 1418809,
+                            <<"expiration">> => <<"2018-08-20T11:53:58.944379602Z">>,
+                            <<"key">> =>
+                                <<"/nct/co/12.0.4/config/mq/co/nodes/rabbit@devops35-1">>,
+                            <<"modifiedIndex">> => 1418809,<<"ttl">> => 26,
+                            <<"value">> => <<"enabled">>},
+
+                          #{<<"createdIndex">> => 1418809,
+                            <<"expiration">> => <<"2018-08-20T11:53:58.944379602Z">>,
+                            <<"key">> =>
+                                <<"/nct/co/12.0.4/config/mq/co/nodes/rabbit@devops35-2">>,
+                            <<"modifiedIndex">> => 1418809,<<"ttl">> => 26,
+                            <<"value">> => <<"enabled">>},
+
+                         #{<<"createdIndex">> => 1418809,
+                            <<"expiration">> => <<"2018-08-20T11:53:58.944379602Z">>,
+                            <<"key">> =>
+                                <<"/nct/co/12.0.4/config/mq/co/no/matches/found/here">>,
+                            <<"modifiedIndex">> => 1418809,<<"ttl">> => 26,
+                            <<"value">> => <<"enabled">>}]}},
+    Expectation = ['rabbit@devops35-1', 'rabbit@devops35-2'],
+    ?assertEqual(lists:usort(Expectation),
+                 lists:usort(rabbit_peer_discovery_etcd:extract_nodes(Values))).
