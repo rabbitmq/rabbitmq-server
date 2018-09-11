@@ -114,9 +114,9 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 dep_cowboy = hex 2.4.0
 dep_cowlib = hex 2.3.0
 dep_jsx = hex 2.9.0
-dep_lager = hex 3.6.4
-dep_ranch = hex 1.5.0
-dep_ranch_proxy_protocol = hex 1.5.0
+dep_lager = hex 3.6.5
+dep_ranch = hex 1.6.1
+dep_ranch_proxy_protocol = hex 2.1.0-rc.1
 dep_recon = hex 2.3.6
 
 dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d36dbf5e1e64942d9b0a1daf
