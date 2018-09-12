@@ -157,7 +157,6 @@ invasive_SSL_option_change1() ->
     {Verifyfun, _UserState} = proplists:get_value(verify_fun, Options),
 
     {module, rabbit_trust_store} = erlang:fun_info(Verifyfun, module),
-    {name,   whitelisted}        = erlang:fun_info(Verifyfun, name),
     ok.
 
 validation_success_for_AMQP_client(Config) ->
