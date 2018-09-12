@@ -46,7 +46,7 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_suite(Config) ->
+set_up_node(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
@@ -56,35 +56,43 @@ init_per_suite(Config) ->
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
-end_per_suite(Config) ->
+tear_down_node(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(file_provider_tests, Config) ->
-    WhitelistDir = filename:join([?config(rmq_certsdir, Config),
-                                  "trust_store", "file_provider_tests"]),
-    Config1 = init_whitelist_dir(Config, WhitelistDir),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-           ?MODULE,  change_configuration,
-           [rabbitmq_trust_store, [{directory, WhitelistDir},
-                                   {refresh_interval, interval()},
-                                   {providers, [rabbit_trust_store_file_provider]}]]),
-    Config1;
+    case set_up_node(Config) of
+        {skip, _} = Error -> Error;
+        Config1           ->
+            WhitelistDir = filename:join([?config(rmq_certsdir, Config1),
+                                          "trust_store", "file_provider_tests"]),
+            Config2 = init_whitelist_dir(Config1, WhitelistDir),
+            ok = rabbit_ct_broker_helpers:rpc(Config2, 0,
+                                              ?MODULE,  change_configuration,
+                                              [rabbitmq_trust_store, [{directory, WhitelistDir},
+                                                                      {refresh_interval, interval()},
+                                                                      {providers, [rabbit_trust_store_file_provider]}]]),
+            Config2
+    end;
 
 init_per_group(http_provider_tests, Config) ->
-    WhitelistDir = filename:join([?config(rmq_certsdir, Config),
-                                  "trust_store", "http_provider_tests"]),
-    Config1 = init_whitelist_dir(Config, WhitelistDir),
-    Config2 = init_provider_server(Config1, WhitelistDir),
-    Url = ?config(trust_store_server_url, Config2),
+    case set_up_node(Config) of
+        {skip, _} = Error -> Error;
+        Config1           ->
+            WhitelistDir = filename:join([?config(rmq_certsdir, Config1),
+                                          "trust_store", "http_provider_tests"]),
+            Config2 = init_whitelist_dir(Config1, WhitelistDir),
+            Config3 = init_provider_server(Config2, WhitelistDir),
+            Url = ?config(trust_store_server_url, Config3),
 
-    ok = rabbit_ct_broker_helpers:rpc(Config2, 0,
-           ?MODULE,  change_configuration,
-           [rabbitmq_trust_store, [{url, Url},
-                                   {refresh_interval, interval()},
-                                   {providers, [rabbit_trust_store_http_provider]}]]),
-    Config2.
+            ok = rabbit_ct_broker_helpers:rpc(Config3, 0,
+                                              ?MODULE,  change_configuration,
+                                              [rabbitmq_trust_store, [{url, Url},
+                                                                      {refresh_interval, interval()},
+                                                                      {providers, [rabbit_trust_store_http_provider]}]]),
+            Config3
+    end.
 
 init_provider_server(Config, WhitelistDir) ->
     %% Assume we don't have more than 100 ports allocated for tests
@@ -101,13 +109,15 @@ init_provider_server(Config, WhitelistDir) ->
                                           {trust_store_server_url, Url}]).
 
 end_per_group(file_provider_tests, Config) ->
-    tear_down_whitelist_dir(Config),
+    Config1 = tear_down_node(Config),
+    tear_down_whitelist_dir(Config1),
     Config;
 end_per_group(http_provider_tests, Config) ->
+    Config1 = tear_down_node(Config),
     application:stop(trust_store_http),
-    Config;
+    Config1;
 end_per_group(_, Config) ->
-    Config.
+    tear_down_node(Config).
 
 init_whitelist_dir(Config, WhitelistDir) ->
     ok = filelib:ensure_dir(WhitelistDir),
@@ -353,7 +363,7 @@ validate_longer_chain1(Config) ->
         %% See previous comment in validation_failure_for_AMQP_client1/1.
         {error, closed} -> expected_erlang_18_ssl_regression
     end,
-        
+
     %% Clean: client & server TLS/TCP
     ok = amqp_connection:close(Con),
     ok = amqp_connection:close(Con2),
