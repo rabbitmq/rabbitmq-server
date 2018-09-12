@@ -174,6 +174,12 @@ validation_success_for_AMQP_client(Config) ->
            ?MODULE, validation_success_for_AMQP_client1, [Config]).
 
 validation_success_for_AMQP_client1(Config) ->
+    %% This test intentionally doesn't whitelist any certificates.
+    %% Both the client and the server use certificate/key pairs signed by
+    %% the same root CA. This exercises a verify_fun clause that no ther tests hit.
+    %% Note that when this test is executed together with the HTTP provider group
+    %% it runs into unexpected interference and fails, even if TLS app PEM cache is force
+    %% cleared. That's why originally each group was made to use a separate node.
     AuthorityInfo = {Root, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
     {Certificate, Key} = chain(AuthorityInfo),
     {Certificate2, Key2} = chain(AuthorityInfo),
