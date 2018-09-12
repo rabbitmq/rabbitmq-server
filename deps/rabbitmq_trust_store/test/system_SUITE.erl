@@ -100,7 +100,9 @@ init_provider_server(Config, WhitelistDir) ->
     rabbit_ct_helpers:set_config(Config, [{trust_store_server_port, CertServerPort},
                                           {trust_store_server_url, Url}]).
 
-
+end_per_group(file_provider_tests, Config) ->
+    tear_down_whitelist_dir(Config),
+    Config;
 end_per_group(http_provider_tests, Config) ->
     application:stop(trust_store_http),
     Config;
@@ -111,6 +113,10 @@ init_whitelist_dir(Config, WhitelistDir) ->
     ok = filelib:ensure_dir(WhitelistDir),
     ok = file:make_dir(WhitelistDir),
     rabbit_ct_helpers:set_config(Config, {whitelist_dir, WhitelistDir}).
+
+tear_down_whitelist_dir(Config) ->
+    WhitelistDir = ?config(whitelist_dir, Config),
+    ok = rabbit_file:recursive_delete([WhitelistDir]).
 
 init_per_testcase(Testcase, Config) ->
     WhitelistDir = ?config(whitelist_dir, Config),
