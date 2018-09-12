@@ -28,7 +28,7 @@ env:
 
 otp_release:
   - "20.3"
-  - "21.0.9"  
+  - "21.0"  
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
