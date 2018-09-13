@@ -45,7 +45,7 @@ maybe_fixup_erlang_cookie() {
     _erlang_cookie="$_rabbitmq_home/.erlang.cookie"
     if [ -f "$_erlang_cookie" ]
     then
-        chown rabbitmq:rabbitmq "$_erlang_cookie"
+        chown @RABBITMQ_USER@:@RABBITMQ_GROUP@ "$_erlang_cookie"
         chmod 400 "$_erlang_cookie"
     fi
 }

@@ -5,6 +5,8 @@
 #export DH_VERBOSE=1
 
 DEB_DESTDIR = debian/rabbitmq-server
+RABBITMQ_USER ?= rabbitmq
+RABBITMQ_GROUP ?= rabbitmq
 
 unexport DEPS_DIR
 
@@ -32,6 +34,7 @@ override_dh_auto_install:
 	$(MAKE) install-bin DESTDIR=$(DEB_DESTDIR)
 
 	sed -e 's|@STDOUT_STDERR_REDIRECTION@|> "$$RABBITMQ_LOG_BASE/startup_log" 2> "$$RABBITMQ_LOG_BASE/startup_err"|' \
+		-e 's|@RABBITMQ_USER@|$(RABBITMQ_USER)|' -e 's|@RABBITMQ_GROUP@|$(RABBITMQ_GROUP)|' \
 		< scripts/rabbitmq-script-wrapper \
 		> $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl
 	chmod 0755 $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl
