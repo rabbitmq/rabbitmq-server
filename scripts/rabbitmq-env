@@ -45,6 +45,40 @@ if [ -z "$RABBITMQ_SCRIPTS_DIR" ]; then
     RABBITMQ_SCRIPTS_DIR=`dirname $SCRIPT_PATH`
 fi
 
+_rmq_env_now()
+{
+    date '+%Y-%m-%d %H:%M:%S'
+}
+
+_rmq_env_print()
+{
+    _rmq_env_tmp="$1"
+    _rmq_env_tmp_len="${#_rmq_env_tmp}"
+    shift
+    printf '%s %s %s\n' "$(_rmq_env_now)" "$_rmq_env_tmp" "$1" 1>&2
+    shift
+    _rmq_env_print_line=''
+    _rmq_env_indent="$((_rmq_env_tmp_len + 21))"
+    for _rmq_env_print_line in "$@"
+    do
+        printf "%${_rmq_env_indent}s%s\n" ' ' "$_rmq_env_print_line" 1>&2
+    done
+    unset _rmq_env_print_line
+    unset _rmq_env_indent
+    unset _rmq_env_tmp_len
+    unset _rmq_env_tmp
+}
+
+_rmq_env_perr()
+{
+    _rmq_env_print '[error]' "$@"
+}
+
+_rmq_env_pwarn()
+{
+    _rmq_env_print '[warning]' "$@"
+}
+
 rmq_realpath() {
     local path=$1
 
@@ -77,6 +111,11 @@ ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 ## Set defaults
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
 
+# We save the current value of $RABBITMQ_PID_FILE in case it was set by
+# an init script. If $CONF_ENV_FILE overrides it again, we must ignore
+# it and warn the user.
+saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
+
 ## Get configuration variables from the configure environment file
 [ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
 [ -f ${RABBITMQ_CONF_ENV_FILE} ] && . ${RABBITMQ_CONF_ENV_FILE} || true
@@ -99,21 +138,6 @@ DEFAULT_MAX_NUMBER_OF_ATOMS=5000000
 
 ## Common server defaults
 SERVER_ERL_ARGS=" +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES +t $RABBITMQ_MAX_NUMBER_OF_ATOMS +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE "
-
-# We save the current value of $RABBITMQ_PID_FILE in case it was set by
-# an init script. If $CONF_ENV_FILE overrides it again, we must ignore
-# it and warn the user.
-saved_RABBITMQ_PID_FILE=$RABBITMQ_PID_FILE
-
-if [ "$saved_RABBITMQ_PID_FILE" -a \
-     "$saved_RABBITMQ_PID_FILE" != "$RABBITMQ_PID_FILE" ]; then
-    echo "WARNING: RABBITMQ_PID_FILE was already set by the init script to:" 1>&2
-    echo "           $saved_RABBITMQ_PID_FILE" 1>&2
-    echo "         The value set in rabbitmq-env.conf is ignored because it" 1>&2
-    echo "         would break the init script." 1>&2
-
-    RABBITMQ_PID_FILE="$saved_RABBITMQ_PID_FILE"
-fi
 
 [ "x" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_USE_LONGNAME=${USE_LONGNAME}
 if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] ; then
@@ -232,8 +256,21 @@ rmq_normalize_path_var \
     RABBITMQ_MNESIA_DIR \
     RABBITMQ_QUORUM_DIR
 
-[ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE=${PID_FILE}
-[ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE=${RABBITMQ_MNESIA_DIR}.pid
+[ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE="$PID_FILE"
+
+if [ -n "$saved_RABBITMQ_PID_FILE" ] && \
+    [ "$saved_RABBITMQ_PID_FILE" != "$RABBITMQ_PID_FILE" ]
+then
+    _rmq_env_pwarn 'RABBITMQ_PID_FILE was already set by the init script to:' \
+        "$saved_RABBITMQ_PID_FILE" \
+        'The value set in rabbitmq-env.conf is ignored because it would break the init script.'
+
+    RABBITMQ_PID_FILE="$saved_RABBITMQ_PID_FILE"
+fi
+
+# Note: at this point, no RABBITMQ_PID_FILE is set so we use the mnesia dir value
+[ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE="${RABBITMQ_MNESIA_DIR}.pid"
+
 rmq_normalize_path_var RABBITMQ_PID_FILE
 
 [ "x" = "x$RABBITMQ_BOOT_MODULE" ] && RABBITMQ_BOOT_MODULE=${BOOT_MODULE}

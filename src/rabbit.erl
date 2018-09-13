@@ -880,7 +880,7 @@ boot_error(Class, Reason) ->
 
 log_boot_error_and_exit(Reason, Format, Args) ->
     rabbit_log:error(Format, Args),
-    io:format("~nBOOT FAILED~n===========~n" ++ Format ++ "~n", Args),
+    io:format(standard_error, "~nBOOT FAILED~n===========~n" ++ Format ++ "~n", Args),
     timer:sleep(1000),
     exit(Reason).
 

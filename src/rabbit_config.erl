@@ -253,47 +253,62 @@ validate_config_files() ->
 assert_config("", _) -> ok;
 assert_config(none, _) -> ok;
 assert_config(Filename, Env) ->
-    ".config" = filename:extension(Filename),
+    assert_config(filename:extension(Filename), Filename, Env).
+
+-define(ERRMSG_INDENT, "                                ").
+
+assert_config(".config", Filename, Env) ->
     case filelib:is_regular(Filename) of
         true ->
             case file:consult(Filename) of
                 {ok, []}    -> {error,
-                                {"ERROR: Config file ~s should not be empty: ~s",
+                                {"Config file ~s should not be empty: ~s",
                                  [Env, Filename]}};
                 {ok, [_]}   -> ok;
                 {ok, [_|_]} -> {error,
-                                {"ERROR: Config file ~s must contain ONE list ended by <dot>: ~s",
+                                {"Config file ~s must contain ONE list ended by <dot>: ~s",
                                  [Env, Filename]}};
                 {error, {1, erl_parse, Err}} ->
-                    {error, {"ERROR: Unable to parse erlang terms from ~s file: ~s~n"
-                             "ERROR: Reason: ~p~n"
-                             "ERROR: Check that the file is in the erlang terms format. " ++
+                    % Note: the sequence of spaces is to indent from the [error] prefix, like this:
+                    %
+                    % 2018-09-06 07:05:40.225 [error] Unable to parse erlang terms from RABBITMQ_ADVANCED_CONFIG_FILE...
+                    %                                 Reason: ["syntax error before: ",[]]
+                    {error, {"Unable to parse erlang terms from ~s file: ~s~n"
+                             ?ERRMSG_INDENT
+                             "Reason: ~p~n"
+                             ?ERRMSG_INDENT
+                             "Check that the file is in erlang term format. " ++
                              case Env of
                                 "RABBITMQ_CONFIG_FILE" ->
-                                    "If you are using the new ini-style format, the file "
-                                    "extension should be '.conf'~n";
+                                    "If you are using the new ini-style format, the file extension should be '.conf'~n";
                                 _ -> ""
                              end,
                              [Env, Filename, Err]}};
                 {error, Err} ->
-                    {error, {"ERROR Unable to parse erlang terms from  ~s file: ~s~n"
+                    {error, {"Unable to parse erlang terms from  ~s file: ~s~n"
+                             ?ERRMSG_INDENT
                              "Error: ~p~n",
                              [Env, Filename, Err]}}
             end;
         false ->
             ok
-    end.
+    end;
+assert_config(BadExt, Filename, Env) ->
+    {error, {"'~s': Expected extension '.config', got extension '~s' for file '~s'~n", [Env, BadExt, Filename]}}.
 
 assert_conf("", _) -> ok;
 assert_conf(Filename, Env) ->
-    ".conf" = filename:extension(Filename),
+    assert_conf(filename:extension(Filename), Filename, Env).
+
+assert_conf(".conf", Filename, Env) ->
     case filelib:is_regular(Filename) of
         true ->
             case file:consult(Filename) of
                 {ok, []} -> ok;
                 {ok, _}  ->
-                    {error, {"ERROR: Wrong format of the config file ~s: ~s~n"
-                             "ERROR: Check that the file is in the new ini-style config format "
+                    {error, {"Wrong format of the config file ~s: ~s~n"
+                             ?ERRMSG_INDENT
+                             "Check that the file is in the new ini-style config format. "
                              "If you are using the old format the file extension should "
                              "be .config~n",
                              [Env, Filename]}};
@@ -302,5 +317,6 @@ assert_conf(Filename, Env) ->
             end;
         false ->
             ok
-    end.
-
+    end;
+assert_conf(BadExt, Filename, Env) ->
+    {error, {"'~s': Expected extension '.config', got extension '~s' for file '~s'~n", [Env, BadExt, Filename]}}.

@@ -93,17 +93,17 @@ RABBITMQ_CONFIG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_FILE})
 if [ "${RABBITMQ_CONFIG_FILE_NOEX}" = "${RABBITMQ_CONFIG_FILE}" ]; then
     if [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.config" ]; then
         if [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.conf" ]; then
-            # Both files exist. Print a warning
-            echo "WARNING: Both old (.config) and new (.conf) format config files exist."
-            echo "WARNING: Using the old format config file: ${RABBITMQ_CONFIG_FILE_NOEX}.config"
-            echo "WARNING: Please update your config files to the new format and remove the old file"
+            # Both files exist. Print a warning.
+            _rmq_env_pwarn 'Both old (.config) and new (.conf) format config files exist.' \
+                "Using the old format config file: ${RABBITMQ_CONFIG_FILE_NOEX}.config" \
+                'Please update your config files to the new format and remove the old file.'
         fi
         RABBITMQ_CONFIG_FILE="${RABBITMQ_CONFIG_FILE_NOEX}.config"
     elif [ -f "${RABBITMQ_CONFIG_FILE_NOEX}.conf" ]; then
         RABBITMQ_CONFIG_FILE="${RABBITMQ_CONFIG_FILE_NOEX}.conf"
     else
         if [ -f ${RABBITMQ_ADVANCED_CONFIG_FILE} ]; then
-            echo "WARNING: Using RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+            _rmq_env_pwarn "Using RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
         fi
         # No config file exist. Use advanced config for -config arg.
         RABBITMQ_CONFIG_ARG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE}"
@@ -125,23 +125,23 @@ elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
 elif [ "x" != "x${RABBITMQ_CONFIG_FILE}" \
        -a  "${RABBITMQ_CONFIG_FILE_NOEX}" != "${RABBITMQ_CONFIG_FILE}" ]; then
     # Config file has an extension, but it's neither .conf or .config
-    echo "ERROR: Wrong extension for RABBITMQ_CONFIG_FILE: ${RABBITMQ_CONFIG_FILE}"
-    echo "ERROR: extension should be either .conf or .config"
-    exit 1
+    _rmq_env_perr "Wrong extension for RABBITMQ_CONFIG_FILE: ${RABBITMQ_CONFIG_FILE}" \
+        'The extension should be either .conf or .config'
+    exit 64 # EX_USAGE
 fi
 
 RABBITMQ_CONFIG_ARG_FILE_NOEX=$(get_noex ${RABBITMQ_CONFIG_ARG_FILE})
 
 if [ "${RABBITMQ_CONFIG_ARG_FILE_NOEX}.config" != "${RABBITMQ_CONFIG_ARG_FILE}" ]; then
     if [ "${RABBITMQ_CONFIG_ARG_FILE}" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
-        echo "ERROR: Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}"
-        echo "ERROR: extension should be .config"
-        exit 1
+        _rmq_env_perr "Wrong extension for RABBITMQ_ADVANCED_CONFIG_FILE: ${RABBITMQ_ADVANCED_CONFIG_FILE}" \
+            'The extension should be .config'
+        exit 64 # EX_USAGE
     else
         # We should never got here, but still there should be some explanation
-        echo "ERROR: Wrong extension for ${RABBITMQ_CONFIG_ARG_FILE}"
-        echo "ERROR: extension should be .config"
-        exit 1
+        _rmq_env_perr "Wrong extension for ${RABBITMQ_CONFIG_ARG_FILE}"
+            'The extension should be .config'
+        exit 64 # EX_USAGE
     fi
 fi
 
