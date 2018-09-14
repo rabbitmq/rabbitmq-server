@@ -29,13 +29,25 @@ main() {
     exec_script_as_rabbitmq "$@"
   elif current_user_is_root && calling_rabbitmq_plugins
   then
-    exec_script_as_rabbitmq "$@"
+    run_script_as_rabbitmq "$@"
+    maybe_fixup_erlang_cookie
   elif current_user_is_root
   then
     exec_script_as_root "$@"
   else
     run_script_help_and_fail
   fi
+}
+
+maybe_fixup_erlang_cookie() {
+    # rabbitmq/rabbitmq-server-release#85
+    _rabbitmq_home="$(cd ~rabbitmq && pwd)"
+    _erlang_cookie="$_rabbitmq_home/.erlang.cookie"
+    if [ -f "$_erlang_cookie" ]
+    then
+        chown @RABBITMQ_USER@:@RABBITMQ_GROUP@ "$_erlang_cookie"
+        chmod 400 "$_erlang_cookie"
+    fi
 }
 
 ensure_we_are_in_a_readable_dir() {
@@ -68,6 +80,10 @@ exec_rabbitmq_server() {
   . "$RABBITMQ_ENV"
 
   exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
+}
+
+run_script_as_rabbitmq() {
+  HOME="$(cd ~rabbitmq && pwd)" "/usr/lib/rabbitmq/bin/$SCRIPT" "$@"
 }
 
 exec_script_as_rabbitmq() {
