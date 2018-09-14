@@ -295,6 +295,9 @@ start_queue_concurrent(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     LQ = <<"quorum-q">>,
     Self = self(),
+    %% A short sleep here appears to avoid some obscure internal race condition
+    %% that can happen very shortly after clustering.
+    timer:sleep(10),
     [begin
          _ = spawn_link(fun () ->
                                 {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Node),
