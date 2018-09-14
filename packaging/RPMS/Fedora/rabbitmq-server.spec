@@ -42,6 +42,8 @@ RabbitMQ is an open source multi-protocol messaging broker.
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
 %define _rabbit_server_ha_ocf scripts/rabbitmq-server-ha.ocf
 %define _rabbitmqctl_autocomplete scripts/rabbitmqctl-autocomplete.sh
+%define _rabbitmq_user rabbitmq
+%define _rabbitmq_group rabbitmq
 
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
@@ -82,6 +84,7 @@ mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 
 mkdir -p %{buildroot}%{_sbindir}
 sed -e 's|@STDOUT_STDERR_REDIRECTION@||' \
+	-e 's|@RABBITMQ_USER@|%{_rabbitmq_user}|' -e 's|@RABBITMQ_GROUP@|%{_rabbitmq_group}|' \
 	< scripts/rabbitmq-script-wrapper \
 	> %{buildroot}%{_sbindir}/rabbitmqctl
 chmod 0755 %{buildroot}%{_sbindir}/rabbitmqctl
