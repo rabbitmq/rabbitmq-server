@@ -162,7 +162,7 @@ member_died(Ref, Pid) ->
         [{{ref, Ref}, Pid}] ->
             leave_all_groups(Pid);
         %% in case the key has already been removed
-        %% we can perform the lookup using the valuee from the DOWN message
+        %% we can clean up using the value from the DOWN message
         _  ->
             leave_all_groups(Pid)
     end,
