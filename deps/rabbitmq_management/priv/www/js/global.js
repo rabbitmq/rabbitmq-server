@@ -372,6 +372,8 @@ var HELP = {
         <dd>Rate at which messages requiring acknowledgement are being delivered in response to basic.get.</dd>\
         <dt>Get (auto ack)</dt>\
         <dd>Rate at which messages not requiring acknowledgement are being delivered in response to basic.get.</dd>\
+        <dt>Get (empty)</dt>\
+        <dd>Rate at which empty queues are hit in response to basic.get.</dd>\
         <dt>Return</dt>\
         <dd>Rate at which basic.return is sent to publishers for unroutable messages published with the \'mandatory\' flag set.</dd>\
         <dt>Disk read</dt>\
