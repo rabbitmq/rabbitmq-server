@@ -224,6 +224,7 @@ recover(Queues) ->
     [begin
          case ra:restart_node({Name, node()}) of
              ok ->
+
                  % queue was restarted, good
                  ok;
              {error, Err}

@@ -93,13 +93,19 @@ handle_cast({publish, DLX, RK, QName, ReasonMsgs}, #state{queue_states = QueueSt
         end,
     {noreply, State#state{queue_states = QueueStates}}.
 
-handle_info({ra_event, {Name, _}, _} = Evt, #state{queue_states = QueueStates} = State0) ->
+handle_info({ra_event, {Name, _}, _} = Evt,
+            #state{queue_states = QueueStates} = State0) ->
     FState0 = maps:get(Name, QueueStates),
     case rabbit_quorum_queue:handle_event(Evt, FState0) of
         {_, FState1} ->
-            {noreply, State0#state{queue_states = maps:put(Name, FState1, QueueStates)}};
+            {noreply,
+             State0#state{queue_states = maps:put(Name, FState1, QueueStates)}};
         {_, _, FState1} ->
-            {noreply, State0#state{queue_states = maps:put(Name, FState1, QueueStates)}}
+            {noreply,
+             State0#state{queue_states = maps:put(Name, FState1, QueueStates)}};
+        eol ->
+            {noreply,
+             State0#state{queue_states = maps:remove(Name, QueueStates)}}
     end;
 handle_info(queue_cleanup, State = #state{queue_states = QueueStates0}) ->
     QueueStates = maps:filter(fun(Name, _) ->
