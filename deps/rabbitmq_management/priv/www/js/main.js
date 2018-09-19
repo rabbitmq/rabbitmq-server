@@ -85,6 +85,7 @@ function check_login() {
         replace_content('login-status', '<p>Login failed</p>');
     }
     else {
+        hide_popup_warn();
         replace_content('outer', format('layout', {}));
         var user_login_session_timeout = parseInt(user.login_session_timeout);
         // Update auth login_session_timeout if changed
@@ -530,6 +531,14 @@ function show_popup(type, text, _mode) {
     $(cssClass + ' span').click(function () {
         $('.popup-owner').removeClass('popup-owner');
         hide();
+    });
+}
+
+function hide_popup_warn() {
+    var cssClass = '.form-popup-warn';
+    $('.popup-owner').removeClass('popup-owner');
+    $(cssClass).fadeOut(100, function() {
+        $(this).remove();
     });
 }
 
