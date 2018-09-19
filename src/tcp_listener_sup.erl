@@ -50,12 +50,18 @@ init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, On
       ConcurrentAcceptorCount, Label}) ->
     {ok, AckTimeout} = application:get_env(rabbit, ssl_handshake_timeout),
     MaxConnections = rabbit_misc:get_env(rabbit, connection_max, infinity),
+    RanchListenerOpts = #{
+      num_acceptors => ConcurrentAcceptorCount,
+      max_connections => MaxConnections,
+      handshake_timeout => AckTimeout,
+      connection_type => supervisor,
+      socket_opts => [{ip, IPAddress},
+                      {port, Port} |
+                      SocketOpts]
+     },
     {ok, {{one_for_all, 10, 10}, [
-        ranch:child_spec({acceptor, IPAddress, Port}, ConcurrentAcceptorCount,
-            Transport, [{port, Port}, {ip, IPAddress},
-                {max_connections, MaxConnections},
-                {ack_timeout, AckTimeout},
-                {connection_type, supervisor}|SocketOpts],
+        ranch:child_spec({acceptor, IPAddress, Port},
+            Transport, RanchListenerOpts,
             ProtoSup, ProtoOpts),
         {tcp_listener, {tcp_listener, start_link,
                         [IPAddress, Port,
