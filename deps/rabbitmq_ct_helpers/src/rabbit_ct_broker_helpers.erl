@@ -173,6 +173,7 @@ setup_steps() ->
       fun rabbit_ct_helpers:ensure_rabbitmqctl_app/1,
       fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
       fun run_make_dist/1,
+      fun set_lager_flood_limit/1,
       fun start_rabbitmq_nodes/1,
       fun share_dist_and_proxy_ports_map/1
     ].
@@ -221,6 +222,10 @@ run_make_dist(Config) ->
             ct:pal(?LOW_IMPORTANCE, "(skip `$MAKE test-dist`)", []),
             Config
     end.
+
+set_lager_flood_limit(Config) ->
+    rabbit_ct_helpers:merge_app_env(Config,
+      {lager, [{error_logger_hwm, 10000}]}).
 
 start_rabbitmq_nodes_on_vms(Config) ->
     ConfigsPerVM = configs_per_vm(Config),
