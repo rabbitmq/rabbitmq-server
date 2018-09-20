@@ -237,3 +237,31 @@ fun(Conf) ->
         Value     -> Value
     end
 end}.
+
+%% lock key prefix
+
+{mapping, "cluster_formation.consul.lock_prefix", "rabbit.cluster_formation.peer_discovery_consul.consul_lock_prefix", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_lock_prefix",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.lock_prefix", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% lock timeout
+
+{mapping, "cluster_formation.consul.lock_timeout", "rabbit.cluster_formation.peer_discovery_consul.lock_wait_time", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.lock_wait_time",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.lock_timeout", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
