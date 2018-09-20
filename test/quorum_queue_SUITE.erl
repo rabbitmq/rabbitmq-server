@@ -180,29 +180,29 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 declare_args(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
     declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    assert_queue_type(Node, LQ, quorum),
+    assert_queue_type(Server, LQ, quorum),
 
     DQ = <<"classic-declare-args-q">>,
     declare(Ch, DQ, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
-    assert_queue_type(Node, DQ, classic),
+    assert_queue_type(Server, DQ, classic),
 
     DQ2 = <<"classic-q2">>,
     declare(Ch, DQ2),
-    assert_queue_type(Node, DQ2, classic).
+    assert_queue_type(Server, DQ2, classic).
 
 declare_invalid_properties(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     LQ = ?config(queue_name, Config),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
        amqp_channel:call(
-         rabbit_ct_client_helpers:open_channel(Config, Node),
+         rabbit_ct_client_helpers:open_channel(Config, Server),
          #'queue.declare'{queue     = LQ,
                           auto_delete = true,
                           durable   = true,
@@ -210,7 +210,7 @@ declare_invalid_properties(Config) ->
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
        amqp_channel:call(
-         rabbit_ct_client_helpers:open_channel(Config, Node),
+         rabbit_ct_client_helpers:open_channel(Config, Server),
          #'queue.declare'{queue     = LQ,
                           exclusive = true,
                           durable   = true,
@@ -218,78 +218,78 @@ declare_invalid_properties(Config) ->
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
        amqp_channel:call(
-         rabbit_ct_client_helpers:open_channel(Config, Node),
+         rabbit_ct_client_helpers:open_channel(Config, Server),
          #'queue.declare'{queue     = LQ,
                           durable   = false,
                           arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]})).
 
 declare_invalid_args(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     LQ = ?config(queue_name, Config),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-expires">>, long, 2000}])),
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-message-ttl">>, long, 2000}])),
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-max-length">>, long, 2000}])),
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-max-length-bytes">>, long, 2000}])),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-max-priority">>, long, 2000}])),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-overflow">>, longstr, <<"drop-head">>}])),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-queue-mode">>, longstr, <<"lazy">>}])),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-quorum-cluster-size">>, longstr, <<"hop">>}])),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Node),
+       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-quorum-cluster-size">>, long, 0}])).
 
 start_queue(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% Check that the application and one ra node are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Node, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Node, supervisor, which_children, [ra_nodes_sup])),
+                                           rpc:call(Server, application, which_applications, []))),
+    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup])),
 
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
@@ -304,31 +304,31 @@ start_queue(Config) ->
 
     %% Check that the application and process are still up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Node, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Node, supervisor, which_children, [ra_nodes_sup])).
+                                           rpc:call(Server, application, which_applications, []))),
+    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup])).
 
 start_queue_concurrent(Config) ->
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     LQ = ?config(queue_name, Config),
     Self = self(),
     [begin
          _ = spawn_link(fun () ->
-                                {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Node),
+                                {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
                                 %% Test declare an existing queue
                                 ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                                              declare(Ch, LQ,
                                                      [{<<"x-queue-type">>,
                                                        longstr,
                                                        <<"quorum">>}])),
-                                Self ! {done, Node}
+                                Self ! {done, Server}
                         end)
-     end || Node <- Nodes],
+     end || Server <- Servers],
 
     [begin
-         receive {done, Node} -> ok
-         after 5000 -> exit({await_done_timeout, Node})
+         receive {done, Server} -> ok
+         after 5000 -> exit({await_done_timeout, Server})
          end
-     end || Node <- Nodes],
+     end || Server <- Servers],
 
 
     ok.
@@ -340,65 +340,65 @@ quorum_cluster_size_7(Config) ->
     quorum_cluster_size_x(Config, 7, 5).
 
 quorum_cluster_size_x(Config, Max, Expected) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     RaName = ra_name(QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-quorum-cluster-size">>, long, Max}])),
-    {ok, Members, _} = ra:members({RaName, Node}),
+    {ok, Members, _} = ra:members({RaName, Server}),
     ?assertEqual(Expected, length(Members)),
-    Info = rpc:call(Node, rabbit_quorum_queue, infos,
+    Info = rpc:call(Server, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     MembersQ = proplists:get_value(members, Info),
     ?assertEqual(Expected, length(MembersQ)).
 
 stop_queue(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% Check that the application and one ra node are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Node, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Node, supervisor, which_children, [ra_nodes_sup])),
+                                           rpc:call(Server, application, which_applications, []))),
+    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup])),
 
     %% Delete the quorum queue
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = LQ})),
     %% Check that the application and process are down
     wait_until(fun() ->
-                       [] == rpc:call(Node, supervisor, which_children, [ra_nodes_sup])
+                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup])
                end),
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Node, application, which_applications, []))).
+                                           rpc:call(Server, application, which_applications, []))).
 
 restart_queue(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server),
 
     %% Check that the application and one ra node are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Node, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Node, supervisor, which_children, [ra_nodes_sup])).
+                                           rpc:call(Server, application, which_applications, []))),
+    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup])).
 
 restart_all_types(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
     %% ensure there are no regressions
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ1 = <<"quorum-q1">>,
     ?assertEqual({'queue.declare_ok', QQ1, 0, 0},
                  declare(Ch, QQ1, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -413,15 +413,15 @@ restart_all_types(Config) ->
     ?assertEqual({'queue.declare_ok', CQ2, 0, 0}, declare(Ch, CQ2, [])),
     rabbit_ct_client_helpers:publish(Ch, CQ2, 1),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server),
 
     %% Check that the application and two ra nodes are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Node, application, which_applications, []))),
-    ?assertMatch([_,_], rpc:call(Node, supervisor, which_children, [ra_nodes_sup])),
+                                           rpc:call(Server, application, which_applications, []))),
+    ?assertMatch([_,_], rpc:call(Server, supervisor, which_children, [ra_server_sup])),
     %% Check the classic queues restarted correctly
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ1, no_ack = false}),
     {#'basic.get_ok'{}, #amqp_msg{}} =
@@ -430,9 +430,9 @@ restart_all_types(Config) ->
 stop_start_rabbit_app(Config) ->
     %% Test start/stop of rabbit app with both types of queues (quorum and
     %%  classic) to ensure there are no regressions
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ1 = <<"quorum-q1">>,
     ?assertEqual({'queue.declare_ok', QQ1, 0, 0},
                  declare(Ch, QQ1, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -447,35 +447,35 @@ stop_start_rabbit_app(Config) ->
     ?assertEqual({'queue.declare_ok', CQ2, 0, 0}, declare(Ch, CQ2, [])),
     rabbit_ct_client_helpers:publish(Ch, CQ2, 1),
 
-    rabbit_control_helper:command(stop_app, Node),
+    rabbit_control_helper:command(stop_app, Server),
     %% Check the ra application has stopped (thus its supervisor and queues)
     ?assertMatch(false, lists:keyfind(ra, 1,
-                                      rpc:call(Node, application, which_applications, []))),
+                                      rpc:call(Server, application, which_applications, []))),
 
-    rabbit_control_helper:command(start_app, Node),
+    rabbit_control_helper:command(start_app, Server),
 
     %% Check that the application and two ra nodes are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Node, application, which_applications, []))),
-    ?assertMatch([_,_], rpc:call(Node, supervisor, which_children, [ra_nodes_sup])),
+                                           rpc:call(Server, application, which_applications, []))),
+    ?assertMatch([_,_], rpc:call(Server, supervisor, which_children, [ra_server_sup])),
     %% Check the classic queues restarted correctly
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ1, no_ack = false}),
     {#'basic.get_ok'{}, #amqp_msg{}} =
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ2, no_ack = false}).
 
 publish(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
     Name = ra_name(QQ),
-    wait_for_messages_ready(Nodes, Name, 1),
-    wait_for_messages_pending_ack(Nodes, Name, 0).
+    wait_for_messages_ready(Servers, Name, 1),
+    wait_for_messages_pending_ack(Servers, Name, 0).
 
 ra_name(Q) ->
     binary_to_atom(<<"%2F_", Q/binary>>, utf8).
@@ -483,83 +483,83 @@ ra_name(Q) ->
 publish_and_restart(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
     %% ensure there are no regressions
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     RaName = ra_name(QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server),
 
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
-    publish(rabbit_ct_client_helpers:open_channel(Config, Node), QQ),
-    wait_for_messages_ready(Nodes, RaName, 2),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+    publish(rabbit_ct_client_helpers:open_channel(Config, Server), QQ),
+    wait_for_messages_ready(Servers, RaName, 2),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 consume(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 1),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 1),
     rabbit_ct_client_helpers:close_channel(Ch),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 consume_in_minority(Config) ->
-    [Node0, Node1, Node2] =
+    [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node1),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node2),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
 
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
                 amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                                    no_ack = false})).
 
 consume_and_autoack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     consume(Ch, QQ, true),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     rabbit_ct_client_helpers:close_channel(Ch),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 consume_from_empty_queue(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -567,29 +567,29 @@ consume_from_empty_queue(Config) ->
     consume_empty(Ch, QQ, false).
 
 subscribe(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
     receive_basic_deliver(false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 1),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 1),
     rabbit_ct_client_helpers:close_channel(Ch),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 subscribe_with_autoack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -597,40 +597,40 @@ subscribe_with_autoack(Config) ->
     RaName = ra_name(QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 2),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 2),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, true),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     rabbit_ct_client_helpers:close_channel(Ch),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 consume_and_ack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 1),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 1),
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 consume_and_multiple_ack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -639,44 +639,44 @@ consume_and_multiple_ack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 3),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 3),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     _ = consume(Ch, QQ, false),
     _ = consume(Ch, QQ, false),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 3),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 3),
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                        multiple     = true}),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 subscribe_and_ack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 1),
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 1),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 0)
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 0)
     end.
 
 subscribe_and_multiple_ack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -685,25 +685,25 @@ subscribe_and_multiple_ack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 3),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 3),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 3),
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 3),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                multiple     = true}),
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 0)
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 0)
     end.
 
 consume_and_requeue_nack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -711,21 +711,21 @@ consume_and_requeue_nack(Config) ->
     RaName = ra_name(QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 2),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 2),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 1),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 1),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = true}),
-    wait_for_messages_ready(Nodes, RaName, 2),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 2),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 consume_and_requeue_multiple_nack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -734,44 +734,44 @@ consume_and_requeue_multiple_nack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 3),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 3),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     _ = consume(Ch, QQ, false),
     _ = consume(Ch, QQ, false),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 3),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 3),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = true,
                                         requeue      = true}),
-    wait_for_messages_ready(Nodes, RaName, 3),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 3),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 consume_and_nack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 1),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 1),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = false}),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 consume_and_multiple_nack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -780,23 +780,23 @@ consume_and_multiple_nack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 3),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 3),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     _ = consume(Ch, QQ, false),
     _ = consume(Ch, QQ, false),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 3),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 3),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = true,
                                         requeue      = false}),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 subscribe_and_requeue_multiple_nack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -805,16 +805,16 @@ subscribe_and_requeue_multiple_nack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 3),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 3),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 3),
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 3),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = true,
                                                 requeue      = true}),
@@ -823,76 +823,76 @@ subscribe_and_requeue_multiple_nack(Config) ->
             receive
                 {#'basic.deliver'{delivery_tag = DeliveryTag1,
                                   redelivered  = true}, _} ->
-                    wait_for_messages_ready(Nodes, RaName, 0),
-                    wait_for_messages_pending_ack(Nodes, RaName, 3),
+                    wait_for_messages_ready(Servers, RaName, 0),
+                    wait_for_messages_pending_ack(Servers, RaName, 3),
                     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
                                                        multiple     = true}),
-                    wait_for_messages_ready(Nodes, RaName, 0),
-                    wait_for_messages_pending_ack(Nodes, RaName, 0)
+                    wait_for_messages_ready(Servers, RaName, 0),
+                    wait_for_messages_pending_ack(Servers, RaName, 0)
             end
     end.
 
 subscribe_and_requeue_nack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 1),
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 1),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true}),
             receive
                 {#'basic.deliver'{delivery_tag = DeliveryTag1,
                                   redelivered  = true}, _} ->
-                    wait_for_messages_ready(Nodes, RaName, 0),
-                    wait_for_messages_pending_ack(Nodes, RaName, 1),
+                    wait_for_messages_ready(Servers, RaName, 0),
+                    wait_for_messages_pending_ack(Servers, RaName, 1),
                     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1}),
-                    wait_for_messages_ready(Nodes, RaName, 0),
-                    wait_for_messages_pending_ack(Nodes, RaName, 0)
+                    wait_for_messages_ready(Servers, RaName, 0),
+                    wait_for_messages_pending_ack(Servers, RaName, 0)
             end
     end.
 
 subscribe_and_nack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 1),
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 1),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = false}),
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 0)
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 0)
     end.
 
 subscribe_and_multiple_nack(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -901,27 +901,27 @@ subscribe_and_multiple_nack(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 3),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 3),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
     receive_basic_deliver(false),
     receive_basic_deliver(false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 3),
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 3),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = true,
                                                 requeue      = false}),
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 0)
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 0)
     end.
 
 publisher_confirms(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -930,15 +930,15 @@ publisher_confirms(Config) ->
     amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     amqp_channel:wait_for_confirms(Ch),
     ct:pal("WAIT FOR CONFIRMS ~n", []).
 
 dead_letter_to_classic_queue(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     CQ = <<"classic-dead_letter_to_classic_queue">>,
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -949,25 +949,25 @@ dead_letter_to_classic_queue(Config) ->
     ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>]]),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0), 
-    wait_for_messages_pending_ack(Nodes, RaName, 1),
+    wait_for_messages_ready(Servers, RaName, 0), 
+    wait_for_messages_pending_ack(Servers, RaName, 1),
     wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = false}),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[CQ, <<"1">>, <<"1">>, <<"0">>]]),
     _ = consume(Ch, CQ, false).
 
 dead_letter_to_quorum_queue(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     QQ2 = <<"dead_letter_to_quorum_queue-q2">>,
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -980,28 +980,28 @@ dead_letter_to_quorum_queue(Config) ->
     RaName = ra_name(QQ),
     RaName2 = ra_name(QQ2),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
-    wait_for_messages_ready(Nodes, RaName2, 0),
-    wait_for_messages_pending_ack(Nodes, RaName2, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages_ready(Servers, RaName2, 0),
+    wait_for_messages_pending_ack(Servers, RaName2, 0),
     DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 1),
-    wait_for_messages_ready(Nodes, RaName2, 0),
-    wait_for_messages_pending_ack(Nodes, RaName2, 0),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 1),
+    wait_for_messages_ready(Servers, RaName2, 0),
+    wait_for_messages_pending_ack(Servers, RaName2, 0),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = false}),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
-    wait_for_messages_ready(Nodes, RaName2, 1),
-    wait_for_messages_pending_ack(Nodes, RaName2, 0),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages_ready(Servers, RaName2, 1),
+    wait_for_messages_pending_ack(Servers, RaName2, 0),
     _ = consume(Ch, QQ2, false).
 
 dead_letter_from_classic_to_quorum_queue(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     CQ = <<"classic-q-dead_letter_from_classic_to_quorum_queue">>,
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', CQ, 0, 0},
@@ -1012,18 +1012,18 @@ dead_letter_from_classic_to_quorum_queue(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     RaName = ra_name(QQ),
     publish(Ch, CQ),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[CQ, <<"1">>, <<"1">>, <<"0">>]]),
     DeliveryTag = consume(Ch, CQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[CQ, <<"1">>, <<"0">>, <<"1">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = false}),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>]]),
     _ = consume(Ch, QQ, false),
     rabbit_ct_client_helpers:close_channel(Ch).
@@ -1031,162 +1031,162 @@ dead_letter_from_classic_to_quorum_queue(Config) ->
 cleanup_queue_state_on_channel_after_publish(Config) ->
     %% Declare/delete the queue in one channel and publish on a different one,
     %% to verify that the cleanup is propagated through channels
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Node),
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     RaName = ra_name(QQ),
     publish(Ch2, QQ),
-    Res = dirty_query(Nodes, RaName, fun rabbit_fifo:query_consumer_count/1),
+    Res = dirty_query(Servers, RaName, fun rabbit_fifo:query_consumer_count/1),
     ct:pal ("Res ~p", [Res]),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    [NCh1, NCh2] = rpc:call(Node, rabbit_channel, list, []),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []),
     %% Check the channel state contains the state for the quorum queue on channel 1 and 2
-    wait_for_cleanup(Node, NCh1, 1),
-    wait_for_cleanup(Node, NCh2, 1),
+    wait_for_cleanup(Server, NCh1, 1),
+    wait_for_cleanup(Server, NCh2, 1),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
-                       [] == rpc:call(Node, supervisor, which_children, [ra_nodes_sup])
+                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup])
                end),
     %% Check that all queue states have been cleaned
-    wait_for_cleanup(Node, NCh1, 0),
-    wait_for_cleanup(Node, NCh2, 0).
+    wait_for_cleanup(Server, NCh1, 0),
+    wait_for_cleanup(Server, NCh2, 0).
 
 cleanup_queue_state_on_channel_after_subscribe(Config) ->
     %% Declare/delete the queue and publish in one channel, while consuming on a
     %% different one to verify that the cleanup is propagated through channels
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Node),
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     RaName = ra_name(QQ),
     publish(Ch1, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch2, QQ, false),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 1),
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 1),
             amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag,
                                                 multiple     = true}),
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 0)
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 0)
     end,
-    [NCh1, NCh2] = rpc:call(Node, rabbit_channel, list, []),
+    [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []),
     %% Check the channel state contains the state for the quorum queue on channel 1 and 2
-    wait_for_cleanup(Node, NCh1, 1),
-    wait_for_cleanup(Node, NCh2, 1),
+    wait_for_cleanup(Server, NCh1, 1),
+    wait_for_cleanup(Server, NCh2, 1),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
-                       [] == rpc:call(Node, supervisor, which_children, [ra_nodes_sup])
+                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup])
                end),
     %% Check that all queue states have been cleaned
-    wait_for_cleanup(Node, NCh1, 0),
-    wait_for_cleanup(Node, NCh2, 0).
+    wait_for_cleanup(Server, NCh1, 0),
+    wait_for_cleanup(Server, NCh2, 0).
 
 recover_from_single_failure(Config) ->
-    [Node, Node1, Node2] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server, Server1, Server2] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node2),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     RaName = ra_name(QQ),
 
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready([Node, Node1], RaName, 3),
-    wait_for_messages_pending_ack([Node, Node1], RaName, 0),
+    wait_for_messages_ready([Server, Server1], RaName, 3),
+    wait_for_messages_pending_ack([Server, Server1], RaName, 0),
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
-    wait_for_messages_ready(Nodes, RaName, 3),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    wait_for_messages_ready(Servers, RaName, 3),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 recover_from_multiple_failures(Config) ->
-    [Node, Node1, Node2] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server, Server1, Server2] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     RaName = ra_name(QQ),
 
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node2),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
 
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
 
-    wait_for_messages_ready([Node], RaName, 3),
-    wait_for_messages_pending_ack([Node], RaName, 0),
+    wait_for_messages_ready([Server], RaName, 3),
+    wait_for_messages_pending_ack([Server], RaName, 0),
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node1),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
 
     %% there is an assumption here that the messages were not lost and were
     %% recovered when a quorum was restored. Not the best test perhaps.
-    wait_for_messages_ready(Nodes, RaName, 6),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 6),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 leadership_takeover(Config) ->
     %% Kill nodes in succession forcing the takeover of leadership, and all messages that
     %% are in the queue.
-    [Node, Node1, Node2] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server, Server1, Server2] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     RaName = ra_name(QQ),
 
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
 
-    wait_for_messages_ready([Node], RaName, 3),
-    wait_for_messages_pending_ack([Node], RaName, 0),
+    wait_for_messages_ready([Server], RaName, 3),
+    wait_for_messages_pending_ack([Server], RaName, 0),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node2),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node1),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Node1),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server),
 
-    wait_for_messages_ready([Node2, Node], RaName, 3),
-    wait_for_messages_pending_ack([Node2, Node], RaName, 0),
+    wait_for_messages_ready([Server2, Server], RaName, 3),
+    wait_for_messages_pending_ack([Server2, Server], RaName, 0),
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, Node1),
-    wait_for_messages_ready(Nodes, RaName, 3),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    wait_for_messages_ready(Servers, RaName, 3),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 metrics_cleanup_on_leadership_takeover(Config) ->
     %% Queue core metrics should be deleted from a node once the leadership is transferred
     %% to another follower
-    [Node, _, _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server, _, _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1196,9 +1196,9 @@ metrics_cleanup_on_leadership_takeover(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
 
-    wait_for_messages_ready([Node], RaName, 3),
-    wait_for_messages_pending_ack([Node], RaName, 0),
-    {ok, _, {_, Leader}} = ra:members({RaName, Node}),
+    wait_for_messages_ready([Server], RaName, 3),
+    wait_for_messages_pending_ack([Server], RaName, 0),
+    {ok, _, {_, Leader}} = ra:members({RaName, Server}),
     QRes = rabbit_misc:r(<<"/">>, queue, QQ),
     wait_until(
       fun() ->
@@ -1207,7 +1207,7 @@ metrics_cleanup_on_leadership_takeover(Config) ->
                   _ -> false
               end
       end),
-    force_leader_change(Leader, Nodes, QQ),
+    force_leader_change(Leader, Servers, QQ),
     wait_until(fun () ->
                        [] =:= rpc:call(Leader, ets, lookup, [queue_coarse_metrics, QRes]) andalso
                        [] =:= rpc:call(Leader, ets, lookup, [queue_metrics, QRes])
@@ -1217,10 +1217,10 @@ metrics_cleanup_on_leadership_takeover(Config) ->
 metrics_cleanup_on_leader_crash(Config) ->
     %% Queue core metrics should be deleted from a node once the leadership is transferred
     %% to another follower
-    [Node | _] = Nodes =
+    [Server | _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1230,9 +1230,9 @@ metrics_cleanup_on_leader_crash(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
 
-    wait_for_messages_ready([Node], RaName, 3),
-    wait_for_messages_pending_ack([Node], RaName, 0),
-    {ok, _, {Name, Leader}} = ra:members({RaName, Node}),
+    wait_for_messages_ready([Server], RaName, 3),
+    wait_for_messages_pending_ack([Server], RaName, 0),
+    {ok, _, {Name, Leader}} = ra:members({RaName, Server}),
     QRes = rabbit_misc:r(<<"/">>, queue, QQ),
     wait_until(
       fun() ->
@@ -1243,7 +1243,7 @@ metrics_cleanup_on_leader_crash(Config) ->
       end),
     Pid = rpc:call(Leader, erlang, whereis, [Name]),
     rpc:call(Leader, erlang, exit, [Pid, kill]),
-    [Other | _] = lists:delete(Leader, Nodes),
+    [Other | _] = lists:delete(Leader, Servers),
     catch ra:trigger_election(Other),
     %% kill it again just in case it came straight back up again
     catch rpc:call(Leader, erlang, exit, [Pid, kill]),
@@ -1258,10 +1258,10 @@ metrics_cleanup_on_leader_crash(Config) ->
 
 delete_declare(Config) ->
     %% Delete cluster in ra is asynchronous, we have to ensure that we handle that in rmq
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config,
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config,
                                                                    nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1270,7 +1270,7 @@ delete_declare(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 3),
+    wait_for_messages_ready(Servers, RaName, 3),
 
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
@@ -1282,35 +1282,35 @@ delete_declare(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% Ensure that is a new queue and it's empty
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 
 basic_cancel(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
     receive
         {#'basic.deliver'{}, _} ->
-            wait_for_messages_ready(Nodes, RaName, 0),
-            wait_for_messages_pending_ack(Nodes, RaName, 1),
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 1),
             amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>}),
-            wait_for_messages_ready(Nodes, RaName, 1),
-            wait_for_messages_pending_ack(Nodes, RaName, 0)
+            wait_for_messages_ready(Servers, RaName, 1),
+            wait_for_messages_pending_ack(Servers, RaName, 0)
     end.
 
 purge(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1318,19 +1318,19 @@ purge(Config) ->
     RaName = ra_name(QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 2),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 2),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     _DeliveryTag = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 1),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 1),
     {'queue.purge_ok', 2} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
-    wait_for_messages_ready(Nodes, RaName, 0).
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 0).
 
 sync_queue(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1339,9 +1339,9 @@ sync_queue(Config) ->
     ok.
 
 cancel_sync_queue(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1350,140 +1350,140 @@ cancel_sync_queue(Config) ->
     ok.
 
 declare_during_node_down(Config) ->
-    [Node, DownNode, _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(
+    [Server, DownServer, _] = Servers = rabbit_ct_broker_helpers:get_node_configs(
                                     Config, nodename),
 
-    stop_node(Config, DownNode),
-    % rabbit_ct_broker_helpers:stop_node(Config, DownNode),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    stop_node(Config, DownServer),
+    % rabbit_ct_broker_helpers:stop_node(Config, DownServer),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     timer:sleep(2000),
-    rabbit_ct_broker_helpers:start_node(Config, DownNode),
+    rabbit_ct_broker_helpers:start_node(Config, DownServer),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
+    wait_for_messages_ready(Servers, RaName, 1),
     ok.
 
 add_member_not_running(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     ct:pal("add_member_not_running config ~p", [Config]),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({error, node_not_running},
-                 rpc:call(Node, rabbit_quorum_queue, add_member,
+                 rpc:call(Server, rabbit_quorum_queue, add_member,
                           [<<"/">>, QQ, 'rabbit@burrow'])).
 
 add_member_classic(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     CQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
     ?assertEqual({error, classic_queue_not_supported},
-                 rpc:call(Node, rabbit_quorum_queue, add_member,
-                          [<<"/">>, CQ, Node])).
+                 rpc:call(Server, rabbit_quorum_queue, add_member,
+                          [<<"/">>, CQ, Server])).
 
 add_member_already_a_member(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({error, already_a_member},
-                 rpc:call(Node, rabbit_quorum_queue, add_member,
-                          [<<"/">>, QQ, Node])).
+                 rpc:call(Server, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, Server])).
 
 add_member_not_found(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
     ?assertEqual({error, not_found},
-                 rpc:call(Node, rabbit_quorum_queue, add_member,
-                          [<<"/">>, QQ, Node])).
+                 rpc:call(Server, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, Server])).
 
 add_member(Config) ->
-    [Node0, Node1] = Nodes0 =
+    [Server0, Server1] = Servers0 =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({error, node_not_running},
-                 rpc:call(Node0, rabbit_quorum_queue, add_member,
-                          [<<"/">>, QQ, Node1])),
-    ok = rabbit_control_helper:command(stop_app, Node1),
-    ok = rabbit_control_helper:command(join_cluster, Node1, [atom_to_list(Node0)], []),
-    rabbit_control_helper:command(start_app, Node1),
-    ?assertEqual(ok, rpc:call(Node0, rabbit_quorum_queue, add_member,
-                              [<<"/">>, QQ, Node1])),
-    Info = rpc:call(Node0, rabbit_quorum_queue, infos,
+                 rpc:call(Server0, rabbit_quorum_queue, add_member,
+                          [<<"/">>, QQ, Server1])),
+    ok = rabbit_control_helper:command(stop_app, Server1),
+    ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
+    rabbit_control_helper:command(start_app, Server1),
+    ?assertEqual(ok, rpc:call(Server0, rabbit_quorum_queue, add_member,
+                              [<<"/">>, QQ, Server1])),
+    Info = rpc:call(Server0, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
-    Nodes = lists:sort(Nodes0),
-    ?assertEqual(Nodes, lists:sort(proplists:get_value(online, Info, []))).
+    Servers = lists:sort(Servers0),
+    ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
 
 delete_member_not_running(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({error, node_not_running},
-                 rpc:call(Node, rabbit_quorum_queue, delete_member,
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, 'rabbit@burrow'])).
 
 delete_member_classic(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     CQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
     ?assertEqual({error, classic_queue_not_supported},
-                 rpc:call(Node, rabbit_quorum_queue, delete_member,
-                          [<<"/">>, CQ, Node])).
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, CQ, Server])).
 
 delete_member_not_found(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
     ?assertEqual({error, not_found},
-                 rpc:call(Node, rabbit_quorum_queue, delete_member,
-                          [<<"/">>, QQ, Node])).
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, Server])).
 
 delete_member(Config) ->
-    [Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(100),
     ?assertEqual(ok,
-                 rpc:call(Node, rabbit_quorum_queue, delete_member,
-                          [<<"/">>, QQ, Node])),
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, Server])),
     ?assertEqual({error, not_a_member},
-                 rpc:call(Node, rabbit_quorum_queue, delete_member,
-                          [<<"/">>, QQ, Node])).
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, Server])).
 
 basic_recover(Config) ->
-    [Node | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
     _ = consume(Ch, QQ, false),
-    wait_for_messages_ready(Nodes, RaName, 0),
-    wait_for_messages_pending_ack(Nodes, RaName, 1),
+    wait_for_messages_ready(Servers, RaName, 0),
+    wait_for_messages_pending_ack(Servers, RaName, 1),
     amqp_channel:cast(Ch, #'basic.recover'{requeue = true}),
-    wait_for_messages_ready(Nodes, RaName, 1),
-    wait_for_messages_pending_ack(Nodes, RaName, 0).
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0).
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->
@@ -1495,14 +1495,14 @@ declare(Ch, Q, Args) ->
                                            auto_delete = false,
                                            arguments = Args}).
 
-assert_queue_type(Node, Q, Expected) ->
-    Actual = get_queue_type(Node, Q),
+assert_queue_type(Server, Q, Expected) ->
+    Actual = get_queue_type(Server, Q),
     Expected = Actual.
 
-get_queue_type(Node, Q) ->
+get_queue_type(Server, Q) ->
     QNameRes = rabbit_misc:r(<<"/">>, queue, Q),
     {ok, AMQQueue} =
-        rpc:call(Node, rabbit_amqqueue, lookup, [QNameRes]),
+        rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
     AMQQueue#amqqueue.type.
 
 wait_for_messages(Config, Stats) ->
@@ -1567,39 +1567,39 @@ receive_basic_deliver(Redelivered) ->
             ok
     end.
 
-wait_for_cleanup(Node, Channel, Number) ->
-    wait_for_cleanup(Node, Channel, Number, 60).
+wait_for_cleanup(Server, Channel, Number) ->
+    wait_for_cleanup(Server, Channel, Number, 60).
 
-wait_for_cleanup(Node, Channel, Number, 0) ->
-    ?assertEqual(Number, length(rpc:call(Node, rabbit_channel, list_queue_states, [Channel])));
-wait_for_cleanup(Node, Channel, Number, N) ->
-    case length(rpc:call(Node, rabbit_channel, list_queue_states, [Channel])) of
+wait_for_cleanup(Server, Channel, Number, 0) ->
+    ?assertEqual(Number, length(rpc:call(Server, rabbit_channel, list_queue_states, [Channel])));
+wait_for_cleanup(Server, Channel, Number, N) ->
+    case length(rpc:call(Server, rabbit_channel, list_queue_states, [Channel])) of
         Length when Number == Length ->
             ok;
         _ ->
             timer:sleep(500),
-            wait_for_cleanup(Node, Channel, Number, N - 1)
+            wait_for_cleanup(Server, Channel, Number, N - 1)
     end.
 
 
-wait_for_messages_ready(Nodes, QName, Ready) ->
-    wait_for_messages(Nodes, QName, Ready,
+wait_for_messages_ready(Servers, QName, Ready) ->
+    wait_for_messages(Servers, QName, Ready,
                       fun rabbit_fifo:query_messages_ready/1, 60).
 
-wait_for_messages_pending_ack(Nodes, QName, Ready) ->
-    wait_for_messages(Nodes, QName, Ready,
+wait_for_messages_pending_ack(Servers, QName, Ready) ->
+    wait_for_messages(Servers, QName, Ready,
                       fun rabbit_fifo:query_messages_checked_out/1, 60).
 
-wait_for_messages(Nodes, QName, Number, Fun, 0) ->
-    Msgs = dirty_query(Nodes, QName, Fun),
+wait_for_messages(Servers, QName, Number, Fun, 0) ->
+    Msgs = dirty_query(Servers, QName, Fun),
     Totals = lists:map(fun(M) when is_map(M) ->
                                maps:size(M);
                           (_) ->
                                -1
                        end, Msgs),
-    ?assertEqual(Totals, [Number || _ <- lists:seq(1, length(Nodes))]);
-wait_for_messages(Nodes, QName, Number, Fun, N) ->
-    Msgs = dirty_query(Nodes, QName, Fun),
+    ?assertEqual(Totals, [Number || _ <- lists:seq(1, length(Servers))]);
+wait_for_messages(Servers, QName, Number, Fun, N) ->
+    Msgs = dirty_query(Servers, QName, Fun),
     case lists:all(fun(M) when is_map(M) ->
                            maps:size(M) == Number;
                       (_) ->
@@ -1609,10 +1609,10 @@ wait_for_messages(Nodes, QName, Number, Fun, N) ->
             ok;
         _ ->
             timer:sleep(500),
-            wait_for_messages(Nodes, QName, Number, Fun, N - 1)
+            wait_for_messages(Servers, QName, Number, Fun, N - 1)
     end.
 
-dirty_query(Nodes, QName, Fun) ->
+dirty_query(Servers, QName, Fun) ->
     lists:map(
       fun(N) ->
               case rpc:call(N, ra, local_query, [{QName, N}, Fun]) of
@@ -1621,7 +1621,7 @@ dirty_query(Nodes, QName, Fun) ->
                   _ ->
                       undefined
               end
-      end, Nodes).
+      end, Servers).
 
 wait_until(Condition) ->
     wait_until(Condition, 60).
@@ -1637,14 +1637,14 @@ wait_until(Condition, N) ->
             wait_until(Condition, N - 1)
     end.
 
-force_leader_change(Leader, Nodes, Q) ->
+force_leader_change(Leader, Servers, Q) ->
     RaName = ra_name(Q),
-    [F1, _] = Nodes -- [Leader],
+    [F1, _] = Servers -- [Leader],
     ok = rpc:call(F1, ra, trigger_election, [{RaName, F1}]),
     case ra:members({RaName, Leader}) of
         {ok, _, {_, Leader}} ->
             %% Leader has been re-elected
-            force_leader_change(Leader, Nodes, Q);
+            force_leader_change(Leader, Servers, Q);
         {ok, _, _} ->
             %% Leader has changed
             ok
@@ -1654,5 +1654,5 @@ delete_queues() ->
     [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
      || Q <- rabbit_amqqueue:list()].
 
-stop_node(Config, Node) ->
-    rabbit_ct_broker_helpers:rabbitmqctl(Config, Node, ["stop"]).
+stop_node(Config, Server) ->
+    rabbit_ct_broker_helpers:rabbitmqctl(Config, Server, ["stop"]).

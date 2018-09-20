@@ -49,26 +49,26 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(TestCase, Config) ->
-    ra_nodes_sup:remove_all(),
-    NodeName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
-    NodeName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
+    ra_server_sup:remove_all(),
+    ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
+    ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
     [
      {cluster_id, TestCase},
      {uid, atom_to_binary(TestCase, utf8)},
      {node_id, {TestCase, node()}},
-     {uid2, atom_to_binary(NodeName2, utf8)},
-     {node_id2, {NodeName2, node()}},
-     {uid3, atom_to_binary(NodeName3, utf8)},
-     {node_id3, {NodeName3, node()}}
+     {uid2, atom_to_binary(ServerName2, utf8)},
+     {node_id2, {ServerName2, node()}},
+     {uid3, atom_to_binary(ServerName3, utf8)},
+     {node_id3, {ServerName3, node()}}
      | Config].
 
 basics(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
+    ServerId = ?config(node_id, Config),
     UId = ?config(uid, Config),
     CustomerTag = UId,
-    ok = start_cluster(ClusterId, [NodeId]),
-    FState0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    ok = start_cluster(ClusterId, [ServerId]),
+    FState0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, FState1} = rabbit_fifo_client:checkout(CustomerTag, 1, FState0),
 
     ra_log_wal:force_roll_over(ra_log_wal),
@@ -95,8 +95,8 @@ basics(Config) ->
 
     % process settle applied notificaiton
     FState5b = process_ra_event(FState5, 250),
-    _ = ra:stop_node(NodeId),
-    _ = ra:restart_node(NodeId),
+    _ = ra:stop_node(ServerId),
+    _ = ra:restart_node(ServerId),
 
     % give time to become leader
     timer:sleep(500),
@@ -117,30 +117,30 @@ basics(Config) ->
     after 2000 ->
               exit(await_msg_timeout)
     end,
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 return(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    NodeId2 = ?config(node_id2, Config),
-    ok = start_cluster(ClusterId, [NodeId, NodeId2]),
+    ServerId = ?config(node_id, Config),
+    ServerId2 = ?config(node_id2, Config),
+    ok = start_cluster(ClusterId, [ServerId, ServerId2]),
 
-    F00 = rabbit_fifo_client:init(ClusterId, [NodeId, NodeId2]),
+    F00 = rabbit_fifo_client:init(ClusterId, [ServerId, ServerId2]),
     {ok, F0} = rabbit_fifo_client:enqueue(1, msg1, F00),
     {ok, F1} = rabbit_fifo_client:enqueue(2, msg2, F0),
     {_, F2} = process_ra_events(F1, 100),
     {ok, {MsgId, _}, F} = rabbit_fifo_client:dequeue(<<"tag">>, unsettled, F2),
     {ok, _F2} = rabbit_fifo_client:return(<<"tag">>, [MsgId], F),
 
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 rabbit_fifo_returns_correlation(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, F1} = rabbit_fifo_client:enqueue(corr1, msg1, F0),
     receive
         {ra_event, Frm, E} ->
@@ -153,14 +153,14 @@ rabbit_fifo_returns_correlation(Config) ->
     after 2000 ->
               exit(await_msg_timeout)
     end,
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 duplicate_delivery(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, F0),
     {ok, F2} = rabbit_fifo_client:enqueue(corr1, msg1, F1),
     Fun = fun Loop(S0) ->
@@ -187,36 +187,36 @@ duplicate_delivery(Config) ->
             end
         end,
     Fun(F2),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 usage(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, F0),
     {ok, F2} = rabbit_fifo_client:enqueue(corr1, msg1, F1),
     {ok, F3} = rabbit_fifo_client:enqueue(corr2, msg2, F2),
     {_, _} = process_ra_events(F3, 50),
     % force tick and usage stats emission
-    NodeId ! tick_timeout,
+    ServerId ! tick_timeout,
     timer:sleep(50),
-    % ct:pal("ets ~w ~w ~w", [ets:tab2list(rabbit_fifo_usage), NodeId, UId]),
-    Use = rabbit_fifo:usage(element(1, NodeId)),
+    % ct:pal("ets ~w ~w ~w", [ets:tab2list(rabbit_fifo_usage), ServerId, UId]),
+    Use = rabbit_fifo:usage(element(1, ServerId)),
     ct:pal("Use ~w~n", [Use]),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ?assert(Use > 0.0),
     ok.
 
 resends_lost_command(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
 
     ok = meck:new(ra, [passthrough]),
 
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
     % lose the enqueue
     meck:expect(ra, send_and_notify, fun (_, _, _) -> ok end),
@@ -227,27 +227,27 @@ resends_lost_command(Config) ->
     {ok, {_, {_, msg1}}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
     {ok, {_, {_, msg2}}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
     {ok, {_, {_, msg3}}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 two_quick_enqueues(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
 
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     F1 = element(2, rabbit_fifo_client:enqueue(msg1, F0)),
     {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
     _ = process_ra_events(F2, 500),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 detects_lost_delivery(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
 
-    F000 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    F000 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, F00} = rabbit_fifo_client:enqueue(msg1, F000),
     {_, F0} = process_ra_events(F00, 100),
     {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, F0),
@@ -263,37 +263,37 @@ detects_lost_delivery(Config) ->
 
     % assert three deliveries were received
     {[_, _, _], _} = process_ra_events(F3, 500),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 returns_after_down(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
 
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
     {_, F2} = process_ra_events(F1, 500),
     % start a customer in a separate processes
     % that exits after checkout
     Self = self(),
     _Pid = spawn(fun () ->
-                         F = rabbit_fifo_client:init(ClusterId, [NodeId]),
+                         F = rabbit_fifo_client:init(ClusterId, [ServerId]),
                          {ok, _} = rabbit_fifo_client:checkout(<<"tag">>, 10, F),
                          Self ! checkout_done
                  end),
     receive checkout_done -> ok after 1000 -> exit(checkout_done_timeout) end,
     % message should be available for dequeue
     {ok, {_, {_, msg1}}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F2),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 resends_after_lost_applied(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
 
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {_, F1} = process_ra_events(element(2, rabbit_fifo_client:enqueue(msg1, F0)),
                            500),
     {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
@@ -310,37 +310,37 @@ resends_after_lost_applied(Config) ->
     {ok, {_, {_, msg1}}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
     {ok, {_, {_, msg2}}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
     {ok, {_, {_, msg3}}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 handles_reject_notification(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId1 = ?config(node_id, Config),
-    NodeId2 = ?config(node_id2, Config),
+    ServerId1 = ?config(node_id, Config),
+    ServerId2 = ?config(node_id2, Config),
     UId1 = ?config(uid, Config),
     CId = {UId1, self()},
 
-    ok = start_cluster(ClusterId, [NodeId1, NodeId2]),
-    _ = ra:send_and_await_consensus(NodeId1, {checkout, {auto, 10}, CId}),
+    ok = start_cluster(ClusterId, [ServerId1, ServerId2]),
+    _ = ra:send_and_await_consensus(ServerId1, {checkout, {auto, 10}, CId}),
     % reverse order - should try the first node in the list first
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId2, NodeId1]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId2, ServerId1]),
     {ok, F1} = rabbit_fifo_client:enqueue(one, F0),
 
     timer:sleep(500),
 
     % the applied notification
     _F2 = process_ra_event(F1, 250),
-    ra:stop_node(NodeId1),
-    ra:stop_node(NodeId2),
+    ra:stop_node(ServerId1),
+    ra:stop_node(ServerId2),
     ok.
 
 discard(Config) ->
     PrivDir = ?config(priv_dir, Config),
-    NodeId = ?config(node_id, Config),
+    ServerId = ?config(node_id, Config),
     UId = ?config(uid, Config),
     ClusterId = ?config(cluster_id, Config),
     Conf = #{cluster_id => ClusterId,
-             id => NodeId,
+             id => ServerId,
              uid => UId,
              log_init_args => #{data_dir => PrivDir, uid => UId},
              initial_nodes => [],
@@ -348,10 +348,10 @@ discard(Config) ->
                          #{dead_letter_handler =>
                            {?MODULE, dead_letter_handler, [self()]}}}},
     _ = ra:start_node(Conf),
-    ok = ra:trigger_election(NodeId),
-    _ = ra:members(NodeId),
+    ok = ra:trigger_election(ServerId),
+    _ = ra:members(ServerId),
 
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, F0),
     {ok, F2} = rabbit_fifo_client:enqueue(msg1, F1),
     F3 = discard_next_delivery(F2, 500),
@@ -364,14 +364,14 @@ discard(Config) ->
     after 500 ->
               exit(dead_letter_timeout)
     end,
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 cancel_checkout(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId], 4),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId], 4),
     {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
     {ok, F2} = rabbit_fifo_client:checkout(<<"tag">>, 10, F1),
     {_, F3} = process_ra_events0(F2, [], 250, fun (_, S) -> S end),
@@ -381,58 +381,58 @@ cancel_checkout(Config) ->
 
 untracked_enqueue(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
 
-    ok = rabbit_fifo_client:untracked_enqueue(ClusterId, [NodeId], msg1),
+    ok = rabbit_fifo_client:untracked_enqueue(ClusterId, [ServerId], msg1),
     timer:sleep(100),
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, {_, {_, msg1}}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F0),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 
 flow(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId], 3),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId], 3),
     {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
     {ok, F2} = rabbit_fifo_client:enqueue(m2, F1),
     {ok, F3} = rabbit_fifo_client:enqueue(m3, F2),
     {slow, F4} = rabbit_fifo_client:enqueue(m4, F3),
     {_, F5} = process_ra_events(F4, 500),
     {ok, _} = rabbit_fifo_client:enqueue(m5, F5),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 test_queries(Config) ->
     ClusterId = ?config(cluster_id, Config),
-    NodeId = ?config(node_id, Config),
-    ok = start_cluster(ClusterId, [NodeId]),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterId, [ServerId]),
     P = spawn(fun () ->
-                  F0 = rabbit_fifo_client:init(ClusterId, [NodeId], 4),
+                  F0 = rabbit_fifo_client:init(ClusterId, [ServerId], 4),
                   {ok, F1} = rabbit_fifo_client:enqueue(m1, F0),
                   {ok, F2} = rabbit_fifo_client:enqueue(m2, F1),
                   process_ra_events(F2, 100),
                   receive stop ->  ok end
           end),
-    F0 = rabbit_fifo_client:init(ClusterId, [NodeId], 4),
+    F0 = rabbit_fifo_client:init(ClusterId, [ServerId], 4),
     {ok, _} = rabbit_fifo_client:checkout(<<"tag">>, 1, F0),
-    {ok, {_, Ready}, _} = ra:local_query(NodeId,
+    {ok, {_, Ready}, _} = ra:local_query(ServerId,
                                              fun rabbit_fifo:query_messages_ready/1),
     ?assertEqual(1, maps:size(Ready)),
     ct:pal("Ready ~w~n", [Ready]),
-    {ok, {_, Checked}, _} = ra:local_query(NodeId,
+    {ok, {_, Checked}, _} = ra:local_query(ServerId,
                                                fun rabbit_fifo:query_messages_checked_out/1),
     ?assertEqual(1, maps:size(Checked)),
     ct:pal("Checked ~w~n", [Checked]),
-    {ok, {_, Processes}, _} = ra:local_query(NodeId,
+    {ok, {_, Processes}, _} = ra:local_query(ServerId,
                                                  fun rabbit_fifo:query_processes/1),
     ct:pal("Processes ~w~n", [Processes]),
     ?assertEqual(2, length(Processes)),
     P !  stop,
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 dead_letter_handler(Pid, Msgs) ->
@@ -440,11 +440,11 @@ dead_letter_handler(Pid, Msgs) ->
 
 dequeue(Config) ->
     ClusterId = ?config(priv_dir, Config),
-    NodeId = ?config(node_id, Config),
+    ServerId = ?config(node_id, Config),
     UId = ?config(uid, Config),
     Tag = UId,
-    ok = start_cluster(ClusterId, [NodeId]),
-    F1 = rabbit_fifo_client:init(ClusterId, [NodeId]),
+    ok = start_cluster(ClusterId, [ServerId]),
+    F1 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, empty, F1b} = rabbit_fifo_client:dequeue(Tag, settled, F1),
     {ok, F2_} = rabbit_fifo_client:enqueue(msg1, F1b),
     {_, F2} = process_ra_events(F2_, 100),
@@ -454,7 +454,7 @@ dequeue(Config) ->
     {_, F4} = process_ra_events(F4_, 100),
     {ok, {MsgId, {_, msg2}}, F5} = rabbit_fifo_client:dequeue(Tag, unsettled, F4),
     {ok, _F6} = rabbit_fifo_client:settle(Tag, [MsgId], F5),
-    ra:stop_node(NodeId),
+    ra:stop_node(ServerId),
     ok.
 
 enq_deq_n(N, F0) ->
@@ -471,9 +471,9 @@ enq_deq_n(N, F, Acc) ->
     {_, F4} = process_ra_events(F3, 5),
     enq_deq_n(N-1, F4, [Deq | Acc]).
 
-conf(ClusterId, UId, NodeId, _, Peers) ->
+conf(ClusterId, UId, ServerId, _, Peers) ->
     #{cluster_id => ClusterId,
-      id => NodeId,
+      id => ServerId,
       uid => UId,
       log_init_args => #{uid => UId},
       initial_nodes => Peers,
@@ -562,11 +562,11 @@ validate_process_down(Name, Num) ->
             validate_process_down(Name, Num-1)
     end.
 
-start_cluster(ClusterId, NodeIds, RaFifoConfig) ->
-    {ok, NodeIds, _} = ra:start_cluster(ClusterId,
+start_cluster(ClusterId, ServerIds, RaFifoConfig) ->
+    {ok, ServerIds, _} = ra:start_cluster(ClusterId,
                                         {module, rabbit_fifo, RaFifoConfig},
-                                        NodeIds),
+                                        ServerIds),
     ok.
 
-start_cluster(ClusterId, NodeIds) ->
-    start_cluster(ClusterId, NodeIds, #{}).
+start_cluster(ClusterId, ServerIds) ->
+    start_cluster(ClusterId, ServerIds, #{}).

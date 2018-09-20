@@ -29,8 +29,8 @@
 -type seq() :: non_neg_integer().
 
 -record(state, {cluster_id :: ra_cluster_id(),
-                nodes = [] :: [ra_node_id()],
-                leader :: maybe(ra_node_id()),
+                servers = [] :: [ra_server_id()],
+                leader :: maybe(ra_server_id()),
                 next_seq = 0 :: seq(),
                 last_applied :: maybe(seq()),
                 next_enqueue_seq = 1 :: seq(),
@@ -59,32 +59,32 @@
 %% @doc Create the initial state for a new rabbit_fifo sessions. A state is needed
 %% to interact with a rabbit_fifo queue using @module.
 %% @param ClusterId the id of the cluster to interact with
-%% @param Nodes The known nodes of the queue. If the current leader is known
+%% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
--spec init(ra_cluster_id(), [ra_node_id()]) -> state().
-init(ClusterId, Nodes) ->
-    init(ClusterId, Nodes, ?SOFT_LIMIT).
+-spec init(ra_cluster_id(), [ra_server_id()]) -> state().
+init(ClusterId, Servers) ->
+    init(ClusterId, Servers, ?SOFT_LIMIT).
 
 %% @doc Create the initial state for a new rabbit_fifo sessions. A state is needed
 %% to interact with a rabbit_fifo queue using @module.
 %% @param ClusterId the id of the cluster to interact with
-%% @param Nodes The known nodes of the queue. If the current leader is known
+%% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
 %% @param MaxPending size defining the max number of pending commands.
--spec init(ra_cluster_id(), [ra_node_id()], non_neg_integer()) -> state().
-init(ClusterId, Nodes, SoftLimit) ->
+-spec init(ra_cluster_id(), [ra_server_id()], non_neg_integer()) -> state().
+init(ClusterId, Servers, SoftLimit) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
     #state{cluster_id = ClusterId,
-           nodes = Nodes,
+           servers = Servers,
            soft_limit = SoftLimit,
            timeout = Timeout}.
 
--spec init(ra_cluster_id(), [ra_node_id()], non_neg_integer(), fun(() -> ok),
+-spec init(ra_cluster_id(), [ra_server_id()], non_neg_integer(), fun(() -> ok),
            fun(() -> ok)) -> state().
-init(ClusterId, Nodes, SoftLimit, BlockFun, UnblockFun) ->
+init(ClusterId, Servers, SoftLimit, BlockFun, UnblockFun) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
     #state{cluster_id = ClusterId,
-           nodes = Nodes,
+           servers = Servers,
            block_handler = BlockFun,
            unblock_handler = UnblockFun,
            soft_limit = SoftLimit,
@@ -297,10 +297,10 @@ discard(ConsumerTag, [_|_] = MsgIds,
 -spec checkout(rabbit_fifo:consumer_tag(), NumUnsettled :: non_neg_integer(),
                state()) -> {ok, state()} | {error | timeout, term()}.
 checkout(ConsumerTag, NumUnsettled, State0) ->
-    Nodes = sorted_nodes(State0),
+    Servers = sorted_servers(State0),
     ConsumerId = {ConsumerTag, self()},
     Cmd = {checkout, {auto, NumUnsettled}, ConsumerId},
-    try_send_and_await_consensus(Nodes, Cmd, State0).
+    try_send_and_await_consensus(Servers, Cmd, State0).
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%
@@ -314,15 +314,15 @@ checkout(ConsumerTag, NumUnsettled, State0) ->
 -spec cancel_checkout(rabbit_fifo:consumer_tag(), state()) ->
     {ok, state()} | {error | timeout, term()}.
 cancel_checkout(ConsumerTag, #state{consumer_deliveries = CDels} = State0) ->
-    Nodes = sorted_nodes(State0),
+    Servers = sorted_servers(State0),
     ConsumerId = {ConsumerTag, self()},
     Cmd = {checkout, cancel, ConsumerId},
     State = State0#state{consumer_deliveries = maps:remove(ConsumerTag, CDels)},
-    try_send_and_await_consensus(Nodes, Cmd, State).
+    try_send_and_await_consensus(Servers, Cmd, State).
 
 %% @doc Purges all the messages from a rabbit_fifo queue and returns the number
 %% of messages purged.
--spec purge(ra_node_id()) -> {ok, non_neg_integer()} | {error | timeout, term()}.
+-spec purge(ra_server_id()) -> {ok, non_neg_integer()} | {error | timeout, term()}.
 purge(Node) ->
     case ra:send_and_await_consensus(Node, purge) of
         {ok, {purge, Reply}, _} ->
@@ -358,7 +358,7 @@ cluster_id(#state{cluster_id = ClusterId}) ->
 %%  end
 %% '''
 %%
-%% @param From the {@link ra_node_id().} of the sending process.
+%% @param From the {@link ra_server_id().} of the sending process.
 %% @param Event the body of the `ra_event'.
 %% @param State the current {@module} state.
 %%
@@ -379,7 +379,7 @@ cluster_id(#state{cluster_id = ClusterId}) ->
 %% <li>`MsgId' is a consumer scoped monotonically incrementing id that can be
 %% used to {@link settle/3.} (roughly: AMQP 0.9.1 ack) message once finished
 %% with them.</li>
--spec handle_ra_event(ra_node_id(), ra_node_proc:ra_event_body(), state()) ->
+-spec handle_ra_event(ra_server_id(), ra_server_proc:ra_event_body(), state()) ->
     {internal, Correlators :: [term()], state()} |
     {rabbit_fifo:client_msg(), state()} | eol.
 handle_ra_event(From, {applied, Seqs},
@@ -430,7 +430,7 @@ handle_ra_event(_Leader, {machine, eol}, _State0) ->
 
 %% @doc Attempts to enqueue a message using cast semantics. This provides no
 %% guarantees or retries if the message fails to achieve consensus or if the
-%% nodes sent to happens not to be available. If the message is sent to a
+%% servers sent to happens not to be available. If the message is sent to a
 %% follower it will attempt the deliver it to the leader, if known. Else it will
 %% drop the messages.
 %%
@@ -438,11 +438,11 @@ handle_ra_event(_Leader, {machine, eol}, _State0) ->
 %% cannot be maintained.
 %%
 %% @param CusterId  the cluster id.
-%% @param Nodes the known nodes in the cluster.
+%% @param Servers the known servers in the cluster.
 %% @param Msg the message to enqueue.
 %%
 %% @returns `ok'
--spec untracked_enqueue(ra_cluster_id(), [ra_node_id()], term()) ->
+-spec untracked_enqueue(ra_cluster_id(), [ra_server_id()], term()) ->
     ok.
 untracked_enqueue(_ClusterId, [Node | _], Msg) ->
     Cmd = {enqueue, undefined, undefined, Msg},
@@ -451,8 +451,8 @@ untracked_enqueue(_ClusterId, [Node | _], Msg) ->
 
 %% Internal
 
-try_send_and_await_consensus([Node | Rem], Cmd, State) ->
-    case ra:send_and_await_consensus(Node, Cmd, 30000) of
+try_send_and_await_consensus([Server | Rem], Cmd, State) ->
+    case ra:send_and_await_consensus(Server, Cmd, 30000) of
         {ok, _, Leader} ->
             {ok, State#state{leader = Leader}};
         Err when length(Rem) =:= 0 ->
@@ -533,16 +533,16 @@ get_missing_deliveries(Leader, From, To, ConsumerTag) ->
     {ok, {_, Missing}, _} = ra:local_query(Leader, Query),
     Missing.
 
-pick_node(#state{leader = undefined, nodes = [N | _]}) ->
+pick_node(#state{leader = undefined, servers = [N | _]}) ->
     N;
 pick_node(#state{leader = Leader}) ->
     Leader.
 
-% nodes sorted by last known leader
-sorted_nodes(#state{leader = undefined, nodes = Nodes}) ->
-    Nodes;
-sorted_nodes(#state{leader = Leader, nodes = Nodes}) ->
-    [Leader | lists:delete(Leader, Nodes)].
+% servers sorted by last known leader
+sorted_servers(#state{leader = undefined, servers = Servers}) ->
+    Servers;
+sorted_servers(#state{leader = Leader, servers = Servers}) ->
+    [Leader | lists:delete(Leader, Servers)].
 
 next_seq(#state{next_seq = Seq} = State) ->
     {Seq, State#state{next_seq = Seq + 1}}.
@@ -553,12 +553,12 @@ next_enqueue_seq(#state{next_enqueue_seq = Seq} = State) ->
 consumer_id(ConsumerTag) ->
     {ConsumerTag, self()}.
 
-send_command(Node, Correlation, Command, Priority,
+send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
                     priority = Priority,
                     soft_limit = SftLmt} = State0) ->
     {Seq, State} = next_seq(State0),
-    ok = ra:send_and_notify(Node, Priority, Command, Seq),
+    ok = ra:send_and_notify(Server, Priority, Command, Seq),
     Tag = case maps:size(Pending) >= SftLmt of
               true -> slow;
               false -> ok

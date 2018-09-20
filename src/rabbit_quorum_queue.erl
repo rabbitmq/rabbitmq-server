@@ -37,11 +37,11 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--type ra_node_id() :: {Name :: atom(), Node :: node()}.
+-type ra_server_id() :: {Name :: atom(), Node :: node()}.
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(), rabbit_types:message()}.
 
--spec handle_event({'ra_event', ra_node_id(), any()}, rabbit_fifo_client:state()) ->
+-spec handle_event({'ra_event', ra_server_id(), any()}, rabbit_fifo_client:state()) ->
                           {'internal', Correlators :: [term()], rabbit_fifo_client:state()} |
                           {rabbit_fifo:client_msg(), rabbit_fifo_client:state()}.
 -spec declare(rabbit_types:amqqueue()) -> {'new', rabbit_types:amqqueue(), rabbit_fifo_client:state()}.
@@ -64,7 +64,7 @@
                     any(), rabbit_fifo_client:state()) -> {'ok', rabbit_fifo_client:state()}.
 -spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
                           {'ok', rabbit_fifo_client:state()}.
--spec stateless_deliver(ra_node_id(), rabbit_types:delivery()) -> 'ok'.
+-spec stateless_deliver(ra_server_id(), rabbit_types:delivery()) -> 'ok'.
 -spec deliver(Confirm :: boolean(), rabbit_types:delivery(), rabbit_fifo_client:state()) ->
                      rabbit_fifo_client:state().
 -spec info(rabbit_types:amqqueue()) -> rabbit_types:infos().
@@ -90,11 +90,12 @@
 
 %%----------------------------------------------------------------------------
 
--spec init_state(ra_node_id(), rabbit_types:r('queue')) ->
+-spec init_state(ra_server_id(), rabbit_types:r('queue')) ->
     rabbit_fifo_client:state().
 init_state({Name, _}, QName) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
-    {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} = rabbit_amqqueue:lookup(QName),
+    {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} =
+        rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
     Nodes = [Leader | lists:delete(Leader, Nodes0)],
     rabbit_fifo_client:init(QName, Nodes, SoftLimit,
@@ -222,7 +223,7 @@ reductions(Name) ->
 
 recover(Queues) ->
     [begin
-         case ra:restart_node({Name, node()}) of
+         case ra:restart_server({Name, node()}) of
              ok ->
 
                  % queue was restarted, good
@@ -236,7 +237,7 @@ recover(Queues) ->
                  RaNodes = [{Name, Node} || Node <- Nodes],
                  % TODO: should we crash the vhost here or just log the error
                  % and continue?
-                 ok = ra:start_node(Name, {Name, node()},
+                 ok = ra:start_server(Name, {Name, node()},
                                     Machine, RaNodes)
          end,
          {_, Q} = rabbit_amqqueue:internal_declare(Q0, true),
@@ -245,7 +246,7 @@ recover(Queues) ->
                       quorum_nodes = Nodes} = Q0 <- Queues].
 
 stop(VHost) ->
-    _ = [ra:stop_node(Pid) || #amqqueue{pid = Pid} <- find_quorum_queues(VHost)],
+    _ = [ra:stop_server(Pid) || #amqqueue{pid = Pid} <- find_quorum_queues(VHost)],
     ok.
 
 delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = QNodes},
@@ -413,11 +414,11 @@ add_member(VHost, Name, Node) ->
 add_member(#amqqueue{pid = {RaName, _} = ServerRef, name = QName,
                      quorum_nodes = QNodes} = Q, Node) ->
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
-    NodeId = {RaName, Node},
-    case ra:start_node(RaName, NodeId, ra_machine(Q),
+    ServerId = {RaName, Node},
+    case ra:start_server(RaName, ServerId, ra_machine(Q),
                        [{RaName, N} || N <- QNodes]) of
         ok ->
-            case ra:add_node(ServerRef, NodeId) of
+            case ra:add_member(ServerRef, ServerId) of
                 {ok, _, Leader} ->
                     Fun = fun(Q1) ->
                                   Q1#amqqueue{quorum_nodes =
@@ -457,8 +458,8 @@ delete_member(VHost, Name, Node) ->
     end.
 
 delete_member(#amqqueue{pid = {RaName, _}, name = QName}, Node) ->
-    NodeId = {RaName, Node},
-    case ra:leave_and_delete_node(NodeId) of
+    ServerId = {RaName, Node},
+    case ra:leave_and_delete_server(ServerId) of
         ok ->
             Fun = fun(Q1) ->
                           Q1#amqqueue{quorum_nodes =
