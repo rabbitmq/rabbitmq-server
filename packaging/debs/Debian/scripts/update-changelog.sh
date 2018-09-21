@@ -10,11 +10,14 @@ if test -z "$PACKAGE_VERSION"; then
 fi
 
 PACKAGE_NAME=$(awk '/^Source:/ { print $2; }' < debian/control)
-CHANGELOG_VERSION=$(dpkg-parsechangelog | sed -n 's/^Version: \(.*\)-[^-]*$/\1/p')
 CHANGELOG_DATE=$(date -R)
 
-if [ "${CHANGELOG_VERSION}" != "${PACKAGE_VERSION}" ]; then
-  cat > debian/changelog.tmp <<EOF
+if dpkg-parsechangelog --all | \
+ grep -E -q "^ $PACKAGE_NAME \(${PACKAGE_VERSION}-[^)]\) "; then
+  exit 0
+fi
+
+cat > debian/changelog.tmp <<EOF
 ${PACKAGE_NAME} (${PACKAGE_VERSION}-1) unstable; urgency=low
 
   * New Upstream Release.
@@ -23,9 +26,8 @@ ${PACKAGE_NAME} (${PACKAGE_VERSION}-1) unstable; urgency=low
 
 EOF
 
-  cat debian/changelog >> debian/changelog.tmp
-  mv -f debian/changelog.tmp debian/changelog
-fi
+cat debian/changelog >> debian/changelog.tmp
+mv -f debian/changelog.tmp debian/changelog
 
 echo
 echo '--------------------------------------------------'
