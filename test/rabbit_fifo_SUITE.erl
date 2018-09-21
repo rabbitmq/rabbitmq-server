@@ -95,8 +95,8 @@ basics(Config) ->
 
     % process settle applied notificaiton
     FState5b = process_ra_event(FState5, 250),
-    _ = ra:stop_node(ServerId),
-    _ = ra:restart_node(ServerId),
+    _ = ra:stop_server(ServerId),
+    _ = ra:restart_server(ServerId),
 
     % give time to become leader
     timer:sleep(500),
@@ -117,7 +117,7 @@ basics(Config) ->
     after 2000 ->
               exit(await_msg_timeout)
     end,
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 return(Config) ->
@@ -133,7 +133,7 @@ return(Config) ->
     {ok, {MsgId, _}, F} = rabbit_fifo_client:dequeue(<<"tag">>, unsettled, F2),
     {ok, _F2} = rabbit_fifo_client:return(<<"tag">>, [MsgId], F),
 
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 rabbit_fifo_returns_correlation(Config) ->
@@ -153,7 +153,7 @@ rabbit_fifo_returns_correlation(Config) ->
     after 2000 ->
               exit(await_msg_timeout)
     end,
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 duplicate_delivery(Config) ->
@@ -187,7 +187,7 @@ duplicate_delivery(Config) ->
             end
         end,
     Fun(F2),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 usage(Config) ->
@@ -205,7 +205,7 @@ usage(Config) ->
     % ct:pal("ets ~w ~w ~w", [ets:tab2list(rabbit_fifo_usage), ServerId, UId]),
     Use = rabbit_fifo:usage(element(1, ServerId)),
     ct:pal("Use ~w~n", [Use]),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ?assert(Use > 0.0),
     ok.
 
@@ -227,7 +227,7 @@ resends_lost_command(Config) ->
     {ok, {_, {_, msg1}}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
     {ok, {_, {_, msg2}}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
     {ok, {_, {_, msg3}}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 two_quick_enqueues(Config) ->
@@ -239,7 +239,7 @@ two_quick_enqueues(Config) ->
     F1 = element(2, rabbit_fifo_client:enqueue(msg1, F0)),
     {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
     _ = process_ra_events(F2, 500),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 detects_lost_delivery(Config) ->
@@ -263,7 +263,7 @@ detects_lost_delivery(Config) ->
 
     % assert three deliveries were received
     {[_, _, _], _} = process_ra_events(F3, 500),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 returns_after_down(Config) ->
@@ -285,7 +285,7 @@ returns_after_down(Config) ->
     receive checkout_done -> ok after 1000 -> exit(checkout_done_timeout) end,
     % message should be available for dequeue
     {ok, {_, {_, msg1}}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F2),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 resends_after_lost_applied(Config) ->
@@ -310,7 +310,7 @@ resends_after_lost_applied(Config) ->
     {ok, {_, {_, msg1}}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
     {ok, {_, {_, msg2}}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
     {ok, {_, {_, msg3}}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 handles_reject_notification(Config) ->
@@ -330,8 +330,8 @@ handles_reject_notification(Config) ->
 
     % the applied notification
     _F2 = process_ra_event(F1, 250),
-    ra:stop_node(ServerId1),
-    ra:stop_node(ServerId2),
+    ra:stop_server(ServerId1),
+    ra:stop_server(ServerId2),
     ok.
 
 discard(Config) ->
@@ -343,11 +343,11 @@ discard(Config) ->
              id => ServerId,
              uid => UId,
              log_init_args => #{data_dir => PrivDir, uid => UId},
-             initial_nodes => [],
+             initial_member => [],
              machine => {module, rabbit_fifo,
                          #{dead_letter_handler =>
                            {?MODULE, dead_letter_handler, [self()]}}}},
-    _ = ra:start_node(Conf),
+    _ = ra:start_server(Conf),
     ok = ra:trigger_election(ServerId),
     _ = ra:members(ServerId),
 
@@ -364,7 +364,7 @@ discard(Config) ->
     after 500 ->
               exit(dead_letter_timeout)
     end,
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 cancel_checkout(Config) ->
@@ -388,7 +388,7 @@ untracked_enqueue(Config) ->
     timer:sleep(100),
     F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, {_, {_, msg1}}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F0),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 
@@ -403,7 +403,7 @@ flow(Config) ->
     {slow, F4} = rabbit_fifo_client:enqueue(m4, F3),
     {_, F5} = process_ra_events(F4, 500),
     {ok, _} = rabbit_fifo_client:enqueue(m5, F5),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 test_queries(Config) ->
@@ -432,7 +432,7 @@ test_queries(Config) ->
     ct:pal("Processes ~w~n", [Processes]),
     ?assertEqual(2, length(Processes)),
     P !  stop,
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 dead_letter_handler(Pid, Msgs) ->
@@ -454,7 +454,7 @@ dequeue(Config) ->
     {_, F4} = process_ra_events(F4_, 100),
     {ok, {MsgId, {_, msg2}}, F5} = rabbit_fifo_client:dequeue(Tag, unsettled, F4),
     {ok, _F6} = rabbit_fifo_client:settle(Tag, [MsgId], F5),
-    ra:stop_node(ServerId),
+    ra:stop_server(ServerId),
     ok.
 
 enq_deq_n(N, F0) ->
@@ -476,7 +476,7 @@ conf(ClusterId, UId, ServerId, _, Peers) ->
       id => ServerId,
       uid => UId,
       log_init_args => #{uid => UId},
-      initial_nodes => Peers,
+      initial_members => Peers,
       machine => {module, rabbit_fifo, #{}}}.
 
 process_ra_event(State, Wait) ->
@@ -563,9 +563,10 @@ validate_process_down(Name, Num) ->
     end.
 
 start_cluster(ClusterId, ServerIds, RaFifoConfig) ->
-    {ok, ServerIds, _} = ra:start_cluster(ClusterId,
+    {ok, Started, _} = ra:start_cluster(ClusterId,
                                         {module, rabbit_fifo, RaFifoConfig},
                                         ServerIds),
+    ?assertEqual(length(Started), length(ServerIds)),
     ok.
 
 start_cluster(ClusterId, ServerIds) ->
