@@ -23,7 +23,7 @@ if test -z "$SPEC" -o ! -f "$SPEC" -o -z "$PACKAGE_VERSION"; then
 fi
 
 if "$SCRIPTS_DIR/parse-changelog.sh" "$SPEC" | \
- grep -E -q "^\*.+ ${PACKAGE_VERSION}-[^ ]+$" "$SPEC"; then
+ grep -E -q "^\*.+ ${PACKAGE_VERSION}-[^ ]+$"; then
   exit 0
 fi
 
