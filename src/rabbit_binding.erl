@@ -195,7 +195,11 @@ add(Src, Dst, B, ActingUser) ->
     [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
     case (SrcDurable andalso DstDurable andalso
           mnesia:read({rabbit_durable_route, B}) =/= []) of
-        false -> ok = sync_route(#route{binding = B}, SrcDurable, DstDurable,
+        false -> ok = sync_route(#route{binding = B,
+                                        source = Src,
+                                        destination = Dst,
+                                        key = B#binding.key},
+                                 SrcDurable, DstDurable,
                                  fun mnesia:write/3),
                  x_callback(transaction, Src, add_binding, B),
                  Serial = rabbit_exchange:serial(Src),
@@ -231,13 +235,18 @@ remove(Binding, InnerFun, ActingUser) ->
 remove(Src, Dst, B, ActingUser) ->
     lock_resource(Src),
     lock_resource(Dst),
-    ok = sync_route(#route{binding = B}, durable(Src), durable(Dst),
+    ok = sync_route(#route{binding = B,
+                           source = Src,
+                           destination = Dst,
+                           key = B#binding.key},
+                    durable(Src), durable(Dst),
                     fun mnesia:delete_object/3),
     Deletions = maybe_auto_delete(
                   B#binding.source, [B], new_deletions(), false),
     process_deletions(Deletions, ActingUser).
 
 list(VHostPath) ->
+%% TODO check if index is efficient
     VHostResource = rabbit_misc:r(VHostPath, '_'),
     Route = #route{binding = #binding{source      = VHostResource,
                                       destination = VHostResource,
@@ -249,30 +258,37 @@ list(VHostPath) ->
 list_for_source(SrcName) ->
     mnesia:async_dirty(
       fun() ->
-              Route = #route{binding = #binding{source = SrcName, _ = '_'}},
-              [B || #route{binding = B}
-                        <- mnesia:match_object(rabbit_route, Route, read)]
+            [B || #route{binding = B} <-
+                mnesia:index_read(rabbit_route, SrcName, #route.source)]
       end).
 
 list_for_destination(DstName) ->
     mnesia:async_dirty(
       fun() ->
-              Route = #route{binding = #binding{destination = DstName,
-                                                _ = '_'}},
-              [reverse_binding(B) ||
-                  #reverse_route{reverse_binding = B} <-
-                      mnesia:match_object(rabbit_reverse_route,
-                                          reverse_route(Route), read)]
+            [B || #route{binding = B} <-
+                mnesia:index_read(rabbit_route, DstName, #route.destination)]
       end).
 
 list_for_source_and_destination(SrcName, DstName) ->
     mnesia:async_dirty(
       fun() ->
-              Route = #route{binding = #binding{source      = SrcName,
-                                                destination = DstName,
-                                                _           = '_'}},
-              [B || #route{binding = B} <- mnesia:match_object(rabbit_route,
-                                                               Route, read)]
+        %% TODO: is that faster?
+
+            Route = #route{binding = #binding{source      = SrcName,
+                                              destination = DstName,
+                                              _           = '_'},
+                           source = SrcName,
+                           destination = DstName},
+            [B || #route{binding = B} <-
+                    mnesia:index_match_object(rabbit_route,
+                                              Route,
+                                              #route.destination,
+                                              read)]
+              % Route = #route{binding = #binding{source      = SrcName,
+              %                                   destination = DstName,
+              %                                   _           = '_'}},
+              % [B || #route{binding = B} <- mnesia:match_object(rabbit_route,
+              %                                                  Route, read)]
       end).
 
 info_keys() -> ?INFO_KEYS.
@@ -306,21 +322,27 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
       AggregatorPid, Ref, fun(B) -> info(B, Items) end, list(VHostPath)).
 
 has_for_source(SrcName) ->
-    Match = #route{binding = #binding{source = SrcName, _ = '_'}},
+    %% TODO: is that faster?
+    Match = #route{binding = #binding{source = SrcName, _ = '_'},
+                   source = SrcName,
+                   _ = '_'},
+    contains(rabbit_route, Match) orelse
+        contains(rabbit_semi_durable_route, Match).
+
+    % Match = #route{binding = #binding{source = SrcName, _ = '_'}},
     %% we need to check for semi-durable routes (which subsumes
     %% durable routes) here too in case a bunch of routes to durable
     %% queues have been removed temporarily as a result of a node
     %% failure
-    contains(rabbit_route, Match) orelse
-        contains(rabbit_semi_durable_route, Match).
+    % contains(rabbit_route, Match) orelse
+        % contains(rabbit_semi_durable_route, Match).
 
 remove_for_source(SrcName) ->
     lock_resource(SrcName),
-    Match = #route{binding = #binding{source = SrcName, _ = '_'}},
     remove_routes(
       lists:usort(
-        mnesia:match_object(rabbit_route, Match, read) ++
-            mnesia:match_object(rabbit_semi_durable_route, Match, read))).
+        mnesia:index_read(rabbit_route, SrcName, #route.source) ++
+        mnesia:index_read(rabbit_semi_durable_route, SrcName, #route.source))).
 
 remove_for_destination(DstName, OnlyDurable) ->
     remove_for_destination(DstName, OnlyDurable, fun remove_routes/1).
@@ -355,8 +377,7 @@ sync_route(Route, _SrcDurable, false, Fun) ->
     sync_transient_route(Route, Fun).
 
 sync_transient_route(Route, Fun) ->
-    ok = Fun(rabbit_route, Route, write),
-    ok = Fun(rabbit_reverse_route, reverse_route(Route), write).
+    ok = Fun(rabbit_route, Route, write).
 
 call_with_source_and_destination(SrcName, DstName, Fun, ErrFun) ->
     SrcTable = table_for_resource(SrcName),
@@ -426,18 +447,14 @@ remove_transient_routes(Routes) ->
 
 remove_for_destination(DstName, OnlyDurable, Fun) ->
     lock_resource(DstName),
-    MatchFwd = #route{binding = #binding{destination = DstName, _ = '_'}},
-    MatchRev = reverse_route(MatchFwd),
     Routes = case OnlyDurable of
                  false ->
-                        [reverse_route(R) ||
-                              R <- mnesia:match_object(
-                                     rabbit_reverse_route, MatchRev, read)];
-                 true  -> lists:usort(
-                            mnesia:match_object(
-                              rabbit_durable_route, MatchFwd, read) ++
-                                mnesia:match_object(
-                                  rabbit_semi_durable_route, MatchFwd, read))
+                        mnesia:index_read(rabbit_route, DstName, #route.destination);
+                 true  ->
+                        lists:usort(
+                            mnesia:index_read(rabbit_durable_route, DstName, #route.destination)
+                            ++
+                            mnesia:index_read(rabbit_semi_durable_route, DstName, #route.destination))
              end,
     Bindings = Fun(Routes),
     group_bindings_fold(fun maybe_auto_delete/4, new_deletions(),
@@ -483,30 +500,6 @@ maybe_auto_delete(XName, Bindings, Deletions, OnlyDurable) ->
                    end
         end,
     add_deletion(XName, Entry, Deletions1).
-
-reverse_route(#route{binding = Binding}) ->
-    #reverse_route{reverse_binding = reverse_binding(Binding)};
-
-reverse_route(#reverse_route{reverse_binding = Binding}) ->
-    #route{binding = reverse_binding(Binding)}.
-
-reverse_binding(#reverse_binding{source      = SrcName,
-                                 destination = DstName,
-                                 key         = Key,
-                                 args        = Args}) ->
-    #binding{source      = SrcName,
-             destination = DstName,
-             key         = Key,
-             args        = Args};
-
-reverse_binding(#binding{source      = SrcName,
-                         destination = DstName,
-                         key         = Key,
-                         args        = Args}) ->
-    #reverse_binding{source      = SrcName,
-                     destination = DstName,
-                     key         = Key,
-                     args        = Args}.
 
 %% ----------------------------------------------------------------------------
 %% Binding / exchange deletion abstraction API

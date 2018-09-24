@@ -296,23 +296,17 @@ definitions() ->
       [{record_name, route},
        {attributes, record_info(fields, route)},
        {disc_copies, [node()]},
-       {match, #route{binding = binding_match(), _='_'}}]},
+       {match, route_match()}]},
      {rabbit_semi_durable_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
        {type, ordered_set},
-       {match, #route{binding = binding_match(), _='_'}}]},
+       {match, route_match()}]},
      {rabbit_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
        {type, ordered_set},
-       {match, #route{binding = binding_match(), _='_'}}]},
-     {rabbit_reverse_route,
-      [{record_name, reverse_route},
-       {attributes, record_info(fields, reverse_route)},
-       {type, ordered_set},
-       {match, #reverse_route{reverse_binding = reverse_binding_match(),
-                              _='_'}}]},
+       {match, route_match()}]},
      {rabbit_topic_trie_node,
       [{record_name, topic_trie_node},
        {attributes, record_info(fields, topic_trie_node)},
@@ -359,14 +353,15 @@ definitions() ->
         ++ gm:table_definitions()
         ++ mirrored_supervisor:table_definitions().
 
+route_match() ->
+    #route{binding = binding_match(),
+           source = exchange_name_match(),
+           destination = binding_destination_match(),
+           _ = '_'}.
 binding_match() ->
     #binding{source = exchange_name_match(),
              destination = binding_destination_match(),
              _='_'}.
-reverse_binding_match() ->
-    #reverse_binding{destination = binding_destination_match(),
-                     source = exchange_name_match(),
-                     _='_'}.
 binding_destination_match() ->
     resource_match('_').
 trie_node_match() ->

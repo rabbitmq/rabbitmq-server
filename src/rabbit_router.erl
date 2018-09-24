@@ -36,26 +36,46 @@
 
 %%----------------------------------------------------------------------------
 
+%% TODO: benchmark publish performance
+
 match_bindings(SrcName, Match) ->
-    MatchHead = #route{binding = #binding{source      = SrcName,
-                                          _           = '_'}},
-    Routes = ets:select(rabbit_route, [{MatchHead, [], [['$_']]}]),
-    [Dest || [#route{binding = Binding = #binding{destination = Dest}}] <-
-        Routes, Match(Binding)].
+    [Dest ||
+        #route{binding = Binding = #binding{destination = Dest}} <-
+            index_read_source(SrcName),
+        Match(Binding)].
+
+    % MatchHead = #route{binding = #binding{source      = SrcName,
+    %                                       _           = '_'}},
+    % Routes = ets:select(rabbit_route, [{MatchHead, [], [['$_']]}]),
+    % [Dest || [#route{binding = Binding = #binding{destination = Dest}}] <-
+    %     Routes, Match(Binding)].
 
 match_routing_key(SrcName, [RoutingKey]) ->
-    find_routes(#route{binding = #binding{source      = SrcName,
-                                          destination = '$1',
-                                          key         = RoutingKey,
-                                          _           = '_'}},
+    %% TODO check if mnesia index read is faster
+    %% Maybe match check with value is faster?
+    find_routes(#route{source = SrcName,
+                       destination = '$1',
+                       key = RoutingKey,
+                       _ = '_'},
                 []);
+    % find_routes(#route{binding = #binding{source      = SrcName,
+    %                                       destination = '$1',
+    %                                       key         = RoutingKey,
+    %                                       _           = '_'}},
+    %             []);
 match_routing_key(SrcName, [_|_] = RoutingKeys) ->
-    find_routes(#route{binding = #binding{source      = SrcName,
-                                          destination = '$1',
-                                          key         = '$2',
-                                          _           = '_'}},
+    find_routes(#route{source      = SrcName,
+                       destination = '$1',
+                       key         = '$2',
+                       _           = '_'},
                 [list_to_tuple(['orelse' | [{'=:=', '$2', RKey} ||
                                                RKey <- RoutingKeys]])]).
+    % find_routes(#route{binding = #binding{source      = SrcName,
+    %                                       destination = '$1',
+    %                                       key         = '$2',
+    %                                       _           = '_'}},
+    %             [list_to_tuple(['orelse' | [{'=:=', '$2', RKey} ||
+    %                                            RKey <- RoutingKeys]])]).
 
 %%--------------------------------------------------------------------
 
@@ -71,4 +91,23 @@ match_routing_key(SrcName, [_|_] = RoutingKeys) ->
 %% calls to first/1 and next/2 will always succeed."), which
 %% rabbit_route is.
 find_routes(MatchHead, Conditions) ->
-    ets:select(rabbit_route, [{MatchHead, Conditions, ['$1']}]).
+    select(MatchHead, Conditions, ['$1']).
+
+index_read_source(SrcName) ->
+    case ets:info(rabbit_route, size) of
+        S when S < 100 ->
+            MatchHead = #route{source = SrcName, _ = '_'},
+            ets:select(rabbit_route, [{MatchHead, [], [['$_']]}]);
+        _ ->
+            mnesia:dirty_index_read(rabbit_route, SrcName, #route.source)
+    end.
+
+select(MatchHead, Conditions, Result) ->
+%% TODO in small datasets ets:select is faster
+%% TODO: find optimal number
+    case ets:info(rabbit_route, size) of
+        S when S < 100 ->
+            ets:select(rabbit_route, [{MatchHead, Conditions, Result}]);
+        _ ->
+            mnesia:dirty_select(rabbit_route, [{MatchHead, Conditions, Result}])
+    end.
