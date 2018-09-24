@@ -62,6 +62,15 @@ create() ->
 %% Sets up secondary indexes in a blank node database.
 ensure_secondary_indexes() ->
   ensure_secondary_index(rabbit_queue, vhost),
+  ensure_secondary_index(rabbit_route, source),
+  ensure_secondary_index(rabbit_route, destination),
+  ensure_secondary_index(rabbit_route, key),
+  ensure_secondary_index(rabbit_durable_route, source),
+  ensure_secondary_index(rabbit_durable_route, destination),
+  ensure_secondary_index(rabbit_durable_route, key),
+  ensure_secondary_index(rabbit_semi_durable_route, source),
+  ensure_secondary_index(rabbit_semi_durable_route, destination),
+  ensure_secondary_index(rabbit_semi_durable_route, key),
   ok.
 
 ensure_secondary_index(Table, Field) ->
