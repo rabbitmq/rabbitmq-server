@@ -457,7 +457,7 @@ empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
             Type =:= queue_stats_deliver_stats;
             Type =:= vhost_stats_deliver_stats;
             Type =:= channel_stats_deliver_stats ->
-    {V, V, V, V, V, V, V};
+    {V, V, V, V, V, V, V, V};
 empty(Type, V) when Type =:= channel_process_stats;
             Type =:= queue_process_stats;
             Type =:= queue_stats_publish;

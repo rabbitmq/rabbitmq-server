@@ -301,14 +301,15 @@ aggregate_entry({{_Ch, X} = Id, Publish0, Confirm, ReturnUnroutable, 1},
     rabbit_core_metrics:delete(channel_exchange_metrics, Id),
     {NextStats, Ops2, State};
 aggregate_entry({{Ch, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck,
-                     Redeliver, Ack, 0}, NextStats, Ops0,
+                     Redeliver, Ack, GetEmpty, 0}, NextStats, Ops0,
                 #state{table = channel_queue_metrics,
                        policies = {BPolicies, DPolicies, GPolicies},
                        rates_mode = RatesMode,
                        lookup_queue = QueueFun} = State) ->
     Stats = ?vhost_stats_deliver_stats(Get, GetNoAck, Deliver, DeliverNoAck,
                                        Redeliver, Ack,
-                                       Deliver + DeliverNoAck + Get + GetNoAck),
+                                       Deliver + DeliverNoAck + Get + GetNoAck,
+                                       GetEmpty),
     Diff = get_difference(Id, Stats, State),
 
     Ops1 = insert_entry_ops(vhost_stats_deliver_stats, vhost(Q), true, Diff,
@@ -331,13 +332,14 @@ aggregate_entry({{Ch, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck,
            end,
      {insert_old_aggr_stats(NextStats, Id, Stats), Ops3, State};
 aggregate_entry({{_, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck,
-                     Redeliver, Ack, 1}, NextStats, Ops0,
+                     Redeliver, Ack, GetEmpty, 1}, NextStats, Ops0,
                 #state{table = channel_queue_metrics,
                        policies = {BPolicies, _, GPolicies},
                        lookup_queue = QueueFun} = State) ->
     Stats = ?vhost_stats_deliver_stats(Get, GetNoAck, Deliver, DeliverNoAck,
                                        Redeliver, Ack,
-                                       Deliver + DeliverNoAck + Get + GetNoAck),
+                                       Deliver + DeliverNoAck + Get + GetNoAck,
+                                       GetEmpty),
     Diff = get_difference(Id, Stats, State),
 
     Ops1 = insert_entry_ops(vhost_stats_deliver_stats, vhost(Q), true, Diff,
@@ -579,8 +581,8 @@ sum_entry({A0, A1}, {B0, B1}) ->
     {B0 + A0, B1 + A1};
 sum_entry({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 + A0, B1 + A1, B2 + A2};
-sum_entry({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
-    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6}.
+sum_entry({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6, B7 + A7}.
 
 difference({A0}, {B0}) ->
     {B0 - A0};
@@ -588,8 +590,8 @@ difference({A0, A1}, {B0, B1}) ->
     {B0 - A0, B1 - A1};
 difference({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 - A0, B1 - A1, B2 - A2};
-difference({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
-    {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5, B6 - A6}.
+difference({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
+    {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5, B6 - A6, B7 - A7}.
 
 vhost(#resource{virtual_host = VHost}) ->
     VHost;

@@ -88,19 +88,23 @@
 -define(channel_exchange_stats_fine_stats(Publish, Confirm, Return_unroutable),
         {Publish, Confirm, Return_unroutable}).
 -define(channel_queue_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
-                                          Redeliver, Ack, Deliver_get),
-        {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get}).
+                                          Redeliver, Ack, Deliver_get, Get_empty),
+        {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get,
+         Get_empty}).
 -define(vhost_stats_fine_stats(Publish, Confirm, Return_unroutable),
         {Publish, Confirm, Return_unroutable}).
 -define(queue_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
-                                  Redeliver, Ack, Deliver_get),
-        {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get}).
+                                  Redeliver, Ack, Deliver_get, Get_empty),
+        {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get,
+         Get_empty}).
 -define(vhost_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
-                                  Redeliver, Ack, Deliver_get),
-        {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get}).
+                                  Redeliver, Ack, Deliver_get, Get_empty),
+        {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get,
+         Get_empty}).
 -define(channel_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
-                                    Redeliver, Ack, Deliver_get),
-        {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get}).
+                                    Redeliver, Ack, Deliver_get, Get_empty),
+        {Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get,
+         Get_empty}).
 -define(channel_process_stats(Reductions), {Reductions}).
 -define(queue_stats_publish(Publish), {Publish}).
 -define(queue_exchange_stats_publish(Publish), {Publish}).
@@ -152,7 +156,8 @@
                    T =:= queue_stats_deliver_stats;
                    T =:= vhost_stats_deliver_stats;
                    T =:= channel_stats_deliver_stats ->
-                [get, get_no_ack, deliver, deliver_no_ack, redeliver, ack, deliver_get];
+                [get, get_no_ack, deliver, deliver_no_ack, redeliver, ack, deliver_get,
+                 get_empty];
             T when T =:= channel_process_stats;
                    T =:= queue_process_stats ->
                 [reductions];
