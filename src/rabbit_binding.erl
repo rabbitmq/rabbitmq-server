@@ -198,7 +198,7 @@ add(Src, Dst, B, ActingUser) ->
         false -> ok = sync_route(#route{binding = B,
                                         source = Src,
                                         destination = Dst,
-                                        key = B#binding.key},
+                                        source_key = {Src, B#binding.key}},
                                  SrcDurable, DstDurable,
                                  fun mnesia:write/3),
                  x_callback(transaction, Src, add_binding, B),
@@ -238,7 +238,7 @@ remove(Src, Dst, B, ActingUser) ->
     ok = sync_route(#route{binding = B,
                            source = Src,
                            destination = Dst,
-                           key = B#binding.key},
+                           source_key = {Src, B#binding.key}},
                     durable(Src), durable(Dst),
                     fun mnesia:delete_object/3),
     Deletions = maybe_auto_delete(

@@ -55,7 +55,7 @@ match_routing_key(SrcName, [RoutingKey]) ->
     %% Maybe match check with value is faster?
     find_routes(#route{source = SrcName,
                        destination = '$1',
-                       key = RoutingKey,
+                       source_key  = {SrcName, RoutingKey},
                        _ = '_'},
                 []);
     % find_routes(#route{binding = #binding{source      = SrcName,
@@ -66,9 +66,9 @@ match_routing_key(SrcName, [RoutingKey]) ->
 match_routing_key(SrcName, [_|_] = RoutingKeys) ->
     find_routes(#route{source      = SrcName,
                        destination = '$1',
-                       key         = '$2',
+                       source_key  = '$2',
                        _           = '_'},
-                [list_to_tuple(['orelse' | [{'=:=', '$2', RKey} ||
+                [list_to_tuple(['orelse' | [{'=:=', '$2', {SrcName, RKey}} ||
                                                RKey <- RoutingKeys]])]).
     % find_routes(#route{binding = #binding{source      = SrcName,
     %                                       destination = '$1',
