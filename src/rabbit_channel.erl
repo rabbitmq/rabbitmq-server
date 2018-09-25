@@ -1172,6 +1172,7 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
             State1 = monitor_delivering_queue(NoAck, QPid, QName, State),
             {noreply, record_sent(none, not(NoAck), Msg, State1)};
         empty ->
+            ?INCR_STATS(queue_stats, QueueName, 1, get_empty, State),
             {reply, #'basic.get_empty'{}, State}
     end;
 
