@@ -366,8 +366,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                           not_found           -> Q1 = rabbit_policy:set(Q),
                                                  Q2 = Q1#amqqueue{state = live},
                                                  ok = store_queue(Q2),
-                                                 B = add_default_binding(Q1),
-                                                 fun () -> B(), Q1 end;
+                                                 fun () -> Q1 end;
                           {absent, _Q, _} = R -> rabbit_misc:const(R)
                       end;
                   [ExistingQ] ->
@@ -421,15 +420,6 @@ policy_changed(Q1 = #amqqueue{decorators = Decorators1},
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
     notify_policy_changed(Q1).
-
-add_default_binding(#amqqueue{name = QueueName}) ->
-    ExchangeName = rabbit_misc:r(QueueName, exchange, <<>>),
-    RoutingKey = QueueName#resource.name,
-    rabbit_binding:add(#binding{source      = ExchangeName,
-                                destination = QueueName,
-                                key         = RoutingKey,
-                                args        = []},
-                       ?INTERNAL_USER).
 
 lookup([])     -> [];                             %% optimisation
 lookup([Name]) -> ets:lookup(rabbit_queue, Name); %% optimisation
