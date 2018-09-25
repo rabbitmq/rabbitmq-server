@@ -13,6 +13,7 @@ function message_rates(id, stats) {
                  ['Redelivered', 'redeliver'],
                  ['Get (manual ack)', 'get'],
                  ['Get (auto ack)', 'get_no_ack'],
+                 ['Get (empty)', 'get_empty'],
                  ['Return', 'return_unroutable'],
                  ['Disk read', 'disk_reads'],
                  ['Disk write', 'disk_writes']];
