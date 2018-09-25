@@ -167,27 +167,31 @@ channel_stats(queue_exchange_stats, publish, Id, Value) ->
     ok;
 channel_stats(queue_stats, get, Id, Value) ->
     %% Includes delete marker
-    _ = ets:update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, get_no_ack, Id, Value) ->
     %% Includes delete marker
-    _ = ets:update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver, Id, Value) ->
     %% Includes delete marker
-    _ = ets:update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver_no_ack, Id, Value) ->
     %% Includes delete marker
-    _ = ets:update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, redeliver, Id, Value) ->
     %% Includes delete marker
-    _ = ets:update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, ack, Id, Value) ->
     %% Includes delete marker
-    _ = ets:update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0, 0}),
+    _ = ets:update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0, 0, 0}),
+    ok;
+channel_stats(queue_stats, get_empty, Id, Value) ->
+    %% Includes delete marker
+    _ = ets:update_counter(channel_queue_metrics, Id, {8, Value}, {Id, 0, 0, 0, 0, 0, 0, 0, 0}),
     ok.
 
 delete(Table, Key) ->
@@ -196,7 +200,7 @@ delete(Table, Key) ->
 
 channel_queue_down(Id) ->
     %% Delete marker
-    ets:update_element(channel_queue_metrics, Id, {8, 1}),
+    ets:update_element(channel_queue_metrics, Id, {9, 1}),
     ok.
 
 channel_queue_exchange_down(Id) ->
@@ -239,7 +243,7 @@ queue_deleted(Name) ->
                   end, CQX),
     CQ = ets:select(channel_queue_metrics, match_spec_cq(Name)),
     lists:foreach(fun(Key) ->
-                          ets:update_element(channel_queue_metrics, Key, {8, 1})
+                          ets:update_element(channel_queue_metrics, Key, {9, 1})
                   end, CQ).
 
 queues_deleted(Queues) ->
@@ -284,14 +288,14 @@ delete_channel_queue_metrics(MatchSpecCondition) ->
         channel_queue_metrics,
         [
             {
-                {{'$2', '$1'}, '_', '_', '_', '_', '_', '_', '_'},
+                {{'$2', '$1'}, '_', '_', '_', '_', '_', '_', '_', '_'},
                 [MatchSpecCondition],
                 [{{'$2', '$1'}}]
             }
         ]
     ),
     lists:foreach(fun(Key) ->
-        ets:update_element(channel_queue_metrics, Key, {8, 1})
+        ets:update_element(channel_queue_metrics, Key, {9, 1})
     end, ChannelQueueMetricsToUpdate).
 
 % [{'orelse',
@@ -331,7 +335,7 @@ match_spec_cqx(Id) ->
     [{{{'$2', {'$1', '$3'}}, '_', '_'}, [{'==', {Id}, '$1'}], [{{'$2', {{'$1', '$3'}}}}]}].
 
 match_spec_cq(Id) ->
-    [{{{'$2', '$1'}, '_', '_', '_', '_', '_', '_', '_'}, [{'==', {Id}, '$1'}], [{{'$2', '$1'}}]}].
+    [{{{'$2', '$1'}, '_', '_', '_', '_', '_', '_', '_', '_'}, [{'==', {Id}, '$1'}], [{{'$2', '$1'}}]}].
 
 gen_server2_stats(Pid, BufferLength) ->
     ets:insert(gen_server2_metrics, {Pid, BufferLength}),
