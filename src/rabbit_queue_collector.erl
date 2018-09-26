@@ -26,7 +26,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {monitors, delete_from}).
+-record(state, {monitors, delete_from, deleted_at}).
 
 -include("rabbit.hrl").
 
@@ -65,10 +65,11 @@ handle_call({register, QPid}, _From,
 
 handle_call(delete_all, From, State = #state{monitors    = QMons,
                                              delete_from = undefined}) ->
+    DeletedAt = erlang:system_time(microsecond),
     case pmon:monitored(QMons) of
         []    -> {reply, ok, State#state{delete_from = From}};
         QPids -> ok = rabbit_amqqueue:delete_exclusive(QPids, From),
-                 {noreply, State#state{delete_from = From}}
+                 {noreply, State#state{delete_from = From, deleted_at = DeletedAt}}
     end.
 
 handle_cast(Msg, State) ->
@@ -78,7 +79,10 @@ handle_info({'DOWN', _MRef, process, DownPid, _Reason},
             State = #state{monitors = QMons, delete_from = Deleting}) ->
     QMons1 = pmon:erase(DownPid, QMons),
     case Deleting =/= undefined andalso pmon:is_empty(QMons1) of
-        true  -> gen_server:reply(Deleting, ok);
+        true  ->
+            FinishedAt = erlang:system_time(microsecond),
+            rabbit_log:error("Finished deleting queues in ~p us ~n", [FinishedAt - State#state.deleted_at]),
+            gen_server:reply(Deleting, ok);
         false -> ok
     end,
     {noreply, State#state{monitors = QMons1}}.

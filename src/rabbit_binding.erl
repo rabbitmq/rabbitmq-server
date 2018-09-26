@@ -195,10 +195,7 @@ add(Src, Dst, B, ActingUser) ->
     [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
     case (SrcDurable andalso DstDurable andalso
           mnesia:read({rabbit_durable_route, B}) =/= []) of
-        false -> ok = sync_route(#route{binding = B,
-                                        source = Src,
-                                        destination = Dst,
-                                        source_key = {Src, B#binding.key}},
+        false -> ok = sync_route(binding_to_route(B),
                                  SrcDurable, DstDurable,
                                  fun mnesia:write/3),
                  x_callback(transaction, Src, add_binding, B),
@@ -235,12 +232,9 @@ remove(Binding, InnerFun, ActingUser) ->
 remove(Src, Dst, B, ActingUser) ->
     lock_resource(Src),
     lock_resource(Dst),
-    ok = sync_route(#route{binding = B,
-                           source = Src,
-                           destination = Dst,
-                           source_key = {Src, B#binding.key}},
+    ok = sync_route(binding_to_route(B),
                     durable(Src), durable(Dst),
-                    fun mnesia:delete_object/3),
+                    fun delete/3),
     Deletions = maybe_auto_delete(
                   B#binding.source, [B], new_deletions(), false),
     process_deletions(Deletions, ActingUser).
@@ -427,21 +421,30 @@ remove_routes(Routes) ->
     %% This partitioning allows us to suppress unnecessary delete
     %% operations on disk tables, which require an fsync.
     {RamRoutes, DiskRoutes} =
-        lists:partition(fun (R) -> mnesia:match_object(
-                                     rabbit_durable_route, R, read) == [] end,
+        lists:partition(fun (R) ->
+                            mnesia:read(rabbit_durable_route, R#route.binding) == [] end,
                         Routes),
-    %% Of course the destination might not really be durable but it's
+    {RamOnlyRoutes, SemiDurableRoutes} =
+        lists:partition(fun (R) ->
+                            mnesia:read(rabbit_semi_durable_route, R#route.binding) == [] end,
+                        RamRoutes),
+    % %% Of course the destination might not really be durable but it's
     %% just as easy to try to delete it from the semi-durable table
     %% than check first
-    [ok = sync_route(R, false, true, fun mnesia:delete_object/3) ||
-        R <- RamRoutes],
-    [ok = sync_route(R, true,  true, fun mnesia:delete_object/3) ||
+    [ok = sync_route(R, false, true, fun delete/3) ||
+        R <- SemiDurableRoutes],
+    [ok = sync_route(R, true,  true, fun delete/3) ||
         R <- DiskRoutes],
+    [ok = sync_route(R, false, false, fun delete/3) ||
+        R <- RamOnlyRoutes],
     [R#route.binding || R <- Routes].
+
+delete(Tab, #route{binding = B}, LockKind) ->
+    mnesia:delete(Tab, B, LockKind).
 
 remove_transient_routes(Routes) ->
     [begin
-         ok = sync_transient_route(R, fun mnesia:delete_object/3),
+         ok = sync_transient_route(R, fun delete/3),
          R#route.binding
      end || R <- Routes].
 
@@ -557,3 +560,10 @@ del_notify(Bs, ActingUser) -> [rabbit_event:notify(
 
 x_callback(Serial, X, F, Bs) ->
     ok = rabbit_exchange:callback(X, F, Serial, [X, Bs]).
+
+
+binding_to_route(B = #binding{source = Src, destination = Dest, key = Key}) ->
+    #route{binding = B,
+           source = Src,
+           destination = Dest,
+           source_key = {Src, Key}}.
