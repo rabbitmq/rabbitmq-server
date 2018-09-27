@@ -377,9 +377,13 @@ node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
 
 vhost_creation_idempotency(Config) ->
     VHost = <<"idempotency-test">>,
-    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
-    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
-    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)).
+    try
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost))
+    after
+        rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+    end.
 
 %% -------------------------------------------------------------------
 %% Helpers
