@@ -55,12 +55,10 @@ defmodule AddVhostCommandTest do
     assert @command.run(["na"], opts) == {:badrpc, :nodedown}
   end
 
-  test "run: adding the same host twice is not idempotent", context do
+  test "run: adding the same host twice is idempotent", context do
     add_vhost context[:vhost]
 
-    assert @command.run([context[:vhost]], context[:opts]) ==
-        {:error, {:vhost_already_exists, context[:vhost]}}
-
+    assert @command.run([context[:vhost]], context[:opts]) == :ok
     assert list_vhosts() |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
@@ -69,5 +67,4 @@ defmodule AddVhostCommandTest do
     assert @command.banner([context[:vhost]], context[:opts])
       =~ ~r/Adding vhost \"#{context[:vhost]}\" \.\.\./
   end
-
 end
