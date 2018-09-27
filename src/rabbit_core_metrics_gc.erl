@@ -138,7 +138,7 @@ gc_entity(Id, Table, Key, GbSet) ->
     end.
 
 gc_process_and_entity(Table, GbSet) ->
-    ets:foldl(fun({{Pid, Id} = Key, _, _, _, _, _, _, _}, none)
+    ets:foldl(fun({{Pid, Id} = Key, _, _, _, _, _, _, _, _}, none)
                   when Table == channel_queue_metrics ->
                       gc_process_and_entity(Id, Pid, Table, Key, GbSet);
                  ({{Pid, Id} = Key, _, _, _, _}, none)
