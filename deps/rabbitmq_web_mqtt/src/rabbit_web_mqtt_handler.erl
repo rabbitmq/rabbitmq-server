@@ -77,6 +77,12 @@ websocket_init(State = #state{conn_name = ConnStr, socket = Sock}) ->
 
 websocket_handle({binary, Data}, State) ->
     handle_data(Data, State);
+%% Silently ignore ping and pong frames.
+websocket_handle({Ping, _}, State) when Ping =:= ping; Ping =:= pong ->
+    {ok, State, hibernate};
+websocket_handle(Ping, State) when Ping =:= ping; Ping =:= pong ->
+    {ok, State, hibernate};
+%% Log any other unexpected frames.
 websocket_handle(Frame, State) ->
     rabbit_log_connection:info("Web MQTT: unexpected WebSocket frame ~p~n",
                     [Frame]),
