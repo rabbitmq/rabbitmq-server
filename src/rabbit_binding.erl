@@ -319,8 +319,8 @@ remove_for_source(SrcName) ->
     Match = #route{binding = #binding{source = SrcName, _ = '_'}},
     remove_routes(
       lists:usort(
-        mnesia:match_object(rabbit_route, Match, read) ++
-            mnesia:match_object(rabbit_semi_durable_route, Match, read))).
+        mnesia:dirty_match_object(rabbit_route, Match) ++
+            mnesia:dirty_match_object(rabbit_semi_durable_route, Match))).
 
 remove_for_destination(DstName, OnlyDurable) ->
     remove_for_destination(DstName, OnlyDurable, fun remove_routes/1).
@@ -443,13 +443,13 @@ remove_for_destination(DstName, OnlyDurable, Fun) ->
     Routes = case OnlyDurable of
                  false ->
                         [reverse_route(R) ||
-                              R <- mnesia:match_object(
-                                     rabbit_reverse_route, MatchRev, read)];
+                              R <- mnesia:dirty_match_object(
+                                     rabbit_reverse_route, MatchRev)];
                  true  -> lists:usort(
-                            mnesia:match_object(
-                              rabbit_durable_route, MatchFwd, read) ++
-                                mnesia:match_object(
-                                  rabbit_semi_durable_route, MatchFwd, read))
+                            mnesia:dirty_match_object(
+                              rabbit_durable_route, MatchFwd) ++
+                                mnesia:dirty_match_object(
+                                  rabbit_semi_durable_route, MatchFwd))
              end,
     Bindings = Fun(Routes),
     group_bindings_fold(fun maybe_auto_delete/4, new_deletions(),
