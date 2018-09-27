@@ -34,7 +34,8 @@ groups() ->
     ClusterSize1Tests = [
         single_node_vhost_deletion_forces_connection_closure,
         vhost_failure_forces_connection_closure,
-        dead_vhost_connection_refused
+        dead_vhost_connection_refused,
+        vhost_creation_idempotency
     ],
     ClusterSize2Tests = [
         cluster_vhost_deletion_forces_connection_closure,
@@ -43,7 +44,8 @@ groups() ->
         vhost_failure_forces_connection_closure_on_failure_node,
         dead_vhost_connection_refused_on_failure_node,
         node_starts_with_dead_vhosts,
-        node_starts_with_dead_vhosts_and_ignore_slaves
+        node_starts_with_dead_vhosts_and_ignore_slaves,
+        vhost_creation_idempotency
     ],
     [
       {cluster_size_1_network, [], ClusterSize1Tests},
@@ -372,6 +374,12 @@ node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
                 rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
     true = rabbit_ct_broker_helpers:rpc(Config, 1,
                 rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]).
+
+vhost_creation_idempotency(Config) ->
+    VHost = <<"idempotency-test">>,
+    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)).
 
 %% -------------------------------------------------------------------
 %% Helpers

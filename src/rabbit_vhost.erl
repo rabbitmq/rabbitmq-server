@@ -83,7 +83,13 @@ recover(VHost) ->
 
 -define(INFO_KEYS, [name, tracing, cluster_state]).
 
-add(VHostPath, ActingUser) ->
+add(VHost, ActingUser) ->
+    case exists(VHost) of
+        true  -> ok;
+        false -> do_add(VHost, ActingUser)
+    end.
+
+do_add(VHostPath, ActingUser) ->
     rabbit_log:info("Adding vhost '~s'~n", [VHostPath]),
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -91,7 +97,8 @@ add(VHostPath, ActingUser) ->
                       []  -> ok = mnesia:write(rabbit_vhost,
                                                #vhost{virtual_host = VHostPath},
                                                write);
-                      [_] -> mnesia:abort({vhost_already_exists, VHostPath})
+                      %% the vhost already exists
+                      [_] -> ok
                   end
           end,
           fun (ok, true) ->
