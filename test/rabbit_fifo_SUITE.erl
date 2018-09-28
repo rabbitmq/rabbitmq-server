@@ -219,7 +219,7 @@ resends_lost_command(Config) ->
     F0 = rabbit_fifo_client:init(ClusterId, [ServerId]),
     {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
     % lose the enqueue
-    meck:expect(ra, send_and_notify, fun (_, _, _) -> ok end),
+    meck:expect(ra, pipeline_command, fun (_, _, _) -> ok end),
     {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
     meck:unload(ra),
     {ok, F3} = rabbit_fifo_client:enqueue(msg3, F2),
@@ -321,7 +321,7 @@ handles_reject_notification(Config) ->
     CId = {UId1, self()},
 
     ok = start_cluster(ClusterId, [ServerId1, ServerId2]),
-    _ = ra:send_and_await_consensus(ServerId1, {checkout, {auto, 10}, CId}),
+    _ = ra:process_command(ServerId1, {checkout, {auto, 10}, CId}),
     % reverse order - should try the first node in the list first
     F0 = rabbit_fifo_client:init(ClusterId, [ServerId2, ServerId1]),
     {ok, F1} = rabbit_fifo_client:enqueue(one, F0),
