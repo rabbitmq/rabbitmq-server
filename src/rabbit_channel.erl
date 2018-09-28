@@ -1211,6 +1211,7 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
         {empty, QueueStates} ->
             {reply, #'basic.get_empty'{}, State#ch{queue_states = QueueStates}};
         empty ->
+            ?INCR_STATS(queue_stats, QueueName, 1, get_empty, State),
             {reply, #'basic.get_empty'{}, State}
     end;
 
