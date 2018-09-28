@@ -23,8 +23,9 @@
 %% Supported ciphers and hashes
 
 supported_ciphers() ->
-    NotSupportedByUs = [aes_ccm, aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4,
-                        aes_gcm, chacha20, chacha20_poly1305],
+    NotSupportedByUs = [aes_ccm, aes_ctr, aes_ecb, aes_gcm,
+                        chacha20, chacha20_poly1305,
+                        blowfish_ecb, des_ecb, rc4],
     SupportedByCrypto = proplists:get_value(ciphers, crypto:supports()),
     lists:filter(fun(Cipher) ->
         not lists:member(Cipher, NotSupportedByUs)
@@ -119,9 +120,13 @@ hash_length(md4) -> 16;
 hash_length(md5) -> 16;
 hash_length(sha) -> 20;
 hash_length(sha224) -> 28;
+hash_length(sha3_224) -> 28;
 hash_length(sha256) -> 32;
+hash_length(sha3_256) -> 32;
 hash_length(sha384) -> 48;
-hash_length(sha512) -> 64.
+hash_length(sha3_384) -> 48;
+hash_length(sha512) -> 64;
+hash_length(sha3_512) -> 64.
 
 iv_length(des_cbc) -> 8;
 iv_length(des_cfb) -> 8;
