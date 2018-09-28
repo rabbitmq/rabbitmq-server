@@ -23,6 +23,7 @@
 -export([extract_schemas/1]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
 -export([is_strictly_plugin/1, strictly_plugins/2, strictly_plugins/1]).
+-export([plugins_dist_dir/0, plugins_expand_dir/0, enabled_plugins_file/0]).
 
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
@@ -104,6 +105,15 @@ plugins_dist_dir() ->
             PluginsDistDir;
         _ ->
             filename:join([rabbit_mnesia:dir(), "plugins_dir_stub"])
+    end.
+
+-spec enabled_plugins_file() -> file:filename().
+enabled_plugins_file() ->
+     case application:get_env(rabbit, enabled_plugins_file) of
+        {ok, Val} ->
+            Val;
+        _ ->
+            filename:join([rabbit_mnesia:dir(), "enabled_plugins"])
     end.
 
 -spec enabled_plugins() -> [atom()].
