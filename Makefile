@@ -35,7 +35,7 @@ include erlang.mk
 .PHONY: source-dist clean-source-dist
 
 SOURCE_DIST_BASE ?= rabbitmq-server
-SOURCE_DIST_SUFFIXES ?= tar.xz zip
+SOURCE_DIST_SUFFIXES ?= tar.xz
 SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(PROJECT_VERSION)
 
 # The first source distribution file is used by packages: if the archive
