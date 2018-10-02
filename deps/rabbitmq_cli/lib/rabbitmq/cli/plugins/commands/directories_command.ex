@@ -61,7 +61,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
   def usage, do: "directories [--offline] [--online]"
 
   def banner([], %{online: false, offline: true}) do
-    "Listing plugin directories inferred from environment..."
+    "Listing plugin directories inferred from local environment..."
   end
 
   def banner([], %{online: true, offline: false, node: node}) do
