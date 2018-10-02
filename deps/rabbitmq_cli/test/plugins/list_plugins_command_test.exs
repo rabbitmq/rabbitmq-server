@@ -54,10 +54,7 @@ defmodule ListPluginsCommandTest do
   end
 
   setup context do
-
     reset_enabled_plugins_to_preconfigured_defaults(context)
-
-
 
     {
       :ok,
