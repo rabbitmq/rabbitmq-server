@@ -1975,12 +1975,12 @@ send_confirms(Cs, Rs, State) ->
 
 coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #ch{unconfirmed = UC}) ->
     SMsgSeqNos = lists:usort(MsgSeqNos),
-    UnconfirmedCutOff = case dtree:is_empty(UC) of
+    UnconfirmedCutoff = case dtree:is_empty(UC) of
                  true  -> lists:last(SMsgSeqNos) + 1;
                  false -> {SeqNo, _XName} = dtree:smallest(UC), SeqNo
              end,
-    CutOff = lists:min([UnconfirmedCutOff | NegativeMsgSeqNos]),
-    {Ms, Ss} = lists:splitwith(fun(X) -> X < CutOff end, SMsgSeqNos),
+    Cutoff = erlang:min(UnconfirmedCutoff, NegativeMsgSeqNos),
+    {Ms, Ss} = lists:splitwith(fun(X) -> X < Cutoff end, SMsgSeqNos),
     case Ms of
         [] -> ok;
         _  -> ok = send(MkMsgFun(lists:last(Ms), true), State)
