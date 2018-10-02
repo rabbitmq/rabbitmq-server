@@ -1979,7 +1979,7 @@ coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #ch{unconfirme
                  true  -> lists:last(SMsgSeqNos) + 1;
                  false -> {SeqNo, _XName} = dtree:smallest(UC), SeqNo
              end,
-    Cutoff = erlang:min(UnconfirmedCutoff, NegativeMsgSeqNos),
+    Cutoff = lists:min([UnconfirmedCutoff | NegativeMsgSeqNos]),
     {Ms, Ss} = lists:splitwith(fun(X) -> X < Cutoff end, SMsgSeqNos),
     case Ms of
         [] -> ok;
