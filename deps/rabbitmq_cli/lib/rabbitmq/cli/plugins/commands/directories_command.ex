@@ -22,6 +22,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
 
+  def merge_defaults(args, %{offline: true} = opts) do
+    {args, opts}
+  end
   def merge_defaults(args, opts) do
     {args, Map.merge(%{online: true, offline: false}, opts)}
   end
@@ -51,20 +54,17 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
                       &Helpers.plugins_dir/2],
                      [args, opts])
   end
-  def validate_execution_environment(args, %{offline: false} = opts) do
-    Validators.node_is_running(args, opts)
-  end
   def validate_execution_environment(args, %{online: true} = opts) do
     Validators.node_is_running(args, opts)
   end
 
   def usage, do: "directories [--offline] [--online]"
 
-  def banner([], %{online: false, offline: true}) do
+  def banner([], %{offline: true}) do
     "Listing plugin directories inferred from local environment..."
   end
 
-  def banner([], %{online: true, offline: false, node: node}) do
+  def banner([], %{online: true, node: node}) do
     "Listing plugin directories used by node #{node}"
   end
 
@@ -73,13 +73,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
       :rabbit_misc.rpc_call(node_name, :rabbit_plugins, key, [])
     end
   end
-
-  def run([], %{offline: false, node: node_name}) do
-    do_run fn(key) ->
-      :rabbit_misc.rpc_call(node_name, :rabbit_plugins, key, [])
-    end
-  end
-
   def run([], %{offline: true}) do
     do_run fn(key) ->
       apply(:rabbit_plugins, key, [])
