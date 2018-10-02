@@ -141,8 +141,10 @@ get_used_fd({win32, _}) ->
                            "sysinternals~n", []);
         _  -> case find_files_line(string:tokens(Handle, "\r\n")) of
                   unknown ->
-                      log_fd_error("Could not parse handle.exe output: ~p~n",
-                                   [Handle]);
+                      log_fd_error("handle.exe output did not contain "
+                                   "a line beginning with '  File ', unable "
+                                   "to determine used file descriptor "
+                                   "count: ~p~n", [Handle]);
                   Any ->
                       Any
               end
