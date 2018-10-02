@@ -377,7 +377,7 @@ state_enter(leader, #state{consumers = Custs,
     end;
 state_enter(eol, #state{enqueuers = Enqs, consumers = Custs0}) ->
     Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
-    [{send_msg, P, eol} || P <- maps:keys(maps:merge(Enqs, Custs))];
+    [{send_msg, P, eol, ra_event} || P <- maps:keys(maps:merge(Enqs, Custs))];
 state_enter(_, _) ->
     %% catch all as not handling all states
     [].
@@ -763,7 +763,7 @@ take_next_msg(#state{prefix_msg_count = MsgCount,
     {dummy, State, Messages, MsgCount - 1}.
 
 send_msg_effect({CTag, CPid}, Msgs) ->
-    {send_msg, CPid, {delivery, CTag, Msgs}}.
+    {send_msg, CPid, {delivery, CTag, Msgs}, ra_event}.
 
 checkout_one(#state{service_queue = SQ0,
                     messages = Messages0,
@@ -923,7 +923,7 @@ enq_enq_checkout_test() ->
     {_State3, Effects, _} =
         apply(meta(3), {checkout, {once, 2}, Cid}, [], State2),
     ?ASSERT_EFF({monitor, _, _}, Effects),
-    ?ASSERT_EFF({send_msg, _, {delivery, _, _}}, Effects),
+    ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, Effects),
     ok.
 
 enq_enq_deq_test() ->
@@ -986,7 +986,7 @@ checkout_enq_settle_test() ->
     {State2, Effects0} = enq(2, 1,  first, State1),
     ?ASSERT_EFF({send_msg, _,
                  {delivery, <<"checkout_enq_settle_test">>,
-                  [{0, {_, first}}]}},
+                  [{0, {_, first}}]}, _},
                 Effects0),
     {State3, [_Inactive]} = enq(3, 2, second, State2),
     {_, _Effects} = settle(Cid, 4, 0, State3),
@@ -999,21 +999,22 @@ out_of_order_enqueue_test() ->
     Cid = {<<"out_of_order_enqueue_test">>, self()},
     {State1, [{monitor, _, _}]} = check_n(Cid, 5, 5, test_init(test)),
     {State2, Effects2} = enq(2, 1, first, State1),
-    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}}, Effects2),
+    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
     % assert monitor was set up
     ?ASSERT_EFF({monitor, _, _}, Effects2),
     % enqueue seq num 3 and 4 before 2
     {State3, Effects3} = enq(3, 3, third, State2),
-    ?assertNoEffect({send_msg, _, {delivery, _, _}}, Effects3),
+    ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects3),
     {State4, Effects4} = enq(4, 4, fourth, State3),
     % assert no further deliveries where made
-    ?assertNoEffect({send_msg, _, {delivery, _, _}}, Effects4),
+    ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects4),
     {_State5, Effects5} = enq(5, 2, second, State4),
     % assert two deliveries were now made
     ?debugFmt("Effects5 ~n~p~n", [Effects5]),
     ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, second}},
                                                {_, {_, third}},
-                                               {_, {_, fourth}}]}}, Effects5),
+                                               {_, {_, fourth}}]}, _},
+                Effects5),
     ok.
 
 out_of_order_first_enqueue_test() ->
@@ -1021,16 +1022,17 @@ out_of_order_first_enqueue_test() ->
     {State1, _} = check_n(Cid, 5, 5, test_init(test)),
     {_State2, Effects2} = enq(2, 10, first, State1),
     ?ASSERT_EFF({monitor, process, _}, Effects2),
-    ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}}, Effects2),
+    ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _},
+                    Effects2),
     ok.
 
 duplicate_enqueue_test() ->
     Cid = {<<"duplicate_enqueue_test">>, self()},
     {State1, [{monitor, _, _}]} = check_n(Cid, 5, 5, test_init(test)),
     {State2, Effects2} = enq(2, 1, first, State1),
-    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}}, Effects2),
+    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
     {_State3, Effects3} = enq(3, 1, first, State2),
-    ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}}, Effects3),
+    ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects3),
     ok.
 
 return_non_existent_test() ->
@@ -1044,7 +1046,7 @@ return_checked_out_test() ->
     Cid = {<<"cid">>, self()},
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, [_Monitor, {aux, active},
-              {send_msg, _, {delivery, _, [{MsgId, _}]}}]} =
+              {send_msg, _, {delivery, _, [{MsgId, _}]}, _}]} =
         check(Cid, 2, State0),
     % return
     {_State2, [_, _], _} = apply(meta(3), {return, [MsgId], Cid}, [], State1),
@@ -1057,12 +1059,12 @@ return_auto_checked_out_test() ->
     % it first active then inactive as the consumer took on but cannot take
     % any more
     {State1, [_Monitor, {aux, inactive}, {aux, active},
-              {send_msg, _, {delivery, _, [{MsgId, _}]}} | _]} =
+              {send_msg, _, {delivery, _, [{MsgId, _}]}, _} | _]} =
         check_auto(Cid, 2, State0),
     % return should include another delivery
     {_State2, Effects, _} = apply(meta(3), {return, [MsgId], Cid}, [], State1),
     ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{_, {#{delivery_count := 1}, first}}]}},
+                 {delivery, _, [{_, {#{delivery_count := 1}, first}}]}, _},
                 Effects),
     ok.
 
@@ -1138,11 +1140,11 @@ discarded_message_without_dead_letter_handler_is_removed_test() ->
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{0, {#{}, first}}]}},
+                 {delivery, _, [{0, {#{}, first}}]}, _},
                 Effects1),
     {_State2, Effects2, _} = apply(meta(1), {discard, [0], Cid}, [], State1),
     ?assertNoEffect({send_msg, _,
-                     {delivery, _, [{0, {#{}, first}}]}},
+                     {delivery, _, [{0, {#{}, first}}]}, _},
                     Effects2),
     ok.
 
@@ -1154,7 +1156,7 @@ discarded_message_with_dead_letter_handler_emits_mod_call_effect_test() ->
     {State0, [_, _]} = enq(1, 1, first, State00),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{0, {#{}, first}}]}},
+                 {delivery, _, [{0, {#{}, first}}]}, _},
                 Effects1),
     {_State2, Effects2, _} = apply(meta(1), {discard, [0], Cid}, [], State1),
     % assert mod call effect with appended reason and message
