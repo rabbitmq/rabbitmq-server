@@ -86,7 +86,6 @@ defmodule DisablePluginsCommandTest do
       {:validation_failure, :no_plugins_dir}
   end
 
-
   test "validate_execution_environment: specifying a non-existent enabled_plugins_file is fine", context do
     assert @command.validate_execution_environment(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) == :ok
   end
