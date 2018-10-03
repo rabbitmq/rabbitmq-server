@@ -1580,7 +1580,6 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
     case rabbit_misc:is_abnormal_exit(Reason) of
         true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
                  record_rejects(MXs, State1#ch{unconfirmed = UC1});
-                 %% TODO send_confirms_and_nacks here?
         false -> {MXs, UC1} = dtree:take(QPid, UC),
                  record_confirms(MXs, State1#ch{unconfirmed = UC1})
 
