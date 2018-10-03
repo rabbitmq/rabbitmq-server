@@ -36,24 +36,28 @@ defmodule RabbitMQ.CLI.Core.Config do
   def normalise(:longnames, _val),       do: :shortnames
   def normalise(_, value),               do: value
 
-  def get_system_option(:script_name) do
-    Path.basename(:escript.script_name())
-    |> Path.rootname
-    |> String.to_atom
-  end
-  def get_system_option(name) do
-    system_env_option = case name do
+  def system_env_variable(name) do
+    case name do
       :longnames            -> "RABBITMQ_USE_LONGNAME";
       :rabbitmq_home        -> "RABBITMQ_HOME";
       :mnesia_dir           -> "RABBITMQ_MNESIA_DIR";
       :plugins_dir          -> "RABBITMQ_PLUGINS_DIR";
+      :plugins_expand_dir   -> "RABBITMQ_PLUGINS_EXPAND_DIR";
       :enabled_plugins_file -> "RABBITMQ_ENABLED_PLUGINS_FILE";
       :node                 -> "RABBITMQ_NODENAME";
       :aliases_file         -> "RABBITMQ_CLI_ALIASES_FILE";
       :erlang_cookie        -> "RABBITMQ_ERLANG_COOKIE";
       _ -> ""
     end
-    System.get_env(system_env_option)
+  end
+
+  def get_system_option(:script_name) do
+    Path.basename(:escript.script_name())
+    |> Path.rootname
+    |> String.to_atom
+  end
+  def get_system_option(name) do
+    System.get_env(system_env_variable(name))
   end
 
   def default(:script_name), do: :rabbitmqctl

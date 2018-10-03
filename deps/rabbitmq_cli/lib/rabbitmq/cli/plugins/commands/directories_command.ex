@@ -16,7 +16,7 @@
 
 defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.{Helpers, Validators}
+  alias RabbitMQ.CLI.Core.{Helpers, Validators, Config}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -73,9 +73,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
       :rabbit_misc.rpc_call(node_name, :rabbit_plugins, key, [])
     end
   end
-  def run([], %{offline: true}) do
+  def run([], %{offline: true} = opts) do
     do_run fn(key) ->
-      apply(:rabbit_plugins, key, [])
+      Config.get_option(key, opts)
     end
   end
 
@@ -100,7 +100,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
 
   defp do_run(fun) do
     # return an error or an {:ok, map} tuple
-    Enum.reduce([:plugins_dist_dir, :plugins_expand_dir, :enabled_plugins_file], {:ok, %{}},
+    Enum.reduce([:plugins_dir, :plugins_expand_dir, :enabled_plugins_file], {:ok, %{}},
                 fn _,   {:error, err} -> {:error, err}
                    key, {:ok, acc}    ->
                     case fun.(key) do
