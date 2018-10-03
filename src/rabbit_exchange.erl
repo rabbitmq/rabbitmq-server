@@ -492,15 +492,21 @@ maybe_auto_delete(#exchange{auto_delete = true} = X, OnlyDurable) ->
 
 conditional_delete(X = #exchange{name = XName}, OnlyDurable) ->
     case rabbit_binding:has_for_source(XName) of
-        false  -> unconditional_delete(X, OnlyDurable);
+        false  -> internal_delete(X, OnlyDurable, false);
         true   -> {error, in_use}
     end.
 
-unconditional_delete(X = #exchange{name = XName}, OnlyDurable) ->
+unconditional_delete(X, OnlyDurable) ->
+    internal_delete(X, OnlyDurable, true).
+
+internal_delete(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
     ok = mnesia:delete({rabbit_exchange, XName}),
     ok = mnesia:delete({rabbit_exchange_serial, XName}),
     mnesia:delete({rabbit_durable_exchange, XName}),
-    Bindings = rabbit_binding:remove_for_source(XName),
+    Bindings = case RemoveBindingsForSource of
+        true  -> rabbit_binding:remove_for_source(XName);
+        false -> []
+    end,
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(
                              XName, OnlyDurable)}.
 
