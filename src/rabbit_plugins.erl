@@ -23,6 +23,7 @@
 -export([extract_schemas/1]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
 -export([is_strictly_plugin/1, strictly_plugins/2, strictly_plugins/1]).
+-export([plugins_dir/0, plugins_expand_dir/0, enabled_plugins_file/0]).
 
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
@@ -97,13 +98,22 @@ plugins_expand_dir() ->
             filename:join([rabbit_mnesia:dir(), "plugins_expand_dir"])
     end.
 
--spec plugins_dist_dir() -> file:filename().
-plugins_dist_dir() ->
+-spec plugins_dir() -> file:filename().
+plugins_dir() ->
     case application:get_env(rabbit, plugins_dir) of
         {ok, PluginsDistDir} ->
             PluginsDistDir;
         _ ->
             filename:join([rabbit_mnesia:dir(), "plugins_dir_stub"])
+    end.
+
+-spec enabled_plugins_file() -> file:filename().
+enabled_plugins_file() ->
+     case application:get_env(rabbit, enabled_plugins_file) of
+        {ok, Val} ->
+            Val;
+        _ ->
+            filename:join([rabbit_mnesia:dir(), "enabled_plugins"])
     end.
 
 -spec enabled_plugins() -> [atom()].
@@ -174,7 +184,7 @@ extract_schema(#plugin{type = dir, location = Location}, SchemaDir) ->
 
 %% @doc Lists the plugins which are currently running.
 active() ->
-    InstalledPlugins = plugin_names(list(plugins_dist_dir())),
+    InstalledPlugins = plugin_names(list(plugins_dir())),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
             lists:member(App, InstalledPlugins)].
 
@@ -230,7 +240,7 @@ strictly_plugins(Plugins, AllPlugins) ->
       end, Plugins).
 
 strictly_plugins(Plugins) ->
-    AllPlugins = list(plugins_dist_dir()),
+    AllPlugins = list(plugins_dir()),
     lists:filter(
       fun(Name) ->
               is_strictly_plugin(lists:keyfind(Name, #plugin.name, AllPlugins))
@@ -286,7 +296,7 @@ running_plugins() ->
 prepare_plugins(Enabled) ->
     ExpandDir = plugins_expand_dir(),
 
-    AllPlugins = list(plugins_dist_dir()),
+    AllPlugins = list(plugins_dir()),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
     {ValidPlugins, Problems} = validate_plugins(WantedPlugins),
