@@ -123,8 +123,10 @@ defmodule DirectoriesCommandTest do
 
   test "run: when --online is used, lists plugin directories", context do
     opts = Map.merge(context[:opts], %{online: true})
-    assert @command.run([], opts) == {:ok, %{plugins_dist_dir: to_string(Map.get(opts, :plugins_dir)),
-                                             plugins_expand_dir: to_string(Map.get(opts, :plugins_expand_dir)),
-                                             enabled_plugins_file: to_string(Map.get(opts, :plugins_file))}}
+    dirs = %{plugins_dir: to_string(Map.get(opts, :plugins_dir)),
+             plugins_expand_dir: to_string(Map.get(opts, :plugins_expand_dir)),
+             enabled_plugins_file: to_string(Map.get(opts, :plugins_file))}
+
+    assert @command.run([], opts) == {:ok, dirs}
   end
 end
