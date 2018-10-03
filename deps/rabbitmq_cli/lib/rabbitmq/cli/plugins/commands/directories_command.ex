@@ -85,7 +85,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
 
   def output({:ok, map}, _opts) do
     s = """
-        Plugin archives directory: #{Map.get(map, :plugins_dist_dir)}
+        Plugin archives directory: #{Map.get(map, :plugins_dir)}
         Plugin expansion directory: #{Map.get(map, :plugins_expand_dir)}
         Enabled plugins file: #{Map.get(map, :enabled_plugins_file)}
         """
