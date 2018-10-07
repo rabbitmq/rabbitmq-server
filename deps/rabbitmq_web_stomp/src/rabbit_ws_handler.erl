@@ -52,7 +52,8 @@ init(Req0, Opts) ->
         undefined -> [];
         AuthHd    -> [{authorization, binary_to_list(AuthHd)}]
     end,
-    {cowboy_websocket, Req, {Socket, Peername, Sockname, Headers, FrameType}}.
+    {_, WsOpts} = lists:keyfind(ws_opts, 1, Opts),
+    {cowboy_websocket, Req, {Socket, Peername, Sockname, Headers, FrameType}, WsOpts}.
 
 websocket_init({Socket, Peername, Sockname, Headers, FrameType}) ->
     Info = [{socket, Socket},
