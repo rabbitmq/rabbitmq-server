@@ -75,8 +75,36 @@
     [{datatype, integer}]}.
 {mapping, "web_stomp.cowboy_opts.max_request_line_length", "rabbitmq_web_stomp.cowboy_opts.max_request_line_length",
     [{datatype, integer}]}.
-{mapping, "web_stomp.cowboy_opts.timeout", "rabbitmq_web_stomp.cowboy_opts.timeout",
-    [{datatype, integer}]}.
+
+%% backwards compatibility
+{mapping, "web_stomp.cowboy_opts.timeout",      "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+}.
+%% recent Cowboy versions have several timeout settings
+{mapping, "web_stomp.cowboy_opts.idle_timeout", "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
+    [{datatype, integer}]
+}.
+
+{translation,
+    "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
+    fun(Conf) ->
+        case cuttlefish:conf_get("web_stomp.cowboy_opts.timeout", Conf, undefined) of
+            Value when is_integer(Value) ->
+                Value;
+            undefined ->
+                case cuttlefish:conf_get("web_stomp.cowboy_opts.idle_timeout", Conf, undefined) of
+                    undefined -> cuttlefish:unset();
+                    Value     -> Value
+                end
+        end
+    end
+}.
 
 {mapping, "web_stomp.ws_opts.compress", "rabbitmq_web_stomp.cowboy_ws_opts.compress",
     [{datatype, {enum, [true, false]}}]}.
+{mapping, "web_stomp.ws_opts.max_frame_size", "rabbitmq_web_stomp.cowboy_ws_opts.max_frame_size",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+}.
+{mapping, "web_stomp.ws_opts.idle_timeout", "rabbitmq_web_stomp.cowboy_ws_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+}.
