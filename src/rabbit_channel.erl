@@ -2152,6 +2152,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
     check_configure_permitted(QueueName, User),
+    rabbit_core_metrics:queue_declared(QueueName),
     case rabbit_amqqueue:with(
            QueueName,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
@@ -2189,6 +2190,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                              _    -> rabbit_queue_collector:register(
                                        CollectorPid, QPid)
                          end,
+                    rabbit_core_metrics:queue_created(QueueName),
                     {ok, QueueName, 0, 0};
                 {existing, _Q} ->
                     %% must have been created between the stat and the
