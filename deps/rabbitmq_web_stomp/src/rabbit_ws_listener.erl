@@ -34,9 +34,10 @@ init() ->
 
     WsFrame = get_env(ws_frame, text),
     CowboyOpts = maps:from_list(get_env(cowboy_opts, [])),
+    CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
 
     VhostRoutes = [
-        {get_env(ws_path, "/ws"), rabbit_ws_handler, [{type, WsFrame}]}
+        {get_env(ws_path, "/ws"), rabbit_ws_handler, [{type, WsFrame}, {ws_opts, CowboyWsOpts}]}
     ],
     Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
     NumTcpAcceptors = case application:get_env(rabbitmq_web_stomp, num_tcp_acceptors) of
