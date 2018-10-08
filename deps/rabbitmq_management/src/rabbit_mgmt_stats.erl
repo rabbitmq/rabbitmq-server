@@ -113,6 +113,15 @@ format_samples(Samples, ESamples, ETotal) ->
 append_full_sample(TS, {V1, V2, V3}, {S1, S2, S3}, {T1, T2, T3}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2), append_sample(V3, TS, S3)},
      {V1 + T1, V2 + T2, V3 + T3}};
+%% connection_churn_rates
+append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
+           {S1, S2, S3, S4, S5, S6, S7},
+           {T1, T2, T3, T4, T5, T6, T7}) ->
+    {{append_sample(V1, TS, S1), append_sample(V2, TS, S2),
+      append_sample(V3, TS, S3), append_sample(V4, TS, S4),
+      append_sample(V5, TS, S5), append_sample(V6, TS, S6),
+      append_sample(V7, TS, S7)},
+     {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7}};
 %% channel_queue_stats_deliver_stats, queue_stats_deliver_stats,
 %% vhost_stats_deliver_stats, channel_stats_deliver_stats
 append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
@@ -334,6 +343,24 @@ format_rate(node_node_coarse_stats, {TS, TR}, {RS, RR}) ->
      {send_bytes_details, [{rate, RS}]},
      {recv_bytes, TR},
      {recv_bytes_details, [{rate, RR}]}
+    ];
+format_rate(connection_churn_rates, {TCCr, TCCo, TChCr, TChCo, TQD, TQCr, TQCo},
+            {RCCr, RCCo, RChCr, RChCo, RQD, RQCr, RQCo}) ->
+    [
+     {connection_created, TCCr},
+     {connection_created_details, [{rate, RCCr}]},
+     {connection_closed, TCCo},
+     {connection_closed_details, [{rate, RCCo}]},
+     {channel_created, TChCr},
+     {channel_created_details, [{rate, RChCr}]},
+     {channel_closed, TChCo},
+     {channel_closed_details, [{rate, RChCo}]},
+     {queue_declared, TQD},
+     {queue_declared_details, [{rate, RQD}]},
+     {queue_created, TQCr},
+     {queue_created_details, [{rate, RQCr}]},
+     {queue_deleted, TQCo},
+     {queue_deleted_details, [{rate, RQCo}]}
     ].
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe},
@@ -577,6 +604,33 @@ format_rate(node_node_coarse_stats, {TS, TR}, {RS, RR}, {SS, SR}, {STS, STR}, Le
      {recv_bytes, TR},
      {recv_bytes_details, [{rate, RR},
                {samples, SR}] ++ average(SR, STR, Length)}
+    ];
+format_rate(connection_churn_rates, {TCCr, TCCo, TChCr, TChCo, TQD, TQCr, TQCo},
+            {RCCr, RCCo, RChCr, RChCo, RQD, RQCr, RQCo},
+            {SCCr, SCCo, SChCr, SChCo, SQD, SQCr, SQCo},
+            {STCCr, STCCo, STChCr, STChCo, STQD, STQCr, STQCo}, Length) ->
+    [
+     {connection_created, TCCr},
+     {connection_created_details, [{rate, RCCr},
+                                   {samples, SCCr}] ++ average(SCCr, STCCr, Length)},
+     {connection_closed, TCCo},
+     {connection_closed_details, [{rate, RCCo},
+                                  {samples, SCCo}] ++ average(SCCo, STCCo, Length)},
+     {channel_created, TChCr},
+     {channel_created_details, [{rate, RChCr},
+                                {samples, SChCr}] ++ average(SChCr, STChCr, Length)},
+     {channel_closed, TChCo},
+     {channel_closed_details, [{rate, RChCo},
+                               {samples, SChCo}] ++ average(SChCo, STChCo, Length)},
+     {queue_declared, TQD},
+     {queue_declared_details, [{rate, RQD},
+                               {samples, SQD}] ++ average(SQD, STQD, Length)},
+     {queue_created, TQCr},
+     {queue_created_details, [{rate, RQCr},
+                              {samples, SQCr}] ++ average(SQCr, STQCr, Length)},
+     {queue_deleted, TQCo},
+     {queue_deleted_details, [{rate, RQCo},
+                              {samples, SQCo}] ++ average(SQCo, STQCo, Length)}
     ].
 
 avg_time_details(Avg) ->
