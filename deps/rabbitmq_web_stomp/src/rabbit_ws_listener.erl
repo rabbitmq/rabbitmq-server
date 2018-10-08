@@ -55,7 +55,7 @@ init() ->
         {error, {already_started, _}} -> ok;
         {error, Err}                  ->
             rabbit_log_connection:error(
-                "Failed to start an HTTP listener. Error: ~p,"
+                "Failed to start a WebSocket (HTTP) listener. Error: ~p,"
                 " listener settings: ~p~n",
                 [Err, TcpConf]),
             throw(Err)
