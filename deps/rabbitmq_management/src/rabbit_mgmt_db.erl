@@ -301,18 +301,18 @@ overview(User, Ranges, Interval) ->
                  all -> rabbit_vhost:list();
                  _   -> rabbit_mgmt_util:list_visible_vhosts(User)
              end,
-
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, overview_data,
                                       [User, Ranges, VHosts]}),
-
     MessageStats = lists:append(
              [format_range(DataLookup, vhost_stats_fine_stats,
                            pick_range(fine_stats, Ranges), Interval),
               format_range(DataLookup, vhost_msg_rates,
                            pick_range(queue_msg_rates, Ranges), Interval),
               format_range(DataLookup, vhost_stats_deliver_stats,
-                           pick_range(deliver_get, Ranges), Interval)]),
+                           pick_range(churn_rates, Ranges), Interval)]),
 
+    ChurnRates = format_range(DataLookup, connection_churn_rates,
+                              pick_range(queue_msg_counts, Ranges), Interval),
     QueueStats = format_range(DataLookup, vhost_msg_stats,
                               pick_range(queue_msg_counts, Ranges), Interval),
     %% Filtering out the user's consumers would be rather expensive so let's
@@ -328,6 +328,7 @@ overview(User, Ranges, Interval) ->
          {channels, maps:get(channels_count, DataLookup)}],
 
     [{message_stats, MessageStats},
+     {churn_rates, ChurnRates},
      {queue_totals,  QueueStats},
      {object_totals, ObjectTotals},
      {statistics_db_event_queue, event_queue()}]. % TODO: event queue?
@@ -598,8 +599,9 @@ node_stats(Ranges, Objs, Interval) ->
      Stats = format_range(NData, node_coarse_stats,
                           pick_range(coarse_node_stats, Ranges), Interval) ++
              format_range(NData, node_persister_stats,
-                          pick_range(coarse_node_stats, Ranges), Interval),
-
+                          pick_range(coarse_node_stats, Ranges), Interval) ++
+             format_range(NData, connection_churn_rates,
+                          pick_range(churn_rates, Ranges), Interval),
      NodeNodeStats = node_node_stats(NData, Id, Ranges, Interval),
      StatsD = [{cluster_links, NodeNodeStats}],
      MgmtStats = maps:get(mgmt_stats, NData),
