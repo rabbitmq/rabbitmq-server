@@ -119,14 +119,15 @@ node_data(Ranges, Id) ->
                         pick_range(coarse_node_stats, Ranges), Id),
        raw_message_data(node_persister_stats,
                         pick_range(coarse_node_stats, Ranges), Id),
-       {node_stats, lookup_element(node_stats, Id)}]).
+       {node_stats, lookup_element(node_stats, Id)}] ++
+      node_connection_churn_rates_data(Ranges)).
 
 overview_data(_Pid, User, Ranges, VHosts) ->
     Raw = [raw_all_message_data(vhost_msg_stats, pick_range(queue_msg_counts, Ranges), VHosts),
            raw_all_message_data(vhost_stats_fine_stats, pick_range(fine_stats, Ranges), VHosts),
            raw_all_message_data(vhost_msg_rates, pick_range(queue_msg_rates, Ranges), VHosts),
-           raw_all_message_data(vhost_stats_deliver_stats, pick_range(deliver_get, Ranges), VHosts)],
-
+           raw_all_message_data(vhost_stats_deliver_stats, pick_range(deliver_get, Ranges), VHosts),
+           raw_message_data(connection_churn_rates, pick_range(queue_msg_rates, Ranges), node())],
     maps:from_list(Raw ++
                    [{connections_count, count_created_stats(connection_created_stats, User)},
                     {channels_count, count_created_stats(channel_created_stats, User)},
@@ -172,6 +173,10 @@ node_raw_detail_stats_data(Ranges, Id) ->
      [raw_message_data2(node_node_coarse_stats,
                         pick_range(coarse_node_node_stats, Ranges), Key)
       || Key <- get_table_keys(node_node_coarse_stats, first(Id))].
+
+node_connection_churn_rates_data(Ranges) ->
+    [raw_message_data(connection_churn_rates,
+                      pick_range(churn_rates, Ranges), node())].
 
 exchange_raw_detail_stats_data(Ranges, Id) ->
      [raw_message_data2(channel_exchange_stats_fine_stats,
@@ -437,7 +442,8 @@ pick_range(K, {_RangeL, _RangeM, RangeD, _RangeN}) when K == coarse_conn_stats;
     RangeD;
 pick_range(K, {_RangeL, _RangeM, _RangeD, RangeN})
   when K == coarse_node_stats;
-       K == coarse_node_node_stats ->
+       K == coarse_node_node_stats;
+       K == churn_rates ->
     RangeN.
 
 first(Id)  ->
@@ -473,7 +479,9 @@ empty(Type, V) when Type =:= node_node_coarse_stats;
             Type =:= vhost_stats_coarse_conn_stats;
             Type =:= queue_msg_rates;
             Type =:= vhost_msg_rates ->
-    {V, V}.
+    {V, V};
+empty(connection_churn_rates, V) ->
+    {V, V, V, V, V, V, V}.
 
 retention_policy(connection_stats_coarse_conn_stats) ->
     basic;
@@ -518,6 +526,8 @@ retention_policy(node_coarse_stats) ->
 retention_policy(node_persister_stats) ->
     global;
 retention_policy(node_node_coarse_stats) ->
+    global;
+retention_policy(connection_churn_rates) ->
     global.
 
 format_resource(unknown) -> unknown;

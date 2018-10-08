@@ -53,7 +53,8 @@
                  {node_node_stats, set},
                  {node_node_coarse_stats, set},
                  {queue_msg_rates, set},
-                 {vhost_msg_rates, set}]).
+                 {vhost_msg_rates, set},
+                 {connection_churn_rates, set}]).
 
 -define(INDEX_TABLES, [consumer_stats_queue_index,
                        consumer_stats_channel_index,
@@ -136,7 +137,11 @@
 -define(queue_msg_rates(Disk_reads, Disk_writes), {Disk_reads, Disk_writes}).
 -define(vhost_msg_rates(Disk_reads, Disk_writes), {Disk_reads, Disk_writes}).
 -define(old_aggr_stats(Id, Stats), {Id, Stats}).
-
+-define(connection_churn_rates(Connection_created, Connection_closed, Channel_created,
+                               Channel_closed, Queue_declared, Queue_created,
+                               Queue_deleted),
+        {Connection_created, Connection_closed, Channel_created, Channel_closed,
+         Queue_declared, Queue_created, Queue_deleted}).
 
 -define(stats_per_table(Table),
         case Table of
@@ -181,6 +186,8 @@
                 [send_bytes, recv_bytes];
             T when T =:= queue_msg_rates;
                    T =:= vhost_msg_rates ->
-                [disk_reads, disk_writes]
+                [disk_reads, disk_writes];
+            T when T =:= connection_churn_rates ->
+                [connection_created, connection_closed, channel_created, channel_closed, queue_declared, queue_created, queue_deleted]
         end).
 %%------------------------------------------------------------------------------
