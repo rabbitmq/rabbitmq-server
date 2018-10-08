@@ -30,9 +30,12 @@
                       {node_persister_metrics, set},
                       {node_coarse_metrics, set},
                       {node_metrics, set},
-                      {node_node_metrics, set}]).
+                      {node_node_metrics, set},
+                      {connection_churn_metrics, set}]).
 
 -define(CORE_EXTRA_TABLES, [{gen_server2_metrics, set}]).
+
+-define(CONNECTION_CHURN_METRICS, {node(), 0, 0, 0, 0, 0, 0, 0}).
 
 %% connection_created :: {connection_id, proplist}
 %% connection_metrics :: {connection_id, proplist}
@@ -53,3 +56,4 @@
 %% node_metrics :: {node_id, proplist}
 %% node_node_metrics :: {{node_id, node_id}, proplist}
 %% gen_server2_metrics :: {pid, buffer_length}
+%% connection_churn_metrics :: {node(), connection_created, connection_closed, channel_created, channel_closed, queue_declared, queue_created, queue_deleted}
