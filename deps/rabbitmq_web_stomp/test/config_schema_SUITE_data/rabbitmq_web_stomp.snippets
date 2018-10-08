@@ -45,7 +45,26 @@
   "web_stomp.ws_frame = binary",
   [{rabbitmq_web_stomp,[{ws_frame,binary}]}],
   [rabbitmq_web_stomp]},
+
+ %%
+ %% Cowboy options
+ %%
+
  {cowboy_max_keepalive,
   "web_stomp.cowboy_opts.max_keepalive = 10",
   [{rabbitmq_web_stomp,[{cowboy_opts,[{max_keepalive,10}]}]}],
+  [rabbitmq_web_stomp]},
+
+ %%
+ %% Cowboy WebSocket options
+ %%
+
+{ws_opts_compress_true,
+  "web_stomp.ws_opts.compress = true",
+  [{rabbitmq_web_stomp,[{cowboy_ws_opts,[{compress, true}]}]}],
+  [rabbitmq_web_stomp]},
+
+{ws_opts_compress_false,
+  "web_stomp.ws_opts.compress = false",
+  [{rabbitmq_web_stomp,[{cowboy_ws_opts,[{compress, false}]}]}],
   [rabbitmq_web_stomp]}].
