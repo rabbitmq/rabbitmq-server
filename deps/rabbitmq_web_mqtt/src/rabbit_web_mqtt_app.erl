@@ -45,10 +45,11 @@ init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 %%----------------------------------------------------------------------------
 
 mqtt_init() ->
-    CowboyOpts0 = maps:from_list(get_env(cowboy_opts, [])),
+    CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
+    CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
 
     Routes = cowboy_router:compile([{'_', [
-        {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, []}
+        {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
     ]}]),
     CowboyOpts = CowboyOpts0#{env         => #{dispatch => Routes},
                               middlewares => [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler]},

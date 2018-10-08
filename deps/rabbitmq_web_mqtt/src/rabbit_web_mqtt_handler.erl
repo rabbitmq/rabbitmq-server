@@ -46,7 +46,8 @@ init(Req, Opts) ->
                 SecWsProtocol ->
                     cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req)
             end,
-            WsOpts = proplists:get_value(ws_opts, Opts, #{}),
+            WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+            WsOpts  = maps:merge(#{compress => true}, WsOpts0),
             {cowboy_websocket, Req2, #state{
                 conn_name     = ConnStr,
                 keepalive     = {none, none},
