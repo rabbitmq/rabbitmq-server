@@ -77,7 +77,7 @@
     [{datatype, integer}]}.
 
 %% backwards compatibility
-{mapping, "web_stomp.cowboy_opts.timeout",      "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
+{mapping, "web_stomp.cowboy_opts.timeout", "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]
 }.
 %% recent Cowboy versions have several timeout settings
@@ -101,7 +101,8 @@
 }.
 
 {mapping, "web_stomp.ws_opts.compress", "rabbitmq_web_stomp.cowboy_ws_opts.compress",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, {enum, [true, false]}}]
+}.
 {mapping, "web_stomp.ws_opts.max_frame_size", "rabbitmq_web_stomp.cowboy_ws_opts.max_frame_size",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]
 }.
