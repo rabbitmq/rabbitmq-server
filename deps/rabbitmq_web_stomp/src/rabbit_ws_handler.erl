@@ -52,7 +52,8 @@ init(Req0, Opts) ->
         undefined -> [];
         AuthHd    -> [{authorization, binary_to_list(AuthHd)}]
     end,
-    {_, WsOpts} = lists:keyfind(ws_opts, 1, Opts),
+    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+    WsOpts  = maps:merge(#{compress => true}, WsOpts0),
     {cowboy_websocket, Req, {Socket, Peername, Sockname, Headers, FrameType}, WsOpts}.
 
 websocket_init({Socket, Peername, Sockname, Headers, FrameType}) ->
