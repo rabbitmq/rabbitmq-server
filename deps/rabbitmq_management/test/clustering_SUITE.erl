@@ -712,6 +712,13 @@ overview(Config) ->
     ?assert(maps:get(messages_ready, QT) >= 2),
     MS = maps:get(message_stats, Res),
     ?assert(maps:get(publish, MS) >= 2),
+    ChurnRates = maps:get(churn_rates, Res),
+    ?assertEqual(maps:get(queue_declared, ChurnRates), 2),
+    ?assertEqual(maps:get(queue_created, ChurnRates), 2),
+    ?assertEqual(maps:get(queue_deleted, ChurnRates), 0),
+    ?assertEqual(maps:get(channel_created, ChurnRates), 2),
+    ?assertEqual(maps:get(channel_closed, ChurnRates), 0),
+    ?assertEqual(maps:get(connection_closed, ChurnRates), 0),
 
     amqp_channel:close(Chan),
     amqp_channel:close(Chan2),

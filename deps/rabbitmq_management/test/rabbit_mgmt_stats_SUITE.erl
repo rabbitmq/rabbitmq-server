@@ -88,7 +88,8 @@ stats_tables() ->
      exchange_stats_publish_out, exchange_stats_publish_in,
      queue_msg_stats, vhost_msg_stats, queue_process_stats,
      node_coarse_stats, node_persister_stats,
-     node_node_coarse_stats, queue_msg_rates, vhost_msg_rates
+     node_node_coarse_stats, queue_msg_rates, vhost_msg_rates,
+     connection_churn_rates
     ].
 
 sample_size(large) ->
