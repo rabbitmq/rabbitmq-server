@@ -273,12 +273,12 @@ build_registration_body() ->
 
 -spec registration_body_add_id() -> list().
 registration_body_add_id() ->
-  [{'ID', list_to_atom(service_id())}].
+  [{'ID', rabbit_data_coercion:to_atom(service_id())}].
 
 -spec registration_body_add_name(Payload :: list()) -> list().
 registration_body_add_name(Payload) ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-  Name = list_to_atom(get_config_key(consul_svc, M)),
+  Name = rabbit_data_coercion:to_atom(get_config_key(consul_svc, M)),
   lists:append(Payload, [{'Name', Name}]).
 
 -spec registration_body_maybe_add_address(Payload :: list())
@@ -290,7 +290,7 @@ registration_body_maybe_add_address(Payload) ->
     -> list().
 registration_body_maybe_add_address(Payload, "undefined") -> Payload;
 registration_body_maybe_add_address(Payload, Address) ->
-  lists:append(Payload, [{'Address', list_to_atom(Address)}]).
+  lists:append(Payload, [{'Address', rabbit_data_coercion:to_atom(Address)}]).
 
 registration_body_maybe_add_check(Payload) ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
@@ -310,8 +310,8 @@ registration_body_maybe_add_check(Payload, undefined) ->
         _ -> Payload
     end;
 registration_body_maybe_add_check(Payload, TTL) ->
-    CheckItems = [{'Notes', list_to_atom(?CONSUL_CHECK_NOTES)},
-        {'TTL', list_to_atom(service_ttl(TTL))},
+    CheckItems = [{'Notes', rabbit_data_coercion:to_atom(?CONSUL_CHECK_NOTES)},
+        {'TTL', rabbit_data_coercion:to_atom(service_ttl(TTL))},
         {'Status', 'passing'}],
     Check = [{'Check',  registration_body_maybe_add_deregister(CheckItems)}],
     lists:append(Payload, Check).
@@ -333,7 +333,7 @@ registration_body_maybe_add_deregister(Payload) ->
 registration_body_maybe_add_deregister(Payload, undefined) -> Payload;
 registration_body_maybe_add_deregister(Payload, Deregister_After) ->
     Deregister = {'DeregisterCriticalServiceAfter',
-        list_to_atom(service_ttl(Deregister_After))},
+        rabbit_data_coercion:to_atom(service_ttl(Deregister_After))},
     Payload ++ [Deregister].
 
 -spec registration_body_maybe_add_tag(Payload :: list()) -> list().
@@ -349,11 +349,11 @@ registration_body_maybe_add_tag(Payload) ->
     -> list().
 registration_body_maybe_add_tag(Payload, "default", []) -> Payload;
 registration_body_maybe_add_tag(Payload, "default", Tags) ->
-  lists:append(Payload, [{'Tags', [list_to_atom(X) || X <- Tags]}]);
+  lists:append(Payload, [{'Tags', [rabbit_data_coercion:to_atom(X) || X <- Tags]}]);
 registration_body_maybe_add_tag(Payload, Cluster, []) ->
-  lists:append(Payload, [{'Tags', [list_to_atom(Cluster)]}]);
+  lists:append(Payload, [{'Tags', [rabbit_data_coercion:to_atom(Cluster)]}]);
 registration_body_maybe_add_tag(Payload, Cluster, Tags) ->
-  lists:append(Payload, [{'Tags', [list_to_atom(Cluster)] ++ [list_to_atom(X) || X <- Tags]}]).
+  lists:append(Payload, [{'Tags', [rabbit_data_coercion:to_atom(Cluster)] ++ [rabbit_data_coercion:to_atom(X) || X <- Tags]}]).
 
 
 -spec validate_addr_parameters(false | true, false | true) -> false | true.
@@ -418,7 +418,7 @@ maybe_add_domain(Value) ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   case get_config_key(consul_use_longname, M) of
       true ->
-          list_to_atom(string:join([atom_to_list(Value),
+          rabbit_data_coercion:to_atom(string:join([atom_to_list(Value),
                                     "node",
                                     get_config_key(consul_domain, M)],
                                    "."));
@@ -503,7 +503,7 @@ wait_for_list_nodes(N) ->
 create_session(Name, TTL) ->
     case consul_session_create([], maybe_add_acl([]),
                                [{'Name', Name},
-                                {'TTL', list_to_atom(service_ttl(TTL))}]) of
+                                {'TTL', rabbit_data_coercion:to_atom(service_ttl(TTL))}]) of
         {ok, Response} ->
             {ok, get_session_id(Response)};
         {error, _} = Err ->
@@ -752,7 +752,7 @@ consul_session_renew(SessionId, Query, Headers) ->
     rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                     get_config_key(consul_host, M),
                                     get_config_key(consul_port, M),
-                                    [v1, session, renew, list_to_atom(SessionId)],
+                                    [v1, session, renew, rabbit_data_coercion:to_atom(SessionId)],
                                     Query,
                                     Headers,
                                     []).
