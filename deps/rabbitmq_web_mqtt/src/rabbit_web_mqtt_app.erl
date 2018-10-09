@@ -45,21 +45,28 @@ init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 %%----------------------------------------------------------------------------
 
 mqtt_init() ->
-    CowboyOpts0 = get_env(cowboy_opts, []),
+    CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
+    CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
 
     Routes = cowboy_router:compile([{'_', [
-        {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, []}
+        {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
     ]}]),
-    CowboyOpts = maps:from_list([
-        {env, #{dispatch => Routes}},
-        {middlewares, [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler]}
-    |CowboyOpts0]),
-
+    CowboyOpts = CowboyOpts0#{env         => #{dispatch => Routes},
+                              middlewares => [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler]},
     {TCPConf, IpStr, Port} = get_tcp_conf(),
 
-    {ok, _} = ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
+    case ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
         ranch_tcp, TCPConf,
-        rabbit_web_mqtt_connection_sup, CowboyOpts),
+        rabbit_web_mqtt_connection_sup, CowboyOpts) of
+        {ok, _}                       -> ok;
+        {error, {already_started, _}} -> ok;
+        {error, Err}                  ->
+            rabbit_log_connection:error(
+                "Failed to start a WebSocket (HTTP) listener. Error: ~p,"
+                " listener settings: ~p~n",
+                [Err, TCPConf]),
+            throw(Err)
+    end,
     listener_started('http/web-mqtt', TCPConf),
     rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w~n",
                     [IpStr, Port]),
