@@ -66,6 +66,18 @@
         ], [rabbitmq_peer_discovery_etcd]
     },
     %% lock acquisition timeout
+    {etcd_lock_wait_time, "cluster_formation.etcd.lock_timeout = 400", [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_etcd, [
+                        {lock_wait_time, 400}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_etcd]
+    },
+
+    %% alias for consistency with etcd
     {etcd_lock_wait_time, "cluster_formation.etcd.lock_wait_time = 400", [
             {rabbit, [
                 {cluster_formation, [
