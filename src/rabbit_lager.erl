@@ -16,7 +16,7 @@
 
 -module(rabbit_lager).
 
--include("rabbit_log.hrl").
+-include_lib("rabbit_common/include/rabbit_log.hrl").
 
 %% API
 -export([start_logger/0, log_locations/0, fold_sinks/2,
@@ -26,11 +26,10 @@
 -export([configure_lager/0]).
 
 start_logger() ->
-    application:stop(lager),
-    application:stop(syslog),
-    ensure_lager_configured(),
-    application:ensure_all_started(syslog),
-    lager:start(),
+    ok = maybe_remove_logger_handler(),
+    ok = app_utils:stop_applications([lager, syslog]),
+    ok = ensure_lager_configured(),
+    ok = app_utils:start_applications([lager]),
     fold_sinks(
       fun
           (_, [], Acc) ->
@@ -176,9 +175,12 @@ lager_configured() ->
     application:get_env(syslog, syslog_error_logger) =/= undefined.
 
 configure_lager() ->
-    application:load(lager),
-    application:load(syslog),
+    ok = app_utils:load_applications([lager]),
     %% Turn off reformatting for error_logger messages
+    case application:get_env(lager, error_logger_redirect) of
+        undefined -> application:set_env(lager, error_logger_redirect, true);
+        _         -> ok
+    end,
     case application:get_env(lager, error_logger_format_raw) of
         undefined -> application:set_env(lager, error_logger_format_raw, true);
         _         -> ok
@@ -190,7 +192,7 @@ configure_lager() ->
             %% difference.
             case application:get_env(rabbit, lager_log_root) of
                 {ok, Value} ->
-                    application:set_env(lager, log_root, Value);
+                    ok = application:set_env(lager, log_root, Value);
                 _ ->
                     ok
             end;
@@ -199,7 +201,7 @@ configure_lager() ->
     %% Set rabbit.log config variable based on environment.
     prepare_rabbit_log_config(),
     %% Configure syslog library.
-    configure_syslog(),
+    ok = configure_syslog_error_logger(),
     %% At this point we should have rabbit.log application variable
     %% configured to generate RabbitMQ log handlers.
     GeneratedHandlers = generate_lager_handlers(),
@@ -217,8 +219,8 @@ configure_lager() ->
                                                         FormerRabbitHandlers)
     end,
 
-    application:set_env(lager, handlers, Handlers),
-    application:set_env(lager, rabbit_handlers, GeneratedHandlers),
+    ok = application:set_env(lager, handlers, Handlers),
+    ok = application:set_env(lager, rabbit_handlers, GeneratedHandlers),
 
     %% Setup extra sink/handlers. If they are not configured, redirect
     %% messages to the default sink. To know the list of expected extra
@@ -253,28 +255,59 @@ configure_lager() ->
         [error_logger_lager_event | list_expected_sinks()],
         SinkConfigs),
     Sinks = merge_lager_sink_handlers(LagerSinks, GeneratedSinks, []),
-    application:set_env(lager, extra_sinks, Sinks),
+    ok = application:set_env(lager, extra_sinks, Sinks),
 
     case application:get_env(lager, error_logger_hwm) of
         undefined ->
-            application:set_env(lager, error_logger_hwm, 1000),
+            ok = application:set_env(lager, error_logger_hwm, 1000),
             % NB: 50 is the default value in lager.app.src
-            application:set_env(lager, error_logger_hwm_original, 50);
+            ok = application:set_env(lager, error_logger_hwm_original, 50);
         {ok, Val} when is_integer(Val) andalso Val < 1000 ->
-            application:set_env(lager, error_logger_hwm, 1000),
-            application:set_env(lager, error_logger_hwm_original, Val);
+            ok = application:set_env(lager, error_logger_hwm, 1000),
+            ok = application:set_env(lager, error_logger_hwm_original, Val);
         {ok, Val} ->
-            application:set_env(lager, error_logger_hwm_original, Val),
+            ok = application:set_env(lager, error_logger_hwm_original, Val),
             ok
     end,
     ok.
 
-configure_syslog() ->
+configure_syslog_error_logger() ->
     %% Disable error_logger forwarding to syslog if it's not configured
     case application:get_env(syslog, syslog_error_logger) of
-        undefined -> application:set_env(syslog, syslog_error_logger, false);
+        undefined ->
+            application:set_env(syslog, syslog_error_logger, false);
         _ -> ok
     end.
+
+-define(SYSLOG_LOCAL_IP, {ip,{127,0,0,1}}).
+configure_syslog() ->
+    ok = app_utils:load_applications([syslog]),
+    %% https://github.com/schlagert/syslog#configuration
+    Protocol = case application:get_env(syslog, protocol) of
+                   undefined ->
+                       {rfc3164, udp, [?SYSLOG_LOCAL_IP]};
+                   %% {protocol,
+                   %%     rfc3164 |
+                   %%     rfc5424 |
+                   %%     {rfc3164 | rfc5424, tcp | udp} |
+                   %%     {rfc3164 | rfc5424, udp, [gen_udp:option()]} |
+                   %%     {rfc3164 | rfc5424, tcp, [gen_tcp:option()]} |
+                   %%     {rfc5424, tls, [ssl:connect_option()]}
+                   %% }
+                   {ok, Rfc} when Rfc =:= rfc3164; Rfc =:= rfc5424 ->
+                       {Rfc, udp, [?SYSLOG_LOCAL_IP]};
+                   {ok, {Rfc, Transport}} when Rfc =:= rfc3164; Rfc =:= rfc5424 ->
+                       {Rfc, Transport, [?SYSLOG_LOCAL_IP]};
+                   {ok, {Rfc, Transport, Opts}} when Rfc =:= rfc3164; Rfc =:= rfc5424 ->
+                       case proplists:lookup(ip, Opts) of
+                           none ->
+                               {Rfc, Transport, [?SYSLOG_LOCAL_IP|Opts]};
+                           _ ->
+                               {Rfc, Transport, Opts}
+                        end
+               end,
+    ok = application:unset_env(syslog, protocol),
+    ok = application:set_env(syslog, protocol, Protocol).
 
 remove_rabbit_handlers(Handlers, FormerHandlers) ->
     lists:filter(fun(Handler) ->
@@ -317,8 +350,9 @@ lager_backend(exchange) -> lager_exchange_backend.
 %% Syslog backend is using an old API for configuration and
 %% does not support proplists.
 generate_handler(syslog_lager_backend, HandlerConfig) ->
-    Level = proplists:get_value(level, HandlerConfig,
-                                default_config_value(level)),
+    DefaultConfigVal = default_config_value(level),
+    Level = proplists:get_value(level, HandlerConfig, DefaultConfigVal),
+    ok = configure_syslog(),
     [{syslog_lager_backend,
      [Level,
       {},
@@ -384,7 +418,7 @@ prepare_rabbit_log_config() ->
 
 set_env_default_log_disabled() ->
     %% Disabling all the logs.
-    application:set_env(rabbit, log, []).
+    ok = application:set_env(rabbit, log, []).
 
 set_env_default_log_console() ->
     LogConfig = application:get_env(rabbit, log, []),
@@ -395,7 +429,7 @@ set_env_default_log_console() ->
                                                 {enabled, true})}),
     %% Remove the file handler - disable logging to file
     LogConfigConsoleNoFile = lists:keydelete(file, 1, LogConfigConsole),
-    application:set_env(rabbit, log, LogConfigConsoleNoFile).
+    ok = application:set_env(rabbit, log, LogConfigConsoleNoFile).
 
 set_env_default_log_file(FileName, Override) ->
     LogConfig = application:get_env(rabbit, log, []),
@@ -416,7 +450,7 @@ set_env_default_log_file(FileName, Override) ->
                     LogConfig
             end
     end,
-    application:set_env(rabbit, log, NewLogConfig).
+    ok = application:set_env(rabbit, log, NewLogConfig).
 
 set_env_upgrade_log_file(FileName) ->
     LogConfig = application:get_env(rabbit, log, []),
@@ -436,7 +470,7 @@ set_env_upgrade_log_file(FileName) ->
         %% No cahnge. We don't want to override the configured value.
         _File -> LogConfig
     end,
-    application:set_env(rabbit, log, NewLogConfig).
+    ok = application:set_env(rabbit, log, NewLogConfig).
 
 generate_lager_sinks(SinkNames, SinkConfigs) ->
     lists:map(fun(SinkName) ->
@@ -523,7 +557,6 @@ merge_lager_sink_handlers([{Name, Sink} | RestSinks], GeneratedSinks, Agg) ->
     end;
 merge_lager_sink_handlers([], GeneratedSinks, Agg) -> GeneratedSinks ++ Agg.
 
-
 list_expected_sinks() ->
     case application:get_env(rabbit, lager_extra_sinks) of
         {ok, List} ->
@@ -543,6 +576,20 @@ list_expected_sinks() ->
             %% module is later cover-compiled, the compile option will
             %% be lost, so we will be able to retrieve the list from the
             %% application environment.
-            application:set_env(rabbit, lager_extra_sinks, List),
+            ok = application:set_env(rabbit, lager_extra_sinks, List),
             List
+    end.
+
+maybe_remove_logger_handler() ->
+    M = logger,
+    F = remove_handler,
+    try
+        ok = erlang:apply(M, F, [default])
+    catch
+        error:undef ->
+            % OK since the logger module only exists in OTP 21.1 or later
+            ok;
+        Err:Reason ->
+            error_logger:error_msg("calling ~p:~p failed: ~p:~p~n",
+                                   [M, F, Err, Reason])
     end.
