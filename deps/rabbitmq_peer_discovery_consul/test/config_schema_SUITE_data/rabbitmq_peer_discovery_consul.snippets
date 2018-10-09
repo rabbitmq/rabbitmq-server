@@ -191,6 +191,36 @@
  [rabbitmq_peer_discovery_consul]}
 
 
+ , {consul_service_tags,
+  "cluster_formation.consul.svc_tags.1 = tag-a
+   cluster_formation.consul.svc_tags.2 = tag-b",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_tags, ["tag-a", "tag-b"]}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+ , {consul_service_tags_set_to_none,
+  "cluster_formation.consul.svc_tags = none",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_tags, []}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+ , {consul_service_tags_with_spaces,
+  "cluster_formation.consul.svc_tags.1 = tag with spaces
+   cluster_formation.consul.svc_tags.2 = another one",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {consul_svc_tags, ["tag with spaces",
+                                                                              "another one"]}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
  , {all_values_absent,
   "",
   [],
