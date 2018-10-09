@@ -18,7 +18,6 @@
 -include("rabbit.hrl").
 
 -include_lib("kernel/include/inet.hrl").
--include_lib("ssl/src/ssl_api.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
          recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
@@ -89,7 +88,9 @@
 
 -define(SSL_CLOSE_TIMEOUT, 5000).
 
--define(IS_SSL(Sock), is_record(Sock, sslsocket)).
+-define(IS_SSL(Sock), is_tuple(Sock)
+    andalso (tuple_size(Sock) =:= 3)
+    andalso (element(1, Sock) =:= sslsocket)).
 
 is_ssl(Sock) -> ?IS_SSL(Sock).
 
