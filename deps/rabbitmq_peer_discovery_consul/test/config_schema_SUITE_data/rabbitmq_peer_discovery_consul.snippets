@@ -181,8 +181,20 @@
  [rabbitmq_peer_discovery_consul]}
 
 
+ %% lock acquisition timeout
+
  , {consul_lock_timeout,
   "cluster_formation.consul.lock_timeout = 60",
+  [{rabbit, [{cluster_formation, [
+                                  {peer_discovery_consul, [
+                                                           {lock_wait_time, 60}
+                                                          ]}
+                                 ]}]}],
+ [rabbitmq_peer_discovery_consul]}
+
+ %% alias for consistency with etcd
+ , {consul_lock_wait_time,
+  "cluster_formation.consul.lock_wait_time = 60",
   [{rabbit, [{cluster_formation, [
                                   {peer_discovery_consul, [
                                                            {lock_wait_time, 60}
