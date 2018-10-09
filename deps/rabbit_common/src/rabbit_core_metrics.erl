@@ -267,6 +267,8 @@ queue_deleted(Name) ->
                   end, CQ).
 
 queues_deleted(Queues) ->
+    ets:update_counter(connection_churn_metrics, node(), {8, length(Queues)},
+                       ?CONNECTION_CHURN_METRICS),
     [ delete_queue_metrics(Queue) || Queue <- Queues ],
     [
         begin
