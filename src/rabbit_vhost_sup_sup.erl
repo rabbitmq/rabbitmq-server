@@ -53,7 +53,6 @@ init([]) ->
     %% unless the operator opts in.
     RestartStrategy = vhost_restart_strategy(),
     ets:new(?MODULE, [named_table, public, {keypos, #vhost_sup.vhost}]),
-    %% TODO massive hack to start the fifo metrics while don't get fixed in ra
     {ok, {{simple_one_for_one, 0, 5},
           [{rabbit_vhost, {rabbit_vhost_sup_wrapper, start_link, []},
             RestartStrategy, ?SUPERVISOR_WAIT, supervisor,
