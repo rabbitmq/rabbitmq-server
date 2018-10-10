@@ -68,9 +68,10 @@
 -type protocol() :: atom().
 -type label() :: string().
 
--spec start_tcp_listener(listener_config(), integer()) -> 'ok'.
--spec start_ssl_listener
-        (listener_config(), rabbit_types:infos(), integer()) -> 'ok'.
+-spec start_tcp_listener(
+        listener_config(), integer()) -> 'ok' | {'error', term()}.
+-spec start_ssl_listener(
+        listener_config(), rabbit_types:infos(), integer()) -> 'ok' | {'error', term()}.
 -spec stop_tcp_listener(listener_config()) -> 'ok'.
 -spec active_listeners() -> [rabbit_types:listener()].
 -spec node_listeners(node()) -> [rabbit_types:listener()].
@@ -118,17 +119,35 @@
 boot() ->
     ok = record_distribution_listener(),
     _ = application:start(ranch),
-    ok = boot_tcp(application:get_env(rabbit, num_tcp_acceptors, 10)),
-    ok = boot_ssl(application:get_env(rabbit, num_ssl_acceptors, 1)),
+    %% Failures will throw exceptions
+    _ = boot_listeners(fun boot_tcp/1, application:get_env(rabbit, num_tcp_acceptors, 10), "TCP"),
+    _ = boot_listeners(fun boot_tls/1, application:get_env(rabbit, num_ssl_acceptors, 10), "TLS"),
     _ = maybe_start_proxy_protocol(),
     ok.
 
+boot_listeners(Fun, NumAcceptors, Type) ->
+    case Fun(NumAcceptors) of
+        ok                                                                  ->
+            ok;
+        {error, {could_not_start_listener, Address, Port, Details}} = Error ->
+            rabbit_log:error("Failed to start ~s listener [~s]:~p, error: ~p",
+                             [Type, Address, Port, Details]),
+            throw(Error)
+    end.
+
 boot_tcp(NumAcceptors) ->
     {ok, TcpListeners} = application:get_env(tcp_listeners),
-    [ok = start_tcp_listener(Listener, NumAcceptors) || Listener <- TcpListeners],
-    ok.
+    case lists:foldl(fun(Listener, ok) ->
+                             start_tcp_listener(Listener, NumAcceptors);
+                        (_Listener, Error) ->
+                             Error
+                     end,
+                     ok, TcpListeners) of
+        ok                 -> ok;
+        {error, _} = Error -> Error
+    end.
 
-boot_ssl(NumAcceptors) ->
+boot_tls(NumAcceptors) ->
     case application:get_env(ssl_listeners) of
         {ok, []} ->
             ok;
@@ -212,15 +231,20 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
      transient, infinity, supervisor, [tcp_listener_sup]}.
 
 start_tcp_listener(Listener, NumAcceptors) ->
-    start_listener(Listener, NumAcceptors, amqp, "TCP Listener", tcp_opts()).
+    start_listener(Listener, NumAcceptors, amqp, "TCP listener", tcp_opts()).
 
 start_ssl_listener(Listener, SslOpts, NumAcceptors) ->
-    start_listener(Listener, NumAcceptors, 'amqp/ssl', "SSL Listener", tcp_opts() ++ SslOpts).
+    start_listener(Listener, NumAcceptors, 'amqp/ssl', "TLS (SSL) listener", tcp_opts() ++ SslOpts).
 
+
+-spec start_listener(
+        listener_config(), integer(), protocol(), label(), list()) -> 'ok' | {'error', term()}.
 start_listener(Listener, NumAcceptors, Protocol, Label, Opts) ->
-    [start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ||
-        Address <- tcp_listener_addresses(Listener)],
-    ok.
+    lists:foldl(fun (Address, ok) ->
+                        start_listener0(Address, NumAcceptors, Protocol, Label, Opts);
+                    (_Address, {error, _} = Error) ->
+                        Error
+                end, ok, tcp_listener_addresses(Listener)).
 
 start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
     Transport = transport(Protocol),
@@ -228,10 +252,15 @@ start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
                              Transport, rabbit_connection_sup, [], Protocol,
                              NumAcceptors, Label),
     case supervisor:start_child(rabbit_sup, Spec) of
-        {ok, _}                -> ok;
-        {error, {shutdown, _}} -> {IPAddress, Port, _Family} = Address,
-                                  exit({could_not_start_tcp_listener,
-                                        {rabbit_misc:ntoa(IPAddress), Port}})
+        {ok, _}          -> ok;
+        {error, {{shutdown, {failed_to_start_child, _,
+                             {shutdown, {failed_to_start_child, _,
+                                         {listen_error, _, PosixError}}}}}, _}} ->
+            {IPAddress, Port, _Family} = Address,
+            {error, {could_not_start_listener, rabbit_misc:ntoa(IPAddress), Port, PosixError}};
+        {error, Other} ->
+            {IPAddress, Port, _Family} = Address,
+            {error, {could_not_start_listener, rabbit_misc:ntoa(IPAddress), Port, Other}}
     end.
 
 transport(Protocol) ->
