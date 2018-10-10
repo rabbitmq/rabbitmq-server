@@ -1,5 +1,5 @@
 UPSTREAM_GIT=https://github.com/pika/pika.git
-REVISION=0.11.2
+REVISION=0.12.0
 
 LIB_DIR=pika
 CHECKOUT_DIR=pika-git
