@@ -190,6 +190,28 @@
 </div>
 
 <div class="section-hidden">
+<h2>Churn statistics</h2>
+<div class="hider">
+  <%= rates_chart_or_text('connection-churn', node,
+      [['Created', 'connection_created'],
+       ['Closed', 'connection_closed']],
+      fmt_rate, fmt_rate_axis, true, 'Connection operations', 'connection-operations') %>
+
+  <%= rates_chart_or_text('channel-churn', node,
+      [['Created', 'channel_created'],
+       ['Closed', 'channel_closed']],
+      fmt_rate, fmt_rate_axis, true, 'Channel operations', 'channel-operations') %>
+
+  <%= rates_chart_or_text('queue-churn', node,
+      [['Declared', 'queue_declared'],
+       ['Created', 'queue_created'],
+       ['Deleted', 'queue_deleted']],
+      fmt_rate, fmt_rate_axis, true, 'Queue operations', 'queue-operations') %>
+
+</div>
+</div>
+
+<div class="section-hidden">
 <h2>Cluster links</h2>
 <div class="hider">
 <% if (node.cluster_links.length > 0) { %>

@@ -204,6 +204,29 @@
 </div>
 
 <div class="section-hidden">
+<h2>Churn statistics</h2>
+<div class="hider updatable">
+  <%= rates_chart_or_text('connection-churn', overview.churn_rates,
+      [['Created', 'connection_created'],
+       ['Closed', 'connection_closed']],
+      fmt_rate, fmt_rate_axis, true, 'Connection operations', 'connection-operations') %>
+
+  <%= rates_chart_or_text('channel-churn', overview.churn_rates,
+      [['Created', 'channel_created'],
+       ['Closed', 'channel_closed']],
+      fmt_rate, fmt_rate_axis, true, 'Channel operations', 'channel-operations') %>
+
+  <%= rates_chart_or_text('queue-churn', overview.churn_rates,
+      [['Declared', 'queue_declared'],
+       ['Created', 'queue_created'],
+       ['Deleted', 'queue_deleted']],
+      fmt_rate, fmt_rate_axis, true, 'Queue operations', 'queue-operations') %>
+
+</div>
+</div>
+
+
+<div class="section-hidden">
 <h2>Ports and contexts</h2>
 <div class="hider updatable">
 <h3>Listening ports</h3>
