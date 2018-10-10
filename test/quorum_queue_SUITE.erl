@@ -76,6 +76,7 @@ all_tests() ->
      publish,
      publish_and_restart,
      consume,
+     consume_first_empty,
      consume_from_empty_queue,
      consume_and_autoack,
      subscribe,
@@ -521,6 +522,22 @@ consume(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0).
+
+consume_first_empty(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    RaName = ra_name(QQ),
+    consume_empty(Ch, QQ, false),
+    publish(Ch, QQ),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+    consume(Ch, QQ, false),
+    rabbit_ct_client_helpers:close_channel(Ch).
 
 consume_in_minority(Config) ->
     [Server0, Server1, Server2] =
