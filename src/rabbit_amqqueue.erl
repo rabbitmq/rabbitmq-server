@@ -1071,7 +1071,7 @@ basic_get(#amqqueue{pid = {Name, _} = Id, type = quorum, name = QName} = Q, _ChP
     FState0 = get_quorum_state(Id, QName, FStates),
     case rabbit_quorum_queue:basic_get(Q, NoAck, CTag, FState0) of
         {ok, empty, FState} ->
-            {empty, FState};
+            {empty, maps:put(Name, FState, FStates)};
         {ok, Count, Msg, FState} ->
             {ok, Count, Msg, maps:put(Name, FState, FStates)};
         {error, Reason} ->
