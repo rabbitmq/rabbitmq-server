@@ -129,7 +129,8 @@ retention_policy(queue_coarse_metrics) -> basic;
 retention_policy(node_persister_metrics) -> global;
 retention_policy(node_coarse_metrics) -> global;
 retention_policy(node_metrics) -> basic;
-retention_policy(node_node_metrics) -> global.
+retention_policy(node_node_metrics) -> global;
+retention_policy(connection_churn_metrics) -> basic.
 
 take_smaller(Policies) ->
     Intervals = [I || {_, I} <- Policies],
@@ -516,7 +517,18 @@ aggregate_entry({Id, Metrics}, NextStats, Ops0,
                      Ops0),
     Ops = insert_entry_ops(node_node_coarse_stats, Id, false, Stats, Ops1,
                            GPolicies),
-    {NextStats, Ops, State}.
+    {NextStats, Ops, State};
+aggregate_entry({Id, ConnCreated, ConnClosed, ChCreated, ChClosed,
+                 QueueDeclared, QueueCreated, QueueDeleted}, NextStats, Ops0,
+                #state{table = connection_churn_metrics,
+                       policies = {_, _, GPolicies}} = State) ->
+    %% Id is the local node. There is only one entry on every ETS table.
+    Stats = ?connection_churn_rates(ConnCreated, ConnClosed, ChCreated, ChClosed,
+                                    QueueDeclared, QueueCreated, QueueDeleted),
+    Diff = get_difference(Id, Stats, State),
+    Ops = insert_entry_ops(connection_churn_rates, Id, true, Diff, Ops0,
+                           GPolicies),
+    {insert_old_aggr_stats(NextStats, Id, Stats), Ops, State}.
 
 insert_entry(Table, Id, TS, Entry, Size, Interval0, Incremental) ->
     Key = {Id, Interval0},
@@ -581,6 +593,10 @@ sum_entry({A0, A1}, {B0, B1}) ->
     {B0 + A0, B1 + A1};
 sum_entry({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 + A0, B1 + A1, B2 + A2};
+sum_entry({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5};
+sum_entry({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6};
 sum_entry({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6, B7 + A7}.
 
@@ -590,6 +606,10 @@ difference({A0, A1}, {B0, B1}) ->
     {B0 - A0, B1 - A1};
 difference({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 - A0, B1 - A1, B2 - A2};
+difference({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
+    {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5};
+difference({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
+    {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5, B6 - A6};
 difference({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5, B6 - A6, B7 - A7}.
 
