@@ -30,7 +30,7 @@ init([{Listeners, SslListeners0}, Configuration]) ->
         = case SslListeners0 of
               [] -> {none, 0, []};
               _  -> {rabbit_networking:ensure_ssl(),
-                     application:get_env(rabbitmq_stomp, num_ssl_acceptors, 1),
+                     application:get_env(rabbitmq_stomp, num_ssl_acceptors, 10),
                      case rabbit_networking:poodle_check('STOMP') of
                          ok     -> SslListeners0;
                          danger -> []
@@ -51,13 +51,13 @@ tcp_listener_spec([Address, SocketOpts, Configuration, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts,
       transport(stomp), rabbit_stomp_client_sup, Configuration,
-      stomp, NumAcceptors, "STOMP TCP Listener").
+      stomp, NumAcceptors, "STOMP TCP listener").
 
 ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts ++ SslOpts,
       transport('stomp/ssl'), rabbit_stomp_client_sup, Configuration,
-      'stomp/ssl', NumAcceptors, "STOMP SSL Listener").
+      'stomp/ssl', NumAcceptors, "STOMP TLS listener").
 
 transport(Protocol) ->
     ProxyProtocol = application:get_env(rabbitmq_stomp, proxy_protocol, false),
