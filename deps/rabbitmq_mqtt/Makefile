@@ -17,9 +17,9 @@ define PROJECT_ENV
 	    {retained_message_store_dets_sync_interval, 2000},
 	    {prefetch, 10},
 	    {ssl_listeners, []},
-	    {num_ssl_acceptors, 1},
 	    {tcp_listeners, [1883]},
 	    {num_tcp_acceptors, 10},
+	    {num_ssl_acceptors, 10},
 	    {tcp_listen_options, [{backlog,   128},
 	                          {nodelay,   true}]},
 	    {proxy_protocol, false}
