@@ -72,7 +72,7 @@ init() ->
             TLSPort = proplists:get_value(port, TLSConf0),
             TLSConf = maybe_parse_ip(TLSConf0),
             NumSslAcceptors = case application:get_env(rabbitmq_web_stomp, num_ssl_acceptors) of
-                undefined     -> get_env(num_acceptors, 1);
+                undefined     -> get_env(num_acceptors, 10);
                 {ok, NumSsl}  -> NumSsl
             end,
              {ok, _} = ranch:start_listener(
