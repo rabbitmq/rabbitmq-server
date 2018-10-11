@@ -120,6 +120,9 @@ saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
 [ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE=${CONF_ENV_FILE}
 [ -f ${RABBITMQ_CONF_ENV_FILE} ] && . ${RABBITMQ_CONF_ENV_FILE} || true
 
+[ -n "$ERL_EPMD_PORT" ] && export ERL_EPMD_PORT
+[ -n "$ERL_EPMD_ADDRESS" ] && export ERL_EPMD_ADDRESS
+
 DEFAULT_SCHEDULER_BIND_TYPE="db"
 [ -n "$SCHEDULER_BIND_TYPE" ] || SCHEDULER_BIND_TYPE="$DEFAULT_SCHEDULER_BIND_TYPE"
 [ -n "$RABBITMQ_SCHEDULER_BIND_TYPE" ] || RABBITMQ_SCHEDULER_BIND_TYPE="$SCHEDULER_BIND_TYPE"
@@ -402,6 +405,7 @@ run_escript()
         -kernel inet_dist_listen_max "$RABBITMQ_CTL_DIST_PORT_MAX" \
         -sasl errlog_type error \
         -mnesia dir "\"$RABBITMQ_MNESIA_DIR\"" \
+        -nodename "$RABBITMQ_NODENAME" \
         -run escript start \
         -escript main "$escript_main" \
         -extra "$escript" "$@"
