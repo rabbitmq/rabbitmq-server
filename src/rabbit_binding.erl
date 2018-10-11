@@ -15,7 +15,8 @@
 %%
 
 -module(rabbit_binding).
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include("amqqueue.hrl").
 
 -export([recover/0, recover/2, exists/1, add/2, add/3, remove/1, remove/3, list/1]).
 -export([list_for_source/1, list_for_destination/1,
@@ -44,7 +45,7 @@
                          {'resources_missing',
                           [{'not_found', (rabbit_types:binding_source() |
                                           rabbit_types:binding_destination())} |
-                           {'absent', rabbit_types:amqqueue()}]}).
+                           {'absent', amqqueue:amqqueue()}]}).
 
 -type bind_ok_or_error() :: 'ok' | bind_errors() |
                             rabbit_types:error(
@@ -53,7 +54,7 @@
 -type bind_res() :: bind_ok_or_error() | rabbit_misc:thunk(bind_ok_or_error()).
 -type inner_fun() ::
         fun((rabbit_types:exchange(),
-             rabbit_types:exchange() | rabbit_types:amqqueue()) ->
+             rabbit_types:exchange() | amqqueue:amqqueue()) ->
                    rabbit_types:ok_or_error(rabbit_types:amqp_error())).
 -type bindings() :: [rabbit_types:binding()].
 
@@ -393,7 +394,8 @@ remove_transient_for_destination(DstName) ->
 %%----------------------------------------------------------------------------
 
 durable(#exchange{durable = D}) -> D;
-durable(#amqqueue{durable = D}) -> D.
+durable(Q) when ?is_amqqueue(Q) ->
+    amqqueue:is_durable(Q).
 
 binding_action(Binding = #binding{source      = SrcName,
                                   destination = DstName,

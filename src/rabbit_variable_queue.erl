@@ -356,8 +356,9 @@
 
 -define(QUEUE, lqueue).
 
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include("amqqueue.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -532,8 +533,9 @@ init(Queue, Recover, Callback) ->
       fun (MsgIds) -> msg_indices_written_to_disk(Callback, MsgIds) end,
       fun (MsgIds) -> msgs_and_indices_written_to_disk(Callback, MsgIds) end).
 
-init(#amqqueue { name = QueueName, durable = IsDurable }, new,
-     AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) ->
+init(Q, new, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
+    QueueName = amqqueue:get_name(Q),
+    IsDurable = amqqueue:is_durable(Q),
     IndexState = rabbit_queue_index:init(QueueName,
                                          MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     VHost = QueueName#resource.virtual_host,
@@ -547,8 +549,9 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, new,
                                AsyncCallback, VHost), VHost);
 
 %% We can be recovering a transient queue if it crashed
-init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
-     AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) ->
+init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) when ?is_amqqueue(Q) ->
+    QueueName = amqqueue:get_name(Q),
+    IsDurable = amqqueue:is_durable(Q),
     {PRef, RecoveryTerms} = process_recovery_terms(Terms),
     VHost = QueueName#resource.virtual_host,
     {PersistentClient, ContainsCheckFun} =
@@ -620,7 +623,8 @@ delete_and_terminate(_Reason, State) ->
     rabbit_msg_store:client_delete_and_terminate(MSCStateT),
     a(State2 #vqstate { msg_store_clients = undefined }).
 
-delete_crashed(#amqqueue{name = QName}) ->
+delete_crashed(Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     ok = rabbit_queue_index:erase(QName).
 
 purge(State = #vqstate { len = Len }) ->
@@ -2825,7 +2829,7 @@ move_messages_to_vhost_store(Queues) ->
     %% Move the queue index for each persistent queue to the new store
     lists:foreach(
         fun(Queue) ->
-            #amqqueue{name = QueueName} = Queue,
+            QueueName = amqqueue:get_name(Queue),
             rabbit_queue_index:move_to_per_vhost_stores(QueueName)
         end,
         Queues),
@@ -2938,17 +2942,16 @@ list_persistent_queues() ->
     Node = node(),
     mnesia:async_dirty(
       fun () ->
-              qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
-                                              pid  = Pid}
-                                    <- mnesia:table(rabbit_durable_queue),
-                                node(Pid) == Node,
-                                mnesia:read(rabbit_queue, Name, read) =:= []]))
+              qlc:e(qlc:q([Q || Q <- mnesia:table(rabbit_durable_queue),
+                                ?amqqueue_is_classic(Q),
+                                amqqueue:qnode(Q) == Node,
+                                mnesia:read(rabbit_queue, amqqueue:get_name(Q), read) =:= []]))
       end).
 
 read_old_recovery_terms([]) ->
     {[], [], ?EMPTY_START_FUN_STATE};
 read_old_recovery_terms(Queues) ->
-    QueueNames = [Name || #amqqueue{name = Name} <- Queues],
+    QueueNames = [amqqueue:get_name(Q) || Q <- Queues],
     {AllTerms, StartFunState} = rabbit_queue_index:read_global_recovery_terms(QueueNames),
     Refs = [Ref || Terms <- AllTerms,
                    Terms /= non_clean_shutdown,

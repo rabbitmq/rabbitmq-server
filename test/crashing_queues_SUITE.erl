@@ -217,9 +217,10 @@ kill_queue(Node, QName) ->
     await_new_pid(Node, QName, Pid1).
 
 queue_pid(Node, QName) ->
-    #amqqueue{pid   = QPid,
-              state = State,
-              name  = #resource{virtual_host = VHost}} = lookup(Node, QName),
+    Q = lookup(Node, QName),
+    QPid = amqqueue:get_pid(Q),
+    State = amqqueue:get_state(Q),
+    #resource{virtual_host = VHost} = amqqueue:get_name(Q),
     case State of
         crashed ->
             case rabbit_amqqueue_sup_sup:find_for_vhost(VHost, Node) of

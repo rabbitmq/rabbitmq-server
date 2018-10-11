@@ -2228,11 +2228,10 @@ assert_queue_type(Server, Q, Expected) ->
     Actual = get_queue_type(Server, Q),
     Expected = Actual.
 
-get_queue_type(Server, Q) ->
-    QNameRes = rabbit_misc:r(<<"/">>, queue, Q),
-    {ok, AMQQueue} =
-        rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
-    AMQQueue#amqqueue.type.
+get_queue_type(Server, Q0) ->
+    QNameRes = rabbit_misc:r(<<"/">>, queue, Q0),
+    {ok, Q1} = rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
+    amqqueue:get_type(Q1).
 
 wait_for_messages(Config, Stats) ->
     wait_for_messages(Config, lists:sort(Stats), 60).

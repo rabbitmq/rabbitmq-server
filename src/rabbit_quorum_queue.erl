@@ -41,6 +41,7 @@
 %%-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
+-include("amqqueue.hrl").
 
 -type ra_server_id() :: {Name :: atom(), Node :: node()}.
 -type msg_id() :: non_neg_integer().
@@ -49,8 +50,8 @@
 -spec handle_event({'ra_event', ra_server_id(), any()}, rabbit_fifo_client:state()) ->
                           {'internal', Correlators :: [term()], rabbit_fifo_client:state()} |
                           {rabbit_fifo:client_msg(), rabbit_fifo_client:state()}.
--spec recover([rabbit_types:amqqueue()]) -> [rabbit_types:amqqueue() |
-                                             {'absent', rabbit_types:amqqueue(), atom()}].
+-spec recover([amqqueue:amqqueue()]) -> [amqqueue:amqqueue() |
+                                             {'absent', amqqueue:amqqueue(), atom()}].
 -spec stop(rabbit_types:vhost()) -> 'ok'.
 -spec ack(rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
                  {'ok', rabbit_fifo_client:state()}.
@@ -59,10 +60,10 @@
 -spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
                           {'ok', rabbit_fifo_client:state()}.
 -spec stateless_deliver(ra_server_id(), rabbit_types:delivery()) -> 'ok'.
--spec info(rabbit_types:amqqueue()) -> rabbit_types:infos().
--spec info(rabbit_types:amqqueue(), rabbit_types:info_keys()) -> rabbit_types:infos().
+-spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
+-spec info(amqqueue:amqqueue(), rabbit_types:info_keys()) -> rabbit_types:infos().
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
--spec stat(rabbit_types:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
+-spec stat(amqqueue:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
 -spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> rabbit_types:infos() | {error, term()}.
 
@@ -93,8 +94,9 @@ init_state({Name, _}, QName = #resource{}) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     %% This lookup could potentially return an {error, not_found}, but we do not
     %% know what to do if the queue has `disappeared`. Let it crash.
-    {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes}} =
-        rabbit_amqqueue:lookup(QName),
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    Leader = amqqueue:get_pid(Q),
+    Nodes = amqqueue:get_quorum_nodes(Q),
     %% Ensure the leader is listed first
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
@@ -105,14 +107,15 @@ init_state({Name, _}, QName = #resource{}) ->
 handle_event({ra_event, From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
 
--spec declare(rabbit_types:amqqueue()) ->
-    {'new', rabbit_types:amqqueue()} |
-    {existing, rabbit_types:amqqueue()}.
-declare(#amqqueue{name = QName,
-                  durable = Durable,
-                  auto_delete = AutoDelete,
-                  arguments = Arguments,
-                  options = Opts} = Q) ->
+-spec declare(amqqueue:amqqueue()) ->
+    {'new', amqqueue:amqqueue()} |
+    {existing, amqqueue:amqqueue()}.
+declare(Q) when ?amqqueue_is_quorum(Q) ->
+    QName = amqqueue:get_name(Q),
+    Durable = amqqueue:is_durable(Q),
+    AutoDelete = amqqueue:is_auto_delete(Q),
+    Arguments = amqqueue:get_arguments(Q),
+    Opts = amqqueue:get_options(Q),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
     check_invalid_arguments(QName, Arguments),
     check_auto_delete(Q),
@@ -122,9 +125,9 @@ declare(#amqqueue{name = QName,
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
     Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
-    NewQ0 = Q#amqqueue{pid = Id,
-                       quorum_nodes = Nodes},
-    case rabbit_amqqueue:internal_declare(NewQ0, false) of
+    NewQ0 = amqqueue:set_pid(Q, Id),
+    NewQ1 = amqqueue:set_quorum_nodes(NewQ0, Nodes),
+    case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             RaMachine = ra_machine(NewQ),
             case ra:start_cluster(RaName, RaMachine,
@@ -150,8 +153,9 @@ declare(#amqqueue{name = QName,
 ra_machine(Q) ->
     {module, rabbit_fifo, ra_machine_config(Q)}.
 
-ra_machine_config(Q = #amqqueue{name = QName,
-                                pid = {Name, _}}) ->
+ra_machine_config(Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
+    {Name, _} = amqqueue:get_pid(Q),
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
@@ -163,7 +167,8 @@ ra_machine_config(Q = #amqqueue{name = QName,
       max_bytes => MaxBytes,
       single_active_consumer_on => single_active_consumer_on(Q)}.
 
-single_active_consumer_on(#amqqueue{arguments = QArguments}) ->
+single_active_consumer_on(Q) ->
+    QArguments = amqqueue:get_arguments(Q),
     case rabbit_misc:table_lookup(QArguments, <<"x-single-active-consumer">>) of
         {bool, true} -> true;
         _            -> false
@@ -200,9 +205,10 @@ local_or_remote_handler(ChPid, Module, Function, Args) ->
     end.
 
 become_leader(QName, Name) ->
-    Fun = fun(Q1) ->
-                  Q1#amqqueue{pid = {Name, node()},
-                              state = live}
+    Fun = fun (Q1) ->
+                  amqqueue:set_state(
+                    amqqueue:set_pid(Q1, {Name, node()}),
+                    live)
           end,
     %% as this function is called synchronously when a ra node becomes leader
     %% we need to ensure there is no chance of blocking as else the ra node
@@ -213,7 +219,8 @@ become_leader(QName, Name) ->
                             rabbit_amqqueue:update(QName, Fun)
                     end),
                   case rabbit_amqqueue:lookup(QName) of
-                      {ok, #amqqueue{quorum_nodes = Nodes}} ->
+                      {ok, Q0} when ?is_amqqueue(Q0) ->
+                          Nodes = amqqueue:get_quorum_nodes(Q0),
                           [rpc:call(Node, ?MODULE, rpc_delete_metrics,
                                     [QName], ?TICK_TIME)
                            || Node <- Nodes, Node =/= node()];
@@ -263,9 +270,10 @@ reductions(Name) ->
 
 recover(Queues) ->
     [begin
+         {Name, _} = amqqueue:get_pid(Q0),
+         Nodes = amqqueue:get_quorum_nodes(Q0),
          case ra:restart_server({Name, node()}) of
              ok ->
-
                  % queue was restarted, good
                  ok;
              {error, Err}
@@ -298,20 +306,24 @@ recover(Queues) ->
          %% So many code paths are dependent on this.
          {ok, Q} = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Q0),
          Q
-     end || #amqqueue{pid = {Name, _},
-                      quorum_nodes = Nodes} = Q0 <- Queues].
+     end || Q0 <- Queues].
 
 stop(VHost) ->
-    _ = [ra:stop_server(Pid) || #amqqueue{pid = Pid} <- find_quorum_queues(VHost)],
+    _ = [begin
+             Pid = amqqueue:get_pid(Q),
+             ra:stop_server(Pid)
+         end || Q <- find_quorum_queues(VHost)],
     ok.
 
--spec delete(#amqqueue{},
+-spec delete(amqqueue:amqqueue(),
              boolean(), boolean(),
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()}.
-delete(#amqqueue{type = quorum, pid = {Name, _},
-                 name = QName, quorum_nodes = QNodes} = Q,
-       _IfUnused, _IfEmpty, ActingUser) ->
+delete(Q,
+       _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+    {Name, _} = amqqueue:get_pid(Q),
+    QName = amqqueue:get_name(Q),
+    QNodes = amqqueue:get_quorum_nodes(Q),
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Timeout = ?DELETE_TIMEOUT,
     {ok, ReadyMsgs, _} = stat(Q),
@@ -388,12 +400,14 @@ reject(false, CTag, MsgIds, QState) ->
 credit(CTag, Credit, Drain, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), Credit, Drain, QState).
 
--spec basic_get(#amqqueue{}, NoAck :: boolean(), rabbit_types:ctag(),
+-spec basic_get(amqqueue:amqqueue(), NoAck :: boolean(), rabbit_types:ctag(),
                 rabbit_fifo_client:state()) ->
     {'ok', 'empty', rabbit_fifo_client:state()} |
     {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()}.
-basic_get(#amqqueue{name = QName, pid = Id, type = quorum}, NoAck,
-          CTag0, QState0) ->
+
+basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
+    QName = amqqueue:get_name(Q),
+    Id = amqqueue:get_pid(Q),
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
                      true ->
@@ -413,17 +427,20 @@ basic_get(#amqqueue{name = QName, pid = Id, type = quorum}, NoAck,
             {error, timeout}
     end.
 
--spec basic_consume(rabbit_types:amqqueue(), NoAck :: boolean(), ChPid :: pid(),
+-spec basic_consume(amqqueue:amqqueue(), NoAck :: boolean(), ChPid :: pid(),
                     ConsumerPrefetchCount :: non_neg_integer(),
                     rabbit_types:ctag(), ExclusiveConsume :: boolean(),
                     Args :: rabbit_framing:amqp_table(), ActingUser :: binary(),
                     any(), rabbit_fifo_client:state()) ->
     {'ok', rabbit_fifo_client:state()}.
-basic_consume(#amqqueue{name = QName, pid = QPid, type = quorum} = Q, NoAck, ChPid,
+
+basic_consume(Q, NoAck, ChPid,
               ConsumerPrefetchCount, ConsumerTag0, ExclusiveConsume, Args,
-              ActingUser, OkMsg, QState0) ->
+              ActingUser, OkMsg, QState0) when ?amqqueue_is_quorum(Q) ->
     %% TODO: validate consumer arguments
     %% currently quorum queues do not support any arguments
+    QName = amqqueue:get_name(Q),
+    QPid = amqqueue:get_pid(Q),
     maybe_send_reply(ChPid, OkMsg),
     ConsumerTag = quorum_ctag(ConsumerTag0),
     %% A prefetch count of 0 means no limitation,
@@ -514,9 +531,12 @@ requeue(ConsumerTag, MsgIds, QState) ->
     rabbit_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, QState).
 
 cleanup_data_dir() ->
-    Names = [Name || #amqqueue{pid = {Name, _}, quorum_nodes = Nodes}
-                     <- rabbit_amqqueue:list_by_type(quorum),
-                     lists:member(node(), Nodes)],
+    Names = [begin
+                 {Name, _} = amqqueue:get_pid(Q),
+                 Name
+             end
+             || Q <- rabbit_amqqueue:list_by_type(quorum),
+                lists:member(node(), amqqueue:get_quorum_nodes(Q))],
     Registered = ra_directory:list_registered(),
     _ = [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
                                        not lists:member(Name, Names)],
@@ -552,9 +572,11 @@ status(Vhost, QueueName) ->
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
     RName = qname_to_rname(QName),
     case rabbit_amqqueue:lookup(QName) of
-        {ok, #amqqueue{type = classic}} ->
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
-        {ok, #amqqueue{pid = {_, Leader}, quorum_nodes = Nodes}} ->
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {_, Leader} = amqqueue:get_pid(Q),
+            Nodes = amqqueue:get_quorum_nodes(Q),
             Info = [{leader, Leader}, {members, Nodes}],
             case ets:lookup(ra_state, RName) of
                 [{_, State}] ->
@@ -569,9 +591,10 @@ status(Vhost, QueueName) ->
 add_member(VHost, Name, Node) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
     case rabbit_amqqueue:lookup(QName) of
-        {ok, #amqqueue{type = classic}} ->
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
-        {ok, #amqqueue{quorum_nodes = QNodes} = Q} ->
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            QNodes = amqqueue:get_quorum_nodes(Q),
             case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) of
                 false ->
                     {error, node_not_running};
@@ -587,8 +610,10 @@ add_member(VHost, Name, Node) ->
                     E
     end.
 
-add_member(#amqqueue{pid = {RaName, _} = ServerRef, name = QName,
-                     quorum_nodes = QNodes} = Q, Node) ->
+add_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
+    {RaName, _} = ServerRef = amqqueue:get_pid(Q),
+    QName = amqqueue:get_name(Q),
+    QNodes = amqqueue:get_quorum_nodes(Q),
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     case ra:start_server(RaName, ServerId, ra_machine(Q),
@@ -597,9 +622,10 @@ add_member(#amqqueue{pid = {RaName, _} = ServerRef, name = QName,
             case ra:add_member(ServerRef, ServerId) of
                 {ok, _, Leader} ->
                     Fun = fun(Q1) ->
-                                  Q1#amqqueue{quorum_nodes =
-                                                  [Node | Q1#amqqueue.quorum_nodes],
-                                              pid = Leader}
+                                  Q2 = amqqueue:set_quorum_nodes(
+                                         Q1,
+                                         [Node | amqqueue:get_quorum_nodes(Q1)]),
+                                  amqqueue:set_pid(Q2, Leader)
                           end,
                     rabbit_misc:execute_mnesia_transaction(
                       fun() -> rabbit_amqqueue:update(QName, Fun) end),
@@ -615,9 +641,10 @@ add_member(#amqqueue{pid = {RaName, _} = ServerRef, name = QName,
 delete_member(VHost, Name, Node) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
     case rabbit_amqqueue:lookup(QName) of
-        {ok, #amqqueue{type = classic}} ->
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
-        {ok, #amqqueue{quorum_nodes = QNodes} = Q} ->
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            QNodes = amqqueue:get_quorum_nodes(Q),
             case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) of
                 false ->
                     {error, node_not_running};
@@ -633,13 +660,16 @@ delete_member(VHost, Name, Node) ->
                     E
     end.
 
-delete_member(#amqqueue{pid = {RaName, _}, name = QName}, Node) ->
+delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
+    QName = amqqueue:get_name(Q),
+    {RaName, _} = amqqueue:get_pid(Q),
     ServerId = {RaName, Node},
     case ra:leave_and_delete_server(ServerId) of
         ok ->
             Fun = fun(Q1) ->
-                          Q1#amqqueue{quorum_nodes =
-                                          lists:delete(Node, Q1#amqqueue.quorum_nodes)}
+                          amqqueue:set_quorum_nodes(
+                            Q1,
+                            lists:delete(Node, amqqueue:get_quorum_nodes(Q1)))
                   end,
             rabbit_misc:execute_mnesia_transaction(
               fun() -> rabbit_amqqueue:update(QName, Fun) end),
@@ -654,16 +684,18 @@ dlx_mfa(Q) ->
                                       fun res_arg/2, Q), Q),
     DLXRKey = args_policy_lookup(<<"dead-letter-routing-key">>,
                                  fun res_arg/2, Q),
-    {?MODULE, dead_letter_publish, [DLX, DLXRKey, Q#amqqueue.name]}.
+    {?MODULE, dead_letter_publish, [DLX, DLXRKey, amqqueue:get_name(Q)]}.
 
 init_dlx(undefined, _Q) ->
     undefined;
-init_dlx(DLX, #amqqueue{name = QName}) ->
+init_dlx(DLX, Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     rabbit_misc:r(QName, exchange, DLX).
 
 res_arg(_PolVal, ArgVal) -> ArgVal.
 
-args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
+args_policy_lookup(Name, Resolve, Q) when ?is_amqqueue(Q) ->
+    Args = amqqueue:get_arguments(Q),
     AName = <<"x-", Name/binary>>,
     case {rabbit_policy:get(Name, Q), rabbit_misc:table_lookup(Args, AName)} of
         {undefined, undefined}       -> undefined;
@@ -693,29 +725,32 @@ find_quorum_queues(VHost) ->
     Node = node(),
     mnesia:async_dirty(
       fun () ->
-              qlc:e(qlc:q([Q || Q = #amqqueue{vhost = VH,
-                                              pid  = Pid,
-                                              type = quorum}
-                                    <- mnesia:table(rabbit_durable_queue),
-                                VH =:= VHost,
-                                qnode(Pid) == Node]))
+              qlc:e(qlc:q([Q || Q <- mnesia:table(rabbit_durable_queue),
+                                ?amqqueue_is_quorum(Q),
+                                amqqueue:get_vhost(Q) =:= VHost,
+                                amqqueue:qnode(Q) == Node]))
       end).
 
-i(name,               #amqqueue{name               = Name}) -> Name;
-i(durable,            #amqqueue{durable            = Dur}) -> Dur;
-i(auto_delete,        #amqqueue{auto_delete        = AD}) -> AD;
-i(arguments,          #amqqueue{arguments          = Args}) -> Args;
-i(pid,                #amqqueue{pid                = {Name, _}}) -> whereis(Name);
-i(messages,           #amqqueue{pid                = {Name, _}}) ->
+i(name,        Q) when ?is_amqqueue(Q) -> amqqueue:get_name(Q);
+i(durable,     Q) when ?is_amqqueue(Q) -> amqqueue:is_durable(Q);
+i(auto_delete, Q) when ?is_amqqueue(Q) -> amqqueue:is_auto_delete(Q);
+i(arguments,   Q) when ?is_amqqueue(Q) -> amqqueue:get_arguments(Q);
+i(pid, Q) when ?is_amqqueue(Q) ->
+    {Name, _} = amqqueue:get_pid(Q),
+    whereis(Name);
+i(messages, Q) when ?is_amqqueue(Q) ->
+    {Name, _} = amqqueue:get_pid(Q),
     quorum_messages(Name);
-i(messages_ready,     #amqqueue{name               = QName}) ->
+i(messages_ready, Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     case ets:lookup(queue_coarse_metrics, QName) of
         [{_, MR, _, _, _}] ->
             MR;
         [] ->
             0
     end;
-i(messages_unacknowledged, #amqqueue{name          = QName}) ->
+i(messages_unacknowledged, Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     case ets:lookup(queue_coarse_metrics, QName) of
         [{_, _, MU, _, _}] ->
             MU;
@@ -737,14 +772,16 @@ i(effective_policy_definition, Q) ->
         undefined -> [];
         Def       -> Def
     end;
-i(consumers,     #amqqueue{name               = QName}) ->
+i(consumers, Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     case ets:lookup(queue_metrics, QName) of
         [{_, M, _}] ->
             proplists:get_value(consumers, M, 0);
         [] ->
             0
     end;
-i(memory, #amqqueue{pid = {Name, _}}) ->
+i(memory, Q) when ?is_amqqueue(Q) ->
+    {Name, _} = amqqueue:get_pid(Q),
     try
         {memory, M} = process_info(whereis(Name), memory),
         M
@@ -752,33 +789,38 @@ i(memory, #amqqueue{pid = {Name, _}}) ->
         error:badarg ->
             0
     end;
-i(state, #amqqueue{pid = {Name, Node}}) ->
+i(state, Q) when ?is_amqqueue(Q) ->
+    {Name, Node} = amqqueue:get_pid(Q),
     %% Check against the leader or last known leader
     case rpc:call(Node, ?MODULE, cluster_state, [Name], ?TICK_TIME) of
         {badrpc, _} -> down;
         State -> State
     end;
-i(local_state, #amqqueue{pid = {Name, _}}) ->
+i(local_state, Q) when ?is_amqqueue(Q) ->
+    {Name, _} = amqqueue:get_pid(Q),
     case ets:lookup(ra_state, Name) of
         [{_, State}] -> State;
         _ -> not_member
     end;
-i(garbage_collection, #amqqueue{pid = {Name, _}}) ->
+i(garbage_collection, Q) when ?is_amqqueue(Q) ->
+    {Name, _} = amqqueue:get_pid(Q),
     try
         rabbit_misc:get_gc_info(whereis(Name))
     catch
         error:badarg ->
             []
     end;
-i(members, #amqqueue{quorum_nodes = Nodes}) ->
-    Nodes;
+i(members, Q) when ?is_amqqueue(Q) ->
+    amqqueue:get_quorum_nodes(Q);
 i(online, Q) -> online(Q);
 i(leader, Q) -> leader(Q);
-i(open_files, #amqqueue{pid = {Name, _},
-                        quorum_nodes = Nodes}) ->
+i(open_files, Q) when ?is_amqqueue(Q) ->
+    {Name, _} = amqqueue:get_pid(Q),
+    Nodes = amqqueue:get_quorum_nodes(Q),
     {Data, _} = rpc:multicall(Nodes, rabbit_quorum_queue, open_files, [Name]),
     lists:flatten(Data);
-i(single_active_consumer_pid, #amqqueue{pid = QPid}) ->
+i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
     {ok, {_, SacResult}, _} = ra:local_query(QPid,
                                              fun rabbit_fifo:query_single_active_consumer/1),
     case SacResult of
@@ -787,7 +829,8 @@ i(single_active_consumer_pid, #amqqueue{pid = QPid}) ->
         _ ->
             ''
     end;
-i(single_active_consumer_ctag, #amqqueue{pid = QPid}) ->
+i(single_active_consumer_ctag, Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
     {ok, {_, SacResult}, _} = ra:local_query(QPid,
                                              fun rabbit_fifo:query_single_active_consumer/1),
     case SacResult of
@@ -807,17 +850,20 @@ open_files(Name) ->
                end
     end.
 
-leader(#amqqueue{pid = {Name, Leader}}) ->
+leader(Q) when ?is_amqqueue(Q) ->
+    {Name, Leader} = amqqueue:get_pid(Q),
     case is_process_alive(Name, Leader) of
         true -> Leader;
         false -> ''
     end.
 
-online(#amqqueue{quorum_nodes = Nodes,
-                 pid = {Name, _Leader}}) ->
+online(Q) when ?is_amqqueue(Q) ->
+    Nodes = amqqueue:get_quorum_nodes(Q),
+    {Name, _} = amqqueue:get_pid(Q),
     [Node || Node <- Nodes, is_process_alive(Name, Node)].
 
-format(#amqqueue{quorum_nodes = Nodes} = Q) ->
+format(Q) when ?is_amqqueue(Q) ->
+    Nodes = amqqueue:get_quorum_nodes(Q),
     [{members, Nodes}, {online, online(Q)}, {leader, leader(Q)}].
 
 is_process_alive(Name, Node) ->
@@ -839,11 +885,6 @@ quorum_ctag(Other) ->
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).
 
-qnode(QPid) when is_pid(QPid) ->
-    node(QPid);
-qnode({_, Node}) ->
-    Node.
-
 check_invalid_arguments(QueueName, Args) ->
     Keys = [<<"x-expires">>, <<"x-message-ttl">>,
             <<"x-max-priority">>, <<"x-queue-mode">>, <<"x-overflow">>],
@@ -856,7 +897,8 @@ check_invalid_arguments(QueueName, Args) ->
      end || Key <- Keys],
     ok.
 
-check_auto_delete(#amqqueue{auto_delete = true, name = Name}) ->
+check_auto_delete(Q) when ?amqqueue_is_auto_delete(Q) ->
+    Name = amqqueue:get_name(Q),
     rabbit_misc:protocol_error(
       precondition_failed,
       "invalid property 'auto-delete' for ~s",
@@ -864,18 +906,19 @@ check_auto_delete(#amqqueue{auto_delete = true, name = Name}) ->
 check_auto_delete(_) ->
     ok.
 
-check_exclusive(#amqqueue{exclusive_owner = none}) ->
+check_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
     ok;
-check_exclusive(#amqqueue{name = Name}) ->
+check_exclusive(Q) when ?is_amqqueue(Q) ->
+    Name = amqqueue:get_name(Q),
     rabbit_misc:protocol_error(
       precondition_failed,
       "invalid property 'exclusive-owner' for ~s",
       [rabbit_misc:rs(Name)]).
 
-check_non_durable(#amqqueue{durable = true}) ->
+check_non_durable(Q) when ?amqqueue_is_durable(Q) ->
     ok;
-check_non_durable(#amqqueue{name = Name,
-                            durable = false}) ->
+check_non_durable(Q) when not ?amqqueue_is_durable(Q) ->
+    Name = amqqueue:get_name(Q),
     rabbit_misc:protocol_error(
       precondition_failed,
       "invalid property 'non-durable' for ~s",
