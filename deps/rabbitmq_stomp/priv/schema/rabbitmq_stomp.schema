@@ -52,7 +52,7 @@ end}.
 %% and SSL listeners.
 %%
 %% {num_tcp_acceptors, 10},
-%% {num_ssl_acceptors, 1},
+%% {num_ssl_acceptors, 10},
 
 {mapping, "stomp.num_acceptors.ssl", "rabbitmq_stomp.num_ssl_acceptors", [
     {datatype, integer}
