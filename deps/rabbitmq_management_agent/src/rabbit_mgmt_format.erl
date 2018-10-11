@@ -474,7 +474,7 @@ strip_queue_pids([], Acc) ->
 %% Items can be connections, channels, consumers or queues, hence remove takes
 %% various items.
 strip_pids(Item = [T | _]) when is_tuple(T) ->
-    strip_pids(Item, []);
+    lists:usort(strip_pids(Item, []));
 
 strip_pids(Items) -> [lists:usort(strip_pids(I)) || I <- Items].
 
