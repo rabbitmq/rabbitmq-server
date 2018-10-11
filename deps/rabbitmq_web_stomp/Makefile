@@ -5,9 +5,9 @@ PROJECT_MOD = rabbit_ws_app
 define PROJECT_ENV
 [
 	    {tcp_config, []},
-	    {num_tcp_acceptors, 10},
 	    {ssl_config, []},
-	    {num_ssl_acceptors, 1},
+	    {num_tcp_acceptors, 10},
+	    {num_ssl_acceptors, 10},
 	    {cowboy_opts, []},
 	    {ws_frame, text},
 	    {use_http_auth, false}
