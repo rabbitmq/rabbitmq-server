@@ -31,7 +31,7 @@ init([{Listeners, SslListeners0}]) ->
         = case SslListeners0 of
               [] -> {none, 0, []};
               _  -> {rabbit_networking:ensure_ssl(),
-                     application:get_env(rabbitmq_mqtt, num_ssl_acceptors, 1),
+                     application:get_env(rabbitmq_mqtt, num_ssl_acceptors, 10),
                      case rabbit_networking:poodle_check('MQTT') of
                          ok     -> SslListeners0;
                          danger -> []
@@ -58,13 +58,13 @@ tcp_listener_spec([Address, SocketOpts, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts,
       transport(mqtt), rabbit_mqtt_connection_sup, [],
-      mqtt, NumAcceptors, "MQTT TCP Listener").
+      mqtt, NumAcceptors, "MQTT TCP listener").
 
 ssl_listener_spec([Address, SocketOpts, SslOpts, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts ++ SslOpts,
       transport('mqtt/ssl'), rabbit_mqtt_connection_sup, [],
-      'mqtt/ssl', NumAcceptors, "MQTT SSL Listener").
+      'mqtt/ssl', NumAcceptors, "MQTT TLS listener").
 
 transport(Protocol) ->
     ProxyProtocol = application:get_env(rabbitmq_mqtt, proxy_protocol, false),
