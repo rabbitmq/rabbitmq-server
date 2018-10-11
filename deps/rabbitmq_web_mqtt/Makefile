@@ -5,9 +5,9 @@ PROJECT_MOD = rabbit_web_mqtt_app
 define PROJECT_ENV
 [
 	    {tcp_config, []},
-	    {num_tcp_acceptors, 10},
 	    {ssl_config, []},
-	    {num_ssl_acceptors, 1},
+	    {num_tcp_acceptors, 10},
+	    {num_ssl_acceptors, 10},
 	    {cowboy_opts, []}
 	  ]
 endef
