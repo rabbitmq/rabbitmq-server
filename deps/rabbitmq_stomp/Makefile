@@ -11,9 +11,9 @@ define PROJECT_ENV
 	    {ssl_cert_login, false},
 	    {implicit_connect, false},
 	    {tcp_listeners, [61613]},
-	    {num_tcp_acceptors, 10},
 	    {ssl_listeners, []},
-	    {num_ssl_acceptors, 1},
+	    {num_tcp_acceptors, 10},
+	    {num_ssl_acceptors, 10},
 	    {tcp_listen_options, [{backlog,   128},
 	                          {nodelay,   true}]},
 	    %% see rabbitmq/rabbitmq-stomp#39
