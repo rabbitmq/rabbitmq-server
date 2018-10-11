@@ -100,43 +100,46 @@ init(Q, Recover, AsyncCallback) ->
     ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
     State.
 
-init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
+init_with_existing_bq(Q0, BQ, BQS) when ?is_amqqueue(Q0) ->
+    QName = amqqueue:get_name(Q0),
     case rabbit_mirror_queue_coordinator:start_link(
-	   Q, undefined, sender_death_fun(), depth_fun()) of
-	{ok, CPid} ->
-	    GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
-	    Self = self(),
-	    ok = rabbit_misc:execute_mnesia_transaction(
-		   fun () ->
-			   [Q1 = #amqqueue{gm_pids = GMPids}]
-			       = mnesia:read({rabbit_queue, QName}),
-			   ok = rabbit_amqqueue:store_queue(
-				  Q1#amqqueue{gm_pids = [{GM, Self} | GMPids],
-					      state   = live})
-		   end),
-	    {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
-	    %% We need synchronous add here (i.e. do not return until the
-	    %% slave is running) so that when queue declaration is finished
-	    %% all slaves are up; we don't want to end up with unsynced slaves
-	    %% just by declaring a new queue. But add can't be synchronous all
-	    %% the time as it can be called by slaves and that's
-	    %% deadlock-prone.
-	    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes, sync),
-	    #state { name                = QName,
-		     gm                  = GM,
-		     coordinator         = CPid,
-		     backing_queue       = BQ,
-		     backing_queue_state = BQS,
-		     seen_status         = #{},
-		     confirmed           = [],
-		     known_senders       = sets:new(),
-		     wait_timeout        = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000) };
-	{error, Reason} ->
-	    %% The GM can shutdown before the coordinator has started up
-	    %% (lost membership or missing group), thus the start_link of
-	    %% the coordinator returns {error, shutdown} as rabbit_amqqueue_process
-	    % is trapping exists
-	    throw({coordinator_not_started, Reason})
+       Q0, undefined, sender_death_fun(), depth_fun()) of
+    {ok, CPid} ->
+        GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
+        Self = self(),
+        Fun = fun () ->
+                  [Q1] = mnesia:read({rabbit_queue, QName}),
+                  true = amqqueue:is_amqqueue(Q1),
+                  GMPids0 = amqqueue:get_gm_pids(Q1),
+                  GMPids1 = [{GM, Self} | GMPids0],
+                  Q2 = amqqueue:set_gm_pids(Q1, GMPids1),
+                  Q3 = amqqueue:set_state(Q2, live),
+                  ok = rabbit_amqqueue:store_queue(Q3)
+              end,
+        ok = rabbit_misc:execute_mnesia_transaction(Fun),
+        {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q0),
+        %% We need synchronous add here (i.e. do not return until the
+        %% slave is running) so that when queue declaration is finished
+        %% all slaves are up; we don't want to end up with unsynced slaves
+        %% just by declaring a new queue. But add can't be synchronous all
+        %% the time as it can be called by slaves and that's
+        %% deadlock-prone.
+        rabbit_mirror_queue_misc:add_mirrors(QName, SNodes, sync),
+        #state{name                = QName,
+               gm                  = GM,
+               coordinator         = CPid,
+               backing_queue       = BQ,
+               backing_queue_state = BQS,
+               seen_status         = #{},
+               confirmed           = [],
+               known_senders       = sets:new(),
+               wait_timeout        = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000)};
+    {error, Reason} ->
+        %% The GM can shutdown before the coordinator has started up
+        %% (lost membership or missing group), thus the start_link of
+        %% the coordinator returns {error, shutdown} as rabbit_amqqueue_process
+        % is trapping exists
+        throw({coordinator_not_started, Reason})
     end.
 
 stop_mirroring(State = #state { coordinator         = CPid,
@@ -156,7 +159,8 @@ sync_mirrors(HandleInfo, EmitStats,
                     QName, "Synchronising: " ++ Fmt ++ "~n", Params)
           end,
     Log("~p messages to synchronise", [BQ:len(BQS)]),
-    {ok, #amqqueue{slave_pids = SPids} = Q} = rabbit_amqqueue:lookup(QName),
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    SPids = amqqueue:get_slave_pids(Q),
     SyncBatchSize = rabbit_mirror_queue_misc:sync_batch_size(Q),
     Log("batch size: ~p", [SyncBatchSize]),
     Ref = make_ref(),
@@ -193,8 +197,8 @@ terminate(Reason,
     %% Backing queue termination. The queue is going down but
     %% shouldn't be deleted. Most likely safe shutdown of this
     %% node.
-    {ok, Q = #amqqueue{sync_slave_pids = SSPids}} =
-        rabbit_amqqueue:lookup(QName),
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    SSPids = amqqueue:get_sync_slave_pids(Q),
     case SSPids =:= [] andalso
         rabbit_policy:get(<<"ha-promote-on-shutdown">>, Q) =/= <<"always">> of
         true  -> %% Remove the whole queue to avoid data loss
@@ -213,7 +217,8 @@ delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
 
 stop_all_slaves(Reason, #state{name = QName, gm = GM, wait_timeout = WT}) ->
-    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    SPids = amqqueue:get_slave_pids(Q),
     rabbit_mirror_queue_misc:stop_all_slaves(Reason, SPids, QName, GM, WT).
 
 purge(State = #state { gm                  = GM,

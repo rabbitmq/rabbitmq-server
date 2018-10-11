@@ -17,7 +17,7 @@
 -module(rabbit_queue_location_validator).
 -behaviour(rabbit_policy_validator).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([validate_policy/1, validate_strategy/1]).
 
@@ -49,7 +49,7 @@ policy(Policy, Q) ->
         P         -> P
     end.
 
-module(#amqqueue{} = Q) ->
+module(Q) when ?is_amqqueue(Q) ->
     case policy(<<"queue-master-locator">>, Q) of
         undefined -> no_location_strategy;
         Mode      -> module(Mode)

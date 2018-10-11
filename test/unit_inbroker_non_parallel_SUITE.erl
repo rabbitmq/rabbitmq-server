@@ -568,7 +568,7 @@ head_message_timestamp1(_Config) ->
     QRes = rabbit_misc:r(<<"/">>, queue, QName),
 
     {ok, Q1} = rabbit_amqqueue:lookup(QRes),
-    QPid = Q1#amqqueue.pid,
+    QPid = amqqueue:get_pid(Q1),
 
     %% Set up event receiver for queue
     dummy_event_receiver:start(self(), [node()], [queue_stats]),

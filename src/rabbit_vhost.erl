@@ -16,7 +16,7 @@
 
 -module(rabbit_vhost).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -72,8 +72,8 @@ recover(VHost) ->
     ok = rabbit_file:ensure_dir(VHostStubFile),
     ok = file:write_file(VHostStubFile, VHost),
     Qs = rabbit_amqqueue:recover(VHost),
-    ok = rabbit_binding:recover(rabbit_exchange:recover(VHost),
-                                [QName || #amqqueue{name = QName} <- Qs]),
+    QNames = [amqqueue:get_name(Q) || Q <- Qs],
+    ok = rabbit_binding:recover(rabbit_exchange:recover(VHost), QNames),
     ok = rabbit_amqqueue:start(Qs),
     %% Start queue mirrors.
     ok = rabbit_mirror_queue_misc:on_vhost_up(VHost),
@@ -142,8 +142,10 @@ delete(VHostPath, ActingUser) ->
     %% notifications which must be sent outside the TX
     rabbit_log:info("Deleting vhost '~s'~n", [VHostPath]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
-    [assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser) ||
-        #amqqueue{name = Name} <- rabbit_amqqueue:list(VHostPath)],
+    [begin
+         Name = amqqueue:get_name(Q),
+         assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser)
+     end || Q <- rabbit_amqqueue:list(VHostPath)],
     [assert_benign(rabbit_exchange:delete(Name, false, ActingUser), ActingUser) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHostPath)],
     Funs = rabbit_misc:execute_mnesia_transaction(
@@ -217,7 +219,8 @@ assert_benign({error, not_found}, _) -> ok;
 assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the mnesia entries here is safe. If/when the down node
     %% restarts, it will clear out the on-disk storage of the queue.
-    case rabbit_amqqueue:internal_delete(Q#amqqueue.name, ActingUser) of
+    QName = amqqueue:get_name(Q),
+    case rabbit_amqqueue:internal_delete(QName, ActingUser) of
         ok                 -> ok;
         {error, not_found} -> ok
     end.

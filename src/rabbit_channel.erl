@@ -1332,7 +1332,8 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
         error ->
             %% Spec requires we ignore this situation.
             return_ok(State, NoWait, OkMsg);
-        {ok, {Q = #amqqueue{pid = QPid}, _CParams}} ->
+        {ok, {Q, _CParams}} when ?is_amqqueue(Q) ->
+            QPid = amqqueue:get_pid(Q),
             ConsumerMapping1 = maps:remove(ConsumerTag, ConsumerMapping),
             QCons1 =
                 case maps:find(QPid, QCons) of
@@ -1601,7 +1602,9 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                       Username, QueueStates0),
                     Q}
            end) of
-        {{ok, QueueStates}, Q = #amqqueue{pid = QPid, name = QName}} ->
+        {{ok, QueueStates}, Q} when ?is_amqqueue(Q) ->
+            QPid = amqqueue:get_pid(Q),
+            QName = amqqueue:get_name(Q),
             CM1 = maps:put(
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
@@ -1614,7 +1617,9 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                      true  -> consumer_monitor(ActualConsumerTag, State1);
                      false -> State1
                  end};
-        {ok, Q = #amqqueue{pid = QPid, name = QName}} ->
+        {ok, Q} when ?is_amqqueue(Q) ->
+            QPid = amqqueue:get_pid(Q),
+            QName = amqqueue:get_name(Q),
             CM1 = maps:put(
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
@@ -1639,8 +1644,9 @@ consumer_monitor(ConsumerTag,
                  State = #ch{consumer_mapping = ConsumerMapping,
                              queue_monitors   = QMons,
                              queue_consumers  = QCons}) ->
-    {#amqqueue{pid = QPid}, _} =
+    {Q, _} =
         maps:get(ConsumerTag, ConsumerMapping),
+    QPid = amqqueue:get_pid(Q),
     CTags1 = case maps:find(QPid, QCons) of
                  {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
                  error -> gb_sets:singleton(ConsumerTag)
@@ -1750,7 +1756,7 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
                       destination = DestinationName,
                       key         = RoutingKey,
                       args        = Arguments},
-             fun (_X, Q = #amqqueue{}) ->
+             fun (_X, Q) when ?is_amqqueue(Q) ->
                      try rabbit_amqqueue:check_exclusive_access(Q, ConnPid)
                      catch exit:Reason -> {error, Reason}
                      end;
@@ -1930,8 +1936,10 @@ foreach_per_queue(F, UAL, Acc) ->
     rabbit_misc:gb_trees_fold(fun (Key, Val, Acc0) -> F(Key, Val, Acc0) end, Acc, T).
 
 consumer_queues(Consumers) ->
-    lists:usort([QPid || {_Key, {#amqqueue{pid = QPid}, _CParams}}
-                             <- maps:to_list(Consumers)]).
+    ConsumerList = maps:to_list(Consumers),
+    QPids = [amqqueue:get_pid(Q) ||
+             {_Key, {Q, _CParams}} <- ConsumerList, amqqueue:is_amqqueue(Q)],
+    lists:usort(QPids).
 
 %% tell the limiter about the number of acks that have been received
 %% for messages delivered to subscribed consumers, but not acks for
@@ -1985,8 +1993,9 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     %% since alternative algorithms to update queue_names less
     %% frequently would in fact be more expensive in the common case.
     {QNames1, QMons1} =
-        lists:foldl(fun (#amqqueue{pid = QPid, name = QName},
-                         {QNames0, QMons0}) ->
+        lists:foldl(fun (Q, {QNames0, QMons0}) when ?is_amqqueue(Q) ->
+                            QPid = amqqueue:get_pid(Q),
+                            QName = amqqueue:get_name(Q),
                             {case maps:is_key(QPid, QNames0) of
                                  true  -> QNames0;
                                  false -> maps:put(QPid, QName, QNames0)
@@ -2303,11 +2312,12 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             end,
             case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
                                          Args, Owner, Username) of
-                {new, #amqqueue{pid = QPid}} ->
+                {new, Q} when ?is_amqqueue(Q) ->
                     %% We need to notify the reader within the channel
                     %% process so that we can be sure there are no
                     %% outstanding exclusive queues being declared as
                     %% the connection shuts down.
+                    QPid = amqqueue:get_pid(Q),
                     ok = case {Owner, CollectorPid} of
                              {none, _} -> ok;
                              {_, none} -> ok; %% Supports call from mgmt API
@@ -2338,9 +2348,12 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
               ConnPid, _CollectorPid, VHostPath, _User) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = rabbit_misc:r(VHostPath, queue, StrippedQueueNameBin),
-    {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
-        rabbit_amqqueue:with_or_die(
-          QueueName, fun (Q) -> {maybe_stat(NoWait, Q), Q} end),
+    Fun = fun (Q0) ->
+              QStat = maybe_stat(NoWait, Q0),
+              {QStat, Q0}
+          end,
+    %% Note: no need to check if Q is an #amqqueue, with_or_die does it
+    {{ok, MessageCount, ConsumerCount}, Q} = rabbit_amqqueue:with_or_die(QueueName, Fun),
     ok = rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
     {ok, QueueName, MessageCount, ConsumerCount};
 handle_method(#'queue.delete'{queue     = QueueNameBin,

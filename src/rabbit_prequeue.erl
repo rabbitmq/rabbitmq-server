@@ -29,7 +29,7 @@
 
 -behaviour(gen_server2).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -57,20 +57,22 @@ init({Q, StartMode, Marker}) ->
 init(Q, master) -> rabbit_amqqueue_process:init(Q);
 init(Q, slave)  -> rabbit_mirror_queue_slave:init(Q);
 
-init(#amqqueue{name = QueueName}, restart) ->
-    {ok, Q = #amqqueue{pid        = QPid,
-                       slave_pids = SPids}} = rabbit_amqqueue:lookup(QueueName),
+init(Q0, restart) when ?is_amqqueue(Q0) ->
+    QueueName = amqqueue:get_name(Q0),
+    {ok, Q1} = rabbit_amqqueue:lookup(QueueName),
+    QPid = amqqueue:get_pid(Q1),
+    SPids = amqqueue:get_slave_pids(Q1),
     LocalOrMasterDown = node(QPid) =:= node()
         orelse not rabbit_mnesia:on_running_node(QPid),
     Slaves = [SPid || SPid <- SPids, rabbit_mnesia:is_process_alive(SPid)],
     case rabbit_mnesia:is_process_alive(QPid) of
         true  -> false = LocalOrMasterDown, %% assertion
                  rabbit_mirror_queue_slave:go(self(), async),
-                 rabbit_mirror_queue_slave:init(Q); %% [1]
+                 rabbit_mirror_queue_slave:init(Q1); %% [1]
         false -> case LocalOrMasterDown andalso Slaves =:= [] of
-                     true  -> crash_restart(Q);     %% [2]
+                     true  -> crash_restart(Q1);     %% [2]
                      false -> timer:sleep(25),
-                              init(Q, restart)      %% [3]
+                              init(Q1, restart)      %% [3]
                  end
     end.
 %% [1] There is a master on another node. Regardless of whether we
@@ -83,10 +85,12 @@ init(#amqqueue{name = QueueName}, restart) ->
 %%     not a stable situation. Sleep and wait for somebody else to make a
 %%     move.
 
-crash_restart(Q = #amqqueue{name = QueueName}) ->
+crash_restart(Q0) when ?is_amqqueue(Q0) ->
+    QueueName = amqqueue:get_name(Q0),
     rabbit_log:error("Restarting crashed ~s.~n", [rabbit_misc:rs(QueueName)]),
     gen_server2:cast(self(), init),
-    rabbit_amqqueue_process:init(Q#amqqueue{pid = self()}).
+    Q1 = amqqueue:set_pid(Q0, self()),
+    rabbit_amqqueue_process:init(Q1).
 
 %%----------------------------------------------------------------------------
 

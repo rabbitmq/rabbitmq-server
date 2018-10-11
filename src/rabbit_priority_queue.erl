@@ -16,8 +16,9 @@
 
 -module(rabbit_priority_queue).
 
--include_lib("rabbit.hrl").
--include_lib("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+
 -behaviour(rabbit_backing_queue).
 
 %% enabled unconditionally. Disabling priority queueing after
@@ -102,10 +103,14 @@ stop(VHost) ->
 
 %%----------------------------------------------------------------------------
 
-mutate_name(P, Q = #amqqueue{name = QName = #resource{name = QNameBin}}) ->
-    Q#amqqueue{name = QName#resource{name = mutate_name_bin(P, QNameBin)}}.
+mutate_name(P, Q) when ?is_amqqueue(Q) ->
+    Res0 = #resource{name = QNameBin0} = amqqueue:get_name(Q),
+    QNameBin1 = mutate_name_bin(P, QNameBin0),
+    Res1 = Res0#resource{name = QNameBin1},
+    amqqueue:set_name(Q, Res1).
 
-mutate_name_bin(P, NameBin) -> <<NameBin/binary, 0, P:8>>.
+mutate_name_bin(P, NameBin) ->
+    <<NameBin/binary, 0, P:8>>.
 
 expand_queues(QNames) ->
     lists:unzip(
@@ -125,7 +130,8 @@ collapse_recovery(QNames, DupNames, Recovery) ->
                               end, dict:new(), lists:zip(DupNames, Recovery)),
     [dict:fetch(Name, NameToTerms) || Name <- QNames].
 
-priorities(#amqqueue{arguments = Args}) ->
+priorities(Q) when ?is_amqqueue(Q) ->
+    Args = amqqueue:get_arguments(Q),
     Ints = [long, short, signedint, byte, unsignedbyte, unsignedshort, unsignedint],
     case rabbit_misc:table_lookup(Args, <<"x-max-priority">>) of
         {Type, RequestedMax} ->

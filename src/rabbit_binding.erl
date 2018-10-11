@@ -331,7 +331,8 @@ remove_transient_for_destination(DstName) ->
 %%----------------------------------------------------------------------------
 
 durable(#exchange{durable = D}) -> D;
-durable(#amqqueue{durable = D}) -> D.
+durable(Q) when ?is_amqqueue(Q) ->
+    amqqueue:is_durable(Q).
 
 binding_action(Binding = #binding{source      = SrcName,
                                   destination = DstName,

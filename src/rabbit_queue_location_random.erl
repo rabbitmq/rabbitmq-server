@@ -17,7 +17,7 @@
 -module(rabbit_queue_location_random).
 -behaviour(rabbit_queue_master_locator).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([description/0, queue_master_location/1]).
 
@@ -37,7 +37,7 @@ description() ->
     [{description,
       <<"Locate queue master node from cluster in a random manner">>}].
 
-queue_master_location(#amqqueue{} = Q) ->
+queue_master_location(Q) when ?is_amqqueue(Q) ->
     Cluster    = rabbit_queue_master_location_misc:all_nodes(Q),
     RandomPos  = erlang:phash2(erlang:monotonic_time(), length(Cluster)),
     MasterNode = lists:nth(RandomPos + 1, Cluster),

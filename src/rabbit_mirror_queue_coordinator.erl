@@ -319,7 +319,8 @@ ensure_monitoring(CPid, Pids) ->
 %% gen_server
 %% ---------------------------------------------------------------------------
 
-init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
+init([Q, GM, DeathFun, DepthFun]) when ?is_amqqueue(Q) ->
+    QueueName = amqqueue:get_name(Q),
     ?store_proc_name(QueueName),
     GM1 = case GM of
               undefined ->
@@ -345,9 +346,9 @@ init([#amqqueue { name = QueueName } = Q, GM, DeathFun, DepthFun]) ->
 handle_call(get_gm, _From, State = #state { gm = GM }) ->
     reply(GM, State).
 
-handle_cast({gm_deaths, DeadGMPids},
-            State = #state { q  = #amqqueue { name = QueueName, pid = MPid } })
-  when node(MPid) =:= node() ->
+handle_cast({gm_deaths, DeadGMPids}, State = #state{q = Q}) when ?amqqueue_pid_runs_on_local_node(Q) ->
+    QueueName = amqqueue:get_name(Q),
+    MPid = amqqueue:get_pid(Q),
     case rabbit_mirror_queue_misc:remove_from_queue(
            QueueName, MPid, DeadGMPids) of
         {ok, MPid, DeadPids, ExtraNodes} ->
@@ -373,14 +374,15 @@ handle_cast({gm_deaths, DeadGMPids},
             error(unexpected_mirrored_state)
     end;
 
-handle_cast(request_depth, State = #state { depth_fun = DepthFun,
-					    q  = #amqqueue { name = QName, pid = MPid }}) ->
+handle_cast(request_depth, State = #state{depth_fun = DepthFun, q = QArg}) when ?is_amqqueue(QArg) ->
+    QName = amqqueue:get_name(QArg),
+    MPid = amqqueue:get_pid(QArg),
     case rabbit_amqqueue:lookup(QName) of
-	{ok, #amqqueue{ pid = MPid }} ->
-	    ok = DepthFun(),
-	    noreply(State);
-	_ ->
-	    {stop, shutdown, State}
+        {ok, QFound} when ?amqqueue_pid_equals(QFound, MPid) ->
+            ok = DepthFun(),
+            noreply(State);
+        _ ->
+            {stop, shutdown, State}
     end;
 
 handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->

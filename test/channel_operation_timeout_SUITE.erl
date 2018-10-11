@@ -169,9 +169,16 @@ get_consumers(Config, Node, VHost) when is_atom(Node),
     rabbit_ct_broker_helpers:rpc(Config, Node,
       rabbit_amqqueue, consumers_all, [VHost]).
 
-get_amqqueue(Q, []) -> throw({not_found, Q});
-get_amqqueue(Q, [AMQQ = #amqqueue{name = Q} | _]) -> AMQQ;
-get_amqqueue(Q, [_| Rem]) -> get_amqqueue(Q, Rem).
+get_amqqueue(QName0, []) ->
+    throw({not_found, QName0});
+get_amqqueue(QName0, [Q | Rem]) when ?is_amqqueue(Q) ->
+    QName1 = amqqueue:get_name(Q),
+    compare_amqqueue(QName0, QName1, Q, Rem).
+
+compare_amqqueue(QName, QName, Q, _Rem) ->
+    Q;
+compare_amqqueue(QName, _, _, Rem) ->
+    get_amqqueue(QName, Rem).
 
 qconfig(Ch, Name, Ex, Consume, Deliver) ->
     [{ch, Ch}, {name, Name}, {ex,Ex}, {consume, Consume}, {deliver, Deliver}].

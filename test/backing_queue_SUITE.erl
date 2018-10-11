@@ -686,11 +686,10 @@ bq_variable_queue_delete_msg_store_files_callback(Config) ->
 
 bq_variable_queue_delete_msg_store_files_callback1(Config) ->
     ok = restart_msg_store_empty(),
-    {new, #amqqueue { pid = QPid, name = QName } = Q} =
-      rabbit_amqqueue:declare(
-        queue_name(Config,
-          <<"bq_variable_queue_delete_msg_store_files_callback-q">>),
-        true, false, [], none, <<"acting-user">>),
+    QName0 = queue_name(Config, <<"bq_variable_queue_delete_msg_store_files_callback-q">>),
+    {new, Q} = rabbit_amqqueue:declare(QName0, true, false, [], none, <<"acting-user">>),
+    QName = amqqueue:get_name(Q),
+    QPid = amqqueue:get_pid(Q),
     Payload = <<0:8388608>>, %% 1MB
     Count = 30,
     publish_and_confirm(Q, Payload, Count),
@@ -718,9 +717,10 @@ bq_queue_recover(Config) ->
 
 bq_queue_recover1(Config) ->
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
-    {new, #amqqueue { pid = QPid, name = QName } = Q} =
-        rabbit_amqqueue:declare(queue_name(Config, <<"bq_queue_recover-q">>),
-                                true, false, [], none, <<"acting-user">>),
+    QName0 = queue_name(Config, <<"bq_queue_recover-q">>),
+    {new, Q} = rabbit_amqqueue:declare(QName0, true, false, [], none, <<"acting-user">>),
+    QName = amqqueue:get_name(Q),
+    QPid = amqqueue:get_pid(Q),
     publish_and_confirm(Q, <<>>, Count),
 
     SupPid = rabbit_ct_broker_helpers:get_queue_sup_pid(Q),
@@ -736,7 +736,8 @@ bq_queue_recover1(Config) ->
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
     rabbit_amqqueue:with_or_die(
       QName,
-      fun (Q1 = #amqqueue { pid = QPid1 }) ->
+      fun (Q1) when ?is_amqqueue(Q) ->
+              QPid1 = amqqueue:get_pid(Q1),
               CountMinusOne = Count - 1,
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
                   rabbit_amqqueue:basic_get(Q1, self(), false, Limiter,
@@ -1482,8 +1483,7 @@ variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
                 end, {VQ, []}, lists:seq(1, Count)).
 
 test_amqqueue(QName, Durable) ->
-    (rabbit_amqqueue:pseudo_queue(QName, self()))
-        #amqqueue { durable = Durable }.
+    rabbit_amqqueue:pseudo_queue(QName, self(), Durable).
 
 assert_prop(List, Prop, Value) ->
     case proplists:get_value(Prop, List)of

@@ -16,7 +16,7 @@
 
 -module(rabbit_queue_decorator).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([select/1, set/1, register/2, unregister/1]).
 
@@ -47,7 +47,9 @@ removed_from_rabbit_registry(_Type) -> ok.
 select(Modules) ->
     [M || M <- Modules, code:which(M) =/= non_existing].
 
-set(Q) -> Q#amqqueue{decorators = [D || D <- list(), D:active_for(Q)]}.
+set(Q) when ?is_amqqueue(Q) ->
+    Decorators = [D || D <- list(), D:active_for(Q)],
+    amqqueue:set_decorators(Q, Decorators).
 
 list() -> [M || {_, M} <- rabbit_registry:lookup_all(queue_decorator)].
 
@@ -61,13 +63,18 @@ unregister(TypeName) ->
     [maybe_recover(Q) || Q <- rabbit_amqqueue:list()],
     ok.
 
-maybe_recover(Q = #amqqueue{name       = Name,
-                            decorators = Decs}) ->
-    #amqqueue{decorators = Decs1} = set(Q),
-    Old = lists:sort(select(Decs)),
+maybe_recover(Q0) when ?is_amqqueue(Q0) ->
+    Name = amqqueue:get_name(Q0),
+    Decs0 = amqqueue:get_decorators(Q0),
+    Q1 = set(Q0),
+    Decs1 = amqqueue:get_decorators(Q1),
+    Old = lists:sort(select(Decs0)),
     New = lists:sort(select(Decs1)),
     case New of
-        Old -> ok;
-        _   -> [M:startup(Q) || M <- New -- Old],
-               rabbit_amqqueue:update_decorators(Name)
+        Old ->
+            ok;
+        _   ->
+            %% TODO LRB JSP 160169569 should startup be passed Q1 here?
+            [M:startup(Q0) || M <- New -- Old],
+            rabbit_amqqueue:update_decorators(Name)
     end.

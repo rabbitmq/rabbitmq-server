@@ -18,7 +18,7 @@
 
 -export([clear_read_cache/0]).
 
--include("rabbit.hrl"). % For #amqqueue record definition.
+-include_lib("rabbit_common/include/rabbit.hrl"). % For #amqqueue record definition.
 
 clear_read_cache() ->
     case application:get_env(rabbit, fhc_read_buffering) of
@@ -37,7 +37,9 @@ clear_vhost_read_cache([VHost | Rest]) ->
 
 clear_queue_read_cache([]) ->
     ok;
-clear_queue_read_cache([#amqqueue{pid = MPid, slave_pids = SPids} | Rest]) ->
+clear_queue_read_cache([Q | Rest]) when ?is_amqqueue(Q) ->
+    MPid = amqqueue:get_pid(Q),
+    SPids = amqqueue:get_slave_pids(Q),
     %% Limit the action to the current node.
     Pids = [P || P <- [MPid | SPids], node(P) =:= node()],
     %% This function is executed in the context of the backing queue

@@ -366,9 +366,9 @@ info_head_message_timestamp1(_Config) ->
     QName = rabbit_misc:r(<<"/">>, queue,
       <<"info_head_message_timestamp-queue">>),
     Q0 = rabbit_amqqueue:pseudo_queue(QName, self()),
-    Q = Q0#amqqueue{arguments = [{<<"x-max-priority">>, long, 2}]},
+    Q1 = amqqueue:set_arguments(Q0, [{<<"x-max-priority">>, long, 2}]),
     PQ = rabbit_priority_queue,
-    BQS1 = PQ:init(Q, new, fun(_, _) -> ok end),
+    BQS1 = PQ:init(Q1, new, fun(_, _) -> ok end),
     %% The queue is empty: no timestamp.
     true = PQ:is_empty(BQS1),
     '' = PQ:info(head_message_timestamp, BQS1),
@@ -415,9 +415,9 @@ info_head_message_timestamp1(_Config) ->
 ram_duration(_Config) ->
     QName = rabbit_misc:r(<<"/">>, queue, <<"ram_duration-queue">>),
     Q0 = rabbit_amqqueue:pseudo_queue(QName, self()),
-    Q = Q0#amqqueue{arguments = [{<<"x-max-priority">>, long, 5}]},
+    Q1 = amqqueue:set_arguments(Q0, [{<<"x-max-priority">>, long, 5}]),
     PQ = rabbit_priority_queue,
-    BQS1 = PQ:init(Q, new, fun(_, _) -> ok end),
+    BQS1 = PQ:init(Q1, new, fun(_, _) -> ok end),
     {_Duration1, BQS2} = PQ:ram_duration(BQS1),
     BQS3 = PQ:set_ram_duration_target(infinity, BQS2),
     BQS4 = PQ:set_ram_duration_target(1, BQS3),

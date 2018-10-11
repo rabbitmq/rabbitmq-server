@@ -354,7 +354,7 @@ node_starts_with_dead_vhosts_and_ignore_slaves(Config) ->
 
     Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
 
-    #amqqueue{sync_slave_pids = [Pid]} = Q,
+    [Pid] = amqqueue:get_sync_slave_pids(Q),
 
     Node1 = node(Pid),
 
