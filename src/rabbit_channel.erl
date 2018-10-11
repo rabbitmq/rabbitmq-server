@@ -1818,8 +1818,14 @@ record_sent(ConsumerTag, AckRequired,
                         conn_name         = ConnName,
                         channel           = ChannelNum}) ->
     ?INCR_STATS(queue_stats, QName, 1, case {ConsumerTag, AckRequired} of
+                                           %% When ConsumerTag is an integer,
+                                           %% it is in fact the DeliveryTag. Used in
+                                           %% quorum queues to track basic.get messages
+                                           %% as these don't have the consumer tag
+                                           %% that the state machine requires.
                                            {_,  true} when is_integer(ConsumerTag) -> get;
                                            {_, false} when is_integer(ConsumerTag) -> get_no_ack;
+                                           %% Authentic consumer tag, this is a delivery
                                            {_   ,  true} -> deliver;
                                            {_   , false} -> deliver_no_ack
                                        end, State),
