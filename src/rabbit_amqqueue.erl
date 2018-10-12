@@ -59,6 +59,8 @@
 
 -define(MORE_CONSUMER_CREDIT_AFTER, 50).
 
+-define(IS_CLASSIC(QPid), is_pid(QPid)).
+-define(IS_QUORUM(QPid), is_tuple(QPid)).
 %%----------------------------------------------------------------------------
 
 -export_type([name/0, qmsg/0, absent_reason/0]).
@@ -260,7 +262,7 @@ filter_per_type(Queues) ->
     lists:partition(fun(#amqqueue{type = Type}) -> Type == classic end, Queues).
 
 filter_pid_per_type(QPids) ->
-    lists:partition(fun(QPid) -> is_pid(QPid) end, QPids).
+    lists:partition(fun(QPid) -> ?IS_CLASSIC(QPid) end, QPids).
 
 stop(VHost) ->
     %% Classic queues
@@ -728,14 +730,14 @@ list_local_followers() ->
                    quorum_nodes = Nodes} = Q <- list(),
          State =/= crashed, Leader =/= node(), lists:member(node(), Nodes)].
 
-is_local_to_node(QPid, Node) when is_pid(QPid) ->
+is_local_to_node(QPid, Node) when ?IS_CLASSIC(QPid) ->
     Node =:= node(QPid);
-is_local_to_node({_, Leader}, Node) ->
+is_local_to_node({_, Leader} = QPid, Node) when ?IS_QUORUM(QPid) ->
     Node =:= Leader.
 
-qnode(QPid) when is_pid(QPid) ->
+qnode(QPid) when ?IS_CLASSIC(QPid) ->
     node(QPid);
-qnode({_, Node}) ->
+qnode({_, Node} = QPid) when ?IS_QUORUM(QPid) ->
     Node.
 
 list(VHostPath) ->
@@ -1001,9 +1003,10 @@ purge(#amqqueue{ pid = QPid, type = classic}) ->
 purge(#amqqueue{ pid = NodeId, type = quorum}) ->
     rabbit_quorum_queue:purge(NodeId).
 
-requeue(QPid, MsgIds, ChPid, _QuorumStates) when is_pid(QPid) ->
+requeue(QPid, MsgIds, ChPid, _QuorumStates) when ?IS_CLASSIC(QPid) ->
     delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]});
-requeue({Name, _}, {CTag, MsgIds}, _ChPid, QuorumStates) ->
+requeue({Name, _} = QPid, {CTag, MsgIds}, _ChPid, QuorumStates)
+  when ?IS_QUORUM(QPid) ->
     case QuorumStates of
         #{Name := QState0} ->
             {ok, QState} = rabbit_quorum_queue:requeue(CTag, MsgIds, QState0),
@@ -1013,9 +1016,9 @@ requeue({Name, _}, {CTag, MsgIds}, _ChPid, QuorumStates) ->
             {ok, QuorumStates}
     end.
 
-ack(QPid, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
+ack(QPid, MsgIds, ChPid, _FStates) when ?IS_CLASSIC(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]});
-ack({Name, _}, {CTag, MsgIds}, _ChPid, QuorumStates) ->
+ack({Name, _} = QPid, {CTag, MsgIds}, _ChPid, QuorumStates) when ?IS_QUORUM(QPid) ->
     case QuorumStates of
         #{Name := QState0} ->
             {ok, QState} = rabbit_quorum_queue:ack(CTag, MsgIds, QState0),
@@ -1025,9 +1028,10 @@ ack({Name, _}, {CTag, MsgIds}, _ChPid, QuorumStates) ->
             {ok, QuorumStates}
     end.
 
-reject(QPid, Requeue, MsgIds, ChPid, _FStates) when is_pid(QPid) ->
+reject(QPid, Requeue, MsgIds, ChPid, _FStates) when ?IS_CLASSIC(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{reject, Requeue, MsgIds, ChPid}]});
-reject({Name, _}, Requeue, {CTag, MsgIds}, _ChPid, QuorumStates) ->
+reject({Name, _} = QPid, Requeue, {CTag, MsgIds}, _ChPid, QuorumStates)
+  when ?IS_QUORUM(QPid) ->
     case QuorumStates of
         #{Name := QState0} ->
             {ok, QState} = rabbit_quorum_queue:reject(Requeue, CTag,

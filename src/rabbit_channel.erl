@@ -210,6 +210,9 @@
             put({Type, Key}, none)
         end).
 
+-define(IS_CLASSIC(QPid), is_pid(QPid)).
+-define(IS_QUORUM(QPid), is_tuple(QPid)).
+
 %%----------------------------------------------------------------------------
 
 -export_type([channel_number/0]).
@@ -634,7 +637,6 @@ handle_cast({confirm, MsgSeqNos, QPid}, State) ->
 handle_info({ra_event, {Name, _} = From, _} = Evt,
             #ch{queue_states = QueueStates,
                 queue_names = QNames,
-                delivering_queues = DQ,
                 consumer_mapping = ConsumerMapping} = State0) ->
     case QueueStates of
         #{Name := QState0} ->
@@ -1652,7 +1654,7 @@ consumer_monitor(ConsumerTag,
 monitor_delivering_queue(NoAck, QPid, QName,
                          State = #ch{queue_names       = QNames,
                                      queue_monitors    = QMons,
-                                     delivering_queues = DQ}) when is_pid(QPid) ->
+                                     delivering_queues = DQ}) when ?IS_CLASSIC(QPid) ->
     State#ch{queue_names       = maps:put(QPid, QName, QNames),
              queue_monitors    = pmon:monitor(QPid, QMons),
              delivering_queues = case NoAck of
@@ -1661,7 +1663,7 @@ monitor_delivering_queue(NoAck, QPid, QName,
                                  end};
 monitor_delivering_queue(NoAck, QPid, QName,
                          State = #ch{queue_names       = QNames,
-                                     delivering_queues = DQ}) ->
+                                     delivering_queues = DQ}) when ?IS_QUORUM(QPid) ->
     State#ch{queue_names       = maps:put(QPid, QName, QNames),
              delivering_queues = case NoAck of
                                      true  -> DQ;
@@ -1670,7 +1672,7 @@ monitor_delivering_queue(NoAck, QPid, QName,
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
                                                        mandatory   = Mand})
-  when is_pid(QPid) ->
+  when ?IS_CLASSIC(QPid) ->
     {MMsgs, Mand1} = dtree:take(QPid, Mand),
     [basic_return(Msg, State, no_route) || {_, Msg} <- MMsgs],
     State1 = State#ch{mandatory = Mand1},
@@ -1681,7 +1683,7 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
                  record_confirms(MXs, State1#ch{unconfirmed = UC1})
 
     end;
-handle_publishing_queue_down(_QPid, _Reason, State) ->
+handle_publishing_queue_down(QPid, _Reason, State) when ?IS_QUORUM(QPid) ->
     %% for quorum queues we cannot infer anything from a queue down
     State.
 
@@ -1934,16 +1936,18 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
 
 foreach_per_queue(_F, [], Acc) ->
     Acc;
-foreach_per_queue(F, [{_DTag, _CTag, {QPid, MsgId}}], Acc) when is_pid(QPid) -> %% common case
+foreach_per_queue(F, [{_DTag, _CTag, {QPid, MsgId}}], Acc) when ?IS_CLASSIC(QPid) ->
+    %% common case
     F(QPid, [MsgId], Acc);
-foreach_per_queue(F, [{_DTag, CTag, {QPid, MsgId}}], Acc) -> %% quorum queue, needs the consumer tag
+foreach_per_queue(F, [{_DTag, CTag, {QPid, MsgId}}], Acc) when ?IS_QUORUM(QPid) ->
+    %% quorum queue, needs the consumer tag
     F({QPid, CTag}, [MsgId], Acc);
 %% NB: UAL should be in youngest-first order; the tree values will
 %% then be in oldest-first order
 foreach_per_queue(F, UAL, Acc) ->
-    T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) when is_pid(QPid) ->
+    T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) when ?IS_CLASSIC(QPid) ->
                             rabbit_misc:gb_trees_cons(QPid, MsgId, T);
-                        ({_DTag, CTag, {QPid, MsgId}}, T) ->
+                        ({_DTag, CTag, {QPid, MsgId}}, T) when ?IS_QUORUM(QPid) ->
                             rabbit_misc:gb_trees_cons({QPid, CTag}, MsgId, T)
                     end, gb_trees:empty(), UAL),
     rabbit_misc:gb_trees_fold(fun (Key, Val, Acc0) -> F(Key, Val, Acc0) end, Acc, T).
@@ -2471,7 +2475,7 @@ handle_deliver(ConsumerTag, AckRequired,
                                redelivered  = Redelivered,
                                exchange     = ExchangeName#resource.name,
                                routing_key  = RoutingKey},
-    case is_pid(QPid) of
+    case ?IS_CLASSIC(QPid) of
         true ->
             ok = rabbit_writer:send_command_and_notify(
                    WriterPid, QPid, self(), Deliver, Content);
