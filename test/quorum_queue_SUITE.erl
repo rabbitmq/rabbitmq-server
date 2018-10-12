@@ -400,17 +400,17 @@ restart_all_types(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    QQ1 = <<"quorum-q1">>,
+    QQ1 = <<"restart_all_types-qq1">>,
     ?assertEqual({'queue.declare_ok', QQ1, 0, 0},
                  declare(Ch, QQ1, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    QQ2 = <<"quorum-q2">>,
+    QQ2 = <<"restart_all_types-qq2">>,
     ?assertEqual({'queue.declare_ok', QQ2, 0, 0},
                  declare(Ch, QQ2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    CQ1 = <<"classic-q1">>,
+    CQ1 = <<"restart_all_types-classic1">>,
     ?assertEqual({'queue.declare_ok', CQ1, 0, 0}, declare(Ch, CQ1, [])),
     rabbit_ct_client_helpers:publish(Ch, CQ1, 1),
-    CQ2 = <<"classic-q2">>,
+    CQ2 = <<"restart_all_types-classic2">>,
     ?assertEqual({'queue.declare_ok', CQ2, 0, 0}, declare(Ch, CQ2, [])),
     rabbit_ct_client_helpers:publish(Ch, CQ2, 1),
 
@@ -426,7 +426,11 @@ restart_all_types(Config) ->
     {#'basic.get_ok'{}, #amqp_msg{}} =
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ1, no_ack = false}),
     {#'basic.get_ok'{}, #amqp_msg{}} =
-        amqp_channel:call(Ch2, #'basic.get'{queue  = CQ2, no_ack = false}).
+        amqp_channel:call(Ch2, #'basic.get'{queue  = CQ2, no_ack = false}),
+    delete_queues(Ch2, [QQ1, QQ2, CQ1, CQ2]).
+
+delete_queues(Ch, Queues) ->
+    [amqp_channel:call(Ch, #'queue.delete'{queue = Q}) ||  Q <- Queues].
 
 stop_start_rabbit_app(Config) ->
     %% Test start/stop of rabbit app with both types of queues (quorum and
@@ -434,17 +438,17 @@ stop_start_rabbit_app(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    QQ1 = <<"quorum-q1">>,
+    QQ1 = <<"stop_start_rabbit_app-qq">>,
     ?assertEqual({'queue.declare_ok', QQ1, 0, 0},
                  declare(Ch, QQ1, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     QQ2 = <<"quorum-q2">>,
     ?assertEqual({'queue.declare_ok', QQ2, 0, 0},
                  declare(Ch, QQ2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    CQ1 = <<"classic-q1">>,
+    CQ1 = <<"stop_start_rabbit_app-classic">>,
     ?assertEqual({'queue.declare_ok', CQ1, 0, 0}, declare(Ch, CQ1, [])),
     rabbit_ct_client_helpers:publish(Ch, CQ1, 1),
-    CQ2 = <<"classic-q2">>,
+    CQ2 = <<"stop_start_rabbit_app-classic2">>,
     ?assertEqual({'queue.declare_ok', CQ2, 0, 0}, declare(Ch, CQ2, [])),
     rabbit_ct_client_helpers:publish(Ch, CQ2, 1),
 
@@ -464,7 +468,8 @@ stop_start_rabbit_app(Config) ->
     {#'basic.get_ok'{}, #amqp_msg{}} =
         amqp_channel:call(Ch2, #'basic.get'{queue  = CQ1, no_ack = false}),
     {#'basic.get_ok'{}, #amqp_msg{}} =
-        amqp_channel:call(Ch2, #'basic.get'{queue  = CQ2, no_ack = false}).
+        amqp_channel:call(Ch2, #'basic.get'{queue  = CQ2, no_ack = false}),
+    delete_queues(Ch2, [QQ1, QQ2, CQ1, CQ2]).
 
 publish(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
