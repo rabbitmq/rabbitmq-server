@@ -1383,7 +1383,7 @@ deliver(Qs, Delivery) ->
 
 deliver([], _Delivery, QueueState) ->
     %% /dev/null optimisation
-    {[], QueueState};
+    {[], [], QueueState};
 
 deliver(Qs, Delivery = #delivery{flow = Flow,
                                  confirm = Confirm}, QueueState0) ->
@@ -1438,7 +1438,7 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
                   end, QueueState0, Quorum)
         end,
     {QuorumPids, _} = lists:unzip(Quorum),
-    {QPids ++ QuorumPids, QueueState}.
+    {QPids, QuorumPids, QueueState}.
 
 qpids([]) -> {[], [], []}; %% optimisation
 qpids([#amqqueue{pid = {LocalName, LeaderNode}, type = quorum, name = QName}]) ->

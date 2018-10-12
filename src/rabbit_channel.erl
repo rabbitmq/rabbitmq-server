@@ -633,6 +633,8 @@ handle_cast({confirm, MsgSeqNos, QPid}, State) ->
 
 handle_info({ra_event, {Name, _} = From, _} = Evt,
             #ch{queue_states = QueueStates,
+                queue_names = QNames,
+                delivering_queues = DQ,
                 consumer_mapping = ConsumerMapping} = State0) ->
     case QueueStates of
         #{Name := QState0} ->
@@ -665,7 +667,10 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     noreply_coalesce(confirm(MsgSeqNos, From,
                                              State0#ch{queue_states = maps:put(Name, QState1, QueueStates)}));
                 eol ->
-                    noreply_coalesce(State0#ch{queue_states = maps:remove(Name, QueueStates)})
+                    State1 = handle_consuming_queue_down(From, State0),
+                    State2 = handle_delivering_queue_down(From, State1),
+                    noreply_coalesce(State2#ch{queue_states = maps:remove(Name, QueueStates),
+                                               queue_names = maps:remove(From, QNames)})
             end;
         _ ->
             %% the assumption here is that the queue state has been cleaned up and
@@ -1647,9 +1652,17 @@ consumer_monitor(ConsumerTag,
 monitor_delivering_queue(NoAck, QPid, QName,
                          State = #ch{queue_names       = QNames,
                                      queue_monitors    = QMons,
-                                     delivering_queues = DQ}) ->
+                                     delivering_queues = DQ}) when is_pid(QPid) ->
     State#ch{queue_names       = maps:put(QPid, QName, QNames),
              queue_monitors    = pmon:monitor(QPid, QMons),
+             delivering_queues = case NoAck of
+                                     true  -> DQ;
+                                     false -> sets:add_element(QPid, DQ)
+                                 end};
+monitor_delivering_queue(NoAck, QPid, QName,
+                         State = #ch{queue_names       = QNames,
+                                     delivering_queues = DQ}) ->
+    State#ch{queue_names       = maps:put(QPid, QName, QNames),
              delivering_queues = case NoAck of
                                      true  -> DQ;
                                      false -> sets:add_element(QPid, DQ)
@@ -1972,7 +1985,9 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                            queue_monitors = QMons,
                                            queue_states = QueueStates0}) ->
     Qs = rabbit_amqqueue:lookup(DelQNames),
-    {DeliveredQPids, QueueStates} = rabbit_amqqueue:deliver(Qs, Delivery, QueueStates0),
+    {DeliveredQPids, DeliveredQQPids, QueueStates} =
+        rabbit_amqqueue:deliver(Qs, Delivery, QueueStates0),
+    AllDeliveredQPids = DeliveredQPids ++ DeliveredQQPids,
     %% The pmon:monitor_all/2 monitors all queues to which we
     %% delivered. But we want to monitor even queues we didn't deliver
     %% to, since we need their 'DOWN' messages to clean
@@ -1995,15 +2010,15 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                       queue_monitors = QMons1},
     %% NB: the order here is important since basic.returns must be
     %% sent before confirms.
-    State2 = process_routing_mandatory(Mandatory, DeliveredQPids, MsgSeqNo,
+    State2 = process_routing_mandatory(Mandatory, AllDeliveredQPids, MsgSeqNo,
                                        Message, State1),
-    State3 = process_routing_confirm(  Confirm,   DeliveredQPids, MsgSeqNo,
-                                       XName,   State2),
+    State3 = process_routing_confirm(  Confirm, AllDeliveredQPids, MsgSeqNo,
+                                       XName, State2),
     case rabbit_event:stats_level(State3, #ch.stats_timer) of
         fine ->
             ?INCR_STATS(exchange_stats, XName, 1, publish),
             [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish) ||
-                QPid        <- DeliveredQPids,
+                QPid        <- AllDeliveredQPids,
                 {ok, QName} <- [maps:find(QPid, QNames1)]];
         _ ->
             ok
