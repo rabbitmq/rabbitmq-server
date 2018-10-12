@@ -132,11 +132,11 @@ define PROJECT_ENV
 endef
 
 LOCAL_DEPS = sasl mnesia os_mon inets
-BUILD_DEPS = rabbitmq_cli
-DEPS = ranch syslog lager rabbit_common
+BUILD_DEPS = rabbitmq_cli syslog
+DEPS = ranch lager rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
-dep_syslog = git https://github.com/schlagert/syslog 3.4.3
+dep_syslog = git https://github.com/schlagert/syslog 3.4.5
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))

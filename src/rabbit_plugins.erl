@@ -134,7 +134,6 @@ setup() ->
         {error, E1} -> throw({error, {cannot_delete_plugins_expand_dir,
                                       [ExpandDir, E1]}})
     end,
-
     Enabled = enabled_plugins(),
     prepare_plugins(Enabled).
 
@@ -196,7 +195,7 @@ list(PluginsPath, IncludeRequiredDeps) ->
     {AllPlugins, LoadingProblems} = discover_plugins(split_path(PluginsPath)),
     {UniquePlugins, DuplicateProblems} = remove_duplicate_plugins(AllPlugins),
     Plugins1 = maybe_keep_required_deps(IncludeRequiredDeps, UniquePlugins),
-    Plugins2 = remove_otp_overrideable_plugins(Plugins1),
+    Plugins2 = remove_plugins(Plugins1),
     maybe_report_plugin_loading_problems(LoadingProblems ++ DuplicateProblems),
     ensure_dependencies(Plugins2).
 
@@ -248,11 +247,19 @@ strictly_plugins(Plugins) ->
 
 %% For a few known cases, an externally provided plugin can be trusted.
 %% In this special case, it overrides the plugin.
-plugin_provided_by_otp(#plugin{name = eldap}) ->
+is_plugin_provided_by_otp(#plugin{name = eldap}) ->
     %% eldap was added to Erlang/OTP R15B01 (ERTS 5.9.1). In this case,
     %% we prefer this version to the plugin.
     rabbit_misc:version_compare(erlang:system_info(version), "5.9.1", gte);
-plugin_provided_by_otp(_) ->
+is_plugin_provided_by_otp(_) ->
+    false.
+
+is_skipped_plugin(#plugin{name = syslog}) ->
+    % syslog is shipped as an .ez file, but it's not an actual plugin and
+    % it's not a direct dependency of the rabbit application, so we must
+    % skip it here
+    true;
+is_skipped_plugin(_) ->
     false.
 
 %% Make sure we don't list OTP apps in here, and also that we detect
@@ -295,7 +302,6 @@ running_plugins() ->
 
 prepare_plugins(Enabled) ->
     ExpandDir = plugins_expand_dir(),
-
     AllPlugins = list(plugins_dir()),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
@@ -306,7 +312,6 @@ prepare_plugins(Enabled) ->
         {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
                                       [ExpandDir, E2]}})
     end,
-
     [prepare_plugin(Plugin, ExpandDir) || Plugin <- ValidPlugins],
     Wanted.
 
@@ -681,9 +686,11 @@ list_all_deps([Application | Applications], Deps) ->
 list_all_deps([], Deps) ->
     Deps.
 
-remove_otp_overrideable_plugins(Plugins) ->
-    lists:filter(fun(P) -> not plugin_provided_by_otp(P) end,
-                 Plugins).
+remove_plugins(Plugins) ->
+    Fun = fun(P) ->
+             not (is_plugin_provided_by_otp(P) orelse is_skipped_plugin(P))
+          end,
+    lists:filter(Fun, Plugins).
 
 maybe_report_plugin_loading_problems([]) ->
     ok;

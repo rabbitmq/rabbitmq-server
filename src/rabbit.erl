@@ -517,7 +517,6 @@ start_apps(Apps) ->
 
 start_apps(Apps, RestartTypes) ->
     app_utils:load_applications(Apps),
-
     ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
         undefined ->
             [];
