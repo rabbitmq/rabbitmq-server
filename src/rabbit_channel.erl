@@ -671,6 +671,10 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                 eol ->
                     State1 = handle_consuming_queue_down(From, State0),
                     State2 = handle_delivering_queue_down(From, State1),
+                    case maps:find(From, QNames) of
+                        {ok, QName} -> erase_queue_stats(QName);
+                        error       -> ok
+                    end,
                     noreply_coalesce(State2#ch{queue_states = maps:remove(Name, QueueStates),
                                                queue_names = maps:remove(From, QNames)})
             end;
