@@ -50,11 +50,8 @@ is_authorized(ReqData, Context) ->
 
 node0(ReqData) ->
     Node = list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))),
-    case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData),
-               proplists:get_value(name, N) == Node] of
-        []     -> not_found;
-        [Data] -> augment(ReqData, Node, Data)
-    end.
+    [Data] = node_data(Node, ReqData),
+    augment(ReqData, Node, Data).
 
 augment(ReqData, Node, Data) ->
     lists:foldl(fun (Key, DataN) -> augment(Key, ReqData, Node, DataN) end,
@@ -68,4 +65,19 @@ augment(Key, ReqData, Node, Data) ->
                         end,
                   [{Key, Res} | Data];
         _      -> Data
+    end.
+
+node_data(Node, ReqData) ->
+    S = rabbit_mnesia:status(),
+    Nodes = proplists:get_value(nodes, S),
+    Running = proplists:get_value(running_nodes, S),
+    Type = find_type(Node, Nodes),
+    rabbit_mgmt_db:augment_nodes(
+      [[{name, Node}, {running, lists:member(Node, Running)}, {type, Type}]],
+      rabbit_mgmt_util:range_ceil(ReqData)).
+
+find_type(Node, [{Type, Nodes} | Rest]) ->
+    case lists:member(Node, Nodes) of
+        true -> Type;
+        false -> find_type(Node, Rest)
     end.
