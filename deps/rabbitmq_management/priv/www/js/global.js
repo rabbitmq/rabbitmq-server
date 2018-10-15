@@ -496,7 +496,34 @@ var HELP = {
     'Rate at which runtime context switching takes place on this node.',
 
     'process-reductions':
-    'Rate at which reductions take place on this process.'
+    'Rate at which reductions take place on this process.',
+
+    'connection-operations':
+    ' <dl>\
+        <dt>Created</dt>\
+        <dd>Rate at which connections are created.</dd>\
+        <dt>Closed</dt>\
+        <dd>Rate at which connections are closed.</dd>\
+      </dl> ',
+
+    'channel-operations':
+    ' <dl>\
+        <dt>Created</dt>\
+        <dd>Rate at which channels are created.</dd>\
+        <dt>Closed</dt>\
+        <dd>Rate at which channels are closed.</dd>\
+      </dl> ',
+
+    'queue-operations':
+    ' <dl>\
+        <dt>Declared</dt>\
+        <dd>Rate at which queues are declared by clients.</dd>\
+        <dt>Created</dt>\
+        <dd>Rate at which queues are created. Declaring a queue that already exists counts for a "Declared" event, but not for a "Created" event. </dd>\
+        <dt>Deleted</dt>\
+        <dd>Rate at which queues are deleted.</dd>\
+     </dl> '
+
 };
 
 ///////////////////////////////////////////////////////////////////////////
