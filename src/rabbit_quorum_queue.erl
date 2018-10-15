@@ -329,9 +329,9 @@ basic_cancel(ConsumerTag, ChPid, OkMsg, FState0) ->
     maybe_send_reply(ChPid, OkMsg),
     rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), FState0).
 
-stateless_deliver({Name, _} = Pid, Delivery) ->
-    ok = rabbit_fifo_client:untracked_enqueue(Name, [Pid],
-                                          Delivery#delivery.message).
+stateless_deliver(ServerId, Delivery) ->
+    ok = rabbit_fifo_client:untracked_enqueue([ServerId],
+                                              Delivery#delivery.message).
 
 deliver(false, Delivery, FState0) ->
     rabbit_fifo_client:enqueue(Delivery#delivery.message, FState0);
@@ -682,7 +682,7 @@ check_non_durable(#amqqueue{name = Name,
       [rabbit_misc:rs(Name)]).
 
 queue_name(RaFifoState) ->
-    rabbit_fifo_client:cluster_id(RaFifoState).
+    rabbit_fifo_client:cluster_name(RaFifoState).
 
 get_quorum_cluster_size(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-quorum-cluster-size">>) of

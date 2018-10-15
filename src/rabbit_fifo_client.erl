@@ -17,9 +17,9 @@
          return/3,
          discard/3,
          handle_ra_event/3,
-         untracked_enqueue/3,
+         untracked_enqueue/2,
          purge/1,
-         cluster_id/1
+         cluster_name/1
          ]).
 
 -include_lib("ra/include/ra.hrl").
@@ -28,7 +28,7 @@
 
 -type seq() :: non_neg_integer().
 
--record(state, {cluster_id :: ra_cluster_id(),
+-record(state, {cluster_name :: ra_cluster_name(),
                 servers = [] :: [ra_server_id()],
                 leader :: maybe(ra_server_id()),
                 next_seq = 0 :: seq(),
@@ -58,32 +58,32 @@
 
 %% @doc Create the initial state for a new rabbit_fifo sessions. A state is needed
 %% to interact with a rabbit_fifo queue using @module.
-%% @param ClusterId the id of the cluster to interact with
+%% @param ClusterName the id of the cluster to interact with
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
--spec init(ra_cluster_id(), [ra_server_id()]) -> state().
-init(ClusterId, Servers) ->
-    init(ClusterId, Servers, ?SOFT_LIMIT).
+-spec init(ra_cluster_name(), [ra_server_id()]) -> state().
+init(ClusterName, Servers) ->
+    init(ClusterName, Servers, ?SOFT_LIMIT).
 
 %% @doc Create the initial state for a new rabbit_fifo sessions. A state is needed
 %% to interact with a rabbit_fifo queue using @module.
-%% @param ClusterId the id of the cluster to interact with
+%% @param ClusterName the id of the cluster to interact with
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
 %% @param MaxPending size defining the max number of pending commands.
--spec init(ra_cluster_id(), [ra_server_id()], non_neg_integer()) -> state().
-init(ClusterId, Servers, SoftLimit) ->
+-spec init(ra_cluster_name(), [ra_server_id()], non_neg_integer()) -> state().
+init(ClusterName, Servers, SoftLimit) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
-    #state{cluster_id = ClusterId,
+    #state{cluster_name = ClusterName,
            servers = Servers,
            soft_limit = SoftLimit,
            timeout = Timeout}.
 
--spec init(ra_cluster_id(), [ra_server_id()], non_neg_integer(), fun(() -> ok),
+-spec init(ra_cluster_name(), [ra_server_id()], non_neg_integer(), fun(() -> ok),
            fun(() -> ok)) -> state().
-init(ClusterId, Servers, SoftLimit, BlockFun, UnblockFun) ->
+init(ClusterName, Servers, SoftLimit, BlockFun, UnblockFun) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
-    #state{cluster_id = ClusterId,
+    #state{cluster_name = ClusterName,
            servers = Servers,
            block_handler = BlockFun,
            unblock_handler = UnblockFun,
@@ -331,10 +331,10 @@ purge(Node) ->
             Err
     end.
 
-%% @doc returns the cluster id
--spec cluster_id(state()) -> ra_cluster_id().
-cluster_id(#state{cluster_id = ClusterId}) ->
-    ClusterId.
+%% @doc returns the cluster name
+-spec cluster_name(state()) -> ra_cluster_name().
+cluster_name(#state{cluster_name = ClusterName}) ->
+    ClusterName.
 
 %% @doc Handles incoming `ra_events'. Events carry both internal "bookeeping"
 %% events emitted by the `ra' leader as well as `rabbit_fifo' emitted events such
@@ -442,9 +442,9 @@ handle_ra_event(_Leader, {machine, eol}, _State0) ->
 %% @param Msg the message to enqueue.
 %%
 %% @returns `ok'
--spec untracked_enqueue(ra_cluster_id(), [ra_server_id()], term()) ->
+-spec untracked_enqueue([ra_server_id()], term()) ->
     ok.
-untracked_enqueue(_ClusterId, [Node | _], Msg) ->
+untracked_enqueue([Node | _], Msg) ->
     Cmd = {enqueue, undefined, undefined, Msg},
     ok = ra:pipeline_command(Node, Cmd),
     ok.
