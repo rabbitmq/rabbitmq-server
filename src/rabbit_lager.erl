@@ -589,6 +589,9 @@ maybe_remove_logger_handler() ->
         error:undef ->
             % OK since the logger module only exists in OTP 21.1 or later
             ok;
+        error:{badmatch, {error, {not_found, default}}} ->
+            % OK - this error happens when running a CLI command
+            ok;
         Err:Reason ->
             error_logger:error_msg("calling ~p:~p failed: ~p:~p~n",
                                    [M, F, Err, Reason])
