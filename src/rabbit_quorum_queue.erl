@@ -115,7 +115,7 @@ declare(#amqqueue{name = QName,
     check_auto_delete(Q),
     check_exclusive(Q),
     check_non_durable(Q),
-    QuorumSize = get_quorum_cluster_size(Arguments),
+    QuorumSize = get_default_quorum_initial_group_size(Arguments),
     RaName = qname_to_rname(QName),
     Id = {RaName, node()},
     Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
@@ -684,9 +684,9 @@ check_non_durable(#amqqueue{name = Name,
 queue_name(RaFifoState) ->
     rabbit_fifo_client:cluster_name(RaFifoState).
 
-get_quorum_cluster_size(Arguments) ->
-    case rabbit_misc:table_lookup(Arguments, <<"x-quorum-cluster-size">>) of
-        undefined -> application:get_env(rabbit, quorum_cluster_size);
+get_default_quorum_initial_group_size(Arguments) ->
+    case rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>) of
+        undefined -> application:get_env(rabbit, default_quorum_initial_group_size);
         {_Type, Val} -> Val
     end.
 

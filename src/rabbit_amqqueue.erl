@@ -630,7 +630,7 @@ declare_args() ->
      {<<"x-overflow">>,                fun check_overflow/2},
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
      {<<"x-queue-type">>,              fun check_queue_type/2},
-     {<<"x-quorum-cluster-size">>,     fun check_quorum_cluster_size_arg/2}].
+     {<<"x-quorum-initial-group-size">>,     fun check_default_quorum_initial_group_size_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -671,7 +671,7 @@ check_max_priority_arg({Type, Val}, Args) ->
         Error                                  -> Error
     end.
 
-check_quorum_cluster_size_arg({Type, Val}, Args) ->
+check_default_quorum_initial_group_size_arg({Type, Val}, Args) ->
     case check_non_neg_int_arg({Type, Val}, Args) of
         ok when Val == 0 -> {error, {value_zero, Val}};
         ok               -> ok;

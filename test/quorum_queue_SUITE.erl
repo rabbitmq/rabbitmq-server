@@ -271,13 +271,13 @@ declare_invalid_args(Config) ->
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-quorum-cluster-size">>, longstr, <<"hop">>}])),
+                    {<<"x-quorum-initial-group-size">>, longstr, <<"hop">>}])),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-quorum-cluster-size">>, long, 0}])).
+                    {<<"x-quorum-initial-group-size">>, long, 0}])).
 
 start_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -348,7 +348,7 @@ quorum_cluster_size_x(Config, Max, Expected) ->
     RaName = ra_name(QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                                  {<<"x-quorum-cluster-size">>, long, Max}])),
+                                  {<<"x-quorum-initial-group-size">>, long, Max}])),
     {ok, Members, _} = ra:members({RaName, Server}),
     ?assertEqual(Expected, length(Members)),
     Info = rpc:call(Server, rabbit_quorum_queue, infos,

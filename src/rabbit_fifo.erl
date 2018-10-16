@@ -106,10 +106,10 @@
 -record(consumer,
         {checked_out = #{} :: #{msg_id() => {msg_in_id(), indexed_msg()}},
          next_msg_id = 0 :: msg_id(), % part of snapshot data
+         %% prefetch/max-in-flight
          num = 0 :: non_neg_integer(), % part of snapshot data
          % number of allocated messages
-         % part of snapshot data
-         seen = 0 :: non_neg_integer(),
+         seen = 0 :: non_neg_integer(), % part of snapshot data
          lifetime = once :: once | auto,
          suspected_down = false :: boolean()
         }).
@@ -600,7 +600,7 @@ return(ConsumerId, MsgNumMsgs, #consumer{lifetime = Life} = Con0, Checked,
               auto ->
                    Num = length(MsgNumMsgs),
                    Con0#consumer{checked_out = Checked,
-                          seen = Con0#consumer.seen - Num};
+                                 seen = Con0#consumer.seen - Num};
                once ->
                    Con0#consumer{checked_out = Checked}
            end,
@@ -781,8 +781,8 @@ checkout_one(#state{service_queue = SQ0,
                                        seen = Seen} = Con0} ->
                             Checked = maps:put(Next, ConsumerMsg, Checked0),
                             Con = Con0#consumer{checked_out = Checked,
-                                                  next_msg_id = Next+1,
-                                                  seen = Seen+1},
+                                                next_msg_id = Next+1,
+                                                seen = Seen+1},
                             {Cons, SQ, []} = % we expect no effects
                                 update_or_remove_sub(ConsumerId, Con,
                                                      Cons0, SQ1, []),
