@@ -1923,8 +1923,10 @@ notify_queues(State = #ch{state = closing}) ->
     {ok, State};
 notify_queues(State = #ch{consumer_mapping  = Consumers,
                           delivering_queues = DQ }) ->
-    QPids = sets:to_list(
-              sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
+    QPids0 = sets:to_list(
+               sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
+    %% filter to only include pids to avoid trying to notify quorum queues
+    QPids = [P || P <- QPids0, ?IS_CLASSIC(P)],
     Timeout = get_operation_timeout(),
     {rabbit_amqqueue:notify_down_all(QPids, self(), Timeout),
      State#ch{state = closing}}.
