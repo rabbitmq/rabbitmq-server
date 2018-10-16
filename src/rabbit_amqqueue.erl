@@ -26,6 +26,7 @@
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, deliver/3, requeue/4, ack/4, reject/5]).
+-export([not_found/1, absent/2]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
@@ -112,6 +113,9 @@
           A | rabbit_types:error(not_found_or_absent()).
 -spec with(name(), qfun(A), fun((not_found_or_absent()) -> B)) -> A | B.
 -spec with_or_die(name(), qfun(A)) -> A | rabbit_types:channel_exit().
+-spec not_found(rabbit_types:r(atom())) -> rabbit_types:channel_exit().
+-spec absent(rabbit_types:amqqueue(), rabbit_amqqueue:absent_reason()) ->
+          rabbit_types:channel_exit().
 -spec assert_equivalence
         (rabbit_types:amqqueue(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid())) ->
@@ -573,9 +577,42 @@ retry_wait(Q, F, E, RetriesLeft) ->
 with(Name, F) -> with(Name, F, fun (E) -> {error, E} end).
 
 with_or_die(Name, F) ->
-    with(Name, F, fun (not_found)           -> rabbit_misc:not_found(Name);
-                      ({absent, Q, Reason}) -> rabbit_misc:absent(Q, Reason)
+    with(Name, F, fun (not_found)           -> not_found(Name);
+                      ({absent, Q, Reason}) -> absent(Q, Reason)
                   end).
+
+not_found(R) -> rabbit_misc:protocol_error(not_found, "no ~s", [rabbit_misc:rs(R)]).
+
+absent(Q, AbsentReason) ->
+    QueueName = amqqueue:get_name(Q),
+    QPid = amqqueue:get_pid(Q),
+    IsDurable = amqqueue:is_durable(Q),
+    priv_absent(QueueName, QPid, IsDurable, AbsentReason).
+
+priv_absent(QueueName, QPid, true, nodedown) ->
+    %% The assertion of durability is mainly there because we mention
+    %% durability in the error message. That way we will hopefully
+    %% notice if at some future point our logic changes s.t. we get
+    %% here with non-durable queues.
+    rabbit_misc:protocol_error(
+      not_found,
+      "home node '~s' of durable ~s is down or inaccessible",
+      [node(QPid), rabbit_misc:rs(QueueName)]);
+
+priv_absent(QueueName, _QPid, _IsDurable, stopped) ->
+    rabbit_misc:protocol_error(
+      not_found,
+      "~s process is stopped by supervisor", [rabbit_misc:rs(QueueName)]);
+
+priv_absent(QueueName, _QPid, _IsDurable, crashed) ->
+    rabbit_misc:protocol_error(
+      not_found,
+      "~s has crashed and failed to restart", [rabbit_misc:rs(QueueName)]);
+
+priv_absent(QueueName, _QPid, _IsDurable, timeout) ->
+    rabbit_misc:protocol_error(
+      not_found,
+      "failed to perform operation on ~s due to timeout", [rabbit_misc:rs(QueueName)]).
 
 assert_equivalence(Q, Durable1, AD1, Args1, Owner) ->
     QName = amqqueue:get_name(Q),

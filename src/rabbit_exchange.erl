@@ -259,7 +259,7 @@ lookup(Name) ->
 lookup_or_die(Name) ->
     case lookup(Name) of
         {ok, X}            -> X;
-        {error, not_found} -> rabbit_misc:not_found(Name)
+        {error, not_found} -> rabbit_amqqueue:not_found(Name)
     end.
 
 list() -> mnesia:dirty_match_object(rabbit_exchange, #exchange{_ = '_'}).

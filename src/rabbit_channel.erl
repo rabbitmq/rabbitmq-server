@@ -1765,9 +1765,9 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
              end,
              Username) of
         {error, {resources_missing, [{not_found, Name} | _]}} ->
-            rabbit_misc:not_found(Name);
+            rabbit_amqqueue:not_found(Name);
         {error, {resources_missing, [{absent, Q, Reason} | _]}} ->
-            rabbit_misc:absent(Q, Reason);
+            rabbit_amqqueue:absent(Q, Reason);
         {error, binding_not_found} ->
             rabbit_misc:protocol_error(
               not_found, "no binding ~s between ~s and ~s",
@@ -2261,7 +2261,7 @@ handle_method(#'queue.declare'{queue   = <<"amq.rabbitmq.reply-to",
     QueueName = rabbit_misc:r(VHost, queue, StrippedQueueNameBin),
     case declare_fast_reply_to(StrippedQueueNameBin) of
         exists    -> {ok, QueueName, 0, 1};
-        not_found -> rabbit_misc:not_found(QueueName)
+        not_found -> rabbit_amqqueue:not_found(QueueName)
     end;
 handle_method(#'queue.declare'{queue       = QueueNameBin,
                                passive     = false,
@@ -2332,7 +2332,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     handle_method(Declare, ConnPid, CollectorPid, VHostPath,
                                   User);
                 {absent, Q, Reason} ->
-                    rabbit_misc:absent(Q, Reason);
+                    rabbit_amqqueue:absent(Q, Reason);
                 {owner_died, _Q} ->
                     %% Presumably our own days are numbered since the
                     %% connection has died. Pretend the queue exists though,
@@ -2340,7 +2340,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     {ok, QueueName, 0, 0}
             end;
         {error, {absent, Q, Reason}} ->
-            rabbit_misc:absent(Q, Reason)
+            rabbit_amqqueue:absent(Q, Reason)
     end;
 handle_method(#'queue.declare'{queue   = QueueNameBin,
                                nowait  = NoWait,
@@ -2377,7 +2377,7 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
                                          {ok, 0};
                ({absent, Q, stopped}) -> rabbit_amqqueue:delete_crashed(Q, Username),
                                          {ok, 0};
-               ({absent, Q, Reason})  -> rabbit_misc:absent(Q, Reason)
+               ({absent, Q, Reason})  -> rabbit_amqqueue:absent(Q, Reason)
            end) of
         {error, in_use} ->
             precondition_failed("~s in use", [rabbit_misc:rs(QueueName)]);
