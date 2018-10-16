@@ -127,7 +127,6 @@ declare(#amqqueue{name = QName,
             case ra:start_cluster(RaName, RaMachine,
                                   [{RaName, Node} || Node <- Nodes]) of
                 {ok, _, _} ->
-                    FState = init_state(Id, QName),
                     %% TODO does the quorum queue receive the `force_event_refresh`?
                     %% what do we do with it?
                     rabbit_event:notify(queue_created,
@@ -136,7 +135,7 @@ declare(#amqqueue{name = QName,
                                          {auto_delete, AutoDelete},
                                          {arguments, Arguments},
                                          {user_who_performed_action, ActingUser}]),
-                    {new, NewQ, FState};
+                    {new, NewQ};
                 {error, Error} ->
                     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
                     rabbit_misc:protocol_error(internal_error,

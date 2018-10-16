@@ -671,12 +671,15 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                 eol ->
                     State1 = handle_consuming_queue_down(From, State0),
                     State2 = handle_delivering_queue_down(From, State1),
+                    {MXs, UC1} = dtree:take(From, State2#ch.unconfirmed),
+                    State3 = record_confirms(MXs, State1#ch{unconfirmed = UC1}),
                     case maps:find(From, QNames) of
                         {ok, QName} -> erase_queue_stats(QName);
                         error       -> ok
                     end,
-                    noreply_coalesce(State2#ch{queue_states = maps:remove(Name, QueueStates),
-                                               queue_names = maps:remove(From, QNames)})
+                    noreply_coalesce(
+                      State3#ch{queue_states = maps:remove(Name, QueueStates),
+                                queue_names = maps:remove(From, QNames)})
             end;
         _ ->
             %% the assumption here is that the queue state has been cleaned up and
@@ -1433,91 +1436,79 @@ handle_method(#'exchange.declare'{nowait = NoWait} = Method,
               _, State = #ch{virtual_host = VHostPath,
                              user = User,
                              queue_collector_pid = CollectorPid,
-                             conn_pid = ConnPid,
-                             queue_states  = QueueStates0}) ->
-    handle_method(Method, ConnPid, CollectorPid, VHostPath, User, QueueStates0),
+                             conn_pid = ConnPid}) ->
+    handle_method(Method, ConnPid, CollectorPid, VHostPath, User),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
 
 handle_method(#'exchange.delete'{nowait = NoWait} = Method,
               _, State = #ch{conn_pid = ConnPid,
                              virtual_host = VHostPath,
                              queue_collector_pid = CollectorPid,
-                             user = User,
-                             queue_states  = QueueStates0}) ->
-    handle_method(Method, ConnPid, CollectorPid, VHostPath, User, QueueStates0),
+                             user = User}) ->
+    handle_method(Method, ConnPid, CollectorPid, VHostPath, User),
     return_ok(State, NoWait,  #'exchange.delete_ok'{});
 
 handle_method(#'exchange.bind'{nowait = NoWait} = Method,
               _, State = #ch{virtual_host        = VHostPath,
                              conn_pid            = ConnPid,
                              queue_collector_pid = CollectorPid,
-                             user = User,
-                             queue_states  = QueueStates0}) ->
-    handle_method(Method, ConnPid, CollectorPid, VHostPath, User, QueueStates0),
+                             user = User}) ->
+    handle_method(Method, ConnPid, CollectorPid, VHostPath, User),
     return_ok(State, NoWait, #'exchange.bind_ok'{});
 
 handle_method(#'exchange.unbind'{nowait = NoWait} = Method,
               _, State = #ch{virtual_host        = VHostPath,
                              conn_pid            = ConnPid,
                              queue_collector_pid = CollectorPid,
-                             user = User,
-                             queue_states  = QueueStates0}) ->
-    handle_method(Method, ConnPid, CollectorPid, VHostPath, User, QueueStates0),
+                             user = User}) ->
+    handle_method(Method, ConnPid, CollectorPid, VHostPath, User),
     return_ok(State, NoWait, #'exchange.unbind_ok'{});
 
 handle_method(#'queue.declare'{nowait = NoWait} = Method,
               _, State = #ch{virtual_host        = VHostPath,
                              conn_pid            = ConnPid,
                              queue_collector_pid = CollectorPid,
-                             user = User,
-                             queue_states = QueueStates0}) ->
-    {ok, QueueName, MessageCount, ConsumerCount, QueueStates} =
-        handle_method(Method, ConnPid, CollectorPid, VHostPath, User, QueueStates0),
+                             user = User}) ->
+    {ok, QueueName, MessageCount, ConsumerCount} =
+        handle_method(Method, ConnPid, CollectorPid, VHostPath, User),
     return_queue_declare_ok(QueueName, NoWait, MessageCount,
-                            ConsumerCount, State#ch{queue_states = QueueStates});
+                            ConsumerCount, State);
 
 handle_method(#'queue.delete'{nowait = NoWait} = Method, _,
               State = #ch{conn_pid     = ConnPid,
                           virtual_host = VHostPath,
                           queue_collector_pid = CollectorPid,
-                          user         = User,
-                          queue_states  = QueueStates0}) ->
-    {ok, PurgedMessageCount, QueueStates} = handle_method(Method, ConnPid, CollectorPid,
-                                                          VHostPath, User, QueueStates0),
-    return_ok(State#ch{queue_states = QueueStates}, NoWait,
+                          user         = User}) ->
+    {ok, PurgedMessageCount} =
+        handle_method(Method, ConnPid, CollectorPid, VHostPath, User),
+    return_ok(State, NoWait,
               #'queue.delete_ok'{message_count = PurgedMessageCount});
 
 handle_method(#'queue.bind'{nowait = NoWait} = Method, _,
               State = #ch{conn_pid = ConnPid,
                           user     = User,
                           queue_collector_pid = CollectorPid,
-                          virtual_host = VHostPath,
-                          queue_states  = QueueStates0}) ->
-    handle_method(Method, ConnPid, CollectorPid, VHostPath, User, QueueStates0),
+                          virtual_host = VHostPath}) ->
+    handle_method(Method, ConnPid, CollectorPid, VHostPath, User),
     return_ok(State, NoWait, #'queue.bind_ok'{});
 
 handle_method(#'queue.unbind'{} = Method, _,
               State = #ch{conn_pid = ConnPid,
                           user     = User,
                           queue_collector_pid = CollectorPid,
-                          virtual_host = VHostPath,
-                          queue_states  = QueueStates0}) ->
-    handle_method(Method, ConnPid, CollectorPid, VHostPath, User, QueueStates0),
+                          virtual_host = VHostPath}) ->
+    handle_method(Method, ConnPid, CollectorPid, VHostPath, User),
     return_ok(State, false, #'queue.unbind_ok'{});
 
 handle_method(#'queue.purge'{nowait = NoWait} = Method,
               _, State = #ch{conn_pid = ConnPid,
                              user     = User,
                              queue_collector_pid = CollectorPid,
-                             virtual_host = VHostPath,
-                             queue_states  = QueueStates0}) ->
+                             virtual_host = VHostPath}) ->
     case handle_method(Method, ConnPid, CollectorPid,
-                       VHostPath, User, QueueStates0) of
+                       VHostPath, User) of
         {ok, PurgedMessageCount} ->
             return_ok(State, NoWait,
-                      #'queue.purge_ok'{message_count = PurgedMessageCount});
-        {ok, PurgedMessageCount, QueueStates} ->
-            return_ok(State#ch{queue_states = QueueStates}, NoWait,
                       #'queue.purge_ok'{message_count = PurgedMessageCount})
     end;
 
@@ -2222,14 +2213,12 @@ get_operation_timeout() ->
 
 %% Refactored and exported to allow direct calls from the HTTP API,
 %% avoiding the usage of AMQP 0-9-1 from the management.
-handle_method(Method, ConnPid, CollectorId, VHostPath, User) ->
-    handle_method(Method, ConnPid, CollectorId, VHostPath, User, #{}).
 
 handle_method(#'exchange.bind'{destination = DestinationNameBin,
                                source      = SourceNameBin,
                                routing_key = RoutingKey,
                                arguments   = Arguments},
-              ConnPid, _CollectorId, VHostPath, User, _QueueStates0) ->
+              ConnPid, _CollectorId, VHostPath, User) ->
     binding_action(fun rabbit_binding:add/3,
                    SourceNameBin, exchange, DestinationNameBin,
                    RoutingKey, Arguments, VHostPath, ConnPid, User);
@@ -2237,7 +2226,7 @@ handle_method(#'exchange.unbind'{destination = DestinationNameBin,
                                  source      = SourceNameBin,
                                  routing_key = RoutingKey,
                                  arguments   = Arguments},
-             ConnPid, _CollectorId, VHostPath, User, _QueueStates0) ->
+             ConnPid, _CollectorId, VHostPath, User) ->
     binding_action(fun rabbit_binding:remove/3,
                        SourceNameBin, exchange, DestinationNameBin,
                        RoutingKey, Arguments, VHostPath, ConnPid, User);
@@ -2245,7 +2234,7 @@ handle_method(#'queue.unbind'{queue       = QueueNameBin,
                               exchange    = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments   = Arguments},
-              ConnPid, _CollectorId, VHostPath, User, _QueueStates0) ->
+              ConnPid, _CollectorId, VHostPath, User) ->
     binding_action(fun rabbit_binding:remove/3,
                    ExchangeNameBin, queue, QueueNameBin,
                    RoutingKey, Arguments, VHostPath, ConnPid, User);
@@ -2253,7 +2242,7 @@ handle_method(#'queue.bind'{queue       = QueueNameBin,
                             exchange    = ExchangeNameBin,
                             routing_key = RoutingKey,
                             arguments   = Arguments},
-             ConnPid, _CollectorId, VHostPath, User, _QueueStates0) ->
+             ConnPid, _CollectorId, VHostPath, User) ->
     binding_action(fun rabbit_binding:add/3,
                    ExchangeNameBin, queue, QueueNameBin,
                    RoutingKey, Arguments, VHostPath, ConnPid, User);
@@ -2261,11 +2250,11 @@ handle_method(#'queue.bind'{queue       = QueueNameBin,
 %% exists it by definition has one consumer.
 handle_method(#'queue.declare'{queue   = <<"amq.rabbitmq.reply-to",
                                            _/binary>> = QueueNameBin},
-              _ConnPid, _CollectorPid, VHost, _User, QueueStates0) ->
+              _ConnPid, _CollectorPid, VHost, _User) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = rabbit_misc:r(VHost, queue, StrippedQueueNameBin),
     case declare_fast_reply_to(StrippedQueueNameBin) of
-        exists    -> {ok, QueueName, 0, 1, QueueStates0};
+        exists    -> {ok, QueueName, 0, 1};
         not_found -> rabbit_misc:not_found(QueueName)
     end;
 handle_method(#'queue.declare'{queue       = QueueNameBin,
@@ -2275,8 +2264,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                                auto_delete = AutoDelete,
                                nowait      = NoWait,
                                arguments   = Args} = Declare,
-              ConnPid, CollectorPid, VHostPath, #user{username = Username} = User,
-              QueueStates0) ->
+              ConnPid, CollectorPid, VHostPath,
+              #user{username = Username} = User) ->
     Owner = case ExclusiveDeclare of
                 true  -> ConnPid;
                 false -> none
@@ -2297,7 +2286,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                       maybe_stat(NoWait, Q)
            end) of
         {ok, MessageCount, ConsumerCount} ->
-            {ok, QueueName, MessageCount, ConsumerCount, QueueStates0};
+            {ok, QueueName, MessageCount, ConsumerCount};
         {error, not_found} ->
             %% enforce the limit for newly declared queues only
             check_vhost_queue_limit(QueueName, VHostPath),
@@ -2327,26 +2316,19 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                              _    -> rabbit_queue_collector:register(
                                        CollectorPid, QPid)
                          end,
-                    {ok, QueueName, 0, 0, QueueStates0};
-                {new, #amqqueue{pid = {Name, _} = QPid}, FState} ->
-                    ok = case {Owner, CollectorPid} of
-                             {none, _} -> ok;
-                             {_, none} -> ok; %% Supports call from mgmt API
-                             _    -> rabbit_queue_collector:register(
-                                       CollectorPid, QPid)
-                         end,
-                    {ok, QueueName, 0, 0, maps:put(Name, FState, QueueStates0)};
+                    {ok, QueueName, 0, 0};
                 {existing, _Q} ->
                     %% must have been created between the stat and the
                     %% declare. Loop around again.
-                    handle_method(Declare, ConnPid, CollectorPid, VHostPath, User, QueueStates0);
+                    handle_method(Declare, ConnPid, CollectorPid, VHostPath,
+                                  User);
                 {absent, Q, Reason} ->
                     rabbit_misc:absent(Q, Reason);
                 {owner_died, _Q} ->
                     %% Presumably our own days are numbered since the
                     %% connection has died. Pretend the queue exists though,
                     %% just so nothing fails.
-                    {ok, QueueName, 0, 0, QueueStates0}
+                    {ok, QueueName, 0, 0}
             end;
         {error, {absent, Q, Reason}} ->
             rabbit_misc:absent(Q, Reason)
@@ -2354,39 +2336,35 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
 handle_method(#'queue.declare'{queue   = QueueNameBin,
                                nowait  = NoWait,
                                passive = true},
-              ConnPid, _CollectorPid, VHostPath, _User, QueueStates0) ->
+              ConnPid, _CollectorPid, VHostPath, _User) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = rabbit_misc:r(VHostPath, queue, StrippedQueueNameBin),
     {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
         rabbit_amqqueue:with_or_die(
           QueueName, fun (Q) -> {maybe_stat(NoWait, Q), Q} end),
     ok = rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
-    {ok, QueueName, MessageCount, ConsumerCount, QueueStates0};
+    {ok, QueueName, MessageCount, ConsumerCount};
 handle_method(#'queue.delete'{queue     = QueueNameBin,
                               if_unused = IfUnused,
                               if_empty  = IfEmpty},
-              ConnPid, _CollectorPid, VHostPath, User = #user{username = Username},
-              QueueStates0) ->
+              ConnPid, _CollectorPid, VHostPath,
+              User = #user{username = Username}) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = qbin_to_resource(StrippedQueueNameBin, VHostPath),
 
     check_configure_permitted(QueueName, User),
     case rabbit_amqqueue:with(
            QueueName,
-           fun (#amqqueue{pid = {Name, _}, type = quorum} = Q) ->
-                   rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
-                   {ok, C} = rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username),
-                   {ok, C, maps:remove(Name, QueueStates0)};
-               (Q) ->
+           fun (Q) ->
                    rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
                    rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username)
            end,
-           fun (not_found)            -> {ok, 0, QueueStates0};
+           fun (not_found)            -> {ok, 0};
                %% TODO delete crashed should clean up fifo states?
                ({absent, Q, crashed}) -> rabbit_amqqueue:delete_crashed(Q, Username),
-                                         {ok, 0, QueueStates0};
+                                         {ok, 0};
                ({absent, Q, stopped}) -> rabbit_amqqueue:delete_crashed(Q, Username),
-                                         {ok, 0, QueueStates0};
+                                         {ok, 0};
                ({absent, Q, Reason})  -> rabbit_misc:absent(Q, Reason)
            end) of
         {error, in_use} ->
@@ -2394,14 +2372,12 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
         {error, not_empty} ->
             precondition_failed("~s not empty", [rabbit_misc:rs(QueueName)]);
         {ok, Count} ->
-            {ok, Count, QueueStates0};
-        {ok, Count, QueueStates} ->
-            {ok, Count, QueueStates}
+            {ok, Count}
     end;
 handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
                                  if_unused = IfUnused},
-              _ConnPid, _CollectorPid, VHostPath, User = #user{username = Username},
-              _QueueStates0) ->
+              _ConnPid, _CollectorPid, VHostPath,
+              User = #user{username = Username}) ->
     StrippedExchangeNameBin = strip_cr_lf(ExchangeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, StrippedExchangeNameBin),
     check_not_default_exchange(ExchangeName),
@@ -2416,7 +2392,7 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
             ok
     end;
 handle_method(#'queue.purge'{queue = QueueNameBin},
-              ConnPid, _CollectorPid, VHostPath, User, _QueueStates0) ->
+              ConnPid, _CollectorPid, VHostPath, User) ->
     QueueName = qbin_to_resource(QueueNameBin, VHostPath),
     check_read_permitted(QueueName, User),
     rabbit_amqqueue:with_exclusive_access_or_die(
@@ -2429,8 +2405,8 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                   auto_delete = AutoDelete,
                                   internal    = Internal,
                                   arguments   = Args},
-              _ConnPid, _CollectorPid, VHostPath, #user{username = Username} = User,
-              _QueueStates0) ->
+              _ConnPid, _CollectorPid, VHostPath,
+              #user{username = Username} = User) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
@@ -2462,7 +2438,7 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                             AutoDelete, Internal, Args);
 handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                   passive     = true},
-              _ConnPid, _CollectorPid, VHostPath, _User, _QueueStates0) ->
+              _ConnPid, _CollectorPid, VHostPath, _User) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
     _ = rabbit_exchange:lookup_or_die(ExchangeName).

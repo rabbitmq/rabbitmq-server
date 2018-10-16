@@ -93,7 +93,8 @@ all_tests() ->
      consume_and_multiple_nack,
      subscribe_and_nack,
      subscribe_and_multiple_nack,
-     %% publisher_confirms,
+     publisher_confirms,
+     publisher_confirms_with_deleted_queue,
      dead_letter_to_classic_queue,
      dead_letter_to_quorum_queue,
      dead_letter_from_classic_to_quorum_queue,
@@ -954,8 +955,26 @@ publisher_confirms(Config) ->
     publish(Ch, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
-    amqp_channel:wait_for_confirms(Ch),
-    ct:pal("WAIT FOR CONFIRMS ~n", []).
+    ct:pal("WAIT FOR CONFIRMS ~n", []),
+    amqp_channel:wait_for_confirms(Ch, 5000),
+    amqp_channel:unregister_confirm_handler(Ch),
+    ok.
+
+publisher_confirms_with_deleted_queue(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    % subscribe(Ch, QQ, false),
+    publish(Ch, QQ),
+    delete_queues(Ch, [QQ]),
+    ct:pal("WAIT FOR CONFIRMS ~n", []),
+    amqp_channel:wait_for_confirms_or_die(Ch, 5000),
+    amqp_channel:unregister_confirm_handler(Ch),
+    ok.
 
 dead_letter_to_classic_queue(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1067,12 +1086,16 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages_ready(Servers, RaName, 1),
     [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []),
-    %% Check the channel state contains the state for the quorum queue on channel 1 and 2
-    wait_for_cleanup(Server, NCh1, 1),
+    %% Check the channel state contains the state for the quorum queue on
+    %% channel 1 and 2
+    wait_for_cleanup(Server, NCh1, 0),
     wait_for_cleanup(Server, NCh2, 1),
-    ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
+    %% then delete the queue and wait for the process to terminate
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
-                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup])
+                       [] == rpc:call(Server, supervisor, which_children,
+                                      [ra_server_sup])
                end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Server, NCh1, 0),
