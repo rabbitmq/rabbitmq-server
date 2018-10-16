@@ -354,7 +354,7 @@ write_enabled_feature_flags_list(FeatureNames) ->
     file:write_file(File, Content).
 
 enabled_feature_flags_list_file() ->
-    "/tmp/feature-flags.erl".
+    filename:join(rabbit_mnesia:dir(), "feature_flags").
 
 %% -------------------------------------------------------------------
 %% Feature flags management: enabling.
