@@ -17,6 +17,7 @@
 -module(rabbit_queue_decorator).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("amqqueue.hrl").
 
 -export([select/1, set/1, register/2, unregister/1]).
 

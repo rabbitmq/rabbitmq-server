@@ -53,6 +53,7 @@
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("amqqueue.hrl").
 
 -behaviour(gen_server2).
 

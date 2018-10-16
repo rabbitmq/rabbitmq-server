@@ -34,7 +34,8 @@
 
 -behaviour(rabbit_backing_queue).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include("amqqueue.hrl").
 
 -record(state, { name,
                  gm,

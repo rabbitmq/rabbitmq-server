@@ -26,7 +26,8 @@
 -behaviour(gen_server2).
 -behaviour(gm).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include("amqqueue.hrl").
 -include("gm_specs.hrl").
 
 -record(state, { q,

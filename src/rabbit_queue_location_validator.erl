@@ -18,6 +18,7 @@
 -behaviour(rabbit_policy_validator).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("amqqueue.hrl").
 
 -export([validate_policy/1, validate_strategy/1]).
 
