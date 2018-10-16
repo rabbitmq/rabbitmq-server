@@ -120,7 +120,7 @@ node_data(Ranges, Id) ->
        raw_message_data(node_persister_stats,
                         pick_range(coarse_node_stats, Ranges), Id),
        {node_stats, lookup_element(node_stats, Id)}] ++
-      node_connection_churn_rates_data(Ranges)).
+      node_connection_churn_rates_data(Ranges, Id)).
 
 overview_data(_Pid, User, Ranges, VHosts) ->
     Raw = [raw_all_message_data(vhost_msg_stats, pick_range(queue_msg_counts, Ranges), VHosts),
@@ -174,9 +174,9 @@ node_raw_detail_stats_data(Ranges, Id) ->
                         pick_range(coarse_node_node_stats, Ranges), Key)
       || Key <- get_table_keys(node_node_coarse_stats, first(Id))].
 
-node_connection_churn_rates_data(Ranges) ->
+node_connection_churn_rates_data(Ranges, Id) ->
     [raw_message_data(connection_churn_rates,
-                      pick_range(churn_rates, Ranges), node())].
+                      pick_range(churn_rates, Ranges), Id)].
 
 exchange_raw_detail_stats_data(Ranges, Id) ->
      [raw_message_data2(channel_exchange_stats_fine_stats,
