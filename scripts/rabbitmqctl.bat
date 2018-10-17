@@ -59,7 +59,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -extra "%RABBITMQ_HOME%\escript\rabbitmqctl" !STAR!
 
 if ERRORLEVEL 1 (
-    EXIT /B 1
+    exit /B 1
 )
 
 endlocal
