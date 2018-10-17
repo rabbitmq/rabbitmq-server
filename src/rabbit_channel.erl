@@ -1679,7 +1679,7 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
     State1 = State#ch{mandatory = Mand1},
     case rabbit_misc:is_abnormal_exit(Reason) of
         true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
-                 send_nacks(MXs, State1#ch{unconfirmed = UC1});
+                 record_rejects(MXs, State1#ch{unconfirmed = UC1});
         false -> {MXs, UC1} = dtree:take(QPid, UC),
                  record_confirms(MXs, State1#ch{unconfirmed = UC1})
 
@@ -2054,37 +2054,29 @@ confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.
     record_confirms(MXs, State#ch{unconfirmed = UC1}).
 
-send_nacks([], State) ->
-    State;
-send_nacks(_MXs, State = #ch{state = closing,
-                             tx    = none}) -> %% optimisation
-    State;
-send_nacks(MXs, State = #ch{tx = none}) ->
-    coalesce_and_send([MsgSeqNo || {MsgSeqNo, _} <- MXs],
-                      fun(MsgSeqNo, Multiple) ->
-                              #'basic.nack'{delivery_tag = MsgSeqNo,
-                                            multiple     = Multiple}
-                      end, State);
-send_nacks(_MXs, State = #ch{state = closing}) -> %% optimisation
-    State#ch{tx = failed};
-send_nacks(_, State) ->
-    maybe_complete_tx(State#ch{tx = failed}).
-
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = [], rejected = []}) ->
     State;
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = C, rejected = R}) ->
     case rabbit_node_monitor:pause_partition_guard() of
-        ok      -> ConfirmMsgSeqNos =
-                       lists:foldl(
-                         fun ({MsgSeqNo, XName}, MSNs) ->
-                                 ?INCR_STATS(exchange_stats, XName, 1,
-                                             confirm, State),
-                                 [MsgSeqNo | MSNs]
-                         end, [], lists:append(C)),
-                   State1 = send_confirms(ConfirmMsgSeqNos, State#ch{confirmed = []}),
-                   %% TODO: msg seq nos, same as for confirms. Need to implement
-                   %% nack rates first.
-                   send_nacks(lists:append(R), State1#ch{rejected = []});
+        ok      ->
+            Confirms = lists:append(C),
+            Rejects = lists:append(R),
+            ConfirmMsgSeqNos =
+                lists:foldl(
+                    fun ({MsgSeqNo, XName}, MSNs) ->
+                        ?INCR_STATS(exchange_stats, XName, 1, confirm, State),
+                        [MsgSeqNo | MSNs]
+                    end, [], Confirms),
+            RejectMsgSeqNos = [MsgSeqNo || {MsgSeqNo, _} <- Rejects],
+
+            State1 = send_confirms(ConfirmMsgSeqNos,
+                                   RejectMsgSeqNos,
+                                   State#ch{confirmed = []}),
+            %% TODO: msg seq nos, same as for confirms. Need to implement
+            %% nack rates first.
+            send_nacks(RejectMsgSeqNos,
+                       ConfirmMsgSeqNos,
+                       State1#ch{rejected = []});
         pausing -> State
     end;
 send_confirms_and_nacks(State) ->
@@ -2093,26 +2085,44 @@ send_confirms_and_nacks(State) ->
         pausing -> State
     end.
 
-send_confirms([], State) ->
+send_nacks([], _, State) ->
     State;
-send_confirms(_Cs, State = #ch{state = closing}) -> %% optimisation
+send_nacks(_Rs, _, State = #ch{state = closing,
+                                tx    = none}) -> %% optimisation
     State;
-send_confirms([MsgSeqNo], State) ->
+send_nacks(Rs, Cs, State = #ch{tx = none}) ->
+    coalesce_and_send(Rs, Cs,
+                      fun(MsgSeqNo, Multiple) ->
+                              #'basic.nack'{delivery_tag = MsgSeqNo,
+                                            multiple     = Multiple}
+                      end, State);
+send_nacks(_MXs, _, State = #ch{state = closing}) -> %% optimisation
+    State#ch{tx = failed};
+send_nacks(_, _, State) ->
+    maybe_complete_tx(State#ch{tx = failed}).
+
+send_confirms([], _, State) ->
+    State;
+send_confirms(_Cs, _, State = #ch{state = closing}) -> %% optimisation
+    State;
+send_confirms([MsgSeqNo], _, State) ->
     ok = send(#'basic.ack'{delivery_tag = MsgSeqNo}, State),
     State;
-send_confirms(Cs, State) ->
-    coalesce_and_send(Cs, fun(MsgSeqNo, Multiple) ->
+send_confirms(Cs, Rs, State) ->
+    coalesce_and_send(Cs, Rs,
+                      fun(MsgSeqNo, Multiple) ->
                                   #'basic.ack'{delivery_tag = MsgSeqNo,
                                                multiple     = Multiple}
-                          end, State).
+                      end, State).
 
-coalesce_and_send(MsgSeqNos, MkMsgFun, State = #ch{unconfirmed = UC}) ->
+coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #ch{unconfirmed = UC}) ->
     SMsgSeqNos = lists:usort(MsgSeqNos),
-    CutOff = case dtree:is_empty(UC) of
+    UnconfirmedCutoff = case dtree:is_empty(UC) of
                  true  -> lists:last(SMsgSeqNos) + 1;
                  false -> {SeqNo, _XName} = dtree:smallest(UC), SeqNo
              end,
-    {Ms, Ss} = lists:splitwith(fun(X) -> X < CutOff end, SMsgSeqNos),
+    Cutoff = lists:min([UnconfirmedCutoff | NegativeMsgSeqNos]),
+    {Ms, Ss} = lists:splitwith(fun(X) -> X < Cutoff end, SMsgSeqNos),
     case Ms of
         [] -> ok;
         _  -> ok = send(MkMsgFun(lists:last(Ms), true), State)
@@ -2287,6 +2297,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
     check_configure_permitted(QueueName, User),
+    rabbit_core_metrics:queue_declared(QueueName),
     case rabbit_amqqueue:with(
            QueueName,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
@@ -2324,6 +2335,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                              _    -> rabbit_queue_collector:register(
                                        CollectorPid, QPid)
                          end,
+                    rabbit_core_metrics:queue_created(QueueName),
                     {ok, QueueName, 0, 0};
                 {existing, _Q} ->
                     %% must have been created between the stat and the
