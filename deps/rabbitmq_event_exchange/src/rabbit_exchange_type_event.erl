@@ -27,6 +27,8 @@
 
 -define(EXCH_NAME, <<"amq.rabbitmq.event">>).
 
+-record(state, {vhost}).
+
 -rabbit_boot_step({rabbit_event_exchange,
                    [{description, "event exchange"},
                     {mfa,         {?MODULE, register, []}},
@@ -50,19 +52,24 @@ unregister() ->
     gen_event:delete_handler(rabbit_event, ?MODULE, []).
 
 exchange() ->
-    VHost = ensure_vhost_exists(),
+    exchange(get_vhost()).
+
+exchange(VHost) ->
+    _ = ensure_vhost_exists(VHost),
     rabbit_misc:r(VHost, exchange, ?EXCH_NAME).
 
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, []}.
+init([]) ->
+    VHost = get_vhost(),
+    {ok, #state{vhost = VHost}}.
 
 handle_call(_Request, State) -> {ok, not_understood, State}.
 
 handle_event(#event{type      = Type,
                     props     = Props,
                     timestamp = TS,
-                    reference = none}, State) ->
+                    reference = none}, #state{vhost = VHost} = State) ->
     case key(Type) of
         ignore -> ok;
         Key    ->
@@ -75,7 +82,7 @@ handle_event(#event{type      = Type,
                                       %% resolution, not millisecond.
                                       timestamp = erlang:convert_time_unit(
                                                     TS, milli_seconds, seconds)},
-                  Msg = rabbit_basic:message(exchange(), Key, PBasic, <<>>),
+            Msg = rabbit_basic:message(exchange(VHost), Key, PBasic, <<>>),
                   rabbit_basic:publish(
                     rabbit_basic:delivery(false, false, Msg, undefined))
     end,
@@ -91,19 +98,11 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%----------------------------------------------------------------------------
 
-ensure_vhost_exists() ->
-    VHost = case application:get_env(rabbitmq_event_exchange, vhost) of
-                undefined ->
-                    {ok, V} = application:get_env(rabbit, default_vhost),
-                    V;
-                {ok, V} ->
-                    V
-            end,
+ensure_vhost_exists(VHost) ->
     case rabbit_vhost:exists(VHost) of
         false -> rabbit_vhost:add(VHost, ?INTERNAL_USER);
         _     -> ok
-    end,
-    VHost.
+    end.
 
 %% pattern matching is way more efficient that the string operations,
 %% let's use all the keys we're aware of to speed up the handler.
@@ -220,3 +219,12 @@ fmt(V)                    -> {longstr,
 
 a2b(A) when is_atom(A)   -> atom_to_binary(A, utf8);
 a2b(B) when is_binary(B) -> B.
+
+get_vhost() ->
+    case application:get_env(rabbitmq_event_exchange, vhost) of
+        undefined ->
+            {ok, V} = application:get_env(rabbit, default_vhost),
+            V;
+        {ok, V} ->
+            V
+    end.
