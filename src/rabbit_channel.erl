@@ -169,7 +169,7 @@
 
 -define(STATISTICS_KEYS,
         [reductions,
-	 pid,
+         pid,
          transactional,
          confirm,
          consumer_count,
@@ -1308,6 +1308,10 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                 {error, exclusive_consume_unavailable} ->
                     rabbit_misc:protocol_error(
                       access_refused, "~s in exclusive use",
+                      [rabbit_misc:rs(QueueName)]);
+                {error, global_qos_not_supported_for_queue_type} ->
+                    rabbit_misc:protocol_error(
+                      not_implemented, "~s does not support global qos",
                       [rabbit_misc:rs(QueueName)])
             end;
         {ok, _} ->
@@ -1626,6 +1630,8 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                      false -> State1
                  end};
         {{error, exclusive_consume_unavailable} = E, _Q} ->
+            E;
+        {{error, global_qos_not_supported_for_queue_type} = E, _Q} ->
             E
     end.
 

@@ -93,6 +93,7 @@ all_tests() ->
      consume_and_multiple_nack,
      subscribe_and_nack,
      subscribe_and_multiple_nack,
+     subscribe_should_fail_when_global_qos_true,
      publisher_confirms,
      publisher_confirms_with_deleted_queue,
      dead_letter_to_classic_queue,
@@ -608,6 +609,27 @@ subscribe(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0).
+
+subscribe_should_fail_when_global_qos_true(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    RaName = ra_name(QQ),
+    qos(Ch, 10, true),
+    publish(Ch, QQ),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+    try subscribe(Ch, QQ, false) of
+        _ -> exit(subscribe_should_not_pass)
+    catch
+        _:_ = Err ->
+        ct:pal("Err ~p", [Err])
+    end,
+    ok.
 
 subscribe_with_autoack(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1605,6 +1627,11 @@ subscribe(Ch, Queue, NoAck) ->
         #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
              ok
     end.
+
+qos(Ch, Prefetch, Global) ->
+    ?assertMatch(#'basic.qos_ok'{},
+                 amqp_channel:call(Ch, #'basic.qos'{global = Global,
+                                                    prefetch_count = Prefetch})).
 
 receive_basic_deliver(Redelivered) ->
     receive

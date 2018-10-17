@@ -1097,6 +1097,10 @@ basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid,
         Err ->
             Err
     end;
+basic_consume(#amqqueue{name = QName, type = quorum}, _NoAck, _ChPid,
+              _LimiterPid, true, _ConsumerPrefetchCount, _ConsumerTag,
+              _ExclusiveConsume, _Args, _OkMsg, _ActingUser, _QStates) ->
+    {error, global_qos_not_supported_for_queue_type};
 basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q, NoAck, ChPid,
               _LimiterPid, _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, _ActingUser, QStates) ->
