@@ -18,6 +18,7 @@
 
 -export([list/0,
          list/1,
+         list/2,
          enable/1,
          disable/1,
          is_supported/1,
@@ -29,6 +30,7 @@
          are_supported_remotely/1,
          are_supported_remotely/2,
          is_enabled/1,
+         info/0,
 
          init/0,
          check_node_compatibility/1,
@@ -51,6 +53,15 @@ list(enabled)  -> rabbit_ff_registry:list(enabled);
 list(disabled) -> maps:filter(
                     fun(FeatureName, _) -> not is_enabled(FeatureName) end,
                     list(all)).
+
+list(Which, Stability)
+  when Stability =:= stable orelse Stability =:= experimental ->
+    maps:filter(fun(_, FeatureProps) ->
+                        case maps:get(stability, FeatureProps, stable) of
+                            Stability -> true;
+                            _         -> false
+                        end
+                end, list(Which)).
 
 enable(FeatureName) ->
     rabbit_log:info("Feature flag `~s`: request to enable",
@@ -147,6 +158,9 @@ are_supported_remotely([], FeatureNames, _) ->
 
 is_enabled(FeatureName) when is_atom(FeatureName) ->
     rabbit_ff_registry:is_enabled(FeatureName).
+
+info() ->
+    rabbit_feature_flags_extra:info().
 
 %% -------------------------------------------------------------------
 %% Feature flags registry.
