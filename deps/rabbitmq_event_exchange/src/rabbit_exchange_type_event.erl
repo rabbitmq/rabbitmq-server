@@ -105,6 +105,85 @@ ensure_vhost_exists() ->
     end,
     VHost.
 
+%% pattern matching is way more efficient that the string operations,
+%% let's use all the keys we're aware of to speed up the handler.
+%% Any unknown or new one will be processed as before (see last function clause).
+key(queue_deleted) ->
+    <<"queue.deleted">>;
+key(queue_created) ->
+    <<"queue.created">>;
+key(exchange_created) ->
+    <<"exchange.created">>;
+key(exchange_deleted) ->
+    <<"exchange.deleted">>;
+key(binding_created) ->
+    <<"binding.created">>;
+key(connection_created) ->
+    <<"connection.created">>;
+key(connection_closed) ->
+    <<"connection.closed">>;
+key(channel_created) ->
+    <<"channel.created">>;
+key(channel_closed) ->
+    <<"channel.closed">>;
+key(consumer_created) ->
+    <<"consumer.created">>;
+key(consumer_deleted) ->
+    <<"consumer.deleted">>;
+key(queue_stats) ->
+    ignore;
+key(connection_stats) ->
+    ignore;
+key(policy_set) ->
+    <<"policy.set">>;
+key(policy_cleared) ->
+    <<"policy.cleared">>;
+key(parameter_set) ->
+    <<"parameter.set">>;
+key(parameter_cleared) ->
+    <<"parameter.cleared">>;
+key(vhost_created) ->
+    <<"vhost.created">>;
+key(vhost_deleted) ->
+    <<"vhost.deleted">>;
+key(vhost_limits_set) ->
+    <<"vhost.limits.set">>;
+key(vhost_limits_cleared) ->
+    <<"vhost.limits.cleared">>;
+key(user_authentication_success) ->
+    <<"user.authentication.success">>;
+key(user_authentication_failure) ->
+    <<"user.authentication.failure">>;
+key(user_created) ->
+    <<"user.created">>;
+key(user_deleted) ->
+    <<"user.deleted">>;
+key(user_password_changed) ->
+    <<"user.password.changed">>;
+key(user_password_cleared) ->
+    <<"user.password.cleared">>;
+key(user_tags_set) ->
+    <<"user.tags.set">>;
+key(permission_created) ->
+    <<"permission.created">>;
+key(permission_deleted) ->
+    <<"permission.deleted">>;
+key(topic_permission_created) ->
+    <<"topic.permission.created">>;
+key(topic_permission_deleted) ->
+    <<"topic.permission.deleted">>;
+key(alarm_set) ->
+    <<"alarm.set">>;
+key(alarm_cleared) ->
+    <<"alarm.cleared">>;
+key(shovel_worker_status) ->
+    <<"shovel.worker.status">>;
+key(shovel_worker_removed) ->
+    <<"shovel.worker.removed">>;
+key(federation_link_status) ->
+    <<"federation.link.status">>;
+key(federation_link_removed) ->
+    <<"federation.link.removed">>;
 key(S) ->
     case string:tokens(atom_to_list(S), "_") of
         [_, "stats"] -> ignore;
