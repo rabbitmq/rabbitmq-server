@@ -547,6 +547,7 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             ok = rabbit_table:wait_for_replicated(_Retry = true),
             ok = rabbit_table:create_local_copy(NodeType)
     end,
+    ensure_feature_flags_are_in_sync(Nodes),
     ensure_schema_integrity(),
     rabbit_node_monitor:update_cluster_status(),
     ok.
@@ -610,6 +611,14 @@ ensure_mnesia_not_running() ->
             ensure_mnesia_not_running();
         Reason when Reason =:= yes; Reason =:= starting ->
             throw({error, mnesia_unexpectedly_running})
+    end.
+
+ensure_feature_flags_are_in_sync(Nodes) ->
+    case rabbit_feature_flags:sync_feature_flags_with_cluster(Nodes) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            throw({error, {incompatible_feature_flags, Reason}})
     end.
 
 ensure_schema_integrity() ->

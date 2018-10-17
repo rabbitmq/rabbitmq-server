@@ -36,7 +36,9 @@
          check_node_compatibility/1,
          check_node_compatibility/2,
          is_node_compatible/1,
-         is_node_compatible/2
+         is_node_compatible/2,
+         sync_feature_flags_with_cluster/1,
+         sync_feature_flags_with_cluster/2
         ]).
 
 %% Internal use only.
@@ -44,7 +46,7 @@
          mark_as_enabled_locally/1]).
 
 %% Default timeout for operations on remote nodes.
--define(TIMEOUT, infinity).
+-define(TIMEOUT, 60000).
 
 list() -> list(all).
 
@@ -64,7 +66,7 @@ list(Which, Stability)
                 end, list(Which)).
 
 enable(FeatureName) ->
-    rabbit_log:info("Feature flag `~s`: request to enable",
+    rabbit_log:info("Feature flag `~s`: REQUEST TO ENABLE",
                     [FeatureName]),
     case is_enabled(FeatureName) of
         true ->
@@ -88,6 +90,18 @@ enable(FeatureName) ->
                                     [FeatureName]),
                     {error, unsupported}
             end
+    end.
+
+enable_locally(FeatureName) ->
+    case is_enabled(FeatureName) of
+        true ->
+            ok;
+        false ->
+            rabbit_log:info(
+              "Feature flag `~s`: enable locally (i.e. was enabled on the cluster "
+              "when this node was not part of it)",
+              [FeatureName]),
+            do_enable_locally(FeatureName)
     end.
 
 disable(_FeatureName) ->
@@ -124,7 +138,7 @@ are_supported_remotely([], _) ->
 are_supported_remotely(FeatureNames, Timeout) when is_list(FeatureNames) ->
     case running_remote_nodes() of
         [] ->
-            rabbit_log:info("Feature flags: not clustered; "
+            rabbit_log:info("Feature flags: isolated node; "
                             "skipping remote node query "
                             "=> consider `~p` supported",
                             [FeatureNames]),
@@ -179,15 +193,17 @@ initialize_registry() ->
                                     lists:member(FeatureName,
                                                  EnabledFeatureNames)
                             end, AllFeatureFlags),
-    List = [
-            io_lib:format("~n  [~s] ~s",
-                          [case maps:is_key(FeatureName, EnabledFeatureFlags) of
-                               true  -> "x";
-                               false -> " "
-                           end,
-                           FeatureName])
-            || FeatureName <- lists:sort(maps:keys(AllFeatureFlags))],
-    rabbit_log:info("Feature flags:~s", [List]),
+    rabbit_log:info("Feature flags: List of feature flags found:", []),
+    lists:foreach(
+      fun(FeatureName) ->
+              rabbit_log:info(
+                "Feature flags:   [~s] ~s",
+                [case maps:is_key(FeatureName, EnabledFeatureFlags) of
+                     true  -> "x";
+                     false -> " "
+                 end,
+                 FeatureName])
+      end, lists:sort(maps:keys(AllFeatureFlags))),
     regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags).
 
 query_supported_feature_flags() ->
@@ -341,6 +357,7 @@ write_enabled_feature_flags_list(FeatureNames) ->
     file:write_file(File, Content).
 
 enabled_feature_flags_list_file() ->
+    %% FIXME: Use a feature-flags-specific directory.
     filename:join(rabbit_mnesia:dir(), "feature_flags").
 
 %% -------------------------------------------------------------------
@@ -348,24 +365,46 @@ enabled_feature_flags_list_file() ->
 %% -------------------------------------------------------------------
 
 do_enable(FeatureName) ->
+    case enable_dependencies(FeatureName, true) of
+        ok ->
+            case run_migration_fun(FeatureName, enable) of
+                ok    -> mark_as_enabled(FeatureName);
+                Error -> Error
+            end;
+        Error -> Error
+    end.
+
+do_enable_locally(FeatureName) ->
+    case enable_dependencies(FeatureName, false) of
+        ok ->
+            case run_migration_fun(FeatureName, enable) of
+                ok    -> mark_as_enabled_locally(FeatureName);
+                Error -> Error
+            end;
+        Error -> Error
+    end.
+
+enable_dependencies(FeatureName, Everywhere) ->
     #{FeatureName := FeatureProps} = rabbit_ff_registry:list(all),
     DependsOn = maps:get(depends_on, FeatureProps, []),
     rabbit_log:info("Feature flag `~s`: enable dependencies: ~p",
                     [FeatureName, DependsOn]),
-    case enable_dependencies(FeatureName, DependsOn) of
-        ok    -> run_migration_fun(FeatureName, FeatureProps, enable);
-        Error -> Error
-    end.
+    enable_dependencies(FeatureName, DependsOn, Everywhere).
 
-enable_dependencies(TopLevelFeatureName, [FeatureName | Rest]) ->
-    case enable(FeatureName) of
-        ok    -> enable_dependencies(TopLevelFeatureName, Rest);
+enable_dependencies(TopLevelFeatureName, [FeatureName | Rest], Everywhere) ->
+    Ret = case Everywhere of
+              true  -> enable(FeatureName);
+              false -> enable_locally(FeatureName)
+          end,
+    case Ret of
+        ok    -> enable_dependencies(TopLevelFeatureName, Rest, Everywhere);
         Error -> Error
     end;
-enable_dependencies(_, []) ->
+enable_dependencies(_, [], _) ->
     ok.
 
-run_migration_fun(FeatureName, FeatureProps, Arg) ->
+run_migration_fun(FeatureName, Arg) ->
+    #{FeatureName := FeatureProps} = rabbit_ff_registry:list(all),
     case maps:get(migration_fun, FeatureProps, none) of
         {MigrationMod, MigrationFun}
           when is_atom(MigrationMod) andalso is_atom(MigrationFun) ->
@@ -373,10 +412,7 @@ run_migration_fun(FeatureName, FeatureProps, Arg) ->
                             "with arg: ~p",
                             [FeatureName, MigrationFun, Arg]),
             try
-                case erlang:apply(MigrationMod, MigrationFun, [Arg]) of
-                    ok    -> mark_as_enabled(FeatureName);
-                    Error -> Error
-                end
+                erlang:apply(MigrationMod, MigrationFun, [Arg])
             catch
                 _:Reason:Stacktrace ->
                     rabbit_log:error("Feature flag `~s`: migration function "
@@ -385,7 +421,7 @@ run_migration_fun(FeatureName, FeatureProps, Arg) ->
                     {error, {migration_fun_crash, Reason, Stacktrace}}
             end;
         none ->
-            mark_as_enabled(FeatureName);
+            ok;
         Invalid ->
             rabbit_log:error("Feature flag `~s`: invalid migration "
                              "function: ~p",
@@ -414,14 +450,8 @@ mark_as_enabled_remotely(FeatureName) ->
 %% Coordination with remote nodes.
 %% -------------------------------------------------------------------
 
-remote_nodes() ->
-    ThisNode = node(),
-    {AllNodes, _, RunningNodes} = rabbit_mnesia:cluster_nodes(status),
-    [{Node, lists:member(Node, RunningNodes)} || Node <- AllNodes,
-                                                 Node =/= ThisNode].
-
 running_remote_nodes() ->
-    [Node || {Node, true} <- remote_nodes()].
+    mnesia:system_info(running_db_nodes).
 
 does_node_support(Node, FeatureNames, Timeout) ->
     rabbit_log:info("Feature flags: querying `~p` support on node ~s...",
@@ -438,7 +468,7 @@ does_node_support(Node, FeatureNames, Timeout) ->
         {badrpc, Reason} ->
             rabbit_log:error("Feature flags: error while querying `~p` "
                              "support on node ~s: ~p",
-                             [FeatureNames, Reason]),
+                             [FeatureNames, Node, Reason]),
             false;
         true ->
             rabbit_log:info("Feature flags: node `~s` supports `~p`",
@@ -492,22 +522,63 @@ local_enabled_feature_flags_are_supported_remotely(Node, Timeout) ->
     are_supported_remotely([Node], LocalEnabledFeatureNames, Timeout).
 
 remote_enabled_feature_flags_are_supported_locally(Node, Timeout) ->
-    rabbit_log:info("Feature flags: querying enabled feature flags "
-                    "on node `~s`...",
-                    [Node]),
-    Ret = rpc:call(Node,
-                   ?MODULE, list, [enabled],
-                   Timeout),
-    case Ret of
-        {badrpc, Reason} ->
-            rabbit_log:error("Feature flags: error while querying "
-                             "enabled feature flags on node `~s`: ~p",
-                             [Node, Reason]),
+    case query_remote_feature_flags(Node, enabled, Timeout) of
+        {error, _} ->
             false;
         RemoteEnabledFeatureFlags when is_map(RemoteEnabledFeatureFlags) ->
             RemoteEnabledFeatureNames = maps:keys(RemoteEnabledFeatureFlags),
-            rabbit_log:info("Feature flags: querying enabled feature flags "
-                            "on node `~s` done; enabled features: ~p",
-                            [Node, RemoteEnabledFeatureNames]),
             are_supported_locally(RemoteEnabledFeatureNames)
     end.
+
+query_remote_feature_flags(Node, Which, Timeout) ->
+    rabbit_log:info("Feature flags: querying ~s feature flags "
+                    "on node `~s`...",
+                    [Which, Node]),
+    case rpc:call(Node, ?MODULE, list, [Which], Timeout) of
+        {badrpc, Reason} = Error ->
+            rabbit_log:error("Feature flags: error while querying "
+                             "~s feature flags on node `~s`: ~p",
+                             [Which, Node, Reason]),
+            {error, Error};
+        RemoteFeatureFlags when is_map(RemoteFeatureFlags) ->
+            RemoteFeatureNames = maps:keys(RemoteFeatureFlags),
+            rabbit_log:info("Feature flags: querying ~s feature flags "
+                            "on node `~s` done; ~s features: ~p",
+                            [Which, Node, Which, RemoteFeatureNames]),
+            RemoteFeatureFlags
+    end.
+
+sync_feature_flags_with_cluster(Nodes) ->
+    sync_feature_flags_with_cluster(Nodes, ?TIMEOUT).
+
+sync_feature_flags_with_cluster([], _) ->
+    ok;
+sync_feature_flags_with_cluster(Nodes, Timeout) ->
+    RemoteNodes = Nodes -- [node()],
+    sync_feature_flags_with_cluster1(RemoteNodes, Timeout).
+
+sync_feature_flags_with_cluster1([], _) ->
+    ok;
+sync_feature_flags_with_cluster1(RemoteNodes, Timeout) ->
+    RandomRemoteNode = pick_one_node(RemoteNodes),
+    rabbit_log:info("Feature flags: SYNCING FEATURE FLAGS with node `~s`...",
+                    [RandomRemoteNode]),
+    case query_remote_feature_flags(RandomRemoteNode, enabled, Timeout) of
+        {error, _} = Error ->
+            Error;
+        RemoteFeatureFlags ->
+            RemoteFeatureNames = maps:keys(RemoteFeatureFlags),
+            do_sync_feature_flags_with_node1(RemoteFeatureNames)
+    end.
+
+pick_one_node(Nodes) ->
+    RandomIndex = rand:uniform(length(Nodes)),
+    lists:nth(RandomIndex, Nodes).
+
+do_sync_feature_flags_with_node1([FeatureFlag | Rest]) ->
+    case enable_locally(FeatureFlag) of
+        ok    -> do_sync_feature_flags_with_node1(Rest);
+        Error -> Error
+    end;
+do_sync_feature_flags_with_node1([]) ->
+    ok.
