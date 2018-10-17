@@ -189,7 +189,9 @@ query_supported_feature_flags([App | Rest], AllFeatureFlags) ->
             rabbit_log:info("Feature flags: application `~s` "
                             "has ~b feature flags",
                             [App, maps:size(FeatureFlags)]),
-            AllFeatureFlags1 = maps:merge(AllFeatureFlags, FeatureFlags),
+            AllFeatureFlags1 = merge_new_feature_flags(AllFeatureFlags,
+                                                       App,
+                                                       FeatureFlags),
             query_supported_feature_flags(Rest, AllFeatureFlags1);
         {ok, {FFMod, FFFun}} when is_atom(FFMod) andalso is_atom(FFFun) ->
             rabbit_log:info("Feature flags: application `~s` "
@@ -201,8 +203,10 @@ query_supported_feature_flags([App | Rest], AllFeatureFlags) ->
                         rabbit_log:info("Feature flags: application `~s` "
                                         "has ~b feature flags",
                                         [App, maps:size(FeatureFlags)]),
-                        AllFeatureFlags1 = maps:merge(AllFeatureFlags,
-                                                      FeatureFlags),
+                        AllFeatureFlags1 = merge_new_feature_flags(
+                                             AllFeatureFlags,
+                                             App,
+                                             FeatureFlags),
                         query_supported_feature_flags(Rest, AllFeatureFlags1);
                     Invalid ->
                         rabbit_log:error(
@@ -230,6 +234,13 @@ query_supported_feature_flags([App | Rest], AllFeatureFlags) ->
     end;
 query_supported_feature_flags([], AllFeatureFlags) ->
     AllFeatureFlags.
+
+merge_new_feature_flags(AllFeatureFlags, App, FeatureFlags) ->
+    FeatureFlags1 = maps:map(
+                      fun(_, FeatureProps) ->
+                              maps:put(provided_by, App, FeatureProps)
+                      end, FeatureFlags),
+    maps:merge(AllFeatureFlags, FeatureFlags1).
 
 regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags) ->
     %% -module(rabbit_ff_registry).
