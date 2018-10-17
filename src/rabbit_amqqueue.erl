@@ -1066,7 +1066,8 @@ activate_limit_all(QPids, ChPid) ->
     delegate:invoke_no_result(QPids, {gen_server2, cast, [{activate_limit, ChPid}]}).
 
 credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
-    delegate:invoke_no_result(QPid, {gen_server2, cast, [{credit, ChPid, CTag, Credit, Drain}]}).
+    delegate:invoke_no_result(QPid, {gen_server2, cast,
+                                     [{credit, ChPid, CTag, Credit, Drain}]}).
 
 basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid, _CTag, _) ->
     delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
@@ -1097,7 +1098,7 @@ basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid,
         Err ->
             Err
     end;
-basic_consume(#amqqueue{name = QName, type = quorum}, _NoAck, _ChPid,
+basic_consume(#amqqueue{type = quorum}, _NoAck, _ChPid,
               _LimiterPid, true, _ConsumerPrefetchCount, _ConsumerTag,
               _ExclusiveConsume, _Args, _OkMsg, _ActingUser, _QStates) ->
     {error, global_qos_not_supported_for_queue_type};
