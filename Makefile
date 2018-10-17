@@ -130,8 +130,7 @@ define PROJECT_ENV
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
 	    {default_consumer_prefetch, {false, 0}},
-	    {channel_queue_cleanup_interval, 60000},
-	    {feature_flags_list, {rabbit_core_ff, list}}
+	    {channel_queue_cleanup_interval, 60000}
 	  ]
 endef
 

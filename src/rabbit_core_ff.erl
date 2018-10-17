@@ -16,21 +16,19 @@
 
 -module(rabbit_core_ff).
 
--export([list/0,
-        quorum_queue_migration/1]).
+-export([quorum_queue_migration/1]).
 
-list() ->
-    #{quorum_queue => #{
-        desc          => "Support queues of type `quorum`",
-        stability     => experimental,
-        migration_fun => {?MODULE, quorum_queue_migration}
-       },
-
-      empty_basic_get_metric => #{
-        desc          => "Count AMQP `basic.get` on empty queues in stats",
-        stability     => stable
-       }
-     }.
+-rabbit_feature_flag(
+   {quorum_queue,
+    #{desc          => "Support queues of type `quorum`",
+      stability     => experimental,
+      migration_fun => {?MODULE, quorum_queue_migration}
+     }}).
+-rabbit_feature_flag(
+   {empty_basic_get_metric,
+    #{desc          => "Count AMQP `basic.get` on empty queues in stats",
+      stability     => stable
+     }}).
 
 quorum_queue_migration(enable) ->
     Tables = [rabbit_queue,

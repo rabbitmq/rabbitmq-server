@@ -191,70 +191,32 @@ initialize_registry() ->
     regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags).
 
 query_supported_feature_flags() ->
-    LoadedApps = [App
-                  || {App, _, _} <- application:loaded_applications()],
-    rabbit_log:info("Feature flags: query feature flags in applications: ~p",
-                    [LoadedApps]),
-    query_supported_feature_flags(LoadedApps, #{}).
+    rabbit_log:info("Feature flags: query feature flags "
+                    "in loaded applications", []),
+    AttributesPerApp = rabbit_misc:all_module_attributes(rabbit_feature_flag),
+    query_supported_feature_flags(AttributesPerApp, #{}).
 
-query_supported_feature_flags([App | Rest], AllFeatureFlags) ->
-    case application:get_env(App, feature_flags_list) of
-        {ok, FeatureFlags} when is_map(FeatureFlags) ->
-            rabbit_log:info("Feature flags: application `~s` "
-                            "has ~b feature flags",
-                            [App, maps:size(FeatureFlags)]),
-            AllFeatureFlags1 = merge_new_feature_flags(AllFeatureFlags,
-                                                       App,
-                                                       FeatureFlags),
-            query_supported_feature_flags(Rest, AllFeatureFlags1);
-        {ok, {FFMod, FFFun}} when is_atom(FFMod) andalso is_atom(FFFun) ->
-            rabbit_log:info("Feature flags: application `~s` "
-                            "provides a feature_flags_list function: ~s:~s()",
-                            [App, FFMod, FFFun]),
-            try
-                case erlang:apply(FFMod, FFFun, []) of
-                    FeatureFlags when is_map(FeatureFlags) ->
-                        rabbit_log:info("Feature flags: application `~s` "
-                                        "has ~b feature flags",
-                                        [App, maps:size(FeatureFlags)]),
-                        AllFeatureFlags1 = merge_new_feature_flags(
-                                             AllFeatureFlags,
-                                             App,
-                                             FeatureFlags),
-                        query_supported_feature_flags(Rest, AllFeatureFlags1);
-                    Invalid ->
-                        rabbit_log:error(
-                          "Feature flags: invalid feature flags "
-                          "in application `~s`: ~p",
-                          [App, Invalid]),
-                        query_supported_feature_flags(Rest, AllFeatureFlags)
-                end
-            catch
-                _:Reason:Stacktrace ->
-                    rabbit_log:error(
-                      "Feature flags: failed to query feature flags "
-                      "of application `~s` "
-                      "using `~s:~s()`: ~p~n~p",
-                      [App, FFMod, FFFun, Reason, Stacktrace]),
-                    query_supported_feature_flags(Rest, AllFeatureFlags)
-            end;
-        undefined ->
-            query_supported_feature_flags(Rest, AllFeatureFlags);
-        {ok, Invalid} ->
-            rabbit_log:error("Feature flags: invalid feature flags "
-                             "in application `~s`: ~p",
-                             [App, Invalid]),
-            query_supported_feature_flags(Rest, AllFeatureFlags)
-    end;
+query_supported_feature_flags([{App, _Module, Attributes} | Rest],
+                              AllFeatureFlags) ->
+    rabbit_log:info("Feature flags: application `~s` "
+                    "has ~b feature flags",
+                    [App, length(Attributes)]),
+    AllFeatureFlags1 = lists:foldl(
+                         fun({FeatureName, FeatureProps}, AllFF) ->
+                                 merge_new_feature_flags(AllFF,
+                                                         App,
+                                                         FeatureName,
+                                                         FeatureProps)
+                         end, AllFeatureFlags, Attributes),
+    query_supported_feature_flags(Rest, AllFeatureFlags1);
 query_supported_feature_flags([], AllFeatureFlags) ->
     AllFeatureFlags.
 
-merge_new_feature_flags(AllFeatureFlags, App, FeatureFlags) ->
-    FeatureFlags1 = maps:map(
-                      fun(_, FeatureProps) ->
-                              maps:put(provided_by, App, FeatureProps)
-                      end, FeatureFlags),
-    maps:merge(AllFeatureFlags, FeatureFlags1).
+merge_new_feature_flags(AllFeatureFlags, App, FeatureName, FeatureProps)
+  when is_atom(FeatureName) andalso is_map(FeatureProps) ->
+    FeatureProps1 = maps:put(provided_by, App, FeatureProps),
+    maps:merge(AllFeatureFlags,
+               #{FeatureName => FeatureProps1}).
 
 regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags) ->
     %% -module(rabbit_ff_registry).
