@@ -112,17 +112,22 @@ key(S) ->
     end.
 
 fmt_proplist(Props) ->
-    lists:append([fmt(a2b(K), V) || {K, V} <- Props]).
+    lists:foldl(fun({K, V}, Acc) ->
+                        case fmt(a2b(K), V) of
+                            L when is_list(L) -> lists:append(L, Acc);
+                            T -> [T | Acc]
+                        end
+                end, [], Props).
 
 fmt(K, #resource{virtual_host = VHost, 
                  name         = Name}) -> [{K,           longstr, Name},
                                            {<<"vhost">>, longstr, VHost}];
 fmt(K, V) -> {T, Enc} = fmt(V),
-             [{K, T, Enc}].
+             {K, T, Enc}.
 
 fmt(true)                 -> {bool, true};
 fmt(false)                -> {bool, false};
-fmt(V) when is_atom(V)    -> {longstr, a2b(V)};
+fmt(V) when is_atom(V)    -> {longstr, atom_to_binary(V, utf8)};
 fmt(V) when is_integer(V) -> {long, V};
 fmt(V) when is_number(V)  -> {float, V};
 fmt(V) when is_binary(V)  -> {longstr, V};
@@ -134,5 +139,5 @@ fmt(V)                    -> {longstr,
                               list_to_binary(
                                 rabbit_misc:format("~1000000000p", [V]))}.
 
-a2b(A) when is_atom(A)   -> list_to_binary(atom_to_list(A));
+a2b(A) when is_atom(A)   -> atom_to_binary(A, utf8);
 a2b(B) when is_binary(B) -> B.
