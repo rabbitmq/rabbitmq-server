@@ -122,7 +122,7 @@ cli_info(FeatureFlags) ->
               FFInfo = [{name, FeatureName},
                         {enabled, IsEnabled},
                         {supported, IsSupported},
-                        {stable, IsStable},
+                        {stability, IsStable},
                         {provided_by, App},
                         {desc, Desc}],
               [FFInfo | Acc]
