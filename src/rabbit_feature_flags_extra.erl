@@ -17,7 +17,8 @@
 -module(rabbit_feature_flags_extra).
 
 -export([info/0,
-         info/1]).
+         info/1,
+         cli_info/0]).
 
 info() ->
     %% Two tables: one for stable feature flags, one for experimental ones.
@@ -103,6 +104,24 @@ info(FeatureFlags) ->
       end, ok, FeatureFlags),
     io:format("~n", []),
     ok.
+
+cli_info() ->
+    StableFF = rabbit_feature_flags:list(all, stable),
+    StableInfo = cli_info(StableFF),
+    ExpFF = rabbit_feature_flags:list(all, experimental),
+    ExpInfo = cli_info(ExpFF),
+    {ok, {StableInfo, ExpInfo}}.
+
+cli_info(FeatureFlags) ->
+    maps:fold(
+      fun(FeatureName, FeatureProps, Acc) ->
+              IsEnabled = rabbit_feature_flags:is_enabled(FeatureName),
+              IsSupported = rabbit_feature_flags:is_supported(FeatureName),
+              App = maps:get(provided_by, FeatureProps),
+              Desc = maps:get(desc, FeatureProps, ""),
+              FFInfo = {FeatureName, IsEnabled, IsSupported, App, Desc},
+              [FFInfo | Acc]
+      end, [], FeatureFlags).
 
 ascii_color(default)      -> "\033[0m";
 ascii_color(bright_white) -> "\033[1m";
