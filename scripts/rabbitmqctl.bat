@@ -58,5 +58,9 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -escript main rabbitmqctl_escript ^
 -extra "%RABBITMQ_HOME%\escript\rabbitmqctl" !STAR!
 
+if ERRORLEVEL 1 (
+    exit /B 1
+)
+
 endlocal
 endlocal
