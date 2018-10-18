@@ -20,10 +20,52 @@
 {mapping, "management.http_log_dir", "rabbitmq_management.http_log_dir",
     [{datatype, string}]}.
 
+%% HTTP (TCP) listener options ========================================================
 
-%% Change the port on which the HTTP listener listens,
-%% specifying an interface for the web server to bind to.
-%% Also set the listener to use SSL and provide SSL options.
+%% HTTP listener consistent with Web STOMP and Web MQTT.
+%%
+%% {tcp_config, [{port,     15672},
+%%               {ip,       "127.0.0.1"}]}
+
+{mapping, "management.tcp.port", "rabbitmq_management.tcp_config.port",
+    [{datatype, integer}]}.
+
+{mapping, "management.tcp.ip", "rabbitmq_management.tcp_config.ip",
+    [{datatype, string},
+     {validators, ["is_ip"]}]}.
+
+
+%% HTTPS (TLS) listener options ========================================================
+
+%% HTTPS listener consistent with Web STOMP and Web MQTT.
+%%
+%% {ssl_config, [{port,       15671},
+%%               {ip,         "127.0.0.1"},
+%%               {cacertfile, "/path/to/cacert.pem"},
+%%               {certfile,   "/path/to/cert.pem"},
+%%               {keyfile,    "/path/to/key.pem"}]}
+
+{mapping, "management.ssl.port", "rabbitmq_management.ssl_config.port",
+    [{datatype, integer}]}.
+{mapping, "management.ssl.backlog", "rabbitmq_management.ssl_config.backlog",
+    [{datatype, integer}]}.
+{mapping, "management.ssl.ip", "rabbitmq_management.ssl_config.ip",
+    [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "management.ssl.listener", "rabbitmq_management.ssl_config",
+    [{datatype, ip}]}.
+{mapping, "management.ssl.certfile", "rabbitmq_management.ssl_config.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "management.ssl.keyfile", "rabbitmq_management.ssl_config.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "management.ssl.cacertfile", "rabbitmq_management.ssl_config.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "management.ssl.password", "rabbitmq_management.ssl_config.password",
+    [{datatype, string}]}.
+
+
+%% Legacy listener options ========================================================
+
+%% Legacy (pre-3.7.9) TCP listener format.
 %%
 %% {listener, [{port,     12345},
 %%             {ip,       "127.0.0.1"},
@@ -41,8 +83,6 @@
 
 {mapping, "management.listener.ssl", "rabbitmq_management.listener.ssl",
     [{datatype, {enum, [true, false]}}]}.
-
-%% Cowboy (HTTP server) options ========================================================
 
 {mapping, "management.listener.server.compress", "rabbitmq_management.listener.cowboy_opts.compress",
     [{datatype, {enum, [true, false]}}]}.
@@ -62,7 +102,7 @@
 {mapping, "management.listener.server.max_keepalive", "rabbitmq_management.listener.cowboy_opts.max_keepalive",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 
-%% HTTPS (TLS) options ========================================================
+%% Legacy HTTPS listener options ========================================================
 
 {mapping, "management.listener.ssl_opts", "rabbitmq_management.listener.ssl_opts", [
     {datatype, {enum, [none]}}
