@@ -23,15 +23,99 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(CONTEXT, rabbit_mgmt).
+-define(DEFAULT_PORT, 15672).
 
 start(_Type, _StartArgs) ->
-    {ok, Listener} = application:get_env(rabbitmq_management, listener),
-    {ok, _} = register_context(Listener, []),
-    log_startup(Listener),
+    %% Modern TCP listener: configured vi management.tcp.*.
+    %% Legacy TCP listener: legacy management.listener.*.
+    %% TLS listener: configured via management.ssl.*
+    case {has_configured_legacy_listener(),
+          has_configured_tcp_listener(),
+          has_configured_tls_listener()} of
+        {false, false, false} ->
+            %% nothing is configured
+            start_tcp_listener();
+        {false, false, true} ->
+            maybe_start_tls_listener();
+        {false, true, false} ->
+            maybe_start_tcp_listener();
+        {false, true, true} ->
+            maybe_start_tcp_listener(),
+            maybe_start_tls_listener();
+        {true,  false, false} ->
+            maybe_start_legacy_listener();
+        {true,  false, true} ->
+            maybe_start_legacy_listener(),
+            maybe_start_tls_listener();
+        {true,  true, false}  ->
+            %% This combination makes some sense:
+            %% legacy listener can be used to set up TLS :/
+            maybe_start_legacy_listener(),
+            maybe_start_tcp_listener();
+        {true,  true, true}  ->
+            %% what is happening?
+            maybe_start_tcp_listener(),
+            maybe_start_legacy_listener(),
+            maybe_start_tls_listener()
+    end,
+
     rabbit_mgmt_sup_sup:start_link().
 
 stop(_State) ->
     unregister_context(),
+    ok.
+
+has_configured_legacy_listener() ->
+    has_configured_listener(listener).
+
+has_configured_tcp_listener() ->
+    has_configured_listener(tcp_config).
+
+has_configured_tls_listener() ->
+    has_configured_listener(ssl_config).
+
+has_configured_listener(Key) ->
+    case rabbit_misc:get_env(rabbitmq_management, Key, undefined) of
+        undefined -> false;
+        _         -> true
+    end.
+
+maybe_start_legacy_listener() ->
+    case rabbit_misc:get_env(rabbitmq_management, listener, undefined) of
+        undefined -> ok;
+        Listener  ->
+            {ok, _} = register_context(Listener, []),
+            Type = case is_tls(Listener) of
+                       true  -> tls;
+                       false -> tcp
+                   end,
+            log_startup(Type, Listener),
+            ok
+    end.
+
+maybe_start_tls_listener() ->
+    case rabbit_misc:get_env(rabbitmq_management, ssl_config, undefined) of
+        undefined  -> ok;
+        Listener0  ->
+            Listener = [{ssl, true} | Listener0],
+            {ok, _}  = register_context(Listener, []),
+            log_startup(tls, Listener),
+            ok
+    end.
+
+maybe_start_tcp_listener() ->
+    case rabbit_misc:get_env(rabbitmq_management, tcp_config, undefined) of
+        undefined -> ok;
+        Listener  ->
+            {ok, _} = register_context(Listener, []),
+            log_startup(tcp, Listener),
+            ok
+    end.
+
+start_tcp_listener() ->
+    Listener = rabbit_misc:get_env(rabbitmq_management, tcp_config, []),
+    {ok, _} = register_context(Listener, []),
+    log_startup(tcp, Listener),
     ok.
 
 %% At the point at which this is invoked we have both newly enabled
@@ -48,7 +132,7 @@ register_context(Listener0, IgnoreApps) ->
     M0 = maps:from_list(Listener0),
     %% include default port if it's not provided in the config
     %% as Cowboy won't start if the port is missing
-    M1 = maps:merge(#{port => 15672}, M0),
+    M1 = maps:merge(#{port => ?DEFAULT_PORT}, M0),
     rabbit_web_dispatch:register_context_handler(
       ?CONTEXT, maps:to_list(M1), "",
       rabbit_mgmt_dispatcher:build_dispatcher(IgnoreApps),
@@ -57,8 +141,18 @@ register_context(Listener0, IgnoreApps) ->
 unregister_context() ->
     rabbit_web_dispatch:unregister_context(?CONTEXT).
 
-log_startup(Listener) ->
-    rabbit_log:info("Management plugin started. Port: ~w", [port(Listener)]).
+log_startup(tcp, Listener) ->
+    rabbit_log:info("Management plugin: HTTP (non-TLS) listener started on port ~w", [port(Listener)]);
+log_startup(tls, Listener) ->
+    rabbit_log:info("Management plugin: HTTPS listener started on port ~w", [port(Listener)]).
+
 
 port(Listener) ->
-    proplists:get_value(port, Listener).
+    proplists:get_value(port, Listener, ?DEFAULT_PORT).
+
+is_tls(Listener) ->
+    case proplists:get_value(ssl, Listener) of
+        undefined -> false;
+        false     -> false;
+        _         -> true
+    end.

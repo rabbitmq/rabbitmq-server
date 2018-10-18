@@ -51,8 +51,6 @@
     [{datatype, integer}]}.
 {mapping, "management.ssl.ip", "rabbitmq_management.ssl_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
-{mapping, "management.ssl.listener", "rabbitmq_management.ssl_config",
-    [{datatype, ip}]}.
 {mapping, "management.ssl.certfile", "rabbitmq_management.ssl_config.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 {mapping, "management.ssl.keyfile", "rabbitmq_management.ssl_config.keyfile",
