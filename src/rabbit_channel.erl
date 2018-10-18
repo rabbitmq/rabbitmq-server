@@ -1609,7 +1609,7 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
                     ConsumerMapping),
-            State1 = monitor_delivering_queue(
+            State1 = track_delivering_queue(
                        NoAck, QPid, QName,
                        State#ch{consumer_mapping = CM1,
                                 queue_states = QueueStates}),
@@ -1622,7 +1622,7 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
                     ConsumerMapping),
-            State1 = monitor_delivering_queue(
+            State1 = track_delivering_queue(
                        NoAck, QPid, QName,
                        State#ch{consumer_mapping = CM1}),
             {ok, case NoWait of
@@ -1642,30 +1642,22 @@ consumer_monitor(ConsumerTag,
                  State = #ch{consumer_mapping = ConsumerMapping,
                              queue_monitors   = QMons,
                              queue_consumers  = QCons}) ->
-    {#amqqueue{pid = QPid}, _CParams} =
+    {#amqqueue{pid = QPid}, _} =
         maps:get(ConsumerTag, ConsumerMapping),
     CTags1 = case maps:find(QPid, QCons) of
-        {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
-        error -> gb_sets:singleton(ConsumerTag)
-    end,
+                 {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
+                 error -> gb_sets:singleton(ConsumerTag)
+             end,
     QCons1 = maps:put(QPid, CTags1, QCons),
-    State#ch{queue_monitors  = pmon:monitor(QPid, QMons),
+    State#ch{queue_monitors  = maybe_monitor(QPid, QMons),
              queue_consumers = QCons1}.
 
-monitor_delivering_queue(NoAck, QPid, QName,
-                         State = #ch{queue_names       = QNames,
-                                     queue_monitors    = QMons,
-                                     delivering_queues = DQ}) when ?IS_CLASSIC(QPid) ->
-    State#ch{queue_names       = maps:put(QPid, QName, QNames),
-             queue_monitors    = pmon:monitor(QPid, QMons),
-             delivering_queues = case NoAck of
-                                     true  -> DQ;
-                                     false -> sets:add_element(QPid, DQ)
-                                 end};
-monitor_delivering_queue(NoAck, QPid, QName,
-                         State = #ch{queue_names       = QNames,
-                                     delivering_queues = DQ}) when ?IS_QUORUM(QPid) ->
-    State#ch{queue_names       = maps:put(QPid, QName, QNames),
+track_delivering_queue(NoAck, QPid, QName,
+                       State = #ch{queue_names = QNames,
+                                   queue_monitors = QMons,
+                                   delivering_queues = DQ}) ->
+    State#ch{queue_names = maps:put(QPid, QName, QNames),
+             queue_monitors = maybe_monitor(QPid, QMons),
              delivering_queues = case NoAck of
                                      true  -> DQ;
                                      false -> sets:add_element(QPid, DQ)
@@ -1684,9 +1676,8 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
                  record_confirms(MXs, State1#ch{unconfirmed = UC1})
 
     end;
-handle_publishing_queue_down(QPid, _Reason, State) when ?IS_QUORUM(QPid) ->
-    %% for quorum queues we cannot infer anything from a queue down
-    State.
+handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
+    error(quorum_queues_should_never_be_monitored).
 
 handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
                                               queue_names      = QNames}) ->
@@ -1834,11 +1825,6 @@ record_sent(ConsumerTag, AckRequired,
                         conn_name         = ConnName,
                         channel           = ChannelNum}) ->
     ?INCR_STATS(queue_stats, QName, 1, case {ConsumerTag, AckRequired} of
-                                           %% When ConsumerTag is an integer,
-                                           %% it is in fact the DeliveryTag. Used in
-                                           %% quorum queues to track basic.get messages
-                                           %% as these don't have the consumer tag
-                                           %% that the state machine requires.
                                            {_,  true} when is_integer(ConsumerTag) -> get;
                                            {_, false} when is_integer(ConsumerTag) -> get_no_ack;
                                            %% Authentic consumer tag, this is a delivery
@@ -1969,7 +1955,12 @@ notify_limiter(Limiter, Acked) ->
     %% common case.
      case rabbit_limiter:is_active(Limiter) of
         false -> ok;
-        true  -> case lists:foldl(fun ({_, CTag, _}, Acc) when is_integer(CTag) -> Acc;
+        true  -> case lists:foldl(fun ({_, CTag, _}, Acc) when is_integer(CTag) ->
+                                          %% Quorum queues use integer CTags
+                                          %% classic queues use binaries
+                                          %% Quorum queues do not interact
+                                          %% with limiters
+                                          Acc;
                                       ({_,    _, _}, Acc) -> Acc + 1
                                   end, 0, Acked) of
                      0     -> ok;
@@ -1995,7 +1986,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     {DeliveredQPids, DeliveredQQPids, QueueStates} =
         rabbit_amqqueue:deliver(Qs, Delivery, QueueStates0),
     AllDeliveredQPids = DeliveredQPids ++ DeliveredQQPids,
-    %% The pmon:monitor_all/2 monitors all queues to which we
+    %% The maybe_monitor_all/2 monitors all queues to which we
     %% delivered. But we want to monitor even queues we didn't deliver
     %% to, since we need their 'DOWN' messages to clean
     %% queue_names. So we also need to monitor each QPid from
@@ -2011,8 +2002,8 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                             {case maps:is_key(QPid, QNames0) of
                                  true  -> QNames0;
                                  false -> maps:put(QPid, QName, QNames0)
-                             end, pmon:monitor(QPid, QMons0)}
-                    end, {QNames, pmon:monitor_all(DeliveredQPids, QMons)}, Qs),
+                             end, maybe_monitor(QPid, QMons0)}
+                    end, {QNames, maybe_monitor_all(DeliveredQPids, QMons)}, Qs),
     State1 = State#ch{queue_names    = QNames1,
                       queue_monitors = QMons1},
     %% NB: the order here is important since basic.returns must be
@@ -2498,9 +2489,20 @@ handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
                            routing_key   = RoutingKey,
                            message_count = MessageCount},
            Content),
-    State1 = monitor_delivering_queue(NoAck, QPid, QName, State),
+    State1 = track_delivering_queue(NoAck, QPid, QName, State),
     {noreply, record_sent(DeliveryTag, not(NoAck), Msg, State1)}.
 
 init_queue_cleanup_timer(State) ->
     {ok, Interval} = application:get_env(rabbit, channel_queue_cleanup_interval),
     State#ch{queue_cleanup_timer = erlang:send_after(Interval, self(), queue_cleanup)}.
+
+%% only classic queues need monitoring so rather than special casing
+%% everywhere monitors are set up we wrap it here for this module
+maybe_monitor(QPid, QMons) when ?IS_CLASSIC(QPid) ->
+    pmon:monitor(QPid, QMons);
+maybe_monitor(_, QMons) ->
+    QMons.
+
+maybe_monitor_all([],     S) -> S;                %% optimisation
+maybe_monitor_all([Item], S) -> maybe_monitor(Item, S); %% optimisation
+maybe_monitor_all(Items,  S) -> lists:foldl(fun maybe_monitor/2, S, Items).

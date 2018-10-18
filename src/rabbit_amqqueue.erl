@@ -1072,13 +1072,13 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
 basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid, _CTag, _) ->
     delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
 basic_get(#amqqueue{pid = {Name, _} = Id, type = quorum, name = QName} = Q, _ChPid, NoAck,
-          _LimiterPid, CTag, FStates) ->
-    FState0 = get_quorum_state(Id, QName, FStates),
-    case rabbit_quorum_queue:basic_get(Q, NoAck, CTag, FState0) of
-        {ok, empty, FState} ->
-            {empty, maps:put(Name, FState, FStates)};
-        {ok, Count, Msg, FState} ->
-            {ok, Count, Msg, maps:put(Name, FState, FStates)};
+          _LimiterPid, CTag, QStates) ->
+    QState0 = get_quorum_state(Id, QName, QStates),
+    case rabbit_quorum_queue:basic_get(Q, NoAck, CTag, QState0) of
+        {ok, empty, QState} ->
+            {empty, maps:put(Name, QState, QStates)};
+        {ok, Count, Msg, QState} ->
+            {ok, Count, Msg, maps:put(Name, QState, QStates)};
         {error, Reason} ->
             rabbit_misc:protocol_error(internal_error,
                                        "Cannot get a message from quorum queue '~s': ~p",
@@ -1090,9 +1090,9 @@ basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid,
               ExclusiveConsume, Args, OkMsg, ActingUser, QState) ->
     ok = check_consume_arguments(QName, Args),
     case delegate:invoke(QPid, {gen_server2, call,
-                           [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-                             ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
-                             Args, OkMsg, ActingUser}, infinity]}) of
+                                [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
+                                  ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
+                                  Args, OkMsg, ActingUser}, infinity]}) of
         ok ->
             {ok, QState};
         Err ->

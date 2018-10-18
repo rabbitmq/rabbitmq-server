@@ -388,7 +388,6 @@ handle_ra_event(From, {applied, Seqs},
     {Corrs, State1} = lists:foldl(fun seq_applied/2,
                                   {[], State0#state{leader = From}},
                                   Seqs),
-    %% TODO check if we have moved from softlimit to safe zone
     case maps:size(State1#state.pending) < SftLmt of
         true when State1#state.slow == true ->
             % we have exited soft limit state
