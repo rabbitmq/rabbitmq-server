@@ -442,6 +442,7 @@ mark_as_enabled_locally(FeatureName) ->
     initialize_registry().
 
 mark_as_enabled_remotely(FeatureName) ->
+    %% FIXME: Handle error cases.
     [ok = rpc:call(Node, ?MODULE, mark_as_enabled_locally, [FeatureName], ?TIMEOUT)
      || Node <- running_remote_nodes()],
     ok.
@@ -465,6 +466,16 @@ does_node_support(Node, FeatureNames, Timeout) ->
                            Timeout)
           end,
     case Ret of
+        {badrpc, {'EXIT',
+                  {undef,
+                   [{?MODULE, are_supported_locally, [FeatureNames], []}
+                    | _]}}} ->
+            rabbit_log:info(
+              "Feature flags: ?MODULE:are_supported_locally(~p) unavailable on node `~s`: "
+              "assuming it is a RabbitMQ 3.7.x node "
+              "=> consider the feature flags unsupported",
+              [FeatureNames, Node]),
+            false;
         {badrpc, Reason} ->
             rabbit_log:error("Feature flags: error while querying `~p` "
                              "support on node ~s: ~p",
@@ -535,10 +546,21 @@ query_remote_feature_flags(Node, Which, Timeout) ->
                     "on node `~s`...",
                     [Which, Node]),
     case rpc:call(Node, ?MODULE, list, [Which], Timeout) of
+        {badrpc, {'EXIT',
+                  {undef,
+                   [{?MODULE, list, [Which], []}
+                    | _]}}} ->
+            rabbit_log:info(
+              "Feature flags: ?MODULE:list(~s) unavailable on node `~s`: "
+              "assuming it is a RabbitMQ 3.7.x node "
+              "=> consider the list empty",
+              [Which, Node]),
+            #{};
         {badrpc, Reason} = Error ->
-            rabbit_log:error("Feature flags: error while querying "
-                             "~s feature flags on node `~s`: ~p",
-                             [Which, Node, Reason]),
+            rabbit_log:error(
+              "Feature flags: error while querying ~s feature flags "
+              "on node `~s`: ~p",
+              [Which, Node, Reason]),
             {error, Error};
         RemoteFeatureFlags when is_map(RemoteFeatureFlags) ->
             RemoteFeatureNames = maps:keys(RemoteFeatureFlags),
