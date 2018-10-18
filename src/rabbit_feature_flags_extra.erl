@@ -106,20 +106,25 @@ info(FeatureFlags) ->
     ok.
 
 cli_info() ->
-    StableFF = rabbit_feature_flags:list(all, stable),
-    StableInfo = cli_info(StableFF),
-    ExpFF = rabbit_feature_flags:list(all, experimental),
-    ExpInfo = cli_info(ExpFF),
-    {ok, {StableInfo, ExpInfo}}.
+    cli_info(rabbit_feature_flags:list(all)).
 
 cli_info(FeatureFlags) ->
     maps:fold(
       fun(FeatureName, FeatureProps, Acc) ->
               IsEnabled = rabbit_feature_flags:is_enabled(FeatureName),
               IsSupported = rabbit_feature_flags:is_supported(FeatureName),
+              IsStable = case maps:get(stability, FeatureProps, stable) of
+                             stable -> true;
+                             _      -> false
+                         end,
               App = maps:get(provided_by, FeatureProps),
               Desc = maps:get(desc, FeatureProps, ""),
-              FFInfo = {FeatureName, IsEnabled, IsSupported, App, Desc},
+              FFInfo = [{name, FeatureName},
+                        {enabled, IsEnabled},
+                        {supported, IsSupported},
+                        {stable, IsStable},
+                        {provided_by, App},
+                        {desc, Desc}],
               [FFInfo | Acc]
       end, [], FeatureFlags).
 

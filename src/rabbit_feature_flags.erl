@@ -31,7 +31,6 @@
          are_supported_remotely/2,
          is_enabled/1,
          info/0,
-
          init/0,
          check_node_compatibility/1,
          check_node_compatibility/2,
