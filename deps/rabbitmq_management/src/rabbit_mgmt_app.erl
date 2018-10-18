@@ -26,9 +26,9 @@
 -define(DEFAULT_PORT, 15672).
 
 start(_Type, _StartArgs) ->
-    %% Modern TCP listener: configured vi management.tcp.*.
-    %% Legacy TCP listener: legacy management.listener.*.
-    %% TLS listener: configured via management.ssl.*
+    %% Modern TCP listener uses management.tcp.*.
+    %% Legacy TCP (or TLS) listener uses management.listener.*.
+    %% Modern TLS listener uses management.ssl.*
     case {has_configured_legacy_listener(),
           has_configured_tcp_listener(),
           has_configured_tls_listener()} of
