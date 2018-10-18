@@ -669,7 +669,7 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     noreply_coalesce(confirm(MsgSeqNos, From,
                                              State0#ch{queue_states = maps:put(Name, QState1, QueueStates)}));
                 eol ->
-                    State1 = handle_consuming_queue_down(From, State0),
+                    State1 = handle_consuming_queue_down_or_eol(From, State0),
                     State2 = handle_delivering_queue_down(From, State1),
                     {MXs, UC1} = dtree:take(From, State2#ch.unconfirmed),
                     State3 = record_confirms(MXs, State1#ch{unconfirmed = UC1}),
@@ -709,7 +709,7 @@ handle_info(emit_stats, State) ->
 
 handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
-    State3 = handle_consuming_queue_down(QPid, State1),
+    State3 = handle_consuming_queue_down_or_eol(QPid, State1),
     State4 = handle_delivering_queue_down(QPid, State3),
     %% A rabbit_amqqueue_process has died. If our channel was being
     %% blocked by this process, and no other process is blocking our
@@ -1672,8 +1672,9 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
 handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
     error(quorum_queues_should_never_be_monitored).
 
-handle_consuming_queue_down(QPid, State = #ch{queue_consumers  = QCons,
-                                              queue_names      = QNames}) ->
+handle_consuming_queue_down_or_eol(QPid,
+                                   State = #ch{queue_consumers  = QCons,
+                                               queue_names      = QNames}) ->
     ConsumerTags = case maps:find(QPid, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
