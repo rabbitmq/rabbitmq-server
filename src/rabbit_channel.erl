@@ -1407,15 +1407,8 @@ handle_method(#'basic.recover_async'{requeue = true},
                   rabbit_misc:with_exit_handler(
                     OkFun,
                     fun () ->
-                            {ok, Acc} = rabbit_amqqueue:requeue(QPid, {CTag, MsgIds}, self(), Acc0),
-                            Acc
-                    end);
-              (QPid, MsgIds, Acc0) ->
-                  rabbit_misc:with_exit_handler(
-                    OkFun,
-                    fun () ->
-                            _ = rabbit_amqqueue:requeue(QPid, MsgIds, self(), Acc0),
-                            Acc0
+                            rabbit_amqqueue:requeue(QPid, {CTag, MsgIds},
+                                                    self(), Acc0)
                     end)
           end, lists:reverse(UAMQL), QueueStates0),
     ok = notify_limiter(Limiter, UAMQL),
@@ -1803,15 +1796,12 @@ reject(DeliveryTag, Requeue, Multiple,
               end}.
 
 %% NB: Acked is in youngest-first order
-internal_reject(Requeue, Acked, Limiter, State = #ch{queue_states = QueueStates0}) ->
+internal_reject(Requeue, Acked, Limiter,
+                State = #ch{queue_states = QueueStates0}) ->
     QueueStates = foreach_per_queue(
                     fun({QPid, CTag}, MsgIds, Acc0) ->
-                            {ok, Acc} = rabbit_amqqueue:reject(QPid, Requeue, {CTag, MsgIds},
-                                                               self(), Acc0),
-                            Acc;
-                       (QPid, MsgIds, Acc0) ->
-                            rabbit_amqqueue:reject(QPid, Requeue, MsgIds, self(), Acc0),
-                            Acc0
+                            rabbit_amqqueue:reject(QPid, Requeue, {CTag, MsgIds},
+                                                   self(), Acc0)
                     end, Acked, QueueStates0),
     ok = notify_limiter(Limiter, Acked),
     State#ch{queue_states = QueueStates}.
@@ -1878,7 +1868,7 @@ ack(Acked, State = #ch{queue_names = QNames,
     QueueStates =
         foreach_per_queue(
           fun ({QPid, CTag}, MsgIds, Acc0) ->
-                  {ok, Acc} = rabbit_amqqueue:ack(QPid, {CTag, MsgIds}, self(), Acc0),
+                  Acc = rabbit_amqqueue:ack(QPid, {CTag, MsgIds}, self(), Acc0),
                   incr_queue_stats(QPid, QNames, MsgIds, State),
                   Acc;
               (QPid, MsgIds, Acc0) ->
@@ -1925,18 +1915,11 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
 
 foreach_per_queue(_F, [], Acc) ->
     Acc;
-foreach_per_queue(F, [{_DTag, _CTag, {QPid, MsgId}}], Acc) when ?IS_CLASSIC(QPid) ->
-    %% common case
-    F(QPid, [MsgId], Acc);
-foreach_per_queue(F, [{_DTag, CTag, {QPid, MsgId}}], Acc) when ?IS_QUORUM(QPid) ->
+foreach_per_queue(F, [{_DTag, CTag, {QPid, MsgId}}], Acc) ->
     %% quorum queue, needs the consumer tag
     F({QPid, CTag}, [MsgId], Acc);
-%% NB: UAL should be in youngest-first order; the tree values will
-%% then be in oldest-first order
 foreach_per_queue(F, UAL, Acc) ->
-    T = lists:foldl(fun ({_DTag, _CTag, {QPid, MsgId}}, T) when ?IS_CLASSIC(QPid) ->
-                            rabbit_misc:gb_trees_cons(QPid, MsgId, T);
-                        ({_DTag, CTag, {QPid, MsgId}}, T) when ?IS_QUORUM(QPid) ->
+    T = lists:foldl(fun ({_DTag, CTag, {QPid, MsgId}}, T) ->
                             rabbit_misc:gb_trees_cons({QPid, CTag}, MsgId, T)
                     end, gb_trees:empty(), UAL),
     rabbit_misc:gb_trees_fold(fun (Key, Val, Acc0) -> F(Key, Val, Acc0) end, Acc, T).

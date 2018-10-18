@@ -1003,43 +1003,49 @@ purge(#amqqueue{ pid = QPid, type = classic}) ->
 purge(#amqqueue{ pid = NodeId, type = quorum}) ->
     rabbit_quorum_queue:purge(NodeId).
 
-requeue(QPid, MsgIds, ChPid, _QuorumStates) when ?IS_CLASSIC(QPid) ->
-    delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]});
+
+requeue(QPid, {_, MsgIds}, ChPid, QuorumStates) when ?IS_CLASSIC(QPid) ->
+    ok = delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]}),
+    QuorumStates;
 requeue({Name, _} = QPid, {CTag, MsgIds}, _ChPid, QuorumStates)
   when ?IS_QUORUM(QPid) ->
     case QuorumStates of
         #{Name := QState0} ->
             {ok, QState} = rabbit_quorum_queue:requeue(CTag, MsgIds, QState0),
-            {ok, maps:put(Name, QState, QuorumStates)};
+            maps:put(Name, QState, QuorumStates);
         _ ->
             % queue was not found
-            {ok, QuorumStates}
+            QuorumStates
     end.
 
-ack(QPid, MsgIds, ChPid, _FStates) when ?IS_CLASSIC(QPid) ->
-    delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]});
-ack({Name, _} = QPid, {CTag, MsgIds}, _ChPid, QuorumStates) when ?IS_QUORUM(QPid) ->
+ack(QPid, {_, MsgIds}, ChPid, QueueStates) when ?IS_CLASSIC(QPid) ->
+    delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]}),
+    QueueStates;
+ack({Name, _} = QPid, {CTag, MsgIds}, _ChPid, QuorumStates)
+  when ?IS_QUORUM(QPid) ->
     case QuorumStates of
         #{Name := QState0} ->
             {ok, QState} = rabbit_quorum_queue:ack(CTag, MsgIds, QState0),
-            {ok, maps:put(Name, QState, QuorumStates)};
+            maps:put(Name, QState, QuorumStates);
         _ ->
             %% queue was not found
-            {ok, QuorumStates}
+            QuorumStates
     end.
 
-reject(QPid, Requeue, MsgIds, ChPid, _FStates) when ?IS_CLASSIC(QPid) ->
-    delegate:invoke_no_result(QPid, {gen_server2, cast, [{reject, Requeue, MsgIds, ChPid}]});
+reject(QPid, Requeue, {_, MsgIds}, ChPid, QStates) when ?IS_CLASSIC(QPid) ->
+    ok = delegate:invoke_no_result(QPid, {gen_server2, cast,
+                                          [{reject, Requeue, MsgIds, ChPid}]}),
+    QStates;
 reject({Name, _} = QPid, Requeue, {CTag, MsgIds}, _ChPid, QuorumStates)
   when ?IS_QUORUM(QPid) ->
     case QuorumStates of
         #{Name := QState0} ->
             {ok, QState} = rabbit_quorum_queue:reject(Requeue, CTag,
                                                       MsgIds, QState0),
-            {ok, maps:put(Name, QState, QuorumStates)};
+            maps:put(Name, QState, QuorumStates);
         _ ->
             %% queue was not found
-            {ok, QuorumStates}
+            QuorumStates
     end.
 
 notify_down_all(QPids, ChPid) ->
