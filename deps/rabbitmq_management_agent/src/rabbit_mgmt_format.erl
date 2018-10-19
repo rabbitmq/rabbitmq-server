@@ -42,6 +42,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -378,13 +379,14 @@ exchange(X) ->
 %% We get queues using rabbit_amqqueue:list/1 rather than :info_all/1 since
 %% the latter wakes up each queue. Therefore we have a record rather than a
 %% proplist to deal with.
-queue(#amqqueue{name            = Name,
-                durable         = Durable,
-                auto_delete     = AutoDelete,
-                exclusive_owner = ExclusiveOwner,
-                arguments       = Arguments,
-                pid             = Pid,
-                state           = State} = Q) ->
+queue(Q) when ?is_amqqueue(Q) ->
+    Name = amqqueue:get_name(Q),
+    Durable = amqqueue:is_durable(Q),
+    AutoDelete = amqqueue:is_auto_delete(Q),
+    ExclusiveOwner = amqqueue:get_exclusive_owner(Q),
+    Arguments = amqqueue:get_arguments(Q),
+    Pid = amqqueue:get_pid(Q),
+    State = amqqueue:get_state(Q),
     format(
       [{name,        Name},
        {durable,     Durable},
