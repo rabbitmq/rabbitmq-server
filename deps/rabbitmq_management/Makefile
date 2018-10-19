@@ -4,7 +4,6 @@ PROJECT_MOD = rabbit_mgmt_app
 
 define PROJECT_ENV
 [
-	    {listener,          [{port, 15672}]},
 	    {http_log_dir,      none},
 	    {load_definitions,  none},
 	    {management_db_cache_multiplier, 5},
