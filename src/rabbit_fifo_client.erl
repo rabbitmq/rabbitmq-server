@@ -277,7 +277,7 @@ discard(ConsumerTag, [_|_] = MsgIds,
 checkout(ConsumerTag, NumUnsettled, State0) ->
     Servers = sorted_servers(State0),
     ConsumerId = {ConsumerTag, self()},
-    Cmd = {checkout, {auto, NumUnsettled}, ConsumerId},
+    Cmd = {checkout, {auto, NumUnsettled, as_settled}, ConsumerId},
     try_process_command(Servers, Cmd, State0).
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
@@ -474,6 +474,15 @@ resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
         error ->
             State
     end.
+
+% credit_consumer(Tag, #state{consumer_deliveries = CDels}) ->
+%     %% send credit command to rabbit fifo with last received msg id and the
+%     %% credit to add
+%     %% rabbit_fifo laster will take _it's_ last send msg id for the consumer
+%     %% and take that away from this credit plus the lcient\s last msg id to
+%     %% arrive at the next credit level.
+%     ra:pipeline_command(adf, {credit_consumer, maps:get(Tag, CDels), Credit}).
+
 
 handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
                 #state{consumer_deliveries = CDels0} = State0) ->

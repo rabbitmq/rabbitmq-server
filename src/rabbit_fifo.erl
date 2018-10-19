@@ -4,7 +4,6 @@
 
 -compile(inline_list_funcs).
 -compile(inline).
--compile({no_auto_import, [apply/3]}).
 
 -include_lib("ra/include/ra.hrl").
 
@@ -76,7 +75,11 @@
 -type consumer_id() :: {consumer_tag(), pid()}.
 %% The entity that receives messages. Uniquely identifies a consumer.
 
--type checkout_spec() :: {once | auto, Num :: non_neg_integer()} |
+-type credit_mode() :: as_settled | credited.
+%% determines how credit is replenished
+
+-type checkout_spec() :: {once | auto, Num :: non_neg_integer(),
+                          credit_mode()} |
                          {dequeue, settled | unsettled} |
                          cancel.
 
@@ -87,6 +90,8 @@
     {settle, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
     {return, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
     {discard, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
+    {credit, Credit :: non_neg_integer(), DeliveryCount :: non_neg_integer(),
+     Consumer :: consumer_id()} |
     purge.
 
 -type command() :: protocol() | ra_machine:builtin_command().
@@ -99,17 +104,23 @@
 % represents a partially applied module call
 
 -define(SHADOW_COPY_INTERVAL, 4096).
-% metrics tuple format:
-% {Key, Ready, Pending, Total}
 -define(USE_AVG_HALF_LIFE, 10000.0).
 
 -record(consumer,
         {checked_out = #{} :: #{msg_id() => {msg_in_id(), indexed_msg()}},
          next_msg_id = 0 :: msg_id(), % part of snapshot data
-         %% prefetch/max-in-flight
-         num = 0 :: non_neg_integer(), % part of snapshot data
-         % number of allocated messages
-         seen = 0 :: non_neg_integer(), % part of snapshot data
+         %% max number of messages that can be sent
+         %% decremented for each delivery
+         credit = 0 : non_neg_integer(),
+         %% total number of checked out messages - ever
+         %% incremented for each delivery
+         delivery_count = 0 :: non_neg_integer(),
+         %% the mode of how credit is incremented
+         %% as_settled: credit is re-filled as deliveries are settled
+         %% or returned.
+         %% credited: credit can only be changed by receiving a consumer_credit
+         %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
+         credit_mode = as_settled :: credit_mode(), % part of snapshot data
          lifetime = once :: once | auto,
          suspected_down = false :: boolean()
         }).
@@ -244,6 +255,23 @@ apply(_, {return, MsgIds, ConsumerId}, Effects0,
         _ ->
             {State, Effects0, ok}
     end;
+apply(_, {credit, NewCredit, RemoteDelCnt, ConsumerId}, Effects,
+      #state{consumers = Cons0,
+             service_queue = ServiceQueue0} = State0) ->
+    case Cons0 of
+        #{ConsumerId := #consumer{delivery_count = DelCnt,
+                                  credit = _Credit} = Con0} ->
+            C = RemoteDelCnt + NewCredit - DelCnt,
+            Con = Con0#consumer{credit = C},
+            ServiceQueue = maybe_queue_consumer(ConsumerId, Con,
+                                                ServiceQueue0),
+            Cons = maps:put(ConsumerId, Con, Cons0),
+            checkout(State0#state{service_queue = ServiceQueue,
+                                  consumers = Cons}, Effects);
+        _ ->
+            %% credit for unknown consumer - just ignore
+            {State0, Effects, ok}
+    end;
 apply(_, {checkout, {dequeue, _}, {_Tag, _Pid}}, Effects0,
       #state{messages = M,
              prefix_msg_count = 0} = State0) when map_size(M) == 0 ->
@@ -252,7 +280,7 @@ apply(_, {checkout, {dequeue, _}, {_Tag, _Pid}}, Effects0,
 apply(Meta, {checkout, {dequeue, settled}, ConsumerId},
       Effects0, State0) ->
     % TODO: this clause could probably be optimised
-    State1 = update_consumer(ConsumerId, {once, 1}, State0),
+    State1 = update_consumer(ConsumerId, {once, 1, as_settled}, State0),
     % turn send msg effect into reply
     {success, _, MsgId, Msg, State2} = checkout_one(State1),
     % immediately settle
@@ -261,7 +289,7 @@ apply(Meta, {checkout, {dequeue, settled}, ConsumerId},
     {State, Effects, {dequeue, {MsgId, Msg}}};
 apply(_, {checkout, {dequeue, unsettled}, {_Tag, Pid} = Consumer},
       Effects0, State0) ->
-    State1 = update_consumer(Consumer, {once, 1}, State0),
+    State1 = update_consumer(Consumer, {once, 1, as_settled}, State0),
     Effects1 = [{monitor, process, Pid} | Effects0],
     {State, Reply, Effects} = case checkout_one(State1) of
                                   {success, _, MsgId, Msg, S} ->
@@ -598,14 +626,14 @@ return(ConsumerId, MsgNumMsgs, #consumer{lifetime = Life} = Con0, Checked,
        Effects0, #state{consumers = Cons0, service_queue = SQ0} = State0) ->
     Con = case Life of
               auto ->
-                   Num = length(MsgNumMsgs),
-                   Con0#consumer{checked_out = Checked,
-                                 seen = Con0#consumer.seen - Num};
-               once ->
-                   Con0#consumer{checked_out = Checked}
-           end,
+                  Num = length(MsgNumMsgs),
+                  Con0#consumer{checked_out = Checked,
+                                credit = increase_credit(Con0, Num)};
+              once ->
+                  Con0#consumer{checked_out = Checked}
+          end,
     {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
-                                                 SQ0, Effects0),
+                                               SQ0, Effects0),
     State1 = lists:foldl(fun(dummy, #state{prefix_msg_count = MsgCount} = S0) ->
                                  S0#state{prefix_msg_count = MsgCount + 1};
                             ({MsgNum, Msg}, S0) ->
@@ -616,16 +644,32 @@ return(ConsumerId, MsgNumMsgs, #consumer{lifetime = Life} = Con0, Checked,
              Effects).
 
 % used to processes messages that are finished
-complete(ConsumerId, MsgRaftIdxs, Con0, Checked, Effects0,
-       #state{consumers = Cons0, service_queue = SQ0,
-              ra_indexes = Indexes0} = State0) ->
-    Con = Con0#consumer{checked_out = Checked},
+complete(ConsumerId, MsgRaftIdxs,
+         Con0, Checked, Effects0,
+         #state{consumers = Cons0, service_queue = SQ0,
+                ra_indexes = Indexes0} = State0) ->
+    %% credit_mode = as_settled should automatically top-up credit as messages
+    %% are as_settled or otherwise returned
+    Con = Con0#consumer{checked_out = Checked,
+                        credit = increase_credit(Con0, length(MsgRaftIdxs))},
     {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
-                                                SQ0, Effects0),
+                                               SQ0, Effects0),
     Indexes = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes0, MsgRaftIdxs),
     {State0#state{consumers = Cons,
                   ra_indexes = Indexes,
                   service_queue = SQ}, Effects, ok}.
+
+increase_credit(#consumer{lifetime = once,
+                          credit = Credit}, _) ->
+    %% once consumers cannot increment credit
+    Credit;
+increase_credit(#consumer{lifetime = auto,
+                          credit_mode = credited,
+                          credit = Credit}, _) ->
+    %% credit_mode: credit also doens't automatically increment credit
+    Credit;
+increase_credit(#consumer{credit = Current}, Credit) ->
+    Current + Credit.
 
 complete_and_checkout(IncomingRaftIdx, MsgIds, ConsumerId,
                       #consumer{checked_out = Checked0} = Con0,
@@ -633,8 +677,8 @@ complete_and_checkout(IncomingRaftIdx, MsgIds, ConsumerId,
     Checked = maps:without(MsgIds, Checked0),
     Discarded = maps:with(MsgIds, Checked0),
     MsgRaftIdxs = [RIdx || {_, {RIdx, _}} <- maps:values(Discarded)],
-    {State1, Effects1, _}  = complete(ConsumerId, MsgRaftIdxs,
-                                   Con0, Checked, Effects0, State0),
+    {State1, Effects1, _} = complete(ConsumerId, MsgRaftIdxs,
+                                     Con0, Checked, Effects0, State0),
     {State, Effects, _} = checkout(State1, Effects1),
     % settle metrics are incremented separately
     update_smallest_raft_index(IncomingRaftIdx, Indexes0, State, Effects).
@@ -778,11 +822,13 @@ checkout_one(#state{service_queue = SQ0,
                     case maps:find(ConsumerId, Cons0) of
                         {ok, #consumer{checked_out = Checked0,
                                        next_msg_id = Next,
-                                       seen = Seen} = Con0} ->
+                                       credit = Credit,
+                                       delivery_count = DelCnt} = Con0} ->
                             Checked = maps:put(Next, ConsumerMsg, Checked0),
                             Con = Con0#consumer{checked_out = Checked,
-                                                next_msg_id = Next+1,
-                                                seen = Seen+1},
+                                                next_msg_id = Next + 1,
+                                                credit = Credit - 1,
+                                                delivery_count = DelCnt + 1},
                             {Cons, SQ, []} = % we expect no effects
                                 update_or_remove_sub(ConsumerId, Con,
                                                      Cons0, SQ1, []),
@@ -811,19 +857,16 @@ checkout_one(#state{service_queue = SQ0,
 
 
 update_or_remove_sub(ConsumerId, #consumer{lifetime = auto,
-                                           checked_out = Checked,
-                                           num = Num} = Con,
+                                           credit = 0} = Con,
                      Cons, ServiceQueue, Effects) ->
-    case maps:size(Checked) < Num of
-        true ->
-            {maps:put(ConsumerId, Con, Cons),
-             uniq_queue_in(ConsumerId, ServiceQueue), Effects};
-        false ->
-            {maps:put(ConsumerId, Con, Cons), ServiceQueue, Effects}
-    end;
+    {maps:put(ConsumerId, Con, Cons), ServiceQueue, Effects};
+update_or_remove_sub(ConsumerId, #consumer{lifetime = auto} = Con,
+                     Cons, ServiceQueue, Effects) ->
+    {maps:put(ConsumerId, Con, Cons),
+     uniq_queue_in(ConsumerId, ServiceQueue), Effects};
 update_or_remove_sub(ConsumerId, #consumer{lifetime = once,
                                            checked_out = Checked,
-                                           num = N, seen = N} = Con,
+                                           credit = 0} = Con,
                      Cons, ServiceQueue, Effects) ->
     case maps:size(Checked)  of
         0 ->
@@ -850,31 +893,32 @@ uniq_queue_in(Key, Queue) ->
     end.
 
 
-update_consumer(ConsumerId, {Life, Num},
+update_consumer(ConsumerId, {Life, Credit, Mode},
                 #state{consumers = Cons0,
                        service_queue = ServiceQueue0} = State0) ->
-    Init = #consumer{lifetime = Life, num = Num},
+    %% TODO: this logic may not be correct for updating a pre-existing consumer
+    Init = #consumer{lifetime = Life, credit = Credit, credit_mode = Mode},
     Cons = maps:update_with(ConsumerId,
                              fun(S) ->
-                                     S#consumer{lifetime = Life, num = Num}
+                                     %% remove any in-flight messages from
+                                     %% the credit update
+                                     N = maps:size(S#consumer.checked_out),
+                                     C = max(0, Credit - N),
+                                     S#consumer{lifetime = Life,
+                                                credit = C}
                              end, Init, Cons0),
     ServiceQueue = maybe_queue_consumer(ConsumerId, maps:get(ConsumerId, Cons),
                                         ServiceQueue0),
 
     State0#state{consumers = Cons, service_queue = ServiceQueue}.
 
-maybe_queue_consumer(ConsumerId, #consumer{checked_out = Checked, num = Num},
+maybe_queue_consumer(ConsumerId, #consumer{credit = Credit},
                      ServiceQueue0) ->
-    case maps:size(Checked) of
-        Size when Size < Num ->
+    case Credit > 0 of
+        true ->
             % consumerect needs service - check if already on service queue
-            case queue:member(ConsumerId, ServiceQueue0) of
-                true ->
-                    ServiceQueue0;
-                false ->
-                    queue:in(ConsumerId, ServiceQueue0)
-            end;
-        _ ->
+            uniq_queue_in(ConsumerId, ServiceQueue0);
+        false ->
             ServiceQueue0
     end.
 
@@ -921,13 +965,43 @@ enq_enq_checkout_test() ->
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     {_State3, Effects, _} =
-        apply(meta(3), {checkout, {once, 2}, Cid}, [], State2),
+        apply(meta(3), {checkout, {once, 2, as_settled}, Cid}, [], State2),
     ?ASSERT_EFF({monitor, _, _}, Effects),
     ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, Effects),
     ok.
 
+credit_enq_enq_checkout_settled_credit_test() ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, _} = enq(1, 1, first, test_init(test)),
+    {State2, _} = enq(2, 2, second, State1),
+    {State3, Effects, _} =
+        apply(meta(3), {checkout, {once, 1, credited}, Cid}, [], State2),
+    ?ASSERT_EFF({monitor, _, _}, Effects),
+    Deliveries = lists:filter(fun ({send_msg, _, {delivery, _, _}, _}) -> true;
+                                  (_) -> false
+                              end, Effects),
+    ?assertEqual(1, length(Deliveries)),
+    %% settle the delivery this should _not_ result in further messages being
+    %% delivered
+    {State4, SettledEffects} = settle(Cid, 4, 1, State3),
+    ?assertEqual(false, lists:any(fun ({send_msg, _, {delivery, _, _}, _}) ->
+                                          true;
+                                      (_) -> false
+                                  end, SettledEffects)),
+    %% granting credit (3) should deliver the second msg if the receivers
+    %% delivery count is (1)
+    {State5, CreditEffects} = credit(Cid, 5, 1, 1, State4),
+    % ?debugFmt("CreditEffects  ~p ~n~p", [CreditEffects, State4]),
+    ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, CreditEffects),
+    {_State6, FinalEffects} = enq(6, 3, third, State5),
+    ?assertEqual(false, lists:any(fun ({send_msg, _, {delivery, _, _}, _}) ->
+                                          true;
+                                      (_) -> false
+                                  end, FinalEffects)),
+    ok.
+
 enq_enq_deq_test() ->
-    Cid = {<<"enq_enq_checkout_get_test">>, self()},
+    Cid = {?FUNCTION_NAME, self()},
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     % get returns a reply value
@@ -936,18 +1010,18 @@ enq_enq_deq_test() ->
     ok.
 
 enq_enq_deq_deq_settle_test() ->
-    Cid = {<<"enq_enq_checkout_get_test">>, self()},
+    Cid = {?FUNCTION_NAME, self()},
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     % get returns a reply value
     {State3, [{monitor, _, _}], {dequeue, {0, {_, first}}}} =
         apply(meta(3), {checkout, {dequeue, unsettled}, Cid}, [], State2),
     {_State4, _Effects4, {dequeue, empty}} =
-        apply(meta(3), {checkout, {dequeue, unsettled}, Cid}, [], State3),
+        apply(meta(4), {checkout, {dequeue, unsettled}, Cid}, [], State3),
     ok.
 
 enq_enq_checkout_get_settled_test() ->
-    Cid = {<<"enq_enq_checkout_get_test">>, self()},
+    Cid = {?FUNCTION_NAME, self()},
     {State1, _} = enq(1, 1, first, test_init(test)),
     % get returns a reply value
     {_State2, _Effects, {dequeue, {0, {_, first}}}} =
@@ -955,21 +1029,21 @@ enq_enq_checkout_get_settled_test() ->
     ok.
 
 checkout_get_empty_test() ->
-    Cid = {<<"checkout_get_empty_test">>, self()},
+    Cid = {?FUNCTION_NAME, self()},
     State = test_init(test),
     {_State2, [], {dequeue, empty}} =
         apply(meta(1), {checkout, {dequeue, unsettled}, Cid}, [], State),
     ok.
 
 untracked_enq_deq_test() ->
-    Cid = {<<"untracked_enq_deq_test">>, self()},
+    Cid = {?FUNCTION_NAME, self()},
     State0 = test_init(test),
     {State1, _, _} = apply(meta(1), {enqueue, undefined, undefined, first}, [], State0),
     {_State2, _, {dequeue, {0, {_, first}}}} =
         apply(meta(3), {checkout, {dequeue, settled}, Cid}, [], State1),
     ok.
 release_cursor_test() ->
-    Cid = {<<"release_cursor_test">>, self()},
+    Cid = {?FUNCTION_NAME, self()},
     {State1, _} = enq(1, 1, first,  test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     {State3, _} = check(Cid, 3, 10, State2),
@@ -981,7 +1055,7 @@ release_cursor_test() ->
     ok.
 
 checkout_enq_settle_test() ->
-    Cid = {<<"checkout_enq_settle_test">>, self()},
+    Cid = {?FUNCTION_NAME, self()},
     {State1, [{monitor, _, _}]} = check(Cid, 1, test_init(test)),
     {State2, Effects0} = enq(2, 1,  first, State1),
     ?ASSERT_EFF({send_msg, _,
@@ -996,7 +1070,7 @@ checkout_enq_settle_test() ->
     ok.
 
 out_of_order_enqueue_test() ->
-    Cid = {<<"out_of_order_enqueue_test">>, self()},
+    Cid = {?FUNCTION_NAME, self()},
     {State1, [{monitor, _, _}]} = check_n(Cid, 5, 5, test_init(test)),
     {State2, Effects2} = enq(2, 1, first, State1),
     ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
@@ -1010,7 +1084,6 @@ out_of_order_enqueue_test() ->
     ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects4),
     {_State5, Effects5} = enq(5, 2, second, State4),
     % assert two deliveries were now made
-    ?debugFmt("Effects5 ~n~p~n", [Effects5]),
     ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, second}},
                                                {_, {_, third}},
                                                {_, {_, fourth}}]}, _},
@@ -1018,7 +1091,7 @@ out_of_order_enqueue_test() ->
     ok.
 
 out_of_order_first_enqueue_test() ->
-    Cid = {<<"out_of_order_enqueue_test">>, self()},
+    Cid = {?FUNCTION_NAME, self()},
     {State1, _} = check_n(Cid, 5, 5, test_init(test)),
     {_State2, Effects2} = enq(2, 10, first, State1),
     ?ASSERT_EFF({monitor, process, _}, Effects2),
@@ -1075,7 +1148,7 @@ cancelled_checkout_out_test() ->
     {State0, [_]} = enq(2, 2, second, State00),
     {State1, _} = check_auto(Cid, 2, State0),
     % cancelled checkout should return all pending messages to queue
-    {State2, _Effects, _} = apply(meta(3), {checkout, cancel, Cid}, [], State1),
+    {State2, _, _} = apply(meta(3), {checkout, cancel, Cid}, [], State1),
 
     {State3, _, {dequeue, {0, {_, first}}}} =
         apply(meta(3), {checkout, {dequeue, settled}, Cid}, [], State2),
@@ -1226,7 +1299,7 @@ snapshot_recover_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 2}, Cid},
+                {checkout, {auto, 2, as_settled}, Cid},
                 {enqueue, self(), 1, one},
                 {enqueue, self(), 2, two},
                 {enqueue, self(), 3, three},
@@ -1255,7 +1328,7 @@ enq_check_settle_snapshot_recover_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 2}, Cid},
+                {checkout, {auto, 2, as_settled}, Cid},
                 {enqueue, self(), 1, one},
                 {enqueue, self(), 2, two},
                 {settle, [1], Cid},
@@ -1303,7 +1376,7 @@ delivery_query_returns_deliveries_test() ->
     Tag = <<"release_cursor_snapshot_state_test">>,
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 5}, Cid},
+                {checkout, {auto, 5, as_settled}, Cid},
                 {enqueue, self(), 1, one},
                 {enqueue, self(), 2, two},
                 {enqueue, self(), 3, tre},
@@ -1335,7 +1408,6 @@ duplicate_delivery_test() ->
     ok.
 
 state_enter_test() ->
-
     S0 = init(#{name => the_name,
                 become_leader_handler => {m, f, [a]}}),
     [{mod_call, m, f, [a, the_name]}] = state_enter(leader, S0),
@@ -1374,19 +1446,26 @@ deq(Idx, Cid, Settlement, State0) ->
     {State, Msg}.
 
 check_n(Cid, Idx, N, State) ->
-    strip_reply(apply(meta(Idx), {checkout, {auto, N}, Cid}, [], State)).
+    strip_reply(apply(meta(Idx),
+                      {checkout, {auto, N, as_settled}, Cid}, [], State)).
 
 check(Cid, Idx, State) ->
-    strip_reply(apply(meta(Idx), {checkout, {once, 1}, Cid}, [], State)).
+    strip_reply(apply(meta(Idx),
+                      {checkout, {once, 1, as_settled}, Cid}, [], State)).
 
 check_auto(Cid, Idx, State) ->
-    strip_reply(apply(meta(Idx), {checkout, {auto, 1}, Cid}, [], State)).
+    strip_reply(apply(meta(Idx),
+                      {checkout, {auto, 1, as_settled}, Cid}, [], State)).
 
 check(Cid, Idx, Num, State) ->
-    strip_reply(apply(meta(Idx), {checkout, {once, Num}, Cid}, [], State)).
+    strip_reply(apply(meta(Idx),
+                      {checkout, {once, Num, as_settled}, Cid}, [], State)).
 
 settle(Cid, Idx, MsgId, State) ->
     strip_reply(apply(meta(Idx), {settle, [MsgId], Cid}, [], State)).
+
+credit(Cid, Idx, Credit, DelCnt, State) ->
+    strip_reply(apply(meta(Idx), {credit, Credit, DelCnt, Cid}, [], State)).
 
 strip_reply({State, Effects, _Replu}) ->
     {State, Effects}.

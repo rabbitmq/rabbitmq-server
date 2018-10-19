@@ -1077,8 +1077,10 @@ credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast,
                                      [{credit, ChPid, CTag, Credit, Drain}]}).
 
-basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid, _CTag, _) ->
-    delegate:invoke(QPid, {gen_server2, call, [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
+basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid,
+          _CTag, _) ->
+    delegate:invoke(QPid, {gen_server2, call,
+                           [{basic_get, ChPid, NoAck, LimiterPid}, infinity]});
 basic_get(#amqqueue{pid = {Name, _} = Id, type = quorum, name = QName} = Q, _ChPid, NoAck,
           _LimiterPid, CTag, QStates) ->
     QState0 = get_quorum_state(Id, QName, QStates),
