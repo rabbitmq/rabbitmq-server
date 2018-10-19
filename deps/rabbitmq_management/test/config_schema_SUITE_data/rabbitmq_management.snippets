@@ -8,27 +8,75 @@
        [{http_log_dir,"test/config_schema_SUITE_data/rabbit-mgmt"},
         {rates_mode,basic}]}],
   [rabbitmq_management]},
- {listener_port,
-  "management.listener.port = 12345",
-  [{rabbitmq_management,[{listener,[{port,12345}]}]}],
+
+ %%
+ %% TCP listener
+ %%
+
+ {tcp_listener_port_only,
+  "management.tcp.port = 15674",
+  [{rabbitmq_management,[
+                         {tcp_config,[
+                                      {port,15674}
+                                     ]}
+                        ]}],
   [rabbitmq_management]},
- {ssl,
-  "management.listener.port = 15671
-   management.listener.ssl = true
-   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   management.listener.ssl_opts.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   management.listener.ssl_opts.keyfile = test/config_schema_SUITE_data/certs/key.pem",
-  [{rabbitmq_management,
-       [{listener,
-            [{port,15671},
-             {ssl,true},
-             {ssl_opts,
-                 [{cacertfile,
-                      "test/config_schema_SUITE_data/certs/cacert.pem"},
-                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-                  {keyfile,
-                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
+
+ {tcp_listener_interface_port,
+  "management.tcp.ip   = 192.168.1.2
+   management.tcp.port = 15674",
+  [{rabbitmq_management,[
+                         {tcp_config,[
+                                      {ip, "192.168.1.2"},
+                                      {port,15674}
+                                     ]}
+                        ]}],
   [rabbitmq_management]},
+
+
+ %%
+ %% TLS listener
+ %%
+
+ {tls_listener_port_only,
+  "management.ssl.port = 15671",
+  [{rabbitmq_management,[
+                         {ssl_config,[
+                                      {port,15671}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tls_listener_interface_port,
+  "management.ssl.ip   = 192.168.1.2
+   management.ssl.port = 15671",
+  [{rabbitmq_management,[
+                         {ssl_config,[
+                                      {ip, "192.168.1.2"},
+                                      {port,15671}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tls_listener,
+  "management.ssl.ip   = 192.168.1.2
+   management.ssl.port = 15671
+   management.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
+   management.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem",
+  [{rabbitmq_management,[
+                         {ssl_config,[
+                                      {ip, "192.168.1.2"},
+                                      {port,15671},
+                                      {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+                                      {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                                      {keyfile,"test/config_schema_SUITE_data/certs/key.pem"}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
+
+
  {retention_policies,
   "management.sample_retention_policies.global.minute  = 5
    management.sample_retention_policies.global.hour    = 60
@@ -43,29 +91,6 @@
             [{global,[{60,5},{3600,60},{86400,1200}]},
              {basic,[{60,5},{3600,60}]},
              {detailed,[{10,5}]}]}]}],
-  [rabbitmq_management]},
- {listener_ip,
-  "management.listener.port = 15672
-   management.listener.ip   = 127.0.0.1",
-  [{rabbitmq_management,[{listener,[{port,15672},{ip,"127.0.0.1"}]}]}],
-  [rabbitmq_management]},
- {ssl_port,
-  "management.listener.port = 15672
-   management.listener.ssl  = true
-
-   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   management.listener.ssl_opts.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   management.listener.ssl_opts.keyfile    = test/config_schema_SUITE_data/certs/key.pem",
-  [{rabbitmq_management,
-       [{listener,
-            [{port,15672},
-             {ssl,true},
-             {ssl_opts,
-                 [{cacertfile,
-                      "test/config_schema_SUITE_data/certs/cacert.pem"},
-                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-                  {keyfile,
-                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
   [rabbitmq_management]},
 
  {path_prefix,
@@ -109,7 +134,59 @@
   ], [rabbitmq_management]
  },
 
- {server_opts_compress,
+
+ %%
+ %% Legacy listener configuration
+ %%
+
+ {legacy_tcp_listener,
+  "management.listener.port = 12345",
+  [{rabbitmq_management,[{listener,[{port,12345}]}]}],
+  [rabbitmq_management]},
+
+ {legacy_ssl_listener,
+  "management.listener.port = 15671
+   management.listener.ssl = true
+   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.listener.ssl_opts.certfile = test/config_schema_SUITE_data/certs/cert.pem
+   management.listener.ssl_opts.keyfile = test/config_schema_SUITE_data/certs/key.pem",
+  [{rabbitmq_management,
+       [{listener,
+            [{port,15671},
+             {ssl,true},
+             {ssl_opts,
+                 [{cacertfile,
+                      "test/config_schema_SUITE_data/certs/cacert.pem"},
+                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                  {keyfile,
+                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
+  [rabbitmq_management]},
+
+ {legacy_tcp_listener_ip,
+  "management.listener.port = 15672
+   management.listener.ip   = 127.0.0.1",
+  [{rabbitmq_management,[{listener,[{port,15672},{ip,"127.0.0.1"}]}]}],
+  [rabbitmq_management]},
+ {legacy_ssl_listener_port,
+  "management.listener.port = 15672
+   management.listener.ssl  = true
+
+   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.listener.ssl_opts.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   management.listener.ssl_opts.keyfile    = test/config_schema_SUITE_data/certs/key.pem",
+  [{rabbitmq_management,
+       [{listener,
+            [{port,15672},
+             {ssl,true},
+             {ssl_opts,
+                 [{cacertfile,
+                      "test/config_schema_SUITE_data/certs/cacert.pem"},
+                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                  {keyfile,
+                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
+  [rabbitmq_management]},
+
+ {legacy_server_opts_compress,
   "management.listener.server.compress = true",
   [
    {rabbitmq_management, [
@@ -118,7 +195,7 @@
   ], [rabbitmq_management]
  },
 
- {server_opts_compress_and_idle_timeout,
+ {legacy_server_opts_compress_and_idle_timeout,
   "management.listener.server.compress     = true
    management.listener.server.idle_timeout = 123",
   [
@@ -129,7 +206,7 @@
   ], [rabbitmq_management]
  },
 
- {server_opts_compress_and_multiple_timeouts,
+ {legacy_server_opts_compress_and_multiple_timeouts,
   "management.listener.server.compress     = true
    management.listener.server.idle_timeout = 123
    management.listener.server.inactivity_timeout = 456
@@ -144,7 +221,7 @@
   ], [rabbitmq_management]
  },
 
- {server_opts_multiple_timeouts_only,
+ {legacy_server_opts_multiple_timeouts_only,
   "management.listener.server.idle_timeout = 123
    management.listener.server.inactivity_timeout = 456
    management.listener.server.request_timeout = 789",
@@ -157,7 +234,7 @@
   ], [rabbitmq_management]
  },
 
- {server_opts_shutdown_timeout,
+ {legacy_server_opts_shutdown_timeout,
   "management.listener.server.shutdown_timeout = 7000",
   [
    {rabbitmq_management, [
@@ -166,7 +243,7 @@
   ], [rabbitmq_management]
  },
 
- {server_opts_max_keepalive,
+ {legacy_server_opts_max_keepalive,
   "management.listener.server.max_keepalive = 120",
   [
    {rabbitmq_management, [
@@ -174,4 +251,5 @@
                          ]}
   ], [rabbitmq_management]
  }
+
 ].
