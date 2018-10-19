@@ -234,10 +234,11 @@ recover(Queues) ->
                  % so needs to be started from scratch.
                  Machine = ra_machine(Q0),
                  RaNodes = [{Name, Node} || Node <- Nodes],
-                 % TODO: should we crash the vhost here or just log the error
-                 % and continue?
+                 %% We should not crash the vhost recovery because a single ra member
+                 %% could not be started
+                 %% TODO: handle errors
                  ok = ra:start_server(Name, {Name, node()},
-                                    Machine, RaNodes)
+                                      Machine, RaNodes)
          end,
          {_, Q} = rabbit_amqqueue:internal_declare(Q0, true),
          Q

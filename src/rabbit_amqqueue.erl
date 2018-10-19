@@ -224,7 +224,7 @@
          arguments]).
 
 warn_file_limit() ->
-    DurableQueues = find_durable_queues(),
+    DurableQueues = find_recoverable_queues(),
     L = length(DurableQueues),
 
     %% if there are not enough file handles, the server might hang
@@ -239,8 +239,8 @@ warn_file_limit() ->
     end.
 
 recover(VHost) ->
-    Queues = find_durable_queues(VHost),
-    {Classic, Quorum} = filter_per_type(Queues),
+    Classic = find_local_durable_classic_queues(VHost),
+    Quorum = find_local_quorum_queues(VHost),
     recover_classic_queues(VHost, Classic) ++ rabbit_quorum_queue:recover(Quorum).
 
 recover_classic_queues(VHost, Queues) ->
@@ -281,7 +281,7 @@ start(Qs) ->
     ok.
 
 mark_local_durable_queues_stopped(VHost) ->
-    Qs = find_durable_queues(VHost),
+    Qs = find_local_durable_classic_queues(VHost),
     rabbit_misc:execute_mnesia_transaction(
         fun() ->
             [ store_queue(Q#amqqueue{ state = stopped })
@@ -289,30 +289,39 @@ mark_local_durable_queues_stopped(VHost) ->
               State =/= stopped ]
         end).
 
-find_durable_queues(VHost) ->
+find_local_quorum_queues(VHost) ->
+    Node = node(),
+    mnesia:async_dirty(
+      fun () ->
+              qlc:e(qlc:q([Q || Q = #amqqueue{vhost = VH,
+                                              type = quorum,
+                                              quorum_nodes = QuorumNodes}
+                                    <- mnesia:table(rabbit_durable_queue),
+                                    VH =:= VHost,
+                                    (lists:member(Node, QuorumNodes))]))
+      end).
+
+find_local_durable_classic_queues(VHost) ->
     Node = node(),
     mnesia:async_dirty(
       fun () ->
               qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
                                               vhost = VH,
                                               pid  = Pid,
-                                              type = Type,
-                                              quorum_nodes = QuorumNodes}
+                                              type = classic}
                                     <- mnesia:table(rabbit_durable_queue),
                                 VH =:= VHost,
-                                (Type == classic andalso
-                                      (is_local_to_node(Pid, Node) andalso
-                                       %% Terminations on node down will not remove the rabbit_queue
-                                       %% record if it is a mirrored queue (such info is now obtained from
-                                       %% the policy). Thus, we must check if the local pid is alive
-                                       %% - if the record is present - in order to restart.
-                                             (mnesia:read(rabbit_queue, Name, read) =:= []
-                                              orelse not rabbit_mnesia:is_process_alive(Pid))))
-                                    orelse (Type == quorum andalso lists:member(Node, QuorumNodes))
+                                (is_local_to_node(Pid, Node) andalso
+                                 %% Terminations on node down will not remove the rabbit_queue
+                                 %% record if it is a mirrored queue (such info is now obtained from
+                                 %% the policy). Thus, we must check if the local pid is alive
+                                 %% - if the record is present - in order to restart.
+                                 (mnesia:read(rabbit_queue, Name, read) =:= []
+                                  orelse not rabbit_mnesia:is_process_alive(Pid)))
                           ]))
       end).
 
-find_durable_queues() ->
+find_recoverable_queues() ->
     Node = node(),
     mnesia:async_dirty(
       fun () ->
