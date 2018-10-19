@@ -377,8 +377,7 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                                       slave_pids_pending_shutdown = [],
                                       vhost                       = VHost,
                                       options = #{user => ActingUser},
-                                      type               = Type,
-                                      created_at         = erlang:monotonic_time()})),
+                                      type               = Type})),
 
     case Type of
         classic ->
