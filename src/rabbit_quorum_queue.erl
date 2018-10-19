@@ -127,8 +127,6 @@ declare(#amqqueue{name = QName,
             case ra:start_cluster(RaName, RaMachine,
                                   [{RaName, Node} || Node <- Nodes]) of
                 {ok, _, _} ->
-                    %% TODO does the quorum queue receive the `force_event_refresh`?
-                    %% what do we do with it?
                     rabbit_event:notify(queue_created,
                                         [{name, QName},
                                          {durable, Durable},
@@ -498,7 +496,7 @@ args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
 dead_letter_publish(_, undefined, _, _, _) ->
     ok;
 dead_letter_publish(VHost, X, RK, QName, ReasonMsgs) ->
-    rabbit_vhost_dead_letter:publish(VHost, X, RK, QName, ReasonMsgs).
+    rabbit_dead_letter:publish(VHost, X, RK, QName, ReasonMsgs).
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->

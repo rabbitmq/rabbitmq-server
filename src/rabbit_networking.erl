@@ -35,7 +35,7 @@
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
-         close_connection/2, force_connection_event_refresh/1, accept_ack/2,
+         close_connection/2, accept_ack/2,
          tcp_host/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
@@ -87,7 +87,6 @@
 -spec connection_info_all(rabbit_types:info_keys()) ->
           [rabbit_types:infos()].
 -spec close_connection(pid(), string()) -> 'ok'.
--spec force_connection_event_refresh(reference()) -> 'ok'.
 -spec accept_ack(any(), rabbit_net:socket()) -> ok.
 
 -spec on_node_down(node()) -> 'ok'.
@@ -368,10 +367,6 @@ close_connection(Pid, Explanation) ->
                                [Pid, Explanation]),
             ok
     end.
-
-force_connection_event_refresh(Ref) ->
-    [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
-    ok.
 
 accept_ack(Ref, Sock) ->
     ok = ranch:accept_ack(Ref),

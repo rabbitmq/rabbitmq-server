@@ -30,7 +30,7 @@
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
 -export([list_down/1, count/1, list_names/0, list_local_names/0]).
--export([force_event_refresh/1, notify_policy_changed/1]).
+-export([notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
 -export([basic_get/6, basic_consume/12, basic_cancel/6, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
@@ -39,7 +39,7 @@
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
--export([is_mirrored/1, is_dead_exclusive/1]). % Note: exported due to use in qlc expression.
+-export([is_replicated/1, is_dead_exclusive/1]). % Note: exported due to use in qlc expression.
 -export([list_local_followers/0]).
 -export([format/1]).
 
@@ -130,7 +130,6 @@
 -spec info_all(rabbit_types:vhost()) -> [rabbit_types:infos()].
 -spec info_all(rabbit_types:vhost(), rabbit_types:info_keys()) ->
           [rabbit_types:infos()].
--spec force_event_refresh(reference()) -> 'ok'.
 -spec notify_policy_changed(rabbit_types:amqqueue()) -> 'ok'.
 -spec consumers(rabbit_types:amqqueue()) ->
           [{pid(), rabbit_types:ctag(), boolean(), non_neg_integer(),
@@ -210,7 +209,7 @@
           'ok' | rabbit_types:error('not_mirrored').
 -spec cancel_sync_mirrors(rabbit_types:amqqueue() | pid()) ->
           'ok' | {'ok', 'not_syncing'}.
--spec is_mirrored(rabbit_types:amqqueue()) -> boolean().
+-spec is_replicated(rabbit_types:amqqueue()) -> boolean().
 
 -spec pid_of(rabbit_types:amqqueue()) ->
           {'ok', pid()} | rabbit_types:error('not_found').
@@ -410,7 +409,7 @@ get_queue_type(Args) ->
         undefined ->
             classic;
         {_, V} ->
-            binary_to_atom(V, utf8)
+            erlang:binary_to_existing_atom(V, utf8)
     end.
 
 internal_declare(Q, true) ->
@@ -560,7 +559,7 @@ with(Name, F, E, RetriesLeft) ->
     end.
 
 retry_wait(Q = #amqqueue{pid = QPid, name = Name, state = QState}, F, E, RetriesLeft) ->
-    case {QState, is_mirrored(Q)} of
+    case {QState, is_replicated(Q)} of
         %% We don't want to repeat an operation if
         %% there are no slaves to migrate to
         {stopped, false} ->
@@ -886,11 +885,6 @@ list_local(VHostPath) ->
     [ Q || #amqqueue{state = State, pid = QPid} = Q <- list(VHostPath),
            State =/= crashed, is_local_to_node(QPid, node()) ].
 
-force_event_refresh(Ref) ->
-    [gen_server2:cast(Q#amqqueue.pid,
-                      {force_event_refresh, Ref}) || Q <- list()],
-    ok.
-
 notify_policy_changed(#amqqueue{pid = QPid}) ->
     gen_server2:cast(QPid, policy_changed).
 
@@ -1121,26 +1115,26 @@ basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q, 
               _LimiterPid, _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, _ActingUser, QStates) ->
     ok = check_consume_arguments(QName, Args),
-    FState0 = get_quorum_state(Id, QName, QStates),
-    {ok, FState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid, ConsumerPrefetchCount,
+    QState0 = get_quorum_state(Id, QName, QStates),
+    {ok, QState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid, ConsumerPrefetchCount,
                                                      ConsumerTag, ExclusiveConsume, Args,
-                                                     OkMsg, FState0),
-    {ok, maps:put(Name, FState, QStates)}.
+                                                     OkMsg, QState0),
+    {ok, maps:put(Name, QState, QStates)}.
 
 basic_cancel(#amqqueue{pid = QPid, type = classic}, ChPid, ConsumerTag, OkMsg, ActingUser,
              QState) ->
     case delegate:invoke(QPid, {gen_server2, call,
-                           [{basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser},
-                            infinity]}) of
+                                [{basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser},
+                                 infinity]}) of
         ok ->
             {ok, QState};
         Err -> Err
     end;
 basic_cancel(#amqqueue{pid = {Name, _} = Id, type = quorum}, ChPid,
              ConsumerTag, OkMsg, _ActingUser, QStates) ->
-    FState0 = get_quorum_state(Id, QStates),
-    {ok, FState} = rabbit_quorum_queue:basic_cancel(ConsumerTag, ChPid, OkMsg, FState0),
-    {ok, maps:put(Name, FState, QStates)}.
+    QState0 = get_quorum_state(Id, QStates),
+    {ok, QState} = rabbit_quorum_queue:basic_cancel(ConsumerTag, ChPid, OkMsg, QState0),
+    {ok, maps:put(Name, QState, QStates)}.
 
 notify_decorators(#amqqueue{pid = QPid}) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]}).
@@ -1269,9 +1263,9 @@ cancel_sync_mirrors(#amqqueue{pid = QPid}) ->
 cancel_sync_mirrors(QPid) ->
     delegate:invoke(QPid, {gen_server2, call, [cancel_sync_mirrors, infinity]}).
 
-is_mirrored(#amqqueue{type = quorum}) ->
+is_replicated(#amqqueue{type = quorum}) ->
     true;
-is_mirrored(Q) ->
+is_replicated(Q) ->
     rabbit_mirror_queue_misc:is_mirrored(Q).
 
 is_dead_exclusive(#amqqueue{exclusive_owner = none}) ->
@@ -1418,7 +1412,6 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
     %% the slave receives the message direct from the channel, and the
     %% other when it receives it via GM.
 
-    %% TODO what to do with credit flow for quorum queues?
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel
         %% process. We are accessing the rabbit_channel process
@@ -1448,16 +1441,12 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
             _ ->
                 lists:foldl(
                   fun({{Name, _} = Pid, QName}, QStates) ->
-                          FState0 = get_quorum_state(Pid, QName, QStates),
-                          case rabbit_quorum_queue:deliver(Confirm, Delivery, FState0) of
-                              {ok, FState} ->
-                                  maps:put(Name, FState, QStates);
-                              {slow, FState} ->
-                                  maps:put(Name, FState, QStates);
-                              {error, stop_sending} ->
-                                  %% TODO
-                                  rabbit_log:warning("STOP_SENDING in deliver ~n", []),
-                                  QStates
+                          QState0 = get_quorum_state(Pid, QName, QStates),
+                          case rabbit_quorum_queue:deliver(Confirm, Delivery, QState0) of
+                              {ok, QState} ->
+                                  maps:put(Name, QState, QStates);
+                              {slow, QState} ->
+                                  maps:put(Name, QState, QStates)
                           end
                   end, QueueState0, Quorum)
         end,
@@ -1481,10 +1470,9 @@ qpids(Qs) ->
     {QuoPids, MPids, lists:append(SPids)}.
 
 get_quorum_state({Name, _} = Id, QName, Map) ->
-    try
-        maps:get(Name, Map)
-    catch
-        error:{badkey, _} ->
+    case maps:find(Name, Map) of
+        {ok, S} -> S;
+        error ->
             rabbit_quorum_queue:init_state(Id, QName)
     end.
 

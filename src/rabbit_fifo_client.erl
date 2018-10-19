@@ -102,13 +102,8 @@ init(ClusterName, Servers, SoftLimit, BlockFun, UnblockFun) ->
 %% {@module} assigns a sequence number to every raft command it issues. The
 %% SequenceNumber can be correlated to the applied sequence numbers returned
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
-%%
-%% `{error, stop_sending}' if the number of message not yet known to
-%% have been successfully applied by ra has reached the maximum limit.
-%% If this happens the caller should either discard or cache the requested
-%% enqueue until at least one <code>ra_event</code> has been processes.
 -spec enqueue(Correlation :: term(), Msg :: term(), State :: state()) ->
-    {ok | slow, state()} | {error, stop_sending}.
+    {ok | slow, state()}.
 enqueue(Correlation, Msg, State0 = #state{slow = Slow,
                                           block_handler = BlockFun}) ->
     Node = pick_node(State0),
@@ -134,12 +129,8 @@ enqueue(Correlation, Msg, State0 = #state{slow = Slow,
 %% SequenceNumber can be correlated to the applied sequence numbers returned
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
 %%
-%% `{error, stop_sending}' if the number of message not yet known to
-%% have been successfully applied by ra has reached the maximum limit.
-%% If this happens the caller should either discard or cache the requested
-%% enqueue until at least one <code>ra_event</code> has been processes.
 -spec enqueue(Msg :: term(), State :: state()) ->
-    {ok | slow, state()} | {error, stop_sending}.
+    {ok | slow, state()}.
 enqueue(Msg, State) ->
     enqueue(undefined, Msg, State).
 
@@ -177,10 +168,6 @@ dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
 %% tag is `slow' it means the limit is approaching and it is time to slow down
 %% the sending rate.
 %%
-%% `{error, stop_sending}' if the number of commands not yet known to
-%% have been successfully applied by ra has reached the maximum limit.
-%% If this happens the caller should either discard or cache the requested
-%% enqueue until at least one <code>ra_event</code> has been processes.
 -spec settle(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {ok, state()}.
 settle(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
@@ -214,10 +201,6 @@ settle(ConsumerTag, [_|_] = MsgIds,
 %% tag is `slow' it means the limit is approaching and it is time to slow down
 %% the sending rate.
 %%
-%% `{error, stop_sending}' if the number of commands not yet known to
-%% have been successfully applied by ra has reached the maximum limit.
-%% If this happens the caller should either discard or cache the requested
-%% enqueue until at least one <code>ra_event</code> has been processes.
 -spec return(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
     {ok, state()}.
 return(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
@@ -252,13 +235,8 @@ return(ConsumerTag, [_|_] = MsgIds,
 %% `{ok | slow, State}' if the command was successfully sent. If the return
 %% tag is `slow' it means the limit is approaching and it is time to slow down
 %% the sending rate.
-%%
-%% `{error, stop_sending}' if the number of commands not yet known to
-%% have been successfully applied by ra has reached the maximum limit.
-%% If this happens the caller should either discard or cache the requested
-%% enqueue until at least one <code>ra_event</code> has been processes.
 -spec discard(rabbit_fifo:consumer_tag(), [rabbit_fifo:msg_id()], state()) ->
-    {ok | slow, state()} | {error, stop_sending}.
+    {ok | slow, state()}.
 discard(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_node(State0),
     Cmd = {discard, MsgIds, consumer_id(ConsumerTag)},

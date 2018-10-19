@@ -63,7 +63,6 @@
          emit_info_all/4, info_local/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([refresh_interceptors/0]).
--export([force_event_refresh/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
@@ -255,7 +254,6 @@
 -spec info_all(rabbit_types:info_keys()) -> [rabbit_types:infos()].
 -spec refresh_config_local() -> 'ok'.
 -spec ready_for_close(pid()) -> 'ok'.
--spec force_event_refresh(reference()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 
@@ -399,10 +397,6 @@ refresh_interceptors() ->
 
 ready_for_close(Pid) ->
     rabbit_channel_common:ready_for_close(Pid).
-
-force_event_refresh(Ref) ->
-    [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
-    ok.
 
 list_queue_states(Pid) ->
     gen_server2:call(Pid, list_queue_states).
@@ -614,11 +608,6 @@ handle_cast({send_drained, CTagCredit}, State = #ch{writer_pid = WriterPid}) ->
                                                credit_drained = CreditDrained})
      || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
-
-handle_cast({force_event_refresh, Ref}, State) ->
-    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State),
-                        Ref),
-    noreply(rabbit_event:init_stats_timer(State, #ch.stats_timer));
 
 handle_cast({mandatory_received, MsgSeqNo}, State = #ch{mandatory = Mand}) ->
     %% NB: don't call noreply/1 since we don't want to send confirms.

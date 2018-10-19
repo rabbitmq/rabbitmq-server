@@ -29,8 +29,7 @@
     delegates_async,
     delegates_sync,
     queue_cleanup,
-    declare_on_dead_queue,
-    refresh_events
+    declare_on_dead_queue
   ]).
 
 all() ->
@@ -240,34 +239,6 @@ declare_on_dead_queue1(_Config, SecondaryNode) ->
     after ?TIMEOUT -> throw(failed_to_create_and_kill_queue)
     end.
 
-refresh_events(Config) ->
-    {I, J} = ?config(test_direction, Config),
-    From = rabbit_ct_broker_helpers:get_node_config(Config, I, nodename),
-    To = rabbit_ct_broker_helpers:get_node_config(Config, J, nodename),
-    rabbit_ct_broker_helpers:add_code_path_to_node(To, ?MODULE),
-    passed = rabbit_ct_broker_helpers:rpc(Config,
-      From, ?MODULE, refresh_events1, [Config, To]).
-
-refresh_events1(Config, SecondaryNode) ->
-    dummy_event_receiver:start(self(), [node(), SecondaryNode],
-                               [channel_created, queue_created]),
-
-    {_Writer, Ch} = test_spawn(),
-    expect_events(pid, Ch, channel_created),
-    rabbit_channel:shutdown(Ch),
-
-    {_Writer2, Ch2} = test_spawn(SecondaryNode),
-    expect_events(pid, Ch2, channel_created),
-    rabbit_channel:shutdown(Ch2),
-
-    {new, #amqqueue{name = QName} = Q} =
-        rabbit_amqqueue:declare(queue_name(Config, <<"refresh_events-q">>),
-                                false, false, [], none, <<"acting-user">>),
-    expect_events(name, QName, queue_created),
-    rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
-
-    dummy_event_receiver:stop(),
-    passed.
 
 make_responder(FMsg) -> make_responder(FMsg, timeout).
 make_responder(FMsg, Throw) ->
@@ -307,19 +278,6 @@ dead_queue_loop(QueueName, OldPid) ->
                   Q
     end.
 
-expect_events(Tag, Key, Type) ->
-    expect_event(Tag, Key, Type),
-    rabbit:force_event_refresh(make_ref()),
-    expect_event(Tag, Key, Type).
-
-expect_event(Tag, Key, Type) ->
-    receive #event{type = Type, props = Props} ->
-            case rabbit_misc:pget(Tag, Props) of
-                Key -> ok;
-                _   -> expect_event(Tag, Key, Type)
-            end
-    after ?TIMEOUT -> throw({failed_to_receive_event, Type})
-    end.
 
 test_spawn() ->
     {Writer, _Limiter, Ch} = rabbit_ct_broker_helpers:test_channel(),
