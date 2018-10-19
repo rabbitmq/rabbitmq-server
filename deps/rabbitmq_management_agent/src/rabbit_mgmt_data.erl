@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2016-2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_data).
@@ -345,7 +345,8 @@ lookup_smaller_sample(Table, Id) ->
         [] ->
             not_found;
         [{_, Slide}] ->
-            exometer_slide:optimize(Slide)
+            Slide1 = exometer_slide:optimize(Slide),
+            maybe_convert_for_compatibility(Table, Slide1)
     end.
 
 -spec lookup_samples(atom(), any(), #range{}) -> maybe_slide().
@@ -354,7 +355,8 @@ lookup_samples(Table, Id, Range) ->
         [] ->
             not_found;
         [{_, Slide}] ->
-            exometer_slide:optimize(Slide)
+            Slide1 = exometer_slide:optimize(Slide),
+            maybe_convert_for_compatibility(Table, Slide1)
     end.
 
 lookup_all(Table, Ids, SecondKey) ->
@@ -370,8 +372,25 @@ lookup_all(Table, Ids, SecondKey) ->
         [] ->
             not_found;
         _ ->
-            exometer_slide:sum(Slides, empty(Table, 0))
+            Slide = exometer_slide:sum(Slides, empty(Table, 0)),
+            maybe_convert_for_compatibility(Table, Slide)
     end.
+
+maybe_convert_for_compatibility(Table, Slide)
+  when Table =:= channel_queue_stats_deliver_stats orelse
+       Table =:= channel_stats_deliver_stats orelse
+       Table =:= queue_stats_deliver_stats orelse
+       Table =:= vhost_stats_deliver_stats ->
+    ConversionNeeded = rabbit_feature_flags:is_disabled(
+                         empty_basic_get_metric),
+    case ConversionNeeded of
+        false ->
+            Slide;
+        true ->
+            rabbit_mgmt_data_compat:drop_get_empty_queue_metric(Slide)
+    end;
+maybe_convert_for_compatibility(_, Slide) ->
+    Slide.
 
 get_table_keys(Table, Id0) ->
     ets:select(Table, match_spec_keys(Id0)).
