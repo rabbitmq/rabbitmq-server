@@ -23,6 +23,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -define(BASIC_COLUMNS, ["vhost", "name", "durable", "auto_delete", "exclusive",
                        "owner_pid", "arguments", "pid", "state"]).
@@ -67,7 +68,7 @@ is_authorized(ReqData, Context) ->
 
 basic(ReqData) ->
     [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
-        [rabbit_mgmt_format:queue(Q#amqqueue{state = down}) ||
+        [rabbit_mgmt_format:queue(amqqueue:set_state(Q, down)) ||
             Q <- down_queues(ReqData)].
 
 augmented(ReqData, Context) ->
