@@ -200,9 +200,21 @@ fmt_proplist(Props) ->
 fmt(K, #resource{virtual_host = VHost, 
                  name         = Name}) -> [{K,           longstr, Name},
                                            {<<"vhost">>, longstr, VHost}];
-fmt(K, V) -> {T, Enc} = fmt(V),
-             {K, T, Enc}.
+fmt(K, true)                 -> {K, bool, true};
+fmt(K, false)                -> {K, bool, false};
+fmt(K, V) when is_atom(V)    -> {K, longstr, atom_to_binary(V, utf8)};
+fmt(K, V) when is_integer(V) -> {K, long, V};
+fmt(K, V) when is_number(V)  -> {K, float, V};
+fmt(K, V) when is_binary(V)  -> {K, longstr, V};
+fmt(K, [{_, _}|_] = Vs)      -> {K, table, fmt_proplist(Vs)};
+fmt(K, Vs) when is_list(Vs)  -> {K, array, [fmt(V) || V <- Vs]};
+fmt(K, V) when is_pid(V)     -> {K, longstr,
+                                 list_to_binary(rabbit_misc:pid_to_string(V))};
+fmt(K, V)                    -> {K, longstr,
+                                 list_to_binary(
+                                   rabbit_misc:format("~1000000000p", [V]))}.
 
+%% Exactly the same as fmt/2, duplicated only for performance issues
 fmt(true)                 -> {bool, true};
 fmt(false)                -> {bool, false};
 fmt(V) when is_atom(V)    -> {longstr, atom_to_binary(V, utf8)};
