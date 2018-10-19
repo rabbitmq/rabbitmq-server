@@ -260,6 +260,10 @@ if "!ENV_OK!"=="false" (
 !RABBITMQ_DIST_ARG! ^
 !STAR!
 
+if ERRORLEVEL 1 (
+    exit /B 1
+)
+
 EXIT /B 0
 
 :check_not_empty
