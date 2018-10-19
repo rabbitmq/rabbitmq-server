@@ -17,14 +17,18 @@
 -module(unit_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
 all() -> [ encoding ].
 
 encoding(_) ->
-    T = fun (In, Exp) -> 
-                true = (rabbit_exchange_type_event:fmt_proplist(In) == Exp) end,
+    T = fun (In, Exp) ->
+                ?assertEqual(
+                   lists:sort(rabbit_exchange_type_event:fmt_proplist(In)),
+                   lists:sort(Exp))
+        end,
     T([{name, <<"test">>}],
       [{<<"name">>, longstr, <<"test">>}]),
     T([{name, rabbit_misc:r(<<"/">>, exchange, <<"test">>)}],
@@ -52,8 +56,8 @@ encoding(_) ->
                                   {array, [{longstr, <<"a">>},
                                            {longstr, <<"b">>}]}]},
        {<<"proplist">>, table,
-        [{<<"foo">>, longstr, <<"a">>},
-         {<<"bar">>, table,   [{<<"baz">>,  longstr, <<"b">>},
-                               {<<"bash">>, longstr, <<"c">>}]}]}       
+        [{<<"bar">>, table,   [{<<"bash">>, longstr, <<"c">>},
+                               {<<"baz">>, longstr, <<"b">>}]},
+         {<<"foo">>, longstr, <<"a">>}]}
       ]),
     ok.
