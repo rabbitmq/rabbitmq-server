@@ -1350,7 +1350,7 @@ queues_to_delete_when_node_down(NodeDown) ->
             #amqqueue{name = QName, pid = Pid} = Q <- mnesia:table(rabbit_queue),
                 qnode(Pid) == NodeDown andalso
                 not rabbit_mnesia:is_process_alive(Pid) andalso
-                (not rabbit_amqqueue:is_mirrored(Q) orelse
+                (not rabbit_amqqueue:is_replicated(Q) orelse
                 rabbit_amqqueue:is_dead_exclusive(Q))]
         ))
     end).

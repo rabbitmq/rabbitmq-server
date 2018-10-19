@@ -496,7 +496,7 @@ args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
 dead_letter_publish(_, undefined, _, _, _) ->
     ok;
 dead_letter_publish(VHost, X, RK, QName, ReasonMsgs) ->
-    rabbit_dead_letter:publish(VHost, X, RK, QName, ReasonMsgs).
+    rabbit_vhost_dead_letter:publish(VHost, X, RK, QName, ReasonMsgs).
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
