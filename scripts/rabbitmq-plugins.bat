@@ -62,9 +62,4 @@ if ERRORLEVEL 1 (
     exit /B 1
 )
 
-if ERRORLEVEL 1 (
-    exit /B 1
-)
-
-endlocal
 endlocal
