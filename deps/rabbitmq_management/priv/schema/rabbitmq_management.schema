@@ -29,10 +29,22 @@
 
 {mapping, "management.tcp.port", "rabbitmq_management.tcp_config.port",
     [{datatype, integer}]}.
-
 {mapping, "management.tcp.ip", "rabbitmq_management.tcp_config.ip",
     [{datatype, string},
      {validators, ["is_ip"]}]}.
+
+{mapping, "management.tcp.compress", "rabbitmq_management.tcp_config.cowboy_opts.compress",
+    [{datatype, {enum, [true, false]}}]}.
+{mapping, "management.tcp.idle_timeout", "rabbitmq_management.tcp_config.cowboy_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "management.tcp.inactivity_timeout", "rabbitmq_management.tcp_config.cowboy_opts.inactivity_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "management.tcp.request_timeout", "rabbitmq_management.tcp_config.cowboy_opts.request_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "management.tcp.shutdown_timeout", "rabbitmq_management.tcp_config.cowboy_opts.shutdown_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "management.tcp.max_keepalive", "rabbitmq_management.tcp_config.cowboy_opts.max_keepalive",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 
 
 %% HTTPS (TLS) listener options ========================================================
@@ -59,6 +71,20 @@
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 {mapping, "management.ssl.password", "rabbitmq_management.ssl_config.password",
     [{datatype, string}]}.
+
+{mapping, "management.ssl.compress", "rabbitmq_management.ssl_config.cowboy_opts.compress",
+    [{datatype, {enum, [true, false]}}]}.
+{mapping, "management.ssl.idle_timeout", "rabbitmq_management.ssl_config.cowboy_opts.idle_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "management.ssl.inactivity_timeout", "rabbitmq_management.ssl_config.cowboy_opts.inactivity_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "management.ssl.request_timeout", "rabbitmq_management.ssl_config.cowboy_opts.request_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "management.ssl.shutdown_timeout", "rabbitmq_management.ssl_config.cowboy_opts.shutdown_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+{mapping, "management.ssl.max_keepalive", "rabbitmq_management.ssl_config.cowboy_opts.max_keepalive",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
 
 
 %% Legacy listener options ========================================================
