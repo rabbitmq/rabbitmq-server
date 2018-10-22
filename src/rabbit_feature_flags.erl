@@ -30,6 +30,7 @@
          are_supported_remotely/1,
          are_supported_remotely/2,
          is_enabled/1,
+         is_disabled/1,
          info/0,
          init/0,
          check_node_compatibility/1,
@@ -52,7 +53,7 @@ list() -> list(all).
 list(all)      -> rabbit_ff_registry:list(all);
 list(enabled)  -> rabbit_ff_registry:list(enabled);
 list(disabled) -> maps:filter(
-                    fun(FeatureName, _) -> not is_enabled(FeatureName) end,
+                    fun(FeatureName, _) -> is_disabled(FeatureName) end,
                     list(all)).
 
 list(Which, Stability)
@@ -171,6 +172,9 @@ are_supported_remotely([], FeatureNames, _) ->
 
 is_enabled(FeatureName) when is_atom(FeatureName) ->
     rabbit_ff_registry:is_enabled(FeatureName).
+
+is_disabled(FeatureName) when is_atom(FeatureName) ->
+    not rabbit_ff_registry:is_enabled(FeatureName).
 
 info() ->
     rabbit_feature_flags_extra:info().
