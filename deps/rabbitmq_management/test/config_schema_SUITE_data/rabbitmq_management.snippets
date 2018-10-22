@@ -33,6 +33,72 @@
                         ]}],
   [rabbitmq_management]},
 
+ {tcp_listener_server_opts_compress,
+  "management.tcp.compress = true",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{compress, true}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_compress_and_idle_timeout,
+  "management.tcp.compress     = true
+   management.tcp.idle_timeout = 123",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{compress,     true},
+                                                     {idle_timeout, 123}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_compress_and_multiple_timeouts,
+  "management.tcp.compress     = true
+   management.tcp.idle_timeout = 123
+   management.tcp.inactivity_timeout = 456
+   management.tcp.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{compress,           true},
+                                                     {idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_multiple_timeouts_only,
+  "management.tcp.idle_timeout = 123
+   management.tcp.inactivity_timeout = 456
+   management.tcp.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{idle_timeout,       123},
+                                                     {inactivity_timeout, 456},
+                                                     {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_shutdown_timeout,
+  "management.tcp.shutdown_timeout = 7000",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_server_opts_max_keepalive,
+  "management.tcp.max_keepalive = 120",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
 
  %%
  %% TLS listener
@@ -75,7 +141,75 @@
                         ]}],
   [rabbitmq_management]},
 
+ {tls_listener_server_opts_compress,
+  "management.ssl.compress = true",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{compress, true}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
 
+ {tls_listener_server_opts_compress_and_idle_timeout,
+  "management.ssl.compress     = true
+   management.ssl.idle_timeout = 123",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{compress,     true},
+                                                       {idle_timeout, 123}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_server_opts_compress_and_multiple_timeouts,
+  "management.ssl.compress     = true
+   management.ssl.idle_timeout = 123
+   management.ssl.inactivity_timeout = 456
+   management.ssl.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{compress,           true},
+                                                       {idle_timeout,       123},
+                                                       {inactivity_timeout, 456},
+                                                       {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_server_opts_multiple_timeouts_only,
+  "management.ssl.idle_timeout = 123
+   management.ssl.inactivity_timeout = 456
+   management.ssl.request_timeout = 789",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{idle_timeout,       123},
+                                                       {inactivity_timeout, 456},
+                                                       {request_timeout,    789}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_server_opts_shutdown_timeout,
+  "management.ssl.shutdown_timeout = 7000",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_server_opts_max_keepalive,
+  "management.ssl.max_keepalive = 120",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ %%
+ %% Retention Policies
+ %%
 
  {retention_policies,
   "management.sample_retention_policies.global.minute  = 5
@@ -110,6 +244,10 @@
                          ]}
   ], [rabbitmq_management]
  },
+
+ %%
+ %% CORS
+ %%
 
  {cors_settings,
   "management.cors.allow_origins.1 = https://origin1.org
