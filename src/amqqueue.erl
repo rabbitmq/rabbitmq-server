@@ -153,8 +153,7 @@ new_with_version(?record_version,
               slave_pids_pending_shutdown = [],
               vhost              = VHost,
               options            = Options,
-              type               = Type,
-              created_at         = erlang:monotonic_time()};
+              type               = Type};
 new_with_version(Version,
                  Name,
                  Pid,
@@ -183,7 +182,6 @@ upgrade_to(?record_version, #amqqueue{} = Queue) ->
     Queue;
 upgrade_to(?record_version, OldQueue) ->
     Fields = erlang:tuple_to_list(OldQueue) ++ [?amqqueue_v1_type,
-                                                erlang:monotonic_time(),
                                                 undefined],
     #amqqueue{} = erlang:list_to_tuple(Fields);
 upgrade_to(Version, OldQueue) ->

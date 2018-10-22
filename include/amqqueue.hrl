@@ -87,6 +87,9 @@
          (?is_amqqueue_v1(Q0) andalso ?is_amqqueue_v1(Q1) andalso
           ?amqqueue_v1_field_pid(Q0) =:= ?amqqueue_v1_field_pid(Q1)))).
 
+-define(amqqueue_v1_vhost(Q), element(2, ?amqqueue_v1_field_name(Q))).
+-define(amqqueue_v2_vhost(Q), element(2, ?amqqueue_v2_field_name(Q))).
+
 -define(amqqueue_vhost_equals(Q, VHost),
         ((?is_amqqueue_v2(Q) andalso
          ?amqqueue_v2_vhost(Q) =:= VHost) orelse
