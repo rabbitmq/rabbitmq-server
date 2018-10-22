@@ -20,7 +20,9 @@
          list/1,
          list/2,
          enable/1,
+         enable_all/0,
          disable/1,
+         disable_all/0,
          is_supported/1,
          is_supported_locally/1,
          is_supported_remotely/1,
@@ -65,7 +67,7 @@ list(Which, Stability)
                         end
                 end, list(Which)).
 
-enable(FeatureName) ->
+enable(FeatureName) when is_atom(FeatureName) ->
     rabbit_log:info("Feature flag `~s`: REQUEST TO ENABLE",
                     [FeatureName]),
     case is_enabled(FeatureName) of
@@ -90,22 +92,28 @@ enable(FeatureName) ->
                                     [FeatureName]),
                     {error, unsupported}
             end
-    end.
+    end;
+enable(FeatureNames) when is_list(FeatureNames) ->
+    with_feature_flags(FeatureNames, fun enable/1).
 
-enable_locally(FeatureName) ->
-    case is_enabled(FeatureName) of
-        true ->
-            ok;
-        false ->
-            rabbit_log:info(
-              "Feature flag `~s`: enable locally (i.e. was enabled on the cluster "
-              "when this node was not part of it)",
-              [FeatureName]),
-            do_enable_locally(FeatureName)
-    end.
+enable_all() ->
+    with_feature_flags(maps:keys(list(all)), fun enable/1).
 
-disable(_FeatureName) ->
-    {error, unsupported}.
+disable(FeatureName) when is_atom(FeatureName) ->
+    {error, unsupported};
+disable(FeatureNames) when is_list(FeatureNames) ->
+    with_feature_flags(FeatureNames, fun disable/1).
+
+disable_all() ->
+    with_feature_flags(maps:keys(list(all)), fun disable/1).
+
+with_feature_flags([FeatureName | Rest], Fun) ->
+    case Fun(FeatureName) of
+        ok    -> with_feature_flags(Rest, Fun);
+        Error -> Error
+    end;
+with_feature_flags([], _) ->
+    ok.
 
 is_supported(FeatureName) when is_atom(FeatureName) ->
     is_supported_locally(FeatureName) andalso
@@ -377,6 +385,18 @@ do_enable(FeatureName) ->
         Error -> Error
     end.
 
+enable_locally(FeatureName) when is_atom(FeatureName) ->
+    case is_enabled(FeatureName) of
+        true ->
+            ok;
+        false ->
+            rabbit_log:info(
+              "Feature flag `~s`: enable locally (i.e. was enabled on the cluster "
+              "when this node was not part of it)",
+              [FeatureName]),
+            do_enable_locally(FeatureName)
+    end.
+
 do_enable_locally(FeatureName) ->
     case enable_dependencies(FeatureName, false) of
         ok ->
@@ -454,8 +474,11 @@ mark_as_enabled_remotely(FeatureName) ->
 %% Coordination with remote nodes.
 %% -------------------------------------------------------------------
 
+remote_nodes() ->
+    mnesia:system_info(db_nodes) -- [node()].
+
 running_remote_nodes() ->
-    mnesia:system_info(running_db_nodes).
+    mnesia:system_info(running_db_nodes) -- [node()].
 
 does_node_support(Node, FeatureNames, Timeout) ->
     rabbit_log:info("Feature flags: querying `~p` support on node ~s...",
@@ -577,7 +600,10 @@ sync_feature_flags_with_cluster(Nodes) ->
     sync_feature_flags_with_cluster(Nodes, ?TIMEOUT).
 
 sync_feature_flags_with_cluster([], _) ->
-    ok;
+    case remote_nodes() of
+        [] -> enable_all();
+        _  -> ok
+    end;
 sync_feature_flags_with_cluster(Nodes, Timeout) ->
     RemoteNodes = Nodes -- [node()],
     sync_feature_flags_with_cluster1(RemoteNodes, Timeout).
