@@ -67,7 +67,7 @@
 
 ## Uncomment the following line if you want to allow access to the
 ## guest user from anywhere on the network.
-# loopback_users.guest = false
+   loopback_users.guest = false
 
 ## TLS configuration.
 ##
