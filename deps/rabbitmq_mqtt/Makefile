@@ -30,7 +30,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-DEPS = ranch rabbit_common rabbit amqp_client ranch_proxy_protocol
+DEPS = ranch rabbit_common rabbit amqp_client
 TEST_DEPS = emqttc ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master

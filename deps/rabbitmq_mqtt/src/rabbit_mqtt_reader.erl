@@ -22,7 +22,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/3]).
+-export([start_link/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
@@ -39,9 +39,9 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(KeepaliveSup, Ref, Sock) ->
+start_link(KeepaliveSup, Ref) ->
     Pid = proc_lib:spawn_link(?MODULE, init,
-                              [[KeepaliveSup, Ref, Sock]]),
+                              [[KeepaliveSup, Ref]]),
 
     {ok, Pid}.
 
@@ -57,10 +57,11 @@ info(Pid, InfoItems) ->
 
 %%----------------------------------------------------------------------------
 
-init([KeepaliveSup, Ref, Sock]) ->
+init([KeepaliveSup, Ref]) ->
     process_flag(trap_exit, true),
+    {ok, Sock} = rabbit_networking:handshake(Ref,
+        application:get_env(rabbitmq_mqtt, proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),
-    rabbit_networking:accept_ack(Ref, RealSocket),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             rabbit_log_connection:debug("MQTT accepting TCP connection ~p (~s)~n", [self(), ConnStr]),
