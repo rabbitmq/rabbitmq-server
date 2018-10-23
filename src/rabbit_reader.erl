@@ -57,12 +57,12 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/3, info_keys/0, info/1, info/2, force_event_refresh/2,
+-export([start_link/2, info_keys/0, info/1, info/2, force_event_refresh/2,
          shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--export([init/4, mainloop/4, recvloop/4]).
+-export([init/3, mainloop/4, recvloop/4]).
 
 -export([conserve_resources/3, server_properties/1]).
 
@@ -157,7 +157,7 @@
 
 %%--------------------------------------------------------------------------
 
--spec start_link(pid(), any(), rabbit_net:socket()) -> rabbit_types:ok(pid()).
+-spec start_link(pid(), any()) -> rabbit_types:ok(pid()).
 -spec info_keys() -> rabbit_types:info_keys().
 -spec info(pid()) -> rabbit_types:infos().
 -spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
@@ -171,7 +171,7 @@
           rabbit_framing:amqp_table().
 
 %% These specs only exists to add no_return() to keep dialyzer happy
--spec init(pid(), pid(), any(), rabbit_net:socket()) -> no_return().
+-spec init(pid(), pid(), any()) -> no_return().
 -spec start_connection(pid(), pid(), any(), rabbit_net:socket()) ->
           no_return().
 
@@ -182,17 +182,18 @@
 
 %%--------------------------------------------------------------------------
 
-start_link(HelperSup, Ref, Sock) ->
-    Pid = proc_lib:spawn_link(?MODULE, init, [self(), HelperSup, Ref, Sock]),
+start_link(HelperSup, Ref) ->
+    Pid = proc_lib:spawn_link(?MODULE, init, [self(), HelperSup, Ref]),
 
     {ok, Pid}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
-init(Parent, HelperSup, Ref, Sock) ->
-    RealSocket = rabbit_net:unwrap_socket(Sock),
-    rabbit_networking:accept_ack(Ref, RealSocket),
+init(Parent, HelperSup, Ref) ->
+    ?LG_PROCESS_TYPE(reader),
+    {ok, Sock} = rabbit_networking:handshake(Ref,
+        application:get_env(rabbit, proxy_protocol, false)),
     Deb = sys:debug_options([]),
     start_connection(Parent, HelperSup, Deb, Sock).
 

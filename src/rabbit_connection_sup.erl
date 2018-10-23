@@ -42,7 +42,7 @@
 
 %%--------------------------------------------------------------------------
 
-start_link(Ref, Sock, _Transport, _Opts) ->
+start_link(Ref, _Sock, _Transport, _Opts) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     %% We need to get channels in the hierarchy here so they get shut
     %% down after the reader, so the reader gets a chance to terminate
@@ -62,7 +62,7 @@ start_link(Ref, Sock, _Transport, _Opts) ->
     {ok, ReaderPid} =
         supervisor2:start_child(
           SupPid,
-          {reader, {rabbit_reader, start_link, [HelperSup, Ref, Sock]},
+          {reader, {rabbit_reader, start_link, [HelperSup, Ref]},
            intrinsic, ?WORKER_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
 

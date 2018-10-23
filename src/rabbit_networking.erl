@@ -36,7 +36,7 @@
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
          close_connection/2, force_connection_event_refresh/1, accept_ack/2,
-         tcp_host/1]).
+         handshake/2, tcp_host/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
@@ -122,7 +122,6 @@ boot() ->
     %% Failures will throw exceptions
     _ = boot_listeners(fun boot_tcp/1, application:get_env(rabbit, num_tcp_acceptors, 10), "TCP"),
     _ = boot_listeners(fun boot_tls/1, application:get_env(rabbit, num_ssl_acceptors, 10), "TLS"),
-    _ = maybe_start_proxy_protocol(),
     ok.
 
 boot_listeners(Fun, NumAcceptors, Type) ->
@@ -191,12 +190,6 @@ log_poodle_fail(Context) ->
       "'rabbit' section of your configuration file.~n",
       [rabbit_misc:otp_release(), Context]).
 
-maybe_start_proxy_protocol() ->
-    case application:get_env(rabbit, proxy_protocol, false) of
-        false -> ok;
-        true  -> application:start(ranch_proxy_protocol)
-    end.
-
 fix_ssl_options(Config) ->
     rabbit_ssl_options:fix(Config).
 
@@ -264,12 +257,9 @@ start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
     end.
 
 transport(Protocol) ->
-    ProxyProtocol = application:get_env(rabbit, proxy_protocol, false),
-    case {Protocol, ProxyProtocol} of
-        {amqp, false}       -> ranch_tcp;
-        {amqp, true}        -> ranch_proxy;
-        {'amqp/ssl', false} -> ranch_ssl;
-        {'amqp/ssl', true}  -> ranch_proxy_ssl
+    case Protocol of
+        amqp       -> ranch_tcp;
+        'amqp/ssl' -> ranch_ssl
     end.
 
 
@@ -373,16 +363,31 @@ force_connection_event_refresh(Ref) ->
     [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
     ok.
 
+handshake(Ref, ProxyProtocol) ->
+    case ProxyProtocol of
+        true ->
+            {ok, ProxyInfo} = ranch:recv_proxy_header(Ref, 1000),
+            {ok, Sock} = ranch:handshake(Ref),
+            tune_buffer_size(Sock),
+            ok = file_handle_cache:obtain(),
+            {ok, {rabbit_proxy_socket, Sock, ProxyInfo}};
+        false ->
+            ranch:handshake(Ref)
+    end.
+
 accept_ack(Ref, Sock) ->
     ok = ranch:accept_ack(Ref),
-    case tune_buffer_size(Sock) of
-        ok         -> ok;
-        {error, _} -> rabbit_net:fast_close(Sock),
-                      exit(normal)
-    end,
+    tune_buffer_size(Sock),
     ok = file_handle_cache:obtain().
 
 tune_buffer_size(Sock) ->
+    case tune_buffer_size1(Sock) of
+        ok         -> ok;
+        {error, _} -> rabbit_net:fast_close(Sock),
+                      exit(normal)
+    end.
+
+tune_buffer_size1(Sock) ->
     case rabbit_net:getopts(Sock, [sndbuf, recbuf, buffer]) of
         {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
                           rabbit_net:setopts(Sock, [{buffer, BufSz}]);
