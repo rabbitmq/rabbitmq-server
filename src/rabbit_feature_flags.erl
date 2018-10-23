@@ -600,9 +600,32 @@ sync_feature_flags_with_cluster(Nodes) ->
     sync_feature_flags_with_cluster(Nodes, ?TIMEOUT).
 
 sync_feature_flags_with_cluster([], _) ->
+    FeatureFlags = get_forced_feature_flags_from_env(),
     case remote_nodes() of
-        [] -> enable_all();
-        _  -> ok
+        [] when FeatureFlags =:= undefined ->
+            rabbit_log:info(
+              "Feature flags: starting an unclustered node: "
+              "all feature flags will be enabled by default"),
+            enable_all();
+        [] ->
+            case FeatureFlags of
+                [] ->
+                    rabbit_log:info(
+                      "Feature flags: starting an unclustered node: "
+                      "all feature flags are forcibly left disabled "
+                      "from the RABBITMQ_FEATURE_FLAGS environment "
+                      "variable");
+                _ ->
+                    rabbit_log:info(
+                      "Feature flags: starting an unclustered node: "
+                      "only the following feature flags specified in "
+                      "the RABBITMQ_FEATURE_FLAGS environment variable "
+                      "will be enabled: ~p",
+                      [FeatureFlags])
+            end,
+            enable(FeatureFlags);
+        _ ->
+            ok
     end;
 sync_feature_flags_with_cluster(Nodes, Timeout) ->
     RemoteNodes = Nodes -- [node()],
@@ -633,3 +656,9 @@ do_sync_feature_flags_with_node1([FeatureFlag | Rest]) ->
     end;
 do_sync_feature_flags_with_node1([]) ->
     ok.
+
+get_forced_feature_flags_from_env() ->
+    case os:getenv("RABBITMQ_FEATURE_FLAGS") of
+        false -> undefined;
+        Value -> [list_to_atom(V) ||V <- string:lexemes(Value, ",")]
+    end.
