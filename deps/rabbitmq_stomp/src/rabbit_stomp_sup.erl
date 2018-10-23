@@ -60,10 +60,7 @@ ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration, NumAcceptors]) -
       'stomp/ssl', NumAcceptors, "STOMP TLS listener").
 
 transport(Protocol) ->
-    ProxyProtocol = application:get_env(rabbitmq_stomp, proxy_protocol, false),
-    case {Protocol, ProxyProtocol} of
-        {stomp, false}       -> ranch_tcp;
-        {stomp, true}        -> ranch_proxy;
-        {'stomp/ssl', false} -> ranch_ssl;
-        {'stomp/ssl', true}  -> ranch_proxy_ssl
+    case Protocol of
+        stomp       -> ranch_tcp;
+        'stomp/ssl' -> ranch_ssl
     end.

@@ -17,7 +17,7 @@
 -module(rabbit_stomp_reader).
 -behaviour(gen_server2).
 
--export([start_link/4]).
+-export([start_link/3]).
 -export([conserve_resources/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
@@ -41,9 +41,9 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(SupHelperPid, Ref, Sock, Configuration) ->
+start_link(SupHelperPid, Ref, Configuration) ->
     Pid = proc_lib:spawn_link(?MODULE, init,
-                              [[SupHelperPid, Ref, Sock, Configuration]]),
+                              [[SupHelperPid, Ref, Configuration]]),
     {ok, Pid}.
 
 info(Pid, InfoItems) ->
@@ -53,10 +53,11 @@ info(Pid, InfoItems) ->
         UnknownItems -> throw({bad_argument, UnknownItems})
     end.
 
-init([SupHelperPid, Ref, Sock, Configuration]) ->
+init([SupHelperPid, Ref, Configuration]) ->
     process_flag(trap_exit, true),
+    {ok, Sock} = rabbit_networking:handshake(Ref,
+        application:get_env(rabbitmq_stomp, proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),
-    rabbit_networking:accept_ack(Ref, RealSocket),
 
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->

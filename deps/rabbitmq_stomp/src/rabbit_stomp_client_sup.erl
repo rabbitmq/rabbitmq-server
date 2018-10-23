@@ -22,7 +22,7 @@
 
 -export([start_link/4, init/1]).
 
-start_link(Ref, Sock, _Transport, Configuration) ->
+start_link(Ref, _Sock, _Transport, Configuration) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, HelperPid} =
         supervisor2:start_child(SupPid,
@@ -39,7 +39,7 @@ start_link(Ref, Sock, _Transport, Configuration) ->
                         SupPid,
                         {rabbit_stomp_reader,
                          {rabbit_stomp_reader,
-                          start_link, [HelperPid, Ref, Sock, Configuration]},
+                          start_link, [HelperPid, Ref, Configuration]},
                          intrinsic, ?WORKER_WAIT, worker,
                          [rabbit_stomp_reader]}),
 
