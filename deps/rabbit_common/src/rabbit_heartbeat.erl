@@ -125,7 +125,7 @@ heartbeater(Params, Identity) ->
                              end)}.
 
 heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
-            Deb, {StatVal, SameCount} = State) ->
+            Deb, {StatVal0, SameCount} = State) ->
     Recurse = fun (State1) -> heartbeater(Params, Deb, State1) end,
     System  = fun (From, Req) ->
                       sys:handle_system_msg(
@@ -143,23 +143,42 @@ heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
         Other ->
             exit({unexpected_message, Other})
     after TimeoutMillisec ->
-            case rabbit_net:getstat(Sock, [StatName]) of
-                {ok, [{StatName, NewStatVal}]} ->
-                    if NewStatVal =/= StatVal ->
-                            Recurse({NewStatVal, 0});
-                       SameCount < Threshold ->
-                            Recurse({NewStatVal, SameCount + 1});
-                       true ->
-                            case Handler() of
-                                stop     -> ok;
-                                continue -> Recurse({NewStatVal, 0})
-                            end
-                    end;
-                {error, einval} ->
-                    %% the socket is dead, most likely because the
-                    %% connection is being shut down -> terminate
-                    ok;
-                {error, Reason} ->
-                    exit({cannot_get_socket_stats, Reason})
-            end
+              OkFun = fun(StatVal1) ->
+                              if StatVal1 =/= StatVal0 ->
+                                     {recurse, {StatVal1, 0}};
+                                 SameCount < Threshold ->
+                                     {recurse, {StatVal1, SameCount +1}};
+                                 true ->
+                                     {run_handler, {StatVal1, 0}}
+                              end
+                      end,
+              SSResult = get_sock_stats(Sock, StatName, OkFun),
+              handle_get_sock_stats(SSResult, Sock, StatName, Recurse, Handler)
+    end.
+
+handle_get_sock_stats(stop, _Sock, _StatName, _Recurse, _Handler) ->
+    ok;
+handle_get_sock_stats({recurse, RecurseArg}, _Sock, _StatName, Recurse, _Handler) ->
+    Recurse(RecurseArg);
+handle_get_sock_stats({run_handler, {_, SameCount}}, Sock, StatName, Recurse, Handler) ->
+    case Handler() of
+        stop     -> ok;
+        continue ->
+            OkFun = fun(StatVal) ->
+                            {recurse, {StatVal, SameCount}}
+                    end,
+            SSResult = get_sock_stats(Sock, StatName, OkFun),
+            handle_get_sock_stats(SSResult, Sock, StatName, Recurse, Handler)
+    end.
+
+get_sock_stats(Sock, StatName, OkFun) ->
+    case rabbit_net:getstat(Sock, [StatName]) of
+        {ok, [{StatName, StatVal}]} ->
+            OkFun(StatVal);
+        {error, einval} ->
+            %% the socket is dead, most likely because the
+            %% connection is being shut down -> terminate
+            stop;
+        {error, Reason} ->
+            exit({cannot_get_socket_stats, Reason})
     end.
