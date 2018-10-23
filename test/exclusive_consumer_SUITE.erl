@@ -24,8 +24,16 @@
 
 all() ->
     [
-        all_messages_go_to_one_consumer,
-        fallback_to_another_consumer_when_first_one_is_cancelled
+        {group, default}
+    ].
+
+groups() ->
+    [
+        {default, [], [
+            all_messages_go_to_one_consumer,
+            fallback_to_another_consumer_when_first_one_is_cancelled,
+            fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled
+        ]}
     ].
 
 init_per_suite(Config) ->
@@ -48,10 +56,10 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-
 all_messages_go_to_one_consumer(Config) ->
-    {C, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}]},
+    {C, Ch} = connection_and_channel(Config),
+    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}],
+        auto_delete = true},
     NbMessages = 5,
     #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, Declare),
     ConsumerPid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages}]),
@@ -77,8 +85,9 @@ all_messages_go_to_one_consumer(Config) ->
     ok.
 
 fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
-    {C, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}]},
+    {C, Ch} = connection_and_channel(Config),
+    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}],
+        auto_delete = true},
     NbMessages = 10,
     #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, Declare),
     ConsumerPid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages}]),
@@ -116,19 +125,87 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     amqp_connection:close(C),
     ok.
 
+fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled(Config) ->
+    {C, Ch} = connection_and_channel(Config),
+    {C1, Ch1} = connection_and_channel(Config),
+    {C2, Ch2} = connection_and_channel(Config),
+    {C3, Ch3} = connection_and_channel(Config),
+    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}],
+        auto_delete = true},
+    NbMessages = 10,
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch1, Declare),
+    Consumer1Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages div 2}]),
+    Consumer2Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages div 2 - 1}]),
+    Consumer3Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages div 2 - 1}]),
+    #'basic.consume_ok'{consumer_tag = CTag1} =
+        amqp_channel:subscribe(Ch1, #'basic.consume'{queue = Q, no_ack = true, consumer_tag = <<"1">>}, Consumer1Pid),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Ch2, #'basic.consume'{queue = Q, no_ack = true, consumer_tag = <<"2">>}, Consumer2Pid),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Ch3, #'basic.consume'{queue = Q, no_ack = true, consumer_tag = <<"3">>}, Consumer3Pid),
+
+    Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
+    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(1, NbMessages div 2)],
+
+    {MessagesPerConsumer1, MessageCount1} = consume_results(),
+    ?assertEqual(NbMessages div 2, MessageCount1),
+    ?assertEqual(1, maps:size(MessagesPerConsumer1)),
+    ?assertEqual(NbMessages div 2, maps:get(CTag1, MessagesPerConsumer1)),
+
+    ok = amqp_channel:close(Ch1),
+
+    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(NbMessages div 2 + 1, NbMessages - 1)],
+
+    {MessagesPerConsumer2, MessageCount2} = consume_results(),
+    ?assertEqual(NbMessages div 2 - 1, MessageCount2),
+    ?assertEqual(1, maps:size(MessagesPerConsumer2)),
+
+    ok = amqp_channel:close(Ch2),
+
+    amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"poison">>}),
+
+    {MessagesPerConsumer3, MessageCount3} = consume_results(),
+    ?assertEqual(1, MessageCount3),
+    ?assertEqual(1, maps:size(MessagesPerConsumer3)),
+
+    [amqp_connection:close(Conn) || Conn <- [C1, C2, C3, C]],
+    ok.
+
+connection_and_channel(Config) ->
+    C = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Ch} = amqp_connection:open_channel(C),
+    {C, Ch}.
+
 consume({Parent, State, 0}) ->
     Parent ! {consumer_done, State};
 consume({Parent, {MessagesPerConsumer, MessageCount}, CountDown}) ->
     receive
         #'basic.consume_ok'{consumer_tag = CTag} ->
             consume({Parent, {maps:put(CTag, 0, MessagesPerConsumer), MessageCount}, CountDown});
+        {#'basic.deliver'{consumer_tag = CTag}, #amqp_msg{payload = <<"poison">>}} ->
+            Parent ! {consumer_done,
+                {maps:update_with(CTag, fun(V) -> V + 1 end, MessagesPerConsumer),
+                    MessageCount + 1}};
         {#'basic.deliver'{consumer_tag = CTag}, _Content} ->
             consume({Parent,
                 {maps:update_with(CTag, fun(V) -> V + 1 end, MessagesPerConsumer),
                     MessageCount + 1},
                 CountDown - 1});
         #'basic.cancel_ok'{} ->
+            consume({Parent, {MessagesPerConsumer, MessageCount}, CountDown});
+        _ ->
             consume({Parent, {MessagesPerConsumer, MessageCount}, CountDown})
-    after 500 ->
+    after 10000 ->
+        Parent ! {consumer_timeout, {MessagesPerConsumer, MessageCount}},
         exit(consumer_timeout)
+    end.
+
+consume_results() ->
+    receive
+        {consumer_done, {MessagesPerConsumer, MessageCount}} ->
+            {MessagesPerConsumer, MessageCount};
+        {consumer_timeout, {MessagesPerConsumer, MessageCount}} ->
+            {MessagesPerConsumer, MessageCount}
+    after 1000 ->
+        throw(failed)
     end.
