@@ -30,20 +30,31 @@ defmodule RabbitMQ.CLI.Formatters.Table do
                       (other) ->
                         [other]
                     end)
-    |> Stream.map(FormatterHelpers.without_errors_1(
-                    fn(element) ->
-                      format_output(element, options)
-                    end))
+    |> Stream.transform(:init,
+                        FormatterHelpers.without_errors_2(
+                          fn(element, :init) ->
+                              {with_header(element, options), :next}
+                            (element, :next) ->
+                              {[format_output_1(element, options)], :next}
+                          end))
   end
 
-  def format_output(output, options) when is_map(output) do
+  def format_output(output, options) do
+    with_header(output, options)
+  end
+
+  defp with_header(output, options) do
+    format_header(output) ++ [format_output_1(output, options)]
+  end
+
+  defp format_output_1(output, options) when is_map(output) do
     escaped = escaped?(options)
     format_line(output, escaped)
   end
-  def format_output([], _) do
+  defp format_output_1([], _) do
     ""
   end
-  def format_output(output, options)do
+  defp format_output_1(output, options)do
     escaped = escaped?(options)
     case Keyword.keyword?(output) do
         true  -> format_line(output, escaped);
@@ -67,4 +78,22 @@ defmodule RabbitMQ.CLI.Formatters.Table do
       false -> inspect(output)
     end
   end
+
+  @spec format_header(term()) :: [String.t()]
+  defp format_header(output) do
+    keys = case output do
+      map when is_map(map) -> Map.keys(map);
+      keyword when is_list(keyword) ->
+        case Keyword.keyword?(keyword) do
+          true  -> Keyword.keys(keyword)
+          false -> []
+        end
+      _ -> []
+    end
+    case keys do
+      [] -> []
+      _  -> [Enum.join(keys, "\t")]
+    end
+  end
+
 end
