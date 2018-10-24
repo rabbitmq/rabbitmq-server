@@ -147,7 +147,8 @@ operator_retroactive_policy_publish_ttl(Config) ->
     %% the queue
     publish(Ch, Q, lists:seq(1, 25)),
     timer:sleep(50),
-    [[<<"policy_ttl-queue">>, <<"75">>]] = rabbit_ct_broker_helpers:rabbitmqctl_list(Config, 0, ["list_queues"]),
+    [[<<"policy_ttl-queue">>, <<"75">>]] =
+        rabbit_ct_broker_helpers:rabbitmqctl_list(Config, 0, ["list_queues", "--no-table-headers"]),
     get_messages(50, Ch, Q),
     delete(Ch, Q),
 

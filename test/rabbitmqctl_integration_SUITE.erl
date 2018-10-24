@@ -151,7 +151,7 @@ list_queues_stopped(Config) ->
     ListedQueues =
         [ {Name, State}
           || [Name, State] <- rabbit_ct_broker_helpers:rabbitmqctl_list(
-                                Config, 0, ["list_queues", "name", "state"]) ],
+                                Config, 0, ["list_queues", "name", "state", "--no-table-headers"]) ],
 
     [ <<"running">> = proplists:get_value(Q, ListedQueues) || Q <- Node1Queues ],
     %% Node is running. Vhost is down
@@ -176,4 +176,4 @@ assert_ctl_queues(Config, Node, Args, Expected0) ->
     end.
 
 run_list_queues(Config, Node, Args) ->
-    rabbit_ct_broker_helpers:rabbitmqctl_list(Config, Node, ["list_queues"] ++ Args ++ ["name"]).
+    rabbit_ct_broker_helpers:rabbitmqctl_list(Config, Node, ["list_queues"] ++ Args ++ ["name", "--no-table-headers"]).
