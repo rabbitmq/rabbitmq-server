@@ -32,7 +32,8 @@ groups() ->
         {default, [], [
             all_messages_go_to_one_consumer,
             fallback_to_another_consumer_when_first_one_is_cancelled,
-            fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled
+            fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled,
+            amqp_exclusive_consume_fails_on_exclusive_consumer_queue
         ]}
     ].
 
@@ -58,10 +59,8 @@ end_per_testcase(Testcase, Config) ->
 
 all_messages_go_to_one_consumer(Config) ->
     {C, Ch} = connection_and_channel(Config),
-    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}],
-        auto_delete = true},
+    Q = queue_declare(Ch),
     NbMessages = 5,
-    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, Declare),
     ConsumerPid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages}]),
     #'basic.consume_ok'{consumer_tag = CTag1} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true}, ConsumerPid),
@@ -86,10 +85,8 @@ all_messages_go_to_one_consumer(Config) ->
 
 fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     {C, Ch} = connection_and_channel(Config),
-    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}],
-        auto_delete = true},
+    Q = queue_declare(Ch),
     NbMessages = 10,
-    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, Declare),
     ConsumerPid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages}]),
     #'basic.consume_ok'{consumer_tag = CTag1} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true}, ConsumerPid),
@@ -130,10 +127,8 @@ fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled(Config
     {C1, Ch1} = connection_and_channel(Config),
     {C2, Ch2} = connection_and_channel(Config),
     {C3, Ch3} = connection_and_channel(Config),
-    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}],
-        auto_delete = true},
+    Q = queue_declare(Ch),
     NbMessages = 10,
-    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch1, Declare),
     Consumer1Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages div 2}]),
     Consumer2Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages div 2 - 1}]),
     Consumer3Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages div 2 - 1}]),
@@ -171,10 +166,26 @@ fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled(Config
     [amqp_connection:close(Conn) || Conn <- [C1, C2, C3, C]],
     ok.
 
+amqp_exclusive_consume_fails_on_exclusive_consumer_queue(Config) ->
+    {C, Ch} = connection_and_channel(Config),
+    Q = queue_declare(Ch),
+    ?assertExit(
+        {{shutdown, {server_initiated_close, 403, _}}, _},
+        amqp_channel:call(Ch, #'basic.consume'{queue = Q, exclusive = true})
+    ),
+    amqp_connection:close(C),
+    ok.
+
 connection_and_channel(Config) ->
     C = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     {ok, Ch} = amqp_connection:open_channel(C),
     {C, Ch}.
+
+queue_declare(Channel) ->
+    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}],
+        auto_delete = true},
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Channel, Declare),
+    Q.
 
 consume({Parent, State, 0}) ->
     Parent ! {consumer_done, State};

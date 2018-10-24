@@ -1234,11 +1234,11 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
             _From, State = #q{consumers             = Consumers,
                               exclusive_consumer    = Holder,
                               exclusive_consumer_on = ExclusiveConsumerOn}) ->
-    State1 = case ExclusiveConsumerOn of
+    ConsumerRegistration = case ExclusiveConsumerOn of
         true ->
             case ExclusiveConsume of
                 true  ->
-                    reply({error, exclusive_consume_unavailable}, State);
+                    {error, reply({error, exclusive_consume_unavailable}, State)};
                 false ->
                   Consumers1 = rabbit_queue_consumers:add(
                     ChPid, ConsumerTag, NoAck,
@@ -1249,17 +1249,17 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                   case Holder of
                       none ->
                           NewConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, Consumers1),
-                          State#q{consumers          = Consumers1,
-                                  has_had_consumers  = true,
-                                  exclusive_consumer = NewConsumer};
+                          {state, State#q{consumers          = Consumers1,
+                                          has_had_consumers  = true,
+                                          exclusive_consumer = NewConsumer}};
                       _    ->
-                          State#q{consumers          = Consumers1,
-                                  has_had_consumers  = true}
+                          {state, State#q{consumers          = Consumers1,
+                                          has_had_consumers  = true}}
                   end
             end;
         false ->
             case check_exclusive_access(Holder, ExclusiveConsume, State) of
-              in_use -> reply({error, exclusive_consume_unavailable}, State);
+              in_use -> {error, reply({error, exclusive_consume_unavailable}, State)};
               ok     -> Consumers1 = rabbit_queue_consumers:add(
                 ChPid, ConsumerTag, NoAck,
                 LimiterPid, LimiterActive,
@@ -1269,22 +1269,27 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                   if ExclusiveConsume -> {ChPid, ConsumerTag};
                     true             -> Holder
                   end,
-                State#q{consumers          = Consumers1,
+                  {state, State#q{consumers          = Consumers1,
                         has_had_consumers  = true,
-                        exclusive_consumer = ExclusiveConsumer}
+                        exclusive_consumer = ExclusiveConsumer}}
             end
     end,
-    ok = maybe_send_reply(ChPid, OkMsg),
-    QName = qname(State1),
-    AckRequired = not NoAck,
-    rabbit_core_metrics:consumer_created(
-        ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-        PrefetchCount, Args),
-    emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-        AckRequired, QName, PrefetchCount,
-        Args, none, ActingUser),
-    notify_decorators(State1),
-    reply(ok, run_message_queue(State1));
+    case ConsumerRegistration of
+        {error, Reply} ->
+            Reply;
+        {state, State1} ->
+            ok = maybe_send_reply(ChPid, OkMsg),
+            QName = qname(State1),
+            AckRequired = not NoAck,
+            rabbit_core_metrics:consumer_created(
+                ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
+                PrefetchCount, Args),
+            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                AckRequired, QName, PrefetchCount,
+                Args, none, ActingUser),
+            notify_decorators(State1),
+            reply(ok, run_message_queue(State1))
+    end;
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, _From,
             State = #q{consumers             = Consumers,
