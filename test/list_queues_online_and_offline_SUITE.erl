@@ -86,17 +86,17 @@ list_queues_online_and_offline(Config) ->
     rabbit_ct_broker_helpers:rabbitmqctl(Config, B, ["stop"]),
 
     GotUp = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
-        ["list_queues", "--online", "name"])),
+        ["list_queues", "--online", "name", "--no-table-headers"])),
     ExpectUp = [[<<"q_a_1">>], [<<"q_a_2">>]],
     ExpectUp = GotUp,
 
     GotDown = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
-        ["list_queues", "--offline", "name"])),
+        ["list_queues", "--offline", "name", "--no-table-headers"])),
     ExpectDown = [[<<"q_b_1">>], [<<"q_b_2">>]],
     ExpectDown = GotDown,
 
     GotAll = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
-        ["list_queues", "name"])),
+        ["list_queues", "name", "--no-table-headers"])),
     ExpectAll = ExpectUp ++ ExpectDown,
     ExpectAll = GotAll,
 
