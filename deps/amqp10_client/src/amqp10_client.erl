@@ -46,6 +46,7 @@
          send_msg/2,
          accept_msg/2,
          flow_link_credit/3,
+         flow_link_credit/4,
          link_handle/1,
          get_msg/1,
          get_msg/2,
@@ -283,12 +284,20 @@ detach_link(#link_ref{link_handle = Handle, session = Session}) ->
 %% the caller will be notified when the link_credit reaches 0 with an
 %% amqp10_event of the following format:
 %% {amqp10_event, {link, LinkRef, credit_exhausted}}
--spec flow_link_credit(link_ref(), non_neg_integer(), never | non_neg_integer()) -> ok.
-flow_link_credit(#link_ref{role = receiver, session = Session,
-                           link_handle = Handle}, Credit, RenewWhenBelow) ->
-    Flow = #'v1_0.flow'{link_credit = {uint, Credit}},
-    ok = amqp10_client_session:flow(Session, Handle, Flow, RenewWhenBelow).
+-spec flow_link_credit(link_ref(), Credit :: non_neg_integer(),
+                       RenewWhenBelow :: never | non_neg_integer()) -> ok.
+flow_link_credit(Ref, Credit, RenewWhenBelow) ->
+    flow_link_credit(Ref, Credit, RenewWhenBelow, false).
 
+-spec flow_link_credit(link_ref(), Credit :: non_neg_integer(),
+                       RenewWhenBelow :: never | non_neg_integer(),
+                       Drain :: boolean()) -> ok.
+flow_link_credit(#link_ref{role = receiver, session = Session,
+                           link_handle = Handle},
+                 Credit, RenewWhenBelow, Drain) ->
+    Flow = #'v1_0.flow'{link_credit = {uint, Credit},
+                        drain = Drain},
+    ok = amqp10_client_session:flow(Session, Handle, Flow, RenewWhenBelow).
 
 %%% messages
 
