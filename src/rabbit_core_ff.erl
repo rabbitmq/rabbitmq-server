@@ -16,7 +16,7 @@
 
 -module(rabbit_core_ff).
 
--export([quorum_queue_migration/1]).
+-export([quorum_queue_migration/3]).
 
 -rabbit_feature_flag(
    {quorum_queue,
@@ -30,18 +30,24 @@
       stability     => stable
      }}).
 
-quorum_queue_migration(enable) ->
+quorum_queue_migration(FeatureName, _FeatureProps, enable) ->
     Tables = [rabbit_queue,
               rabbit_durable_queue],
     rabbit_table:wait(Tables),
     Fields = amqqueue:fields(amqqueue_v2),
-    migrate_to_amqqueue_with_type(Tables, Fields).
+    migrate_to_amqqueue_with_type(FeatureName, Tables, Fields).
 
-migrate_to_amqqueue_with_type([Table | Rest], Fields) ->
+migrate_to_amqqueue_with_type(FeatureName, [Table | Rest], Fields) ->
+    rabbit_log:info("Feature flag `~s`:   migrating Mnesia table ~s...",
+                    [FeatureName, Table]),
     Fun = fun(Queue) -> amqqueue:upgrade_to(amqqueue_v2, Queue) end,
     case mnesia:transform_table(Table, Fun, Fields) of
-        {atomic, ok}      -> migrate_to_amqqueue_with_type(Rest, Fields);
+        {atomic, ok}      -> migrate_to_amqqueue_with_type(FeatureName,
+                                                           Rest,
+                                                           Fields);
         {aborted, Reason} -> {error, Reason}
     end;
-migrate_to_amqqueue_with_type([], _) ->
+migrate_to_amqqueue_with_type(FeatureName, [], _) ->
+    rabbit_log:info("Feature flag `~s`:   Mnesia tables migration done",
+                    [FeatureName]),
     ok.

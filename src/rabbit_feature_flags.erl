@@ -435,7 +435,9 @@ run_migration_fun(FeatureName, Arg) ->
                             "with arg: ~p",
                             [FeatureName, MigrationFun, Arg]),
             try
-                erlang:apply(MigrationMod, MigrationFun, [Arg])
+                erlang:apply(MigrationMod,
+                             MigrationFun,
+                             [FeatureName, FeatureProps, Arg])
             catch
                 _:Reason:Stacktrace ->
                     rabbit_log:error("Feature flag `~s`: migration function "
