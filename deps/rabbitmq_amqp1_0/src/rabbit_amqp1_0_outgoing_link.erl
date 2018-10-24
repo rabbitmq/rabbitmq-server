@@ -16,7 +16,7 @@
 
 -module(rabbit_amqp1_0_outgoing_link).
 
--export([attach/3, delivery/6, transferred/3, credit_drained/4, flow/3]).
+-export([attach/3, delivery/6, transferred/3, credit_drained/3, flow/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -98,8 +98,7 @@ attach(#'v1_0.attach'{name = Name,
     end.
 
 credit_drained(#'basic.credit_drained'{credit_drained = CreditDrained},
-               Handle, Link = #outgoing_link{delivery_count = Count0},
-               WriterPid) ->
+               Handle, Link = #outgoing_link{delivery_count = Count0}) ->
     Count = Count0 + CreditDrained,
     %% The transfer count that is given by the queue should be at
     %% least that we have locally, since we will either have received
@@ -112,8 +111,8 @@ credit_drained(#'basic.credit_drained'{credit_drained = CreditDrained},
                       link_credit = {uint, 0},
                       available   = {uint, 0},
                       drain       = true },
-    rabbit_amqp1_0_writer:send_command(WriterPid, F),
-    Link#outgoing_link{delivery_count = Count}.
+    % rabbit_amqp1_0_writer:send_command(WriterPid, F),
+    {F, Link#outgoing_link{delivery_count = Count}}.
 
 flow(#outgoing_link{delivery_count = LocalCount},
      #'v1_0.flow'{handle         = Handle,
