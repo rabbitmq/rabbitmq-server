@@ -95,3 +95,26 @@
          ?amqqueue_v2_vhost(Q) =:= VHost) orelse
         (?is_amqqueue_v1(Q) andalso
          ?amqqueue_v1_vhost(Q) =:= VHost))).
+
+-ifdef(DEBUG_QUORUM_QUEUE_FF).
+-define(enable_quorum_queue_if_debug,
+        begin
+            rabbit_log:info(
+              "---- ENABLING quorum_queue as part of "
+              "?try_mnesia_tx_or_upgrade_amqqueue_and_retry() ----"),
+            ok = rabbit_feature_flags:enable(quorum_queue)
+        end).
+-else.
+-define(enable_quorum_queue_if_debug, noop).
+-endif.
+
+-define(try_mnesia_tx_or_upgrade_amqqueue_and_retry(Expr1, Expr2),
+        try
+            ?enable_quorum_queue_if_debug,
+            Expr1
+        catch
+            throw:{error, {bad_type, T}} when ?is_amqqueue(T) ->
+                Expr2;
+            throw:{aborted, {bad_type, T}} when ?is_amqqueue(T) ->
+                Expr2
+        end).

@@ -285,6 +285,9 @@ terminate(shutdown = R,      State = #q{backing_queue = BQ, q = Q0}) ->
              fun() ->
                 [Q] = mnesia:read({rabbit_queue, QName}),
                 Q2 = amqqueue:set_state(Q, stopped),
+                %% amqqueue migration:
+                %% The amqqueue was read from this transaction, no need
+                %% to handle migration.
                 rabbit_amqqueue:store_queue(Q2)
              end),
         BQ:terminate(R, BQS)
@@ -311,7 +314,12 @@ terminate(_Reason,           State = #q{q = Q}) ->
                                Q2 = amqqueue:set_state(Q, crashed),
                                rabbit_misc:execute_mnesia_transaction(
                                  fun() ->
-                                         rabbit_amqqueue:store_queue(Q2)
+                                     ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
+                                        rabbit_amqqueue:store_queue(Q2),
+                                        begin
+                                            Q3 = amqqueue:upgrade(Q2),
+                                            rabbit_amqqueue:store_queue(Q3)
+                                        end)
                                  end),
                                BQS
                        end, State).

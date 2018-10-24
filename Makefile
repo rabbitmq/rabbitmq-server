@@ -214,6 +214,10 @@ ifdef CREDIT_FLOW_TRACING
 RMQ_ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
 endif
 
+ifdef DEBUG_FF
+RMQ_ERLC_OPTS += -DDEBUG_QUORUM_QUEUE_FF=true
+endif
+
 ifndef USE_PROPER_QC
 # PropEr needs to be installed for property checking
 # http://proper.softlab.ntua.gr/

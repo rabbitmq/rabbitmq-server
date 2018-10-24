@@ -300,6 +300,9 @@ store_updated_slaves(Q0) when ?is_amqqueue(Q0) ->
     RS1 = update_recoverable(SPids, RS0),
     Q2 = amqqueue:set_recoverable_slaves(Q1, RS1),
     Q3 = amqqueue:set_state(Q2, live),
+    %% amqqueue migration:
+    %% The amqqueue was read from this transaction, no need to handle
+    %% migration.
     ok = rabbit_amqqueue:store_queue(Q3),
     %% Wake it up so that we emit a stats event
     rabbit_amqqueue:notify_policy_changed(Q3),
