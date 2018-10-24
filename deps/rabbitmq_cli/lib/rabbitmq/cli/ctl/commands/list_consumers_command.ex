@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer]
+  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   @info_keys ~w(queue_name channel_pid consumer_tag
@@ -33,9 +33,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def info_keys(), do: @info_keys
 
   def merge_defaults([], opts) do
-    {Enum.map(@info_keys, &Atom.to_string/1), Map.merge(%{vhost: "/"}, opts)}
+    {Enum.map(@info_keys, &Atom.to_string/1), Map.merge(%{vhost: "/", no_table_headers: false}, opts)}
   end
-  def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/", no_table_headers: false}, opts)}
+  end
 
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do

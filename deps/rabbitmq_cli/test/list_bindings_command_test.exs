@@ -10,7 +10,6 @@ defmodule ListBindingsCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     :ok
   end
 
@@ -25,18 +24,24 @@ defmodule ListBindingsCommandTest do
       opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || @default_timeout,
-        vhost: @vhost
+        vhost: @vhost,
+        no_table_headers: false
       }
     }
   end
 
-  test "merge_defaults: adds all keys if no keys specificed", context do
+  test "merge_defaults: adds all keys if none specificed", context do
     default_keys = ~w(source_name source_kind destination_name destination_kind routing_key arguments)
     declare_queue("test_queue", @vhost)
     :timer.sleep(100)
 
     {keys, _} = @command.merge_defaults([], context[:opts])
     assert default_keys == keys
+  end
+
+  test "merge_defaults: includes table headers by default", context do
+    {_, opts} = @command.merge_defaults([], %{})
+    assert !opts[:no_table_headers]
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do

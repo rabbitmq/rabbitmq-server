@@ -40,11 +40,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [offline: :boolean, online: :boolean, local: :boolean, timeout: :integer]
+  def switches(), do: [offline: :boolean, online: :boolean, local: :boolean, timeout: :integer,
+                       no_table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   defp default_opts() do
-    %{vhost: "/", offline: false, online: false, local: false}
+    %{vhost: "/", offline: false, online: false, local: false,
+      no_table_headers: false}
   end
 
   def merge_defaults([_|_] = args, opts) do
