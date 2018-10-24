@@ -30,7 +30,8 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
--export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0]).
+-export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0,
+         list_with_possible_retry/1]).
 -export([list_by_type/1]).
 -export([notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
@@ -297,6 +298,11 @@ start(Qs) ->
     ok.
 
 mark_local_durable_queues_stopped(VHost) ->
+    ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
+       do_mark_local_durable_queues_stopped(VHost),
+       do_mark_local_durable_queues_stopped(VHost)).
+
+do_mark_local_durable_queues_stopped(VHost) ->
     Qs = find_local_durable_classic_queues(VHost),
     rabbit_misc:execute_mnesia_transaction(
         fun() ->
@@ -426,13 +432,21 @@ get_queue_type(Args) ->
             erlang:binary_to_existing_atom(V, utf8)
     end.
 
-internal_declare(Q, true) ->
+internal_declare(Q, Recover) ->
+    ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
+        do_internal_declare(Q, Recover),
+        begin
+            Q1 = amqqueue:upgrade(Q),
+            do_internal_declare(Q1, Recover)
+        end).
+
+do_internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               ok = store_queue(amqqueue:set_state(Q, live)),
               rabbit_misc:const({created, Q})
       end);
-internal_declare(Q, false) ->
+do_internal_declare(Q, false) ->
     QueueName = amqqueue:get_name(Q),
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
@@ -468,6 +482,14 @@ update(Name, Fun) ->
 %% only really used for quorum queues to ensure the rabbit_queue record
 %% is initialised
 ensure_rabbit_queue_record_is_initialized(Q) ->
+    ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
+       do_ensure_rabbit_queue_record_is_initialized(Q),
+       begin
+           Q1 = amqqueue:upgrade(Q),
+           do_ensure_rabbit_queue_record_is_initialized(Q1)
+       end).
+
+do_ensure_rabbit_queue_record_is_initialized(Q) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               ok = store_queue(Q),
@@ -794,7 +816,11 @@ check_queue_type({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 
-list() -> mnesia:dirty_match_object(rabbit_queue, amqqueue:pattern_match_all()).
+list() ->
+    list_with_possible_retry(fun do_list/0).
+
+do_list() ->
+    mnesia:dirty_match_object(rabbit_queue, amqqueue:pattern_match_all()).
 
 list_names() -> mnesia:dirty_all_keys(rabbit_queue).
 
@@ -828,9 +854,12 @@ is_local_to_node({_, Leader} = QPid, Node) when ?IS_QUORUM(QPid) ->
 list(VHostPath) ->
     list(VHostPath, rabbit_queue).
 
+list(VHostPath, TableName) ->
+    list_with_possible_retry(fun() -> do_list(VHostPath, TableName) end).
+
 %% Not dirty_match_object since that would not be transactional when used in a
 %% tx context
-list(VHostPath, TableName) ->
+do_list(VHostPath, TableName) ->
     mnesia:async_dirty(
       fun () ->
               mnesia:match_object(
@@ -838,6 +867,38 @@ list(VHostPath, TableName) ->
                 amqqueue:pattern_match_on_name(rabbit_misc:r(VHostPath, queue)),
                 read)
       end).
+
+list_with_possible_retry(Fun) ->
+    %% amqqueue migration:
+    %% The `rabbit_queue` or `rabbit_durable_queue` tables
+    %% might be migrated between the time we query the pattern
+    %% (with the `amqqueue` module) and the time we call
+    %% `mnesia:dirty_match_object()`. This would lead to an empty list
+    %% (no object matching the now incorrect pattern), not a Mnesia
+    %% error.
+    %%
+    %% So if the result is an empty list and the version of the
+    %% `amqqueue` record changed in between, we retry the operation.
+    %%
+    %% However, we don't do this if inside a Mnesia transaction: we
+    %% could end up with a live lock between this started transaction
+    %% and the Mnesia table migration which is blocked (but the
+    %% rabbit_feature_flags lock is held).
+    AmqqueueRecordVersion = amqqueue:record_version_to_use(),
+    case Fun() of
+        [] ->
+            case mnesia:is_transaction() of
+                true ->
+                    [];
+                false ->
+                    case amqqueue:record_version_to_use() of
+                        AmqqueueRecordVersion -> [];
+                        _                     -> Fun()
+                    end
+            end;
+        Ret ->
+            Ret
+    end.
 
 list_down(VHostPath) ->
     case rabbit_vhost:exists(VHostPath) of
@@ -859,12 +920,20 @@ count(VHost) ->
     %% won't work here because with master migration of mirrored queues
     %% the "ownership" of queues by nodes becomes a non-trivial problem
     %% that requires a proper consensus algorithm.
-    length(mnesia:dirty_index_read(rabbit_queue, VHost, amqqueue:field_vhost()))
+    length(list_for_count(VHost))
   catch _:Err ->
     rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p~n",
                      [VHost, Err]),
     0
   end.
+
+list_for_count(VHost) ->
+    list_with_possible_retry(
+      fun() ->
+              mnesia:dirty_index_read(rabbit_queue,
+                                      VHost,
+                                      amqqueue:field_vhost())
+      end).
 
 info_keys() -> rabbit_amqqueue_process:info_keys().
 

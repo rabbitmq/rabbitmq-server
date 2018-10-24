@@ -115,6 +115,9 @@ init_with_existing_bq(Q0, BQ, BQS) when ?is_amqqueue(Q0) ->
                   GMPids1 = [{GM, Self} | GMPids0],
                   Q2 = amqqueue:set_gm_pids(Q1, GMPids1),
                   Q3 = amqqueue:set_state(Q2, live),
+                  %% amqqueue migration:
+                  %% The amqqueue was read from this transaction, no
+                  %% need to handle migration.
                   ok = rabbit_amqqueue:store_queue(Q3)
               end,
         ok = rabbit_misc:execute_mnesia_transaction(Fun),

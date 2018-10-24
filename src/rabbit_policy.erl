@@ -184,7 +184,11 @@ recover() ->
 %% variants.
 recover0() ->
     Xs = mnesia:dirty_match_object(rabbit_durable_exchange, #exchange{_ = '_'}),
-    Qs = mnesia:dirty_match_object(rabbit_durable_queue, amqqueue:pattern_match_all()),
+    Qs = rabbit_amqqueue:list_with_possible_retry(
+           fun() ->
+                   mnesia:dirty_match_object(
+                     rabbit_durable_queue, amqqueue:pattern_match_all())
+           end),
     Policies = list(),
     OpPolicies = list_op(),
     [rabbit_misc:execute_mnesia_transaction(
@@ -203,10 +207,18 @@ recover0() ->
          OpPolicy1 = match(QName, OpPolicies),
          Q2 = amqqueue:set_operator_policy(Q1, OpPolicy1),
          Q3 = rabbit_queue_decorator:set(Q2),
-         F = fun () ->
-                 mnesia:write(rabbit_durable_queue, Q3, write)
-             end,
-         rabbit_misc:execute_mnesia_transaction(F)
+         ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
+            rabbit_misc:execute_mnesia_transaction(
+              fun () ->
+                      mnesia:write(rabbit_durable_queue, Q3, write)
+              end),
+            begin
+                Q4 = amqqueue:upgrade(Q3),
+                rabbit_misc:execute_mnesia_transaction(
+                  fun () ->
+                          mnesia:write(rabbit_durable_queue, Q4, write)
+                  end)
+            end)
      end || Q0 <- Qs],
     ok.
 
