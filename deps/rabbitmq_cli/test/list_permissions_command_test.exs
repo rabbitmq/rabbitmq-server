@@ -24,6 +24,7 @@ defmodule ListPermissionsCommandTest do
   @user "guest"
   @root   "/"
   @default_timeout :infinity
+  @default_options %{vhost: "/", no_table_headers: false}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -47,18 +48,20 @@ defmodule ListPermissionsCommandTest do
       opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout],
-        vhost: "/"
+        vhost: "/",
+        no_table_headers: false
       }
     }
   end
 
-  test "merge_defaults adds default vhost" do
-    assert {[], %{vhost: "/"}} == @command.merge_defaults([], %{})
+  test "merge_defaults adds default options" do
+    assert @command.merge_defaults([], %{}) == {[], @default_options}
   end
 
   test "merge_defaults: defaults can be overridden" do
-    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
-    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
+    assert @command.merge_defaults([], %{}) == {[], @default_options}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default",
+                                                                          no_table_headers: false}}
   end
 
   test "validate: invalid parameters yield an arg count error" do

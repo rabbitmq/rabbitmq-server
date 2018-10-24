@@ -11,16 +11,15 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
 alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
 defmodule RabbitMQ.CLI.Formatters.Table do
-
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_stream(stream, options) do
-    ## Flatten list_consumers
+    # Flatten for list_consumers
     Stream.flat_map(stream,
                     fn([first | _] = element) ->
                         case Keyword.keyword?(first) or is_map(first) do
@@ -33,18 +32,22 @@ defmodule RabbitMQ.CLI.Formatters.Table do
     |> Stream.transform(:init,
                         FormatterHelpers.without_errors_2(
                           fn(element, :init) ->
-                              {with_header(element, options), :next}
+                              {maybe_header(element, options), :next}
                             (element, :next) ->
                               {[format_output_1(element, options)], :next}
                           end))
   end
 
   def format_output(output, options) do
-    with_header(output, options)
+    maybe_header(output, options)
   end
 
-  defp with_header(output, options) do
-    format_header(output) ++ [format_output_1(output, options)]
+  defp maybe_header(output, options) do
+    case Map.get(options, :no_table_headers, false) do
+      true  -> [format_output_1(output, options)]
+      false -> format_header(output) ++ [format_output_1(output, options)]
+      nil   -> format_header(output) ++ [format_output_1(output, options)]
+    end
   end
 
   defp format_output_1(output, options) when is_map(output) do

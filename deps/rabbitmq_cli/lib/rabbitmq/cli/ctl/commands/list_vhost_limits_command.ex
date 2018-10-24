@@ -20,13 +20,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def switches(), do: [global: :boolean]
+  def switches(), do: [global: :boolean, no_table_headers: :boolean]
 
   def merge_defaults(args, %{global: true} = opts) do
-    {args, opts}
+    {args, Map.merge(%{no_table_headers: false}, opts)}
   end
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/"}, opts)}
+    {args, Map.merge(%{vhost: "/", no_table_headers: false}, opts)}
   end
 
   def validate([_|_], _) do

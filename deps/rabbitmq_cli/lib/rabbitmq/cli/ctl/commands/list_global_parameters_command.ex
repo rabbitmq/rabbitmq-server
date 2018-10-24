@@ -21,11 +21,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def merge_defaults(args, opts) do
-    {args, opts}
+    {args, Map.merge(%{no_table_headers: false}, opts)}
   end
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer]
+  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   def validate([_|_], _) do

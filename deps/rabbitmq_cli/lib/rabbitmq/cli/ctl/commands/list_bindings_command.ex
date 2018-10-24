@@ -28,13 +28,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [timeout: :integer]
+  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   def merge_defaults([], opts) do
-    {~w(source_name source_kind
-             destination_name destination_kind
-             routing_key arguments), Map.merge(default_opts(), opts)}
+    merge_defaults(
+      ~w(source_name source_kind
+        destination_name destination_kind
+        routing_key arguments), opts)
   end
   def merge_defaults(args, opts) do
     {args, Map.merge(default_opts(), opts)}
@@ -69,7 +70,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   end
 
   defp default_opts() do
-      %{vhost: "/"}
+      %{vhost: "/", no_table_headers: false}
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."

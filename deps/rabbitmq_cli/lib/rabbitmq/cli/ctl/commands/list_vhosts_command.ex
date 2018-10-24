@@ -27,11 +27,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   def info_keys(), do: @info_keys
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer]
+  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
-  def merge_defaults([], opts), do: {["name"], opts}
-  def merge_defaults(args, opts), do: {args, opts}
+  def merge_defaults([], opts) do
+    merge_defaults(["name"], opts)
+  end
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{no_table_headers: false}, opts)}
+  end
 
   def validate(args, _) do
     case InfoKeys.validate_info_keys(args, @info_keys) do

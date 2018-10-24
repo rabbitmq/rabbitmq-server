@@ -27,7 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
   def info_keys(), do: @info_keys
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer]
+  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   def merge_defaults([], opts) do
@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
   end
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/"}, opts)}
+    {args, Map.merge(%{vhost: "/", no_table_headers: false}, opts)}
   end
 
   def validate(args, _) do
