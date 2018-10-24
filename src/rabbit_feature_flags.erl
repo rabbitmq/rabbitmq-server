@@ -32,7 +32,9 @@
          are_supported_remotely/1,
          are_supported_remotely/2,
          is_enabled/1,
+         is_enabled/2,
          is_disabled/1,
+         is_disabled/2,
          info/0,
          init/0,
          check_node_compatibility/1,
@@ -49,6 +51,9 @@
 
 %% Default timeout for operations on remote nodes.
 -define(TIMEOUT, 60000).
+
+-define(FF_REGISTRY_LOADING_LOCK, {feature_flags_registry_loading, self()}).
+-define(FF_STATE_CHANGE_LOCK,     {feature_flags_state_change, self()}).
 
 list() -> list(all).
 
@@ -179,10 +184,28 @@ are_supported_remotely([], FeatureNames, _) ->
     true.
 
 is_enabled(FeatureName) when is_atom(FeatureName) ->
-    rabbit_ff_registry:is_enabled(FeatureName).
+    is_enabled(FeatureName, blocking).
+
+is_enabled(FeatureName, non_blocking) ->
+    rabbit_ff_registry:is_enabled(FeatureName);
+is_enabled(FeatureName, blocking) ->
+    case rabbit_ff_registry:is_enabled(FeatureName) of
+        state_changing ->
+            global:set_lock(?FF_STATE_CHANGE_LOCK),
+            global:del_lock(?FF_STATE_CHANGE_LOCK),
+            is_enabled(FeatureName);
+        IsEnabled ->
+            IsEnabled
+    end.
 
 is_disabled(FeatureName) when is_atom(FeatureName) ->
-    not rabbit_ff_registry:is_enabled(FeatureName).
+    is_disabled(FeatureName, blocking).
+
+is_disabled(FeatureName, Blocking) ->
+    case is_enabled(FeatureName, Blocking) of
+        state_changing -> state_changing;
+        IsEnabled      -> not IsEnabled
+    end.
 
 info() ->
     rabbit_feature_flags_extra:info().
@@ -196,26 +219,26 @@ init() ->
     ok.
 
 initialize_registry() ->
+    EnabledFeatureNames = read_enabled_feature_flags_list(),
+    initialize_registry(EnabledFeatureNames, []).
+
+initialize_registry(EnabledFeatureNames, ChangingFeatureNames) ->
     rabbit_log:info("Feature flags: (re)initialize registry", []),
     AllFeatureFlags = query_supported_feature_flags(),
-    EnabledFeatureNames = read_enabled_feature_flags_list(),
-    EnabledFeatureFlags = maps:filter(
-                            fun(FeatureName, _) ->
-                                    lists:member(FeatureName,
-                                                 EnabledFeatureNames)
-                            end, AllFeatureFlags),
     rabbit_log:info("Feature flags: List of feature flags found:", []),
     lists:foreach(
       fun(FeatureName) ->
               rabbit_log:info(
                 "Feature flags:   [~s] ~s",
-                [case maps:is_key(FeatureName, EnabledFeatureFlags) of
+                [case lists:member(FeatureName, EnabledFeatureNames) of
                      true  -> "x";
                      false -> " "
                  end,
                  FeatureName])
       end, lists:sort(maps:keys(AllFeatureFlags))),
-    regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags).
+    regen_registry_mod(AllFeatureFlags,
+                       EnabledFeatureNames,
+                       ChangingFeatureNames).
 
 query_supported_feature_flags() ->
     rabbit_log:info("Feature flags: query feature flags "
@@ -245,7 +268,9 @@ merge_new_feature_flags(AllFeatureFlags, App, FeatureName, FeatureProps)
     maps:merge(AllFeatureFlags,
                #{FeatureName => FeatureProps1}).
 
-regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags) ->
+regen_registry_mod(AllFeatureFlags,
+                   EnabledFeatureNames,
+                   ChangingFeatureNames) ->
     %% -module(rabbit_ff_registry).
     ModuleAttr = erl_syntax:attribute(
                    erl_syntax:atom(module),
@@ -270,6 +295,11 @@ regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags) ->
     ListAllClause = erl_syntax:clause([erl_syntax:atom(all)],
                                       [],
                                       [ListAllBody]),
+    EnabledFeatureFlags = maps:filter(
+                            fun(FeatureName, _) ->
+                                    lists:member(FeatureName,
+                                                 EnabledFeatureNames)
+                            end, AllFeatureFlags),
     ListEnabledBody = erl_syntax:abstract(EnabledFeatureFlags),
     ListEnabledClause = erl_syntax:clause([erl_syntax:atom(enabled)],
                                           [],
@@ -279,8 +309,7 @@ regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags) ->
                 [ListAllClause, ListEnabledClause]),
     ListFunForm = erl_syntax:revert(ListFun),
     %% is_supported(_) -> ...
-    IsSupportedClauses = [
-                          erl_syntax:clause(
+    IsSupportedClauses = [erl_syntax:clause(
                             [erl_syntax:atom(FeatureName)],
                             [],
                             [erl_syntax:atom(true)])
@@ -295,12 +324,18 @@ regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags) ->
                        IsSupportedClauses ++ [NotSupportedClause]),
     IsSupportedFunForm = erl_syntax:revert(IsSupportedFun),
     %% is_enabled(_) -> ...
-    IsEnabledClauses = [
-                        erl_syntax:clause(
+    IsEnabledClauses = [erl_syntax:clause(
                           [erl_syntax:atom(FeatureName)],
                           [],
-                          [erl_syntax:atom(
-                             maps:is_key(FeatureName, EnabledFeatureFlags))])
+                          [case lists:member(FeatureName,
+                                             ChangingFeatureNames) of
+                               true ->
+                                   erl_syntax:atom(state_changing);
+                               false ->
+                                   erl_syntax:atom(
+                                     lists:member(FeatureName,
+                                                  EnabledFeatureNames))
+                           end])
                         || FeatureName <- maps:keys(AllFeatureFlags)
                        ],
     NotEnabledClause = erl_syntax:clause(
@@ -332,13 +367,12 @@ regen_registry_mod(AllFeatureFlags, EnabledFeatureFlags) ->
 
 load_registry_mod(Mod, Bin) ->
     rabbit_log:info("Feature flags: registry module ready, loading it..."),
-    LockId = {?MODULE, self()},
     FakeFilename = "Compiled and loaded by " ++ ?MODULE_STRING,
-    global:set_lock(LockId, [node()]),
+    global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     _ = code:soft_purge(Mod),
     _ = code:delete(Mod),
     Ret = code:load_binary(Mod, FakeFilename, Bin),
-    global:del_lock(LockId, [node()]),
+    global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
     case Ret of
         {module, _} ->
             rabbit_log:info("Feature flags: registry module loaded"),
@@ -376,14 +410,31 @@ enabled_feature_flags_list_file() ->
 %% -------------------------------------------------------------------
 
 do_enable(FeatureName) ->
-    case enable_dependencies(FeatureName, true) of
-        ok ->
-            case run_migration_fun(FeatureName, enable) of
-                ok    -> mark_as_enabled(FeatureName);
-                Error -> Error
-            end;
-        Error -> Error
-    end.
+    %% We mark this feature flag as "state changing" before doing the
+    %% actual state change. We also take a global lock: this permits
+    %% to block callers asking about a feature flag changing state.
+    global:set_lock(?FF_STATE_CHANGE_LOCK),
+    EnabledFeatureNames = maps:keys(list(enabled)),
+    Ret = case initialize_registry(EnabledFeatureNames, [FeatureName]) of
+              ok ->
+                  case enable_dependencies(FeatureName, true) of
+                      ok ->
+                          case run_migration_fun(FeatureName, enable) of
+                              ok    -> mark_as_enabled(FeatureName);
+                              Error -> Error
+                          end;
+                      Error ->
+                          Error
+                  end;
+              Error ->
+                  Error
+          end,
+    case Ret of
+        ok -> ok;
+        _  -> initialize_registry(EnabledFeatureNames, [])
+    end,
+    global:del_lock(?FF_STATE_CHANGE_LOCK),
+    Ret.
 
 enable_locally(FeatureName) when is_atom(FeatureName) ->
     case is_enabled(FeatureName) of
@@ -461,10 +512,10 @@ mark_as_enabled(FeatureName) ->
 mark_as_enabled_locally(FeatureName) ->
     rabbit_log:info("Feature flag `~s`: mark as enabled",
                     [FeatureName]),
-    EnabledFeatureNames = read_enabled_feature_flags_list(),
-    EnabledFeatureNames1 = [FeatureName | EnabledFeatureNames],
-    write_enabled_feature_flags_list(EnabledFeatureNames1),
-    initialize_registry().
+    EnabledFeatureNames = lists:usort(
+                            [FeatureName | maps:keys(list(enabled))]),
+    write_enabled_feature_flags_list(EnabledFeatureNames),
+    initialize_registry(EnabledFeatureNames, []).
 
 mark_as_enabled_remotely(FeatureName) ->
     %% FIXME: Handle error cases.
@@ -499,8 +550,8 @@ does_node_support(Node, FeatureNames, Timeout) ->
                    [{?MODULE, are_supported_locally, [FeatureNames], []}
                     | _]}}} ->
             rabbit_log:info(
-              "Feature flags: ?MODULE:are_supported_locally(~p) unavailable on node `~s`: "
-              "assuming it is a RabbitMQ 3.7.x node "
+              "Feature flags: ?MODULE:are_supported_locally(~p) unavailable "
+              "on node `~s`: assuming it is a RabbitMQ 3.7.x node "
               "=> consider the feature flags unsupported",
               [FeatureNames, Node]),
             false;
