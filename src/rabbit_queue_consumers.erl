@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_queue_consumers).
@@ -200,14 +200,24 @@ deliver(_FetchFun, _QName, false, State, true, none) ->
     {undelivered, false,
         State#state{use = update_use(State#state.use, inactive)}};
 deliver(FetchFun, QName, false, State = #state{consumers = Consumers}, true, ExclusiveConsumer) ->
-    case deliver_to_consumer(FetchFun, ExclusiveConsumer, QName) of
-        {delivered, R} ->
-            {delivered, false, R, State};
-        undelivered ->
-            {ChPid, Consumer} = ExclusiveConsumer,
-            Consumers1 = remove_consumer(ChPid, Consumer#consumer.tag, Consumers),
-            {undelivered, true,
-                State#state{consumers = Consumers1, use = update_use(State#state.use, inactive)}}
+    {ChPid, Consumer} = ExclusiveConsumer,
+    %% blocked consumers are removed from the queue state, but not the exclusive_consumer field,
+    %% so we need to do this check to avoid adding the exclusive consumer to the channel record
+    %% over and over
+    case is_blocked(ExclusiveConsumer) of
+        true ->
+            {undelivered, false,
+                State#state{use = update_use(State#state.use, inactive)}};
+        false ->
+            case deliver_to_consumer(FetchFun, ExclusiveConsumer, QName) of
+                {delivered, R} ->
+                    {delivered, false, R, State};
+                undelivered ->
+                    {ChPid, Consumer} = ExclusiveConsumer,
+                    Consumers1 = remove_consumer(ChPid, Consumer#consumer.tag, Consumers),
+                    {undelivered, true,
+                        State#state{consumers = Consumers1, use = update_use(State#state.use, inactive)}}
+            end
     end;
 deliver(FetchFun, QName, ConsumersChanged,
     State = #state{consumers = Consumers}, false, _ExclusiveConsumer) ->
@@ -262,6 +272,10 @@ deliver_to_consumer(FetchFun,
     update_ch_record(C#cr{acktags              = ChAckTags1,
                           unsent_message_count = Count + 1}),
     R.
+
+is_blocked(Consumer = {ChPid, _C}) ->
+    #cr{blocked_consumers = BlockedConsumers} = lookup_ch(ChPid),
+    priority_queue:member(Consumer, BlockedConsumers).
 
 record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
