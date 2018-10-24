@@ -124,18 +124,6 @@ append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
      {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7}};
 %% channel_queue_stats_deliver_stats, queue_stats_deliver_stats,
 %% vhost_stats_deliver_stats, channel_stats_deliver_stats
-append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
-           {S1, S2, S3, S4, S5, S6, S7},
-           {T1, T2, T3, T4, T5, T6, T7}) ->
-    {{append_sample(V1, TS, S1), append_sample(V2, TS, S2),
-      append_sample(V3, TS, S3), append_sample(V4, TS, S4),
-      append_sample(V5, TS, S5), append_sample(V6, TS, S6),
-      append_sample(V7, TS, S7)},
-     {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7}};
-%% channel_process_stats, queue_stats_publish, queue_exchange_stats_publish,
-%% exchange_stats_publish_out, exchange_stats_publish_in, queue_process_stats
-append_full_sample(TS, {V1}, {S1}, {T1}) ->
-    {{append_sample(V1, TS, S1)}, {V1 + T1}};
 %% node_coarse_stats
 append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7, V8},
            {S1, S2, S3, S4, S5, S6, S7, S8},
@@ -145,6 +133,10 @@ append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7, V8},
       append_sample(V5, TS, S5), append_sample(V6, TS, S6),
       append_sample(V7, TS, S7), append_sample(V8, TS, S8)},
      {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7, V8 + T8}};
+%% channel_process_stats, queue_stats_publish, queue_exchange_stats_publish,
+%% exchange_stats_publish_out, exchange_stats_publish_in, queue_process_stats
+append_full_sample(TS, {V1}, {S1}, {T1}) ->
+    {{append_sample(V1, TS, S1)}, {V1 + T1}};
 %% node_persister_stats
 append_full_sample(TS,
            {V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14,
@@ -171,7 +163,6 @@ append_full_sample(TS,
 %% vhost_msg_rates
 append_full_sample(TS, {V1, V2}, {S1, S2}, {T1, T2}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2)}, {V1 + T1, V2 + T2}}.
-
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe}) ->
     [
