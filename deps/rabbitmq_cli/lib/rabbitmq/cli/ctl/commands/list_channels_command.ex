@@ -25,6 +25,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
+  def switches(), do: [no_table_headers: :boolean]
 
   @info_keys ~w(pid connection name number user vhost transactional
                 confirm consumer_count messages_unacknowledged
@@ -34,9 +35,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   def info_keys(), do: @info_keys
 
   def merge_defaults([], opts) do
-    {~w(pid user consumer_count messages_unacknowledged), opts}
+    merge_defaults(~w(pid user consumer_count messages_unacknowledged), opts)
   end
-  def merge_defaults(args, opts), do: {args, opts}
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{no_table_headers: false}, opts)}
+  end
 
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do

@@ -21,24 +21,21 @@ defmodule ListPoliciesCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand
 
   @vhost "test1"
-  @root   "/"
+  @default_vhost   "/"
   @key "federate"
   @pattern "^fed\."
   @value "{\"federation-upstream-set\":\"all\"}"
   @apply_to "all"
+  @default_options %{vhost: "/", no_table_headers: false}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     add_vhost @vhost
-
     enable_federation_plugin()
 
     on_exit(fn ->
       delete_vhost @vhost
-
-
     end)
 
     :ok
@@ -57,9 +54,16 @@ defmodule ListPoliciesCommandTest do
         timeout: (context[:timeout] || :infinity),
         vhost: context[:vhost],
         apply_to: @apply_to,
-        priority: 0
+        priority: 0,
+        no_table_headers: false
       }
     }
+  end
+
+  test "merge_defaults: default vhost is '/'" do
+    assert @command.merge_defaults([], %{}) == {[], @default_options}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default",
+                                                                          no_table_headers: false}}
   end
 
   test "validate: providing too many arguments fails validation" do
@@ -84,9 +88,8 @@ defmodule ListPoliciesCommandTest do
     assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 
-  @tag key: @key, pattern: @pattern, value: @value, vhost: @root
+  @tag key: @key, pattern: @pattern, value: @value, vhost: @default_vhost
   test "run: a well-formed command with no vhost runs against the default one", context do
-
     set_policy("/", context[:key], context[:pattern], @value)
     on_exit(fn ->
       clear_policy("/", context[:key])
@@ -110,11 +113,6 @@ defmodule ListPoliciesCommandTest do
       [],
       vhost_opts
     ) == {:error, {:no_such_vhost, context[:vhost]}}
-  end
-
-  test "merge_defaults: default vhost is '/'" do
-    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
-    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
   end
 
   @tag vhost: @vhost
@@ -147,7 +145,7 @@ defmodule ListPoliciesCommandTest do
 
   # Checks each element of the first policy against the expected context values
   defp assert_policy_list(policies, context) do
-    [policy] = policies
+    [policy | _] = policies
     assert MapSet.new(policy) == MapSet.new([name: context[:key],
                                              pattern: context[:pattern],
                                              definition: context[:value],

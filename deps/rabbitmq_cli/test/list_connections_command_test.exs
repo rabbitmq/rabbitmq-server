@@ -5,17 +5,15 @@ defmodule ListConnectionsCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand
   @user "guest"
   @default_timeout 15000
+  @default_options %{no_table_headers: false}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-
 
     close_all_connections(get_rabbit_hostname())
 
     on_exit([], fn ->
       close_all_connections(get_rabbit_hostname())
-
-
     end)
 
     :ok
@@ -26,13 +24,14 @@ defmodule ListConnectionsCommandTest do
       :ok,
       opts: %{
         node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || @default_timeout
+        timeout: context[:test_timeout] || @default_timeout,
+        no_table_headers: false
       }
     }
   end
 
   test "merge_defaults: user, peer_host, peer_port and state by default" do
-    assert @command.merge_defaults([], %{}) == {~w(user peer_host peer_port state), %{}}
+    assert @command.merge_defaults([], %{}) == {~w(user peer_host peer_port state), @default_options}
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do

@@ -8,10 +8,10 @@ defmodule ListConsumersCommandTest do
   @user "guest"
   @default_timeout :infinity
   @info_keys ~w(queue_name channel_pid consumer_tag ack_required prefetch_count arguments)
+  @default_options %{vhost: "/", no_table_headers: false}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
-
 
     :ok
   end
@@ -27,14 +27,16 @@ defmodule ListConsumersCommandTest do
       opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || @default_timeout,
-        vhost: @vhost
+        vhost: @vhost,
+        no_table_headers: false
       }
     }
   end
 
   test "merge_defaults: defaults can be overridden" do
-    assert @command.merge_defaults([], %{}) == {@info_keys, %{vhost: "/"}}
-    assert @command.merge_defaults([], %{vhost: "non_default"}) == {@info_keys, %{vhost: "non_default"}}
+    assert @command.merge_defaults([], %{}) == {@info_keys, @default_options}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {@info_keys, %{vhost: "non_default",
+                                                                                  no_table_headers: false}}
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do

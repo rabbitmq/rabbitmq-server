@@ -25,6 +25,7 @@ defmodule ListParametersCommandTest do
   @component_name "federation-upstream"
   @key "reconnect-delay"
   @value "{\"uri\":\"amqp://\"}"
+  @default_options %{vhost: "/", no_table_headers: false}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -73,8 +74,9 @@ defmodule ListParametersCommandTest do
   end
 
   test "merge_defaults: defaults can be overridden" do
-    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
-    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
+    assert @command.merge_defaults([], %{}) == {[], @default_options}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default",
+                                                                          no_table_headers: false}}
   end
 
   test "validate: wrong number of arguments leads to an arg count error" do
