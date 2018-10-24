@@ -23,6 +23,8 @@
          fields/0,
          fields/1,
          field_vhost/0,
+         record_version_to_use/0,
+         upgrade/1,
          upgrade_to/2,
          % arguments
          get_arguments/1,
@@ -142,6 +144,12 @@ new_with_version(?record_version,
 
 is_amqqueue(#amqqueue{}) -> true;
 is_amqqueue(_)           -> false.
+
+record_version_to_use() ->
+    ?record_version.
+
+upgrade(#amqqueue{} = Queue) ->
+    Queue.
 
 upgrade_to(?record_version, #amqqueue{} = Queue) ->
     Queue.

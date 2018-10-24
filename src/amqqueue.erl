@@ -24,6 +24,8 @@
          fields/0,
          fields/1,
          field_vhost/0,
+         record_version_to_use/0,
+         upgrade/1,
          upgrade_to/2,
          % arguments
          get_arguments/1,
@@ -86,12 +88,6 @@
          macros/0]).
 
 -define(record_version, amqqueue_v2).
-
-record_version_to_use() ->
-    case rabbit_feature_flags:is_enabled(quorum_queue) of
-        true  -> amqqueue_v2;
-        false -> amqqueue_v1
-    end.
 
 new(Name,
     Pid,
@@ -177,6 +173,15 @@ new_with_version(Version,
 
 is_amqqueue(#amqqueue{}) -> true;
 is_amqqueue(Queue)       -> amqqueue_v1:is_amqqueue(Queue).
+
+record_version_to_use() ->
+    case rabbit_feature_flags:is_enabled(quorum_queue) of
+        true  -> ?record_version;
+        false -> amqqueue_v1:record_version_to_use()
+    end.
+
+upgrade(#amqqueue{} = Queue) -> Queue;
+upgrade(OldQueue)            -> upgrade_to(record_version_to_use(), OldQueue).
 
 upgrade_to(?record_version, #amqqueue{} = Queue) ->
     Queue;
@@ -383,21 +388,21 @@ fields(?record_version) -> record_info(fields, amqqueue);
 fields(Version)         -> amqqueue_v1:fields(Version).
 
 field_vhost() ->
-    case rabbit_feature_flags:is_enabled(quorum_queue) of
-        true  -> #amqqueue.vhost;
-        false -> amqqueue_v1:field_vhost()
+    case record_version_to_use() of
+        ?record_version -> #amqqueue.vhost;
+        _               -> amqqueue_v1:field_vhost()
     end.
 
 pattern_match_all() ->
-    case rabbit_feature_flags:is_enabled(quorum_queue) of
-        true  -> #amqqueue{_ = '_'};
-        false -> amqqueue_v1:pattern_match_all()
+    case record_version_to_use() of
+        ?record_version -> #amqqueue{_ = '_'};
+        _               -> amqqueue_v1:pattern_match_all()
     end.
 
 pattern_match_on_name(Name) ->
-    case rabbit_feature_flags:is_enabled(quorum_queue) of
-        true  -> #amqqueue{name = Name, _ = '_'};
-        false -> amqqueue_v1:pattern_match_on_name(Name)
+    case record_version_to_use() of
+        ?record_version -> #amqqueue{name = Name, _ = '_'};
+        _               -> amqqueue_v1:pattern_match_on_name(Name)
     end.
 
 reset_mirroring_and_decorators(#amqqueue{} = Queue) ->
