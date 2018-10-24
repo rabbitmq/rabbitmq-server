@@ -75,7 +75,7 @@
 -type consumer_id() :: {consumer_tag(), pid()}.
 %% The entity that receives messages. Uniquely identifies a consumer.
 
--type credit_mode() :: as_settled | credited.
+-type credit_mode() :: simple_prefetch | credited.
 %% determines how credit is replenished
 
 -type checkout_spec() :: {once | auto, Num :: non_neg_integer(),
@@ -90,7 +90,10 @@
     {settle, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
     {return, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
     {discard, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
-    {credit, Credit :: non_neg_integer(), DeliveryCount :: non_neg_integer(),
+    {credit,
+     Credit :: non_neg_integer(),
+     DeliveryCount :: non_neg_integer(),
+     Drain :: boolean(),
      Consumer :: consumer_id()} |
     purge.
 
@@ -116,11 +119,11 @@
          %% incremented for each delivery
          delivery_count = 0 :: non_neg_integer(),
          %% the mode of how credit is incremented
-         %% as_settled: credit is re-filled as deliveries are settled
+         %% simple_prefetch: credit is re-filled as deliveries are settled
          %% or returned.
          %% credited: credit can only be changed by receiving a consumer_credit
          %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
-         credit_mode = as_settled :: credit_mode(), % part of snapshot data
+         credit_mode = simple_prefetch :: credit_mode(), % part of snapshot data
          lifetime = once :: once | auto,
          suspected_down = false :: boolean()
         }).
@@ -255,22 +258,48 @@ apply(_, {return, MsgIds, ConsumerId}, Effects0,
         _ ->
             {State, Effects0, ok}
     end;
-apply(_, {credit, NewCredit, RemoteDelCnt, ConsumerId}, Effects,
+apply(_, {credit, NewCredit, RemoteDelCnt, Drain, ConsumerId}, Effects0,
       #state{consumers = Cons0,
              service_queue = ServiceQueue0} = State0) ->
     case Cons0 of
-        #{ConsumerId := #consumer{delivery_count = DelCnt,
-                                  credit = _Credit} = Con0} ->
-            C = RemoteDelCnt + NewCredit - DelCnt,
-            Con = Con0#consumer{credit = C},
-            ServiceQueue = maybe_queue_consumer(ConsumerId, Con,
+        #{ConsumerId := #consumer{delivery_count = DelCnt} = Con0} ->
+            %% this can go below 0 when credit is reduced
+            C = max(0, RemoteDelCnt + NewCredit - DelCnt),
+            %% grant the credit
+            Con1 = Con0#consumer{credit = C},
+            ServiceQueue = maybe_queue_consumer(ConsumerId, Con1,
                                                 ServiceQueue0),
-            Cons = maps:put(ConsumerId, Con, Cons0),
-            checkout(State0#state{service_queue = ServiceQueue,
-                                  consumers = Cons}, Effects);
+            Cons = maps:put(ConsumerId, Con1, Cons0),
+            {State1, Effects, ok} =
+                checkout(State0#state{service_queue = ServiceQueue,
+                                      consumers = Cons}, Effects0),
+            Response = {send_credit_reply, maps:size(State1#state.messages)},
+            %% by this point all checkouts for the updated credit value
+            %% should be processed so we can evaluate the drain
+            case Drain of
+                false ->
+                    %% just return the result of the checkout
+                    {State1, Effects, Response};
+                true ->
+                    Con = #consumer{credit = PostCred} =
+                        maps:get(ConsumerId, State1#state.consumers),
+                    %% add the outstanding credit to the delivery count
+                    DeliveryCount = Con#consumer.delivery_count + PostCred,
+                    Consumers = maps:put(ConsumerId,
+                                         Con#consumer{delivery_count = DeliveryCount,
+                                                      credit = 0},
+                                         State1#state.consumers),
+                    Drained = Con#consumer.credit,
+                    {CTag, _} = ConsumerId,
+                    {State1#state{consumers = Consumers},
+                     Effects,
+                     %% returning a multi response with two client actions
+                     %% for the channel to execute
+                     {multi, [Response, {send_drained, [{CTag, Drained}]}]}}
+            end;
         _ ->
             %% credit for unknown consumer - just ignore
-            {State0, Effects, ok}
+            {State0, Effects0, ok}
     end;
 apply(_, {checkout, {dequeue, _}, {_Tag, _Pid}}, Effects0,
       #state{messages = M,
@@ -280,7 +309,7 @@ apply(_, {checkout, {dequeue, _}, {_Tag, _Pid}}, Effects0,
 apply(Meta, {checkout, {dequeue, settled}, ConsumerId},
       Effects0, State0) ->
     % TODO: this clause could probably be optimised
-    State1 = update_consumer(ConsumerId, {once, 1, as_settled}, State0),
+    State1 = update_consumer(ConsumerId, {once, 1, simple_prefetch}, State0),
     % turn send msg effect into reply
     {success, _, MsgId, Msg, State2} = checkout_one(State1),
     % immediately settle
@@ -289,7 +318,7 @@ apply(Meta, {checkout, {dequeue, settled}, ConsumerId},
     {State, Effects, {dequeue, {MsgId, Msg}}};
 apply(_, {checkout, {dequeue, unsettled}, {_Tag, Pid} = Consumer},
       Effects0, State0) ->
-    State1 = update_consumer(Consumer, {once, 1, as_settled}, State0),
+    State1 = update_consumer(Consumer, {once, 1, simple_prefetch}, State0),
     Effects1 = [{monitor, process, Pid} | Effects0],
     {State, Reply, Effects} = case checkout_one(State1) of
                                   {success, _, MsgId, Msg, S} ->
@@ -648,8 +677,8 @@ complete(ConsumerId, MsgRaftIdxs,
          Con0, Checked, Effects0,
          #state{consumers = Cons0, service_queue = SQ0,
                 ra_indexes = Indexes0} = State0) ->
-    %% credit_mode = as_settled should automatically top-up credit as messages
-    %% are as_settled or otherwise returned
+    %% credit_mode = simple_prefetch should automatically top-up credit as messages
+    %% are simple_prefetch or otherwise returned
     Con = Con0#consumer{checked_out = Checked,
                         credit = increase_credit(Con0, length(MsgRaftIdxs))},
     {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
@@ -820,6 +849,11 @@ checkout_one(#state{service_queue = SQ0,
                     %% there are consumers waiting to be serviced
                     %% process consumer checkout
                     case maps:find(ConsumerId, Cons0) of
+                        {ok, #consumer{credit = 0}} ->
+                            %% no credit but was still on queue
+                            %% can happen when draining
+                            %% recurse without consumer on queue
+                            checkout_one(InitState#state{service_queue = SQ1});
                         {ok, #consumer{checked_out = Checked0,
                                        next_msg_id = Next,
                                        credit = Credit,
@@ -947,6 +981,11 @@ dehydrate_state(#state{messages = Messages0,
                           (_) -> false
                       end, Effects))).
 
+-define(ASSERT_NO_EFF(EfxPat, Effects),
+    ?assert(not lists:any(fun (EfxPat) -> true;
+                          (_) -> false
+                      end, Effects))).
+
 -define(assertNoEffect(EfxPat, Effects),
     ?assert(not lists:any(fun (EfxPat) -> true;
                           (_) -> false
@@ -965,7 +1004,7 @@ enq_enq_checkout_test() ->
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     {_State3, Effects, _} =
-        apply(meta(3), {checkout, {once, 2, as_settled}, Cid}, [], State2),
+        apply(meta(3), {checkout, {once, 2, simple_prefetch}, Cid}, [], State2),
     ?ASSERT_EFF({monitor, _, _}, Effects),
     ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, Effects),
     ok.
@@ -975,7 +1014,7 @@ credit_enq_enq_checkout_settled_credit_test() ->
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     {State3, Effects, _} =
-        apply(meta(3), {checkout, {once, 1, credited}, Cid}, [], State2),
+        apply(meta(3), {checkout, {auto, 1, credited}, Cid}, [], State2),
     ?ASSERT_EFF({monitor, _, _}, Effects),
     Deliveries = lists:filter(fun ({send_msg, _, {delivery, _, _}, _}) -> true;
                                   (_) -> false
@@ -990,7 +1029,7 @@ credit_enq_enq_checkout_settled_credit_test() ->
                                   end, SettledEffects)),
     %% granting credit (3) should deliver the second msg if the receivers
     %% delivery count is (1)
-    {State5, CreditEffects} = credit(Cid, 5, 1, 1, State4),
+    {State5, CreditEffects} = credit(Cid, 5, 1, 1, false, State4),
     % ?debugFmt("CreditEffects  ~p ~n~p", [CreditEffects, State4]),
     ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, CreditEffects),
     {_State6, FinalEffects} = enq(6, 3, third, State5),
@@ -999,6 +1038,45 @@ credit_enq_enq_checkout_settled_credit_test() ->
                                       (_) -> false
                                   end, FinalEffects)),
     ok.
+
+credit_with_drained_test() ->
+    Cid = {?FUNCTION_NAME, self()},
+    State0 = test_init(test),
+    {State1, _, _} =
+        apply(meta(1), {checkout, {auto, 1, credited}, Cid}, [], State0),
+    {State2, _} = credit(Cid, 2, 0, 5, false, State1),
+    {State, DrainedEffs} = credit(Cid, 3, 0, 5, true, State2),
+    ?assertMatch(#state{consumers = #{Cid := #consumer{credit = 0,
+                                                       delivery_count = 5}}},
+                 State),
+    ?ASSERT_EFF({send_msg, _, {send_drained, [{?FUNCTION_NAME, 5}]}, cast},
+                DrainedEffs),
+    ok.
+
+credit_and_drain_test() ->
+    Cid = {?FUNCTION_NAME, self()},
+    {State1, _} = enq(1, 1, first, test_init(test)),
+    {State2, _} = enq(2, 2, second, State1),
+    %% checkout without any initial credit (like AMQP 1.0 would)
+    {State3, CheckEffs, _} =
+        apply(meta(3), {checkout, {auto, 0, credited}, Cid}, [], State2),
+
+    ?ASSERT_NO_EFF({send_msg, _, {delivery, _, _}}, CheckEffs),
+    {State4, Effects, {send_credit_reply, 0}} =
+        apply(meta(4), {credit, 4, 0, true, Cid}, [], State3),
+    ?assertMatch(#state{consumers = #{Cid := #consumer{credit = 0,
+                                                       delivery_count = 4}}},
+                 State4),
+
+    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}},
+                                             {_, {_, second}}]}, _}, Effects),
+    ?ASSERT_EFF({send_msg, _, {send_drained, [{?FUNCTION_NAME, 2}]}, cast},
+                Effects),
+    {_State5, EnqEffs} = enq(5, 2, third, State4),
+    ?ASSERT_NO_EFF({send_msg, _, {delivery, _, _}}, EnqEffs),
+    ok.
+
+
 
 enq_enq_deq_test() ->
     Cid = {?FUNCTION_NAME, self()},
@@ -1059,7 +1137,7 @@ checkout_enq_settle_test() ->
     {State1, [{monitor, _, _}]} = check(Cid, 1, test_init(test)),
     {State2, Effects0} = enq(2, 1,  first, State1),
     ?ASSERT_EFF({send_msg, _,
-                 {delivery, <<"checkout_enq_settle_test">>,
+                 {delivery, ?FUNCTION_NAME,
                   [{0, {_, first}}]}, _},
                 Effects0),
     {State3, [_Inactive]} = enq(3, 2, second, State2),
@@ -1299,7 +1377,7 @@ snapshot_recover_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 2, as_settled}, Cid},
+                {checkout, {auto, 2, simple_prefetch}, Cid},
                 {enqueue, self(), 1, one},
                 {enqueue, self(), 2, two},
                 {enqueue, self(), 3, three},
@@ -1328,7 +1406,7 @@ enq_check_settle_snapshot_recover_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 2, as_settled}, Cid},
+                {checkout, {auto, 2, simple_prefetch}, Cid},
                 {enqueue, self(), 1, one},
                 {enqueue, self(), 2, two},
                 {settle, [1], Cid},
@@ -1376,7 +1454,7 @@ delivery_query_returns_deliveries_test() ->
     Tag = <<"release_cursor_snapshot_state_test">>,
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 5, as_settled}, Cid},
+                {checkout, {auto, 5, simple_prefetch}, Cid},
                 {enqueue, self(), 1, one},
                 {enqueue, self(), 2, two},
                 {enqueue, self(), 3, tre},
@@ -1447,25 +1525,25 @@ deq(Idx, Cid, Settlement, State0) ->
 
 check_n(Cid, Idx, N, State) ->
     strip_reply(apply(meta(Idx),
-                      {checkout, {auto, N, as_settled}, Cid}, [], State)).
+                      {checkout, {auto, N, simple_prefetch}, Cid}, [], State)).
 
 check(Cid, Idx, State) ->
     strip_reply(apply(meta(Idx),
-                      {checkout, {once, 1, as_settled}, Cid}, [], State)).
+                      {checkout, {once, 1, simple_prefetch}, Cid}, [], State)).
 
 check_auto(Cid, Idx, State) ->
     strip_reply(apply(meta(Idx),
-                      {checkout, {auto, 1, as_settled}, Cid}, [], State)).
+                      {checkout, {auto, 1, simple_prefetch}, Cid}, [], State)).
 
 check(Cid, Idx, Num, State) ->
     strip_reply(apply(meta(Idx),
-                      {checkout, {once, Num, as_settled}, Cid}, [], State)).
+                      {checkout, {once, Num, simple_prefetch}, Cid}, [], State)).
 
 settle(Cid, Idx, MsgId, State) ->
     strip_reply(apply(meta(Idx), {settle, [MsgId], Cid}, [], State)).
 
-credit(Cid, Idx, Credit, DelCnt, State) ->
-    strip_reply(apply(meta(Idx), {credit, Credit, DelCnt, Cid}, [], State)).
+credit(Cid, Idx, Credit, DelCnt, Drain, State) ->
+    strip_reply(apply(meta(Idx), {credit, Credit, DelCnt, Drain, Cid}, [], State)).
 
 strip_reply({State, Effects, _Replu}) ->
     {State, Effects}.

@@ -97,10 +97,7 @@ handle_info({ra_event, {Name, _}, _} = Evt,
             #state{queue_states = QueueStates} = State0) ->
     FState0 = maps:get(Name, QueueStates),
     case rabbit_quorum_queue:handle_event(Evt, FState0) of
-        {_, FState1} ->
-            {noreply,
-             State0#state{queue_states = maps:put(Name, FState1, QueueStates)}};
-        {_, _, FState1} ->
+        {_, _, _, FState1} ->
             {noreply,
              State0#state{queue_states = maps:put(Name, FState1, QueueStates)}};
         eol ->

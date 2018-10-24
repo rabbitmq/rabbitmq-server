@@ -20,6 +20,7 @@
 -export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
 -export([info/1, info/2, stat/1, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/9, basic_cancel/4]).
+-export([credit/4]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
@@ -290,6 +291,9 @@ reject(true, CTag, MsgIds, FState) ->
 reject(false, CTag, MsgIds, FState) ->
     rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, FState).
 
+credit(CTag, Credit, Drain, QState) ->
+    rabbit_fifo_client:credit(quorum_ctag(CTag), Credit, Drain, QState).
+
 basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
           CTag0, FState0) ->
     CTag = quorum_ctag(CTag0),
@@ -310,18 +314,20 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
     end.
 
 basic_consume(#amqqueue{name = QName, type = quorum}, NoAck, ChPid,
-              ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg, FState0) ->
+              ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg,
+              QState0) ->
     maybe_send_reply(ChPid, OkMsg),
     %% A prefetch count of 0 means no limitation, let's make it into something large for ra
     Prefetch = case ConsumerPrefetchCount of
                    0 -> 2000;
                    Other -> Other
                end,
-    {ok, FState} = rabbit_fifo_client:checkout(quorum_ctag(ConsumerTag), Prefetch, FState0),
-    %% TODO maybe needs to be handled by ra? how can we manage the consumer deleted?
+    {ok, QState} = rabbit_fifo_client:checkout(quorum_ctag(ConsumerTag),
+                                               Prefetch, QState0),
     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                         not NoAck, QName, ConsumerPrefetchCount, Args),
-    {ok, FState}.
+                                         not NoAck, QName,
+                                         ConsumerPrefetchCount, Args),
+    {ok, QState}.
 
 basic_cancel(ConsumerTag, ChPid, OkMsg, FState0) ->
     maybe_send_reply(ChPid, OkMsg),

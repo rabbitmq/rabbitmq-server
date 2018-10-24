@@ -9,6 +9,7 @@
          init/3,
          init/5,
          checkout/3,
+         checkout/4,
          cancel_checkout/2,
          enqueue/2,
          enqueue/3,
@@ -16,6 +17,7 @@
          settle/3,
          return/3,
          discard/3,
+         credit/4,
          handle_ra_event/3,
          untracked_enqueue/2,
          purge/1,
@@ -27,6 +29,13 @@
 -define(SOFT_LIMIT, 256).
 
 -type seq() :: non_neg_integer().
+-type action() :: {send_credit_reply, Available :: non_neg_integer()} |
+                  {send_drained, CTagCredit ::
+                   {rabbit_fifo:consumer_tag(), non_neg_integer()}}.
+-type actions() :: [action()].
+
+-record(consumer, {last_msg_id :: seq(),
+                   delivery_count = 0 :: non_neg_integer()}).
 
 -record(state, {cluster_name :: ra_cluster_name(),
                 servers = [] :: [ra_server_id()],
@@ -42,7 +51,7 @@
                 pending = #{} :: #{seq() =>
                                    {maybe(term()), rabbit_fifo:command()}},
                 consumer_deliveries = #{} :: #{rabbit_fifo:consumer_tag() =>
-                                               seq()},
+                                               #consumer{}},
                 priority = normal :: normal | low,
                 block_handler = fun() -> ok end :: fun(() -> ok),
                 unblock_handler = fun() -> ok end :: fun(() -> ok),
@@ -275,10 +284,62 @@ discard(ConsumerTag, [_|_] = MsgIds,
 -spec checkout(rabbit_fifo:consumer_tag(), NumUnsettled :: non_neg_integer(),
                state()) -> {ok, state()} | {error | timeout, term()}.
 checkout(ConsumerTag, NumUnsettled, State0) ->
+    checkout(ConsumerTag, NumUnsettled, simple_prefetch, State0).
+
+%% @doc Register with the rabbit_fifo queue to "checkout" messages as they
+%% become available.
+%%
+%% This is a syncronous call. I.e. the call will block until the command
+%% has been accepted by the ra process or it times out.
+%%
+%% @param ConsumerTag a unique tag to identify this particular consumer.
+%% @param NumUnsettled the maximum number of in-flight messages. Once this
+%% number of messages has been received but not settled no further messages
+%% will be delivered to the consumer.
+%% @param CreditMode The credit mode to use for the checkout.
+%%     simple_prefetch: credit is auto topped up as deliveries are settled
+%%     credited: credit is only increased by sending credit to the queue
+%% @param State The {@module} state.
+%%
+%% @returns `{ok, State}' or `{error | timeout, term()}'
+-spec checkout(rabbit_fifo:consumer_tag(), NumUnsettled :: non_neg_integer(),
+               CreditMode :: rabbit_fifo:credit_mode(),
+               state()) -> {ok, state()} | {error | timeout, term()}.
+checkout(ConsumerTag, NumUnsettled, CreditMode, State0) ->
     Servers = sorted_servers(State0),
     ConsumerId = {ConsumerTag, self()},
-    Cmd = {checkout, {auto, NumUnsettled, as_settled}, ConsumerId},
+    Cmd = {checkout, {auto, NumUnsettled, CreditMode}, ConsumerId},
     try_process_command(Servers, Cmd, State0).
+
+%% @doc Provide credit to the queue
+%%
+%% This only has an effect if the consumer uses credit mode: credited
+%% @param ConsumerTag a unique tag to identify this particular consumer.
+%% @param Credit the amount of credit to provide to theq queue
+%% @param Drain tells the queue to use up any credit that cannot be immediately
+%% fulfilled. (i.e. there are not enough messages on queue to use up all the
+%% provided credit).
+-spec credit(rabbit_fifo:consumer_tag(),
+             Credit :: non_neg_integer(),
+             Drain :: boolean(),
+             state()) ->
+    {ok, state()}.
+credit(ConsumerTag, Credit, Drain,
+       #state{consumer_deliveries = CDels} = State0) ->
+    ConsumerId = consumer_id(ConsumerTag),
+    %% the last received msgid provides us with the delivery count if we
+    %% add one as it is 0 indexed
+    C = maps:get(ConsumerTag, CDels, #consumer{last_msg_id = -1}),
+    Node = pick_node(State0),
+    Cmd = {credit, Credit, C#consumer.last_msg_id + 1, Drain, ConsumerId},
+    ct:pal("sending credit ~w", [Cmd]),
+    case send_command(Node, undefined, Cmd, normal, State0) of
+        {slow, S} ->
+            % turn slow into ok for this function
+            {ok, S};
+        {ok, _} = Ret ->
+            Ret
+    end.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%
@@ -358,14 +419,14 @@ cluster_name(#state{cluster_name = ClusterName}) ->
 %% used to {@link settle/3.} (roughly: AMQP 0.9.1 ack) message once finished
 %% with them.</li>
 -spec handle_ra_event(ra_server_id(), ra_server_proc:ra_event_body(), state()) ->
-    {internal, Correlators :: [term()], state()} |
+    {internal, Correlators :: [term()], actions(), state()} |
     {rabbit_fifo:client_msg(), state()} | eol.
 handle_ra_event(From, {applied, Seqs},
                 #state{soft_limit = SftLmt,
                        unblock_handler = UnblockFun} = State0) ->
-    {Corrs, State1} = lists:foldl(fun seq_applied/2,
-                                  {[], State0#state{leader = From}},
-                                  Seqs),
+    {Corrs, Actions, State1} = lists:foldl(fun seq_applied/2,
+                                           {[], [], State0#state{leader = From}},
+                                           Seqs),
     case maps:size(State1#state.pending) < SftLmt of
         true when State1#state.slow == true ->
             % we have exited soft limit state
@@ -389,19 +450,19 @@ handle_ra_event(From, {applied, Seqs},
                                         end
                                 end, State2, Commands),
             UnblockFun(),
-            {internal, lists:reverse(Corrs), State};
+            {internal, lists:reverse(Corrs), lists:reverse(Actions), State};
         _ ->
-            {internal, lists:reverse(Corrs), State1}
+            {internal, lists:reverse(Corrs), lists:reverse(Actions), State1}
     end;
 handle_ra_event(Leader, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
     handle_delivery(Leader, Del, State0);
 handle_ra_event(_From, {rejected, {not_leader, undefined, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
-    {internal, [], State0};
+    {internal, [], [], State0};
 handle_ra_event(_From, {rejected, {not_leader, Leader, Seq}}, State0) ->
     State1 = State0#state{leader = Leader},
     State = resend(Seq, State1),
-    {internal, [], State};
+    {internal, [], [], State};
 handle_ra_event(_Leader, {machine, eol}, _State0) ->
     eol.
 
@@ -438,26 +499,46 @@ try_process_command([Server | Rem], Cmd, State) ->
             try_process_command(Rem, Cmd, State)
     end.
 
-seq_applied({Seq, _}, {Corrs, #state{last_applied = Last} = State0})
+seq_applied({Seq, MaybeAction},
+            {Corrs, Actions0, #state{last_applied = Last} = State0})
   when Seq > Last orelse Last =:= undefined ->
-    State = case Last of
+    State1 = case Last of
                 undefined -> State0;
                 _ ->
                     do_resends(Last+1, Seq-1, State0)
             end,
+    {Actions, State} = maybe_add_action(MaybeAction, Actions0, State1),
     case maps:take(Seq, State#state.pending) of
         {{undefined, _}, Pending} ->
-            {Corrs, State#state{pending = Pending,
-                                last_applied = Seq}};
-        {{Corr, _}, Pending} ->
-            {[Corr | Corrs], State#state{pending = Pending,
+            {Corrs, Actions, State#state{pending = Pending,
                                          last_applied = Seq}};
+        {{Corr, _}, Pending} ->
+            {[Corr | Corrs], Actions, State#state{pending = Pending,
+                                                  last_applied = Seq}};
         error ->
             % must have already been resent or removed for some other reason
-            {Corrs, State}
+            {Corrs, Actions, State}
     end;
 seq_applied(_Seq, Acc) ->
     Acc.
+
+maybe_add_action(ok, Acc, State) ->
+    {Acc, State};
+maybe_add_action({multi, Actions}, Acc0, State0) ->
+    lists:foldl(fun (Act, {Acc, State}) ->
+                        maybe_add_action(Act, Acc, State)
+                end, {Acc0, State0}, Actions);
+maybe_add_action({send_drained, {Tag, Credit}} = Action, Acc,
+                 #state{consumer_deliveries = CDels} = State) ->
+    %% add credit to consumer delivery_count
+    C = maps:get(Tag, CDels),
+    {[Action | Acc],
+     State#state{consumer_deliveries =
+                 update_consumer(Tag, C#consumer.last_msg_id,
+                                 Credit, C, CDels)}};
+maybe_add_action(Action, Acc, State) ->
+    %% anything else is assumed to be an action
+    {[Action | Acc], State}.
 
 do_resends(From, To, State) when From =< To ->
     ?INFO("doing resends From ~w  To ~w~n", [From, To]),
@@ -475,39 +556,48 @@ resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
             State
     end.
 
-% credit_consumer(Tag, #state{consumer_deliveries = CDels}) ->
-%     %% send credit command to rabbit fifo with last received msg id and the
-%     %% credit to add
-%     %% rabbit_fifo laster will take _it's_ last send msg id for the consumer
-%     %% and take that away from this credit plus the lcient\s last msg id to
-%     %% arrive at the next credit level.
-%     ra:pipeline_command(adf, {credit_consumer, maps:get(Tag, CDels), Credit}).
-
-
 handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
                 #state{consumer_deliveries = CDels0} = State0) ->
     {LastId, _} = lists:last(IdMsgs),
-    case maps:get(Tag, CDels0, -1) of
-        Prev when FstId =:= Prev+1 ->
+    %% TODO: remove potential default allocation
+    case maps:get(Tag, CDels0, #consumer{last_msg_id = -1}) of
+        #consumer{last_msg_id = Prev} = C
+          when FstId =:= Prev+1 ->
             {Del0, State0#state{consumer_deliveries =
-                                maps:put(Tag, LastId, CDels0)}};
-        Prev when FstId > Prev+1 ->
+                                update_consumer(Tag, LastId, length(IdMsgs), C,
+                                                CDels0)}};
+        #consumer{last_msg_id = Prev} = C
+          when FstId > Prev+1 ->
             Missing = get_missing_deliveries(Leader, Prev+1, FstId-1, Tag),
             Del = {delivery, Tag, Missing ++ IdMsgs},
             {Del, State0#state{consumer_deliveries =
-                               maps:put(Tag, LastId, CDels0)}};
-        Prev when FstId =< Prev ->
+                               update_consumer(Tag, LastId,
+                                               length(IdMsgs) + length(Missing),
+                                               C, CDels0)}};
+        #consumer{last_msg_id = Prev}
+          when FstId =< Prev ->
             case lists:dropwhile(fun({Id, _}) -> Id =< Prev end, IdMsgs) of
                 [] ->
-                    {internal, [], State0};
+                    {internal, [], [],  State0};
                 IdMsgs2 ->
                     handle_delivery(Leader, {delivery, Tag, IdMsgs2}, State0)
             end;
         _ when FstId =:= 0 ->
             % the very first delivery
             {Del0, State0#state{consumer_deliveries =
-                                maps:put(Tag, LastId, CDels0)}}
+                                update_consumer(Tag, LastId,
+                                                length(IdMsgs),
+                                                #consumer{last_msg_id = LastId},
+                                                CDels0)}}
     end.
+
+update_consumer(Tag, LastId, DelCntIncr,
+                #consumer{delivery_count = D}, Consumers) ->
+    maps:put(Tag,
+             #consumer{last_msg_id = LastId,
+                       delivery_count = D + DelCntIncr},
+             Consumers).
+
 
 get_missing_deliveries(Leader, From, To, ConsumerTag) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -552,6 +642,11 @@ send_command(Server, Correlation, Command, Priority,
     {Tag, State#state{pending = Pending#{Seq => {Correlation, Command}},
                       priority = Priority,
                       slow = Tag == slow}};
+%% once a low priority command has been sent it's not possible to then
+%% send a normal priority command without risking that commands are
+%% re-ordered. From an AMQP 0.9.1 point of view this should only affect
+%% channels that _both_ publish and consume as the enqueue operation is the
+%% only low priority one that is sent.
 send_command(Node, Correlation, Command, normal,
              #state{priority = low} = State) ->
     send_command(Node, Correlation, Command, low, State);

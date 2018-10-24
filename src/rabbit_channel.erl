@@ -654,9 +654,22 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                                                      Acc)
                               end, State0#ch{queue_states = maps:put(Name, QState2, QueueStates)}, Msgs),
                     noreply(State);
-                {internal, MsgSeqNos, QState1} ->
-                    noreply_coalesce(confirm(MsgSeqNos, From,
-                                             State0#ch{queue_states = maps:put(Name, QState1, QueueStates)}));
+                {internal, MsgSeqNos, Actions, QState1} ->
+                    State = State0#ch{queue_states = maps:put(Name, QState1, QueueStates)},
+                    %% execute actions
+                    WriterPid = State#ch.writer_pid,
+                    lists:foreach(fun ({send_credit_reply, Avail}) ->
+                                          ok = rabbit_writer:send_command(
+                                                 WriterPid,
+                                                 #'basic.credit_ok'{available =
+                                                                    Avail});
+                                      ({send_drained, {CTag, Credit}}) ->
+                                          ok = rabbit_writer:send_command(
+                                                 WriterPid,
+                                                 #'basic.credit_drained'{consumer_tag   = CTag,
+                                                                         credit_drained = Credit})
+                                  end, Actions),
+                    noreply_coalesce(confirm(MsgSeqNos, From, State));
                 eol ->
                     State1 = handle_consuming_queue_down_or_eol(From, State0),
                     State2 = handle_delivering_queue_down(From, State1),
@@ -1547,13 +1560,15 @@ handle_method(#'channel.flow'{active = false}, _, _State) ->
 handle_method(#'basic.credit'{consumer_tag = CTag,
                               credit       = Credit,
                               drain        = Drain},
-              _, State = #ch{consumer_mapping = Consumers}) ->
+              _, State = #ch{consumer_mapping = Consumers,
+                             queue_states = QStates0}) ->
     case maps:find(CTag, Consumers) of
-        {ok, {Q, _CParams}} -> ok = rabbit_amqqueue:credit(
-                                      Q, self(), CTag, Credit, Drain),
-                               {noreply, State};
-        error               -> precondition_failed(
-                                 "unknown consumer tag '~s'", [CTag])
+        {ok, {Q, _CParams}} ->
+            {ok, QStates} = rabbit_amqqueue:credit(
+                              Q, self(), CTag, Credit, Drain, QStates0),
+            {noreply, State#ch{queue_states = QStates}};
+        error -> precondition_failed(
+                   "unknown consumer tag '~s'", [CTag])
     end;
 
 handle_method(_MethodRecord, _Content, _State) ->

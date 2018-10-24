@@ -34,7 +34,7 @@
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
 -export([basic_get/6, basic_consume/12, basic_cancel/6, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
--export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
+-export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/6]).
 -export([on_node_up/1, on_node_down/1]).
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
@@ -173,7 +173,7 @@
           {'ok', non_neg_integer(), qmsg()} | 'empty'.
 -spec credit
         (rabbit_types:amqqueue(), pid(), rabbit_types:ctag(), non_neg_integer(),
-         boolean()) ->
+         boolean(), #{Name :: atom() => rabbit_fifo_client:state()}) ->
             'ok'.
 -spec basic_consume
         (rabbit_types:amqqueue(), boolean(), pid(), pid(), boolean(),
@@ -1071,11 +1071,21 @@ notify_down_all(QPids, ChPid, Timeout) ->
     end.
 
 activate_limit_all(QPids, ChPid) ->
-    delegate:invoke_no_result(QPids, {gen_server2, cast, [{activate_limit, ChPid}]}).
+    delegate:invoke_no_result(QPids, {gen_server2, cast,
+                                      [{activate_limit, ChPid}]}).
 
-credit(#amqqueue{pid = QPid}, ChPid, CTag, Credit, Drain) ->
+credit(#amqqueue{pid = QPid, type = classic}, ChPid, CTag, Credit,
+       Drain, QStates) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast,
-                                     [{credit, ChPid, CTag, Credit, Drain}]}).
+                                     [{credit, ChPid, CTag, Credit, Drain}]}),
+    {ok, QStates};
+credit(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum},
+       _ChPid, CTag, Credit,
+       Drain, QStates) ->
+    QState0 = get_quorum_state(Id, QName, QStates),
+    {ok, QState} = rabbit_quorum_queue:credit(CTag, Credit, Drain, QState0),
+    {ok, maps:put(Name, QState, QStates)}.
+
 
 basic_get(#amqqueue{pid = QPid, type = classic}, ChPid, NoAck, LimiterPid,
           _CTag, _) ->
@@ -1117,8 +1127,10 @@ basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q, 
               ExclusiveConsume, Args, OkMsg, _ActingUser, QStates) ->
     ok = check_consume_arguments(QName, Args),
     QState0 = get_quorum_state(Id, QName, QStates),
-    {ok, QState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid, ConsumerPrefetchCount,
-                                                     ConsumerTag, ExclusiveConsume, Args,
+    {ok, QState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid,
+                                                     ConsumerPrefetchCount,
+                                                     ConsumerTag,
+                                                     ExclusiveConsume, Args,
                                                      OkMsg, QState0),
     {ok, maps:put(Name, QState, QStates)}.
 
