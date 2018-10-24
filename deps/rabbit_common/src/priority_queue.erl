@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
 %% Priority queues have essentially the same interface as ordinary
@@ -33,7 +33,7 @@
 %% When the queue contains items with non-zero priorities, it is
 %% represented as a sorted kv list with the inverted Priority as the
 %% key and an ordinary queue as the value. Here again we use our own
-%% ordinary queue implemention for efficiency, often making recursive
+%% ordinary queue implementation for efficiency, often making recursive
 %% calls into the same function knowing that ordinary queues represent
 %% a base case.
 
@@ -41,7 +41,8 @@
 -module(priority_queue).
 
 -export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, from_list/1,
-         in/2, in/3, out/1, out_p/1, join/2, filter/2, fold/3, highest/1]).
+         in/2, in/3, out/1, out_p/1, join/2, filter/2, fold/3, highest/1,
+         member/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -67,6 +68,7 @@
 -spec fold
         (fun ((any(), priority(), A) -> A), A, pqueue()) -> A.
 -spec highest(pqueue()) -> priority() | 'empty'.
+-spec member(any(), pqueue()) -> boolean().
 
 %%----------------------------------------------------------------------------
 
@@ -213,6 +215,24 @@ fold(Fun, Init, Q) -> case out_p(Q) of
 highest({queue, [], [], 0})     -> empty;
 highest({queue, _, _, _})       -> 0;
 highest({pqueue, [{P, _} | _]}) -> maybe_negate_priority(P).
+
+member(_X, {queue, [], [], 0}) ->
+    false;
+member(X, {queue, R, F, _Size}) ->
+    lists:member(X, R) orelse lists:member(X, F);
+member(_X, {pqueue, []}) ->
+    false;
+member(X, {pqueue, [{_P, Q}]}) ->
+    member(X, Q);
+member(X, {pqueue, [{_P, Q} | T]}) ->
+    case member(X, Q) of
+        true ->
+            true;
+        false ->
+            member(X, {pqueue, T})
+    end;
+member(X, Q) ->
+    erlang:error(badarg, [X,Q]).
 
 r2f([],      0) -> {queue, [], [], 0};
 r2f([_] = R, 1) -> {queue, [], R, 1};
