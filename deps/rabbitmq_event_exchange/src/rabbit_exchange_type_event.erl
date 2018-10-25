@@ -15,8 +15,10 @@
 %%
 
 -module(rabbit_exchange_type_event).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include("rabbit_event_exchange.hrl").
 
 -export([register/0, unregister/0]).
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
@@ -25,9 +27,9 @@
 
 -export([fmt_proplist/1]). %% testing
 
--define(EXCH_NAME, <<"amq.rabbitmq.event">>).
-
--record(state, {vhost}).
+-record(state, {vhost,
+                has_binding
+               }).
 
 -rabbit_boot_step({rabbit_event_exchange,
                    [{description, "event exchange"},
@@ -62,10 +64,18 @@ exchange(VHost) ->
 
 init([]) ->
     VHost = get_vhost(),
-    {ok, #state{vhost = VHost}}.
+    X = rabbit_misc:r(VHost, exchange, ?EXCH_NAME),
+    HasBinding = case rabbit_binding:list_for_source(X) of
+                     [] -> false;
+                     _ -> true
+                 end,
+    {ok, #state{vhost = VHost,
+                has_binding = HasBinding}}.
 
 handle_call(_Request, State) -> {ok, not_understood, State}.
 
+handle_event(_, #state{has_binding = false} = State) ->
+    {ok, State};
 handle_event(#event{type      = Type,
                     props     = Props,
                     timestamp = TS,
@@ -90,6 +100,10 @@ handle_event(#event{type      = Type,
 handle_event(_Event, State) ->
     {ok, State}.
 
+handle_info({event_exchange, added_first_binding}, State) ->
+    {ok, State#state{has_binding = true}};
+handle_info({event_exchange, removed_last_binding}, State) ->
+    {ok, State#state{has_binding = false}};
 handle_info(_Info, State) -> {ok, State}.
 
 terminate(_Arg, _State) -> ok.
