@@ -240,8 +240,8 @@ recover(Queues) ->
                  case ra:start_server(Name, {Name, node()}, Machine, RaNodes) of
                      ok -> ok;
                      Err ->
-                         rabbit_log:warn("recover: Quorum queue ~w could not"
-                                        " be started ~w", [Name, Err]),
+                         rabbit_log:warning("recover: Quorum queue ~w could not"
+                                            " be started ~w", [Name, Err]),
                          ok
                  end;
              {error, {already_started, _}} ->
@@ -251,8 +251,8 @@ recover(Queues) ->
                  ok;
              Err ->
                  %% catch all clause to avoid causing the vhost not to start
-                 rabbit_log:warn("recover: Quorum queue ~w could not be "
-                                 "restarted ~w", [Name, Err]),
+                 rabbit_log:warning("recover: Quorum queue ~w could not be "
+                                    "restarted ~w", [Name, Err]),
                  ok
          end,
          %% we have to ensure the  quorum queue is

@@ -106,7 +106,8 @@ all_tests() ->
      sync_queue,
      cancel_sync_queue,
      basic_recover,
-     idempotent_recover
+     idempotent_recover,
+     vhost_with_quorum_queue_is_deleted
     ].
 
 %% -------------------------------------------------------------------
@@ -425,7 +426,27 @@ idempotent_recover(Config) ->
          #{cluster_state := ServerStatuses} = maps:from_list(I),
          ?assertMatch(#{Server := running}, maps:from_list(ServerStatuses))
      end || I <- rpc:call(Server, rabbit_vhost,info_all, [])],
+    ok.
 
+vhost_with_quorum_queue_is_deleted(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    VHost = <<"vhost2">>,
+    QName = atom_to_binary(?FUNCTION_NAME, utf8),
+    RaName = binary_to_atom(<<VHost/binary, "_", QName/binary>>, utf8),
+    User = ?config(rmq_username, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node,
+                                                              VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    UId = rpc:call(Node, ra_directory, where_is, [RaName]),
+    ?assert(UId =/= undefined),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+    %% validate quorum queues got deleted
+    undefined = rpc:call(Node, ra_directory, where_is, [RaName]),
     ok.
 
 restart_all_types(Config) ->
