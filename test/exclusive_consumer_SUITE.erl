@@ -18,7 +18,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include("amqp_client.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
 
@@ -182,7 +182,7 @@ connection_and_channel(Config) ->
     {C, Ch}.
 
 queue_declare(Channel) ->
-    Declare = #'queue.declare'{arguments = [{"x-exclusive-consumer", bool, true}],
+    Declare = #'queue.declare'{arguments = [{"x-single-active-consumer", bool, true}],
         auto_delete = true},
     #'queue.declare_ok'{queue = Q} = amqp_channel:call(Channel, Declare),
     Q.

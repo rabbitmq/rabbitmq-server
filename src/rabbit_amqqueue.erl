@@ -576,7 +576,7 @@ declare_args() ->
      {<<"x-max-priority">>,            fun check_max_priority_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
-     {<<"x-exclusive-consumer">>,      fun check_exclusive_consumer_arg/2}].
+     {<<"x-single-active-consumer">>,  fun check_single_active_consumer_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -617,7 +617,7 @@ check_max_priority_arg({Type, Val}, Args) ->
         Error                                  -> Error
     end.
 
-check_exclusive_consumer_arg({Type, Val}, Args) ->
+check_single_active_consumer_arg({Type, Val}, Args) ->
     case check_bool_arg({Type, Val}, Args) of
         ok    -> ok;
         Error -> Error

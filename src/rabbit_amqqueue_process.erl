@@ -157,7 +157,7 @@ init(Q) ->
     ?MODULE}.
 
 init_state(Q) ->
-    ExclusiveConsumerOn = case rabbit_misc:table_lookup(Q#amqqueue.arguments, <<"x-exclusive-consumer">>) of
+    ExclusiveConsumerOn = case rabbit_misc:table_lookup(Q#amqqueue.arguments, <<"x-single-active-consumer">>) of
         {bool, true} -> true;
         _            -> false
     end,
