@@ -309,7 +309,7 @@ overview(User, Ranges, Interval) ->
               format_range(DataLookup, vhost_msg_rates,
                            pick_range(queue_msg_rates, Ranges), Interval),
               format_range(DataLookup, vhost_stats_deliver_stats,
-                           pick_range(churn_rates, Ranges), Interval)]),
+                           pick_range(deliver_get, Ranges), Interval)]),
 
     ChurnRates = format_range(DataLookup, connection_churn_rates,
                               pick_range(queue_msg_counts, Ranges), Interval),
