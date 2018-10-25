@@ -6,7 +6,7 @@ A fork of [gmr/httpc-aws](https://github.com/gmr/httpc-aws) for use in building 
 
 ## Supported Erlang Versions
 
- - 17.5+
+[Same as RabbitMQ](http://www.rabbitmq.com/which-erlang.html)
  
 ## Configuration
 
@@ -90,13 +90,13 @@ RequestHeaders = [{"Content-Type", "application/x-amz-json-1.0"},
 ## Build
 
 ```bash
-$ make
+make
 ```
 
 ## Test
 
 ```bash
-$ make test
+make tests
 ```
 
 ## License
