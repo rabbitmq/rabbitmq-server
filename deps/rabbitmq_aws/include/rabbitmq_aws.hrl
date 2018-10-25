@@ -1,6 +1,7 @@
 %% ====================================================================
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
+%% @copyright 2016-2018, Pivotal Software, Inc.
 %% @headerfile
 %% @private
 %% @doc rabbitmq_aws client library constants and records
@@ -17,7 +18,7 @@
 -define(DEFAULT_PROFILE, "default").
 -define(INSTANCE_AZ, ["placement", "availability-zone"]).
 -define(INSTANCE_HOST, "169.254.169.254").
--define(INSTANCE_CONNECT_TIMEOUT, 100).
+-define(INSTANCE_CONNECT_TIMEOUT, 10000).
 -define(INSTANCE_CREDENTIALS, ["iam", "security-credentials"]).
 -define(INSTANCE_METADATA_BASE, ["latest", "meta-data"]).
 
