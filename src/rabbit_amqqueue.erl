@@ -41,6 +41,7 @@
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 -export([is_replicated/1, is_dead_exclusive/1]). % Note: exported due to use in qlc expression.
 -export([list_local_followers/0]).
+-export([ensure_rabbit_queue_record_is_initialized/1]).
 -export([format/1]).
 
 -export([pid_of/1, pid_of/2]).
@@ -49,7 +50,7 @@
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
-	 emit_consumers_local/3, internal_delete/3]).
+         emit_consumers_local/3, internal_delete/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -448,6 +449,15 @@ update(Name, Fun) ->
         [] ->
             not_found
     end.
+
+%% only really used for quorum queues to ensure the rabbit_queue record
+%% is initialised
+ensure_rabbit_queue_record_is_initialized(Q) ->
+    rabbit_misc:execute_mnesia_tx_with_tail(
+      fun () ->
+              ok = store_queue(Q),
+              rabbit_misc:const({ok, Q})
+      end).
 
 store_queue(Q = #amqqueue{durable = true}) ->
     ok = mnesia:write(rabbit_durable_queue,

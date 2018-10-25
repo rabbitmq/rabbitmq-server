@@ -105,7 +105,8 @@ all_tests() ->
      purge,
      sync_queue,
      cancel_sync_queue,
-     basic_recover
+     basic_recover,
+     idempotent_recover
     ].
 
 %% -------------------------------------------------------------------
@@ -395,6 +396,37 @@ restart_queue(Config) ->
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
     ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup])).
+
+idempotent_recover(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    LQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', LQ, 0, 0},
+                 declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% kill default vhost to trigger recovery
+    [{_, SupWrapperPid, _, _} | _] = rpc:call(Server, supervisor,
+                                              which_children,
+                                              [rabbit_vhost_sup_sup]),
+    [{_, Pid, _, _} | _] = rpc:call(Server, supervisor,
+                                    which_children,
+                                    [SupWrapperPid]),
+    %% kill the vhost process to trigger recover
+    rpc:call(Server, erlang, exit, [Pid, kill]),
+
+    timer:sleep(1000),
+    %% validate quorum queue is still functional
+    RaName = ra_name(LQ),
+    {ok, _, _} = ra:members({RaName, Server}),
+    %% validate vhosts are running - or rather validate that at least one
+    %% vhost per cluster is running
+    [begin
+         #{cluster_state := ServerStatuses} = maps:from_list(I),
+         ?assertMatch(#{Server := running}, maps:from_list(ServerStatuses))
+     end || I <- rpc:call(Server, rabbit_vhost,info_all, [])],
+
+    ok.
 
 restart_all_types(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to

@@ -173,14 +173,18 @@ cancel_consumer(QName, ChPid, ConsumerTag) ->
                          {user_who_performed_action, ?INTERNAL_USER}]).
 
 become_leader(QName, Name) ->
-    % QName = queue_name(Name),
-    Fun = fun(Q1) -> Q1#amqqueue{pid = {Name, node()}} end,
+    Fun = fun(Q1) ->
+                  Q1#amqqueue{pid = {Name, node()},
+                              state = live}
+          end,
     %% as this function is called synchronously when a ra node becomes leader
     %% we need to ensure there is no chance of blocking as else the ra node
-    %% cannot establish it's leadership
+    %% may not be able to establish it's leadership
     spawn(fun() ->
                   rabbit_misc:execute_mnesia_transaction(
-                    fun() -> rabbit_amqqueue:update(QName, Fun) end),
+                    fun() ->
+                            rabbit_amqqueue:update(QName, Fun)
+                    end),
                   case rabbit_amqqueue:lookup(QName) of
                       {ok, #amqqueue{quorum_nodes = Nodes}} ->
                           [rpc:call(Node, ?MODULE, rpc_delete_metrics, [QName])
@@ -233,13 +237,28 @@ recover(Queues) ->
                  % so needs to be started from scratch.
                  Machine = ra_machine(Q0),
                  RaNodes = [{Name, Node} || Node <- Nodes],
-                 %% We should not crash the vhost recovery because a single ra member
-                 %% could not be started
-                 %% TODO: handle errors
-                 ok = ra:start_server(Name, {Name, node()},
-                                      Machine, RaNodes)
+                 case ra:start_server(Name, {Name, node()}, Machine, RaNodes) of
+                     ok -> ok;
+                     Err ->
+                         rabbit_log:warn("recover: Quorum queue ~w could not"
+                                        " be started ~w", [Name, Err]),
+                         ok
+                 end;
+             {error, {already_started, _}} ->
+                 %% this is fine and can happen if a vhost crashes and performs
+                 %% recovery whilst the ra application and servers are still
+                 %% running
+                 ok;
+             Err ->
+                 %% catch all clause to avoid causing the vhost not to start
+                 rabbit_log:warn("recover: Quorum queue ~w could not be "
+                                 "restarted ~w", [Name, Err]),
+                 ok
          end,
-         {_, Q} = rabbit_amqqueue:internal_declare(Q0, true),
+         %% we have to ensure the  quorum queue is
+         %% present in the rabbit_queue table and not just in rabbit_durable_queue
+         %% So many code paths are dependent on this.
+         {ok, Q} = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Q0),
          Q
      end || #amqqueue{pid = {Name, _},
                       quorum_nodes = Nodes} = Q0 <- Queues].
