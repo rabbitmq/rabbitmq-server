@@ -365,18 +365,30 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
     ok = check_declare_arguments(QueueName, Args),
     Type = get_queue_type(Args),
-    Q0 = amqqueue:new(QueueName,
-                      none,
-                      Durable,
-                      AutoDelete,
-                      Owner,
-                      Args,
-                      VHost,
-                      #{user => ActingUser},
-                      Type),
-    Q = rabbit_queue_decorator:set(
-          rabbit_policy:set(Q0)),
-    do_declare(Q, Node).
+    TypeIsAllowed =
+      Type =:= classic orelse
+      rabbit_feature_flags:is_enabled(quorum_queue),
+    case TypeIsAllowed of
+        true ->
+            Q0 = amqqueue:new(QueueName,
+                              none,
+                              Durable,
+                              AutoDelete,
+                              Owner,
+                              Args,
+                              VHost,
+                              #{user => ActingUser},
+                              Type),
+            Q = rabbit_queue_decorator:set(
+                  rabbit_policy:set(Q0)),
+            do_declare(Q, Node);
+        false ->
+            rabbit_misc:protocol_error(
+              internal_error,
+              "Cannot declare a queue '~s' of type '~s' on node '~s': "
+              "the 'quorum_queue' feature flag is disabled",
+              [rabbit_misc:rs(QueueName), Type, Node])
+    end.
 
 do_declare(Q, Node) when ?amqqueue_is_classic(Q) ->
     declare_classic_queue(Q, Node);
