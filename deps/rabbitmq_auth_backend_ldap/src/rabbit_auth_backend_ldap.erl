@@ -98,9 +98,10 @@ user_login_authorization(Username, AuthProps) ->
 check_vhost_access(User = #auth_user{username = Username,
                                      impl     = #impl{user_dn = UserDN}},
                    VHost, _Sock) ->
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username, Username},
             {user_dn,  UserDN},
-            {vhost,    VHost}],
+            {vhost,    VHost}] ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_vhost(Args), log_user(User)]),
     R = evaluate_ldap(env(vhost_access_query), Args, User),
     ?L("DECISION: ~s for ~s: ~p",
@@ -111,12 +112,13 @@ check_resource_access(User = #auth_user{username = Username,
                                         impl     = #impl{user_dn = UserDN}},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
             {user_dn,    UserDN},
             {vhost,      VHost},
             {resource,   Type},
             {name,       Name},
-            {permission, Permission}],
+            {permission, Permission}] ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
     R = evaluate_ldap(env(resource_access_query), Args, User),
     ?L("DECISION: ~s for ~s: ~p",
@@ -129,12 +131,13 @@ check_topic_access(User = #auth_user{username = Username,
                    Permission,
                    Context) ->
     OptionsArgs = topic_context_as_options(Context, undefined),
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
             {user_dn,    UserDN},
             {vhost,      VHost},
             {resource,   Resource},
             {name,       Name},
-            {permission, Permission}] ++ OptionsArgs,
+            {permission, Permission}] ++ OptionsArgs ++ ADArgs,
     ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
     R = evaluate_ldap(env(topic_access_query), Args, User),
     ?L("DECISION: ~s for ~s: ~p",
@@ -705,9 +708,10 @@ do_login(Username, PrebindUserDN, Password, VHost, LDAP) ->
 do_tag_queries(Username, UserDN, User, VHost, LDAP) ->
     {ok, [begin
               ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
-              R = evaluate(Q, [{username, Username},
-                               {user_dn,  UserDN} | vhost_if_defined(VHost)],
-                           User, LDAP),
+              VhostArgs = vhost_if_defined(VHost),
+              ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
+              EvalArgs = [{username, Username}, {user_dn, UserDN}] ++ VhostArgs ++ ADArgs,
+              R = evaluate(Q, EvalArgs, User, LDAP),
               ?L1("DECISION: does ~s have tag ~s? ~p",
                   [Username, Tag, R]),
               {Tag, R}
@@ -752,7 +756,8 @@ dn_lookup(Username, LDAP) ->
     end.
 
 fill_user_dn_pattern(Username) ->
-    fill(env(user_dn_pattern), [{username, Username}]).
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
+    fill(env(user_dn_pattern), [{username, Username}] ++ ADArgs).
 
 creds(User) -> creds(User, env(other_bind)).
 

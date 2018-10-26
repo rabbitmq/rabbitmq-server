@@ -16,7 +16,7 @@
 
 -module(rabbit_auth_backend_ldap_util).
 
--export([fill/2]).
+-export([fill/2, get_active_directory_args/1]).
 
 fill(Fmt, []) ->
     binary_to_list(iolist_to_binary(Fmt));
@@ -32,3 +32,11 @@ to_repl([$\\ | T])           -> [$\\, $\\ | to_repl(T)];
 to_repl([$&  | T])           -> [$\\, $&  | to_repl(T)];
 to_repl([H   | T])           -> [H        | to_repl(T)].
 
+get_active_directory_args([ADDomain, ADUser]) ->
+    [{ad_domain, ADDomain}, {ad_user, ADUser}];
+get_active_directory_args(Parts) when is_list(Parts) ->
+    [];
+get_active_directory_args(Username) when is_binary(Username) ->
+    % If Username is in Domain\User format, provide additional fill
+    % template arguments
+    get_active_directory_args(binary:split(Username, <<"\\">>, [trim_all])).
