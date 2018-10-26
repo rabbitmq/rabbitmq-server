@@ -766,11 +766,6 @@ handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
     State#state{next_incoming_id = NOI,
                 remote_incoming_window = NII + InWin - OurNOI, % see: 2.5.6
                 remote_outgoing_window = OutWin}.
-% handle_session_flow(_Flow, State) ->
-%     %% for example if RabbitMQ sends a flow in response to a drain credit
-%     %% request we may end up here as next_outgoing_id and friends may be
-%     %% undefined
-%     State.
 
 
 -spec handle_link_flow(#'v1_0.flow'{}, #link{}) -> {ok | send_flow, #link{}}.
