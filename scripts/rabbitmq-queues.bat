@@ -56,7 +56,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -nodename !RABBITMQ_NODENAME! ^
 -run escript start ^
 -escript main rabbitmqctl_escript ^
--extra "%RABBITMQ_HOME%\escript\rabbitmqctl" !STAR!
+-extra "%RABBITMQ_HOME%\escript\rabbitmq-queues" !STAR!
 
 if ERRORLEVEL 1 (
     exit /B 1
