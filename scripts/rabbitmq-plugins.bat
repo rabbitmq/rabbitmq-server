@@ -59,5 +59,9 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -ra data_dir \""!RABBITMQ_QUORUM_DIR:\=/!"\"
 -extra "%RABBITMQ_HOME%\escript\rabbitmq-plugins" !STAR!
 
+if ERRORLEVEL 1 (
+    exit /B 1
+)
+
 endlocal
 endlocal

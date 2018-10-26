@@ -91,7 +91,7 @@ list_consumers_sanity_check(Config) ->
     %% `rabbitmqctl report` shares some code with `list_consumers`, so
     %% check that it also reports both channels
     {ok, ReportStdOut} = rabbit_ct_broker_helpers:rabbitmqctl(Config, A,
-      ["list_consumers"]),
+      ["list_consumers", "--no-table-headers"]),
     ReportLines = re:split(ReportStdOut, <<"\n">>, [trim]),
     ReportCTags = [lists:nth(3, re:split(Row, <<"\t">>)) || <<"list_consumers_q", _/binary>> = Row <- ReportLines],
     true = (lists:sort([CTag1, CTag2]) =:=
@@ -99,7 +99,7 @@ list_consumers_sanity_check(Config) ->
 
 rabbitmqctl_list_consumers(Config, Node) ->
     {ok, StdOut} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Node,
-      ["list_consumers"]),
+      ["list_consumers", "--no-table-headers"]),
     [<<"Listing consumers", _/binary>> | ConsumerRows] = re:split(StdOut, <<"\n">>, [trim]),
     CTags = [ lists:nth(3, re:split(Row, <<"\t">>)) || Row <- ConsumerRows ],
     CTags.
@@ -117,17 +117,17 @@ list_queues_online_and_offline(Config) ->
     rabbit_ct_broker_helpers:rabbitmqctl(Config, B, ["stop"]),
 
     GotUp = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
-        ["list_queues", "--online", "name"])),
+        ["list_queues", "--online", "name", "--no-table-headers"])),
     ExpectUp = [[<<"q_a_1">>], [<<"q_a_2">>]],
     ExpectUp = GotUp,
 
     GotDown = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
-        ["list_queues", "--offline", "name"])),
+        ["list_queues", "--offline", "name", "--no-table-headers"])),
     ExpectDown = [[<<"q_b_1">>], [<<"q_b_2">>]],
     ExpectDown = GotDown,
 
     GotAll = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
-        ["list_queues", "name"])),
+        ["list_queues", "name", "--no-table-headers"])),
     ExpectAll = ExpectUp ++ ExpectDown,
     ExpectAll = GotAll,
 
