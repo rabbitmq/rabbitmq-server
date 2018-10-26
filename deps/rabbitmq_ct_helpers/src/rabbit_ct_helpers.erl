@@ -41,7 +41,7 @@
     term_checksum/1,
     random_term_checksum/0,
     exec/1, exec/2,
-    make/3,
+    make/3, make/4,
     get_config/2, get_config/3, set_config/2, delete_config/2,
     merge_app_env/2, merge_app_env_in_erlconf/2,
     get_app_env/4,
@@ -73,9 +73,12 @@ run_setup_steps(Config, ExtraSteps) ->
     Steps = [
       fun init_skip_as_error_flag/1,
       fun guess_tested_erlang_app_name/1,
+      fun ensure_secondary_umbrella/1,
       fun ensure_current_srcdir/1,
       fun ensure_rabbitmq_ct_helpers_srcdir/1,
       fun ensure_erlang_mk_depsdir/1,
+      fun ensure_secondary_erlang_mk_depsdir/1,
+      fun ensure_secondary_current_srcdir/1,
       fun ensure_rabbit_common_srcdir/1,
       fun ensure_rabbitmq_cli_srcdir/1,
       fun ensure_rabbit_srcdir/1,
@@ -144,12 +147,20 @@ guess_tested_erlang_app_name(Config) ->
             set_config(Config, {tested_erlang_app, list_to_atom(AppName)})
     end.
 
+ensure_secondary_umbrella(Config) ->
+    Path = case get_config(Config, secondary_umbrella) of
+               undefined -> os:getenv("SECONDARY_UMBRELLA");
+               P         -> P
+           end,
+    case Path =/= false andalso filelib:is_dir(Path) of
+        true  -> set_config(Config, {secondary_umbrella, Path});
+        false -> set_config(Config, {secondary_umbrella, false})
+    end.
+
 ensure_current_srcdir(Config) ->
     Path = case get_config(Config, current_srcdir) of
-        undefined ->
-            os:getenv("PWD");
-        P ->
-            P
+        undefined -> os:getenv("PWD");
+        P         -> P
     end,
     case filelib:is_dir(Path) of
         true  -> set_config(Config, {current_srcdir, Path});
@@ -203,6 +214,45 @@ ensure_erlang_mk_depsdir(Config) ->
                   "in ct config"}
     end.
 
+ensure_secondary_erlang_mk_depsdir(Config) ->
+    Path = case get_config(Config, secondary_erlang_mk_depsdir) of
+               undefined ->
+                   case ?config(secondary_umbrella, Config) of
+                       false       -> ?config(erlang_mk_depsdir, Config);
+                       SecUmbrella -> filename:join(SecUmbrella, "deps")
+                   end;
+               P ->
+                   P
+           end,
+    case filelib:is_dir(Path) of
+        true  -> set_config(Config, {secondary_erlang_mk_depsdir, Path});
+        false -> {skip,
+                  "Secondary deps directory required, " ++
+                  "please set 'secondary_erlang_mk_depsdir' in ct config"}
+    end.
+
+ensure_secondary_current_srcdir(Config) ->
+    Path = case get_config(Config, secondary_current_srcdir) of
+               undefined ->
+                   case ?config(secondary_umbrella, Config) of
+                       false ->
+                           ?config(current_srcdir, Config);
+                       _ ->
+                           TestedAppName = ?config(tested_erlang_app, Config),
+                           filename:join(
+                             ?config(secondary_erlang_mk_depsdir, Config),
+                             TestedAppName)
+                   end;
+               P ->
+                   P
+           end,
+    case filelib:is_dir(Path) of
+        true  -> set_config(Config, {secondary_current_srcdir, Path});
+        false -> {skip,
+                  "Secondary current source directory required, " ++
+                  "please set 'secondary_current_srcdir' in ct config"}
+    end.
+
 ensure_rabbit_common_srcdir(Config) ->
     ensure_application_srcdir(Config, rabbit_common, rabbit_misc).
 
@@ -218,6 +268,7 @@ ensure_application_srcdir(Config, App, Module) ->
 ensure_application_srcdir(Config, App, Lang, Module) ->
     AppS = atom_to_list(App),
     Key = list_to_atom(AppS ++ "_srcdir"),
+    SecondaryKey = list_to_atom("secondary_" ++ AppS ++ "_srcdir"),
     Path = case get_config(Config, Key) of
         undefined ->
             case code:which(Module) of
@@ -239,8 +290,18 @@ ensure_application_srcdir(Config, App, Lang, Module) ->
         P ->
             P
     end,
-    case filelib:is_dir(Path) of
-        true  -> set_config(Config, {Key, Path});
+    SecondaryPath = case get_config(Config, SecondaryKey) of
+                        undefined ->
+                            filename:join(
+                              ?config(secondary_erlang_mk_depsdir, Config),
+                              AppS);
+                        SP ->
+                            SP
+                    end,
+    case filelib:is_dir(Path) andalso filelib:is_dir(SecondaryPath) of
+        true  -> set_config(Config,
+                            [{Key, Path},
+                             {SecondaryKey, SecondaryPath}]);
         false -> {skip,
                   AppS ++ "source directory required, " ++
                   "please set '" ++ AppS ++ "_srcdir' in ct config"}
@@ -705,13 +766,16 @@ port_receive_loop(Port, Stdout, Options) ->
     end.
 
 make(Config, Dir, Args) ->
+    make(Config, Dir, Args, []).
+
+make(Config, Dir, Args, Options) ->
     Make = rabbit_ct_vm_helpers:get_current_vm_config(Config, make_cmd),
     Verbosity = case os:getenv("V") of
         false -> [];
         V     -> ["V=" ++ V]
     end,
     Cmd = [Make, "-C", Dir] ++ Verbosity ++ Args,
-    exec(Cmd).
+    exec(Cmd, Options).
 
 %% This is the same as ?config(), except this one doesn't log a warning
 %% if the key is missing.
