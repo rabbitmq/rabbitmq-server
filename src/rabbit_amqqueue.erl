@@ -427,8 +427,8 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                           not_found           -> Q1 = rabbit_policy:set(Q),
                                                  Q2 = Q1#amqqueue{state = live},
                                                  ok = store_queue(Q2),
-                                                 B = add_default_binding(Q1),
-                                                 fun () -> B(), {created, Q1} end;
+                                                 B = add_default_binding(Q2),
+                                                 fun () -> B(), {created, Q2} end;
                           {absent, _Q, _} = R -> rabbit_misc:const(R)
                       end;
                   [ExistingQ] ->
