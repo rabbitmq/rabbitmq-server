@@ -15,18 +15,13 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
-  require RabbitMQ.CLI.Ctl.InfoKeys
-  require RabbitMQ.CLI.Ctl.RpcStream
-
-  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def scopes(), do: [:ctl, :diagnostics]
+  def scopes(), do: [:ctl, :diagnostics, :queues]
 
   defp default_opts() do
     %{vhost: "/"}
@@ -45,7 +40,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([name] = args, %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :status, [vhost, name])
+    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :status, [vhost, name]) do
+      {:error, :classic_queue_not_supported} ->
+        {:error, "Cannot get quorum status of a classic queue"};
+      other ->
+        other
+    end
   end
 
   def usage() do

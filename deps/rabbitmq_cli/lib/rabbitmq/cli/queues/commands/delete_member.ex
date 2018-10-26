@@ -15,9 +15,6 @@
 
 
 defmodule RabbitMQ.CLI.Queues.Commands.DeleteMember do
-
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -38,10 +35,17 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMember do
 
   def validate([_,_], _), do: :ok
 
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
   def run([name, node] = args, %{vhost: vhost, node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
-      :rabbit_quorum_queue,
-      :delete_member, [vhost, name, to_atom(node)])
+    case :rabbit_misc.rpc_call(node_name,
+                               :rabbit_quorum_queue, :delete_member,
+                               [vhost, name, to_atom(node)]) do
+      {:error, :classic_queue_not_supported} ->
+        {:error, "Cannot add members to a classic queue"};
+      other ->
+        other
+    end
   end
 
   use RabbitMQ.CLI.DefaultOutput
