@@ -98,7 +98,7 @@ user_login_authorization(Username, AuthProps) ->
 check_vhost_access(User = #auth_user{username = Username,
                                      impl     = #impl{user_dn = UserDN}},
                    VHost, _Sock) ->
-    ADArgs = get_active_directory_args(Username),
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username, Username},
             {user_dn,  UserDN},
             {vhost,    VHost}] ++ ADArgs,
@@ -112,7 +112,7 @@ check_resource_access(User = #auth_user{username = Username,
                                         impl     = #impl{user_dn = UserDN}},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
-    ADArgs = get_active_directory_args(Username),
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
             {user_dn,    UserDN},
             {vhost,      VHost},
@@ -131,7 +131,7 @@ check_topic_access(User = #auth_user{username = Username,
                    Permission,
                    Context) ->
     OptionsArgs = topic_context_as_options(Context, undefined),
-    ADArgs = get_active_directory_args(Username),
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
             {user_dn,    UserDN},
             {vhost,      VHost},
@@ -709,7 +709,7 @@ do_tag_queries(Username, UserDN, User, VHost, LDAP) ->
     {ok, [begin
               ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
               VhostArgs = vhost_if_defined(VHost),
-              ADArgs = get_active_directory_args(Username),
+              ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
               EvalArgs = [{username, Username}, {user_dn, UserDN}] ++ VhostArgs ++ ADArgs,
               R = evaluate(Q, EvalArgs, User, LDAP),
               ?L1("DECISION: does ~s have tag ~s? ~p",
@@ -756,7 +756,7 @@ dn_lookup(Username, LDAP) ->
     end.
 
 fill_user_dn_pattern(Username) ->
-    ADArgs = get_active_directory_args(Username),
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     fill(env(user_dn_pattern), [{username, Username}] ++ ADArgs).
 
 creds(User) -> creds(User, env(other_bind)).
@@ -830,15 +830,6 @@ fill(Fmt, Args) ->
     R = rabbit_auth_backend_ldap_util:fill(Fmt, Args),
     ?L2("template result: \"~s\"", [R]),
     R.
-
-get_active_directory_args([ADUser, ADDomain]) ->
-    [{ad_user, ADUser}, {ad_domain, ADDomain}];
-get_active_directory_args(Parts) when is_list(Parts) ->
-    [];
-get_active_directory_args(Username) when is_binary(Username) ->
-    % If Username is in Domain\User format, provide additional fill
-    % template arguments
-    get_active_directory_args(binary:split(Username, <<"\\">>, [trim_all])).
 
 log_result({ok, #auth_user{}}) -> ok;
 log_result(true)               -> ok;

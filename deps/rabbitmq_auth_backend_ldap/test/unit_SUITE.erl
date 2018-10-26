@@ -23,7 +23,8 @@
 
 all() ->
     [
-     fill
+     fill,
+     ad_fill
     ].
 
 fill(_Config) ->
@@ -38,4 +39,18 @@ fill(_Config) ->
     F("x${usernamex",  [{username,  "ab"}],     "x${usernamex"),
     F("x${username}x", [{username,  "a\\b"}],   "xa\\bx"),
     F("x${username}x", [{username,  "a&b"}],    "xa&bx"),
+    ok.
+
+ad_fill(_Config) ->
+    F = fun(Fmt, Args, Res) ->
+                ?assertEqual(Res, rabbit_auth_backend_ldap_util:fill(Fmt, Args))
+        end,
+
+    U0 = <<"ADDomain\\ADUser">>,
+    A0 = rabbit_auth_backend_ldap_util:get_active_directory_args(U0),
+    F("x-${ad_domain}-x-${ad_user}-x", A0, "x-ADDomain-x-ADUser-x"),
+
+    U1 = <<"ADDomain\\ADUser\\Extra">>,
+    A1 = rabbit_auth_backend_ldap_util:get_active_directory_args(U1),
+    F("x-${ad_domain}-x-${ad_user}-x", A1, "x-ADDomain-x-ADUser\\Extra-x"),
     ok.
