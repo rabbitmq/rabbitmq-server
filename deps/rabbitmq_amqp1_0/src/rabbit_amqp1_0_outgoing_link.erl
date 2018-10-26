@@ -111,7 +111,6 @@ credit_drained(#'basic.credit_drained'{credit_drained = CreditDrained},
                       link_credit = {uint, 0},
                       available   = {uint, 0},
                       drain       = true },
-    % rabbit_amqp1_0_writer:send_command(WriterPid, F),
     {F, Link#outgoing_link{delivery_count = Count}}.
 
 flow(#outgoing_link{delivery_count = LocalCount},
