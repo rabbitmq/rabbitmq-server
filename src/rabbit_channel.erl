@@ -1875,12 +1875,7 @@ ack(Acked, State = #ch{queue_names = QNames,
           fun ({QPid, CTag}, MsgIds, Acc0) ->
                   Acc = rabbit_amqqueue:ack(QPid, {CTag, MsgIds}, self(), Acc0),
                   incr_queue_stats(QPid, QNames, MsgIds, State),
-                  Acc;
-              (QPid, MsgIds, Acc0) ->
-                  %% Classic queue
-                  _ = rabbit_amqqueue:ack(QPid, MsgIds, self(), Acc0),
-                  incr_queue_stats(QPid, QNames, MsgIds, State),
-                  Acc0
+                  Acc
           end, Acked, QueueStates0),
     ok = notify_limiter(State#ch.limiter, Acked),
     State#ch{queue_states = QueueStates}.
