@@ -47,7 +47,7 @@ configuration or to impact configuration behavior:
  - ``AWS_ACCESS_KEY_ID``
  - ``AWS_SECRET_ACCESS_KEY``
  
-## API Methods
+## API Functions
  
   Method                                | Description
  ---------------------------------------|--------------------------------------------------------------------------------------------
