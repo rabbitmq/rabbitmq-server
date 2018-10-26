@@ -73,7 +73,7 @@
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
 -spec stat(rabbit_types:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
 -spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
--spec status(rabbit_types:vhost(), Name :: atom()) -> rabbit_types:infos().
+-spec status(rabbit_types:vhost(), Name :: atom()) -> rabbit_types:infos() | {error, term()}.
 
 -define(STATISTICS_KEYS,
         [policy,
@@ -401,6 +401,8 @@ status(Vhost, QueueName) ->
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
     RName = qname_to_rname(QName),
     case rabbit_amqqueue:lookup(QName) of
+        {ok, #amqqueue{type = classic}} ->
+            {error, classic_queue_not_supported};
         {ok, #amqqueue{pid = {_, Leader}, quorum_nodes = Nodes}} ->
             Info = [{leader, Leader}, {members, Nodes}],
             case ets:lookup(ra_state, RName) of
