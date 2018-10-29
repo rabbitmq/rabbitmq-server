@@ -47,6 +47,8 @@ DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
 
 WITHOUT = plugins/proper
 
+PLT_APPS += mnesia crypto ssl
+
 include mk/rabbitmq-components.mk
 include erlang.mk
 
