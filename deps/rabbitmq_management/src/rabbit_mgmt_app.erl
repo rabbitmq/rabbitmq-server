@@ -73,9 +73,9 @@ start_configured_listener(IgnoreApps, NeedLogStartup) ->
              get_tcp_listener()];
         {true,  true, true}  ->
             %% what is happening?
-            rabbit_log:warning("Management plugin: TCP, SSL and legacy listeners configured. "
-                               "Only two configurations are supported at the same time. "
-                               "Ignoring the legacy configuration "),
+            rabbit_log:warning("Management plugin: TCP, TLS and a legacy (management.listener.*) listener are all configured. "
+                               "Only two listeners at a time are supported. "
+                               "Ignoring the legacy listener"),
             [get_tcp_listener(),
              get_tls_listener()]
     end,
