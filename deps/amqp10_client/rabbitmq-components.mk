@@ -40,7 +40,6 @@ endif
 dep_amqp_client                       = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_amqp10_client                     = git_rmq rabbitmq-amqp1.0-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_amqp10_common                     = git_rmq rabbitmq-amqp1.0-common $(current_rmq_ref) $(base_rmq_ref) master
-dep_ra                                = git_rmq ra $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit                            = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbit_common                     = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_amqp1_0                  = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref) master
@@ -115,6 +114,7 @@ dep_cowboy = hex 2.4.0
 dep_cowlib = hex 2.3.0
 dep_jsx = hex 2.9.0
 dep_lager = hex 3.6.5
+dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.6.2
 dep_ranch_proxy_protocol = hex 2.1.1
 dep_recon = hex 2.3.6
@@ -124,7 +124,6 @@ dep_sockjs = git https://github.com/rabbitmq/sockjs-erlang.git 405990ea62353d98d
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \
 		      amqp10_client \
-		      ra \
 		      rabbit \
 		      rabbit_common \
 		      rabbitmq_amqp1_0 \
