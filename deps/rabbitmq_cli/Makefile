@@ -37,14 +37,16 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 ACTUAL_ESCRIPTS = escript/rabbitmqctl
 LINKED_ESCRIPTS = escript/rabbitmq-plugins \
-		  escript/rabbitmq-diagnostics
+		  escript/rabbitmq-diagnostics \
+		  escript/rabbitmq-queues
 ESCRIPTS = $(ACTUAL_ESCRIPTS) $(LINKED_ESCRIPTS)
 
 # Record the build and link dependency: the target files are linked to
 # their first dependency.
 rabbitmq-plugins = escript/rabbitmqctl
 rabbitmq-diagnostics = escript/rabbitmqctl
-escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
+rabbitmq-queues = escript/rabbitmqctl
+escript/rabbitmq-plugins escript/rabbitmq-diagnostics escript/rabbitmq-queues: escript/rabbitmqctl
 
 # We use hardlinks or symlinks in the `escript` directory and
 # install's PREFIX when a single escript can have several names (eg.
