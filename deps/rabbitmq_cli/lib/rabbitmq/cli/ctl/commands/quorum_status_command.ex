@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([name] = args, %{node: node_name, vhost: vhost}) do
+  def run([name] = _args, %{node: node_name, vhost: vhost}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :status, [vhost, name]) do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot get quorum status of a classic queue"};

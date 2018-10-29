@@ -37,7 +37,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMember do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([name, node] = args, %{vhost: vhost, node: node_name}) do
+  def run([name, node] = _args, %{vhost: vhost, node: node_name}) do
     case :rabbit_misc.rpc_call(node_name,
                                :rabbit_quorum_queue, :add_member,
                                [vhost, name, to_atom(node)]) do
