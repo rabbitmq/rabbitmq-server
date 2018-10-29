@@ -39,7 +39,7 @@ defmodule ListBindingsCommandTest do
     assert default_keys == keys
   end
 
-  test "merge_defaults: includes table headers by default", context do
+  test "merge_defaults: includes table headers by default", _context do
     {_, opts} = @command.merge_defaults([], %{})
     assert !opts[:no_table_headers]
   end
