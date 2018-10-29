@@ -701,7 +701,9 @@ bq_variable_queue_delete_msg_store_files_callback1(Config) ->
 
     CountMinusOne = Count - 1,
     {ok, CountMinusOne, {QName, QPid, _AckTag, false, _Msg}} =
-        rabbit_amqqueue:basic_get(Q, self(), true, Limiter),
+        rabbit_amqqueue:basic_get(Q, self(), true, Limiter,
+                                  <<"bq_variable_queue_delete_msg_store_files_callback1">>,
+                                  #{}),
     {ok, CountMinusOne} = rabbit_amqqueue:purge(Q),
 
     %% give the queue a second to receive the close_fds callback msg
@@ -737,7 +739,8 @@ bq_queue_recover1(Config) ->
       fun (Q1 = #amqqueue { pid = QPid1 }) ->
               CountMinusOne = Count - 1,
               {ok, CountMinusOne, {QName, QPid1, _AckTag, true, _Msg}} =
-                  rabbit_amqqueue:basic_get(Q1, self(), false, Limiter),
+                  rabbit_amqqueue:basic_get(Q1, self(), false, Limiter,
+                                            <<"bq_queue_recover1">>, #{}),
               exit(QPid1, shutdown),
               VQ1 = variable_queue_init(Q, true),
               {{_Msg1, true, _AckTag1}, VQ2} =

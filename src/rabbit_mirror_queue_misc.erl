@@ -190,7 +190,8 @@ on_vhost_up(VHost) ->
                         QNames0;
                     (Q = #amqqueue{name       = QName,
                                        pid        = Pid,
-                                       slave_pids = SPids}, QNames0) ->
+                                       slave_pids = SPids,
+                                       type = classic}, QNames0) ->
                             %% We don't want to pass in the whole
                             %% cluster - we don't want a situation
                             %% where starting one node causes us to
@@ -206,7 +207,9 @@ on_vhost_up(VHost) ->
                             case lists:member(node(), SNodes) of
                                 true  -> [QName | QNames0];
                                 false -> QNames0
-                            end
+                            end;
+                    (_, QNames0) ->
+                            QNames0
                     end, [], rabbit_queue)
           end),
     [add_mirror(QName, node(), async) || QName <- QNames],
@@ -446,12 +449,18 @@ maybe_auto_sync(Q = #amqqueue{pid = QPid}) ->
 
 sync_queue(Q) ->
     rabbit_amqqueue:with(
-      Q, fun(#amqqueue{pid = QPid}) -> rabbit_amqqueue:sync_mirrors(QPid) end).
+      Q, fun(#amqqueue{pid = QPid, type = classic}) ->
+                 rabbit_amqqueue:sync_mirrors(QPid);
+            (#amqqueue{type = quorum}) ->
+                 {error, quorum_queue_not_supported}
+         end).
 
 cancel_sync_queue(Q) ->
     rabbit_amqqueue:with(
-      Q, fun(#amqqueue{pid = QPid}) ->
-                 rabbit_amqqueue:cancel_sync_mirrors(QPid)
+      Q, fun(#amqqueue{pid = QPid, type = classic}) ->
+                 rabbit_amqqueue:cancel_sync_mirrors(QPid);
+            (#amqqueue{type = quorum}) ->
+                 {error, quorum_queue_not_supported}
          end).
 
 sync_batch_size(#amqqueue{} = Q) ->

@@ -245,6 +245,7 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH=${SERVER_CODE_PATH}
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${MNESIA_DIR}
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
+[ "x" = "x$RABBITMQ_QUORUM_DIR" ] && RABBITMQ_QUORUM_DIR=${RABBITMQ_MNESIA_DIR}/quorum
 [ "x" = "x$RABBITMQ_GENERATED_CONFIG_DIR" ] && RABBITMQ_GENERATED_CONFIG_DIR=${GENERATED_CONFIG_DIR}
 [ "x" = "x$RABBITMQ_ADVANCED_CONFIG_FILE" ] && RABBITMQ_ADVANCED_CONFIG_FILE=${ADVANCED_CONFIG_FILE}
 [ "x" = "x$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR=${SCHEMA_DIR}
@@ -255,7 +256,8 @@ rmq_normalize_path_var \
     RABBITMQ_CONFIG_FILE \
     RABBITMQ_LOG_BASE \
     RABBITMQ_MNESIA_BASE \
-    RABBITMQ_MNESIA_DIR
+    RABBITMQ_MNESIA_DIR \
+    RABBITMQ_QUORUM_DIR
 
 [ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE="$PID_FILE"
 
@@ -348,6 +350,10 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
         if [ "${mnesia_dir}" -a \
              "$RABBITMQ_MNESIA_DIR_source" != 'environment' ]; then
             RABBITMQ_MNESIA_DIR="${mnesia_dir}"
+        fi
+        if [ "${mnesia_dir}" -a \
+             "$RABBITMQ_QUORUM_DIR_source" != 'environment' ]; then
+            RABBITMQ_QUORUM_DIR="${mnesia_dir}/quorum"
         fi
     fi
 
