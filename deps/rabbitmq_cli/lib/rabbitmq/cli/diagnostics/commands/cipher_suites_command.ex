@@ -47,10 +47,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
     :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [:openssl], timeout)
   end
   def run([], %{node: node_name, timeout: timeout, openssl_format: false} = opts) do
-    :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [], timeout)
+    # :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [], timeout)
+    :io_lib.format("~p", [:rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [], timeout)])
   end
   def run([], %{node: node_name, timeout: timeout, erlang_format: true} = opts) do
-    :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [], timeout)
+    :io_lib.format("~p", [:rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [], timeout)])
   end
 
   def banner([], %{openssl_format: true}),  do: "Listing available cipher suites in the OpenSSL format"
