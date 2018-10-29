@@ -86,6 +86,7 @@ all_tests() -> [
     multiple_invalid_connections_test,
     exchanges_test,
     queues_test,
+    quorum_queues_test,
     queues_well_formed_json_test,
     bindings_test,
     bindings_post_test,
@@ -949,6 +950,41 @@ queues_test(Config) ->
     http_delete(Config, "/queues/downvhost/bar", {group, '2xx'}),
     passed.
 
+quorum_queues_test(Config) ->
+    %% Test in a loop that no metrics are left behing after deleting a queue
+    quorum_queues_test_loop(Config, 5).
+
+quorum_queues_test_loop(_Config, 0) ->
+    passed;
+quorum_queues_test_loop(Config, N) ->
+    Good = [{durable, true}, {arguments, [{'x-queue-type', 'quorum'}]}],
+    http_get(Config, "/queues/%2f/qq", ?NOT_FOUND),
+    http_put(Config, "/queues/%2f/qq", Good, {group, '2xx'}),
+
+    {Conn, Ch} = open_connection_and_channel(Config),
+    Publish = fun() ->
+                      amqp_channel:call(
+                        Ch, #'basic.publish'{exchange = <<"">>,
+                                             routing_key = <<"qq">>},
+                        #amqp_msg{payload = <<"message">>})
+              end,
+    Publish(),
+    Publish(),
+    wait_until(fun() ->
+                       2 == maps:get(messages, http_get(Config, "/queues/%2f/qq?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"), undefined)
+               end, 100),
+
+    http_delete(Config, "/queues/%2f/qq", {group, '2xx'}),
+    http_put(Config, "/queues/%2f/qq", Good, {group, '2xx'}),
+
+    wait_until(fun() ->
+                       0 == maps:get(messages, http_get(Config, "/queues/%2f/qq?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"), undefined)
+               end, 100),
+
+    http_delete(Config, "/queues/%2f/qq", {group, '2xx'}),
+    close_connection(Conn),
+    quorum_queues_test_loop(Config, N-1).
+
 queues_well_formed_json_test(Config) ->
     %% TODO This test should be extended to the whole API
     Good = [{durable, true}],
@@ -1229,8 +1265,8 @@ permissions_connection_channel_consumer_test(Config) ->
         Ch <- [Ch1, Ch2, Ch3]],
     timer:sleep(1500),
     AssertLength = fun (Path, User, Len) ->
-                           ?assertEqual(Len,
-                                        length(http_get(Config, Path, User, User, ?OK)))
+                           Res = http_get(Config, Path, User, User, ?OK),
+                           ?assertEqual(Len, length(Res))
                    end,
     [begin
          AssertLength(P, "user", 1),
