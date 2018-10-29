@@ -107,11 +107,14 @@ handle_info({#'basic.deliver'{ consumer_tag = ConsumerTag,
 
 %% A message from the queue saying that there are no more messages
 handle_info(#'basic.credit_drained'{consumer_tag = CTag} = CreditDrained,
-            State = #state{writer_pid = WriterPid}) ->
+            State = #state{writer_pid = WriterPid,
+                           session = Session}) ->
     Handle = ctag_to_handle(CTag),
     Link = get({out, Handle}),
-    Link1 = rabbit_amqp1_0_outgoing_link:credit_drained(
-              CreditDrained, Handle, Link, WriterPid),
+    {Flow0, Link1} = rabbit_amqp1_0_outgoing_link:credit_drained(
+                      CreditDrained, Handle, Link),
+    Flow = rabbit_amqp1_0_session:flow_fields(Flow0, Session),
+    rabbit_amqp1_0_writer:send_command(WriterPid, Flow),
     put({out, Handle}, Link1),
     {noreply, State};
 
