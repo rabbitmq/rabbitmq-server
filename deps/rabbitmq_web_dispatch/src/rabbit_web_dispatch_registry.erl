@@ -98,16 +98,22 @@ handle_call({add, Name, Listener, Selector, Handler, Link = {_, Desc}}, _From,
 
 handle_call({remove, Name}, _From,
             undefined) ->
-    Listener = listener_by_name(Name),
-    {ok, {Selectors, Fallback}} = lookup_dispatch(Listener),
-    Selectors1 = lists:keydelete(Name, 1, Selectors),
-    set_dispatch(Listener, Selectors1, Fallback),
-    case Selectors1 of
-        [] -> rabbit_web_dispatch_sup:stop_listener(Listener),
-              listener_stopped(Listener);
-        _  -> ok
-    end,
-    {reply, ok, undefined};
+    case listener_by_name(Name) of
+        {error, not_found} ->
+            rabbit_log:warning("RabbitMQ HTTP listener registry could not find context ~p",
+                               [Name]),
+            {reply, ok, undefined};
+        {ok, Listener} ->
+            {ok, {Selectors, Fallback}} = lookup_dispatch(Listener),
+            Selectors1 = lists:keydelete(Name, 1, Selectors),
+            set_dispatch(Listener, Selectors1, Fallback),
+            case Selectors1 of
+                [] -> rabbit_web_dispatch_sup:stop_listener(Listener),
+                      listener_stopped(Listener);
+                _  -> ok
+            end,
+            {reply, ok, undefined}
+    end;
 
 handle_call({set_fallback, Listener, FallbackHandler}, _From,
             undefined) ->
@@ -184,10 +190,11 @@ list() ->
         {_P, Listener, Selectors, _F} <- ets:tab2list(?ETS),
         {_N, _S, _H, {Path, Desc}} <- Selectors].
 
+-spec listener_by_name(atom()) -> {ok, term()} | {error, not_found}.
 listener_by_name(Name) ->
     case [L || {_P, L, S, _F} <- ets:tab2list(?ETS), contains_name(Name, S)] of
-        [Listener] -> Listener;
-        []         -> exit({not_found, Name})
+        [Listener] -> {ok, Listener};
+        []         -> {error, not_found}
     end.
 
 contains_name(Name, Selectors) ->
