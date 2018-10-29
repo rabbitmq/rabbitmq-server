@@ -145,7 +145,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
         input,
         strict: switches,
         aliases: aliases,
-        allow_nonexistent_atoms: true,
+        allow_nonexistent_atoms: true
       )
     norm_options = normalize_options(options, switches) |> Map.new
     {norm_options, tail, invalid}
@@ -162,7 +162,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
       input,
       strict: switches,
       aliases: aliases,
-      allow_nonexistent_atoms: true,
+      allow_nonexistent_atoms: true
     )
     norm_options = normalize_options(options, switches) |> Map.new
     {args, norm_options, invalid}
