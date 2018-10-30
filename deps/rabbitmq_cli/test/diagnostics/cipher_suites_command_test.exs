@@ -31,32 +31,44 @@ defmodule CipherSuitesCommandTest do
     {:ok, opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || 30000,
-        openssl_format: context[:openssl_format] || false
+        openssl_format: context[:openssl_format] || true,
+        erlang_format: context[:erlang_format] || false
       }}
   end
 
-  test "merge_defaults: defaults to the Erlang term format (that is, non-OpenSSL)" do
-    assert @command.merge_defaults([], %{}) == {[], %{openssl_format: false}}
+  test "validate: providing no arguments passes validation", context do
+    assert @command.validate([], context[:opts]) == :ok
   end
 
-  test "merge_defaults: OpenSSL format can be switched on" do
-    assert @command.merge_defaults([], %{openssl_format: true}) == {[], %{openssl_format: true}}
+  test "validate: providing --openssl-format passes validation", context do
+    assert @command.validate([], Map.merge(%{openssl_format: true}, context[:opts])) == :ok
   end
 
-  test "merge_defaults: OpenSSL format can be switched off" do
-    assert @command.merge_defaults([], %{openssl_format: false}) == {[], %{openssl_format: false}}
+  test "validate: providing --erlang-format passes validation", context do
+    assert @command.validate([], Map.merge(%{erlang_format: true}, context[:opts])) == :ok
   end
 
-  test "validate: treats positional arguments as a failure" do
-    assert @command.validate(["extra-arg"], %{openssl_format: false}) == {:validation_failure, :too_many_args}
+  test "validate: providing any arguments fails validation", context do
+    assert @command.validate(["a", "b", "c"], context[:opts]) ==
+      {:validation_failure, :too_many_args}
+  end
+
+  test "validate: setting both --openssl-format and --erlang-format to false fails validation", context do
+    assert @command.validate([], Map.merge(context[:opts], %{openssl_format: false, erlang_format: false})) ==
+      {:validation_failure, {:bad_argument, "Either OpenSSL or Erlang term format must be selected"}}
+  end
+
+  test "validate: setting both --openssl-format and --erlang-format to true fails validation", context do
+    assert @command.validate([], Map.merge(context[:opts], %{openssl_format: true, erlang_format: true})) ==
+      {:validation_failure, {:bad_argument, "Cannot use both formats together"}}
   end
 
   test "validate: treats empty positional arguments and default switches as a success" do
-    assert @command.validate([], %{openssl_format: false}) == :ok
+    assert @command.validate([], %{openssl_format: true, erlang_format: false}) == :ok
   end
 
-  test "validate: treats empty positional arguments and an OpenSSL format flag as a success" do
-    assert @command.validate([], %{openssl_format: true}) == :ok
+  test "validate: treats empty positional arguments and an Erlang term format flag as a success" do
+    assert @command.validate([], %{erlang_format: true}) == :ok
   end
 
   @tag test_timeout: 3000
