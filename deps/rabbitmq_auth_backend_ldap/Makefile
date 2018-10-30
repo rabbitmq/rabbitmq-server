@@ -5,6 +5,7 @@ PROJECT_MOD = rabbit_auth_backend_ldap_app
 define PROJECT_ENV
 [
 	    {servers,               undefined},
+	    {user_bind_pattern,     none},
 	    {user_dn_pattern,       "$${username}"},
 	    {dn_lookup_attribute,   none},
 	    {dn_lookup_base,        none},
