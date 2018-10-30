@@ -44,7 +44,7 @@ defmodule CipherSuitesCommandTest do
     assert @command.validate([], Map.merge(%{openssl_format: true}, context[:opts])) == :ok
   end
 
-  test "validate: providing --erlang-term-format passes validation", context do
+  test "validate: providing --erlang-format passes validation", context do
     assert @command.validate([], Map.merge(%{erlang_format: true}, context[:opts])) == :ok
   end
 
@@ -53,12 +53,12 @@ defmodule CipherSuitesCommandTest do
       {:validation_failure, :too_many_args}
   end
 
-  test "validate: setting both --openssl-format and --erlang-term-format to false fails validation", context do
+  test "validate: setting both --openssl-format and --erlang-format to false fails validation", context do
     assert @command.validate([], Map.merge(context[:opts], %{openssl_format: false, erlang_format: false})) ==
       {:validation_failure, {:bad_argument, "Either OpenSSL or Erlang term format must be selected"}}
   end
 
-  test "validate: setting both --openssl-format and --erlang-term-format to true fails validation", context do
+  test "validate: setting both --openssl-format and --erlang-format to true fails validation", context do
     assert @command.validate([], Map.merge(context[:opts], %{openssl_format: true, erlang_format: true})) ==
       {:validation_failure, {:bad_argument, "Cannot use both formats together"}}
   end
