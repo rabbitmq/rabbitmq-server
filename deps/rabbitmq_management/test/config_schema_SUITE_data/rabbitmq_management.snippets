@@ -274,6 +274,62 @@
 
 
  %%
+ %% CSP
+ %%
+
+ {csp_policy_case1,
+  "management.csp.policy = default-src 'self'",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self'"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_policy_case2,
+  "management.csp.policy = default-src https://onlinebanking.examplebank.com",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src https://onlinebanking.examplebank.com"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_policy_case3,
+  "management.csp.policy = default-src 'self' *.mailsite.com; img-src *",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self' *.mailsite.com; img-src *"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ %%
+ %% HSTS
+ %%
+
+ {hsts_policy_case1,
+  "management.hsts.policy = max-age=31536000; includeSubDomains",
+  [
+   {rabbitmq_management, [
+                          {strict_transport_security, "max-age=31536000; includeSubDomains"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_and_hsts_combined,
+  "management.csp.policy = default-src 'self' *.mailsite.com; img-src *
+   management.hsts.policy = max-age=31536000; includeSubDomains",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self' *.mailsite.com; img-src *"},
+                          {strict_transport_security, "max-age=31536000; includeSubDomains"}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+
+ %%
  %% Legacy listener configuration
  %%
 

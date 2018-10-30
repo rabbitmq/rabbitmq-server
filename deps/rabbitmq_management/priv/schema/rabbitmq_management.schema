@@ -284,6 +284,34 @@ fun(Conf) ->
 end}.
 
 
+%% CSP (https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)
+
+{mapping, "management.csp.policy", "rabbitmq_management.content_security_policy", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_management.content_security_policy",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.csp.policy", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% HSTS (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security)
+
+{mapping, "management.hsts.policy", "rabbitmq_management.strict_transport_security", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_management.strict_transport_security",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.hsts.policy", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
 
 %% ===========================================================================
 

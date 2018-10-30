@@ -9,8 +9,11 @@ define PROJECT_ENV
 	    {management_db_cache_multiplier, 5},
 	    {process_stats_gc_timeout, 300000},
 	    {stats_event_max_backlog, 250},
+
 	    {cors_allow_origins, []},
-	    {cors_max_age, 1800}
+	    {cors_max_age, 1800},
+
+	    {content_security_policy, "default-src 'self'"}
 	  ]
 endef
 
