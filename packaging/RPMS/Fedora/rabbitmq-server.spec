@@ -1,5 +1,5 @@
 %define debug_package %{nil}
-%define erlang_minver 19.3
+%define erlang_minver 21.0
 
 Name: rabbitmq-server
 Version: %%VERSION%%
