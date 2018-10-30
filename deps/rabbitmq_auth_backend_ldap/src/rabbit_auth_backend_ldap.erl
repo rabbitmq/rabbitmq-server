@@ -79,7 +79,7 @@ user_login_authentication(Username, AuthProps) when is_list(AuthProps) ->
                     prebind -> UserDN = username_to_dn_prebind(Username),
                                with_ldap({ok, {UserDN, PW}},
                                          login_fun(Username, UserDN, PW, AuthProps));
-                    _       -> with_ldap({ok, {fill_user_dn_pattern(Username), PW}},
+                    _       -> with_ldap({ok, {simple_bind_fill_pattern(Username), PW}},
                                          login_fun(Username, unknown, PW, AuthProps))
                 end,
             ?L("DECISION: login for ~s: ~p", [Username, log_result(R)]),
@@ -758,6 +758,15 @@ dn_lookup(Username, LDAP) ->
 fill_user_dn_pattern(Username) ->
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     fill(env(user_dn_pattern), [{username, Username}] ++ ADArgs).
+
+simple_bind_fill_pattern(Username) ->
+    simple_bind_fill_pattern(env(user_bind_pattern), Username).
+
+simple_bind_fill_pattern(none, Username) ->
+    fill_user_dn_pattern(Username);
+simple_bind_fill_pattern(Pattern, Username) ->
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
+    fill(Pattern, [{username, Username}] ++ ADArgs).
 
 creds(User) -> creds(User, env(other_bind)).
 
