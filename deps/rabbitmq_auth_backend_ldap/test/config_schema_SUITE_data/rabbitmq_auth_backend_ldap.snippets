@@ -88,6 +88,17 @@
                                ]}],
   [rabbitmq_auth_backend_ldap]},
 
+ {user_dn_pattern,
+  "auth_ldap.user_dn_pattern = ${ad_user}-${ad_domain}",
+  [{rabbitmq_auth_backend_ldap,
+       [{user_dn_pattern, "${ad_user}-${ad_domain}"}]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {user_bind_pattern,
+  "auth_ldap.user_bind_pattern = ${ad_user}-${ad_domain}",
+  [{rabbitmq_auth_backend_ldap,
+       [{user_bind_pattern, "${ad_user}-${ad_domain}"}]}],
+  [rabbitmq_auth_backend_ldap]},
 
  {group_lookup_base,
   "auth_ldap.group_lookup_base = DC=gopivotal,DC=com",
@@ -104,29 +115,35 @@
         {dn_lookup_base,"DC=gopivotal,DC=com"},
         {dn_lookup_bind,as_user}]}],
   [rabbitmq_auth_backend_ldap]},
+
  {db_lookup_bind,
   "auth_ldap.dn_lookup_bind.user_dn = username
    auth_ldap.dn_lookup_bind.password = password",
   [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,{"username","password"}}]}],
   [rabbitmq_auth_backend_ldap]},
+
  {db_lookup_bind_anon,
   "auth_ldap.dn_lookup_bind = anon",
   [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,anon}]}],
   [rabbitmq_auth_backend_ldap]},
+
  {other_bind_anon,
   "auth_ldap.other_bind = anon",
   [{rabbitmq_auth_backend_ldap,[{other_bind,anon}]}],
   [rabbitmq_auth_backend_ldap]},
+
  {both_binds_anon,
   "auth_ldap.dn_lookup_bind = anon
    auth_ldap.other_bind = anon",
   [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,anon},
                                 {other_bind,anon}]}],
   [rabbitmq_auth_backend_ldap]},
+
  {other_bind_as_user,
   "auth_ldap.other_bind = as_user",
   [{rabbitmq_auth_backend_ldap,[{other_bind,as_user}]}],
   [rabbitmq_auth_backend_ldap]},
+
  {other_bind_pass,
   "auth_ldap.other_bind.user_dn = username
    auth_ldap.other_bind.password = password",
