@@ -42,7 +42,7 @@
                      rates_mode, uptime, run_queue, processors, exchange_types,
                      auth_mechanisms, applications, contexts, log_files,
                      db_dir, config_files, net_ticktime, enabled_plugins,
-                     mem_calculation_strategy]).
+                     mem_calculation_strategy, ra_open_file_metrics]).
 
 %%--------------------------------------------------------------------
 
@@ -230,7 +230,22 @@ i(gc_bytes_reclaimed, _State) ->
     Words * erlang:system_info(wordsize);
 i(context_switches, _State) ->
     {Sw, 0} = erlang:statistics(context_switches),
-    Sw.
+    Sw;
+i(ra_open_file_metrics, _State) ->
+    [{ra_log_wal, ra_metrics(ra_log_wal)},
+     {ra_log_segment_writer, ra_metrics(ra_log_segment_writer)}].
+
+ra_metrics(K) ->
+    try
+        case ets:lookup(ra_open_file_metrics, whereis(K)) of
+            [] -> 0;
+            [{_, C}] -> C
+        end
+    catch
+        error:badarg ->
+            %% On startup the mgmt might start before ra does
+            0
+    end.
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
@@ -340,7 +355,7 @@ format_mochiweb_option(_K, V) ->
 init([]) ->
     {ok, Interval}   = application:get_env(rabbit, collect_statistics_interval),
     State = #state{fd_total    = file_handle_cache:ulimit(),
-                   fhc_stats   = file_handle_cache_stats:get(),
+                   fhc_stats   = get_fhc_stats(),
                    node_owners = sets:new(),
                    interval    = Interval},
     %% We can update stats straight away as they need to be available
@@ -395,5 +410,13 @@ emit_node_node_stats(State = #state{node_owners = Owners}) ->
 update_state(State0) ->
     %% Store raw data, the average operation time is calculated during querying
     %% from the accumulated total
-    FHC = file_handle_cache_stats:get(),
+    FHC = get_fhc_stats(),
     State0#state{fhc_stats = FHC}.
+
+get_fhc_stats() ->
+    dict:to_list(dict:merge(fun(_, V1, V2) -> V1 + V2 end,
+                            dict:from_list(file_handle_cache_stats:get()),
+                            dict:from_list(get_ra_io_metrics()))).
+
+get_ra_io_metrics() ->
+    lists:sort(ets:tab2list(ra_io_metrics)).

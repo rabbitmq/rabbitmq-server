@@ -61,6 +61,8 @@ format_queue_stats({slave_pids, ''}) ->
     [];
 format_queue_stats({slave_pids, Pids}) ->
     [{slave_nodes, [node(Pid) || Pid <- Pids]}];
+format_queue_stats({leader, Leader}) ->
+    [{node, Leader}];
 format_queue_stats({synchronised_slave_pids, ''}) ->
     [];
 format_queue_stats({synchronised_slave_pids, Pids}) ->
@@ -380,7 +382,7 @@ queue(#amqqueue{name            = Name,
                 exclusive_owner = ExclusiveOwner,
                 arguments       = Arguments,
                 pid             = Pid,
-                state           = State}) ->
+                state           = State} = Q) ->
     format(
       [{name,        Name},
        {durable,     Durable},
@@ -389,7 +391,7 @@ queue(#amqqueue{name            = Name,
        {owner_pid,   ExclusiveOwner},
        {arguments,   Arguments},
        {pid,         Pid},
-       {state,       State}],
+       {state,       State}] ++ rabbit_amqqueue:format(Q),
       {fun format_exchange_and_queue/1, false}).
 
 queue_state({syncing, Msgs}) -> [{state,         syncing},
