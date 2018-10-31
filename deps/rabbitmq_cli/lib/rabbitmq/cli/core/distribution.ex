@@ -13,9 +13,8 @@
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.Config
-
 defmodule RabbitMQ.CLI.Core.Distribution do
+  alias RabbitMQ.CLI.Core.{Config, Helpers}
 
   #
   # API
@@ -79,26 +78,32 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   end
 
   defp generate_cli_node_name(node_name_type) do
-    base                 = "rabbitmqcli" <> to_string(:rabbit_misc.random(100))
+    rmq_hostname         = Helpers.get_rabbit_hostname()
+    base                 = "rabbitmqcli-#{:os.getpid()}-#{rmq_hostname}"
     inet_resolver_config = :inet.get_rc()
-
     case {node_name_type, Keyword.get(inet_resolver_config, :domain)} do
-      {:longnames, nil} ->
-        generate_dot_no_domain_name(base);
-      {:longnames, ""}  ->
-        generate_dot_no_domain_name(base);
+      {:longnames, domain}  ->
+        ensure_ends_with_domain(base, domain)
       _ ->
         base
     end |> String.to_atom
-
   end
 
-  defp generate_dot_no_domain_name(base) do
+  defp ensure_ends_with_domain(base, nil) do
+    "#{base}.localdomain"
+  end
+  defp ensure_ends_with_domain(base, "") do
+    "#{base}.localdomain"
+  end
+  defp ensure_ends_with_domain(base, domain) do
     # Distribution will fail to start if it's unable to
     # determine FQDN of a node (with at least one dot in
     # the name).
-    # The CLI always acts as a connection initiator, so it
-    # doesn't matter if the name will not resolve.
-    base <> "@" <> to_string(:inet_db.gethostname()) <> ".no-domain"
+    case String.ends_with?(base, to_string(domain)) do
+      true ->
+        base
+      _ ->
+        "#{base}.#{domain}"
+    end
   end
 end
