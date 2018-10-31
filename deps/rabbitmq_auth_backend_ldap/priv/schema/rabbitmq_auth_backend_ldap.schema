@@ -80,6 +80,14 @@ end}.
 %% ==============
 %%
 
+%% Pattern to convert the username given through AMQP to a different
+%% form before performing a simple bind
+%%
+%% {user_bind_pattern, "${ad_user}@${ad_domain}.com"},
+
+{mapping, "auth_ldap.user_bind_pattern", "rabbitmq_auth_backend_ldap.user_bind_pattern",
+    [{datatype, string}]}.
+
 %% Pattern to convert the username given through AMQP to a DN before
 %% binding
 %%
