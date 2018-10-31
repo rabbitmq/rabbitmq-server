@@ -35,7 +35,7 @@ Lists all shovels, optionally filtering by Virtual Host.
 curl -u guest:guest -v http://localhost:15672/api/shovels/%2f
 ```
 
-#### `POST /api/parameters/shovel/<VHOST>/<NAME>`
+#### `PUT /api/parameters/shovel/<VHOST>/<NAME>`
 Create a shovel, passing in the configuration as JSON in the request body.
 
 **Example**
@@ -64,7 +64,7 @@ Create a file called ``shovel.json`` similar to the following, replacing the par
 Once created, post the file to the HTTP API:
 
 ```bash
-curl -u guest:guest -v -X POST -H 'Content-Type: application/json' -d @./shovel.json \
+curl -u guest:guest -v -X PUT -H 'Content-Type: application/json' -d @./shovel.json \
   http://localhost:15672/api/parameters/shovel/%2F/my-shovel
 ```
 *Note* You can specify either `dest_queue` OR `dest_exchange` in the `value` stanza of the JSON, but not both.
