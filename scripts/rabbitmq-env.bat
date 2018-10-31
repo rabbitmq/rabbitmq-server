@@ -262,6 +262,15 @@ if not exist "!RABBITMQ_MNESIA_DIR!" (
 )
 for /f "delims=" %%F in ("!RABBITMQ_MNESIA_DIR!") do set RABBITMQ_MNESIA_DIR=%%~sF
 
+REM [ "x" = "x$RABBITMQ_QUORUM_DIR" ] && RABBITMQ_QUORUM_DIR=${RABBITMQ_MNESIA_DIR}/quorum
+if "!RABBITMQ_QUORUM_DIR!"=="" (
+    set RABBITMQ_QUORUM_DIR=!RABBITMQ_MNESIA_DIR!\quorum
+)
+if not exist "!RABBITMQ_QUORUM_DIR!" (
+    mkdir "!RABBITMQ_QUORUM_DIR!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_QUORUM_DIR!") do set RABBITMQ_QUORUM_DIR=%%~sF
+
 REM [ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE=${PID_FILE}
 REM [ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE=${RABBITMQ_MNESIA_DIR}.pid
 REM No Windows equivalent
