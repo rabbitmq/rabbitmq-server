@@ -12,3 +12,6 @@
 test/config_schema_SUITE_data/schema/
 
 /rabbitmq_auth_backend_http.d
+
+.idea
+
