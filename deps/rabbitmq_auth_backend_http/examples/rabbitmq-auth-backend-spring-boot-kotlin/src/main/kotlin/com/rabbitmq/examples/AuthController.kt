@@ -17,27 +17,43 @@
 package com.rabbitmq.examples;
 
 import org.slf4j.LoggerFactory
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestMethod
-import org.springframework.web.bind.annotation.RestController
+import org.springframework.http.MediaType
+import org.springframework.web.bind.annotation.*
 
 /**
  * Controller for the RabbitMQ authentication/authorisation as described
  * in https://github.com/rabbitmq/rabbitmq-auth-backend-http
  */
-@RequestMapping(path = ["/auth"], method = [RequestMethod.GET, RequestMethod.POST])
+@RequestMapping(path = ["/auth"])
 @RestController
 class AuthController {
+
+    private val ALLOW = "allow"
+    private val DENY = "deny"
 
     private val logger = LoggerFactory.getLogger(AuthController::class.java!!)
 
     /**
      * user_path
      */
-    @RequestMapping(value = ["/user"], produces = ["text/plain"])
-    fun checkUserCredentials(passwordCheck: PasswordCheck): String {
-        logger.info("checkUserCredentials username: ${passwordCheck.username}")
-        return "allow"
+    @GetMapping(value = ["/user"], produces = ["text/plain"])
+    fun checkUserCredentialsViaGET(passwordCheck: PasswordCheck): String {
+        logger.info("checkUserCredentialsViaGET username: ${passwordCheck.username}")
+        if (passwordCheck.username == "foo" && passwordCheck.password == "bar") {
+            return ALLOW
+        } else {
+            return DENY
+        }
+    }
+
+    @PostMapping(value = ["/user"], produces = ["text/plain"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    fun checkUserCredentialsViaPOST(@RequestParam map: Map<String, String>): String {
+        logger.info("checkUserCredentialsViaPOST username: ${map}")
+        if (map["username"] == "foo" && map["password"] == "bar") {
+            return ALLOW
+        } else {
+            return DENY
+        }
     }
 
     /**

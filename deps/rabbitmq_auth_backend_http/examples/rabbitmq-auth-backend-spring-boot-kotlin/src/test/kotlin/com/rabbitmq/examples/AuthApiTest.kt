@@ -31,19 +31,18 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 @WebMvcTest
 class AuthApiTest(@Autowired val mockMvc: MockMvc) {
 
-
     @Test
     fun `Check authentication for external users with GET`() {
         mockMvc.perform(get("/auth/user")
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .param("username", "test-soc1")
-                .param("password", "pass1"))
+                .param("username", "foo")
+                .param("password", "bar"))
                 .andExpect(status().isOk)
     }
 
-    //@Test
+    @Test
     fun `Check authentication for external users with POST`() {
-        mockMvc.perform(post("/auth/user").contentType(MediaType.APPLICATION_FORM_URLENCODED).content("username=guest&password=pass1"))
+        mockMvc.perform(post("/auth/user").contentType(MediaType.APPLICATION_FORM_URLENCODED).content("username=foo&password=bar"))
                 .andExpect(status().isOk)
     }
 }
