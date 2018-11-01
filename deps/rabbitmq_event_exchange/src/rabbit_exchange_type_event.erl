@@ -28,7 +28,7 @@
 -export([fmt_proplist/1]). %% testing
 
 -record(state, {vhost,
-                has_binding
+                has_any_bindings
                }).
 
 -rabbit_boot_step({rabbit_event_exchange,
@@ -65,16 +65,16 @@ exchange(VHost) ->
 init([]) ->
     VHost = get_vhost(),
     X = rabbit_misc:r(VHost, exchange, ?EXCH_NAME),
-    HasBinding = case rabbit_binding:list_for_source(X) of
+    HasBindings = case rabbit_binding:list_for_source(X) of
                      [] -> false;
                      _ -> true
                  end,
     {ok, #state{vhost = VHost,
-                has_binding = HasBinding}}.
+                has_any_bindings = HasBindings}}.
 
 handle_call(_Request, State) -> {ok, not_understood, State}.
 
-handle_event(_, #state{has_binding = false} = State) ->
+handle_event(_, #state{has_any_bindings = false} = State) ->
     {ok, State};
 handle_event(#event{type      = Type,
                     props     = Props,
@@ -101,9 +101,9 @@ handle_event(_Event, State) ->
     {ok, State}.
 
 handle_info({event_exchange, added_first_binding}, State) ->
-    {ok, State#state{has_binding = true}};
+    {ok, State#state{has_any_bindings = true}};
 handle_info({event_exchange, removed_last_binding}, State) ->
-    {ok, State#state{has_binding = false}};
+    {ok, State#state{has_any_bindings = false}};
 handle_info(_Info, State) -> {ok, State}.
 
 terminate(_Arg, _State) -> ok.
