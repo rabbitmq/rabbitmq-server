@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
 
 defmodule StopCommandTest do
@@ -23,12 +23,12 @@ defmodule StopCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     :ok
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname()}}
+    {:ok, opts: %{node: get_rabbit_hostname(),
+                  idempotent: false}}
   end
 
   test "validate accepts no arguments", context do
@@ -43,13 +43,20 @@ defmodule StopCommandTest do
     assert @command.validate(["/path/to/pidfile.pid", "extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
-  # NB: as this commands shuts down the erlang vm it isn't really practical to test it here
+  # NB: as this commands shuts down the Erlang vm it isn't really practical to test it here
 
-  test "run: request to a non-existent node returns nodedown" do
+  test "run: request to a non-existent node with --idempotent=false returns nodedown" do
     target = :jake@thedog
 
-    opts = %{node: target}
+    opts = %{node: target, idempotent: false}
     assert match?({:badrpc, :nodedown}, @command.run([], opts))
+  end
+
+  test "run: request to a non-existent node with --idempotent returns ok" do
+    target = :jake@thedog
+
+    opts = %{node: target, idempotent: true}
+    assert match?({:ok, _}, @command.run([], opts))
   end
 
   test "banner", context do
