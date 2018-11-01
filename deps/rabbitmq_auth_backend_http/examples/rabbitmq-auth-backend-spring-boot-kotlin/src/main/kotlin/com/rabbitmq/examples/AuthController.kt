@@ -33,36 +33,42 @@ class AuthController {
 
     private val logger = LoggerFactory.getLogger(AuthController::class.java!!)
 
+    private fun check(condition: Boolean): String = if (condition) ALLOW else DENY
+
     /**
-     * user_path
+     * user_path GET
      */
     @GetMapping(value = ["/user"], produces = ["text/plain"])
     fun checkUserCredentialsViaGET(passwordCheck: PasswordCheck): String {
         logger.info("checkUserCredentialsViaGET username: ${passwordCheck.username}")
-        if (passwordCheck.username == "foo" && passwordCheck.password == "bar") {
-            return ALLOW
-        } else {
-            return DENY
-        }
-    }
-
-    @PostMapping(value = ["/user"], produces = ["text/plain"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
-    fun checkUserCredentialsViaPOST(@RequestParam map: Map<String, String>): String {
-        logger.info("checkUserCredentialsViaPOST username: ${map}")
-        if (map["username"] == "foo" && map["password"] == "bar") {
-            return ALLOW
-        } else {
-            return DENY
-        }
+        return check(passwordCheck.username == "foo" && passwordCheck.password == "bar")
     }
 
     /**
-     * vhost_path
+     * user_path POST
+     */
+    @PostMapping(value = ["/user"], produces = ["text/plain"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    fun checkUserCredentialsViaPOST(@RequestParam map: Map<String, String>): String {
+        logger.info("checkUserCredentialsViaPOST username: ${map}")
+        return check(map["username"] == "foo" && map["password"] == "bar")
+    }
+
+    /**
+     * vhost_path GET
      */
     @RequestMapping(value = ["/vhost"], produces = ["text/plain"])
-    fun checkVhost(question: VirtualHostCheck): String {
+    fun checkVhostViaGet(question: VirtualHostCheck): String {
         logger.info("checkVhost: $question")
-        return "allow"
+        return check(question.username == "foo" && question.vhost == "bar")
+    }
+
+    /**
+     * vhost_path POST
+     */
+    @PostMapping(value = ["/vhost"], produces = ["text/plain"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
+    fun checkVhostViaPost(@RequestParam map: Map<String, String>): String {
+        logger.info("checkVhostViaPost username: ${map}")
+        return check(map["username"] == "foo" && map["vhost"] == "bar")
     }
 
     /**

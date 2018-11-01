@@ -31,10 +31,10 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 @WebMvcTest
 class AuthApiTest(@Autowired val mockMvc: MockMvc) {
 
+    // user
     @Test
     fun `Check authentication for external users with GET`() {
         mockMvc.perform(get("/auth/user")
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .param("username", "foo")
                 .param("password", "bar"))
                 .andExpect(status().isOk)
@@ -43,6 +43,60 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
     @Test
     fun `Check authentication for external users with POST`() {
         mockMvc.perform(post("/auth/user").contentType(MediaType.APPLICATION_FORM_URLENCODED).content("username=foo&password=bar"))
+                .andExpect(status().isOk)
+    }
+
+    // vhost
+    @Test
+    fun `Check vhost for external users with GET`() {
+        mockMvc.perform(get("/auth/vhost")
+                .param("username", "foo")
+                .param("vhost", "bar"))
+                .andExpect(status().isOk)
+    }
+
+    @Test
+    fun `Check vhost for external users with POST`() {
+        mockMvc.perform(post("/auth/vhost").contentType(MediaType.APPLICATION_FORM_URLENCODED).content("username=foo&vhost=bar"))
+                .andExpect(status().isOk)
+    }
+
+    // resource
+    @Test
+    fun `Check resource_path for external users with GET`() {
+        mockMvc.perform(get("/auth/resource")
+                .param("username", "foo")
+                .param("vhost", "bar")
+                .param("resource", "yet")
+                .param("name", "another")
+                .param("permission", "word"))
+                .andExpect(status().isOk)
+    }
+
+    @Test
+    fun `Check resource_path for external users with POST`() {
+        mockMvc.perform(post("/auth/resource").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .content("username=foo&vhost=bar&resource=1&name=2&permission=3"))
+                .andExpect(status().isOk)
+    }
+
+    // topic
+    @Test
+    fun `Check topic for external users with GET`() {
+        mockMvc.perform(get("/auth/topic")
+                .param("username", "foo")
+                .param("vhost", "bar")
+                .param("resource", "yet")
+                .param("name", "another")
+                .param("routing_key", "short")
+                .param("permission", "word"))
+                .andExpect(status().isOk)
+    }
+
+    @Test
+    fun `Check topic for external users with POST`() {
+        mockMvc.perform(post("/auth/topic").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .content("username=foo&vhost=bar&resource=1&name=2&permission=3&routing_key=4"))
                 .andExpect(status().isOk)
     }
 }
