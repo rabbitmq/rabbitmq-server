@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
@@ -19,13 +19,23 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
   use RabbitMQ.CLI.DefaultOutput
   alias RabbitMQ.CLI.Core.OsPid
 
-  def merge_defaults(args, opts), do: {args, opts}
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{idempotent: false}, opts)}
+  end
+
+  def switches(), do: [idempotent: :boolean]
 
   def validate([], _), do: :ok
   def validate([_pidfile_path], _), do: :ok
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
 
-  def run([], %{node: node_name}) do
+  def run([], %{node: node_name, idempotent: true}) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, []) do
+      {:badrpc, :nodedown} -> {:ok, "Node #{node_name} is no longer running"};
+      any                  -> any
+    end
+  end
+  def run([], %{node: node_name, idempotent: false}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
   end
   def run([pidfile_path], %{node: node_name}) do
@@ -43,7 +53,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
     end
   end
 
-  def usage, do: "stop [<pidfile>]"
+  def usage, do: "stop [--idempotent] [<pidfile>]"
 
   def banner([pidfile_path], %{node: node_name}) do
     "Stopping and halting node #{node_name} (will monitor pid file #{pidfile_path}) ..."
