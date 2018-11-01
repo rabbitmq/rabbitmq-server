@@ -176,6 +176,9 @@ amqp_table(Table)     -> maps:from_list([{Name, amqp_value(Type, Value)} ||
 
 amqp_value(array, Vs)                  -> [amqp_value(T, V) || {T, V} <- Vs];
 amqp_value(table, V)                   -> amqp_table(V);
+amqp_value(decimal, {Before, After})   ->
+    erlang:list_to_float(
+      lists:flatten(io_lib:format("~p.~p", [Before, After])));
 amqp_value(_Type, V) when is_binary(V) -> utf8_safe(V);
 amqp_value(_Type, V)                   -> V.
 
