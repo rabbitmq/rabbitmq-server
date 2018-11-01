@@ -17,14 +17,15 @@
 package com.rabbitmq.examples;
 
 import org.slf4j.LoggerFactory
-import org.springframework.http.MediaType
-import org.springframework.web.bind.annotation.*
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestMethod
+import org.springframework.web.bind.annotation.RestController
 
 /**
  * Controller for the RabbitMQ authentication/authorisation as described
  * in https://github.com/rabbitmq/rabbitmq-auth-backend-http
  */
-@RequestMapping(path = ["/auth"])
+@RequestMapping(path = ["/auth"], method = [RequestMethod.GET, RequestMethod.POST])
 @RestController
 class AuthController {
 
@@ -36,39 +37,21 @@ class AuthController {
     private fun check(condition: Boolean): String = if (condition) ALLOW else DENY
 
     /**
-     * user_path GET
+     * user_path
      */
-    @GetMapping(value = ["/user"], produces = ["text/plain"])
-    fun checkUserCredentialsViaGET(passwordCheck: PasswordCheck): String {
+    @RequestMapping(value = ["/user"], produces = ["text/plain"])
+    fun checkUserCredentials(passwordCheck: PasswordCheck): String {
         logger.info("checkUserCredentialsViaGET username: ${passwordCheck.username}")
         return check(passwordCheck.username == "foo" && passwordCheck.password == "bar")
     }
 
     /**
-     * user_path POST
-     */
-    @PostMapping(value = ["/user"], produces = ["text/plain"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
-    fun checkUserCredentialsViaPOST(@RequestParam map: Map<String, String>): String {
-        logger.info("checkUserCredentialsViaPOST username: ${map}")
-        return check(map["username"] == "foo" && map["password"] == "bar")
-    }
-
-    /**
-     * vhost_path GET
+     * vhost_path
      */
     @RequestMapping(value = ["/vhost"], produces = ["text/plain"])
-    fun checkVhostViaGet(question: VirtualHostCheck): String {
+    fun checkVhost(question: VirtualHostCheck): String {
         logger.info("checkVhost: $question")
         return check(question.username == "foo" && question.vhost == "bar")
-    }
-
-    /**
-     * vhost_path POST
-     */
-    @PostMapping(value = ["/vhost"], produces = ["text/plain"], consumes = [MediaType.APPLICATION_FORM_URLENCODED_VALUE])
-    fun checkVhostViaPost(@RequestParam map: Map<String, String>): String {
-        logger.info("checkVhostViaPost username: ${map}")
-        return check(map["username"] == "foo" && map["vhost"] == "bar")
     }
 
     /**
@@ -77,7 +60,7 @@ class AuthController {
     @RequestMapping(value = ["/resource"], produces = ["text/plain"])
     fun checkResource(question: ResourceCheck): String {
         logger.info("checkResource: $question")
-        return "allow"
+        return check(question.username == "foo" && question.vhost == "bar")
     }
 
     /**
@@ -86,7 +69,7 @@ class AuthController {
     @RequestMapping(value = ["/topic"], produces = ["text/plain"])
     fun checkTopic(question: TopicCheck): String {
         logger.info("checkTopic: $question")
-        return "allow"
+        return check(question.username == "foo" && question.vhost == "bar")
     }
 
 }
