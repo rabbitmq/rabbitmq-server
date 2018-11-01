@@ -41,7 +41,7 @@ class AuthController {
      */
     @RequestMapping(value = ["/user"], produces = ["text/plain"])
     fun checkUserCredentials(passwordCheck: PasswordCheck): String {
-        logger.info("checkUserCredentialsViaGET username: ${passwordCheck.username}")
+        logger.info("checkUserCredentials username: ${passwordCheck.username}")
         return check(passwordCheck.username == "foo" && passwordCheck.password == "bar")
     }
 
