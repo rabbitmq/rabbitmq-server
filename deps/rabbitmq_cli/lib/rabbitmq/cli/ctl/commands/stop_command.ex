@@ -20,22 +20,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
   alias RabbitMQ.CLI.Core.OsPid
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{ignore_stopped: false}, opts)}
+    {args, Map.merge(%{idempotent: false}, opts)}
   end
 
-  def switches(), do: [ignore_stopped: :boolean]
+  def switches(), do: [idempotent: :boolean]
 
   def validate([], _), do: :ok
   def validate([_pidfile_path], _), do: :ok
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
 
-  def run([], %{node: node_name, ignore_stopped: true}) do
+  def run([], %{node: node_name, idempotent: true}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, []) do
       {:badrpc, :nodedown} -> {:ok, "Node #{node_name} is no longer running"};
       any                  -> any
     end
   end
-  def run([], %{node: node_name, ignore_stopped: false}) do
+  def run([], %{node: node_name, idempotent: false}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
   end
   def run([pidfile_path], %{node: node_name}) do
@@ -53,7 +53,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
     end
   end
 
-  def usage, do: "stop [--ignore-stopped] [<pidfile>]"
+  def usage, do: "stop [--idempotent] [<pidfile>]"
 
   def banner([pidfile_path], %{node: node_name}) do
     "Stopping and halting node #{node_name} (will monitor pid file #{pidfile_path}) ..."
