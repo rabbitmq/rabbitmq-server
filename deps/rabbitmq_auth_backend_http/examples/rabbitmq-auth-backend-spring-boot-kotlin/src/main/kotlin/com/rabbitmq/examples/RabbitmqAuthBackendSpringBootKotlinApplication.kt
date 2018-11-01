@@ -1,4 +1,4 @@
-package com.rabbitmq.examples.rabbitmqauthbackendspringbootkotlin
+package com.rabbitmq.examples
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
