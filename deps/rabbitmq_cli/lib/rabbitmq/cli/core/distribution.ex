@@ -40,9 +40,12 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   ## Optimization. We try to start EPMD only if distribution fails
   def start_with_epmd(node_name, node_name_type) do
     case :net_kernel.start([node_name, node_name_type]) do
-      {:ok, _} = ok -> ok;
-      {:error, {:already_started, _}} = started -> started;
-      {:error, {{:already_started, _}, _}} = started -> started;
+      {:ok, _} = ok ->
+        ok
+      {:error, {:already_started, _}} = started ->
+        started
+      {:error, {{:already_started, _}, _}} = started ->
+        started
       ## EPMD can be stopped. Retry with EPMD
       {:error, _} ->
         :rabbit_nodes_common.ensure_epmd()
@@ -56,9 +59,11 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
   def ensure_cookie(options) do
     case Config.get_option(:erlang_cookie, options) do
-      nil    -> :ok;
-      cookie -> Node.set_cookie(cookie)
-                :ok
+      nil ->
+        :ok
+      cookie ->
+        Node.set_cookie(cookie)
+        :ok
     end
   end
 
@@ -68,42 +73,80 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
   defp start(node_name_type, attempts, _last_err) do
     candidate = generate_cli_node_name(node_name_type)
+
     case start_with_epmd(candidate, node_name_type) do
-      {:ok, _} -> :ok
-      {:error, {:already_started, pid}}      -> {:ok, pid};
-      {:error, {{:already_started, pid}, _}} -> {:ok, pid};
+      {:ok, _} ->
+        :ok
+      {:error, {:already_started, pid}} ->
+        {:ok, pid}
+      {:error, {{:already_started, pid}, _}} ->
+        {:ok, pid}
       {:error, reason} ->
         start(node_name_type, attempts - 1, reason)
     end
   end
 
   defp generate_cli_node_name(node_name_type) do
-    rmq_hostname         = Helpers.get_rabbit_hostname()
-    base                 = "rabbitmqcli-#{:os.getpid()}-#{rmq_hostname}"
+    rmq_hostname = Helpers.get_rabbit_hostname()
+    base = "rabbitmqcli-#{:os.getpid()}-#{rmq_hostname}"
     inet_resolver_config = :inet.get_rc()
+
     case {node_name_type, Keyword.get(inet_resolver_config, :domain)} do
-      {:longnames, domain}  ->
+      {:longnames, domain} ->
+        # Distribution will fail to start if it's unable to
+        # determine FQDN of a node (with at least one dot in
+        # the name).
         ensure_ends_with_domain(base, domain)
       _ ->
         base
-    end |> String.to_atom
+    end |> String.to_atom()
   end
 
   defp ensure_ends_with_domain(base, nil) do
-    "#{base}.localdomain"
+    maybe_add_domain(base)
   end
+
   defp ensure_ends_with_domain(base, "") do
-    "#{base}.localdomain"
+    maybe_add_domain(base)
   end
+
   defp ensure_ends_with_domain(base, domain) do
-    # Distribution will fail to start if it's unable to
-    # determine FQDN of a node (with at least one dot in
-    # the name).
     case String.ends_with?(base, to_string(domain)) do
       true ->
         base
-      _ ->
+
+      false ->
         "#{base}.#{domain}"
     end
+  end
+
+  defp maybe_add_domain(base) do
+    # :inet:get_rc() didn't return a useful domain
+    # so come up with one
+    parts = String.split(base, "@", parts: 2)
+    maybe_add_domain(base, parts)
+  end
+
+  defp maybe_add_domain(base, [_, ""]) do
+    # base ends with an @, weird but possible?
+    hostname = Helpers.hostname()
+    "#{base}#{hostname}.localdomain"
+  end
+
+  defp maybe_add_domain(base, [_, domain]) do
+    case String.contains?(domain, ".") do
+      true ->
+        base
+      false ->
+        # the domain part of base does not contain
+        # a dot, so assume no full domain. Append
+        # one here
+        "#{base}.localdomain"
+    end
+  end
+
+  defp maybe_add_domain(base, [_]) do
+    hostname = Helpers.hostname()
+    "#{base}@#{hostname}.localdomain"
   end
 end
