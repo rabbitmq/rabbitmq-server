@@ -53,34 +53,35 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
       ks  -> [ks, values(output)]
     end
     |> CSV.encode
+    |> Enum.join
   end
 
-  def keys(map) when is_map(map) do
+  defp keys(map) when is_map(map) do
     Map.keys(map)
   end
-  def keys(list) when is_list(list) do
+  defp keys(list) when is_list(list) do
     case Keyword.keyword?(list) do
       true  -> Keyword.keys(list);
       false -> nil
     end
   end
-  def keys(_other) do
+  defp keys(_other) do
     nil
   end
 
-  def values(map) when is_map(map) do
+  defp values(map) when is_map(map) do
     Map.values(map)
   end
-  def values([]) do
+  defp values([]) do
     []
   end
-  def values(list) when is_list(list) do
+  defp values(list) when is_list(list) do
     case Keyword.keyword?(list) do
       true  -> Keyword.values(list);
       false -> list
     end
   end
-  def values(other) do
+  defp values(other) do
     other
   end
 
