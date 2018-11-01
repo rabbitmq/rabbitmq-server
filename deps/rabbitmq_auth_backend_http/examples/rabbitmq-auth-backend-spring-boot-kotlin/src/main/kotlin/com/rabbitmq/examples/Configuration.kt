@@ -16,13 +16,14 @@
  */
 package com.rabbitmq.examples
 
-import org.springframework.boot.autoconfigure.SpringBootApplication
-import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
-import org.springframework.boot.runApplication
+import org.springframework.context.annotation.Configuration
+import org.springframework.security.config.annotation.web.builders.HttpSecurity
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter
 
-@SpringBootApplication
-class RabbitmqAuthBackendSpringBootKotlinApplication
 
-fun main(args: Array<String>) {
-    runApplication<RabbitmqAuthBackendSpringBootKotlinApplication>(*args)
+@Configuration
+class SecurityConfiguration : WebSecurityConfigurerAdapter() {
+    override fun configure(http: HttpSecurity) {
+        http.authorizeRequests().antMatchers("/").permitAll()
+    }
 }
