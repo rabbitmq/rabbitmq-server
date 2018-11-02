@@ -276,14 +276,14 @@ evaluate0({match, {string, _} = StringQuery, {string, _} = REQuery}, Args, User,
 
 evaluate0({match, StringQuery, {string, _} = REQuery}, Args, User, LDAP) when is_list(StringQuery)->
     safe_eval(fun (String1, String2) ->
-        do_match(String1, String2)
+                      do_match(String1, String2)
               end,
         evaluate(StringQuery, Args, User, LDAP),
         evaluate(REQuery, Args, User, LDAP));
 
 evaluate0({match, {string, _} = StringQuery, REQuery}, Args, User, LDAP) when is_list(REQuery) ->
     safe_eval(fun (String1, String2) ->
-        do_match(String1, String2)
+                      do_match(String1, String2)
               end,
         evaluate(StringQuery, Args, User, LDAP),
         evaluate(REQuery, Args, User, LDAP));
@@ -291,14 +291,14 @@ evaluate0({match, {string, _} = StringQuery, REQuery}, Args, User, LDAP) when is
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) when is_list(StringQuery),
                                                                 is_list(REQuery)  ->
     safe_eval(fun (String1, String2) ->
-        do_match(String1, String2)
+                      do_match(String1, String2)
               end,
         evaluate(StringQuery, Args, User, LDAP),
         evaluate(REQuery, Args, User, LDAP));
 
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) ->
     safe_eval(fun (String1, String2) ->
-        do_match_bidirectionally(String1, String2)
+                      do_match_multi(String1, String2)
               end,
         evaluate(StringQuery, Args, User, LDAP),
         evaluate(REQuery, Args, User, LDAP));
@@ -364,32 +364,45 @@ safe_eval(F,  V1,         V2)         -> F(V1, V2).
 
 do_match(S1, S2) ->
     case re:run(S1, S2) of
-        {match, _} -> log_match(S1, S2, R = true),
+        {match, _} ->
+            log_match(S1, S2, R = true),
             R;
-        nomatch    -> log_match(S1, S2, R = false),
+        nomatch ->
+            log_match(S1, S2, R = false),
             R
     end.
 
-do_match_bidirectionally(S1, S2) ->
-    case re:run(S1, S2) of
-        {match, _} -> log_match(S1, S2, R = true),
-                      R;
-        nomatch    ->
-            %% Do match bidirectionally, if intial RE consists of
-            %% multi attributes, else log match and return result.
-            case S2 of
-                S when length(S) > 1 ->
-                    R = case re:run(S2, S1) of
-                            {match, _} -> true;
-                            nomatch    -> false
-                        end,
-                    log_match(S2, S1, R),
-                    R;
-                _ ->
-                    log_match(S1, S2, R = false),
-                    R
-            end
-    end.
+%% In some cases when fetching regular expressions, LDAP evalution() 
+%% returns a list of strings, so we need to wrap guards around that.
+%% If a list of strings is returned, loop and match versus each element.
+do_match_multi(S1, []) ->
+    log_match(S1, [], R = false),
+    R;
+do_match_multi(S1 = [H1|_], [H2|Tail]) when is_list(H2) and not is_list(H1) ->
+    case re:run(S1, H2) of
+        {match, _} ->
+            log_match(S1, H2, R = true),
+            R;
+        _ ->
+            log_match(S1,H2, false),
+            do_match_multi(S1, Tail)
+    end;
+do_match_multi([], S2) ->
+    log_match([], S2, R = false),
+    R;
+do_match_multi([H1|Tail], S2 = [H2|_] ) when is_list(H1) and not is_list(H2) ->
+    case re:run(H1, S2) of
+        {match, _} ->
+            log_match(H1, S2, R = true),
+            R;
+        _ ->
+            log_match(H1, S2, false),
+            do_match_multi(Tail, S2)
+    end;
+do_match_multi([H1|_],[H2|_]) when is_list(H1) and is_list(H2) ->
+    false; %% Unsupported combination
+do_match_multi(S1, S2) ->
+    do_match(S1, S2).
 
 log_match(String, RE, Result) ->
     ?L1("evaluated match \"~s\" against RE \"~s\": ~s",

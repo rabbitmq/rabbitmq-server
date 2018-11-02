@@ -25,6 +25,7 @@
 -define(BOB_NAME, "Bob").
 -define(CAROL_NAME, "Carol").
 -define(PETER_NAME, "Peter").
+-define(JIMMY_NAME, "Jimmy").
 
 -define(VHOST, "test").
 -define(DEFAULT_LDAP_PORT, "3890").
@@ -42,6 +43,10 @@
                                     virtual_host = <<?VHOST>>}).
 
 -define(PETER, #amqp_params_network{username     = <<?PETER_NAME>>,
+                                    password     = <<"password">>,
+                                    virtual_host = <<?VHOST>>}).
+
+-define(JIMMY, #amqp_params_network{username     = <<?JIMMY_NAME>>,
                                     password     = <<"password">>,
                                     virtual_host = <<?VHOST>>}).
 
@@ -113,7 +118,8 @@ groups() ->
         invalid_and_clause_ldap_only,
         topic_authorisation_publishing_ldap_only,
         topic_authorisation_consumption,
-        match_bidirectional
+        match_bidirectional,
+        match_bidirectional_gh_100
     ],
     [
       {non_parallel_tests, [], Tests
@@ -475,9 +481,7 @@ topic_authorisation_consumption1(Config) ->
     false = rabbit_auth_backend_ldap:check_topic_access(Alice, Resource, read, #{routing_key => <<"b.c">>}),
     %% user KO, routing key OK, should fail
     false = rabbit_auth_backend_ldap:check_topic_access(Bob, Resource, read, #{routing_key => <<"a.b.c">>}),
-
     ok.
-
 
 match_bidirectional(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -497,6 +501,25 @@ match_bidirectional(Config) ->
          P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
          [test_resource(PTR) || PTR <- [{P?ALICE, Q1, ok},
                                         {P?ALICE, Q2, fail}]]
+     end || ConfigurationFunction <- Configurations],
+    ok.
+
+match_bidirectional_gh_100(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        application, set_env, [rabbit, auth_backends, [rabbit_auth_backend_ldap]]),
+
+    Configurations = [
+        fun resource_access_query_match_gh_100/0,
+        fun resource_access_query_match_query_is_string_gh_100/0
+    ],
+
+    [begin
+         set_env(Config, ConfigurationFunction()),
+         Q1 = [#'queue.declare'{queue = <<"Jimmy-queue">>}],
+         Q2 = [#'queue.declare'{queue = <<"Jimmy">>}],
+         P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
+         [test_resource(PTR) || PTR <- [{P?JIMMY, Q1, ok},
+                                        {P?JIMMY, Q2, ok}]]
      end || ConfigurationFunction <- Configurations],
     ok.
 
@@ -646,6 +669,22 @@ vhost_access_query_and_in_group() ->
 vhost_access_query_nested_groups_env() ->
     [{vhost_access_query, {in_group_nested, "cn=admins,ou=groups,dc=rabbitmq,dc=com"}}].
 
+vhost_access_query_base_env() ->
+    [{vhost_access_query, vhost_access_query_base()}].
+
+vhost_access_query_base() ->
+    {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}.
+
+resource_access_query_match_gh_100() ->
+    [{resource_access_query,
+      {match, {string, "RMQ-${vhost}"}, {attribute, "${user_dn}", "description"}}
+     }].
+
+resource_access_query_match_query_is_string_gh_100() ->
+    [{resource_access_query,
+      {match, "RMQ-${vhost}", {attribute, "${user_dn}", "description"}}
+     }].
+
 resource_access_query_match() ->
     [{resource_access_query, {match, {string, "${name}"},
         {string, "^${username}-"}}
@@ -665,12 +704,6 @@ resource_access_query_match_query_and_re_query_are_strings() ->
     [{resource_access_query, {match, "${name}",
         "^${username}-"}
     }].
-
-vhost_access_query_base_env() ->
-    [{vhost_access_query, vhost_access_query_base()}].
-
-vhost_access_query_base() ->
-    {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}.
 
 topic_access_query_base_env() ->
     [{topic_access_query, topic_access_query_base()}].
