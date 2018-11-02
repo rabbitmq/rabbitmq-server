@@ -413,18 +413,21 @@ apply(_, {down, Pid, _Info}, Effects0,
 apply(_, {nodeup, Node}, Effects0,
       #state{consumers = Cons0,
              enqueuers = Enqs0} = State0) ->
+    %% A node we are monitoring has come back.
+    %% If we have suspected any processes of being
+    %% down we should now re-issue the monitors for them to detect if they're
+    %% actually down or not
     Cons = maps:fold(fun({_, P}, #consumer{suspected_down = true}, Acc)
-                            when node(P) =:= Node ->
-                              [P | Acc];
-                         (_, _, Acc) -> Acc
-                      end, [], Cons0),
+                           when node(P) =:= Node ->
+                             [P | Acc];
+                        (_, _, Acc) -> Acc
+                     end, [], Cons0),
     Enqs = maps:fold(fun(P, #enqueuer{suspected_down = true}, Acc)
                            when node(P) =:= Node ->
                              [P | Acc];
                         (_, _, Acc) -> Acc
                      end, [], Enqs0),
     Monitors = [{monitor, process, P} || P <- Cons ++ Enqs],
-    % TODO: should we unsuspect these processes here?
     % TODO: avoid list concat
     {State0, Monitors ++ Effects0, ok};
 apply(_, {nodedown, _Node}, Effects, State) ->
@@ -432,10 +435,13 @@ apply(_, {nodedown, _Node}, Effects, State) ->
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
 state_enter(leader, #state{consumers = Custs,
+                           enqueuers = Enqs,
                            name = Name,
                            become_leader_handler = BLH}) ->
-    % return effects to monitor all current consumerss
-    Effects = [{monitor, process, P} || {_, P} <- maps:keys(Custs)],
+    % return effects to monitor all current consumers and enqueuers
+    ConMons = [{monitor, process, P} || {_, P} <- maps:keys(Custs)],
+    EnqMons = [{monitor, process, P} || P <- maps:keys(Enqs)],
+    Effects = ConMons ++ EnqMons,
     case BLH of
         undefined ->
             Effects;
@@ -1508,6 +1514,19 @@ state_enter_test() ->
                 become_leader_handler => {m, f, [a]}}),
     [{mod_call, m, f, [a, the_name]}] = state_enter(leader, S0),
     ok.
+
+leader_monitors_on_state_enter_test() ->
+    Cid = {<<"cid">>, self()},
+    {State0, [_, _]} = enq(1, 1, first, test_init(test)),
+    {State1, _} = check_auto(Cid, 2, State0),
+    Self = self(),
+    %% as we have an enqueuer _and_ a consumer we chould
+    %% get two monitor effects in total, even if they are for the same
+    %% processs
+    [{monitor, process, Self},
+     {monitor, process, Self}] = state_enter(leader, State1),
+    ok.
+
 
 purge_test() ->
     Cid = {<<"purge_test">>, self()},
