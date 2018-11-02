@@ -60,7 +60,8 @@ groups() ->
                                exchange,
                                vhosts,
                                nodes,
-                               overview
+                               overview,
+                               disable_plugin
                               ]}
     ].
 
@@ -726,6 +727,17 @@ overview(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn2),
 
     ok.
+
+disable_plugin(Config) ->
+    Node = get_node_config(Config, 0, nodename),
+    Status0 = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit, status, []),
+    Listeners0 = proplists:get_value(listeners, Status0),
+    ?assert(lists:keymember(http, 1, Listeners0)),
+    rabbit_ct_broker_helpers:disable_plugin(Config, Node, 'rabbitmq_web_dispatch'),
+    Status = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit, status, []),
+    Listeners = proplists:get_value(listeners, Status),
+    ?assert(not lists:keymember(http, 1, Listeners)),
+    rabbit_ct_broker_helpers:enable_plugin(Config, Node, 'rabbitmq_management').
 
 %%----------------------------------------------------------------------------
 %%
