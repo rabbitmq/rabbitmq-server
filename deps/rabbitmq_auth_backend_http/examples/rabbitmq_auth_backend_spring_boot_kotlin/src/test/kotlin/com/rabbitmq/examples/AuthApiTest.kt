@@ -25,6 +25,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 @ExtendWith(SpringExtension::class)
@@ -38,12 +39,24 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
                 .param("username", "foo")
                 .param("password", "bar"))
                 .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("allow"))
+
+    }
+
+    @Test
+    fun `Check deny for external users with GET`() {
+        mockMvc.perform(get("/auth/user")
+                .param("username", "foo")
+                .param("password", "blabla"))
+                .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("deny"))
     }
 
     @Test
     fun `Check authentication for external users with POST`() {
         mockMvc.perform(post("/auth/user").contentType(MediaType.APPLICATION_FORM_URLENCODED).content("username=foo&password=bar"))
                 .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
 
     // vhost
@@ -53,12 +66,14 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
                 .param("username", "foo")
                 .param("vhost", "bar"))
                 .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
 
     @Test
     fun `Check vhost for external users with POST`() {
         mockMvc.perform(post("/auth/vhost").contentType(MediaType.APPLICATION_FORM_URLENCODED).content("username=foo&vhost=bar"))
                 .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
 
     // resource
@@ -71,6 +86,7 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
                 .param("name", "another")
                 .param("permission", "word"))
                 .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
 
     @Test
@@ -78,6 +94,7 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
         mockMvc.perform(post("/auth/resource").contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .content("username=foo&vhost=bar&resource=1&name=2&permission=3"))
                 .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
 
     // topic
@@ -91,6 +108,7 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
                 .param("routing_key", "short")
                 .param("permission", "word"))
                 .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
 
     @Test
@@ -98,5 +116,6 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
         mockMvc.perform(post("/auth/topic").contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .content("username=foo&vhost=bar&resource=1&name=2&permission=3&routing_key=4"))
                 .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
 }
