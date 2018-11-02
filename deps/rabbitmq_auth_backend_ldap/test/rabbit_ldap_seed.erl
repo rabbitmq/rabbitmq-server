@@ -60,7 +60,8 @@ people() ->
       johndoe(),
       alice(),
       peter(),
-      carol()
+      carol(),
+      jimmy()
     ].
 
 groups() ->
@@ -183,6 +184,15 @@ carol() ->
                        "person"]},
       {"loginShell", ["/bin/bash"]},
       {"userPassword", ["password"]}]}.
+
+% rabbitmq/rabbitmq-auth-backend-ldap#100
+jimmy() ->
+    {"cn=Jimmy,ou=people,dc=rabbitmq,dc=com",
+     [{"objectClass", ["person"]},
+      {"cn", ["Jimmy"]},
+      {"sn", ["Makes"]},
+      {"userPassword", ["password"]},
+      {"description", ["^RMQ-foobar", "^RMQ-.*$"]}]}.
 
 add(H, {A, B}) ->
     ok = eldap:add(H, A, B).
