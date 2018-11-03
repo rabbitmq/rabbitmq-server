@@ -411,7 +411,6 @@ run_escript()
         -kernel inet_dist_listen_max "$RABBITMQ_CTL_DIST_PORT_MAX" \
         -sasl errlog_type error \
         -mnesia dir "\"$RABBITMQ_MNESIA_DIR\"" \
-        -nodename "$RABBITMQ_NODENAME" \
         -run escript start \
         -escript main "$escript_main" \
         -extra "$escript" "$@"
