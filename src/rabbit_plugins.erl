@@ -69,7 +69,9 @@ ensure1(FileJustChanged0) ->
             %% that won't work.
             ok = rabbit_event:sync_notify(plugins_changed, [{enabled,  Start},
                                                             {disabled, Stop}]),
-            rabbit:stop_apps(Stop),
+            %% The app_utils module stops the apps in reverse order, so we should
+            %% pass them here in dependency order.
+            rabbit:stop_apps(lists:reverse(Stop)),
             clean_plugins(Stop),
             case {Start, Stop} of
                 {[], []} ->
