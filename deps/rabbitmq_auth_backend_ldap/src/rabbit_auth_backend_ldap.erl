@@ -331,6 +331,8 @@ search_groups(LDAP, Desc, GroupsBase, Scope, DN) ->
         {error, _} = E ->
             ?L("error searching for parent groups for \"~s\": ~p", [DN, E]),
             [];
+        {ok, {referral, Referrals}} ->
+            {error, {referrals_not_supported, Referrals}};
         {ok, #eldap_search_result{entries = []}} ->
             [];
         {ok, #eldap_search_result{entries = Entries}} ->
@@ -415,6 +417,8 @@ object_exists(DN, Filter, LDAP) ->
                        {filter, Filter},
                        {attributes, ["objectClass"]}, %% Reduce verbiage
                        {scope, eldap:baseObject()}]) of
+        {ok, {referral, Referrals}} ->
+            {error, {referrals_not_supported, Referrals}};
         {ok, #eldap_search_result{entries = Entries}} ->
             length(Entries) > 0;
         {error, _} = E ->
@@ -426,6 +430,8 @@ attribute(DN, AttributeName, LDAP) ->
                       [{base, DN},
                        {filter, eldap:present("objectClass")},
                        {attributes, [AttributeName]}]) of
+        {ok, {referral, Referrals}} ->
+            {error, {referrals_not_supported, Referrals}};
         {ok, #eldap_search_result{entries = E = [#eldap_entry{}|_]}} ->
             get_attributes(AttributeName, E);
         {ok, #eldap_search_result{entries = _}} ->
@@ -757,6 +763,8 @@ dn_lookup(Username, LDAP) ->
                        {filter, eldap:equalityMatch(
                                   env(dn_lookup_attribute), Filled)},
                        {attributes, ["distinguishedName"]}]) of
+        {ok, {referral, Referrals}} ->
+            {error, {referrals_not_supported, Referrals}};
         {ok, #eldap_search_result{entries = [#eldap_entry{object_name = DN}]}}->
             ?L1("DN lookup: ~s -> ~s", [Username, DN]),
             DN;
