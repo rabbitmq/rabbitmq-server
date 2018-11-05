@@ -34,8 +34,6 @@ class AuthController {
 
     private val logger = LoggerFactory.getLogger(AuthController::class.java!!)
 
-    private fun check(condition: Boolean): String = if (condition) ALLOW else DENY
-
     /**
      * user_path
      */
@@ -43,9 +41,9 @@ class AuthController {
     fun checkUserCredentials(passwordCheck: PasswordCheck): String {
         logger.info("checkUserCredentials username: ${passwordCheck.username}")
         if (passwordCheck.username == "guest" && passwordCheck.password == "guest") {
-            return check(true) + " administrator management"
+            return "$ALLOW administrator management"
         } else {
-            return check(false)
+            return DENY
         }
     }
 
@@ -55,7 +53,7 @@ class AuthController {
     @RequestMapping(value = ["/vhost"], produces = ["text/plain"])
     fun checkVhost(question: VirtualHostCheck): String {
         logger.info("checkVhost: $question")
-        return check(true)
+        return ALLOW
     }
 
     /**
@@ -64,7 +62,7 @@ class AuthController {
     @RequestMapping(value = ["/resource"], produces = ["text/plain"])
     fun checkResource(question: ResourceCheck): String {
         logger.info("checkResource: $question")
-        return check(true)
+        return ALLOW
     }
 
     /**
@@ -73,7 +71,7 @@ class AuthController {
     @RequestMapping(value = ["/topic"], produces = ["text/plain"])
     fun checkTopic(question: TopicCheck): String {
         logger.info("checkTopic: $question")
-        return check(question.routing_key.startsWith("a", false))
+        return if (question.routing_key.startsWith("a", false)) ALLOW else DENY
     }
 
 }
