@@ -156,12 +156,18 @@ $(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
+COMMA = ,
+
 define test_rabbitmq_config
 %% vim:ft=erlang:
 
 [
   {rabbit, [
+$(if $(RABBITMQ_NODE_PORT),      {listeners$(COMMA) [$(RABBITMQ_NODE_PORT)]}$(COMMA),)
       {loopback_users, []}
+    ]},
+  {rabbitmq_management, [
+$(if $(RABBITMQ_NODE_PORT),      {listener$(COMMA) [{port$(COMMA) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
     ]}
 ].
 endef
