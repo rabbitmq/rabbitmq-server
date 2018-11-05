@@ -12,7 +12,7 @@
  * The Original Code is RabbitMQ HTTP authentication.
  *
  * The Initial Developer of the Original Code is VMware, Inc.
- * Copyright (c) 2017 Pivotal Software, Inc.  All rights reserved.
+ * Copyright (c) 2018 Pivotal Software, Inc.  All rights reserved.
  */
 package com.rabbitmq.examples;
 
@@ -42,7 +42,11 @@ class AuthController {
     @RequestMapping(value = ["/user"], produces = ["text/plain"])
     fun checkUserCredentials(passwordCheck: PasswordCheck): String {
         logger.info("checkUserCredentials username: ${passwordCheck.username}")
-        return check(passwordCheck.username == "foo" && passwordCheck.password == "bar")
+        if (passwordCheck.username == "guest" && passwordCheck.password == "guest") {
+            return check(true) + " administrator management"
+        } else {
+            return check(false)
+        }
     }
 
     /**
@@ -51,7 +55,7 @@ class AuthController {
     @RequestMapping(value = ["/vhost"], produces = ["text/plain"])
     fun checkVhost(question: VirtualHostCheck): String {
         logger.info("checkVhost: $question")
-        return check(question.username == "foo" && question.vhost == "bar")
+        return check(true)
     }
 
     /**
@@ -60,7 +64,7 @@ class AuthController {
     @RequestMapping(value = ["/resource"], produces = ["text/plain"])
     fun checkResource(question: ResourceCheck): String {
         logger.info("checkResource: $question")
-        return check(question.username == "foo" && question.vhost == "bar")
+        return check(true)
     }
 
     /**
@@ -69,7 +73,7 @@ class AuthController {
     @RequestMapping(value = ["/topic"], produces = ["text/plain"])
     fun checkTopic(question: TopicCheck): String {
         logger.info("checkTopic: $question")
-        return check(question.username == "foo" && question.vhost == "bar")
+        return check(question.routing_key.startsWith("a", false))
     }
 
 }

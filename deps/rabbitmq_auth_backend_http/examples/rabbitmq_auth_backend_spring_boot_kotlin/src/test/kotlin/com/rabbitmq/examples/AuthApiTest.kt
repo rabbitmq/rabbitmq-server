@@ -12,7 +12,7 @@
  * The Original Code is RabbitMQ HTTP authentication.
  *
  * The Initial Developer of the Original Code is VMware, Inc.
- * Copyright (c) 2017 Pivotal Software, Inc.  All rights reserved.
+ * Copyright (c) 2018 Pivotal Software, Inc.  All rights reserved.
  */
 package com.rabbitmq.examples
 
@@ -36,42 +36,44 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
     @Test
     fun `Check authentication for external users with GET`() {
         mockMvc.perform(get("/auth/user")
-                .param("username", "foo")
-                .param("password", "bar"))
+                .param("username", "guest")
+                .param("password", "guest"))
                 .andExpect(status().isOk)
-                .andExpect(MockMvcResultMatchers.content().string("allow"))
+                .andExpect(MockMvcResultMatchers.content().string("allow administrator management"))
 
     }
 
     @Test
     fun `Check deny for external users with GET`() {
         mockMvc.perform(get("/auth/user")
-                .param("username", "foo")
-                .param("password", "blabla"))
+                .param("username", "guest")
+                .param("password", "wrong"))
                 .andExpect(status().isOk)
                 .andExpect(MockMvcResultMatchers.content().string("deny"))
     }
 
     @Test
     fun `Check authentication for external users with POST`() {
-        mockMvc.perform(post("/auth/user").contentType(MediaType.APPLICATION_FORM_URLENCODED).content("username=foo&password=bar"))
+        mockMvc.perform(post("/auth/user").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .content("username=guest&password=guest"))
                 .andExpect(status().isOk)
-                .andExpect(MockMvcResultMatchers.content().string("allow"))
+                .andExpect(MockMvcResultMatchers.content().string("allow administrator management"))
     }
 
     // vhost
     @Test
     fun `Check vhost for external users with GET`() {
         mockMvc.perform(get("/auth/vhost")
-                .param("username", "foo")
-                .param("vhost", "bar"))
+                .param("username", "guest")
+                .param("vhost", "guest"))
                 .andExpect(status().isOk)
                 .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
 
     @Test
     fun `Check vhost for external users with POST`() {
-        mockMvc.perform(post("/auth/vhost").contentType(MediaType.APPLICATION_FORM_URLENCODED).content("username=foo&vhost=bar"))
+        mockMvc.perform(post("/auth/vhost").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .content("username=guest&vhost=guest"))
                 .andExpect(status().isOk)
                 .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
@@ -80,11 +82,11 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
     @Test
     fun `Check resource_path for external users with GET`() {
         mockMvc.perform(get("/auth/resource")
-                .param("username", "foo")
-                .param("vhost", "bar")
-                .param("resource", "yet")
-                .param("name", "another")
-                .param("permission", "word"))
+                .param("username", "guest")
+                .param("vhost", "guest")
+                .param("resource", "exchange")
+                .param("name", "amq.topic")
+                .param("permission", "write"))
                 .andExpect(status().isOk)
                 .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
@@ -92,7 +94,7 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
     @Test
     fun `Check resource_path for external users with POST`() {
         mockMvc.perform(post("/auth/resource").contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .content("username=foo&vhost=bar&resource=1&name=2&permission=3"))
+                .content("username=guest&vhost=guest&resource=exchange&name=amq.topic&permission=write"))
                 .andExpect(status().isOk)
                 .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
@@ -101,12 +103,12 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
     @Test
     fun `Check topic for external users with GET`() {
         mockMvc.perform(get("/auth/topic")
-                .param("username", "foo")
-                .param("vhost", "bar")
-                .param("resource", "yet")
-                .param("name", "another")
-                .param("routing_key", "short")
-                .param("permission", "word"))
+                .param("username", "guest")
+                .param("vhost", "guest")
+                .param("resource", "exchange")
+                .param("name", "amq.topic")
+                .param("routing_key", "a.b")
+                .param("permission", "write"))
                 .andExpect(status().isOk)
                 .andExpect(MockMvcResultMatchers.content().string("allow"))
     }
@@ -114,8 +116,21 @@ class AuthApiTest(@Autowired val mockMvc: MockMvc) {
     @Test
     fun `Check topic for external users with POST`() {
         mockMvc.perform(post("/auth/topic").contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .content("username=foo&vhost=bar&resource=1&name=2&permission=3&routing_key=4"))
+                .content("username=guest&vhost=guest&resource=exchange&name=amq.topic&permission=write&routing_key=a.b"))
                 .andExpect(status().isOk)
                 .andExpect(MockMvcResultMatchers.content().string("allow"))
+    }
+
+    @Test
+    fun `Check deny topic for external users with GET`() {
+        mockMvc.perform(get("/auth/topic")
+                .param("username", "guest")
+                .param("vhost", "guest")
+                .param("resource", "exchange")
+                .param("name", "amq.topic")
+                .param("routing_key", "b.b")
+                .param("permission", "write"))
+                .andExpect(status().isOk)
+                .andExpect(MockMvcResultMatchers.content().string("deny"))
     }
 }
