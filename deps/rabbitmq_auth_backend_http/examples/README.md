@@ -56,6 +56,15 @@ routing key starts with an `a` when publishing to a topic exchange
 or consuming from a topic. (an example of [topic authorisation](http://next.rabbitmq.com/access-control.html#topic-authorisation)).
 
 
+## Spring Boot Kotlin Example
+
+`rabbitmq_auth_backend_spring_boot_kotlin` is a simple [Spring Boot](https://projects.spring.io/spring-boot/)
+application written in Kotlin that rabbitmq-auth-backend-http can authenticate against. It's really
+not designed to be anything other than an example.
+It contains examples with recommended POST methods and example RabbitMQ configuration.
+It can be run the same way as the above example.
+
+
 ## ASP.NET Web API Example
 
 `rabbitmq_auth_backend_webapi_dotnet` is a very minimalistic ASP.NET Web API application
