@@ -43,7 +43,7 @@ not designed to be anything other than an example.
 Import the example as a Maven project in your favorite IDE or run it directly from the command line:
 
 ``` shell
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
 The application listens on the 8080 port.
