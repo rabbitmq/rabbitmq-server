@@ -281,7 +281,7 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
             end,
             rpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName]),
             {ok, Msgs};
-        {error, {no_more_nodes_to_try, Errs}} = Err ->
+        {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
                               (_) -> false
                            end, Errs) of
@@ -291,7 +291,10 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
                     rabbit_core_metrics:queue_deleted(QName),
                     {ok, Msgs};
                 false ->
-                    Err
+                    rabbit_misc:protocol_error(
+                      internal_error,
+                      "Cannot delete queue '~s', servers unavailable: ~255p",
+                      [rabbit_misc:rs(QName), Errs])
             end
     end.
 
