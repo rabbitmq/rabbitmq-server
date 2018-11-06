@@ -1,3 +1,4 @@
+export PATH :=$(CURDIR):$(PATH)
 HOSTNAME := $(shell hostname)
 MVN_FLAGS += -Ddeps.dir="$(abspath $(DEPS_DIR))" \
 			 -Dhostname=$(HOSTNAME) \
@@ -10,13 +11,13 @@ MVN_FLAGS += -Ddeps.dir="$(abspath $(DEPS_DIR))" \
 
 deps:
 	mkdir -p lib
-	mvn dependency:copy-dependencies -DoutputDirectory=lib
+	@mvnw dependency:copy-dependencies -DoutputDirectory=lib
 
 tests:
-	mvn -q $(MVN_FLAGS) test
+	@mvnw -q $(MVN_FLAGS) test
 
 clean:
-	mvn clean
+	@mvnw clean
 
 distclean: clean
 	rm -f lib/*.jar
