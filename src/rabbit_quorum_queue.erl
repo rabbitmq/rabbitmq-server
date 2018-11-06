@@ -34,6 +34,7 @@
 -export([add_member/3]).
 -export([delete_member/3]).
 -export([requeue/3]).
+-export([cleanup_data_dir/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -388,6 +389,26 @@ purge(Node) ->
 
 requeue(ConsumerTag, MsgIds, FState) ->
     rabbit_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, FState).
+
+cleanup_data_dir() ->
+    Names = [Name || #amqqueue{pid = {Name, _}, quorum_nodes = Nodes}
+                         <- rabbit_amqqueue:list_by_type(quorum),
+                     lists:member(node(), Nodes)],
+    Registered = ra_directory:list_registered(),
+    [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
+                                   not lists:member(Name, Names)],
+    ok.
+
+maybe_delete_data_dir(UId) ->
+    Dir = ra_env:server_data_dir(UId),
+    {ok, Config} = ra_log:read_config(Dir),
+    case maps:get(machine, Config) of
+        {module, rabbit_fifo, _} ->
+            ra_lib:recursive_delete(Dir),
+            ra_directory:unregister_name(UId);
+        _ ->
+            ok
+    end.
 
 cluster_state(Name) ->
     case whereis(Name) of
