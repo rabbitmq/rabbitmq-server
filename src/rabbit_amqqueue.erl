@@ -1476,7 +1476,8 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
                 lists:foldl(
                   fun({{Name, _} = Pid, QName}, QStates) ->
                           QState0 = get_quorum_state(Pid, QName, QStates),
-                          case rabbit_quorum_queue:deliver(Confirm, Delivery, QState0) of
+                          case rabbit_quorum_queue:deliver(Confirm, Delivery,
+                                                           QState0) of
                               {ok, QState} ->
                                   maps:put(Name, QState, QStates);
                               {slow, QState} ->
