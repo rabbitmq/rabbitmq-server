@@ -102,7 +102,7 @@ build_dotnet_test_project(Config) ->
 
 build_maven_test_project(Config) ->
     TestProjectDir = filename:join([?config(data_dir, Config), "java-tests"]),
-    Ret = rabbit_ct_helpers:exec(["mvn", "test-compile"],
+    Ret = rabbit_ct_helpers:exec([TestProjectDir ++ "/mvnw", "test-compile"],
       [{cd, TestProjectDir}]),
     case Ret of
         {ok, _} ->
@@ -209,7 +209,7 @@ run_dotnet_test(Config, Method) ->
 run_java_test(Config, Class) ->
     TestProjectDir = ?config(maven_test_project_dir, Config),
     Ret = rabbit_ct_helpers:exec([
-        "mvn",
+        TestProjectDir ++ "/mvnw",
         "test",
         {"-Dtest=~s", [Class]},
         {"-Drmq_broker_uri=~s", [rabbit_ct_broker_helpers:node_uri(Config, 0)]}
