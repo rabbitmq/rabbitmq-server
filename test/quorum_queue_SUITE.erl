@@ -36,6 +36,7 @@ groups() ->
                         {cluster_size_2, [], [add_member]}
                        ]},
      {clustered, [], [
+                      {cluster_size_2, [], [cleanup_data_dir]},
                       {cluster_size_2, [], [add_member_not_running,
                                             add_member_classic,
                                             add_member_already_a_member,
@@ -43,8 +44,7 @@ groups() ->
                                             delete_member_not_running,
                                             delete_member_classic,
                                             delete_member_not_found,
-                                            delete_member,
-                                            cleanup_data_dir]
+                                            delete_member]
                        ++ all_tests()},
                       {cluster_size_3, [], [
                                             declare_during_node_down,
