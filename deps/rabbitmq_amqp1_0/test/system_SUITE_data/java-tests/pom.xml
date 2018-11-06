@@ -32,7 +32,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.0</version>
+        <version>3.8.0</version>
         <configuration>
           <source>1.6</source>
           <target>1.6</target>
@@ -41,11 +41,16 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>2.19.1</version>
+        <version>2.22.1</version>
         <configuration>
           <systemPropertyVariables>
             <rmq_broker_uri>${rmq_broker_uri}</rmq_broker_uri>
           </systemPropertyVariables>
+          <!--
+            needed because of bug in OpenJDK 8 u181 on Debian distros
+            see https://stackoverflow.com/questions/53010200/maven-surefire-could-not-find-forkedbooter-class
+          -->
+          <argLine>-Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
         </configuration>
       </plugin>
     </plugins>
