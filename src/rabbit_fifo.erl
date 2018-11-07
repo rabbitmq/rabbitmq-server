@@ -207,19 +207,19 @@
 
 -spec init(config()) -> {state(), ra_machine:effects()}.
 init(#{name := Name} = Conf) ->
+    update_state(Conf, #state{name = Name}).
+
+update_state(Conf, State) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
     CCH = maps:get(cancel_consumer_handler, Conf, undefined),
     BLH = maps:get(become_leader_handler, Conf, undefined),
     MH = maps:get(metrics_handler, Conf, undefined),
     SHI = maps:get(shadow_copy_interval, Conf, ?SHADOW_COPY_INTERVAL),
-    #state{name = Name,
-           dead_letter_handler = DLH,
-           cancel_consumer_handler = CCH,
-           become_leader_handler = BLH,
-           metrics_handler = MH,
-           shadow_copy_interval = SHI}.
-
-
+    State#state{dead_letter_handler = DLH,
+                cancel_consumer_handler = CCH,
+                become_leader_handler = BLH,
+                metrics_handler = MH,
+                shadow_copy_interval = SHI}.
 
 % msg_ids are scoped per consumer
 % ra_indexes holds all raft indexes for enqueues currently on queue
@@ -431,7 +431,9 @@ apply(_, {nodeup, Node}, Effects0,
     % TODO: avoid list concat
     {State0, Monitors ++ Effects0, ok};
 apply(_, {nodedown, _Node}, Effects, State) ->
-    {State, Effects, ok}.
+    {State, Effects, ok};
+apply(_, {update_state, Conf}, Effects, State) ->
+    {update_state(Conf, State), Effects, ok}.
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
 state_enter(leader, #state{consumers = Custs,

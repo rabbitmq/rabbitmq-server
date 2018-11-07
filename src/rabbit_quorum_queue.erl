@@ -34,6 +34,7 @@
 -export([add_member/3]).
 -export([delete_member/3]).
 -export([requeue/3]).
+-export([policy_changed/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -147,12 +148,14 @@ declare(#amqqueue{name = QName,
 
 
 
-ra_machine(Q = #amqqueue{name = QName}) ->
-    {module, rabbit_fifo,
-     #{dead_letter_handler => dlx_mfa(Q),
-       cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
-       become_leader_handler => {?MODULE, become_leader, [QName]},
-       metrics_handler => {?MODULE, update_metrics, [QName]}}}.
+ra_machine(Q) ->
+    {module, rabbit_fifo, ra_machine_state(Q)}.
+
+ra_machine_state(Q = #amqqueue{name = QName}) ->
+    #{dead_letter_handler => dlx_mfa(Q),
+      cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
+      become_leader_handler => {?MODULE, become_leader, [QName]},
+      metrics_handler => {?MODULE, update_metrics, [QName]}}.
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
     Node = node(ChPid),
@@ -385,6 +388,10 @@ purge(Node) ->
 
 requeue(ConsumerTag, MsgIds, FState) ->
     rabbit_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, FState).
+
+policy_changed(QName, Node) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    rabbit_fifo_client:update_machine_state(Node, ra_machine_state(Q)).
 
 cluster_state(Name) ->
     case whereis(Name) of

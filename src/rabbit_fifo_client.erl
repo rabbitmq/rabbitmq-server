@@ -21,7 +21,8 @@
          handle_ra_event/3,
          untracked_enqueue/2,
          purge/1,
-         cluster_name/1
+         cluster_name/1,
+         update_machine_state/2
          ]).
 
 -include_lib("ra/include/ra.hrl").
@@ -374,6 +375,14 @@ purge(Node) ->
 -spec cluster_name(state()) -> ra_cluster_name().
 cluster_name(#state{cluster_name = ClusterName}) ->
     ClusterName.
+
+update_machine_state(Node, Conf) ->
+    case ra:process_command(Node, {update_state, Conf}) of
+        {ok, ok, _} ->
+            ok;
+        Err ->
+            Err
+    end.
 
 %% @doc Handles incoming `ra_events'. Events carry both internal "bookeeping"
 %% events emitted by the `ra' leader as well as `rabbit_fifo' emitted events such
