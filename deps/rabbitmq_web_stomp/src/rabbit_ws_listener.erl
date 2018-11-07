@@ -45,8 +45,8 @@ init() ->
     end,
     case ranch:start_listener(
             http, NumTcpAcceptors,
-            ranch_tcp, TcpConf,
-            rabbit_ws_protocol,
+            ranch_tcp, [{connection_type, supervisor}|TcpConf],
+            rabbit_ws_connection_sup,
             CowboyOpts#{env => #{dispatch => Routes},
                         middlewares => [cowboy_router,
                                         rabbit_ws_middleware,
@@ -77,8 +77,8 @@ init() ->
             end,
              {ok, _} = ranch:start_listener(
                             https, NumSslAcceptors,
-                            ranch_ssl, TLSConf,
-                            rabbit_ws_protocol,
+                            ranch_ssl, [{connection_type, supervisor}|TLSConf],
+                            rabbit_ws_connection_sup,
                             CowboyOpts#{env => #{dispatch => Routes},
                                         middlewares => [cowboy_router,
                                                         rabbit_ws_middleware,
