@@ -391,7 +391,9 @@ install-windows-scripts: install-windows-escripts
 
 install-windows-docs: install-windows-erlapp
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/etc
-	$(inst_verbose) man $(DEPS_DIR)/rabbit/docs/rabbitmq-service.8 | col -bx > $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
+	$(inst_verbose) man $(DEPS_DIR)/rabbit/docs/rabbitmq-service.8 > tmp-readme-service.txt
+	$(verbose) col -bx < ./tmp-readme-service.txt > $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
+	$(verbose) rm -f ./tmp-readme-service.txt
 	$(verbose) cp $(DEPS_DIR)/rabbit/docs/rabbitmq.config.example \
 		$(DESTDIR)$(WINDOWS_PREFIX)/etc
 	$(verbose) for file in \
