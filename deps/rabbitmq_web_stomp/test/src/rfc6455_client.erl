@@ -107,7 +107,7 @@ start_conn(State = #state{transport = Transport}, AuthInfo, Protocols) ->
 
     ProtocolHd = case Protocols of
         [] -> "";
-        _  -> "Sec-Websocket-Protocol: " ++ string:join(Protocols, ", ")
+        _  -> "Sec-Websocket-Protocol: " ++ string:join(Protocols, ", ") ++ "\r\n"
     end,
 
     Key = base64:encode_to_string(crypto:strong_rand_bytes(16)),
