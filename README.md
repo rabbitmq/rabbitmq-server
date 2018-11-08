@@ -38,6 +38,10 @@ make package-standalone-macosx
 make -C packaging package-standalone-macosx SOURCE_DIST_FILE=/path/to/rabbitmq-server-3.8.1-rc.1.tar.xz
 ```
 
+The instructions in the [`PKG_LINUX.md`](PKG_LINUX.md) document include a
+script to install the necessary pre-requisites for building package archives as
+well as `deb` and `rpm` packages.
+
 ## Source archive
 
 ### How to create it
@@ -204,15 +208,18 @@ flavors, accepts the `RPM_OS` variable to set the flavor. It can be:
 ### Windows package
 
 We create two artefacts:
+
 * a Zip archive, resembling the `generic-unix` package;
 * an installer.
 
 To create them:
+
 ```
 make package-windows
 ```
 
 To create them separately:
+
 ```
 make -C packaging/windows     # the Zip archive
 make -C packaging/windows-exe # the installer
@@ -228,6 +235,7 @@ one requires the Zip archive as its input, not the source archive.
 
 So you need to built the Zip archive first, then the installer. You can
 specify the path to the Zip archive using the `ZIP` variable:
+
 ```
 make -C packaging/windows-exe ZIP=/path/to/rabbitmq-server-windows.zip
 ```
@@ -237,9 +245,13 @@ everything following the third integer was replaced by `.0`. Thus it's
 only fine if the version is a semver-based version (eg. 3.8.1-pre.3 or
 3.8.2). If the version doesn't conform to that, you need to set the
 `PRODUCT_VERSION` variable:
+
 ```
 make package-windows PROJECT_VERSION=3.8.1-rc.1 PRODUCT_VERSION=3.8.1.0
 ```
+
+To build the Windows package using a Windows machine, follow the
+instructions in [`PKG_WINDOWS.md`](PKG_WINDOWS.md).
 
 ### Standalone package
 
