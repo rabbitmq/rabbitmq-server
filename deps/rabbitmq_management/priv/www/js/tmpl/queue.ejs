@@ -135,9 +135,11 @@
         <th class="horizontal">Total</th>
         <th class="horizontal">Ready</th>
         <th class="horizontal">Unacked</th>
+        <% if (! queue.hasOwnProperty('members')) { %>
         <th class="horizontal">In memory</th>
         <th class="horizontal">Persistent</th>
         <th class="horizontal">Transient, Paged Out</th>
+        <% } %>
       </tr>
       <tr>
         <th>
@@ -153,6 +155,7 @@
         <td class="r">
           <%= fmt_num_thousands(queue.messages_unacknowledged) %>
         </td>
+        <% if (! queue.hasOwnProperty('members')) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ram) %>
         </td>
@@ -162,6 +165,7 @@
         <td class="r">
           <%= fmt_num_thousands(queue.messages_paged_out) %>
         </td>
+        <% } %>
       </tr>
       <tr>
         <th>
@@ -177,6 +181,7 @@
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_unacknowledged) %>
         </td>
+        <% if (! queue.hasOwnProperty('members')) { %>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_ram) %>
         </td>
@@ -186,6 +191,7 @@
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_paged_out) %>
         </td>
+        <% } %>
       </tr>
       <tr>
         <th>
