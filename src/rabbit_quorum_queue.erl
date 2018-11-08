@@ -23,7 +23,7 @@
 -export([credit/4]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3]).
--export([dead_letter_publish/5]).
+-export([dead_letter_publish/4]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
 -export([cancel_consumer_handler/3, cancel_consumer/3]).
@@ -498,11 +498,10 @@ delete_member(#amqqueue{pid = {RaName, _}, name = QName}, Node) ->
     end.
 
 %%----------------------------------------------------------------------------
-dlx_mfa(#amqqueue{name = Resource} = Q) ->
-    #resource{virtual_host = VHost} = Resource,
+dlx_mfa(Q) ->
     DLX = init_dlx(args_policy_lookup(<<"dead-letter-exchange">>, fun res_arg/2, Q), Q),
     DLXRKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun res_arg/2, Q),
-    {?MODULE, dead_letter_publish, [VHost, DLX, DLXRKey, Q#amqqueue.name]}.
+    {?MODULE, dead_letter_publish, [DLX, DLXRKey, Q#amqqueue.name]}.
 
 init_dlx(undefined, _Q) ->
     undefined;
@@ -520,10 +519,12 @@ args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
         {PolVal,    {_Type, ArgVal}} -> Resolve(PolVal, ArgVal)
     end.
 
-dead_letter_publish(_, undefined, _, _, _) ->
+dead_letter_publish(undefined, _, _, _) ->
     ok;
-dead_letter_publish(VHost, X, RK, QName, ReasonMsgs) ->
-    rabbit_vhost_dead_letter:publish(VHost, X, RK, QName, ReasonMsgs).
+dead_letter_publish(X, RK, QName, ReasonMsgs) ->
+    {ok, Exchange} = rabbit_exchange:lookup(X),
+    [rabbit_dead_letter:publish(Msg, Reason, Exchange, RK, QName)
+     || {Reason, Msg} <- ReasonMsgs].
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->

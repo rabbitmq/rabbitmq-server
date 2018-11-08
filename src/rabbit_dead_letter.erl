@@ -16,7 +16,7 @@
 
 -module(rabbit_dead_letter).
 
--export([publish/6]).
+-export([publish/5]).
 
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
@@ -26,20 +26,17 @@
 -type reason() :: 'expired' | 'rejected' | 'maxlen'.
 
 -spec publish(rabbit_types:message(), reason(), rabbit_types:exchange(),
-              'undefined' | binary(), rabbit_amqqueue:name(),
-              #{Name :: atom() => rabbit_fifo_client:state()}) -> 'ok'.
+              'undefined' | binary(), rabbit_amqqueue:name()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 
-publish(Msg, Reason, X, RK, QName, QueueStates0) ->
+publish(Msg, Reason, X, RK, QName) ->
     DLMsg = make_msg(Msg, Reason, X#exchange.name, RK, QName),
     Delivery = rabbit_basic:delivery(false, false, DLMsg, undefined),
     {Queues, Cycles} = detect_cycles(Reason, DLMsg,
                                      rabbit_exchange:route(X, Delivery)),
     lists:foreach(fun log_cycle_once/1, Cycles),
-    {_, _, QueueStates} = rabbit_amqqueue:deliver(rabbit_amqqueue:lookup(Queues),
-                                                  Delivery, QueueStates0),
-    QueueStates.
+    rabbit_amqqueue:deliver(rabbit_amqqueue:lookup(Queues), Delivery).
 
 make_msg(Msg = #basic_message{content       = Content,
                               exchange_name = Exchange,
