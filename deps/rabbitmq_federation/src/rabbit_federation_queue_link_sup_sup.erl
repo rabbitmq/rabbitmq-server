@@ -19,6 +19,7 @@
 -behaviour(supervisor2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 -define(SUPERVISOR, ?MODULE).
 
 %% Supervises the upstream links for all queues (but not exchanges). We need
@@ -42,7 +43,7 @@ start_child(Q) ->
             [rabbit_federation_link_sup]}) of
         {ok, _Pid}               -> ok;
         {error, {already_started, _Pid}} ->
-          QueueName = Q#amqqueue.name,
+          QueueName = amqqueue:get_name(Q),
           rabbit_log_federation:warning("Federation link for queue ~p was already started",
                                         [rabbit_misc:rs(QueueName)]),
           ok;
@@ -65,7 +66,7 @@ stop_child(Q) ->
     case supervisor2:terminate_child(?SUPERVISOR, id(Q)) of
       ok -> ok;
       {error, Err} ->
-        QueueName = Q#amqqueue.name,
+        QueueName = amqqueue:get_name(Q),
         rabbit_log_federation:warning(
           "Attempt to stop a federation link for queue ~p failed: ~p",
           [rabbit_misc:rs(QueueName), Err]),
@@ -87,5 +88,7 @@ init([]) ->
 %% frequently.  Note that since we take down all the links and start
 %% again when policies change, the policy will always be correct, so
 %% we don't clear it out here and can trust it.
-id(Q = #amqqueue{policy = Policy}) -> Q1 = rabbit_amqqueue:immutable(Q),
-                                      Q1#amqqueue{policy = Policy}.
+id(Q) when ?is_amqqueue(Q) ->
+    Policy = amqqueue:get_policy(Q),
+    Q1 = rabbit_amqqueue:immutable(Q),
+    amqqueue:set_policy(Q1, Policy).

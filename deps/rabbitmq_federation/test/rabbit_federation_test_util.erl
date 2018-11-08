@@ -293,11 +293,25 @@ links(#'queue.declare'{queue = Name}) ->
           case rabbit_policy:get(<<"federation-upstream-pattern">>, qr(Name)) of
               undefined -> [];
               Regex       ->
-                  Q = #amqqueue{name = qr(Name)},
+                  Q = amqqueue:new(qr(Name),
+                                   self(),
+                                   false,
+                                   false,
+                                   none,
+                                   [],
+                                   undefined,
+                                   #{}),
                   [{Name, U#upstream.name, U#upstream.queue_name} ||
                       U <- rabbit_federation_upstream:from_pattern(Regex, Q)]
           end;
-        Set       -> Q = #amqqueue{name = qr(Name)},
+        Set       -> Q = amqqueue:new(qr(Name),
+                                      self(),
+                                      false,
+                                      false,
+                                      none,
+                                      [],
+                                      undefined,
+                                      #{}),
                      [{Name, U#upstream.name, U#upstream.queue_name} ||
                          U <- rabbit_federation_upstream:from_set(Set, Q)]
     end.

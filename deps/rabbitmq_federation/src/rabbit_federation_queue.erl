@@ -25,6 +25,7 @@
                                [<<"federation">>]}},
                     {enables, recovery}]}).
 
+-include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
@@ -43,7 +44,8 @@ startup(Q) ->
     end,
     ok.
 
-shutdown(Q = #amqqueue{name = QName}) ->
+shutdown(Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     case active_for(Q) of
         true  -> rabbit_federation_queue_link_sup_sup:stop_child(Q),
                  rabbit_federation_status:remove_exchange_or_queue(QName);
@@ -51,9 +53,11 @@ shutdown(Q = #amqqueue{name = QName}) ->
     end,
     ok.
 
-policy_changed(Q1 = #amqqueue{name = QName}, Q2) ->
+policy_changed(Q1, Q2) when ?is_amqqueue(Q1) ->
+    QName = amqqueue:get_name(Q1),
     case rabbit_amqqueue:lookup(QName) of
-        {ok, #amqqueue{pid = QPid}} ->
+        {ok, Q0} when ?is_amqqueue(Q0) ->
+            QPid = amqqueue:get_pid(Q0),
             rpc:call(node(QPid), rabbit_federation_queue,
                      policy_changed_local, [Q1, Q2]);
         {error, not_found} ->
@@ -64,7 +68,8 @@ policy_changed_local(Q1, Q2) ->
     shutdown(Q1),
     startup(Q2).
 
-active_for(Q = #amqqueue{arguments = Args}) ->
+active_for(Q) ->
+    Args = amqqueue:get_arguments(Q),
     case rabbit_misc:table_lookup(Args, <<"x-internal-purpose">>) of
         {longstr, _} -> false; %% [0]
         _            -> rabbit_federation_upstream:federate(Q)
@@ -102,7 +107,8 @@ active_for(Q = #amqqueue{arguments = Args}) ->
 %% non-empty then it must have no active consumers - in which case it stays
 %% the same from our POV.
 
-consumer_state_changed(#amqqueue{name = QName}, MaxActivePriority, IsEmpty) ->
+consumer_state_changed(Q, MaxActivePriority, IsEmpty) ->
+    QName = amqqueue:get_name(Q),
     case IsEmpty andalso active_unfederated(MaxActivePriority) of
         true  -> rabbit_federation_queue_link:run(QName);
         false -> rabbit_federation_queue_link:pause(QName)
