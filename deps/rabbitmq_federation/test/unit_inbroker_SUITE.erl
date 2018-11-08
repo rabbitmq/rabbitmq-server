@@ -144,9 +144,18 @@ remove_credentials(Config) ->
     ok.
 
 get_connection_name(_Config) ->
+    Q = amqqueue:new(rabbit_misc:r(<<"/">>, queue, <<"queue">>),
+                     self(),
+                     false,
+                     false,
+                     none,
+                     [],
+                     undefined,
+                     #{},
+                     classic),
     <<"Federation link (upstream: my.upstream, policy: my.federation.policy)">> = rabbit_federation_link_util:get_connection_name(
         #upstream{name = <<"my.upstream">>},
-        #upstream_params{x_or_q = #amqqueue{policy = [{name, <<"my.federation.policy">>}]}}
+        #upstream_params{x_or_q = amqqueue:set_policy(Q, [{name, <<"my.federation.policy">>}])}
     ),
     <<"Federation link (upstream: my.upstream, policy: my.federation.policy)">> = rabbit_federation_link_util:get_connection_name(
         #upstream{name = <<"my.upstream">>},
@@ -154,7 +163,7 @@ get_connection_name(_Config) ->
     ),
     <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
         #upstream{},
-        #upstream_params{x_or_q = #amqqueue{policy = []}}
+        #upstream_params{x_or_q = amqqueue:set_policy(Q, [])}
     ),
     <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
         #upstream{},

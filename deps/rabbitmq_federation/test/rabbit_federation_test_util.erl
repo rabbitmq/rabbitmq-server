@@ -270,7 +270,15 @@ links(#'exchange.declare'{exchange = Name}) ->
 links(#'queue.declare'{queue = Name}) ->
     case rabbit_policy:get(<<"federation-upstream-set">>, qr(Name)) of
         undefined -> [];
-        Set       -> Q = #amqqueue{name = qr(Name)},
+        Set       -> Q = amqqueue:new(qr(Name),
+                                      self(),
+                                      false,
+                                      false,
+                                      none,
+                                      [],
+                                      undefined,
+                                      #{},
+                                      classic),
                      [{Name, U#upstream.name, U#upstream.queue_name} ||
                          U <- rabbit_federation_upstream:from_set(Set, Q)]
     end.

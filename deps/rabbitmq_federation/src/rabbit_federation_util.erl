@@ -16,6 +16,7 @@
 
 -module(rabbit_federation_util).
 
+-include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
@@ -55,16 +56,16 @@ fail(Fmt, Args) -> rabbit_misc:protocol_error(precondition_failed, Fmt, Args).
 
 name(                 #resource{name = XorQName})  -> XorQName;
 name(#exchange{name = #resource{name = XName}})    -> XName;
-name(#amqqueue{name = #resource{name = QName}})    -> QName.
+name(Q) when ?is_amqqueue(Q) -> #resource{name = QName} = amqqueue:get_name(Q), QName.
 
 vhost(                 #resource{virtual_host = VHost})  -> VHost;
 vhost(#exchange{name = #resource{virtual_host = VHost}}) -> VHost;
-vhost(#amqqueue{name = #resource{virtual_host = VHost}}) -> VHost;
+vhost(Q) when ?is_amqqueue(Q) -> #resource{virtual_host = VHost} = amqqueue:get_name(Q), VHost;
 vhost( #amqp_params_direct{virtual_host = VHost}) -> VHost;
 vhost(#amqp_params_network{virtual_host = VHost}) -> VHost.
 
 r(#exchange{name = XName}) -> XName;
-r(#amqqueue{name = QName}) -> QName.
+r(Q) when ?is_amqqueue(Q) -> amqqueue:get_name(Q).
 
 pgname(Name) ->
     case application:get_env(rabbitmq_federation, pgroup_name_cluster_id) of

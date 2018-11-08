@@ -19,6 +19,7 @@
 -behaviour(supervisor2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 -include("rabbit_federation.hrl").
 
 %% Supervises the upstream links for an exchange or queue.
@@ -65,7 +66,7 @@ adjust(Sup, X = #exchange{name = XName}, {upstream_set, _Set}) ->
         true  -> ok = rabbit_federation_db:prune_scratch(
                         XName, rabbit_federation_upstream:for(X))
     end;
-adjust(Sup, Q = #amqqueue{}, {upstream_set, _}) ->
+adjust(Sup, Q, {upstream_set, _}) when ?is_amqqueue(Q) ->
     adjust(Sup, Q, everything);
 adjust(Sup, XorQ, {clear_upstream_set, _}) ->
     adjust(Sup, XorQ, everything).
@@ -108,10 +109,10 @@ spec(U = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
      {permanent, Delay}, ?WORKER_WAIT, worker,
      [rabbit_federation_exchange_link]};
 
-spec(Upstream = #upstream{reconnect_delay = Delay}, Q = #amqqueue{}) ->
+spec(Upstream = #upstream{reconnect_delay = Delay}, Q) when ?is_amqqueue(Q) ->
     {Upstream, {rabbit_federation_queue_link, start_link, [{Upstream, Q}]},
      {permanent, Delay}, ?WORKER_WAIT, worker,
      [rabbit_federation_queue_link]}.
 
 name(#exchange{name = XName}) -> XName;
-name(#amqqueue{name = QName}) -> QName.
+name(Q) when ?is_amqqueue(Q) -> amqqueue:get_name(Q).
