@@ -6,7 +6,7 @@
 Debian Jesse using this `Vagrantfile`:
 
 ```
-script = <<SCRIPT
+$script = <<SCRIPT
 export LANG='C.UTF-8'
 export DEBIAN_FRONTEND=noninteractive
 
@@ -47,7 +47,7 @@ SCRIPT
 Vagrant.configure('2') do |config|
   config.vm.box = "debian/jessie64"
   config.vm.hostname = 'DEBIAN-JESSIE64'
-  config.vm.provision 'shell', inline: script
+  config.vm.provision 'shell', inline: $script
 end
 ```
 
