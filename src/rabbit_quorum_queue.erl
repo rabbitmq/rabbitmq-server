@@ -149,9 +149,9 @@ declare(#amqqueue{name = QName,
 
 
 ra_machine(Q) ->
-    {module, rabbit_fifo, ra_machine_state(Q)}.
+    {module, rabbit_fifo, ra_machine_config(Q)}.
 
-ra_machine_state(Q = #amqqueue{name = QName}) ->
+ra_machine_config(Q = #amqqueue{name = QName}) ->
     #{dead_letter_handler => dlx_mfa(Q),
       cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
       become_leader_handler => {?MODULE, become_leader, [QName]},
@@ -391,7 +391,7 @@ requeue(ConsumerTag, MsgIds, FState) ->
 
 policy_changed(QName, Node) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
-    rabbit_fifo_client:update_machine_state(Node, ra_machine_state(Q)).
+    rabbit_fifo_client:update_machine_state(Node, ra_machine_config(Q)).
 
 cluster_state(Name) ->
     case whereis(Name) of
