@@ -1,7 +1,5 @@
 # Build RabbitMQ Windows Package using Windows
 
-Last updated: `2018-11-08 12:31:19`
-
 ## Environment
 
 Windows 8.1 using this `Vagrantfile`:
@@ -15,11 +13,17 @@ Vagrant.configure("2") do |config|
 end
 ```
 
+Note that these steps should work on more recent versions of Windows as well.
+If you have issues using a newer version of Windows, please provide full
+details in a message to the
+[`rabbitmq-users`](https://groups.google.com/forum/#!forum/rabbitmq-users)
+mailing list.
+
 ## Initial Steps
 
-Bring up the VM and go through the process of updating Windows and VirtualBox
-tools. You'll notice that the evaluation license is expired. Re-arm it by
-running this command via an administrative prompt:
+Bring up the VM and go through the process of updating Windows and (optionall)
+VirtualBox tools. You'll notice that the evaluation license is expired. Re-arm
+it by running this command via an administrative prompt:
 
 ```
 slmgr -rearm
