@@ -38,6 +38,10 @@ make package-standalone-macosx
 make -C packaging package-standalone-macosx SOURCE_DIST_FILE=/path/to/rabbitmq-server-3.8.1-rc.1.tar.xz
 ```
 
+The instructions in the [`PKG_LINUX.md`](PKG_LINUX.md) document include a
+script to install the necessary pre-requisites for building package archives as
+well as `deb` and `rpm` packages.
+
 ## Source archive
 
 ### How to create it
