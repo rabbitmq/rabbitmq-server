@@ -1539,3 +1539,11 @@ function select_queue_type(queuetype) {
     queue_type = queuetype.value;
     update();
 }
+
+function is_quorum(queue) {
+    return queue.hasOwnProperty('members');
+}
+
+function is_classic(queue) {
+    return (! queue.hasOwnProperty('members'));
+}
