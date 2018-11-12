@@ -331,7 +331,7 @@ start-brokers start-cluster:
 	done
 
 stop-brokers stop-cluster:
-	@for n in $$(seq $(NODES) 1); do \
+	@for n in $$(seq $(NODES) -1 1); do \
 		nodename="rabbit-$$n@$$(hostname -s)"; \
 		$(MAKE) stop-node \
 		  RABBITMQ_NODENAME="$$nodename"; \
