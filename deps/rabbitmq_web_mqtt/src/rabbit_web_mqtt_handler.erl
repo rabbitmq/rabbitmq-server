@@ -126,14 +126,14 @@ websocket_info({start_keepalives, Keepalive},
     ReceiveFun = fun() -> Parent ! keepalive_timeout end,
     Heartbeater = rabbit_heartbeat:start(
                     KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
-    {ok, State #state { keepalive = Heartbeater }};
+    {ok, State #state { keepalive = Heartbeater }, hibernate};
 websocket_info(keepalive_timeout, State = #state {conn_name = ConnStr,
                                                        proc_state = PState}) ->
     rabbit_log_connection:error("closing WEB-MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
     rabbit_mqtt_processor:send_will(PState),
     {stop, State};
 websocket_info(emit_stats, State) ->
-    {ok, emit_stats(State)};
+    {ok, emit_stats(State), hibernate};
 websocket_info(Msg, State) ->
     rabbit_log_connection:info("WEB-MQTT: unexpected message ~p~n",
                     [Msg]),
