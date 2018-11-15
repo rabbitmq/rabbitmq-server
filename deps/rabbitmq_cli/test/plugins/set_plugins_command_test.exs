@@ -171,14 +171,11 @@ defmodule SetPluginsCommandTest do
     opts = get_opts_with_plugins_directories(context, [plugins_directory])
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
 
-    {:stream, _} = @command.run(["mock_rabbitmq_plugin_for_3_7"], opts)
-    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_7], context)
 
-    {:error, _version_error} =
-      @command.run(["mock_rabbitmq_plugin_for_3_8"], opts)
+    {:stream, _} = @command.run(["mock_rabbitmq_plugin_for_3_8"], opts)
+    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_8], context)
 
-    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_7], context)
+    {:error, _version_error} = @command.run(["mock_rabbitmq_plugin_for_3_7"], opts)
+    check_plugins_enabled([:mock_rabbitmq_plugin_for_3_8], context)
   end
-
-
 end
