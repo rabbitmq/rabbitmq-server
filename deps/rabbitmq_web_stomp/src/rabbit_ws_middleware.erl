@@ -19,8 +19,12 @@
 -export([execute/2]).
 
 execute(Req, Env) ->
+    #{keepalive_sup := KeepaliveSup} = Env,
     Sock = maps:get(socket, Env),
-    {ok, Req#{socket => Sock}, Env}.
-
-
-
+    case maps:get(handler_opts, Env, undefined) of
+        undefined -> {ok, Req, Env};
+        Opts when is_list(Opts) ->
+            {ok, Req, Env#{handler_opts => [{keepalive_sup, KeepaliveSup},
+                                            {socket, Sock}
+                                            |Opts]}}
+    end.
