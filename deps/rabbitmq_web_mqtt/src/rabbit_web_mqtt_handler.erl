@@ -115,7 +115,7 @@ websocket_info({'EXIT', _, _}, State) ->
     {stop, State};
 websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcState,
                                                                  conn_name = ConnName }) ->
-    rabbit_log_connection:warning("WEB-MQTT disconnecting duplicate client id ~p (~p)~n",
+    rabbit_log_connection:warning("Web MQTT disconnecting duplicate client id ~p (~p)~n",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
     {stop, State};
 websocket_info({start_keepalives, Keepalive},
@@ -129,20 +129,20 @@ websocket_info({start_keepalives, Keepalive},
     {ok, State #state { keepalive = Heartbeater }, hibernate};
 websocket_info(keepalive_timeout, State = #state {conn_name = ConnStr,
                                                        proc_state = PState}) ->
-    rabbit_log_connection:error("closing WEB-MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
+    rabbit_log_connection:error("closing Web MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
     rabbit_mqtt_processor:send_will(PState),
     {stop, State};
 websocket_info(emit_stats, State) ->
     {ok, emit_stats(State), hibernate};
 websocket_info(Msg, State) ->
-    rabbit_log_connection:info("WEB-MQTT: unexpected message ~p~n",
+    rabbit_log_connection:info("Web MQTT: unexpected message ~p~n",
                     [Msg]),
     {ok, State, hibernate}.
 
 terminate(_, _, State = #state{ proc_state = ProcState,
                                 conn_name  = ConnName }) ->
     maybe_emit_stats(State),
-    rabbit_log_connection:info("closing WEB-MQTT connection ~p (~s)~n", [self(), ConnName]),
+    rabbit_log_connection:info("closing Web MQTT connection ~p (~s)~n", [self(), ConnName]),
     rabbit_mqtt_processor:close_connection(ProcState),
     ok;
 terminate(_, _, State) ->
