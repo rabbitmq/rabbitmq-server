@@ -196,7 +196,7 @@ websocket_info(emit_stats, State) ->
     {ok, emit_stats(State)};
 
 websocket_info(Msg, State) ->
-    rabbit_log_connection:info("WEB-STOMP: unexpected message ~p~n",
+    rabbit_log_connection:info("Web STOMP: unexpected message ~p~n",
                     [Msg]),
     {ok, State}.
 
