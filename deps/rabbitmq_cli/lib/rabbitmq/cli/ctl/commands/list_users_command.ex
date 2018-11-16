@@ -21,11 +21,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
+  def switches(), do: [timeout: :integer, table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
 def merge_defaults(args, opts) do
-    {args, Map.merge(%{no_table_headers: false}, opts)}
+    {args, Map.merge(%{table_headers: true}, opts)}
   end
 
   def validate([_|_], _) do
@@ -39,7 +39,7 @@ def merge_defaults(args, opts) do
     :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :list_users, [], timeout)
   end
 
-  def usage, do: "list_users"
+  def usage, do: "list_users [--no-table-headers]"
 
   def banner(_,_), do: "Listing users ..."
 end

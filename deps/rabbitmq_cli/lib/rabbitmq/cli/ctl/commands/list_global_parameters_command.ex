@@ -21,11 +21,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{no_table_headers: false}, opts)}
+    {args, Map.merge(%{table_headers: true}, opts)}
   end
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
+  def switches(), do: [timeout: :integer, table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   def validate([_|_], _) do
@@ -43,7 +43,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
       timeout)
   end
 
-  def usage, do: "list_global_parameters"
+  def usage, do: "list_global_parameters [--no-table-headers]"
 
   def banner(_, _), do: "Listing global runtime parameters ..."
 

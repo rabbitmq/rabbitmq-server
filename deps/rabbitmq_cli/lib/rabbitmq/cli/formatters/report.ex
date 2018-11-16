@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Formatters.Report do
   end
 
   def format_stream(stream, options) do
-    quiet = options[:quiet] || false
+    quiet = options[:quiet] || options[:silent] || false
     Stream.flat_map(stream,
       FormatterHelpers.without_errors_1(
         fn

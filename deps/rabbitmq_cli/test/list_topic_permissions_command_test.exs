@@ -25,7 +25,7 @@ defmodule ListTopicPermissionsCommandTest do
   @password "password"
   @root   "/"
   @default_timeout :infinity
-  @default_options %{vhost: "/", no_table_headers: false}
+  @default_options %{vhost: "/", table_headers: true}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -50,8 +50,7 @@ defmodule ListTopicPermissionsCommandTest do
       opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout],
-        vhost: "/",
-        no_table_headers: false
+        vhost: "/"
       }
     }
   end
@@ -63,7 +62,7 @@ defmodule ListTopicPermissionsCommandTest do
   test "merge_defaults: defaults can be overridden" do
     assert @command.merge_defaults([], %{}) == {[], @default_options}
     assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default",
-                                                                          no_table_headers: false}}
+                                                                          table_headers: true}}
   end
 
   test "validate: does not expect any parameter" do

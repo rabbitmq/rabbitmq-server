@@ -22,11 +22,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
+  def switches(), do: [timeout: :integer, table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/", no_table_headers: false}, opts)}
+    {args, Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
   def validate([_|_], _) do
@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
       timeout)
   end
 
-  def usage, do: "list_parameters [-p <vhost>]"
+  def usage, do: "list_parameters [-p <vhost>] [--no-table-headers]"
 
   def banner(_, %{vhost: vhost}), do: "Listing runtime parameters for vhost \"#{vhost}\" ..."
 end

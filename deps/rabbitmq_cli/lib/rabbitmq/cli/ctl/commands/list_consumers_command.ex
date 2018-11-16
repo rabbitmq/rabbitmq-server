@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
+  def switches(), do: [timeout: :integer, table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   @info_keys ~w(queue_name channel_pid consumer_tag
@@ -33,10 +33,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def info_keys(), do: @info_keys
 
   def merge_defaults([], opts) do
-    {Enum.map(@info_keys, &Atom.to_string/1), Map.merge(%{vhost: "/", no_table_headers: false}, opts)}
+    {Enum.map(@info_keys, &Atom.to_string/1), Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/", no_table_headers: false}, opts)}
+    {args, Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
   def validate(args, _) do
@@ -58,7 +58,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   end
 
   def usage() do
-      "list_consumers [-p vhost] [<consumerinfoitem> ...]"
+      "list_consumers [-p vhost] [--no-table-headers] [<consumerinfoitem> ...]"
   end
 
   def usage_additional() do
