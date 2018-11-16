@@ -64,7 +64,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
               additional_usage(), "\n\n")
   end
 
-  def usage(), do: "help <command>"
+  def usage(), do: "help (<command> | [--list-commands])"
 
   defp tool_usage(tool_name) do
     ["\nUsage:\n" <>
@@ -93,9 +93,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   defp options_usage() do
     ["General options:
-    -n node
-    -q quiet
-    -l longnames
+    short            | long          | description
+    -----------------|---------------|--------------------------------
+    -n <node>        | --node <node> | connect to node <node>
+    -l               | --longnames   | use long host names
+    -q               | --quiet       | suppress informational messages
+    -s               | --silent      | suppress informational messages
+                                     | and table header row
 
 Default node is \"rabbit@server\", where `server` is the local hostname. On a host
 named \"server.example.com\", the node name of the RabbitMQ Erlang node will
@@ -103,6 +107,10 @@ usually be rabbit@server (unless RABBITMQ_NODENAME has been set to some
 non-default value at broker startup time). The output of hostname -s is usually
 the correct suffix to use after the \"@\" sign. See rabbitmq-server(1) for
 details of configuring the RabbitMQ broker.
+
+Most options have a corresponding \"long option\" i.e. \"-q\" or \"--quiet\".
+Long options for boolean values may be negated with the \"--no-\" prefix,
+i.e. \"--no-quiet\" or \"--no-table-headers\"
 
 Quiet output mode is selected with the \"-q\" flag. Informational messages are
 suppressed when quiet mode is in effect.

@@ -59,7 +59,6 @@ defmodule RpcStreamTest do
     assert [1, {:error, {:badrpc, {:timeout, 0.15}}}] == items
   end
 
-
   test "parallel emission do not mix values" do
     {:ok, agent} = Agent.start_link(fn() -> :init end)
     list1  = [:one, :two, :three]

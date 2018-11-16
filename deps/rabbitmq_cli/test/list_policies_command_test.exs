@@ -26,7 +26,7 @@ defmodule ListPoliciesCommandTest do
   @pattern "^fed\."
   @value "{\"federation-upstream-set\":\"all\"}"
   @apply_to "all"
-  @default_options %{vhost: "/", no_table_headers: false}
+  @default_options %{vhost: "/", table_headers: true}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -54,8 +54,7 @@ defmodule ListPoliciesCommandTest do
         timeout: (context[:timeout] || :infinity),
         vhost: context[:vhost],
         apply_to: @apply_to,
-        priority: 0,
-        no_table_headers: false
+        priority: 0
       }
     }
   end
@@ -63,7 +62,7 @@ defmodule ListPoliciesCommandTest do
   test "merge_defaults: default vhost is '/'" do
     assert @command.merge_defaults([], %{}) == {[], @default_options}
     assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default",
-                                                                          no_table_headers: false}}
+                                                                          table_headers: true}}
   end
 
   test "validate: providing too many arguments fails validation" do

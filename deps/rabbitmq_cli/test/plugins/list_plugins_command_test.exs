@@ -142,7 +142,6 @@ defmodule ListPluginsCommandTest do
            @command.run([".*"], Map.merge(context[:opts], %{minimal: true}))
   end
 
-
   test "by default lists all plugins", context do
     set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     on_exit(fn ->

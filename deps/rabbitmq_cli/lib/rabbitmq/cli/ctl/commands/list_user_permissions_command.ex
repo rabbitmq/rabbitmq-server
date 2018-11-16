@@ -21,11 +21,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
+  def switches(), do: [timeout: :integer, table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{no_table_headers: false}, opts)}
+    {args, Map.merge(%{table_headers: true}, opts)}
   end
 
   def validate([], _), do: {:validation_failure, :not_enough_args}
@@ -43,7 +43,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
       )
   end
 
-  def usage, do: "list_user_permissions <username>"
+  def usage, do: "list_user_permissions [--no-table-headers] <username>"
 
   def banner([username], _), do: "Listing permissions for user \"#{username}\" ..."
 end

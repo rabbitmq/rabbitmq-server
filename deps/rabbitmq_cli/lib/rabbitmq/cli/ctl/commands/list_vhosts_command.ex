@@ -27,14 +27,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   def info_keys(), do: @info_keys
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
+  def switches(), do: [timeout: :integer, table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   def merge_defaults([], opts) do
     merge_defaults(["name"], opts)
   end
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{no_table_headers: false}, opts)}
+    {args, Map.merge(%{table_headers: true}, opts)}
   end
 
   def validate(args, _) do
@@ -51,7 +51,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
     |> filter_by_arg(args)
   end
 
-  def usage, do: "list_vhosts [<vhostinfoitem> ...]"
+  def usage, do: "list_vhosts [--no-table-headers] [<vhostinfoitem> ...]"
 
   def usage_additional() do
     "<vhostinfoitem> must be a member of the list [name, tracing, cluster_state]."

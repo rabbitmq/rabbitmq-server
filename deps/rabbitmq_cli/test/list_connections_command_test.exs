@@ -5,7 +5,7 @@ defmodule ListConnectionsCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand
   @user "guest"
   @default_timeout 15000
-  @default_options %{no_table_headers: false}
+  @default_options %{table_headers: true}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -24,14 +24,18 @@ defmodule ListConnectionsCommandTest do
       :ok,
       opts: %{
         node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || @default_timeout,
-        no_table_headers: false
+        timeout: context[:test_timeout] || @default_timeout
       }
     }
   end
 
   test "merge_defaults: user, peer_host, peer_port and state by default" do
     assert @command.merge_defaults([], %{}) == {~w(user peer_host peer_port state), @default_options}
+  end
+
+  test "merge_defaults: includes table headers by default", _context do
+    {_, opts} = @command.merge_defaults([], %{})
+    assert opts[:table_headers]
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do

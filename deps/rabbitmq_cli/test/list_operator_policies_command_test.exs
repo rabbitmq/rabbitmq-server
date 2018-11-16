@@ -26,7 +26,7 @@ defmodule ListOperatorPoliciesCommandTest do
   @pattern "^queue\."
   @value "{\"message-ttl\":10}"
   @apply_to "all"
-  @default_options %{vhost: "/", no_table_headers: false}
+  @default_options %{vhost: "/", table_headers: true}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -44,7 +44,6 @@ defmodule ListOperatorPoliciesCommandTest do
     on_exit(fn ->
       clear_operator_policy context[:vhost], context[:key]
     end)
-
     {
       :ok,
       opts: %{
@@ -60,7 +59,7 @@ defmodule ListOperatorPoliciesCommandTest do
   test "merge_defaults: default vhost is '/'" do
     assert @command.merge_defaults([], %{}) == {[], @default_options}
     assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default",
-                                                                          no_table_headers: false}}
+                                                                          table_headers: true}}
   end
 
   test "validate: providing too many arguments fails validation" do

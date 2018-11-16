@@ -24,8 +24,7 @@ defmodule ListBindingsCommandTest do
       opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || @default_timeout,
-        vhost: @vhost,
-        no_table_headers: false
+        vhost: @vhost
       }
     }
   end
@@ -41,7 +40,7 @@ defmodule ListBindingsCommandTest do
 
   test "merge_defaults: includes table headers by default", _context do
     {_, opts} = @command.merge_defaults([], %{})
-    assert !opts[:no_table_headers]
+    assert opts[:table_headers]
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do

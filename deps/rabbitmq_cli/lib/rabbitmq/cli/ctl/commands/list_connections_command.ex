@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
+  def switches(), do: [timeout: :integer, table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   @info_keys ~w(pid name port host peer_port peer_host ssl ssl_protocol
@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
     merge_defaults(~w(user peer_host peer_port state), opts)
   end
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{no_table_headers: false}, opts)}
+    {args, Map.merge(%{table_headers: true}, opts)}
   end
 
   def validate(args, _) do
@@ -66,7 +66,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   end
 
   def usage() do
-      "list_connections [<connectioninfoitem> ...]"
+      "list_connections [--no-table-headers] [<connectioninfoitem> ...]"
   end
 
   def usage_additional() do
