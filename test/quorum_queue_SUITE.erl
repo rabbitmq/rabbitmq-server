@@ -36,6 +36,7 @@ groups() ->
                         {cluster_size_2, [], [add_member]}
                        ]},
      {clustered, [], [
+                      {cluster_size_2, [], [cleanup_data_dir]},
                       {cluster_size_2, [], [add_member_not_running,
                                             add_member_classic,
                                             add_member_already_a_member,
@@ -1585,6 +1586,34 @@ delete_member(Config) ->
     ?assertEqual({error, not_a_member},
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, Server])).
+
+cleanup_data_dir(Config) ->
+    %% This test is slow, but also checks that we handle properly errors when
+    %% trying to delete a queue in minority. A case clause there had gone
+    %% previously unnoticed.
+
+    [Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    timer:sleep(100),
+
+    [{_, UId}] = rpc:call(Server1, ra_directory, list_registered, []),
+    DataDir = rpc:call(Server1, ra_env, server_data_dir, [UId]),
+    ?assert(filelib:is_dir(DataDir)),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+
+    ?assertExit({{shutdown,
+                  {connection_closing, {server_initiated_close, 541, _}}}, _},
+                amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    ?assert(filelib:is_dir(DataDir)),
+
+    ?assertEqual(ok,
+                 rpc:call(Server1, rabbit_quorum_queue, cleanup_data_dir,
+                          [])),
+    ?assert(not filelib:is_dir(DataDir)).
 
 basic_recover(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

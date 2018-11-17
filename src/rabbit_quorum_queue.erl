@@ -34,6 +34,7 @@
 -export([add_member/3]).
 -export([delete_member/3]).
 -export([requeue/3]).
+-export([cleanup_data_dir/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -240,7 +241,7 @@ recover(Queues) ->
                  case ra:start_server(Name, {Name, node()}, Machine, RaNodes) of
                      ok -> ok;
                      Err ->
-                         rabbit_log:warning("recover: Quorum queue ~w could not"
+                         rabbit_log:warning("recover: quorum queue ~w could not"
                                             " be started ~w", [Name, Err]),
                          ok
                  end;
@@ -251,7 +252,7 @@ recover(Queues) ->
                  ok;
              Err ->
                  %% catch all clause to avoid causing the vhost not to start
-                 rabbit_log:warning("recover: Quorum queue ~w could not be "
+                 rabbit_log:warning("recover: quorum queue ~w could not be "
                                     "restarted ~w", [Name, Err]),
                  ok
          end,
@@ -281,7 +282,7 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
             end,
             rpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName]),
             {ok, Msgs};
-        {error, {no_more_nodes_to_try, Errs}} = Err ->
+        {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
                               (_) -> false
                            end, Errs) of
@@ -291,7 +292,10 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
                     rabbit_core_metrics:queue_deleted(QName),
                     {ok, Msgs};
                 false ->
-                    Err
+                    rabbit_misc:protocol_error(
+                      internal_error,
+                      "Cannot delete quorum queue '~s', not enough nodes online to reach a quorum: ~255p",
+                      [rabbit_misc:rs(QName), Errs])
             end
     end.
 
@@ -385,6 +389,26 @@ purge(Node) ->
 
 requeue(ConsumerTag, MsgIds, FState) ->
     rabbit_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, FState).
+
+cleanup_data_dir() ->
+    Names = [Name || #amqqueue{pid = {Name, _}, quorum_nodes = Nodes}
+                         <- rabbit_amqqueue:list_by_type(quorum),
+                     lists:member(node(), Nodes)],
+    Registered = ra_directory:list_registered(),
+    [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
+                                   not lists:member(Name, Names)],
+    ok.
+
+maybe_delete_data_dir(UId) ->
+    Dir = ra_env:server_data_dir(UId),
+    {ok, Config} = ra_log:read_config(Dir),
+    case maps:get(machine, Config) of
+        {module, rabbit_fifo, _} ->
+            ra_lib:recursive_delete(Dir),
+            ra_directory:unregister_name(UId);
+        _ ->
+            ok
+    end.
 
 cluster_state(Name) ->
     case whereis(Name) of
