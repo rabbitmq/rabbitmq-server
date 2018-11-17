@@ -241,7 +241,7 @@ recover(Queues) ->
                  case ra:start_server(Name, {Name, node()}, Machine, RaNodes) of
                      ok -> ok;
                      Err ->
-                         rabbit_log:warning("recover: Quorum queue ~w could not"
+                         rabbit_log:warning("recover: quorum queue ~w could not"
                                             " be started ~w", [Name, Err]),
                          ok
                  end;
@@ -252,7 +252,7 @@ recover(Queues) ->
                  ok;
              Err ->
                  %% catch all clause to avoid causing the vhost not to start
-                 rabbit_log:warning("recover: Quorum queue ~w could not be "
+                 rabbit_log:warning("recover: quorum queue ~w could not be "
                                     "restarted ~w", [Name, Err]),
                  ok
          end,
@@ -294,7 +294,7 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
                 false ->
                     rabbit_misc:protocol_error(
                       internal_error,
-                      "Cannot delete queue '~s', servers unavailable: ~255p",
+                      "Cannot delete quorum queue '~s', not enough nodes online to reach a quorum: ~255p",
                       [rabbit_misc:rs(QName), Errs])
             end
     end.
