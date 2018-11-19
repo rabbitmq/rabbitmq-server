@@ -595,7 +595,7 @@ master_score() {
         score=0
     fi
     ocf_log info "${LH} Updating master score attribute with ${score}"
-    ocf_run crm_master -l reboot -v $score || return $OCF_ERR_GENERIC
+    ocf_run crm_master -N $THIS_PCMK_NODE -l reboot -v $score || return $OCF_ERR_GENERIC
     return $OCF_SUCCESS
 }
 
@@ -660,7 +660,7 @@ get_node_master_score() {
 
 # Return either rabbit node name as FQDN or shortname, depends on the OCF_RESKEY_use_fqdn.
 rabbit_node_name() {
-    echo "rabbit@$(process_fqdn $1)"
+    echo "rabbit@$(process_fqdn $(ocf_attribute_target $1))"
 }
 
 rmq_setup_env() {
@@ -673,7 +673,7 @@ rmq_setup_env() {
     MNESIA_FILES="${OCF_RESKEY_mnesia_base}/$(rabbit_node_name $H)"
     RMQ_START_TIME="${MNESIA_FILES}/ocf_server_start_time.txt"
     MASTER_FLAG_FILE="${MNESIA_FILES}/ocf_master_for_${OCF_RESOURCE_INSTANCE}"
-    THIS_PCMK_NODE=`crm_node -n`
+    THIS_PCMK_NODE=$(ocf_attribute_target)
     TOTALVMEM=`free -mt | awk '/Total:/ {print $2}'`
     # check and make PID file dir
     local PID_DIR=$( dirname $OCF_RESKEY_pid_file )
