@@ -31,6 +31,8 @@
     keepalive_sup,
     parse_state,
     proc_state,
+    state,
+    conserve_resources,
     socket,
     stats_timer,
     connection
@@ -49,11 +51,13 @@ init(Req, Opts) ->
             WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
             WsOpts  = maps:merge(#{compress => true}, WsOpts0),
             {cowboy_websocket, Req2, #state{
-                conn_name     = ConnStr,
-                keepalive     = {none, none},
-                keepalive_sup = KeepaliveSup,
-                parse_state   = rabbit_mqtt_frame:initial_state(),
-                socket        = Sock
+                conn_name          = ConnStr,
+                keepalive          = {none, none},
+                keepalive_sup      = KeepaliveSup,
+                parse_state        = rabbit_mqtt_frame:initial_state(),
+                state              = running,
+                conserve_resources = false,
+                socket             = Sock
             }, WsOpts};
         _ ->
             {stop, Req}
@@ -61,11 +65,7 @@ init(Req, Opts) ->
 
 websocket_init(State = #state{conn_name = ConnStr, socket = Sock}) ->
     rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
-    AdapterInfo0 = #amqp_adapter_info{additional_info=Extra}
-        = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
-    %% Flow control is not supported for Web-MQTT connections.
-    AdapterInfo = AdapterInfo0#amqp_adapter_info{
-        additional_info=[{state, running}|Extra]},
+    AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
     ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
         rabbit_mqtt_reader:ssl_login_name(Sock),
         AdapterInfo,
@@ -90,6 +90,12 @@ websocket_handle(Frame, State) ->
                     [Frame]),
     {ok, State, hibernate}.
 
+websocket_info({conserve_resources, Conserve}, State) ->
+    NewState = State#state{conserve_resources = Conserve},
+    handle_credits(control_throttle(NewState));
+websocket_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    handle_credits(control_throttle(State));
 websocket_info({#'basic.deliver'{}, #amqp_msg{}, _DeliveryCtx} = Delivery,
             State = #state{ proc_state = ProcState0 }) ->
     case rabbit_mqtt_processor:amqp_callback(Delivery, ProcState0) of
@@ -151,19 +157,28 @@ terminate(_, _, State) ->
 
 %% Internal.
 
-handle_data(<<>>, State) ->
-    {ok, ensure_stats_timer(State), hibernate};
-handle_data(Data, State = #state{ parse_state = ParseState,
+handle_data(Data, State0) ->
+    case handle_data1(Data, State0) of
+        {ok, State1 = #state{state = blocked}, hibernate} ->
+            {[{active, false}], State1, hibernate};
+        Other ->
+            Other
+    end.
+
+handle_data1(<<>>, State) ->
+    {ok, ensure_stats_timer(control_throttle(State)), hibernate};
+handle_data1(Data, State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
                                        conn_name   = ConnStr }) ->
     case rabbit_mqtt_frame:parse(Data, ParseState) of
         {more, ParseState1} ->
-            {ok, ensure_stats_timer(State #state{ parse_state = ParseState1 }), hibernate};
+            {ok, ensure_stats_timer(control_throttle(
+                State #state{ parse_state = ParseState1 })), hibernate};
         {ok, Frame, Rest} ->
             case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
                 {ok, ProcState1, ConnPid} ->
                     PS = rabbit_mqtt_frame:initial_state(),
-                    handle_data(
+                    handle_data1(
                       Rest,
                       State #state{ parse_state = PS,
                                     proc_state = ProcState1,
@@ -185,6 +200,26 @@ handle_data(Data, State = #state{ parse_state = ParseState,
             {stop, State}
     end.
 
+handle_credits(State0) ->
+    case control_throttle(State0) of
+        State = #state{state = running} ->
+            {[{active, true}], State};
+        State ->
+            {ok, State}
+    end.
+
+control_throttle(State = #state{ state              = CS,
+                                 conserve_resources = Mem }) ->
+    case {CS, Mem orelse credit_flow:blocked()} of
+        {running,   true} -> ok = rabbit_heartbeat:pause_monitor(
+                                    State#state.keepalive),
+                             State #state{ state = blocked };
+        {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
+                                    State#state.keepalive),
+                             State #state{ state = running };
+        {_,            _} -> State
+    end.
+
 send_reply(Frame, _) ->
     self() ! {reply, rabbit_mqtt_frame:serialise(Frame)}.
 
@@ -200,13 +235,13 @@ emit_stats(State=#state{connection = C}) when C == none; C == undefined ->
     %% established, as this causes orphan entries on the stats database
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
     State1;
-emit_stats(State=#state{socket=Sock, connection=Conn}) ->
+emit_stats(State=#state{socket=Sock, state=RunningState, connection=Conn}) ->
     SockInfos = case rabbit_net:getstat(Sock,
             [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
         {ok,    SI} -> SI;
         {error,  _} -> []
     end,
-    Infos = [{pid, Conn}|SockInfos],
+    Infos = [{pid, Conn}, {state, RunningState}|SockInfos],
     rabbit_core_metrics:connection_stats(Conn, Infos),
     rabbit_event:notify(connection_stats, Infos),
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
