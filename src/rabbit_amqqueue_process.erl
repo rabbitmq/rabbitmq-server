@@ -954,13 +954,11 @@ dead_letter_maxlen_msg(X, State = #q{backing_queue = BQ}) ->
 
 dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
                                             backing_queue_state = BQS,
-                                            backing_queue       = BQ,
-                                            q = #amqqueue{ name = Resource } }) ->
-    #resource{virtual_host = VHost} = Resource,
+                                            backing_queue       = BQ}) ->
     QName = qname(State),
     {Res, Acks1, BQS1} =
         Fun(fun (Msg, AckTag, Acks) ->
-                    rabbit_vhost_dead_letter:publish(VHost, X, RK, QName, [{Reason, Msg}]),
+                    rabbit_dead_letter:publish(Msg, Reason, X, RK, QName),
                     [AckTag | Acks]
             end, [], BQS),
     {_Guids, BQS2} = BQ:ack(Acks1, BQS1),
