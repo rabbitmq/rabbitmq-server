@@ -14,7 +14,7 @@ defmodule ListExchangesCommandTest do
                       {"amq.headers", :headers},
                       {"amq.topic", :topic},
                       {"", :direct}]
-  @default_options %{vhost: "/", no_table_headers: false}
+  @default_options %{vhost: "/", table_headers: true}
   
   defp default_exchange_names() do
     {names, _types} = Enum.unzip(@default_exchanges)
@@ -39,8 +39,7 @@ defmodule ListExchangesCommandTest do
         quiet: true,
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || @default_timeout,
-        vhost: @vhost,
-        no_table_headers: false
+        vhost: @vhost
       }
     }
   end
@@ -53,7 +52,7 @@ defmodule ListExchangesCommandTest do
   test "merge_defaults: defaults can be overridden" do
     assert @command.merge_defaults([], %{}) == {["name", "type"], @default_options}
     assert @command.merge_defaults([], %{vhost: "non_default"}) == {["name", "type"], %{vhost: "non_default",
-                                                                                        no_table_headers: false}}
+                                                                                        table_headers: true}}
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do

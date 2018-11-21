@@ -43,10 +43,15 @@ defmodule RabbitMQ.CLI.Formatters.Table do
   end
 
   defp maybe_header(output, options) do
-    case Map.get(options, :no_table_headers, false) do
-      true  -> [format_output_1(output, options)]
-      false -> format_header(output) ++ [format_output_1(output, options)]
-      nil   -> format_header(output) ++ [format_output_1(output, options)]
+    opt_table_headers = Map.get(options, :table_headers, true)
+    opt_silent = Map.get(options, :silent, false)
+    case {opt_silent, opt_table_headers} do
+      {true, _} ->
+        [format_output_1(output, options)]
+      {false, false} ->
+        [format_output_1(output, options)]
+      {false, true} ->
+        format_header(output) ++ [format_output_1(output, options)]
     end
   end
 

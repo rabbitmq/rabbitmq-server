@@ -28,7 +28,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [timeout: :integer, no_table_headers: :boolean]
+  def switches(), do: [timeout: :integer, table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   def merge_defaults([], opts) do
@@ -40,7 +40,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   def merge_defaults(args, opts) do
     {args, Map.merge(default_opts(), opts)}
   end
-
 
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
@@ -61,7 +60,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   end
 
   def usage() do
-      "list_bindings [-p <vhost>] [<bindinginfoitem> ...]"
+      "list_bindings [-p <vhost>] [--no-table-headers] [<bindinginfoitem> ...]"
   end
 
   def usage_additional() do
@@ -70,7 +69,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   end
 
   defp default_opts() do
-      %{vhost: "/", no_table_headers: false}
+    %{vhost: "/",
+      table_headers: true}
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."

@@ -89,6 +89,16 @@ defmodule ParserTest do
       {["sandwich", "pastrami"], %{quiet: true}, []}
   end
 
+  test "one arity 1 command, one double-dash silent flag" do
+    assert @subject.parse_global(["sandwich", "pastrami", "--silent"]) ==
+      {["sandwich", "pastrami"], %{silent: true}, []}
+  end
+
+  test "one arity 1 command, one single-dash silent flag" do
+    assert @subject.parse_global(["sandwich", "pastrami", "-s"]) ==
+      {["sandwich", "pastrami"], %{silent: true}, []}
+  end
+
   test "one arity 0 command, one single-dash node option" do
     assert @subject.parse_global(["sandwich", "-n", "rabbitmq@localhost"]) ==
       {["sandwich"], %{node: :"rabbitmq@localhost"}, []}

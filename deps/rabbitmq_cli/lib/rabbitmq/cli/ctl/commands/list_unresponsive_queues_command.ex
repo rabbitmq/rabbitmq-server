@@ -34,11 +34,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   def scopes(), do: [:ctl, :diagnostics]
 
   def switches(), do: [queue_timeout: :integer, local: :boolean, timeout: :integer,
-                       no_table_headers: :boolean]
+                       table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
   defp default_opts() do
-    %{vhost: "/", local: false, queue_timeout: 15, no_table_headers: false}
+    %{vhost: "/", local: false, queue_timeout: 15, table_headers: true}
   end
 
   def merge_defaults([_|_] = args, opts) do
@@ -73,7 +73,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   end
 
   def usage() do
-    "list_unresponsive_queues [--local] [--queue-timeout <queue-timeout>] [<unresponsiveq_ueueinfoitem> ...]"
+    "list_unresponsive_queues [--local] [--queue-timeout <queue-timeout>] [<unresponsiveq_ueueinfoitem> ...] [--no-table-headers]"
   end
 
   def usage_additional() do

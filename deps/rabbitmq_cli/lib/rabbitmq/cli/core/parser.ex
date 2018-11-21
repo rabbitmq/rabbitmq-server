@@ -13,9 +13,8 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.{CommandModules, Config}
-
 defmodule RabbitMQ.CLI.Core.Parser do
+  alias RabbitMQ.CLI.Core.{CommandModules, Config}
 
   # This assumes the average word letter count in
   # the English language is 5.
@@ -171,6 +170,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
   def default_switches() do
     [node: :atom,
      quiet: :boolean,
+     silent: :boolean,
      dry_run: :boolean,
      vhost: :string,
      # for backwards compatibility,
@@ -194,6 +194,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
     [p: :vhost,
      n: :node,
      q: :quiet,
+     s: :silent,
      l: :longnames,
      # for backwards compatibility,
      # not all commands support timeouts
