@@ -35,7 +35,7 @@ memory() ->
     {Sums, _Other} = sum_processes(
                        lists:append(All), distinguishers(), [memory]),
 
-    [Qs, QsSlave, ConnsReader, ConnsWriter, ConnsChannel, ConnsOther,
+    [Qs, QsSlave, Qqs, ConnsReader, ConnsWriter, ConnsChannel, ConnsOther,
      MsgIndexProc, MgmtDbProc, Plugins] =
         [aggregate(Names, Sums, memory, fun (X) -> X end)
          || Names <- distinguished_interesting_sups()],
@@ -69,7 +69,7 @@ memory() ->
 
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
-        - Qs - QsSlave - MsgIndexProc - Plugins - MgmtDbProc - MetricsProc,
+        - Qs - QsSlave - Qqs - MsgIndexProc - Plugins - MgmtDbProc - MetricsProc,
 
     [
      %% Connections
@@ -81,6 +81,7 @@ memory() ->
      %% Queues
      {queue_procs,          Qs},
      {queue_slave_procs,    QsSlave},
+     {quorum_queue_procs,   Qqs},
 
      %% Processes
      {plugins,              Plugins},
@@ -124,7 +125,7 @@ binary() ->
                                       sets:add_element({Ptr, Sz}, Acc0)
                               end, Acc, Info)
           end, distinguishers(), [{binary, sets:new()}]),
-    [Other, Qs, QsSlave, ConnsReader, ConnsWriter, ConnsChannel, ConnsOther,
+    [Other, Qs, QsSlave, Qqs, ConnsReader, ConnsWriter, ConnsChannel, ConnsOther,
      MsgIndexProc, MgmtDbProc, Plugins] =
         [aggregate(Names, [{other, Rest} | Sums], binary, fun sum_binary/1)
          || Names <- [[other] | distinguished_interesting_sups()]],
@@ -134,6 +135,7 @@ binary() ->
      {connection_other,    ConnsOther},
      {queue_procs,         Qs},
      {queue_slave_procs,   QsSlave},
+     {quorum_queue_procs,  Qqs},
      {plugins,             Plugins},
      {mgmt_db,             MgmtDbProc},
      {msg_index,           MsgIndexProc},
@@ -173,10 +175,13 @@ bytes(Words) ->  try
                  end.
 
 interesting_sups() ->
-    [queue_sups(), conn_sups() | interesting_sups0()].
+    [queue_sups(), quorum_sups(), conn_sups() | interesting_sups0()].
 
 queue_sups() ->
     all_vhosts_children(rabbit_amqqueue_sup_sup).
+
+quorum_sups() ->
+    [ra_server_sup].
 
 msg_stores() ->
     all_vhosts_children(msg_store_transient)
@@ -229,6 +234,7 @@ distinguished_interesting_sups() ->
     [
      with(queue_sups(), master),
      with(queue_sups(), slave),
+     quorum_sups(),
      with(conn_sups(), reader),
      with(conn_sups(), writer),
      with(conn_sups(), channel),
