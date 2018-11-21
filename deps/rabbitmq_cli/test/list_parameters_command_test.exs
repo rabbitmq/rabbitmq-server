@@ -25,7 +25,7 @@ defmodule ListParametersCommandTest do
   @component_name "federation-upstream"
   @key "reconnect-delay"
   @value "{\"uri\":\"amqp://\"}"
-  @default_options %{vhost: "/"}
+  @default_options %{vhost: "/", table_headers: true}
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
