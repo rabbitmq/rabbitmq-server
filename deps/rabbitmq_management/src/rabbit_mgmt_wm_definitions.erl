@@ -54,8 +54,8 @@ to_json(ReqData, Context) ->
         not_found ->
             rabbit_mgmt_util:bad_request(rabbit_data_coercion:to_binary("vhost_not_found"),
                                          ReqData, Context);
-        _VHost ->
-            vhost_definitions(ReqData, Context)
+        VHost ->
+            vhost_definitions(ReqData, VHost, Context)
     end.
 
 all_definitions(ReqData, Context) ->
@@ -93,7 +93,7 @@ accept_json(ReqData0, Context) ->
     {ok, Body, ReqData} = cowboy_req:read_body(ReqData0),
     accept(Body, ReqData, Context).
 
-vhost_definitions(ReqData, Context) ->
+vhost_definitions(ReqData, VHost, Context) ->
     %% rabbit_mgmt_wm_<>:basic/1 filters by VHost if it is available
     Xs = [strip_vhost(X) || X <- rabbit_mgmt_wm_exchanges:basic(ReqData),
                export_exchange(X)],
@@ -103,10 +103,14 @@ vhost_definitions(ReqData, Context) ->
     Bs = [strip_vhost(B) || B <- rabbit_mgmt_wm_bindings:basic(ReqData),
                             export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
+    Parameters = [rabbit_mgmt_format:parameter(
+                    rabbit_mgmt_wm_parameters:fix_shovel_publish_properties(P))
+                  || P <- rabbit_runtime_parameters:list(VHost)],
     rabbit_mgmt_util:reply(
       [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)}] ++
           filter(
-            [{policies,    rabbit_mgmt_wm_policies:basic(ReqData)},
+            [{parameters,  Parameters},
+             {policies,    rabbit_mgmt_wm_policies:basic(ReqData)},
              {queues,      Qs},
              {exchanges,   Xs},
              {bindings,    Bs}]),
@@ -210,6 +214,8 @@ apply_defs(Body, ActingUser, SuccessFun, ErrorFun, VHost) ->
         {ok, _, All} ->
             try
                 validate_limits(All, VHost),
+                rabbit_log:info("Importing parameters..."),
+                for_all(parameters,  ActingUser, All, VHost, fun add_parameter/3),
                 rabbit_log:info("Importing policies..."),
                 for_all(policies,    ActingUser, All, VHost, fun add_policy/3),
                 rabbit_log:info("Importing queues..."),
@@ -332,6 +338,9 @@ atomise_name(N) -> rabbit_data_coercion:to_atom(N).
 
 add_parameter(Param, Username) ->
     VHost = maps:get(vhost,     Param, undefined),
+    add_parameter(VHost, Param, Username).
+
+add_parameter(VHost, Param, Username) ->
     Comp  = maps:get(component, Param, undefined),
     Key   = maps:get(name,      Param, undefined),
     Term  = maps:get(value,     Param, undefined),
