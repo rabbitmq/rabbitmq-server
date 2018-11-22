@@ -110,12 +110,12 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # all projects use the same versions. It avoids conflicts and makes it
 # possible to work with rabbitmq-public-umbrella.
 
-dep_cowboy = hex 2.4.0
-dep_cowlib = hex 2.3.0
+dep_cowboy = hex 2.6.0
+dep_cowlib = hex 2.7.0
 dep_jsx = hex 2.9.0
 dep_lager = hex 3.6.5
 dep_ra = git https://github.com/rabbitmq/ra.git master
-dep_ranch = hex 1.6.2
+dep_ranch = hex 1.7.0
 dep_ranch_proxy_protocol = hex 2.1.1
 dep_recon = hex 2.3.6
 
