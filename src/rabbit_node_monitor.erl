@@ -24,7 +24,8 @@
 
 -export([start_link/0]).
 -export([running_nodes_filename/0,
-         cluster_status_filename/0, prepare_cluster_status_files/0,
+         cluster_status_filename/0, quorum_filename/0,
+         prepare_cluster_status_files/0,
          write_cluster_status/1, read_cluster_status/0,
          update_cluster_status/0, reset_cluster_status/0]).
 -export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
@@ -100,7 +101,10 @@ running_nodes_filename() ->
     filename:join(rabbit_mnesia:dir(), "nodes_running_at_shutdown").
 
 cluster_status_filename() ->
-    rabbit_mnesia:dir() ++ "/cluster_nodes.config".
+    filename:join(rabbit_mnesia:dir(), "cluster_nodes.config").
+
+quorum_filename() ->
+    filename:join(rabbit_mnesia:dir(), "quorum").
 
 prepare_cluster_status_files() ->
     rabbit_mnesia:ensure_mnesia_dir(),

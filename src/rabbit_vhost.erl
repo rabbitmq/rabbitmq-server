@@ -212,6 +212,7 @@ delete_storage(VHost) ->
 
 assert_benign(ok, _)                 -> ok;
 assert_benign({ok, _}, _)            -> ok;
+assert_benign({ok, _, _}, _)         -> ok;
 assert_benign({error, not_found}, _) -> ok;
 assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the mnesia entries here is safe. If/when the down node

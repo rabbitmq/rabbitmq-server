@@ -29,6 +29,7 @@
          is_clustered/0,
          on_running_node/1,
          is_process_alive/1,
+         is_registered_process_alive/1,
          cluster_nodes/1,
          node_type/0,
          dir/0,
@@ -77,7 +78,8 @@
                          {'partitions', [{node(), [node()]}]}].
 -spec is_clustered() -> boolean().
 -spec on_running_node(pid()) -> boolean().
--spec is_process_alive(pid()) -> boolean().
+-spec is_process_alive(pid() | {atom(), node()}) -> boolean().
+-spec is_registered_process_alive(atom()) -> boolean().
 -spec cluster_nodes('all' | 'disc' | 'ram' | 'running') -> [node()].
 -spec node_type() -> node_type().
 -spec dir() -> file:filename().
@@ -434,9 +436,15 @@ on_running_node(Pid) -> lists:member(node(Pid), cluster_nodes(running)).
 %% (i.e. not partitioned or some random node).
 %%
 %% See also rabbit_misc:is_process_alive/1 which does not.
-is_process_alive(Pid) ->
+is_process_alive(Pid) when is_pid(Pid) ->
     on_running_node(Pid) andalso
-        rpc:call(node(Pid), erlang, is_process_alive, [Pid]) =:= true.
+        rpc:call(node(Pid), erlang, is_process_alive, [Pid]) =:= true;
+is_process_alive({Name, Node}) ->
+    lists:member(Node, cluster_nodes(running)) andalso
+        rpc:call(Node, rabbit_mnesia, is_registered_process_alive, [Name]) =:= true.
+
+is_registered_process_alive(Name) ->
+    is_pid(whereis(Name)).
 
 cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 
@@ -933,10 +941,13 @@ is_virgin_node() ->
             true;
         {ok, []} ->
             true;
-        {ok, [File1, File2]} ->
-            lists:usort([dir() ++ "/" ++ File1, dir() ++ "/" ++ File2]) =:=
+        {ok, [File1, File2, File3]} ->
+            lists:usort([filename:join(dir(), File1),
+                         filename:join(dir(), File2),
+                         filename:join(dir(), File3)]) =:=
                 lists:usort([rabbit_node_monitor:cluster_status_filename(),
-                             rabbit_node_monitor:running_nodes_filename()]);
+                             rabbit_node_monitor:running_nodes_filename(),
+                             rabbit_node_monitor:quorum_filename()]);
         {ok, _} ->
             false
     end.
