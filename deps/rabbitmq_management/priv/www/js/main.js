@@ -1541,9 +1541,9 @@ function select_queue_type(queuetype) {
 }
 
 function is_quorum(queue) {
-    return queue.hasOwnProperty('members');
+    return queue["arguments"]["x-queue-type"] == "quorum";
 }
 
 function is_classic(queue) {
-    return (! queue.hasOwnProperty('members'));
+    return queue["arguments"]["x-queue-type"] == "classic";
 }
