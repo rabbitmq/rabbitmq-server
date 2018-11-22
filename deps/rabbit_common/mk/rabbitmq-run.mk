@@ -64,6 +64,7 @@ node_pid_file = $(call node_tmpdir,$(1))/$(1).pid
 node_log_base = $(call node_tmpdir,$(1))/log
 node_mnesia_base = $(call node_tmpdir,$(1))/mnesia
 node_mnesia_dir = $(call node_mnesia_base,$(1))/$(1)
+node_quorum_dir = $(call node_mnesia_dir,$(1))/quorum
 node_schema_dir = $(call node_tmpdir,$(1))/schema
 node_plugins_expand_dir = $(call node_tmpdir,$(1))/plugins
 node_generated_config_dir = $(call node_tmpdir,$(1))/config
@@ -78,6 +79,7 @@ RABBITMQ_PID_FILE ?= $(call node_pid_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_LOG_BASE ?= $(call node_log_base,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_MNESIA_BASE ?= $(call node_mnesia_base,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_MNESIA_DIR ?= $(call node_mnesia_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
+RABBITMQ_QUORUM_DIR ?= $(call node_quorum_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_SCHEMA_DIR ?= $(call node_schema_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_PLUGINS_EXPAND_DIR ?= $(call node_plugins_expand_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_GENERATED_CONFIG_DIR ?= $(call node_generated_config_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
@@ -105,6 +107,7 @@ RABBITMQ_PID_FILE="$(call node_pid_file,$(2))" \
 RABBITMQ_LOG_BASE="$(call node_log_base,$(2))" \
 RABBITMQ_MNESIA_BASE="$(call node_mnesia_base,$(2))" \
 RABBITMQ_MNESIA_DIR="$(call node_mnesia_dir,$(2))" \
+RABBITMQ_QUORUM_DIR="$(call node_quorum_dir,$(2))" \
 RABBITMQ_SCHEMA_DIR="$(call node_schema_dir,$(2))" \
 RABBITMQ_GENERATED_CONFIG_DIR="$(call node_generated_config_dir,$(2))" \
 RABBITMQ_PLUGINS_DIR="$(RMQ_PLUGINS_DIR)" \
@@ -156,12 +159,21 @@ $(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
+COMMA = ,
+
 define test_rabbitmq_config
 %% vim:ft=erlang:
 
 [
   {rabbit, [
+$(if $(RABBITMQ_NODE_PORT),      {listeners$(COMMA) [$(RABBITMQ_NODE_PORT)]}$(COMMA),)
       {loopback_users, []}
+    ]},
+  {rabbitmq_management, [
+$(if $(RABBITMQ_NODE_PORT),      {listener$(COMMA) [{port$(COMMA) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
+    ]},
+  {ra, [
+      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
     ]}
 ].
 endef
@@ -193,7 +205,10 @@ define test_rabbitmq_config_with_tls
             {fail_if_no_peer_cert, false},
             {honor_cipher_order, true}]}
         ]}
-  ]}
+  ]},
+  {ra, [
+      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
+    ]}
 ].
 endef
 
@@ -310,6 +325,7 @@ start-brokers start-cluster:
 		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
 		  RABBITMQ_SERVER_START_ARGS=" \
 		  -rabbit loopback_users [] \
+		  -ra data_dir "$(RABBITMQ_QUORUM_DIR)"
 		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
 		  "; \
 		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
@@ -325,7 +341,7 @@ start-brokers start-cluster:
 	done
 
 stop-brokers stop-cluster:
-	@for n in $$(seq $(NODES) 1); do \
+	@for n in $$(seq $(NODES) -1 1); do \
 		nodename="rabbit-$$n@$$(hostname -s)"; \
 		$(MAKE) stop-node \
 		  RABBITMQ_NODENAME="$$nodename"; \
