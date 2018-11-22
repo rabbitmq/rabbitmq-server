@@ -30,6 +30,7 @@
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
 -export([list_down/1, count/1, list_names/0, list_local_names/0]).
+-export([list_by_type/1]).
 -export([notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
 -export([basic_get/6, basic_consume/12, basic_cancel/6, notify_decorators/1]).
@@ -124,6 +125,7 @@
 -spec list(rabbit_types:vhost()) -> [rabbit_types:amqqueue()].
 -spec list_names() -> [rabbit_amqqueue:name()].
 -spec list_down(rabbit_types:vhost()) -> [rabbit_types:amqqueue()].
+-spec list_by_type(atom()) -> [rabbit_types:amqqueue()].
 -spec info_keys() -> rabbit_types:info_keys().
 -spec info(rabbit_types:amqqueue()) -> rabbit_types:infos().
 -spec info(rabbit_types:amqqueue(), rabbit_types:info_keys()) ->
@@ -740,6 +742,15 @@ list_names() -> mnesia:dirty_all_keys(rabbit_queue).
 list_local_names() ->
     [ Q#amqqueue.name || #amqqueue{state = State, pid = QPid} = Q <- list(),
            State =/= crashed, is_local_to_node(QPid, node())].
+
+list_by_type(Type) ->
+    {atomic, Qs} =
+        mnesia:sync_transaction(
+          fun () ->
+                  mnesia:match_object(rabbit_durable_queue,
+                                      #amqqueue{_ = '_', type = Type}, read)
+          end),
+    Qs.
 
 list_local_followers() ->
     [ Q#amqqueue.name
@@ -1468,7 +1479,8 @@ deliver(Qs, Delivery = #delivery{flow = Flow,
                 lists:foldl(
                   fun({{Name, _} = Pid, QName}, QStates) ->
                           QState0 = get_quorum_state(Pid, QName, QStates),
-                          case rabbit_quorum_queue:deliver(Confirm, Delivery, QState0) of
+                          case rabbit_quorum_queue:deliver(Confirm, Delivery,
+                                                           QState0) of
                               {ok, QState} ->
                                   maps:put(Name, QState, QStates);
                               {slow, QState} ->

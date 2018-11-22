@@ -23,7 +23,7 @@
 -export([credit/4]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3]).
--export([dead_letter_publish/5]).
+-export([dead_letter_publish/4]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
 -export([cancel_consumer_handler/3, cancel_consumer/3]).
@@ -35,6 +35,7 @@
 -export([delete_member/3]).
 -export([requeue/3]).
 -export([policy_changed/2]).
+-export([cleanup_data_dir/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -104,8 +105,8 @@ init_state({Name, _}, QName) ->
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
-handle_event({ra_event, From, Evt}, FState) ->
-    rabbit_fifo_client:handle_ra_event(From, Evt, FState).
+handle_event({ra_event, From, Evt}, QState) ->
+    rabbit_fifo_client:handle_ra_event(From, Evt, QState).
 
 declare(#amqqueue{name = QName,
                   durable = Durable,
@@ -162,9 +163,10 @@ cancel_consumer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
     % QName = queue_name(Name),
     case Node == node() of
         true -> cancel_consumer(QName, ChPid, ConsumerTag);
-        false -> rabbit_misc:rpc_call(Node, rabbit_quorum_queue,
-                                      cancel_consumer,
-                                      [QName, ChPid, ConsumerTag])
+        false ->
+            rpc:cast(Node, rabbit_quorum_queue,
+                     cancel_consumer,
+                     [QName, ChPid, ConsumerTag])
     end.
 
 cancel_consumer(QName, ChPid, ConsumerTag) ->
@@ -243,7 +245,7 @@ recover(Queues) ->
                  case ra:start_server(Name, {Name, node()}, Machine, RaNodes) of
                      ok -> ok;
                      Err ->
-                         rabbit_log:warning("recover: Quorum queue ~w could not"
+                         rabbit_log:warning("recover: quorum queue ~w could not"
                                             " be started ~w", [Name, Err]),
                          ok
                  end;
@@ -254,7 +256,7 @@ recover(Queues) ->
                  ok;
              Err ->
                  %% catch all clause to avoid causing the vhost not to start
-                 rabbit_log:warning("recover: Quorum queue ~w could not be "
+                 rabbit_log:warning("recover: quorum queue ~w could not be "
                                     "restarted ~w", [Name, Err]),
                  ok
          end,
@@ -284,7 +286,7 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
             end,
             rpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName]),
             {ok, Msgs};
-        {error, {no_more_nodes_to_try, Errs}} = Err ->
+        {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
                               (_) -> false
                            end, Errs) of
@@ -294,7 +296,10 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
                     rabbit_core_metrics:queue_deleted(QName),
                     {ok, Msgs};
                 false ->
-                    Err
+                    rabbit_misc:protocol_error(
+                      internal_error,
+                      "Cannot delete quorum queue '~s', not enough nodes online to reach a quorum: ~255p",
+                      [rabbit_misc:rs(QName), Errs])
             end
     end.
 
@@ -305,19 +310,19 @@ delete_immediately({Name, _} = QPid) ->
     rabbit_core_metrics:queue_deleted(QName),
     ok.
 
-ack(CTag, MsgIds, FState) ->
-    rabbit_fifo_client:settle(quorum_ctag(CTag), MsgIds, FState).
+ack(CTag, MsgIds, QState) ->
+    rabbit_fifo_client:settle(quorum_ctag(CTag), MsgIds, QState).
 
-reject(true, CTag, MsgIds, FState) ->
-    rabbit_fifo_client:return(quorum_ctag(CTag), MsgIds, FState);
-reject(false, CTag, MsgIds, FState) ->
-    rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, FState).
+reject(true, CTag, MsgIds, QState) ->
+    rabbit_fifo_client:return(quorum_ctag(CTag), MsgIds, QState);
+reject(false, CTag, MsgIds, QState) ->
+    rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, QState).
 
 credit(CTag, Credit, Drain, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), Credit, Drain, QState).
 
 basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
-          CTag0, FState0) ->
+          CTag0, QState0) ->
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
                      true ->
@@ -325,12 +330,12 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
                      false ->
                          unsettled
                  end,
-    case rabbit_fifo_client:dequeue(CTag, Settlement, FState0) of
-        {ok, empty, FState} ->
-            {ok, empty, FState};
-        {ok, {MsgId, {MsgHeader, Msg}}, FState} ->
+    case rabbit_fifo_client:dequeue(CTag, Settlement, QState0) of
+        {ok, empty, QState} ->
+            {ok, empty, QState};
+        {ok, {MsgId, {MsgHeader, Msg}}, QState} ->
             IsDelivered = maps:is_key(delivery_count, MsgHeader),
-            {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg}, FState};
+            {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg}, QState};
         {timeout, _} ->
             {error, timeout}
     end.
@@ -351,19 +356,19 @@ basic_consume(#amqqueue{name = QName, type = quorum}, NoAck, ChPid,
                                          ConsumerPrefetchCount, Args),
     {ok, QState}.
 
-basic_cancel(ConsumerTag, ChPid, OkMsg, FState0) ->
+basic_cancel(ConsumerTag, ChPid, OkMsg, QState0) ->
     maybe_send_reply(ChPid, OkMsg),
-    rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), FState0).
+    rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), QState0).
 
 stateless_deliver(ServerId, Delivery) ->
     ok = rabbit_fifo_client:untracked_enqueue([ServerId],
                                               Delivery#delivery.message).
 
-deliver(false, Delivery, FState0) ->
-    rabbit_fifo_client:enqueue(Delivery#delivery.message, FState0);
-deliver(true, Delivery, FState0) ->
+deliver(false, Delivery, QState0) ->
+    rabbit_fifo_client:enqueue(Delivery#delivery.message, QState0);
+deliver(true, Delivery, QState0) ->
     rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
-                           Delivery#delivery.message, FState0).
+                               Delivery#delivery.message, QState0).
 
 info(Q) ->
     info(Q, [name, durable, auto_delete, arguments, pid, state, messages,
@@ -386,8 +391,28 @@ stat(_Q) ->
 purge(Node) ->
     rabbit_fifo_client:purge(Node).
 
-requeue(ConsumerTag, MsgIds, FState) ->
-    rabbit_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, FState).
+requeue(ConsumerTag, MsgIds, QState) ->
+    rabbit_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, QState).
+
+cleanup_data_dir() ->
+    Names = [Name || #amqqueue{pid = {Name, _}, quorum_nodes = Nodes}
+                         <- rabbit_amqqueue:list_by_type(quorum),
+                     lists:member(node(), Nodes)],
+    Registered = ra_directory:list_registered(),
+    [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
+                                   not lists:member(Name, Names)],
+    ok.
+
+maybe_delete_data_dir(UId) ->
+    Dir = ra_env:server_data_dir(UId),
+    {ok, Config} = ra_log:read_config(Dir),
+    case maps:get(machine, Config) of
+        {module, rabbit_fifo, _} ->
+            ra_lib:recursive_delete(Dir),
+            ra_directory:unregister_name(UId);
+        _ ->
+            ok
+    end.
 
 policy_changed(QName, Node) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
@@ -505,11 +530,10 @@ delete_member(#amqqueue{pid = {RaName, _}, name = QName}, Node) ->
     end.
 
 %%----------------------------------------------------------------------------
-dlx_mfa(#amqqueue{name = Resource} = Q) ->
-    #resource{virtual_host = VHost} = Resource,
+dlx_mfa(Q) ->
     DLX = init_dlx(args_policy_lookup(<<"dead-letter-exchange">>, fun res_arg/2, Q), Q),
     DLXRKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun res_arg/2, Q),
-    {?MODULE, dead_letter_publish, [VHost, DLX, DLXRKey, Q#amqqueue.name]}.
+    {?MODULE, dead_letter_publish, [DLX, DLXRKey, Q#amqqueue.name]}.
 
 init_dlx(undefined, _Q) ->
     undefined;
@@ -527,10 +551,12 @@ args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
         {PolVal,    {_Type, ArgVal}} -> Resolve(PolVal, ArgVal)
     end.
 
-dead_letter_publish(_, undefined, _, _, _) ->
+dead_letter_publish(undefined, _, _, _) ->
     ok;
-dead_letter_publish(VHost, X, RK, QName, ReasonMsgs) ->
-    rabbit_vhost_dead_letter:publish(VHost, X, RK, QName, ReasonMsgs).
+dead_letter_publish(X, RK, QName, ReasonMsgs) ->
+    {ok, Exchange} = rabbit_exchange:lookup(X),
+    [rabbit_dead_letter:publish(Msg, Reason, Exchange, RK, QName)
+     || {Reason, Msg} <- ReasonMsgs].
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->

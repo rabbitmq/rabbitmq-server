@@ -392,8 +392,7 @@ apply(_, {down, ConsumerPid, noconnection},
 apply(_, {down, Pid, _Info}, Effects0,
       #state{consumers = Cons0,
              enqueuers = Enqs0} = State0) ->
-    % remove any enqueuer for the same pid
-    % TODO: if there are any pending enqueuers these should be enqueued
+    % Remove any enqueuer for the same pid and enqueue any pending messages
     % This should be ok as we won't see any more enqueues from this pid
     State1 = case maps:take(Pid, Enqs0) of
                  {#enqueuer{pending = Pend}, Enqs} ->
