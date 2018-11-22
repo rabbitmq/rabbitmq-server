@@ -193,34 +193,34 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
 send_drained() -> [update_ch_record(send_drained(C)) || C <- all_ch_record()],
                   ok.
 
-deliver(FetchFun, QName, State, ExclusiveConsumerIsOn, ExclusiveConsumer) ->
-    deliver(FetchFun, QName, false, State, ExclusiveConsumerIsOn, ExclusiveConsumer).
+deliver(FetchFun, QName, State, SingleActiveConsumerIsOn, ActiveConsumer) ->
+    deliver(FetchFun, QName, false, State, SingleActiveConsumerIsOn, ActiveConsumer).
 
 deliver(_FetchFun, _QName, false, State, true, none) ->
     {undelivered, false,
         State#state{use = update_use(State#state.use, inactive)}};
-deliver(FetchFun, QName, false, State = #state{consumers = Consumers}, true, ExclusiveConsumer) ->
-    {ChPid, Consumer} = ExclusiveConsumer,
+deliver(FetchFun, QName, false, State = #state{consumers = Consumers}, true, SingleActiveConsumer) ->
+    {ChPid, Consumer} = SingleActiveConsumer,
     %% blocked consumers are removed from the queue state, but not the exclusive_consumer field,
     %% so we need to do this check to avoid adding the exclusive consumer to the channel record
     %% over and over
-    case is_blocked(ExclusiveConsumer) of
+    case is_blocked(SingleActiveConsumer) of
         true ->
             {undelivered, false,
                 State#state{use = update_use(State#state.use, inactive)}};
         false ->
-            case deliver_to_consumer(FetchFun, ExclusiveConsumer, QName) of
+            case deliver_to_consumer(FetchFun, SingleActiveConsumer, QName) of
                 {delivered, R} ->
                     {delivered, false, R, State};
                 undelivered ->
-                    {ChPid, Consumer} = ExclusiveConsumer,
+                    {ChPid, Consumer} = SingleActiveConsumer,
                     Consumers1 = remove_consumer(ChPid, Consumer#consumer.tag, Consumers),
                     {undelivered, true,
                         State#state{consumers = Consumers1, use = update_use(State#state.use, inactive)}}
             end
     end;
 deliver(FetchFun, QName, ConsumersChanged,
-    State = #state{consumers = Consumers}, false, _ExclusiveConsumer) ->
+    State = #state{consumers = Consumers}, false, _SingleActiveConsumer) ->
     case priority_queue:out_p(Consumers) of
         {empty, _} ->
             {undelivered, ConsumersChanged,
@@ -233,7 +233,7 @@ deliver(FetchFun, QName, ConsumersChanged,
                                                                Tail)}};
                 undelivered ->
                     deliver(FetchFun, QName, true,
-                            State#state{consumers = Tail}, false, _ExclusiveConsumer)
+                            State#state{consumers = Tail}, false, _SingleActiveConsumer)
             end
     end.
 

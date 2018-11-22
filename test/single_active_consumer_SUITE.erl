@@ -14,7 +14,7 @@
 %% Copyright (c) 2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(exclusive_consumer_SUITE).
+-module(single_active_consumer_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
