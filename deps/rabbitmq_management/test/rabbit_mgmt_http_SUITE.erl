@@ -1529,10 +1529,16 @@ definitions_vhost_test(Config) ->
                  definition => #{testpos => [1, 2, 3]},
                  priority   => 1}),
 
+    defs_vhost(Config, parameters, "/parameters/vhost-limits/<vhost>/limits", put,
+               #{vhost      => vhost,
+                 name       => <<"limits">>,
+                 component  => <<"vhost-limits">>,
+                 value      => #{ 'max-connections' => 100 }}),
     Upload =
         #{queues     => [],
           exchanges  => [],
           policies   => [],
+          parameters => [],
           bindings   => []},
     http_post(Config, "/definitions/othervhost", Upload, ?BAD_REQUEST),
 
