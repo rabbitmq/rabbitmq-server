@@ -210,8 +210,9 @@ deliver(FetchFun, QName, ConsumersChanged,
 deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
     C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
-        true  -> block_consumer(C, E),
-                 undelivered;
+        true  ->
+            block_consumer(C, E),
+            undelivered;
         false -> case rabbit_limiter:can_send(C#cr.limiter,
                                               Consumer#consumer.ack_required,
                                               Consumer#consumer.tag) of
@@ -330,6 +331,7 @@ activate_limit_fun() ->
     end.
 
 credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
+
     case lookup_ch(ChPid) of
         not_found ->
             unchanged;

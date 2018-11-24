@@ -53,12 +53,14 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -kernel inet_dist_listen_max !RABBITMQ_CTL_DIST_PORT_MAX! ^
 -sasl errlog_type error ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
+-nodename !RABBITMQ_NODENAME! ^
 -run escript start ^
 -escript main rabbitmqctl_escript ^
--extra "%RABBITMQ_HOME%\escript\rabbitmq-diagnostics" !STAR!
+-extra "%RABBITMQ_HOME%\escript\rabbitmq-queues" !STAR!
 
 if ERRORLEVEL 1 (
     exit /B 1
 )
 
+endlocal
 endlocal

@@ -35,7 +35,7 @@ fun(Conf) ->
     end
 end}.
 
-%% SSL listeners are configured in the same fashion as TCP listeners,
+%% TLS listeners are configured in the same fashion as TCP listeners,
 %% including the option to control the choice of interface.
 %%
 %% {ssl_listeners, [5671]},
@@ -129,7 +129,7 @@ fun(Conf) ->
     end
 end}.
 
-%% Configuring SSL.
+%% TLS options.
 %% See http://www.rabbitmq.com/ssl.html for full documentation.
 %%
 %% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
@@ -137,8 +137,6 @@ end}.
 %%                {keyfile,              "/path/to/server/key.pem"},
 %%                {verify,               verify_peer},
 %%                {fail_if_no_peer_cert, false}]},
-
-%% SSL options section ========================================================
 
 {mapping, "ssl_allow_poodle_attack", "rabbit.ssl_allow_poodle_attack",
 [{datatype, {enum, [true, false]}}]}.
@@ -251,7 +249,16 @@ end}.
 {translation, "rabbit.ssl_options.versions",
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("ssl_options.versions", Conf),
-    [ V || {_, V} <- Settings ]
+    [V || {_, V} <- Settings]
+end}.
+
+{mapping, "ssl_options.ciphers.$cipher", "rabbit.ssl_options.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbit.ssl_options.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("ssl_options.ciphers", Conf),
+    [V || {_, V} <- Settings]
 end}.
 
 %% ===========================================================================

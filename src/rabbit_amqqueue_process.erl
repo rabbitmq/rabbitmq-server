@@ -195,7 +195,7 @@ init_it2(Recover, From, State = #q{q                   = Q,
                                    backing_queue_state = undefined}) ->
     {Barrier, TermsOrNew} = recovery_status(Recover),
     case rabbit_amqqueue:internal_declare(Q, Recover /= new) of
-        #amqqueue{} = Q1 ->
+        {Res, #amqqueue{} = Q1} when Res == created orelse Res == existing ->
             case matches(Recover, Q, Q1) of
                 true ->
                     ok = file_handle_cache:register_callback(
@@ -1432,26 +1432,6 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
           {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
                                      run_message_queue(true, State1)
       end);
-
-handle_cast({force_event_refresh, Ref},
-            State = #q{consumers          = Consumers,
-                       exclusive_consumer = Exclusive}) ->
-    rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State), Ref),
-    QName = qname(State),
-    AllConsumers = rabbit_queue_consumers:all(Consumers),
-    case Exclusive of
-        none ->
-            [emit_consumer_created(
-               Ch, CTag, false, AckRequired, QName, Prefetch,
-               Args, Ref, ActingUser) ||
-                {Ch, CTag, AckRequired, Prefetch, Args, ActingUser}
-                    <- AllConsumers];
-        {Ch, CTag} ->
-            [{Ch, CTag, AckRequired, Prefetch, Args, ActingUser}] = AllConsumers,
-            emit_consumer_created(
-              Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref, ActingUser)
-    end,
-    noreply(rabbit_event:init_stats_timer(State, #q.stats_timer));
 
 handle_cast(notify_decorators, State) ->
     notify_decorators(State),

@@ -96,6 +96,8 @@ define PROJECT_ENV
 	    %% see rabbitmq-server#143,
 	    %% rabbitmq-server#949, rabbitmq-server#1098
 	    {credit_flow_default_credit, {400, 200}},
+	    {quorum_commands_soft_limit, 256},
+	    {quorum_cluster_size, 5},
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
@@ -127,13 +129,14 @@ define PROJECT_ENV
 	    %% vhost had to shut down, see server#1158 and server#1280
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
-	    {default_consumer_prefetch, {false, 0}}
+	    {default_consumer_prefetch, {false, 0}},
+	    {channel_queue_cleanup_interval, 60000}
 	  ]
 endef
 
 LOCAL_DEPS = sasl mnesia os_mon inets
 BUILD_DEPS = rabbitmq_cli syslog
-DEPS = ranch lager rabbit_common
+DEPS = ranch lager rabbit_common ra
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 dep_syslog = git https://github.com/schlagert/syslog 3.4.5
