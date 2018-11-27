@@ -670,11 +670,12 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                                                  #'basic.credit_drained'{consumer_tag   = CTag,
                                                                          credit_drained = Credit})
                                   end, Actions),
-                    noreply_coalesce(confirm(MsgSeqNos, From, State));
+                    noreply_coalesce(confirm(MsgSeqNos, Name, State));
                 eol ->
                     State1 = handle_consuming_queue_down_or_eol(From, State0),
                     State2 = handle_delivering_queue_down(From, State1),
-                    {MXs, UC1} = dtree:take(From, State2#ch.unconfirmed),
+                    %% TODO: this should use dtree:take/3
+                    {MXs, UC1} = dtree:take(Name, State2#ch.unconfirmed),
                     State3 = record_confirms(MXs, State1#ch{unconfirmed = UC1}),
                     case maps:find(From, QNames) of
                         {ok, QName} -> erase_queue_stats(QName);
@@ -1968,7 +1969,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     Qs = rabbit_amqqueue:lookup(DelQNames),
     {DeliveredQPids, DeliveredQQPids, QueueStates} =
         rabbit_amqqueue:deliver(Qs, Delivery, QueueStates0),
-    AllDeliveredQPids = DeliveredQPids ++ DeliveredQQPids,
+    AllDeliveredQRefs = DeliveredQPids ++ [N || {N, _} <- DeliveredQQPids],
     %% The maybe_monitor_all/2 monitors all queues to which we
     %% delivered. But we want to monitor even queues we didn't deliver
     %% to, since we need their 'DOWN' messages to clean
@@ -1991,40 +1992,40 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                       queue_monitors = QMons1},
     %% NB: the order here is important since basic.returns must be
     %% sent before confirms.
-    State2 = process_routing_mandatory(Mandatory, AllDeliveredQPids, MsgSeqNo,
+    State2 = process_routing_mandatory(Mandatory, AllDeliveredQRefs , MsgSeqNo,
                                        Message, State1),
-    State3 = process_routing_confirm(  Confirm, AllDeliveredQPids, MsgSeqNo,
-                                       XName, State2),
+    State3 = process_routing_confirm(Confirm, AllDeliveredQRefs , MsgSeqNo,
+                                     XName, State2),
     case rabbit_event:stats_level(State3, #ch.stats_timer) of
         fine ->
             ?INCR_STATS(exchange_stats, XName, 1, publish),
             [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish) ||
-                QPid        <- AllDeliveredQPids,
+                QPid        <- AllDeliveredQRefs,
                 {ok, QName} <- [maps:find(QPid, QNames1)]];
         _ ->
             ok
     end,
     State3#ch{queue_states = QueueStates}.
 
-process_routing_mandatory(false,     _, _MsgSeqNo, _Msg, State) ->
+process_routing_mandatory(false, _, _, _, State) ->
     State;
-process_routing_mandatory(true,     [], _MsgSeqNo,  Msg, State) ->
+process_routing_mandatory(true, [], _, Msg, State) ->
     ok = basic_return(Msg, State, no_route),
     State;
-process_routing_mandatory(true,  QPids,  MsgSeqNo,  Msg, State) ->
-    State#ch{mandatory = dtree:insert(MsgSeqNo, QPids, Msg,
+process_routing_mandatory(true, QRefs, MsgSeqNo, Msg, State) ->
+    State#ch{mandatory = dtree:insert(MsgSeqNo, QRefs, Msg,
                                       State#ch.mandatory)}.
 
-process_routing_confirm(false,    _, _MsgSeqNo, _XName, State) ->
+process_routing_confirm(false, _, _, _, State) ->
     State;
-process_routing_confirm(true,    [],  MsgSeqNo,  XName, State) ->
+process_routing_confirm(true, [], MsgSeqNo, XName, State) ->
     record_confirms([{MsgSeqNo, XName}], State);
-process_routing_confirm(true, QPids,  MsgSeqNo,  XName, State) ->
-    State#ch{unconfirmed = dtree:insert(MsgSeqNo, QPids, XName,
+process_routing_confirm(true, QRefs, MsgSeqNo, XName, State) ->
+    State#ch{unconfirmed = dtree:insert(MsgSeqNo, QRefs, XName,
                                         State#ch.unconfirmed)}.
 
-confirm(MsgSeqNos, QPid, State = #ch{unconfirmed = UC}) ->
-    {MXs, UC1} = dtree:take(MsgSeqNos, QPid, UC),
+confirm(MsgSeqNos, QRef, State = #ch{unconfirmed = UC}) ->
+    {MXs, UC1} = dtree:take(MsgSeqNos, QRef, UC),
     %% NB: don't call noreply/1 since we don't want to send confirms.
     record_confirms(MXs, State#ch{unconfirmed = UC1}).
 

@@ -432,10 +432,20 @@ update_machine_state(Node, Conf) ->
     {rabbit_fifo:client_msg(), state()} | eol.
 handle_ra_event(From, {applied, Seqs},
                 #state{soft_limit = SftLmt,
+                       leader = CurLeader,
+                       last_applied = _Last,
                        unblock_handler = UnblockFun} = State0) ->
     {Corrs, Actions, State1} = lists:foldl(fun seq_applied/2,
                                            {[], [], State0#state{leader = From}},
                                            Seqs),
+    case From of
+        CurLeader -> ok;
+        _ ->
+            ?INFO("rabbit_fifo_client: leader change from ~w to ~w~n"
+                  "applying ~w last ~w~n"
+                  "STate1 ~p~n",
+                  [CurLeader, From, Seqs, _Last, State1])
+    end,
     case maps:size(State1#state.pending) < SftLmt of
         true when State1#state.slow == true ->
             % we have exited soft limit state
@@ -447,7 +457,8 @@ handle_ra_event(From, {applied, Seqs},
                          fun (Cid, {Settled, Returns, Discards}, Acc) ->
                                  add_command(Cid, settle, Settled,
                                              add_command(Cid, return, Returns,
-                                                         add_command(Cid, discard, Discards, Acc)))
+                                                         add_command(Cid, discard,
+                                                                     Discards, Acc)))
                          end, [], State1#state.unsent_commands),
             Node = pick_node(State2),
             %% send all the settlements and returns
@@ -468,7 +479,9 @@ handle_ra_event(Leader, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
 handle_ra_event(_From, {rejected, {not_leader, undefined, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {internal, [], [], State0};
-handle_ra_event(_From, {rejected, {not_leader, Leader, Seq}}, State0) ->
+handle_ra_event(From, {rejected, {not_leader, Leader, Seq}}, State0) ->
+    ?INFO("rabbit_fifo_client: rejected ~b not leader ~w leader: ~w~n",
+          [Seq, From, Leader]),
     State1 = State0#state{leader = Leader},
     State = resend(Seq, State1),
     {internal, [], [], State};
@@ -511,6 +524,7 @@ try_process_command([Server | Rem], Cmd, State) ->
 seq_applied({Seq, MaybeAction},
             {Corrs, Actions0, #state{last_applied = Last} = State0})
   when Seq > Last orelse Last =:= undefined ->
+    % ?INFO("rabbit_fifo_client: applying seq ~b last ~w", [Seq, Last]),
     State1 = case Last of
                 undefined -> State0;
                 _ ->
@@ -525,10 +539,12 @@ seq_applied({Seq, MaybeAction},
             {[Corr | Corrs], Actions, State#state{pending = Pending,
                                                   last_applied = Seq}};
         error ->
+            ?INFO("rabbit_fifo_client: pending not found ~w", [Seq]),
             % must have already been resent or removed for some other reason
             {Corrs, Actions, State}
     end;
 seq_applied(_Seq, Acc) ->
+    ?INFO("rabbit_fifo_client: dropping seq ~b", [_Seq]),
     Acc.
 
 maybe_add_action(ok, Acc, State) ->
@@ -619,6 +635,7 @@ get_missing_deliveries(Leader, From, To, ConsumerTag) ->
     Missing.
 
 pick_node(#state{leader = undefined, servers = [N | _]}) ->
+    %% TODO: pick random rather that first?
     N;
 pick_node(#state{leader = Leader}) ->
     Leader.

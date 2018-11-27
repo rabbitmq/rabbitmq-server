@@ -106,7 +106,7 @@
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
 
--define(SHADOW_COPY_INTERVAL, 4096).
+-define(SHADOW_COPY_INTERVAL, 4096 * 4).
 -define(USE_AVG_HALF_LIFE, 10000.0).
 
 -record(consumer,
