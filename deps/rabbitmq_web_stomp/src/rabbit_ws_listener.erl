@@ -33,7 +33,8 @@ init() ->
     TcpConf = get_tcp_conf(get_env(tcp_config, []), Port),
 
     WsFrame = get_env(ws_frame, text),
-    CowboyOpts = maps:from_list(get_env(cowboy_opts, [])),
+    CowboyOpts0 = maps:from_list(get_env(cowboy_opts, [])),
+    CowboyOpts = CowboyOpts0#{proxy_header => get_env(proxy_protocol, false)},
 
     VhostRoutes = [
         {get_env(ws_path, "/ws"), rabbit_ws_handler, [{type, WsFrame}]}
