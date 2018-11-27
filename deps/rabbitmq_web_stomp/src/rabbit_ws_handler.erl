@@ -45,7 +45,13 @@
 init(Req0, Opts) ->
     {PeerAddr, _PeerPort} = maps:get(peer, Req0),
     {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
-    {_, Sock} = lists:keyfind(socket, 1, Opts),
+    {_, Sock0} = lists:keyfind(socket, 1, Opts),
+    Sock = case maps:get(proxy_header, Req0, undefined) of
+        undefined ->
+            Sock0;
+        ProxyInfo ->
+            {rabbit_proxy_socket, Sock0, ProxyInfo}
+    end,
     Req = case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req0) of
         undefined  -> Req0;
         Protocols ->
