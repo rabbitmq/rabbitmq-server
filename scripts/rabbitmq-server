@@ -275,17 +275,17 @@ ensure_thread_pool_size() {
 }
 
 start_rabbitmq_server() {
-    # "-pa ${RABBITMQ_SERVER_CODE_PATH}" should be the very first
-    # command-line argument. In case of using cached HiPE-compilation,
-    # this will allow for compiled versions of erlang built-in modules
-    # (e.g. lists) to be loaded.
+    # The arguments to -pa are in this order because they are *pre*-pended
+    # to the code path. Since we want RABBITMQ_SERVER_CODE_PATH to precede
+    # RABBITMQ_EBIN_ROOT, it must come as the second argument here.
+    # https://github.com/rabbitmq/rabbitmq-server/issues/1777
     ensure_thread_pool_size
     check_start_params &&
     RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
     ERL_MAX_ETS_TABLES=$ERL_MAX_ETS_TABLES \
     ERL_CRASH_DUMP=$ERL_CRASH_DUMP \
     exec ${ERL_DIR}erl \
-        -pa ${RABBITMQ_SERVER_CODE_PATH} ${RABBITMQ_EBIN_ROOT} \
+        -pa "$RABBITMQ_EBIN_ROOT" "$RABBITMQ_SERVER_CODE_PATH" \
         ${RABBITMQ_START_RABBIT} \
         ${RABBITMQ_NAME_TYPE} ${RABBITMQ_NODENAME} \
         -boot "${SASL_BOOT_FILE}" \
