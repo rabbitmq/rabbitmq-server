@@ -11,8 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
-
+## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
 defmodule SetLogLevelCommandTest do
   use ExUnit.Case, async: false
@@ -27,8 +26,12 @@ defmodule SetLogLevelCommandTest do
       opts: %{node: get_rabbit_hostname()}}
   end
 
-  test "validate: with one argument succeeds", context do
+  test "validate: with a single known level succeeds", context do
     assert @command.validate([context[:log_level]], context[:opts]) == :ok
+  end
+
+  test "validate: with a single unsupported level fails", context do
+    assert match?({:error, _}, @command.validate(["lolwut"], context[:opts]))
   end
 
   test "validate: with extra arguments returns an arg count error", context do

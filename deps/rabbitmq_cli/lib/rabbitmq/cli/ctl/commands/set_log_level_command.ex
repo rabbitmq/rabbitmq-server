@@ -17,13 +17,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
+  @known_levels ["debug", "info", "notice", "warning", "error", "critical", "alert", "emergency", "none"]
 
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
-  def validate([_], _), do: :ok
+  def validate([level], _) do
+    case Enum.member?(@known_levels, level) do
+      true  -> :ok
+      false -> {:error, "level #{level} is not supported. Try one of debug, info, warning, error, none"}
+    end
+  end
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
@@ -35,4 +40,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
   def usage, do: "set_log_level <log_level>"
 
   def banner([log_level], _), do: "Setting log level to \"#{log_level}\" ..."
+
+  def output({:error, {:invalid_log_level, level}}, _opts) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
+     "level #{level} is not supported. Try one of debug, info, warning, error, none"}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 end
