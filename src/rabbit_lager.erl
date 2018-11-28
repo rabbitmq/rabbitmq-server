@@ -20,7 +20,7 @@
 
 %% API
 -export([start_logger/0, log_locations/0, fold_sinks/2,
-         broker_is_started/0]).
+         broker_is_started/0, set_log_level/1]).
 
 %% For test purposes
 -export([configure_lager/0]).
@@ -55,6 +55,34 @@ broker_is_started() ->
         _ ->
             ok
     end.
+
+set_log_level(Level) ->
+    IsValidLevel = lists:member(Level, lager_util:levels()),
+    set_log_level(IsValidLevel, Level).
+
+set_log_level(true, Level) ->
+    SinksAndHandlers = [{Sink, gen_event:which_handlers(Sink)} ||
+                        Sink <- lager:list_all_sinks()],
+    set_sink_log_level(SinksAndHandlers, Level);
+set_log_level(_, Level) ->
+    {error, {invalid_log_level, Level}}.
+
+set_sink_log_level([], _Level) ->
+    ok;
+set_sink_log_level([{Sink, Handlers}|Rest], Level) ->
+    set_sink_handler_log_level(Sink, Handlers, Level),
+    set_sink_log_level(Rest, Level).
+
+set_sink_handler_log_level(_Sink, [], _Level) ->
+    ok;
+set_sink_handler_log_level(Sink, [Handler|Rest], Level) when is_atom(Handler) ->
+    ok = lager:set_loglevel(Sink, Handler, undefined, Level),
+    set_sink_handler_log_level(Sink, Rest, Level);
+set_sink_handler_log_level(Sink, [{Handler, Id}|Rest], Level) ->
+    ok = lager:set_loglevel(Sink, Handler, Id, Level),
+    set_sink_handler_log_level(Sink, Rest, Level);
+set_sink_handler_log_level(Sink, [_|Rest], Level) ->
+    set_sink_handler_log_level(Sink, Rest, Level).
 
 log_locations() ->
     ensure_lager_configured(),
