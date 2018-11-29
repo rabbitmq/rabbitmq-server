@@ -30,7 +30,10 @@ groups() ->
     [
       {non_parallel_tests, [], [
           simple,
-          set_properties,
+          set_properties_using_proplist,
+          set_properties_using_map,
+          set_empty_properties_using_proplist,
+          set_empty_properties_using_map,
           headers,
           exchange,
           restart,
@@ -86,7 +89,19 @@ simple(Config) ->
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 
-set_properties(Config) ->
+set_properties_using_map(Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              Ps = [{<<"src-queue">>,      <<"src">>},
+                    {<<"dest-queue">>,     <<"dest">>},
+                    {<<"publish-properties">>, #{<<"cluster_id">> => <<"x">>}}],
+              shovel_test_utils:set_param(Config, <<"test">>, Ps),
+              #amqp_msg{props = #'P_basic'{cluster_id = Cluster}} =
+                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>),
+              <<"x">> = Cluster
+      end).
+
+set_properties_using_proplist(Config) ->
     with_ch(Config,
       fun (Ch) ->
               Ps = [{<<"src-queue">>,      <<"src">>},
@@ -96,6 +111,28 @@ set_properties(Config) ->
               #amqp_msg{props = #'P_basic'{cluster_id = Cluster}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>),
               <<"x">> = Cluster
+      end).
+
+set_empty_properties_using_map(Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              Ps = [{<<"src-queue">>,      <<"src">>},
+                    {<<"dest-queue">>,     <<"dest">>},
+                    {<<"publish-properties">>, #{}}],
+              shovel_test_utils:set_param(Config, <<"test">>, Ps),
+              #amqp_msg{props = #'P_basic'{}} =
+                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>)
+      end).
+
+set_empty_properties_using_proplist(Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              Ps = [{<<"src-queue">>,      <<"src">>},
+                    {<<"dest-queue">>,     <<"dest">>},
+                    {<<"publish-properties">>, []}],
+              shovel_test_utils:set_param(Config, <<"test">>, Ps),
+              #amqp_msg{props = #'P_basic'{}} =
+                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>)
       end).
 
 headers(Config) ->
