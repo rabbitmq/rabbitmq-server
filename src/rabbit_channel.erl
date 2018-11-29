@@ -649,8 +649,9 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     State = lists:foldl(
                               fun({MsgId, {MsgHeader, Msg}}, Acc) ->
                                       IsDelivered = maps:is_key(delivery_count, MsgHeader),
+                                      Msg1 = add_delivery_count_header(MsgHeader, Msg),
                                       handle_deliver(CTag, AckRequired,
-                                                     {QName, From, MsgId, IsDelivered, Msg},
+                                                     {QName, From, MsgId, IsDelivered, Msg1},
                                                      Acc)
                               end, State0#ch{queue_states = maps:put(Name, QState2, QueueStates)}, Msgs),
                     noreply(State);
@@ -2488,3 +2489,7 @@ maybe_monitor(_, QMons) ->
 maybe_monitor_all([],     S) -> S;                %% optimisation
 maybe_monitor_all([Item], S) -> maybe_monitor(Item, S); %% optimisation
 maybe_monitor_all(Items,  S) -> lists:foldl(fun maybe_monitor/2, S, Items).
+
+add_delivery_count_header(MsgHeader, Msg) ->
+    Count = maps:get(delivery_count, MsgHeader, 0),
+    rabbit_basic:add_header(<<"x-redelivery-count">>, long, Count, Msg).

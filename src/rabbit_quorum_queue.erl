@@ -330,8 +330,10 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
     case rabbit_fifo_client:dequeue(CTag, Settlement, QState0) of
         {ok, empty, QState} ->
             {ok, empty, QState};
-        {ok, {MsgId, {MsgHeader, Msg}}, QState} ->
-            IsDelivered = maps:is_key(delivery_count, MsgHeader),
+        {ok, {MsgId, {MsgHeader, Msg0}}, QState} ->
+            Count = maps:get(delivery_count, MsgHeader, 0),
+            IsDelivered = Count > 0,
+            Msg = rabbit_basic:add_header(<<"x-redelivery-count">>, long, Count, Msg0),
             {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg}, QState};
         {timeout, _} ->
             {error, timeout}
