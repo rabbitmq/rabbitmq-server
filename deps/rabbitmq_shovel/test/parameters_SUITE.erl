@@ -36,8 +36,10 @@ all() ->
 groups() ->
     [
       {tests, [parallel], [
-          parse_amqp091,
-          parse_amqp091_legacy,
+          parse_amqp091_maps,
+          parse_amqp091_proplists,
+          parse_amqp091_empty_maps,
+          parse_amqp091_empty_proplists,
           parse_amqp10,
           parse_amqp10_minimal,
           validate_amqp10,
@@ -70,7 +72,7 @@ end_per_testcase(_Testcase, Config) -> Config.
 %% Testcases.
 %% -------------------------------------------------------------------
 
-parse_amqp091_legacy(_Config) ->
+parse_amqp091_maps(_Config) ->
     Params =
         [{<<"src-uri">>, <<"amqp://localhost:5672">>},
          {<<"src-protocol">>, <<"amqp091">>},
@@ -90,7 +92,7 @@ parse_amqp091_legacy(_Config) ->
 
     test_parse_amqp091(Params).
 
-parse_amqp091(_Config) ->
+parse_amqp091_proplists(_Config) ->
     Params =
         [{<<"src-uri">>, <<"amqp://localhost:5672">>},
          {<<"src-protocol">>, <<"amqp091">>},
@@ -108,6 +110,42 @@ parse_amqp091(_Config) ->
          {<<"dest-queue">>, <<"a-dest-queue">>}
         ],
     test_parse_amqp091(Params).
+
+parse_amqp091_empty_maps(_Config) ->
+    Params =
+        [{<<"src-uri">>, <<"amqp://localhost:5672">>},
+         {<<"src-protocol">>, <<"amqp091">>},
+         {<<"dest-protocol">>, <<"amqp091">>},
+         {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
+         {<<"dest-add-forward-headers">>, true},
+         {<<"dest-add-timestamp-header">>, true},
+         {<<"dest-publish-properties">>, #{}},
+         {<<"ack-mode">>, <<"on-publish">>},
+         {<<"src-delete-after">>, <<"queue-length">>},
+         {<<"src-prefetch-count">>, 30},
+         {<<"reconnect-delay">>, 1001},
+         {<<"src-queue">>, <<"a-src-queue">>},
+         {<<"dest-queue">>, <<"a-dest-queue">>}
+        ],
+    test_parse_amqp091_with_blank_proprties(Params).
+
+parse_amqp091_empty_proplists(_Config) ->
+    Params =
+        [{<<"src-uri">>, <<"amqp://localhost:5672">>},
+         {<<"src-protocol">>, <<"amqp091">>},
+         {<<"dest-protocol">>, <<"amqp091">>},
+         {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
+         {<<"dest-add-forward-headers">>, true},
+         {<<"dest-add-timestamp-header">>, true},
+         {<<"dest-publish-properties">>, []},
+         {<<"ack-mode">>, <<"on-publish">>},
+         {<<"src-delete-after">>, <<"queue-length">>},
+         {<<"src-prefetch-count">>, 30},
+         {<<"reconnect-delay">>, 1001},
+         {<<"src-queue">>, <<"a-src-queue">>},
+         {<<"dest-queue">>, <<"a-dest-queue">>}
+        ],
+    test_parse_amqp091_with_blank_proprties(Params).
 
 
 test_parse_amqp091(Params) ->
@@ -127,13 +165,40 @@ test_parse_amqp091(Params) ->
                   delete_after := 'queue-length'}
      } = Result,
 
-    #'P_basic'{headers = HeadersResult,
+    #'P_basic'{headers = ActualHeaders,
                delivery_mode = 2,
                cluster_id = <<"x">>} = PropsFun("amqp://localhost:5672",
                                                 "amqp://remotehost:5672",
                                                 #'P_basic'{headers = undefined}),
-    {_, array, [{table, Shovelled}]} = lists:keyfind(<<"x-shovelled">>, 1, HeadersResult),
-    {_, long, _} = lists:keyfind(<<"x-shovelled-timestamp">>, 1, HeadersResult),
+    assert_amqp901_headers(ActualHeaders),
+    ok.
+
+test_parse_amqp091_with_blank_proprties(Params) ->
+    {ok, Result} = rabbit_shovel_parameters:parse({"vhost", "name"},
+                                                  "my-cluster", Params),
+    #{ack_mode := on_publish,
+      name := "name",
+      reconnect_delay := 1001,
+      dest := #{module := rabbit_amqp091_shovel,
+                uris := ["amqp://remotehost:5672"],
+                props_fun := PropsFun
+               },
+      source := #{module := rabbit_amqp091_shovel,
+                  uris := ["amqp://localhost:5672"],
+                  prefetch_count := 30,
+                  queue := <<"a-src-queue">>,
+                  delete_after := 'queue-length'}
+     } = Result,
+
+    #'P_basic'{headers = ActualHeaders} = PropsFun("amqp://localhost:5672",
+                                                   "amqp://remotehost:5672",
+                                                   #'P_basic'{headers = undefined}),
+    assert_amqp901_headers(ActualHeaders),
+    ok.
+
+assert_amqp901_headers(ActualHeaders) ->
+    {_, array, [{table, Shovelled}]} = lists:keyfind(<<"x-shovelled">>, 1, ActualHeaders),
+    {_, long, _} = lists:keyfind(<<"x-shovelled-timestamp">>, 1, ActualHeaders),
 
     ExpectedHeaders =
     [{<<"shovelled-by">>, "my-cluster"},
