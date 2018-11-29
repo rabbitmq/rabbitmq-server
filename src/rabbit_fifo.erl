@@ -456,20 +456,26 @@ apply(_, {update_state, Conf}, Effects, State) ->
     {update_state(Conf, State), Effects, ok}.
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
-state_enter(leader, #state{consumers = Custs,
+state_enter(leader, #state{consumers = Cons,
                            enqueuers = Enqs,
                            name = Name,
+                           prefix_msg_count = 0,
                            become_leader_handler = BLH}) ->
     % return effects to monitor all current consumers and enqueuers
-    ConMons = [{monitor, process, P} || {_, P} <- maps:keys(Custs)],
-    EnqMons = [{monitor, process, P} || P <- maps:keys(Enqs)],
-    Effects = ConMons ++ EnqMons,
+    Pids = lists:usort(maps:keys(Enqs) ++ [P || {_, P} <- maps:keys(Cons)]),
+    Mons = [{monitor, process, P} || P <- Pids],
+    Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
+    Effects = Mons ++ Nots,
     case BLH of
         undefined ->
             Effects;
         {Mod, Fun, Args} ->
             [{mod_call, Mod, Fun, Args ++ [Name]} | Effects]
     end;
+state_enter(recovered, #state{prefix_msg_count = PrefixMsgCount})
+  when PrefixMsgCount =/= 0 ->
+    %% TODO: remove assertion?
+    exit({rabbit_fifo, unexpected_prefix_msg_count, PrefixMsgCount});
 state_enter(eol, #state{enqueuers = Enqs, consumers = Custs0}) ->
     Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
     [{send_msg, P, eol, ra_event} || P <- maps:keys(maps:merge(Enqs, Custs))];
@@ -1020,6 +1026,7 @@ dehydrate_state(#state{messages = Messages0,
                                              C#consumer{checked_out = #{}}
                                      end, Consumers),
                 returns = queue:new(),
+                %% messages include returns
                 prefix_msg_count = maps:size(Messages0) + MsgCount}.
 
 
@@ -1456,22 +1463,49 @@ snapshot_recover_test() ->
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
-enq_deq_return_snapshot_recover_test() ->
+enq_deq_return_settle_snapshot_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
-    % OthPid = spawn(fun () -> ok end),
-    % Oth = {<<"oth">>, OthPid},
     Commands = [
                 {enqueue, self(), 1, one}, %% to Cid
                 {checkout, {auto, 1, simple_prefetch}, Cid},
-                % {checkout, {auto, 1, simple_prefetch}, Oth},
-                {return, [0], Cid}, %% should be re-delivered to Oth
-                {enqueue, self(), 2, two}, %% Cid prefix_msg_count: 1
-                % {enqueue, self(), 3, three}, %% Queued: prefetch_msg_count: 2?
-                % {settle, [0], Oth},
+                {return, [0], Cid}, %% should be re-delivered to Cid
+                {enqueue, self(), 2, two}, %% Cid prefix_msg_count: 2
                 {settle, [1], Cid},
                 {settle, [2], Cid}
-                % purge
+              ],
+    run_snapshot_test(?FUNCTION_NAME, Commands).
+
+return_prefix_msg_count_test() ->
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
+    Cid = {Tag, self()},
+    Commands = [
+                {enqueue, self(), 1, one},
+                {checkout, {auto, 1, simple_prefetch}, Cid},
+                {checkout, cancel, Cid},
+                {enqueue, self(), 2, two} %% Cid prefix_msg_count: 2
+               ],
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    {State, _Effects} = run_log(test_init(?FUNCTION_NAME), Entries),
+    ?debugFmt("return_prefix_msg_count_test state ~n~p~n", [State]),
+    ok.
+
+
+return_settle_snapshot_test() ->
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
+    Cid = {Tag, self()},
+    Commands = [
+                {enqueue, self(), 1, one}, %% to Cid
+                {checkout, {auto, 1, simple_prefetch}, Cid},
+                {return, [0], Cid}, %% should be re-delivered to Oth
+                {enqueue, self(), 2, two}, %% Cid prefix_msg_count: 2
+                {settle, [1], Cid},
+                {return, [2], Cid},
+                {settle, [3], Cid},
+                {enqueue, self(), 3, three},
+                purge,
+                {enqueue, self(), 4, four}
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
@@ -1577,18 +1611,29 @@ state_enter_test() ->
     [{mod_call, m, f, [a, the_name]}] = state_enter(leader, S0),
     ok.
 
-leader_monitors_on_state_enter_test() ->
-    Cid = {<<"cid">>, self()},
-    {State0, [_, _]} = enq(1, 1, first, test_init(test)),
-    {State1, _} = check_auto(Cid, 2, State0),
+state_enter_montors_and_notifications_test() ->
+    Oth = spawn(fun () -> ok end),
+    {State0, _} = enq(1, 1, first, test_init(test)),
+    Cid = {<<"adf">>, self()},
+    OthCid = {<<"oth">>, Oth},
+    {State1, _} = check(Cid, 2, State0),
+    {State, _} = check(OthCid, 3, State1),
     Self = self(),
-    %% as we have an enqueuer _and_ a consumer we chould
-    %% get two monitor effects in total, even if they are for the same
-    %% processs
-    [{monitor, process, Self},
-     {monitor, process, Self}] = state_enter(leader, State1),
-    ok.
+    Effects = state_enter(leader, State),
 
+    %% monitor all enqueuers and consumers
+    [{monitor, process, Self},
+     {monitor, process, Oth}] =
+        lists:filter(fun ({monitor, process, _}) -> true;
+                         (_) -> false
+                     end, Effects),
+    [{send_msg, Self, leader_change, ra_event},
+     {send_msg, Oth, leader_change, ra_event}] =
+        lists:filter(fun ({send_msg, _, leader_change, ra_event}) -> true;
+                         (_) -> false
+                     end, Effects),
+    ?ASSERT_EFF({monitor, process, _}, Effects),
+    ok.
 
 purge_test() ->
     Cid = {<<"purge_test">>, self()},

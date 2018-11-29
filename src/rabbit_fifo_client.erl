@@ -442,9 +442,8 @@ handle_ra_event(From, {applied, Seqs},
         CurLeader -> ok;
         _ ->
             ?INFO("rabbit_fifo_client: leader change from ~w to ~w~n"
-                  "applying ~w last ~w~n"
-                  "STate1 ~p~n",
-                  [CurLeader, From, Seqs, _Last, State1])
+                  "applying ~w last ~w~n",
+                  [CurLeader, From, Seqs, _Last])
     end,
     case maps:size(State1#state.pending) < SftLmt of
         true when State1#state.slow == true ->
@@ -476,6 +475,18 @@ handle_ra_event(From, {applied, Seqs},
     end;
 handle_ra_event(Leader, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
     handle_delivery(Leader, Del, State0);
+handle_ra_event(Leader, {machine, leader_change},
+                #state{leader = Leader} = State) ->
+    %% leader already known
+    {internal, [], [], State};
+handle_ra_event(Leader, {machine, leader_change},
+                #state{leader = OldLeader} = State0) ->
+    ?INFO("rabbit_fifo_client: leader changed from ~w to ~w~n",
+          [OldLeader, Leader]),
+    %% we need to update leader
+    %% and resend any pending commands
+    State = resend_all_pending(State0#state{leader = Leader}),
+    {internal, [], [], State};
 handle_ra_event(_From, {rejected, {not_leader, undefined, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {internal, [], [], State0};
@@ -541,7 +552,9 @@ seq_applied({Seq, MaybeAction},
         error ->
             ?INFO("rabbit_fifo_client: pending not found ~w", [Seq]),
             % must have already been resent or removed for some other reason
-            {Corrs, Actions, State}
+            % still need to update last_applied or we may inadvertently resend
+            % stuff later
+            {Corrs, Actions, State#state{last_applied = Seq}}
     end;
 seq_applied(_Seq, Acc) ->
     ?INFO("rabbit_fifo_client: dropping seq ~b", [_Seq]),
@@ -580,6 +593,11 @@ resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
         error ->
             State
     end.
+
+resend_all_pending(#state{pending = Pend} = State) ->
+    Seqs = lists:sort(maps:keys(Pend)),
+    ?INFO ("rabbit_fifo_client: resending all ~w~n", [Seqs]),
+    lists:foldl(fun resend/2, State, Seqs).
 
 handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
                 #state{consumer_deliveries = CDels0} = State0) ->
