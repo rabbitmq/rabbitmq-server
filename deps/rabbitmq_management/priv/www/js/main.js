@@ -1539,3 +1539,11 @@ function select_queue_type(queuetype) {
     queue_type = queuetype.value;
     update();
 }
+
+function is_quorum(queue) {
+    return queue["arguments"]["x-queue-type"] == "quorum";
+}
+
+function is_classic(queue) {
+    return queue["arguments"]["x-queue-type"] == "classic";
+}

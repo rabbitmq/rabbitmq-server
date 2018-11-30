@@ -28,14 +28,14 @@
       </tr>
 <% if (nodes_interesting) { %>
       <tr>
-      <% if (queue.hasOwnProperty('members')) { %>
+      <% if (is_quorum(queue)) { %>
         <th>Leader</th>
       <% } else { %>
         <th>Node</th>
       <% } %>
         <td><%= fmt_node(queue.node) %></td>
       </tr>
-  <% if (queue.hasOwnProperty('members')) { %>
+  <% if (is_quorum(queue)) { %>
       <tr>
         <th>Online</th>
                                               <td>
@@ -121,7 +121,7 @@
         <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
         <td><%= fmt_percent(queue.consumer_utilisation) %></td>
       </tr>
-      <% if (queue.hasOwnProperty('members')) { %>
+      <% if (is_quorum(queue)) { %>
       <tr>
         <th>Open files</th>
         <td><%= fmt_table_short(queue.open_files) %></td>
@@ -135,9 +135,11 @@
         <th class="horizontal">Total</th>
         <th class="horizontal">Ready</th>
         <th class="horizontal">Unacked</th>
+        <% if (is_classic(queue)) { %>
         <th class="horizontal">In memory</th>
         <th class="horizontal">Persistent</th>
         <th class="horizontal">Transient, Paged Out</th>
+        <% } %>
       </tr>
       <tr>
         <th>
@@ -153,6 +155,7 @@
         <td class="r">
           <%= fmt_num_thousands(queue.messages_unacknowledged) %>
         </td>
+        <% if (is_classic(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ram) %>
         </td>
@@ -162,6 +165,7 @@
         <td class="r">
           <%= fmt_num_thousands(queue.messages_paged_out) %>
         </td>
+        <% } %>
       </tr>
       <tr>
         <th>
@@ -177,6 +181,7 @@
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_unacknowledged) %>
         </td>
+        <% if (is_classic(queue)) { %>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_ram) %>
         </td>
@@ -186,6 +191,7 @@
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_paged_out) %>
         </td>
+        <% } %>
       </tr>
       <tr>
         <th>

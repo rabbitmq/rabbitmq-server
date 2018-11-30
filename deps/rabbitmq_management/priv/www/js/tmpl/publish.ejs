@@ -21,6 +21,7 @@
           <td><input type="text" name="routing_key" value=""/></td>
         </tr>
 <% } %>
+        <% if (is_classic(queue)) { %>
         <tr>
           <th><label>Delivery mode:</label></th>
           <td>
@@ -30,6 +31,9 @@
             </select>
           </td>
         </tr>
+        <% } else { %>
+          <input type="hidden" name="delivery_mode" value="2">
+        <% } %>
         <tr>
           <th>
             <label>
