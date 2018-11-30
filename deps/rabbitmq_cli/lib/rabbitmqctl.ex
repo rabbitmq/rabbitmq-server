@@ -161,9 +161,12 @@ defmodule RabbitMQCtl do
 
   def merge_all_defaults(%{} = options) do
     options
+    |> merge_defaults_node
     |> merge_defaults_timeout
     |> merge_defaults_longnames
   end
+
+  defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: Helpers.get_rabbit_hostname()}, opts)
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
