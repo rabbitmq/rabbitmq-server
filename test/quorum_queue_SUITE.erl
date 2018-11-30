@@ -48,6 +48,7 @@ groups() ->
                        ++ all_tests()},
                       {cluster_size_3, [], [
                                             declare_during_node_down,
+                                            simple_confirm_availability_on_leader_change,
                                             confirm_availability_on_leader_change,
                                             recover_from_single_failure,
                                             recover_from_multiple_failures,
@@ -1561,6 +1562,30 @@ declare_during_node_down(Config) ->
     rabbit_ct_broker_helpers:start_node(Config, DownServer),
     publish(Ch, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
+    ok.
+
+simple_confirm_availability_on_leader_change(Config) ->
+    [Node1, Node2, _Node3] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    %% declare a queue on node2 - this _should_ host the leader on node 2
+    DCh = rabbit_ct_client_helpers:open_channel(Config, Node2),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(DCh, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    erlang:process_flag(trap_exit, true),
+    %% open a channel to another node
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    publish_confirm(Ch, QQ),
+
+    %% stop the node hosting the leader
+    stop_node(Config, Node2),
+    %% this should not fail as the channel should detect the new leader and
+    %% resend to that
+    publish_confirm(Ch, QQ),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
     ok.
 
 confirm_availability_on_leader_change(Config) ->

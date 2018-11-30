@@ -1,3 +1,19 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(rabbit_fifo).
 
 -behaviour(ra_machine).
@@ -228,9 +244,9 @@ update_state(Conf, State) ->
     {state(), ra_machine:effects(), Reply :: term()}.
 apply(#{index := RaftIdx}, {enqueue, From, Seq, RawMsg}, Effects0, State00) ->
     case maybe_enqueue(RaftIdx, From, Seq, RawMsg, Effects0, State00) of
-        {ok, State0, Effects} ->
-            State = append_to_master_index(RaftIdx, State0),
-            checkout(State, Effects);
+        {ok, State0, Effects1} ->
+            {State, Effects, ok} = checkout(State0, Effects1),
+            {append_to_master_index(RaftIdx, State), Effects, ok};
         {duplicate, State, Effects} ->
             {State, Effects, ok}
     end;
@@ -314,6 +330,7 @@ apply(_, {credit, NewCredit, RemoteDelCnt, Drain, ConsumerId}, Effects0,
 apply(_, {checkout, {dequeue, _}, {_Tag, _Pid}}, Effects0,
       #state{messages = M,
              prefix_msg_count = 0} = State0) when map_size(M) == 0 ->
+    %% FIX: also check if there are returned messages
     %% TODO do we need metric visibility of empty get requests?
     {State0, Effects0, {dequeue, empty}};
 apply(Meta, {checkout, {dequeue, settled}, ConsumerId},
@@ -780,6 +797,7 @@ cancel_consumer_effects(Pid, Name,
 
 update_smallest_raft_index(IncomingRaftIdx, OldIndexes,
                            #state{ra_indexes = Indexes,
+                                  % prefix_msg_count = 0,
                                   messages = Messages} = State, Effects) ->
     case rabbit_fifo_index:size(Indexes) of
         0 when map_size(Messages) =:= 0 ->
@@ -1023,11 +1041,16 @@ dehydrate_state(#state{messages = Messages0,
                 ra_indexes = rabbit_fifo_index:empty(),
                 low_msg_num = undefined,
                 consumers = maps:map(fun (_, C) ->
-                                             C#consumer{checked_out = #{}}
+                                             dehydrate_consumer(C)
+                                             % C#consumer{checked_out = #{}}
                                      end, Consumers),
                 returns = queue:new(),
                 %% messages include returns
                 prefix_msg_count = maps:size(Messages0) + MsgCount}.
+
+dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
+    Checked = maps:map(fun (_, _) -> '$prefix_msg' end, Checked0),
+    Con#consumer{checked_out = Checked}.
 
 
 -ifdef(TEST).
@@ -1406,7 +1429,7 @@ tick_test() ->
     ok.
 
 enq_deq_snapshot_recover_test() ->
-    Tag = <<"release_cursor_snapshot_state_test">>,
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     % OthPid = spawn(fun () -> ok end),
     % Oth = {<<"oth">>, OthPid},
@@ -1539,6 +1562,23 @@ enq_check_settle_snapshot_purge_test() ->
          % ?debugFmt("~w running commands ~w~n", [?FUNCTION_NAME, C]),
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
+enq_check_settle_duplicate_test() ->
+    %% duplicate settle commands are likely
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
+    Cid = {Tag, self()},
+    Commands = [
+                {checkout, {auto, 2, simple_prefetch}, Cid},
+                {enqueue, self(), 1, one}, %% 0
+                {enqueue, self(), 2, two}, %% 0
+                {settle, [0], Cid},
+                {settle, [1], Cid},
+                {settle, [1], Cid},
+                {enqueue, self(), 3, three},
+                {settle, [2], Cid}
+              ],
+         % ?debugFmt("~w running commands ~w~n", [?FUNCTION_NAME, C]),
+    run_snapshot_test(?FUNCTION_NAME, Commands).
+
 run_snapshot_test(Name, Commands) ->
     %% create every incremental permuation of the commands lists
     %% and run the snapshot tests against that
@@ -1556,6 +1596,7 @@ run_snapshot_test0(Name, Commands) ->
          Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
                                        (_) -> false
                                     end, Entries),
+         ?debugFmt("running from snapshot: ~b", [SnapIdx]),
          {S, _} = run_log(SnapState, Filtered),
          % assert log can be restored from any release cursor index
          % ?debugFmt("Name ~p Idx ~p S~p~nState~p~nSnapState ~p~nFiltered ~p~n",
@@ -1571,7 +1612,7 @@ prefixes(Source, N, Acc) ->
     prefixes(Source, N+1, [X | Acc]).
 
 delivery_query_returns_deliveries_test() ->
-    Tag = <<"release_cursor_snapshot_state_test">>,
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
                 {checkout, {auto, 5, simple_prefetch}, Cid},

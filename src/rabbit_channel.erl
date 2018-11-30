@@ -110,7 +110,7 @@
   %% when queue.bind's queue field is empty,
   %% this name will be used instead
   most_recently_declared_queue,
-  %% a map of queue pid to queue name
+  %% a map of queue ref to queue name
   queue_names,
   %% queue processes are monitored to update
   %% queue names
@@ -210,7 +210,7 @@
         end).
 
 -define(IS_CLASSIC(QPid), is_pid(QPid)).
--define(IS_QUORUM(QPid), is_tuple(QPid)).
+-define(IS_QUORUM(QPid), is_tuple(QPid) orelse is_atom(QPid)).
 
 %%----------------------------------------------------------------------------
 
@@ -672,18 +672,18 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                                   end, Actions),
                     noreply_coalesce(confirm(MsgSeqNos, Name, State));
                 eol ->
-                    State1 = handle_consuming_queue_down_or_eol(From, State0),
-                    State2 = handle_delivering_queue_down(From, State1),
+                    State1 = handle_consuming_queue_down_or_eol(Name, State0),
+                    State2 = handle_delivering_queue_down(Name, State1),
                     %% TODO: this should use dtree:take/3
                     {MXs, UC1} = dtree:take(Name, State2#ch.unconfirmed),
                     State3 = record_confirms(MXs, State1#ch{unconfirmed = UC1}),
-                    case maps:find(From, QNames) of
+                    case maps:find(Name, QNames) of
                         {ok, QName} -> erase_queue_stats(QName);
                         error       -> ok
                     end,
                     noreply_coalesce(
                       State3#ch{queue_states = maps:remove(Name, QueueStates),
-                                queue_names = maps:remove(From, QNames)})
+                                queue_names = maps:remove(Name, QNames)})
             end;
         _ ->
             %% the assumption here is that the queue state has been cleaned up and
@@ -1336,13 +1336,14 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
             return_ok(State, NoWait, OkMsg);
         {ok, {Q = #amqqueue{pid = QPid}, _CParams}} ->
             ConsumerMapping1 = maps:remove(ConsumerTag, ConsumerMapping),
+            QRef = qpid_to_ref(QPid),
             QCons1 =
-                case maps:find(QPid, QCons) of
+                case maps:find(QRef, QCons) of
                     error       -> QCons;
                     {ok, CTags} -> CTags1 = gb_sets:delete(ConsumerTag, CTags),
                                    case gb_sets:is_empty(CTags1) of
-                                       true  -> maps:remove(QPid, QCons);
-                                       false -> maps:put(QPid, CTags1, QCons)
+                                       true  -> maps:remove(QRef, QCons);
+                                       false -> maps:put(QRef, CTags1, QCons)
                                    end
                 end,
             NewState = State#ch{consumer_mapping = ConsumerMapping1,
@@ -1395,7 +1396,7 @@ handle_method(#'basic.qos'{global         = true,
     case ((not rabbit_limiter:is_active(Limiter)) andalso
           rabbit_limiter:is_active(Limiter1)) of
         true  -> rabbit_amqqueue:activate_limit_all(
-                   consumer_queues(State#ch.consumer_mapping), self());
+                   consumer_queue_refs(State#ch.consumer_mapping), self());
         false -> ok
     end,
     {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
@@ -1641,25 +1642,26 @@ consumer_monitor(ConsumerTag,
                  State = #ch{consumer_mapping = ConsumerMapping,
                              queue_monitors   = QMons,
                              queue_consumers  = QCons}) ->
-    {#amqqueue{pid = QPid}, _} =
-        maps:get(ConsumerTag, ConsumerMapping),
-    CTags1 = case maps:find(QPid, QCons) of
+    {#amqqueue{pid = QPid}, _} = maps:get(ConsumerTag, ConsumerMapping),
+    QRef = qpid_to_ref(QPid),
+    CTags1 = case maps:find(QRef, QCons) of
                  {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
                  error -> gb_sets:singleton(ConsumerTag)
              end,
-    QCons1 = maps:put(QPid, CTags1, QCons),
-    State#ch{queue_monitors  = maybe_monitor(QPid, QMons),
+    QCons1 = maps:put(QRef, CTags1, QCons),
+    State#ch{queue_monitors  = maybe_monitor(QRef, QMons),
              queue_consumers = QCons1}.
 
 track_delivering_queue(NoAck, QPid, QName,
                        State = #ch{queue_names = QNames,
                                    queue_monitors = QMons,
                                    delivering_queues = DQ}) ->
-    State#ch{queue_names = maps:put(QPid, QName, QNames),
-             queue_monitors = maybe_monitor(QPid, QMons),
+    QRef = qpid_to_ref(QPid),
+    State#ch{queue_names = maps:put(QRef, QName, QNames),
+             queue_monitors = maybe_monitor(QRef, QMons),
              delivering_queues = case NoAck of
                                      true  -> DQ;
-                                     false -> sets:add_element(QPid, DQ)
+                                     false -> sets:add_element(QRef, DQ)
                                  end}.
 
 handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
@@ -1678,16 +1680,16 @@ handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
 handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
     error(quorum_queues_should_never_be_monitored).
 
-handle_consuming_queue_down_or_eol(QPid,
-                                   State = #ch{queue_consumers  = QCons,
-                                               queue_names      = QNames}) ->
-    ConsumerTags = case maps:find(QPid, QCons) of
+handle_consuming_queue_down_or_eol(QRef,
+                                   State = #ch{queue_consumers = QCons,
+                                               queue_names = QNames}) ->
+    ConsumerTags = case maps:find(QRef, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
     gb_sets:fold(
       fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
-              QName = maps:get(QPid, QNames),
+              QName = maps:get(QRef, QNames),
               case queue_down_consumer_action(CTag, CMap) of
                   remove ->
                       cancel_consumer(CTag, QName, StateN);
@@ -1699,7 +1701,7 @@ handle_consuming_queue_down_or_eol(QPid,
                           _             -> cancel_consumer(CTag, QName, StateN)
                       end
               end
-      end, State#ch{queue_consumers = maps:remove(QPid, QCons)}, ConsumerTags).
+      end, State#ch{queue_consumers = maps:remove(QRef, QCons)}, ConsumerTags).
 
 %% [0] There is a slight danger here that if a queue is deleted and
 %% then recreated again the reconsume will succeed even though it was
@@ -1726,8 +1728,8 @@ queue_down_consumer_action(CTag, CMap) ->
         _            -> {recover, ConsumeSpec}
     end.
 
-handle_delivering_queue_down(QPid, State = #ch{delivering_queues = DQ}) ->
-    State#ch{delivering_queues = sets:del_element(QPid, DQ)}.
+handle_delivering_queue_down(QRef, State = #ch{delivering_queues = DQ}) ->
+    State#ch{delivering_queues = sets:del_element(QRef, DQ)}.
 
 binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
                RoutingKey, Arguments, VHostPath, ConnPid,
@@ -1882,7 +1884,7 @@ ack(Acked, State = #ch{queue_names = QNames,
     State#ch{queue_states = QueueStates}.
 
 incr_queue_stats(QPid, QNames, MsgIds, State) ->
-    case maps:find(QPid, QNames) of
+    case maps:find(qpid_to_ref(QPid), QNames) of
         {ok, QName} -> Count = length(MsgIds),
                        ?INCR_STATS(queue_stats, QName, Count, ack, State);
         error       -> ok
@@ -1906,10 +1908,10 @@ notify_queues(State = #ch{state = closing}) ->
     {ok, State};
 notify_queues(State = #ch{consumer_mapping  = Consumers,
                           delivering_queues = DQ }) ->
-    QPids0 = sets:to_list(
-               sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
+    QRefs0 = sets:to_list(
+               sets:union(sets:from_list(consumer_queue_refs(Consumers)), DQ)),
     %% filter to only include pids to avoid trying to notify quorum queues
-    QPids = [P || P <- QPids0, ?IS_CLASSIC(P)],
+    QPids = [P || P <- QRefs0, ?IS_CLASSIC(P)],
     Timeout = get_operation_timeout(),
     {rabbit_amqqueue:notify_down_all(QPids, self(), Timeout),
      State#ch{state = closing}}.
@@ -1925,8 +1927,8 @@ foreach_per_queue(F, UAL, Acc) ->
                     end, gb_trees:empty(), UAL),
     rabbit_misc:gb_trees_fold(fun (Key, Val, Acc0) -> F(Key, Val, Acc0) end, Acc, T).
 
-consumer_queues(Consumers) ->
-    lists:usort([QPid || {_Key, {#amqqueue{pid = QPid}, _CParams}}
+consumer_queue_refs(Consumers) ->
+    lists:usort([qpid_to_ref(QPid) || {_Key, {#amqqueue{pid = QPid}, _CParams}}
                              <- maps:to_list(Consumers)]).
 
 %% tell the limiter about the number of acks that have been received
@@ -1983,9 +1985,10 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
     {QNames1, QMons1} =
         lists:foldl(fun (#amqqueue{pid = QPid, name = QName},
                          {QNames0, QMons0}) ->
-                            {case maps:is_key(QPid, QNames0) of
+                            QRef = qpid_to_ref(QPid),
+                            {case maps:is_key(QRef, QNames0) of
                                  true  -> QNames0;
-                                 false -> maps:put(QPid, QName, QNames0)
+                                 false -> maps:put(QRef, QName, QNames0)
                              end, maybe_monitor(QPid, QMons0)}
                     end, {QNames, maybe_monitor_all(DeliveredQPids, QMons)}, Qs),
     State1 = State#ch{queue_names    = QNames1,
@@ -2000,8 +2003,8 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
         fine ->
             ?INCR_STATS(exchange_stats, XName, 1, publish),
             [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish) ||
-                QPid        <- AllDeliveredQRefs,
-                {ok, QName} <- [maps:find(QPid, QNames1)]];
+                QRef        <- AllDeliveredQRefs,
+                {ok, QName} <- [maps:find(QRef, QNames1)]];
         _ ->
             ok
     end,
@@ -2494,3 +2497,8 @@ maybe_monitor_all(Items,  S) -> lists:foldl(fun maybe_monitor/2, S, Items).
 add_delivery_count_header(MsgHeader, Msg) ->
     Count = maps:get(delivery_count, MsgHeader, 0),
     rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg).
+
+qpid_to_ref(Pid)  when is_pid(Pid) -> Pid;
+qpid_to_ref({Name, _}) -> Name;
+%% assume it already is a ref
+qpid_to_ref(Ref) -> Ref.

@@ -1,3 +1,19 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%
+
 %% @doc Provides an easy to consume API for interacting with the {@link rabbit_fifo.}
 %% state machine implementation running inside a `ra' raft system.
 %%
@@ -432,19 +448,10 @@ update_machine_state(Node, Conf) ->
     {rabbit_fifo:client_msg(), state()} | eol.
 handle_ra_event(From, {applied, Seqs},
                 #state{soft_limit = SftLmt,
-                       leader = CurLeader,
-                       last_applied = _Last,
                        unblock_handler = UnblockFun} = State0) ->
     {Corrs, Actions, State1} = lists:foldl(fun seq_applied/2,
                                            {[], [], State0#state{leader = From}},
                                            Seqs),
-    case From of
-        CurLeader -> ok;
-        _ ->
-            ?INFO("rabbit_fifo_client: leader change from ~w to ~w~n"
-                  "applying ~w last ~w~n",
-                  [CurLeader, From, Seqs, _Last])
-    end,
     case maps:size(State1#state.pending) < SftLmt of
         true when State1#state.slow == true ->
             % we have exited soft limit state
@@ -479,10 +486,7 @@ handle_ra_event(Leader, {machine, leader_change},
                 #state{leader = Leader} = State) ->
     %% leader already known
     {internal, [], [], State};
-handle_ra_event(Leader, {machine, leader_change},
-                #state{leader = OldLeader} = State0) ->
-    ?INFO("rabbit_fifo_client: leader changed from ~w to ~w~n",
-          [OldLeader, Leader]),
+handle_ra_event(Leader, {machine, leader_change}, State0) ->
     %% we need to update leader
     %% and resend any pending commands
     State = resend_all_pending(State0#state{leader = Leader}),
@@ -490,9 +494,9 @@ handle_ra_event(Leader, {machine, leader_change},
 handle_ra_event(_From, {rejected, {not_leader, undefined, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {internal, [], [], State0};
-handle_ra_event(From, {rejected, {not_leader, Leader, Seq}}, State0) ->
-    ?INFO("rabbit_fifo_client: rejected ~b not leader ~w leader: ~w~n",
-          [Seq, From, Leader]),
+handle_ra_event(_From, {rejected, {not_leader, Leader, Seq}}, State0) ->
+    % ?INFO("rabbit_fifo_client: rejected ~b not leader ~w leader: ~w~n",
+    %       [Seq, From, Leader]),
     State1 = State0#state{leader = Leader},
     State = resend(Seq, State1),
     {internal, [], [], State};
@@ -535,7 +539,6 @@ try_process_command([Server | Rem], Cmd, State) ->
 seq_applied({Seq, MaybeAction},
             {Corrs, Actions0, #state{last_applied = Last} = State0})
   when Seq > Last orelse Last =:= undefined ->
-    % ?INFO("rabbit_fifo_client: applying seq ~b last ~w", [Seq, Last]),
     State1 = case Last of
                 undefined -> State0;
                 _ ->
@@ -550,14 +553,12 @@ seq_applied({Seq, MaybeAction},
             {[Corr | Corrs], Actions, State#state{pending = Pending,
                                                   last_applied = Seq}};
         error ->
-            ?INFO("rabbit_fifo_client: pending not found ~w", [Seq]),
             % must have already been resent or removed for some other reason
             % still need to update last_applied or we may inadvertently resend
             % stuff later
             {Corrs, Actions, State#state{last_applied = Seq}}
     end;
 seq_applied(_Seq, Acc) ->
-    ?INFO("rabbit_fifo_client: dropping seq ~b", [_Seq]),
     Acc.
 
 maybe_add_action(ok, Acc, State) ->
@@ -579,7 +580,7 @@ maybe_add_action(Action, Acc, State) ->
     {[Action | Acc], State}.
 
 do_resends(From, To, State) when From =< To ->
-    ?INFO("doing resends From ~w  To ~w~n", [From, To]),
+    % ?INFO("rabbit_fifo_client: doing resends From ~w  To ~w~n", [From, To]),
     lists:foldl(fun resend/2, State, lists:seq(From, To));
 do_resends(_, _, State) ->
     State.
@@ -596,7 +597,6 @@ resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
 
 resend_all_pending(#state{pending = Pend} = State) ->
     Seqs = lists:sort(maps:keys(Pend)),
-    ?INFO ("rabbit_fifo_client: resending all ~w~n", [Seqs]),
     lists:foldl(fun resend/2, State, Seqs).
 
 handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
