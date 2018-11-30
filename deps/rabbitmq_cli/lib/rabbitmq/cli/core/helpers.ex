@@ -13,16 +13,15 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-
 # Small helper functions, mostly related to connecting to RabbitMQ and
 # handling memory units.
-alias RabbitMQ.CLI.Core.Config
 
 defmodule RabbitMQ.CLI.Core.Helpers do
+  alias RabbitMQ.CLI.Core.Config
   require Record
 
   def get_rabbit_hostname() do
-    parse_node(RabbitMQ.CLI.Core.Config.get_option(:node))
+    parse_node(Config.get_option(:node))
   end
 
   def parse_node(nil), do: get_rabbit_hostname()
@@ -37,7 +36,15 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
-  def hostname, do: :inet.gethostname() |> elem(1) |> List.to_string
+  def hostname, do: :inet_db.gethostname() |> List.to_string
+
+  def domain, do: Keyword.get(:inet.get_rc(), :domain)
+
+  def normalise_node_option(options) do
+    node_opt = Config.get_option(:node, options)
+    normalised_node_opt = :rabbit_nodes_common.make(node_opt)
+    Map.put(options, :node, normalised_node_opt)
+  end
 
   def validate_step(:ok, step) do
     case step.() do

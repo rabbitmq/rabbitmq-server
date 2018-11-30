@@ -58,9 +58,12 @@ defmodule RabbitMQCtl do
         argument_validation_error_output({:bad_option, invalid}, command,
           unparsed_command, parsed_options);
       _ ->
-        options = parsed_options |> merge_all_defaults |> normalize_options
+        options = parsed_options |> merge_all_defaults |> normalise_options
         {arguments, options} = command.merge_defaults(arguments, options)
         maybe_with_distribution(command, options, fn() ->
+          # rabbitmq/rabbitmq-cli#278
+          options = Helpers.normalise_node_option(options)
+
           # The code below implements a tiny decision tree that has
           # to do with CLI argument and environment state validation.
 
@@ -158,34 +161,23 @@ defmodule RabbitMQCtl do
 
   def merge_all_defaults(%{} = options) do
     options
-    |> merge_defaults_node
     |> merge_defaults_timeout
     |> merge_defaults_longnames
-  end
-
-  defp merge_defaults_node(%{} = opts) do
-    Map.merge(%{node: Helpers.get_rabbit_hostname()}, opts)
   end
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
   defp merge_defaults_longnames(%{} = opts), do: Map.merge(%{longnames: false}, opts)
 
-  defp normalize_options(opts) do
-    opts
-    |> normalize_node
-    |> normalize_timeout
+  defp normalise_options(opts) do
+    opts |> normalise_timeout
   end
 
-  defp normalize_node(%{node: node} = opts) do
-    Map.merge(opts, %{node: Helpers.parse_node(node)})
-  end
-
-  defp normalize_timeout(%{timeout: timeout} = opts)
+  defp normalise_timeout(%{timeout: timeout} = opts)
   when is_integer(timeout) do
     Map.put(opts, :timeout, timeout * 1000)
   end
-  defp normalize_timeout(opts) do
+  defp normalise_timeout(opts) do
     opts
   end
 

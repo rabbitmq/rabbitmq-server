@@ -30,6 +30,8 @@ defmodule RabbitMQ.CLI.Core.Distribution do
     result
   end
 
+  def stop, do: Node.stop
+
   def start_as(node_name, options) do
     node_name_type = Config.get_option(:longnames, options)
     result = start_with_epmd(node_name, node_name_type)
@@ -39,7 +41,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
   ## Optimization. We try to start EPMD only if distribution fails
   def start_with_epmd(node_name, node_name_type) do
-    case :net_kernel.start([node_name, node_name_type]) do
+    case Node.start(node_name, node_name_type) do
       {:ok, _} = ok ->
         ok
       {:error, {:already_started, _}} = started ->
@@ -49,7 +51,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
       ## EPMD can be stopped. Retry with EPMD
       {:error, _} ->
         :rabbit_nodes_common.ensure_epmd()
-        :net_kernel.start([node_name, node_name_type])
+        Node.start(node_name, node_name_type)
     end
   end
 
@@ -89,9 +91,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   defp generate_cli_node_name(node_name_type) do
     rmq_hostname = Helpers.get_rabbit_hostname()
     base = "rabbitmqcli-#{:os.getpid()}-#{rmq_hostname}"
-    inet_resolver_config = :inet.get_rc()
-
-    case {node_name_type, Keyword.get(inet_resolver_config, :domain)} do
+    case {node_name_type, Helpers.domain()} do
       {:longnames, domain} ->
         # Distribution will fail to start if it's unable to
         # determine FQDN of a node (with at least one dot in
