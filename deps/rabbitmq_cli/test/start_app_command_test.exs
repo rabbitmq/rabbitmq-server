@@ -44,7 +44,7 @@ defmodule StartAppCommandTest do
   end
 
   test "run: request to an active node succeeds", context do
-    node = RabbitMQ.CLI.Core.Helpers.parse_node context[:node]
+    node = RabbitMQ.CLI.Core.Helpers.normalise_node(context[:node])
     stop_rabbitmq_app()
     refute :rabbit_misc.rpc_call(node, :rabbit, :is_running, [])
     assert @command.run([], context[:opts])

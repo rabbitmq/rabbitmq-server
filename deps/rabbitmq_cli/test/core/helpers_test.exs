@@ -67,35 +67,49 @@ defmodule HelpersTest do
     RabbitMQ.CLI.Core.Distribution.stop()
   end
 
-  ## ------------------- parse_node* tests --------------------
+  ## ------------------- normalise_node tests (:shortnames) --------------------
 
   test "if nil input, retrieve standard rabbit hostname" do
-    assert @subject.parse_node(nil) == get_rabbit_hostname()
+    assert @subject.normalise_node(nil) == get_rabbit_hostname()
   end
 
   test "if input is an atom short name, return the atom with hostname" do
-    assert @subject.parse_node(:rabbit_test) == "rabbit_test@#{hostname()}" |> String.to_atom
+    want = String.to_atom("rabbit_test@#{hostname()}")
+    got = @subject.normalise_node(:rabbit_test)
+    assert want == got
   end
 
   test "if input is a string fully qualified node name, return an atom" do
-    assert @subject.parse_node("rabbit_test@#{hostname()}") == "rabbit_test@#{hostname()}" |> String.to_atom
+    want = String.to_atom("rabbit_test@#{hostname()}")
+    got = @subject.normalise_node("rabbit_test@#{hostname()}")
+    assert want == got
   end
 
   test "if input is a short node name, host name is added" do
-    assert @subject.parse_node("rabbit_test") == "rabbit_test@#{hostname()}" |> String.to_atom
+    want = String.to_atom("rabbit_test@#{hostname()}")
+    got = @subject.normalise_node("rabbit_test")
+    assert want == got
   end
 
-  test "if input is a hostname without a node name, return an atom" do
-    assert @subject.parse_node("@#{hostname()}") == "@#{hostname()}" |> String.to_atom
+  test "if input is a hostname without a node name, default node name is added" do
+    want = String.to_atom("rabbit_test@#{hostname()}")
+    got = @subject.normalise_node("@#{hostname()}")
+    assert want == got
   end
 
   test "if input is a short node name with an @ and no hostname, local host name is added" do
-    assert @subject.parse_node("rabbit_test@") == "rabbit_test@#{hostname()}" |> String.to_atom
+    want = String.to_atom("rabbit_test@#{hostname()}")
+    got = @subject.normalise_node("rabbit_test@")
+    assert want == got
   end
 
   test "if input contains more than one @, return an atom" do
-    assert @subject.parse_node("rabbit@rabbit_test@#{hostname()}") == "rabbit@rabbit_test@#{hostname()}" |>String.to_atom
+    want = String.to_atom("rabbit@rabbit_test@#{hostname()}")
+    got = @subject.normalise_node("rabbit@rabbit_test@#{hostname()}")
+    assert want == got
   end
+
+  ## ------------------- normalise_node tests (:longnames) --------------------
 
   ## ------------------- require_rabbit/1 tests --------------------
 

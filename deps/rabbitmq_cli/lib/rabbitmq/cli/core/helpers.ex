@@ -21,14 +21,14 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   require Record
 
   def get_rabbit_hostname() do
-    parse_node(Config.get_option(:node))
+    normalise_node(Config.get_option(:node))
   end
 
-  def parse_node(nil), do: get_rabbit_hostname()
-  def parse_node(name) when is_atom(name) do
-    parse_node(to_string(name))
+  def normalise_node(nil), do: get_rabbit_hostname()
+  def normalise_node(name) when is_atom(name) do
+    normalise_node(to_string(name))
   end
-  def parse_node(name) do
+  def normalise_node(name) do
     case String.split(name, "@", parts: 2) do
       [_,""] -> name <> "#{hostname()}" |> String.to_atom
       [_,_] -> name |> String.to_atom
