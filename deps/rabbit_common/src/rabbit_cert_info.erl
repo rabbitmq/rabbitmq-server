@@ -78,10 +78,7 @@ validity(Cert) ->
 %%--------------------------------------------------------------------------
 
 cert_info(F, Cert) ->
-    F(case public_key:pkix_decode_cert(Cert, otp) of
-          {ok, DecCert} -> DecCert; %%pre R14B
-          DecCert       -> DecCert  %%R14B onwards
-      end).
+    F(public_key:pkix_decode_cert(Cert, otp)).
 
 find_by_type(Type, {rdnSequence, RDNs}) ->
     case [V || #'AttributeTypeAndValue'{type = T, value = V}

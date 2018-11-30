@@ -71,7 +71,7 @@
 -spec invoke
         ( pid(),  fun_or_mfa(A)) -> A;
         ([pid()], fun_or_mfa(A)) -> {[{pid(), A}], [{pid(), term()}]}.
--spec invoke_no_result(pid(), fun_or_mfa(any())) -> 'ok'.
+-spec invoke_no_result(pid() | [pid()], fun_or_mfa(any())) -> 'ok'.
 -spec monitor('process', pid()) -> monitor_ref().
 -spec demonitor(monitor_ref()) -> 'true'.
 
