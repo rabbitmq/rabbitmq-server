@@ -22,7 +22,7 @@ defmodule TestHelper do
   alias RabbitMQ.CLI.Core.{CommandModules, Config, Helpers}
 
   def get_rabbit_hostname(node_name_type \\ :shortnames) do
-    RabbitMQ.CLI.Core.Helpers.get_rabbit_hostname(node_name_type)
+    Helpers.get_rabbit_hostname(node_name_type)
   end
 
   def hostname, do: Helpers.hostname

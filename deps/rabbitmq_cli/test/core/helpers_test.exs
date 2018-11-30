@@ -54,7 +54,8 @@ defmodule HelpersTest do
   ## ------------------- normalise_node_option tests --------------------
 
   test "longnames: 'rabbit' as node name, correct domain is used" do
-    options = %{node: :rabbit, longnames: true}
+    default_name = Config.get_option(:node)
+    options = %{node: default_name, longnames: true}
     Distribution.start(options)
     options = @subject.normalise_node_option(options)
     assert options[:node] == :"rabbit@#{hostname()}.#{domain()}"

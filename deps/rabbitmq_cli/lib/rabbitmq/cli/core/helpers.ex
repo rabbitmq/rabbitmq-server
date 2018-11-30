@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
 
   def normalise_node(name, node_name_type \\ :shortnames)
   def normalise_node(nil, node_name_type) do
-    get_rabbit_hostname(node_name_type)
+    normalise_node(Config.get_option(:node), node_name_type)
   end
   def normalise_node(name, :longnames) when is_atom(name) do
     priv_normalise_node(name, :longnames)
@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   end
 
   defp priv_normalise_node(name, :longnames) when is_atom(name) do
-    case :net_kernel.get_net_ticktime do
+    case :net_kernel.get_net_ticktime() do
       :ignored ->
         raise "distributed Erlang must be active to "
               "normalise a node with :longnames name type"
@@ -67,6 +67,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
+  # rabbitmq/rabbitmq-cli#278
   def normalise_node_option(options) do
     node_opt = Config.get_option(:node, options)
     longnames_opt = Config.get_option(:longnames, options)
@@ -74,6 +75,10 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     Map.put(options, :node, normalised_node_opt)
   end
 
+  # NB: we're using :inet_db here because that's what Erlang/OTP
+  # uses when it creates a node name:
+  # https://github.com/erlang/otp/blob/8ca061c3006ad69c2a8d1c835d0d678438966dfc/lib/kernel/src/net_kernel.erl#L1363-L1445
+  # Using :inet.gethostname() results in a different name sometimes
   def hostname, do: :inet_db.gethostname() |> List.to_string
 
   def domain, do: Keyword.get(:inet.get_rc(), :domain)

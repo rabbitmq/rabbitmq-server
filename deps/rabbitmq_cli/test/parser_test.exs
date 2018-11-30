@@ -101,26 +101,26 @@ defmodule ParserTest do
 
   test "one arity 0 command, one single-dash node option" do
     assert @subject.parse_global(["sandwich", "-n", "rabbitmq@localhost"]) ==
-      {["sandwich"], %{node: :"rabbitmq@localhost"}, []}
+      {["sandwich"], %{node: :rabbitmq@localhost}, []}
   end
 
   test "one arity 1 command, one single-dash node option" do
     assert @subject.parse_global(["sandwich", "pastrami", "-n", "rabbitmq@localhost"]) ==
-      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost"}, []}
+      {["sandwich", "pastrami"], %{node: :rabbitmq@localhost}, []}
   end
 
   test "one arity 1 command, one single-dash node option and one quiet flag" do
     assert @subject.parse_global(["sandwich", "pastrami", "-n", "rabbitmq@localhost", "--quiet"]) ==
-      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost", quiet: true}, []}
+      {["sandwich", "pastrami"], %{node: :rabbitmq@localhost, quiet: true}, []}
   end
 
   test "single-dash node option before command" do
     assert @subject.parse_global(["-n", "rabbitmq@localhost", "sandwich", "pastrami"]) ==
-      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost"}, []}
+      {["sandwich", "pastrami"], %{node: :rabbitmq@localhost}, []}
   end
 
   test "no commands, one double-dash node option" do
-    assert @subject.parse_global(["--node=rabbitmq@localhost"]) == {[], %{node: :"rabbitmq@localhost"}, []}
+    assert @subject.parse_global(["--node=rabbitmq@localhost"]) == {[], %{node: :rabbitmq@localhost}, []}
   end
 
   test "no commands, one single-dash -p option" do
@@ -165,13 +165,13 @@ defmodule ParserTest do
   test "--timeout can be specified before command" do
     # for backwards compatibility
     assert @subject.parse_global(["-n", "rabbitmq@localhost", "--timeout", "5", "sandwich", "pastrami"]) ==
-      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost", timeout: 5}, []}
+      {["sandwich", "pastrami"], %{node: :rabbitmq@localhost, timeout: 5}, []}
   end
 
   test "-t can be specified before command" do
     # for backwards compatibility
     assert @subject.parse_global(["-n", "rabbitmq@localhost", "-t", "5", "sandwich", "pastrami"]) ==
-      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost", timeout: 5}, []}
+      {["sandwich", "pastrami"], %{node: :rabbitmq@localhost, timeout: 5}, []}
   end
 
   test "parse/1 returns command name" do
