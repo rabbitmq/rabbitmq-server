@@ -258,46 +258,20 @@
                                {rabbit_types:msg_id(), non_neg_integer(), A}).
 -type shutdown_terms() :: [term()] | 'non_clean_shutdown'.
 
--spec erase(rabbit_amqqueue:name()) -> 'ok'.
--spec reset_state(qistate()) -> qistate().
--spec init(rabbit_amqqueue:name(),
-                 on_sync_fun(), on_sync_fun()) -> qistate().
--spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
-                    contains_predicate(),
-                    on_sync_fun(), on_sync_fun()) ->
-                        {'undefined' | non_neg_integer(),
-                         'undefined' | non_neg_integer(), qistate()}.
--spec terminate(rabbit_types:vhost(), [any()], qistate()) -> qistate().
--spec delete_and_terminate(qistate()) -> qistate().
--spec publish(rabbit_types:msg_id(), seq_id(),
-                    rabbit_types:message_properties(), boolean(),
-                    non_neg_integer(), qistate()) -> qistate().
--spec deliver([seq_id()], qistate()) -> qistate().
--spec ack([seq_id()], qistate()) -> qistate().
--spec sync(qistate()) -> qistate().
--spec needs_sync(qistate()) -> 'confirms' | 'other' | 'false'.
--spec flush(qistate()) -> qistate().
--spec read(seq_id(), seq_id(), qistate()) ->
-                     {[{rabbit_types:msg_id(), seq_id(),
-                        rabbit_types:message_properties(),
-                        boolean(), boolean()}], qistate()}.
--spec next_segment_boundary(seq_id()) -> seq_id().
--spec bounds(qistate()) ->
-                       {non_neg_integer(), non_neg_integer(), qistate()}.
--spec start(rabbit_types:vhost(), [rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
-
--spec add_queue_ttl() -> 'ok'.
-
-
 %%----------------------------------------------------------------------------
 %% public API
 %%----------------------------------------------------------------------------
+
+-spec erase(rabbit_amqqueue:name()) -> 'ok'.
 
 erase(Name) ->
     #qistate { dir = Dir } = blank_state(Name),
     erase_index_dir(Dir).
 
 %% used during variable queue purge when there are no pending acks
+
+-spec reset_state(qistate()) -> qistate().
+
 reset_state(#qistate{ queue_name     = Name,
                       dir            = Dir,
                       on_sync        = OnSyncFun,
@@ -310,11 +284,20 @@ reset_state(#qistate{ queue_name     = Name,
     ok = erase_index_dir(Dir),
     blank_state_name_dir_funs(Name, Dir, OnSyncFun, OnSyncMsgFun).
 
+-spec init(rabbit_amqqueue:name(),
+                 on_sync_fun(), on_sync_fun()) -> qistate().
+
 init(Name, OnSyncFun, OnSyncMsgFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
     State#qistate{on_sync     = OnSyncFun,
                   on_sync_msg = OnSyncMsgFun}.
+
+-spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
+                    contains_predicate(),
+                    on_sync_fun(), on_sync_fun()) ->
+                        {'undefined' | non_neg_integer(),
+                         'undefined' | non_neg_integer(), qistate()}.
 
 recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun,
         OnSyncFun, OnSyncMsgFun) ->
@@ -328,11 +311,15 @@ recover(Name, Terms, MsgStoreRecovered, ContainsCheckFun,
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
+-spec terminate(rabbit_types:vhost(), [any()], qistate()) -> qistate().
+
 terminate(VHost, Terms, State = #qistate { dir = Dir }) ->
     {SegmentCounts, State1} = terminate(State),
     rabbit_recovery_terms:store(VHost, filename:basename(Dir),
                                 [{segments, SegmentCounts} | Terms]),
     State1.
+
+-spec delete_and_terminate(qistate()) -> qistate().
 
 delete_and_terminate(State) ->
     {_SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
@@ -396,6 +383,10 @@ flush_delivered_cache(State = #qistate{delivered_cache = DC}) ->
     State1 = deliver(lists:reverse(DC), State),
     State1#qistate{delivered_cache = []}.
 
+-spec publish(rabbit_types:msg_id(), seq_id(),
+                    rabbit_types:message_properties(), boolean(),
+                    non_neg_integer(), qistate()) -> qistate().
+
 publish(MsgOrId, SeqId, MsgProps, IsPersistent, JournalSizeHint, State) ->
     {JournalHdl, State1} =
         get_journal_handle(
@@ -429,19 +420,28 @@ maybe_needs_confirming(MsgProps, MsgOrId,
       {false, _}     -> State
     end.
 
+-spec deliver([seq_id()], qistate()) -> qistate().
+
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
+
+-spec ack([seq_id()], qistate()) -> qistate().
 
 ack(SeqIds, State) ->
     deliver_or_ack(ack, SeqIds, State).
 
 %% This is called when there are outstanding confirms or when the
 %% queue is idle and the journal needs syncing (see needs_sync/1).
+
+-spec sync(qistate()) -> qistate().
+
 sync(State = #qistate { journal_handle = undefined }) ->
     State;
 sync(State = #qistate { journal_handle = JournalHdl }) ->
     ok = file_handle_cache:sync(JournalHdl),
     notify_sync(State).
+
+-spec needs_sync(qistate()) -> 'confirms' | 'other' | 'false'.
 
 needs_sync(#qistate{journal_handle = undefined}) ->
     false;
@@ -456,8 +456,15 @@ needs_sync(#qistate{journal_handle  = JournalHdl,
         false -> confirms
     end.
 
+-spec flush(qistate()) -> qistate().
+
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
+
+-spec read(seq_id(), seq_id(), qistate()) ->
+                     {[{rabbit_types:msg_id(), seq_id(),
+                        rabbit_types:message_properties(),
+                        boolean(), boolean()}], qistate()}.
 
 read(StartEnd, StartEnd, State) ->
     {[], State};
@@ -472,9 +479,14 @@ read(Start, End, State = #qistate { segments = Segments,
                     end, {[], Segments}, lists:seq(StartSeg, EndSeg)),
     {Messages, State #qistate { segments = Segments1 }}.
 
+-spec next_segment_boundary(seq_id()) -> seq_id().
+
 next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
     reconstruct_seq_id(Seg + 1, 0).
+
+-spec bounds(qistate()) ->
+                       {non_neg_integer(), non_neg_integer(), qistate()}.
 
 bounds(State = #qistate { segments = Segments }) ->
     %% This is not particularly efficient, but only gets invoked on
@@ -497,6 +509,8 @@ bounds(State = #qistate { segments = Segments }) ->
                            reconstruct_seq_id(1 + lists:last(SegNums), 0)}
         end,
     {LowSeqId, NextSeqId, State}.
+
+-spec start(rabbit_types:vhost(), [rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
 
 start(VHost, DurableQueueNames) ->
     ok = rabbit_recovery_terms:start(VHost),
@@ -1285,6 +1299,8 @@ journal_minus_segment1({no_pub, del, ack},         undefined) ->
 %%----------------------------------------------------------------------------
 %% upgrade
 %%----------------------------------------------------------------------------
+
+-spec add_queue_ttl() -> 'ok'.
 
 add_queue_ttl() ->
     foreach_queue_index({fun add_queue_ttl_journal/1,

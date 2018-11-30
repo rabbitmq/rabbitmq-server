@@ -33,29 +33,14 @@
 
 -type version() :: [atom()].
 
--spec recorded() -> rabbit_types:ok_or_error2(version(), any()).
--spec matches([A], [A]) -> boolean().
--spec desired() -> version().
--spec desired_for_scope(scope()) -> scope_version().
--spec record_desired() -> 'ok'.
--spec record_desired_for_scope
-        (scope()) -> rabbit_types:ok_or_error(any()).
--spec upgrades_required
-        (scope()) -> rabbit_types:ok_or_error2([step()], any()).
--spec check_version_consistency
-        (string(), string(), string()) -> rabbit_types:ok_or_error(any()).
--spec check_version_consistency
-        (string(), string(), string(), string()) ->
-                                          rabbit_types:ok_or_error(any()).
--spec check_otp_consistency
-        (string()) -> rabbit_types:ok_or_error(any()).
-
 %% -------------------------------------------------------------------
 
 -define(VERSION_FILENAME, "schema_version").
 -define(SCOPES, [mnesia, local]).
 
 %% -------------------------------------------------------------------
+
+-spec recorded() -> rabbit_types:ok_or_error2(version(), any()).
 
 recorded() -> case rabbit_file:read_term_file(schema_filename()) of
                   {ok, [V]}        -> {ok, V};
@@ -87,19 +72,33 @@ record_for_scope(Scope, ScopeVersion) ->
 
 %% -------------------------------------------------------------------
 
+-spec matches([A], [A]) -> boolean().
+
 matches(VerA, VerB) ->
     lists:usort(VerA) =:= lists:usort(VerB).
 
 %% -------------------------------------------------------------------
 
+-spec desired() -> version().
+
 desired() -> [Name || Scope <- ?SCOPES, Name <- desired_for_scope(Scope)].
+
+-spec desired_for_scope(scope()) -> scope_version().
 
 desired_for_scope(Scope) -> with_upgrade_graph(fun heads/1, Scope).
 
+-spec record_desired() -> 'ok'.
+
 record_desired() -> record(desired()).
+
+-spec record_desired_for_scope
+        (scope()) -> rabbit_types:ok_or_error(any()).
 
 record_desired_for_scope(Scope) ->
     record_for_scope(Scope, desired_for_scope(Scope)).
+
+-spec upgrades_required
+        (scope()) -> rabbit_types:ok_or_error2([step()], any()).
 
 upgrades_required(Scope) ->
     case recorded_for_scope(Scope) of
@@ -208,8 +207,15 @@ schema_filename() -> filename:join(dir(), ?VERSION_FILENAME).
 
 %% --------------------------------------------------------------------
 
+-spec check_version_consistency
+        (string(), string(), string()) -> rabbit_types:ok_or_error(any()).
+
 check_version_consistency(This, Remote, Name) ->
     check_version_consistency(This, Remote, Name, fun (A, B) -> A =:= B end).
+
+-spec check_version_consistency
+        (string(), string(), string(), string()) ->
+                                          rabbit_types:ok_or_error(any()).
 
 check_version_consistency(This, Remote, Name, Comp) ->
     case Comp(This, Remote) of
@@ -221,6 +227,9 @@ version_error(Name, This, Remote) ->
     {error, {inconsistent_cluster,
              rabbit_misc:format("~s version mismatch: local node is ~s, "
                                 "remote node ~s", [Name, This, Remote])}}.
+
+-spec check_otp_consistency
+        (string()) -> rabbit_types:ok_or_error(any()).
 
 check_otp_consistency(Remote) ->
     check_version_consistency(rabbit_misc:otp_release(), Remote, "OTP").

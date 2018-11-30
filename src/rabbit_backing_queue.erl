@@ -52,8 +52,6 @@
 
 -type queue_mode() :: atom().
 
--spec info_keys() -> rabbit_types:info_keys().
-
 %% Called on startup with a vhost and a list of durable queue names on this vhost.
 %% The queues aren't being started at this point, but this call allows the
 %% backing queue to perform any checking necessary for the consistency
@@ -269,5 +267,7 @@
 %% handle_info and it should be processed by the backing
 %% queue
 -callback handle_info(term(), state()) -> state().
+
+-spec info_keys() -> rabbit_types:info_keys().
 
 info_keys() -> ?INFO_KEYS.

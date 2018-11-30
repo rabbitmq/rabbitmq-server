@@ -38,9 +38,6 @@
 
 -spec start_link(any(), rabbit_net:socket(), module(), any()) ->
           {'ok', pid(), pid()}.
--spec reader(pid()) -> pid().
-
-%%--------------------------------------------------------------------------
 
 start_link(Ref, _Sock, _Transport, _Opts) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
@@ -65,6 +62,8 @@ start_link(Ref, _Sock, _Transport, _Opts) ->
           {reader, {rabbit_reader, start_link, [HelperSup, Ref]},
            intrinsic, ?WORKER_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
+
+-spec reader(pid()) -> pid().
 
 reader(Pid) ->
     hd(supervisor2:find_child(Pid, reader)).

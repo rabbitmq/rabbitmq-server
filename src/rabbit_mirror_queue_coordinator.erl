@@ -37,14 +37,6 @@
                  depth_fun
                }).
 
--spec start_link
-        (amqqueue:amqqueue(), pid() | 'undefined',
-         rabbit_mirror_queue_master:death_fun(),
-         rabbit_mirror_queue_master:depth_fun()) ->
-            rabbit_types:ok_pid_or_error().
--spec get_gm(pid()) -> pid().
--spec ensure_monitoring(pid(), [pid()]) -> 'ok'.
-
 %%----------------------------------------------------------------------------
 %%
 %% Mirror Queues
@@ -307,11 +299,21 @@
 %%
 %%----------------------------------------------------------------------------
 
+-spec start_link
+        (amqqueue:amqqueue(), pid() | 'undefined',
+         rabbit_mirror_queue_master:death_fun(),
+         rabbit_mirror_queue_master:depth_fun()) ->
+            rabbit_types:ok_pid_or_error().
+
 start_link(Queue, GM, DeathFun, DepthFun) ->
     gen_server2:start_link(?MODULE, [Queue, GM, DeathFun, DepthFun], []).
 
+-spec get_gm(pid()) -> pid().
+
 get_gm(CPid) ->
     gen_server2:call(CPid, get_gm, infinity).
+
+-spec ensure_monitoring(pid(), [pid()]) -> 'ok'.
 
 ensure_monitoring(CPid, Pids) ->
     gen_server2:cast(CPid, {ensure_monitoring, Pids}).

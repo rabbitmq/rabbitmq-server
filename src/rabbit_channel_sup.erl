@@ -47,11 +47,11 @@
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
          rabbit_framing:amqp_table(), pid()}.
 
--spec start_link(start_link_args()) -> {'ok', pid(), {pid(), any()}}.
-
 -define(FAIR_WAIT, 70000).
 
 %%----------------------------------------------------------------------------
+
+-spec start_link(start_link_args()) -> {'ok', pid(), {pid(), any()}}.
 
 start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
             VHost, Capabilities, Collector}) ->

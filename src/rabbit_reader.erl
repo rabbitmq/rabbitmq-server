@@ -159,38 +159,25 @@
 
 %%--------------------------------------------------------------------------
 
--spec start_link(pid(), any()) -> rabbit_types:ok(pid()).
--spec info_keys() -> rabbit_types:info_keys().
--spec info(pid()) -> rabbit_types:infos().
--spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
--spec force_event_refresh(pid(), reference()) -> 'ok'.
--spec shutdown(pid(), string()) -> 'ok'.
 -type resource_alert() :: {WasAlarmSetForNode :: boolean(),
                            IsThereAnyAlarmsWithSameSourceInTheCluster :: boolean(),
                            NodeForWhichAlarmWasSetOrCleared :: node()}.
--spec conserve_resources(pid(), atom(), resource_alert()) -> 'ok'.
--spec server_properties(rabbit_types:protocol()) ->
-          rabbit_framing:amqp_table().
-
-%% These specs only exists to add no_return() to keep dialyzer happy
--spec init(pid(), pid(), any()) -> no_return().
--spec start_connection(pid(), pid(), any(), rabbit_net:socket()) ->
-          no_return().
-
--spec mainloop(_,[binary()], non_neg_integer(), #v1{}) -> any().
--spec system_code_change(_,_,_,_) -> {'ok',_}.
--spec system_continue(_,_,{[binary()], non_neg_integer(), #v1{}}) -> any().
--spec system_terminate(_,_,_,_) -> none().
 
 %%--------------------------------------------------------------------------
+
+-spec start_link(pid(), any()) -> rabbit_types:ok(pid()).
 
 start_link(HelperSup, Ref) ->
     Pid = proc_lib:spawn_link(?MODULE, init, [self(), HelperSup, Ref]),
 
     {ok, Pid}.
 
+-spec shutdown(pid(), string()) -> 'ok'.
+
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
+
+-spec init(pid(), pid(), any()) -> no_return().
 
 init(Parent, HelperSup, Ref) ->
     ?LG_PROCESS_TYPE(reader),
@@ -199,19 +186,31 @@ init(Parent, HelperSup, Ref) ->
     Deb = sys:debug_options([]),
     start_connection(Parent, HelperSup, Deb, Sock).
 
+-spec system_continue(_,_,{[binary()], non_neg_integer(), #v1{}}) -> any().
+
 system_continue(Parent, Deb, {Buf, BufLen, State}) ->
     mainloop(Deb, Buf, BufLen, State#v1{parent = Parent}).
+
+-spec system_terminate(_,_,_,_) -> none().
 
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
 
+-spec system_code_change(_,_,_,_) -> {'ok',_}.
+
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
+-spec info_keys() -> rabbit_types:info_keys().
+
 info_keys() -> ?INFO_KEYS.
+
+-spec info(pid()) -> rabbit_types:infos().
 
 info(Pid) ->
     gen_server:call(Pid, info, infinity).
+
+-spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
 
 info(Pid, Items) ->
     case gen_server:call(Pid, {info, Items}, infinity) of
@@ -219,12 +218,19 @@ info(Pid, Items) ->
         {error, Error} -> throw(Error)
     end.
 
+-spec force_event_refresh(pid(), reference()) -> 'ok'.
+
 force_event_refresh(Pid, Ref) ->
     gen_server:cast(Pid, {force_event_refresh, Ref}).
+
+-spec conserve_resources(pid(), atom(), resource_alert()) -> 'ok'.
 
 conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.
+
+-spec server_properties(rabbit_types:protocol()) ->
+          rabbit_framing:amqp_table().
 
 server_properties(Protocol) ->
     {ok, Product} = application:get_key(rabbit, description),
@@ -302,6 +308,9 @@ socket_op(Sock, Fun) ->
                            rabbit_net:fast_close(RealSocket),
                            exit(normal)
     end.
+
+-spec start_connection(pid(), pid(), any(), rabbit_net:socket()) ->
+          no_return().
 
 start_connection(Parent, HelperSup, Deb, Sock) ->
     process_flag(trap_exit, true),
@@ -492,6 +501,8 @@ binlist_split(Len, L, [Acc0|Acc]) when Len < 0 ->
     {[H|L], [T|Acc]};
 binlist_split(Len, [H|T], Acc) ->
     binlist_split(Len - size(H), T, [H|Acc]).
+
+-spec mainloop(_,[binary()], non_neg_integer(), #v1{}) -> any().
 
 mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                                        connection_state = CS,

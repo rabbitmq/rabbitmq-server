@@ -57,29 +57,12 @@
 
 %%----------------------------------------------------------------------------
 
+%% Returns {ok, NewMPid, DeadPids, ExtraNodes}
+
 -spec remove_from_queue
         (rabbit_amqqueue:name(), pid(), [pid()]) ->
             {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'}.
--spec add_mirrors(rabbit_amqqueue:name(), [node()], 'sync' | 'async') ->
-          'ok'.
--spec store_updated_slaves(amqqueue:amqqueue()) ->
-          amqqueue:amqqueue().
--spec initial_queue_node(amqqueue:amqqueue(), node()) -> node().
--spec suggested_queue_nodes(amqqueue:amqqueue()) ->
-          {node(), [node()]}.
--spec is_mirrored(amqqueue:amqqueue()) -> boolean().
--spec update_mirrors
-        (amqqueue:amqqueue(), amqqueue:amqqueue()) -> 'ok'.
--spec update_mirrors
-        (amqqueue:amqqueue()) -> 'ok'.
--spec maybe_drop_master_after_sync(amqqueue:amqqueue()) -> 'ok'.
--spec maybe_auto_sync(amqqueue:amqqueue()) -> 'ok'.
--spec log_info(rabbit_amqqueue:name(), string(), [any()]) -> 'ok'.
--spec log_warning(rabbit_amqqueue:name(), string(), [any()]) -> 'ok'.
 
-%%----------------------------------------------------------------------------
-
-%% Returns {ok, NewMPid, DeadPids, ExtraNodes}
 remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
@@ -241,6 +224,9 @@ drop_mirror(QName, MirrorNode) ->
             E
     end.
 
+-spec add_mirrors(rabbit_amqqueue:name(), [node()], 'sync' | 'async') ->
+          'ok'.
+
 add_mirrors(QName, Nodes, SyncMode) ->
     [add_mirror(QName, Node, SyncMode)  || Node <- Nodes],
     ok.
@@ -282,12 +268,20 @@ report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
                      rabbit_misc:pid_to_string(MirrorPid),
                      [[$ , rabbit_misc:pid_to_string(P)] || P <- DeadPids]]).
 
+-spec log_info(rabbit_amqqueue:name(), string(), [any()]) -> 'ok'.
+
 log_info   (QName, Fmt, Args) ->
     rabbit_log_mirroring:info("Mirrored ~s: " ++ Fmt,
                               [rabbit_misc:rs(QName) | Args]).
+
+-spec log_warning(rabbit_amqqueue:name(), string(), [any()]) -> 'ok'.
+
 log_warning(QName, Fmt, Args) ->
     rabbit_log_mirroring:warning("Mirrored ~s: " ++ Fmt,
                                  [rabbit_misc:rs(QName) | Args]).
+
+-spec store_updated_slaves(amqqueue:amqqueue()) ->
+          amqqueue:amqqueue().
 
 store_updated_slaves(Q0) when ?is_amqqueue(Q0) ->
     SPids = amqqueue:get_slave_pids(Q0),
@@ -373,9 +367,14 @@ promote_slave([SPid | SPids]) ->
     %% the one to promote is the oldest.
     {SPid, SPids}.
 
+-spec initial_queue_node(amqqueue:amqqueue(), node()) -> node().
+
 initial_queue_node(Q, DefNode) ->
     {MNode, _SNodes} = suggested_queue_nodes(Q, DefNode, rabbit_nodes:all_running()),
     MNode.
+
+-spec suggested_queue_nodes(amqqueue:amqqueue()) ->
+          {node(), [node()]}.
 
 suggested_queue_nodes(Q)      -> suggested_queue_nodes(Q, rabbit_nodes:all_running()).
 suggested_queue_nodes(Q, All) -> suggested_queue_nodes(Q, node(), All).
@@ -429,6 +428,8 @@ validate_mode(Mode) ->
             {error, "~p is not a valid ha-mode value", [Mode]}
     end.
 
+-spec is_mirrored(amqqueue:amqqueue()) -> boolean().
+
 is_mirrored(Q) ->
     case module(Q) of
         {ok, _}  -> true;
@@ -450,6 +451,8 @@ actual_queue_nodes(Q) when ?is_amqqueue(Q) ->
          none -> none;
          _    -> node(MPid)
      end, Nodes(SPids), Nodes(SSPids)}.
+
+-spec maybe_auto_sync(amqqueue:amqqueue()) -> 'ok'.
 
 maybe_auto_sync(Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
@@ -496,6 +499,9 @@ default_batch_size() ->
     rabbit_misc:get_env(rabbit, mirroring_sync_batch_size,
                         ?DEFAULT_BATCH_SIZE).
 
+-spec update_mirrors
+        (amqqueue:amqqueue(), amqqueue:amqqueue()) -> 'ok'.
+
 update_mirrors(OldQ, NewQ) when ?amqqueue_pids_are_equal(OldQ, NewQ) ->
     % Note: we do want to ensure both queues have same pid
     QPid = amqqueue:get_pid(OldQ),
@@ -504,6 +510,9 @@ update_mirrors(OldQ, NewQ) when ?amqqueue_pids_are_equal(OldQ, NewQ) ->
         {false, false} -> ok;
         _ -> rabbit_amqqueue:update_mirroring(QPid)
     end.
+
+-spec update_mirrors
+        (amqqueue:amqqueue()) -> 'ok'.
 
 update_mirrors(Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
@@ -532,6 +541,9 @@ update_mirrors(Q) when ?is_amqqueue(Q) ->
 %% We don't just call update_mirrors/2 here since that could decide to
 %% start a slave for some other reason, and since we are the slave ATM
 %% that allows complicated deadlocks.
+
+-spec maybe_drop_master_after_sync(amqqueue:amqqueue()) -> 'ok'.
+
 maybe_drop_master_after_sync(Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
     MPid = amqqueue:get_pid(Q),

@@ -62,18 +62,6 @@
                                  confirmed           :: [rabbit_guid:guid()],
                                  known_senders       :: sets:set()
                                }.
--spec promote_backing_queue_state
-        (rabbit_amqqueue:name(), pid(), atom(), any(), pid(), [any()],
-         map(), [pid()]) ->
-            master_state().
-
--spec sender_death_fun() -> death_fun().
--spec depth_fun() -> depth_fun().
--spec init_with_existing_bq(amqqueue:amqqueue(), atom(), any()) ->
-          master_state().
--spec stop_mirroring(master_state()) -> {atom(), any()}.
--spec sync_mirrors(stats_fun(), stats_fun(), master_state()) ->
-          {'ok', master_state()} | {stop, any(), master_state()}.
 
 %% For general documentation of HA design, see
 %% rabbit_mirror_queue_coordinator
@@ -100,6 +88,9 @@ init(Q, Recover, AsyncCallback) ->
     State = #state{gm = GM} = init_with_existing_bq(Q, BQ, BQS),
     ok = gm:broadcast(GM, {depth, BQ:depth(BQS)}),
     State.
+
+-spec init_with_existing_bq(amqqueue:amqqueue(), atom(), any()) ->
+          master_state().
 
 init_with_existing_bq(Q0, BQ, BQS) when ?is_amqqueue(Q0) ->
     QName = amqqueue:get_name(Q0),
@@ -146,12 +137,17 @@ init_with_existing_bq(Q0, BQ, BQS) when ?is_amqqueue(Q0) ->
         throw({coordinator_not_started, Reason})
     end.
 
+-spec stop_mirroring(master_state()) -> {atom(), any()}.
+
 stop_mirroring(State = #state { coordinator         = CPid,
                                 backing_queue       = BQ,
                                 backing_queue_state = BQS }) ->
     unlink(CPid),
     stop_all_slaves(shutdown, State),
     {BQ, BQS}.
+
+-spec sync_mirrors(stats_fun(), stats_fun(), master_state()) ->
+          {'ok', master_state()} | {stop, any(), master_state()}.
 
 sync_mirrors(HandleInfo, EmitStats,
              State = #state { name                = QName,
@@ -506,6 +502,11 @@ zip_msgs_and_acks(Msgs, AckTags, Accumulator,
 %% Other exported functions
 %% ---------------------------------------------------------------------------
 
+-spec promote_backing_queue_state
+        (rabbit_amqqueue:name(), pid(), atom(), any(), pid(), [any()],
+         map(), [pid()]) ->
+            master_state().
+
 promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
     {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
     Len   = BQ:len(BQS1),
@@ -523,6 +524,8 @@ promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
              known_senders       = sets:from_list(KS),
              wait_timeout        = WaitTimeout }.
 
+-spec sender_death_fun() -> death_fun().
+
 sender_death_fun() ->
     Self = self(),
     fun (DeadPid) ->
@@ -534,6 +537,8 @@ sender_death_fun() ->
                       State #state { known_senders = KS1 }
               end)
     end.
+
+-spec depth_fun() -> depth_fun().
 
 depth_fun() ->
     Self = self(),

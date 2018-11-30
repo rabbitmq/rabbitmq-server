@@ -173,33 +173,6 @@
 -type maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok').
 -type deletion_thunk() :: fun (() -> boolean()).
 
--spec start_link
-        (atom(), file:filename(), [binary()] | 'undefined',
-         {msg_ref_delta_gen(A), A}) -> rabbit_types:ok_pid_or_error().
--spec successfully_recovered_state(server()) -> boolean().
--spec client_init(server(), client_ref(), maybe_msg_id_fun(),
-                        maybe_close_fds_fun()) -> client_msstate().
--spec client_terminate(client_msstate()) -> 'ok'.
--spec client_delete_and_terminate(client_msstate()) -> 'ok'.
--spec client_ref(client_msstate()) -> client_ref().
--spec close_all_indicated
-        (client_msstate()) -> rabbit_types:ok(client_msstate()).
--spec write(rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok'.
--spec write_flow(rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok'.
--spec read(rabbit_types:msg_id(), client_msstate()) ->
-                     {rabbit_types:ok(msg()) | 'not_found', client_msstate()}.
--spec contains(rabbit_types:msg_id(), client_msstate()) -> boolean().
--spec remove([rabbit_types:msg_id()], client_msstate()) -> 'ok'.
-
--spec set_maximum_since_use(server(), non_neg_integer()) -> 'ok'.
--spec has_readers(non_neg_integer(), gc_state()) -> boolean().
--spec combine_files(non_neg_integer(), non_neg_integer(), gc_state()) ->
-                              deletion_thunk().
--spec delete_file(non_neg_integer(), gc_state()) -> deletion_thunk().
--spec force_recovery(file:filename(), server()) -> 'ok'.
--spec transform_dir(file:filename(), server(),
-        fun ((any()) -> (rabbit_types:ok_or_error2(msg(), any())))) -> 'ok'.
-
 %%----------------------------------------------------------------------------
 
 %% We run GC whenever (garbage / sum_file_size) > ?GARBAGE_FRACTION
@@ -472,6 +445,10 @@
 %% public API
 %%----------------------------------------------------------------------------
 
+-spec start_link
+        (atom(), file:filename(), [binary()] | 'undefined',
+         {msg_ref_delta_gen(A), A}) -> rabbit_types:ok_pid_or_error().
+
 start_link(Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
     gen_server2:start_link(?MODULE,
                            [Type, Dir, ClientRefs, StartupFunState],
@@ -482,8 +459,13 @@ start_global_store_link(Type, Dir, ClientRefs, StartupFunState) when is_atom(Typ
                            [Type, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
+-spec successfully_recovered_state(server()) -> boolean().
+
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
+
+-spec client_init(server(), client_ref(), maybe_msg_id_fun(),
+                        maybe_close_fds_fun()) -> client_msstate().
 
 client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) when is_pid(Server); is_atom(Server) ->
     {IState, IModule, Dir, GCPid,
@@ -506,16 +488,24 @@ client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) when is_pid(Server); is_atom
                       flying_ets         = FlyingEts,
                       credit_disc_bound  = CreditDiscBound }.
 
+-spec client_terminate(client_msstate()) -> 'ok'.
+
 client_terminate(CState = #client_msstate { client_ref = Ref }) ->
     close_all_handles(CState),
     ok = server_call(CState, {client_terminate, Ref}).
+
+-spec client_delete_and_terminate(client_msstate()) -> 'ok'.
 
 client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
     close_all_handles(CState),
     ok = server_cast(CState, {client_dying, Ref}),
     ok = server_cast(CState, {client_delete, Ref}).
 
+-spec client_ref(client_msstate()) -> client_ref().
+
 client_ref(#client_msstate { client_ref = Ref }) -> Ref.
+
+-spec write_flow(rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok'.
 
 write_flow(MsgId, Msg,
            CState = #client_msstate {
@@ -528,7 +518,12 @@ write_flow(MsgId, Msg,
     credit_flow:send(Server, CreditDiscBound),
     client_write(MsgId, Msg, flow, CState).
 
+-spec write(rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok'.
+
 write(MsgId, Msg, CState) -> client_write(MsgId, Msg, noflow, CState).
+
+-spec read(rabbit_types:msg_id(), client_msstate()) ->
+                     {rabbit_types:ok(msg()) | 'not_found', client_msstate()}.
 
 read(MsgId,
      CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts }) ->
@@ -545,11 +540,18 @@ read(MsgId,
             {{ok, Msg}, CState}
     end.
 
+-spec contains(rabbit_types:msg_id(), client_msstate()) -> boolean().
+
 contains(MsgId, CState) -> server_call(CState, {contains, MsgId}).
+
+-spec remove([rabbit_types:msg_id()], client_msstate()) -> 'ok'.
+
 remove([],    _CState) -> ok;
 remove(MsgIds, CState = #client_msstate { client_ref = CRef }) ->
     [client_update_flying(-1, MsgId, CState) || MsgId <- MsgIds],
     server_cast(CState, {remove, CRef, MsgIds}).
+
+-spec set_maximum_since_use(server(), non_neg_integer()) -> 'ok'.
 
 set_maximum_since_use(Server, Age) when is_pid(Server); is_atom(Server) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
@@ -1447,6 +1449,9 @@ safe_file_delete(File, Dir, FileHandlesEts) ->
                           true
     end.
 
+-spec close_all_indicated
+        (client_msstate()) -> rabbit_types:ok(client_msstate()).
+
 close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts,
                                       client_ref       = Ref } =
                         CState) ->
@@ -1965,10 +1970,15 @@ cleanup_after_file_deletion(File,
 %% garbage collection / compaction / aggregation -- external
 %%----------------------------------------------------------------------------
 
+-spec has_readers(non_neg_integer(), gc_state()) -> boolean().
+
 has_readers(File, #gc_state { file_summary_ets = FileSummaryEts }) ->
     [#file_summary { locked = true, readers = Count }] =
         ets:lookup(FileSummaryEts, File),
     Count /= 0.
+
+-spec combine_files(non_neg_integer(), non_neg_integer(), gc_state()) ->
+                              deletion_thunk().
 
 combine_files(Source, Destination,
               State = #gc_state { file_summary_ets = FileSummaryEts,
@@ -2045,6 +2055,8 @@ combine_files(Source, Destination,
     Reclaimed = SourceFileSize + DestinationFileSize - TotalValidData,
     gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}),
     safe_file_delete_fun(Source, Dir, FileHandlesEts).
+
+-spec delete_file(non_neg_integer(), gc_state()) -> deletion_thunk().
 
 delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                                       file_handles_ets = FileHandlesEts,
@@ -2127,6 +2139,8 @@ copy_messages(WorkList, InitOffset, FinalOffset, SourceHdl, DestinationHdl,
                         {destination, Destination}]}
     end.
 
+-spec force_recovery(file:filename(), server()) -> 'ok'.
+
 force_recovery(BaseDir, Store) ->
     Dir = filename:join(BaseDir, atom_to_list(Store)),
     case file:delete(filename:join(Dir, ?CLEAN_FILENAME)) of
@@ -2141,6 +2155,9 @@ foreach_file(D, Fun, Files) ->
 
 foreach_file(D1, D2, Fun, Files) ->
     [ok = Fun(filename:join(D1, File), filename:join(D2, File)) || File <- Files].
+
+-spec transform_dir(file:filename(), server(),
+        fun ((any()) -> (rabbit_types:ok_or_error2(msg(), any())))) -> 'ok'.
 
 transform_dir(BaseDir, Store, TransformFun) ->
     Dir = filename:join(BaseDir, atom_to_list(Store)),

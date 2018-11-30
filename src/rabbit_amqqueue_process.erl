@@ -102,14 +102,6 @@
 
 %%----------------------------------------------------------------------------
 
--spec info_keys() -> rabbit_types:info_keys().
--spec init_with_backing_queue_state
-        (amqqueue:amqqueue(), atom(), tuple(), any(),
-         [rabbit_types:delivery()], pmon:pmon(), gb_trees:tree()) ->
-            #q{}.
-
-%%----------------------------------------------------------------------------
-
 -define(STATISTICS_KEYS,
         [messages_ready,
          messages_unacknowledged,
@@ -146,6 +138,8 @@
 -define(INFO_KEYS, [pid | ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name]]).
 
 %%----------------------------------------------------------------------------
+
+-spec info_keys() -> rabbit_types:info_keys().
 
 info_keys()       -> ?INFO_KEYS       ++ rabbit_backing_queue:info_keys().
 statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
@@ -264,6 +258,11 @@ recovery_barrier(BarrierPid) ->
         {BarrierPid, go}              -> erlang:demonitor(MRef, [flush]);
         {'DOWN', MRef, process, _, _} -> ok
     end.
+
+-spec init_with_backing_queue_state
+        (amqqueue:amqqueue(), atom(), tuple(), any(),
+         [rabbit_types:delivery()], pmon:pmon(), gb_trees:tree()) ->
+            #q{}.
 
 init_with_backing_queue_state(Q, BQ, BQS,
                               RateTRef, Deliveries, Senders, MTC) ->

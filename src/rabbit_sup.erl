@@ -34,26 +34,18 @@
 %%----------------------------------------------------------------------------
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
--spec start_child(atom()) -> 'ok'.
--spec start_child(atom(), [any()]) -> 'ok'.
--spec start_child(atom(), atom(), [any()]) -> 'ok'.
--spec start_child(atom(), atom(), atom(), [any()]) -> 'ok'.
--spec start_supervisor_child(atom()) -> 'ok'.
--spec start_supervisor_child(atom(), [any()]) -> 'ok'.
--spec start_supervisor_child(atom(), atom(), [any()]) -> 'ok'.
--spec start_restartable_child(atom()) -> 'ok'.
--spec start_restartable_child(atom(), [any()]) -> 'ok'.
--spec start_delayed_restartable_child(atom()) -> 'ok'.
--spec start_delayed_restartable_child(atom(), [any()]) -> 'ok'.
--spec stop_child(atom()) -> rabbit_types:ok_or_error(any()).
-
-%%----------------------------------------------------------------------------
 
 start_link() -> supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
+-spec start_child(atom()) -> 'ok'.
+
 start_child(Mod) -> start_child(Mod, []).
 
+-spec start_child(atom(), [any()]) -> 'ok'.
+
 start_child(Mod, Args) -> start_child(Mod, Mod, Args).
+
+-spec start_child(atom(), atom(), [any()]) -> 'ok'.
 
 start_child(ChildId, Mod, Args) ->
     child_reply(supervisor:start_child(
@@ -61,16 +53,23 @@ start_child(ChildId, Mod, Args) ->
                   {ChildId, {Mod, start_link, Args},
                    transient, ?WORKER_WAIT, worker, [Mod]})).
 
+-spec start_child(atom(), atom(), atom(), [any()]) -> 'ok'.
+
 start_child(ChildId, Mod, Fun, Args) ->
     child_reply(supervisor:start_child(
                   ?SERVER,
                   {ChildId, {Mod, Fun, Args},
                    transient, ?WORKER_WAIT, worker, [Mod]})).
 
+-spec start_supervisor_child(atom()) -> 'ok'.
 
 start_supervisor_child(Mod) -> start_supervisor_child(Mod, []).
 
+-spec start_supervisor_child(atom(), [any()]) -> 'ok'.
+
 start_supervisor_child(Mod, Args) -> start_supervisor_child(Mod, Mod, Args).
+
+-spec start_supervisor_child(atom(), atom(), [any()]) -> 'ok'.
 
 start_supervisor_child(ChildId, Mod, Args) ->
     child_reply(supervisor:start_child(
@@ -78,9 +77,20 @@ start_supervisor_child(ChildId, Mod, Args) ->
                   {ChildId, {Mod, start_link, Args},
                    transient, infinity, supervisor, [Mod]})).
 
+-spec start_restartable_child(atom()) -> 'ok'.
+
 start_restartable_child(M)            -> start_restartable_child(M, [], false).
+
+-spec start_restartable_child(atom(), [any()]) -> 'ok'.
+
 start_restartable_child(M, A)         -> start_restartable_child(M, A,  false).
+
+-spec start_delayed_restartable_child(atom()) -> 'ok'.
+
 start_delayed_restartable_child(M)    -> start_restartable_child(M, [], true).
+
+-spec start_delayed_restartable_child(atom(), [any()]) -> 'ok'.
+
 start_delayed_restartable_child(M, A) -> start_restartable_child(M, A,  true).
 
 start_restartable_child(Mod, Args, Delay) ->
@@ -90,6 +100,8 @@ start_restartable_child(Mod, Args, Delay) ->
                   {Name, {rabbit_restartable_sup, start_link,
                           [Name, {Mod, start_link, Args}, Delay]},
                    transient, infinity, supervisor, [rabbit_restartable_sup]})).
+
+-spec stop_child(atom()) -> rabbit_types:ok_or_error(any()).
 
 stop_child(ChildId) ->
     case supervisor:terminate_child(?SERVER, ChildId) of

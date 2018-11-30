@@ -31,14 +31,13 @@
 %%----------------------------------------------------------------------------
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
--spec start_queue_process
-        (node(), amqqueue:amqqueue(), 'declare' | 'recovery' | 'slave') ->
-            pid().
-
-%%----------------------------------------------------------------------------
 
 start_link() ->
     supervisor2:start_link(?MODULE, []).
+
+-spec start_queue_process
+        (node(), amqqueue:amqqueue(), 'declare' | 'recovery' | 'slave') ->
+            pid().
 
 start_queue_process(Node, Q, StartMode) ->
     #resource{virtual_host = VHost} = amqqueue:get_name(Q),

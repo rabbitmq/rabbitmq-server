@@ -40,12 +40,6 @@
 %%----------------------------------------------------------------------------
 
 -spec start(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
--spec stop(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
--spec store(rabbit_types:vhost(), file:filename(), term()) -> rabbit_types:ok_or_error(term()).
--spec read(rabbit_types:vhost(), file:filename()) -> rabbit_types:ok_or_error2(term(), not_found).
--spec clear(rabbit_types:vhost()) -> 'ok'.
-
-%%----------------------------------------------------------------------------
 
 start(VHost) ->
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
@@ -64,6 +58,8 @@ start(VHost) ->
     end,
     ok.
 
+-spec stop(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
+
 stop(VHost) ->
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
         {ok, VHostSup} ->
@@ -79,14 +75,20 @@ stop(VHost) ->
             ok
     end.
 
+-spec store(rabbit_types:vhost(), file:filename(), term()) -> rabbit_types:ok_or_error(term()).
+
 store(VHost, DirBaseName, Terms) ->
     dets:insert(VHost, {DirBaseName, Terms}).
+
+-spec read(rabbit_types:vhost(), file:filename()) -> rabbit_types:ok_or_error2(term(), not_found).
 
 read(VHost, DirBaseName) ->
     case dets:lookup(VHost, DirBaseName) of
         [{_, Terms}] -> {ok, Terms};
         _            -> {error, not_found}
     end.
+
+-spec clear(rabbit_types:vhost()) -> 'ok'.
 
 clear(VHost) ->
     try

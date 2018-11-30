@@ -27,24 +27,14 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
--type retry() :: boolean().
 
--spec create() -> 'ok'.
--spec create_local_copy('disc' | 'ram') -> 'ok'.
--spec wait_for_replicated(retry()) -> 'ok'.
--spec wait_for_replicated() -> 'ok'.
--spec wait([atom()]) -> 'ok'.
--spec retry_timeout() -> {non_neg_integer() | infinity, non_neg_integer()}.
--spec force_load() -> 'ok'.
--spec is_present() -> boolean().
--spec is_empty() -> boolean().
--spec needs_default_data() -> boolean().
--spec check_schema_integrity(retry()) -> rabbit_types:ok_or_error(any()).
--spec clear_ram_only_tables() -> 'ok'.
+-type retry() :: boolean().
 
 %%----------------------------------------------------------------------------
 %% Main interface
 %%----------------------------------------------------------------------------
+
+-spec create() -> 'ok'.
 
 create() ->
     lists:foreach(fun ({Tab, TabDef}) ->
@@ -74,6 +64,9 @@ ensure_secondary_index(Table, Field) ->
 %% tables is important: if we delete the schema first when moving to
 %% RAM mnesia will loudly complain since it doesn't make much sense to
 %% do that. But when moving to disc, we need to move the schema first.
+
+-spec create_local_copy('disc' | 'ram') -> 'ok'.
+
 create_local_copy(disc) ->
     create_local_copy(schema, disc_copies),
     create_local_copies(disc);
@@ -83,12 +76,19 @@ create_local_copy(ram)  ->
 
 %% This arity only exists for backwards compatibility with certain
 %% plugins. See https://github.com/rabbitmq/rabbitmq-clusterer/issues/19.
+
+-spec wait_for_replicated() -> 'ok'.
+
 wait_for_replicated() ->
     wait_for_replicated(false).
+
+-spec wait_for_replicated(retry()) -> 'ok'.
 
 wait_for_replicated(Retry) ->
     wait([Tab || {Tab, TabDef} <- definitions(),
                  not lists:member({local_content, true}, TabDef)], Retry).
+
+-spec wait([atom()]) -> 'ok'.
 
 wait(TableNames) ->
     wait(TableNames, _Retry = false).
@@ -131,23 +131,36 @@ retry_timeout(_Retry = true) ->
               end,
     {retry_timeout(), Retries}.
 
+-spec retry_timeout() -> {non_neg_integer() | infinity, non_neg_integer()}.
+
 retry_timeout() ->
     case application:get_env(rabbit, mnesia_table_loading_retry_timeout) of
         {ok, T}   -> T;
         undefined -> 30000
     end.
 
+-spec force_load() -> 'ok'.
+
 force_load() -> [mnesia:force_load_table(T) || T <- names()], ok.
+
+-spec is_present() -> boolean().
 
 is_present() -> names() -- mnesia:system_info(tables) =:= [].
 
+-spec is_empty() -> boolean().
+
 is_empty()           -> is_empty(names()).
+
+-spec needs_default_data() -> boolean().
+
 needs_default_data() -> is_empty([rabbit_user, rabbit_user_permission,
                                   rabbit_vhost]).
 
 is_empty(Names) ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
               Names).
+
+-spec check_schema_integrity(retry()) -> rabbit_types:ok_or_error(any()).
 
 check_schema_integrity(Retry) ->
     Tables = mnesia:system_info(tables),
@@ -161,6 +174,8 @@ check_schema_integrity(Retry) ->
                   check(fun check_content/2);
         Other  -> Other
     end.
+
+-spec clear_ram_only_tables() -> 'ok'.
 
 clear_ram_only_tables() ->
     Node = node(),

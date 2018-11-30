@@ -47,26 +47,6 @@
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(), rabbit_types:message()}.
 
--spec handle_event({'ra_event', ra_server_id(), any()}, rabbit_fifo_client:state()) ->
-                          {'internal', Correlators :: [term()], rabbit_fifo_client:state()} |
-                          {rabbit_fifo:client_msg(), rabbit_fifo_client:state()}.
--spec recover([amqqueue:amqqueue()]) -> [amqqueue:amqqueue() |
-                                             {'absent', amqqueue:amqqueue(), atom()}].
--spec stop(rabbit_types:vhost()) -> 'ok'.
--spec ack(rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
-                 {'ok', rabbit_fifo_client:state()}.
--spec reject(Confirm :: boolean(), rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
-                    {'ok', rabbit_fifo_client:state()}.
--spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
-                          {'ok', rabbit_fifo_client:state()}.
--spec stateless_deliver(ra_server_id(), rabbit_types:delivery()) -> 'ok'.
--spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
--spec info(amqqueue:amqqueue(), rabbit_types:info_keys()) -> rabbit_types:infos().
--spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
--spec stat(amqqueue:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
--spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
--spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> rabbit_types:infos() | {error, term()}.
-
 -define(STATISTICS_KEYS,
         [policy,
          operator_policy,
@@ -104,12 +84,17 @@ init_state({Name, _}, QName = #resource{}) ->
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
+-spec handle_event({'ra_event', ra_server_id(), any()}, rabbit_fifo_client:state()) ->
+                          {'internal', Correlators :: [term()], rabbit_fifo_client:state()} |
+                          {rabbit_fifo:client_msg(), rabbit_fifo_client:state()}.
+
 handle_event({ra_event, From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
 
 -spec declare(amqqueue:amqqueue()) ->
     {'new', amqqueue:amqqueue()} |
     {existing, amqqueue:amqqueue()}.
+
 declare(Q) when ?amqqueue_is_quorum(Q) ->
     QName = amqqueue:get_name(Q),
     Durable = amqqueue:is_durable(Q),
@@ -268,6 +253,9 @@ reductions(Name) ->
             0
     end.
 
+-spec recover([amqqueue:amqqueue()]) -> [amqqueue:amqqueue() |
+                                             {'absent', amqqueue:amqqueue(), atom()}].
+
 recover(Queues) ->
     [begin
          {Name, _} = amqqueue:get_pid(Q0),
@@ -308,6 +296,8 @@ recover(Queues) ->
          Q
      end || Q0 <- Queues].
 
+-spec stop(rabbit_types:vhost()) -> 'ok'.
+
 stop(VHost) ->
     _ = [begin
              Pid = amqqueue:get_pid(Q),
@@ -319,6 +309,7 @@ stop(VHost) ->
              boolean(), boolean(),
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()}.
+
 delete(Q,
        _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
@@ -389,8 +380,14 @@ delete_immediately(Resource, {_Name, _} = QPid) ->
     rabbit_core_metrics:queue_deleted(Resource),
     ok.
 
+-spec ack(rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
+                 {'ok', rabbit_fifo_client:state()}.
+
 ack(CTag, MsgIds, QState) ->
     rabbit_fifo_client:settle(quorum_ctag(CTag), MsgIds, QState).
+
+-spec reject(Confirm :: boolean(), rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
+                    {'ok', rabbit_fifo_client:state()}.
 
 reject(true, CTag, MsgIds, QState) ->
     rabbit_fifo_client:return(quorum_ctag(CTag), MsgIds, QState);
@@ -478,9 +475,14 @@ basic_consume(Q, NoAck, ChPid,
                                          ActivityStatus, Args),
     {ok, QState}.
 
+-spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
+                          {'ok', rabbit_fifo_client:state()}.
+
 basic_cancel(ConsumerTag, ChPid, OkMsg, QState0) ->
     maybe_send_reply(ChPid, OkMsg),
     rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), QState0).
+
+-spec stateless_deliver(ra_server_id(), rabbit_types:delivery()) -> 'ok'.
 
 stateless_deliver(ServerId, Delivery) ->
     ok = rabbit_fifo_client:untracked_enqueue([ServerId],
@@ -489,15 +491,20 @@ stateless_deliver(ServerId, Delivery) ->
 -spec deliver(Confirm :: boolean(), rabbit_types:delivery(),
               rabbit_fifo_client:state()) ->
     {ok | slow, rabbit_fifo_client:state()}.
+
 deliver(false, Delivery, QState0) ->
     rabbit_fifo_client:enqueue(Delivery#delivery.message, QState0);
 deliver(true, Delivery, QState0) ->
     rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
                                Delivery#delivery.message, QState0).
 
+-spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
+
 info(Q) ->
     info(Q, [name, durable, auto_delete, arguments, pid, state, messages,
              messages_ready, messages_unacknowledged]).
+
+-spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
 
 infos(QName) ->
     case rabbit_amqqueue:lookup(QName) of
@@ -507,10 +514,15 @@ infos(QName) ->
             []
     end.
 
+-spec info(amqqueue:amqqueue(), rabbit_types:info_keys()) -> rabbit_types:infos().
+
 info(Q, Items) ->
     [{Item, i(Item, Q)} || Item <- Items].
 
-stat(#amqqueue{pid = Leader}) ->
+-spec stat(amqqueue:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
+
+stat(Q) when ?is_amqqueue(Q) ->
+    Leader = amqqueue:get_pid(Q),
     try
         case rabbit_fifo_client:stat(Leader) of
             {ok, _, _} = Stat ->
@@ -557,6 +569,8 @@ policy_changed(QName, Node) ->
     {ok, Q} = rabbit_amqqueue:lookup(QName),
     rabbit_fifo_client:update_machine_state(Node, ra_machine_config(Q)).
 
+-spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
+
 cluster_state(Name) ->
     case whereis(Name) of
         undefined -> down;
@@ -566,6 +580,8 @@ cluster_state(Name) ->
                 _ -> running
             end
     end.
+
+-spec status(rabbit_types:vhost(), Name :: atom()) -> rabbit_types:infos() | {error, term()}.
 
 status(Vhost, QueueName) ->
     %% Handle not found queues

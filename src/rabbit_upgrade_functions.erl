@@ -64,49 +64,12 @@
 
 %% -------------------------------------------------------------------
 
--spec remove_user_scope() -> 'ok'.
--spec hash_passwords() -> 'ok'.
--spec add_ip_to_listener() -> 'ok'.
--spec add_opts_to_listener() -> 'ok'.
--spec internal_exchanges() -> 'ok'.
--spec user_to_internal_user() -> 'ok'.
--spec topic_trie() -> 'ok'.
--spec semi_durable_route() -> 'ok'.
--spec exchange_event_serial() -> 'ok'.
--spec trace_exchanges() -> 'ok'.
--spec user_admin_to_tags() -> 'ok'.
--spec ha_mirrors() -> 'ok'.
--spec gm() -> 'ok'.
--spec exchange_scratch() -> 'ok'.
--spec mirrored_supervisor() -> 'ok'.
--spec topic_trie_node() -> 'ok'.
--spec runtime_parameters() -> 'ok'.
--spec policy() -> 'ok'.
--spec sync_slave_pids() -> 'ok'.
--spec no_mirror_nodes() -> 'ok'.
--spec gm_pids() -> 'ok'.
--spec exchange_decorators() -> 'ok'.
--spec policy_apply_to() -> 'ok'.
--spec queue_decorators() -> 'ok'.
--spec internal_system_x() -> 'ok'.
--spec cluster_name() -> 'ok'.
--spec down_slave_nodes() -> 'ok'.
--spec queue_state() -> 'ok'.
--spec recoverable_slaves() -> 'ok'.
--spec user_password_hashing() -> 'ok'.
--spec vhost_limits() -> 'ok'.
--spec operator_policies() -> 'ok'.
--spec queue_vhost_field() -> 'ok'.
--spec queue_options() -> 'ok'.
--spec exchange_options() -> 'ok'.
-
--spec remove_explicit_default_exchange_bindings() -> 'ok'.
-
-%%--------------------------------------------------------------------
-
 %% replaces vhost.dummy (used to avoid having a single-field record
 %% which Mnesia doesn't like) with vhost.limits (which is actually
 %% used)
+
+-spec vhost_limits() -> 'ok'.
+
 vhost_limits() ->
     transform(
       rabbit_vhost,
@@ -121,6 +84,8 @@ vhost_limits() ->
 %% would be messy to have to go back and fix old transforms at that
 %% point.
 
+-spec remove_user_scope() -> 'ok'.
+
 remove_user_scope() ->
     transform(
       rabbit_user_permission,
@@ -133,6 +98,9 @@ remove_user_scope() ->
 %% only relevant to those migrating from 2.1.1.
 %% all users created after in 3.6.0 or later will use SHA-256 (unless configured
 %% otherwise)
+
+-spec hash_passwords() -> 'ok'.
+
 hash_passwords() ->
     transform(
       rabbit_user,
@@ -142,6 +110,8 @@ hash_passwords() ->
       end,
       [username, password_hash, is_admin]).
 
+-spec add_ip_to_listener() -> 'ok'.
+
 add_ip_to_listener() ->
     transform(
       rabbit_listener,
@@ -150,6 +120,8 @@ add_ip_to_listener() ->
       end,
       [node, protocol, host, ip_address, port]).
 
+-spec add_opts_to_listener() -> 'ok'.
+
 add_opts_to_listener() ->
     transform(
       rabbit_listener,
@@ -157,6 +129,8 @@ add_opts_to_listener() ->
               {listener, Node, Protocol, Host, IP, Port, []}
       end,
       [node, protocol, host, ip_address, port, opts]).
+
+-spec internal_exchanges() -> 'ok'.
 
 internal_exchanges() ->
     Tables = [rabbit_exchange, rabbit_durable_exchange],
@@ -170,6 +144,8 @@ internal_exchanges() ->
       || T <- Tables ],
     ok.
 
+-spec user_to_internal_user() -> 'ok'.
+
 user_to_internal_user() ->
     transform(
       rabbit_user,
@@ -177,6 +153,8 @@ user_to_internal_user() ->
               {internal_user, Username, PasswordHash, IsAdmin}
       end,
       [username, password_hash, is_admin], internal_user).
+
+-spec topic_trie() -> 'ok'.
 
 topic_trie() ->
     create(rabbit_topic_trie_edge, [{record_name, topic_trie_edge},
@@ -186,19 +164,27 @@ topic_trie() ->
                                        {attributes, [trie_binding, value]},
                                        {type, ordered_set}]).
 
+-spec semi_durable_route() -> 'ok'.
+
 semi_durable_route() ->
     create(rabbit_semi_durable_route, [{record_name, route},
                                        {attributes, [binding, value]}]).
 
+-spec exchange_event_serial() -> 'ok'.
+
 exchange_event_serial() ->
     create(rabbit_exchange_serial, [{record_name, exchange_serial},
                                     {attributes, [name, next]}]).
+
+-spec trace_exchanges() -> 'ok'.
 
 trace_exchanges() ->
     [declare_exchange(
        rabbit_misc:r(VHost, exchange, <<"amq.rabbitmq.trace">>), topic) ||
         VHost <- rabbit_vhost:list()],
     ok.
+
+-spec user_admin_to_tags() -> 'ok'.
 
 user_admin_to_tags() ->
     transform(
@@ -209,6 +195,8 @@ user_admin_to_tags() ->
               {internal_user, Username, PasswordHash, [management]}
       end,
       [username, password_hash, tags], internal_user).
+
+-spec ha_mirrors() -> 'ok'.
 
 ha_mirrors() ->
     Tables = [rabbit_queue, rabbit_durable_queue],
@@ -224,9 +212,13 @@ ha_mirrors() ->
       || T <- Tables ],
     ok.
 
+-spec gm() -> 'ok'.
+
 gm() ->
     create(gm_group, [{record_name, gm_group},
                       {attributes, [name, version, members]}]).
+
+-spec exchange_scratch() -> 'ok'.
 
 exchange_scratch() ->
     ok = exchange_scratch(rabbit_exchange),
@@ -240,16 +232,22 @@ exchange_scratch(Table) ->
       end,
       [name, type, durable, auto_delete, internal, arguments, scratch]).
 
+-spec mirrored_supervisor() -> 'ok'.
+
 mirrored_supervisor() ->
     create(mirrored_sup_childspec,
            [{record_name, mirrored_sup_childspec},
             {attributes, [key, mirroring_pid, childspec]}]).
+
+-spec topic_trie_node() -> 'ok'.
 
 topic_trie_node() ->
     create(rabbit_topic_trie_node,
            [{record_name, topic_trie_node},
             {attributes, [trie_node, edge_count, binding_count]},
             {type, ordered_set}]).
+
+-spec runtime_parameters() -> 'ok'.
 
 runtime_parameters() ->
     create(rabbit_runtime_parameters,
@@ -273,6 +271,8 @@ exchange_scratches(Table) ->
               {exchange, Name, Type, Dur, AutoDel, Int, Args, undefined}
       end,
       [name, type, durable, auto_delete, internal, arguments, scratches]).
+
+-spec policy() -> 'ok'.
 
 policy() ->
     ok = exchange_policy(rabbit_exchange),
@@ -300,6 +300,8 @@ queue_policy(Table) ->
       [name, durable, auto_delete, exclusive_owner, arguments, pid,
        slave_pids, mirror_nodes, policy]).
 
+-spec sync_slave_pids() -> 'ok'.
+
 sync_slave_pids() ->
     Tables = [rabbit_queue, rabbit_durable_queue],
     AddSyncSlavesFun =
@@ -311,6 +313,8 @@ sync_slave_pids() ->
                      pid, slave_pids, sync_slave_pids, mirror_nodes, policy])
      || T <- Tables],
     ok.
+
+-spec no_mirror_nodes() -> 'ok'.
 
 no_mirror_nodes() ->
     Tables = [rabbit_queue, rabbit_durable_queue],
@@ -324,6 +328,8 @@ no_mirror_nodes() ->
      || T <- Tables],
     ok.
 
+-spec gm_pids() -> 'ok'.
+
 gm_pids() ->
     Tables = [rabbit_queue, rabbit_durable_queue],
     AddGMPidsFun =
@@ -335,6 +341,8 @@ gm_pids() ->
                      pid, slave_pids, sync_slave_pids, policy, gm_pids])
      || T <- Tables],
     ok.
+
+-spec exchange_decorators() -> 'ok'.
 
 exchange_decorators() ->
     ok = exchange_decorators(rabbit_exchange),
@@ -350,6 +358,8 @@ exchange_decorators(Table) ->
       end,
       [name, type, durable, auto_delete, internal, arguments, scratches, policy,
        decorators]).
+
+-spec policy_apply_to() -> 'ok'.
 
 policy_apply_to() ->
     transform(
@@ -373,6 +383,8 @@ apply_to(Def) ->
         [_,         _]         -> <<"all">>
     end.
 
+-spec queue_decorators() -> 'ok'.
+
 queue_decorators() ->
     ok = queue_decorators(rabbit_queue),
     ok = queue_decorators(rabbit_durable_queue).
@@ -388,6 +400,8 @@ queue_decorators(Table) ->
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, policy, gm_pids, decorators]).
 
+-spec internal_system_x() -> 'ok'.
+
 internal_system_x() ->
     transform(
       rabbit_durable_exchange,
@@ -400,6 +414,8 @@ internal_system_x() ->
       end,
       [name, type, durable, auto_delete, internal, arguments, scratches, policy,
        decorators]).
+
+-spec cluster_name() -> 'ok'.
 
 cluster_name() ->
     {atomic, ok} = mnesia:transaction(fun cluster_name_tx/0),
@@ -427,6 +443,8 @@ cluster_name_tx() ->
     [mnesia:delete(T, K, write) || K <- Ks],
     ok.
 
+-spec down_slave_nodes() -> 'ok'.
+
 down_slave_nodes() ->
     ok = down_slave_nodes(rabbit_queue),
     ok = down_slave_nodes(rabbit_durable_queue).
@@ -441,6 +459,8 @@ down_slave_nodes(Table) ->
       end,
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, down_slave_nodes, policy, gm_pids, decorators]).
+
+-spec queue_state() -> 'ok'.
 
 queue_state() ->
     ok = queue_state(rabbit_queue),
@@ -457,6 +477,8 @@ queue_state(Table) ->
       end,
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, down_slave_nodes, policy, gm_pids, decorators, state]).
+
+-spec recoverable_slaves() -> 'ok'.
 
 recoverable_slaves() ->
     ok = recoverable_slaves(rabbit_queue),
@@ -505,6 +527,8 @@ slave_pids_pending_shutdown(Table) ->
        sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators, state,
        policy_version, slave_pids_pending_shutdown]).
 
+-spec operator_policies() -> 'ok'.
+
 operator_policies() ->
     ok = exchange_operator_policies(rabbit_exchange),
     ok = exchange_operator_policies(rabbit_durable_exchange),
@@ -536,6 +560,7 @@ queue_operator_policies(Table) ->
        sync_slave_pids, recoverable_slaves, policy, operator_policy,
        gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown]).
 
+-spec queue_vhost_field() -> 'ok'.
 
 queue_vhost_field() ->
     ok = queue_vhost_field(rabbit_queue),
@@ -557,6 +582,8 @@ queue_vhost_field(Table) ->
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, recoverable_slaves, policy, operator_policy,
        gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown, vhost]).
+
+-spec queue_options() -> 'ok'.
 
 queue_options() ->
     ok = queue_options(rabbit_queue),
@@ -581,6 +608,9 @@ queue_options(Table) ->
 %% existing records with said default.  Users created with 3.6.0+ will
 %% have internal_user.hashing_algorithm populated by the internal
 %% authn backend.
+
+-spec user_password_hashing() -> 'ok'.
+
 user_password_hashing() ->
     transform(
       rabbit_user,
@@ -594,6 +624,8 @@ topic_permission() ->
         [{record_name, topic_permission},
          {attributes, [topic_permission_key, permission]},
          {disc_copies, [node()]}]).
+
+-spec exchange_options() -> 'ok'.
 
 exchange_options() ->
     ok = exchange_options(rabbit_exchange),

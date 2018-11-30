@@ -38,10 +38,10 @@
 
 -type start_mode() :: 'declare' | 'recovery' | 'slave'.
 
+%%----------------------------------------------------------------------------
+
 -spec start_link(amqqueue:amqqueue(), start_mode(), pid())
                       -> rabbit_types:ok_pid_or_error().
-
-%%----------------------------------------------------------------------------
 
 start_link(Q, StartMode, Marker) ->
     gen_server2:start_link(?MODULE, {Q, StartMode, Marker}, []).

@@ -28,24 +28,6 @@
 -export([delete_storage/1]).
 -export([vhost_down/1]).
 
--spec add(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
--spec delete(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
--spec update(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
--spec exists(rabbit_types:vhost()) -> boolean().
--spec list() -> [rabbit_types:vhost()].
--spec with(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
--spec with_user_and_vhost
-        (rabbit_types:username(), rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
--spec assert(rabbit_types:vhost()) -> 'ok'.
-
--spec info(rabbit_types:vhost()) -> rabbit_types:infos().
--spec info(rabbit_types:vhost(), rabbit_types:info_keys())
-                -> rabbit_types:infos().
--spec info_all() -> [rabbit_types:infos()].
--spec info_all(rabbit_types:info_keys()) -> [rabbit_types:infos()].
--spec info_all(rabbit_types:info_keys(), reference(), pid()) ->
-                         'ok'.
-
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
     %% faster than other nodes handled DOWN messages from us.
@@ -82,6 +64,8 @@ recover(VHost) ->
 %%----------------------------------------------------------------------------
 
 -define(INFO_KEYS, [name, tracing, cluster_state]).
+
+-spec add(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 
 add(VHost, ActingUser) ->
     case exists(VHost) of
@@ -133,6 +117,8 @@ do_add(VHostPath, ActingUser) ->
                                      [VHostPath, Reason]),
             {error, Msg}
     end.
+
+-spec delete(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 
 delete(VHostPath, ActingUser) ->
     %% FIXME: We are forced to delete the queues and exchanges outside
@@ -252,11 +238,17 @@ internal_delete(VHostPath, ActingUser) ->
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
     Fs1 ++ Fs2.
 
+-spec exists(rabbit_types:vhost()) -> boolean().
+
 exists(VHostPath) ->
     mnesia:dirty_read({rabbit_vhost, VHostPath}) /= [].
 
+-spec list() -> [rabbit_types:vhost()].
+
 list() ->
     mnesia:dirty_all_keys(rabbit_vhost).
+
+-spec with(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
 
 with(VHostPath, Thunk) ->
     fun () ->
@@ -268,14 +260,22 @@ with(VHostPath, Thunk) ->
             end
     end.
 
+-spec with_user_and_vhost
+        (rabbit_types:username(), rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
+
 with_user_and_vhost(Username, VHostPath, Thunk) ->
     rabbit_misc:with_user(Username, with(VHostPath, Thunk)).
 
 %% Like with/2 but outside an Mnesia tx
+
+-spec assert(rabbit_types:vhost()) -> 'ok'.
+
 assert(VHostPath) -> case exists(VHostPath) of
                          true  -> ok;
                          false -> throw({error, {no_such_vhost, VHostPath}})
                      end.
+
+-spec update(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
 
 update(VHostPath, Fun) ->
     case mnesia:read({rabbit_vhost, VHostPath}) of
@@ -329,13 +329,27 @@ i(tracing, VHost) -> rabbit_trace:enabled(VHost);
 i(cluster_state, VHost) -> vhost_cluster_state(VHost);
 i(Item, _)        -> throw({bad_argument, Item}).
 
+-spec info(rabbit_types:vhost()) -> rabbit_types:infos().
+
 info(VHost)        -> infos(?INFO_KEYS, VHost).
+
+-spec info(rabbit_types:vhost(), rabbit_types:info_keys())
+                -> rabbit_types:infos().
+
 info(VHost, Items) -> infos(Items, VHost).
 
+-spec info_all() -> [rabbit_types:infos()].
+
 info_all()      -> info_all(?INFO_KEYS).
+
+-spec info_all(rabbit_types:info_keys()) -> [rabbit_types:infos()].
+
 info_all(Items) -> [info(VHost, Items) || VHost <- list()].
 
 info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
+
+-spec info_all(rabbit_types:info_keys(), reference(), pid()) ->
+                         'ok'.
 info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
        AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, list()).

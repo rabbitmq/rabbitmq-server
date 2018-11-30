@@ -27,14 +27,6 @@
 
 %% -------------------------------------------------------------------
 
--spec maybe_upgrade_mnesia() -> 'ok'.
--spec maybe_upgrade_local() ->
-          'ok' |
-          'version_not_available' |
-          'starting_from_scratch'.
-
-%% -------------------------------------------------------------------
-
 %% The upgrade logic is quite involved, due to the existence of
 %% clusters.
 %%
@@ -124,6 +116,8 @@ ensure_backup_removed() ->
 remove_backup() ->
     ok = rabbit_file:recursive_delete([backup_dir()]),
     info("upgrades: Mnesia backup removed~n", []).
+
+-spec maybe_upgrade_mnesia() -> 'ok'.
 
 maybe_upgrade_mnesia() ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
@@ -243,6 +237,11 @@ nodes_running(Nodes) ->
     [N || N <- Nodes, rabbit:is_running(N)].
 
 %% -------------------------------------------------------------------
+
+-spec maybe_upgrade_local() ->
+          'ok' |
+          'version_not_available' |
+          'starting_from_scratch'.
 
 maybe_upgrade_local() ->
     case rabbit_version:upgrades_required(local) of

@@ -50,36 +50,10 @@
                 keepalive_timer, autoheal, guid, node_guids}).
 
 %%----------------------------------------------------------------------------
-
--spec start_link() -> rabbit_types:ok_pid_or_error().
-
--spec running_nodes_filename() -> string().
--spec cluster_status_filename() -> string().
--spec prepare_cluster_status_files() -> 'ok'.
--spec write_cluster_status(rabbit_mnesia:cluster_status()) -> 'ok'.
--spec read_cluster_status() -> rabbit_mnesia:cluster_status().
--spec update_cluster_status() -> 'ok'.
--spec reset_cluster_status() -> 'ok'.
-
--spec notify_node_up() -> 'ok'.
--spec notify_joined_cluster() -> 'ok'.
--spec notify_left_cluster(node()) -> 'ok'.
-
--spec partitions() -> [node()].
--spec partitions([node()]) -> [{node(), [node()]}].
--spec status([node()]) -> {[{node(), [node()]}], [node()]}.
--spec subscribe(pid()) -> 'ok'.
--spec pause_partition_guard() -> 'ok' | 'pausing'.
-
--spec all_rabbit_nodes_up() -> boolean().
--spec run_outside_applications(fun (() -> any()), boolean()) -> pid().
--spec ping_all() -> 'ok'.
--spec alive_nodes([node()]) -> [node()].
--spec alive_rabbit_nodes([node()]) -> [node()].
-
-%%----------------------------------------------------------------------------
 %% Start
 %%----------------------------------------------------------------------------
+
+-spec start_link() -> rabbit_types:ok_pid_or_error().
 
 start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
@@ -97,14 +71,20 @@ start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 %% the information we have will be outdated, but it cannot be
 %% otherwise.
 
+-spec running_nodes_filename() -> string().
+
 running_nodes_filename() ->
     filename:join(rabbit_mnesia:dir(), "nodes_running_at_shutdown").
+
+-spec cluster_status_filename() -> string().
 
 cluster_status_filename() ->
     filename:join(rabbit_mnesia:dir(), "cluster_nodes.config").
 
 quorum_filename() ->
     filename:join(rabbit_mnesia:dir(), "quorum").
+
+-spec prepare_cluster_status_files() -> 'ok'.
 
 prepare_cluster_status_files() ->
     rabbit_mnesia:ensure_mnesia_dir(),
@@ -133,6 +113,8 @@ prepare_cluster_status_files() ->
     AllNodes2 = lists:usort(AllNodes1 ++ RunningNodes2),
     ok = write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
 
+-spec write_cluster_status(rabbit_mnesia:cluster_status()) -> 'ok'.
+
 write_cluster_status({All, Disc, Running}) ->
     ClusterStatusFN = cluster_status_filename(),
     Res = case rabbit_file:write_term_file(ClusterStatusFN, [{All, Disc}]) of
@@ -148,6 +130,8 @@ write_cluster_status({All, Disc, Running}) ->
         {FN, {error, E2}} -> throw({error, {could_not_write_file, FN, E2}})
     end.
 
+-spec read_cluster_status() -> rabbit_mnesia:cluster_status().
+
 read_cluster_status() ->
     case {try_read_file(cluster_status_filename()),
           try_read_file(running_nodes_filename())} of
@@ -157,9 +141,13 @@ read_cluster_status() ->
             throw({error, {corrupt_or_missing_cluster_files, Stat, Run}})
     end.
 
+-spec update_cluster_status() -> 'ok'.
+
 update_cluster_status() ->
     {ok, Status} = rabbit_mnesia:cluster_status_from_mnesia(),
     write_cluster_status(Status).
+
+-spec reset_cluster_status() -> 'ok'.
 
 reset_cluster_status() ->
     write_cluster_status({[node()], [node()], [node()]}).
@@ -168,14 +156,20 @@ reset_cluster_status() ->
 %% Cluster notifications
 %%----------------------------------------------------------------------------
 
+-spec notify_node_up() -> 'ok'.
+
 notify_node_up() ->
     gen_server:cast(?SERVER, notify_node_up).
+
+-spec notify_joined_cluster() -> 'ok'.
 
 notify_joined_cluster() ->
     Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
     gen_server:abcast(Nodes, ?SERVER,
                       {joined_cluster, node(), rabbit_mnesia:node_type()}),
     ok.
+
+-spec notify_left_cluster(node()) -> 'ok'.
 
 notify_left_cluster(Node) ->
     Nodes = rabbit_mnesia:cluster_nodes(running),
@@ -186,15 +180,23 @@ notify_left_cluster(Node) ->
 %% Server calls
 %%----------------------------------------------------------------------------
 
+-spec partitions() -> [node()].
+
 partitions() ->
     gen_server:call(?SERVER, partitions, infinity).
+
+-spec partitions([node()]) -> [{node(), [node()]}].
 
 partitions(Nodes) ->
     {Replies, _} = gen_server:multi_call(Nodes, ?SERVER, partitions, ?NODE_REPLY_TIMEOUT),
     Replies.
 
+-spec status([node()]) -> {[{node(), [node()]}], [node()]}.
+
 status(Nodes) ->
     gen_server:multi_call(Nodes, ?SERVER, status, infinity).
+
+-spec subscribe(pid()) -> 'ok'.
 
 subscribe(Pid) ->
     gen_server:cast(?SERVER, {subscribe, Pid}).
@@ -217,6 +219,8 @@ subscribe(Pid) ->
 %%
 %% So we have channels call in here before issuing confirms, to do a
 %% lightweight check that we have not entered a pausing state.
+
+-spec pause_partition_guard() -> 'ok' | 'pausing'.
 
 pause_partition_guard() ->
     case get(pause_partition_guard) of
@@ -888,12 +892,18 @@ all_nodes_up() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     length(alive_nodes(Nodes)) =:= length(Nodes).
 
+-spec all_rabbit_nodes_up() -> boolean().
+
 all_rabbit_nodes_up() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     length(alive_rabbit_nodes(Nodes)) =:= length(Nodes).
 
+-spec alive_nodes([node()]) -> [node()].
+
 alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
 alive_nodes(Nodes) -> [N || N <- Nodes, lists:member(N, [node()|nodes()])].
+
+-spec alive_rabbit_nodes([node()]) -> [node()].
 
 alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_mnesia:cluster_nodes(all)).
 
@@ -901,6 +911,9 @@ alive_rabbit_nodes(Nodes) ->
     [N || N <- alive_nodes(Nodes), rabbit:is_running(N)].
 
 %% This one is allowed to connect!
+
+-spec ping_all() -> 'ok'.
+
 ping_all() ->
     [net_adm:ping(N) || N <- rabbit_mnesia:cluster_nodes(all)],
     ok.

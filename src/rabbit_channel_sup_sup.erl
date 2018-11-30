@@ -32,13 +32,12 @@
 %%----------------------------------------------------------------------------
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
--spec start_channel(pid(), rabbit_channel_sup:start_link_args()) ->
-          {'ok', pid(), {pid(), any()}}.
-
-%%----------------------------------------------------------------------------
 
 start_link() ->
     supervisor2:start_link(?MODULE, []).
+
+-spec start_channel(pid(), rabbit_channel_sup:start_link_args()) ->
+          {'ok', pid(), {pid(), any()}}.
 
 start_channel(Pid, Args) ->
     supervisor2:start_child(Pid, [Args]).

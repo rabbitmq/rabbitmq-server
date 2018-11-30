@@ -31,19 +31,9 @@
 
 -type plugin_name() :: atom().
 
--spec setup() -> [plugin_name()].
--spec active() -> [plugin_name()].
--spec list(string()) -> [#plugin{}].
--spec list(string(), boolean()) -> [#plugin{}].
--spec read_enabled(file:filename()) -> [plugin_name()].
--spec dependencies(boolean(), [plugin_name()], [#plugin{}]) ->
-                             [plugin_name()].
--spec ensure(string()) -> {'ok', [atom()], [atom()]} | {error, any()}.
--spec strictly_plugins([plugin_name()], [#plugin{}]) -> [plugin_name()].
--spec strictly_plugins([plugin_name()]) -> [plugin_name()].
--spec is_strictly_plugin(#plugin{}) -> boolean().
-
 %%----------------------------------------------------------------------------
+
+-spec ensure(string()) -> {'ok', [atom()], [atom()]} | {error, any()}.
 
 ensure(FileJustChanged) ->
     case rabbit:is_running() of
@@ -128,6 +118,9 @@ enabled_plugins() ->
     end.
 
 %% @doc Prepares the file system and installs all enabled plugins.
+
+-spec setup() -> [plugin_name()].
+
 setup() ->
     ExpandDir = plugins_expand_dir(),
     %% Eliminate the contents of the destination directory
@@ -184,14 +177,22 @@ extract_schema(#plugin{type = dir, location = Location}, SchemaDir) ->
 
 
 %% @doc Lists the plugins which are currently running.
+
+-spec active() -> [plugin_name()].
+
 active() ->
     InstalledPlugins = plugin_names(list(plugins_dir())),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
             lists:member(App, InstalledPlugins)].
 
 %% @doc Get the list of plugins which are ready to be enabled.
+
+-spec list(string()) -> [#plugin{}].
+
 list(PluginsPath) ->
     list(PluginsPath, false).
+
+-spec list(string(), boolean()) -> [#plugin{}].
 
 list(PluginsPath, IncludeRequiredDeps) ->
     {AllPlugins, LoadingProblems} = discover_plugins(split_path(PluginsPath)),
@@ -202,6 +203,9 @@ list(PluginsPath, IncludeRequiredDeps) ->
     ensure_dependencies(Plugins2).
 
 %% @doc Read the list of enabled plugins from the supplied term file.
+
+-spec read_enabled(file:filename()) -> [plugin_name()].
+
 read_enabled(PluginsFile) ->
     case rabbit_file:read_term_file(PluginsFile) of
         {ok, [Plugins]} -> Plugins;
@@ -216,6 +220,10 @@ read_enabled(PluginsFile) ->
 %% @doc Calculate the dependency graph from <i>Sources</i>.
 %% When Reverse =:= true the bottom/leaf level applications are returned in
 %% the resulting list, otherwise they're skipped.
+
+-spec dependencies(boolean(), [plugin_name()], [#plugin{}]) ->
+                             [plugin_name()].
+
 dependencies(Reverse, Sources, AllPlugins) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
                 fun ({App, _Deps}) -> [{App, App}] end,
@@ -231,14 +239,21 @@ dependencies(Reverse, Sources, AllPlugins) ->
     OrderedDests.
 
 %% Filter real plugins from application dependencies
+
+-spec is_strictly_plugin(#plugin{}) -> boolean().
+
 is_strictly_plugin(#plugin{extra_dependencies = ExtraDeps}) ->
     lists:member(rabbit, ExtraDeps).
+
+-spec strictly_plugins([plugin_name()], [#plugin{}]) -> [plugin_name()].
 
 strictly_plugins(Plugins, AllPlugins) ->
     lists:filter(
       fun(Name) ->
               is_strictly_plugin(lists:keyfind(Name, #plugin.name, AllPlugins))
       end, Plugins).
+
+-spec strictly_plugins([plugin_name()]) -> [plugin_name()].
 
 strictly_plugins(Plugins) ->
     AllPlugins = list(plugins_dir()),

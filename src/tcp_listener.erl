@@ -64,8 +64,6 @@
          mfargs(), mfargs(), string()) ->
                            rabbit_types:ok_pid_or_error().
 
-%%--------------------------------------------------------------------
-
 start_link(IPAddress, Port,
            OnStartup, OnShutdown, Label) ->
     gen_server:start_link(

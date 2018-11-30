@@ -33,10 +33,6 @@
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
--spec headers_match
-        (rabbit_framing:amqp_table(), rabbit_framing:amqp_table()) ->
-            boolean().
-
 info(_X) -> [].
 info(_X, _) -> [].
 
@@ -84,6 +80,11 @@ parse_x_match(_)                    -> all. %% legacy; we didn't validate
 %% In other words: REQUIRES BOTH PATTERN AND DATA TO BE SORTED ASCENDING BY KEY.
 %%                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 %%
+
+-spec headers_match
+        (rabbit_framing:amqp_table(), rabbit_framing:amqp_table()) ->
+            boolean().
+
 headers_match(Args, Data) ->
     MK = parse_x_match(rabbit_misc:table_lookup(Args, <<"x-match">>)),
     headers_match(Args, Data, true, false, MK).

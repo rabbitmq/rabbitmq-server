@@ -67,6 +67,9 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
+
+-deprecated([{force_event_refresh, 1, eventually}]).
+
 %% Internal
 -export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
 -export([get_vhost/1, get_user/1]).
@@ -222,42 +225,13 @@
 
 -type channel() :: #ch{}.
 
+%%----------------------------------------------------------------------------
+
 -spec start_link
         (channel_number(), pid(), pid(), pid(), string(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
          pid(), pid()) ->
             rabbit_types:ok_pid_or_error().
--spec do(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
--spec do
-        (pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:maybe(rabbit_types:content())) ->
-            'ok'.
--spec do_flow
-        (pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:maybe(rabbit_types:content())) ->
-            'ok'.
--spec flush(pid()) -> 'ok'.
--spec shutdown(pid()) -> 'ok'.
--spec send_command(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
--spec deliver
-        (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg()) -> 'ok'.
--spec deliver_reply(binary(), rabbit_types:delivery()) -> 'ok'.
--spec deliver_reply_local(pid(), binary(), rabbit_types:delivery()) -> 'ok'.
--spec send_credit_reply(pid(), non_neg_integer()) -> 'ok'.
--spec send_drained(pid(), [{rabbit_types:ctag(), non_neg_integer()}]) -> 'ok'.
--spec list() -> [pid()].
--spec list_local() -> [pid()].
--spec info_keys() -> rabbit_types:info_keys().
--spec info(pid()) -> rabbit_types:infos().
--spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
--spec info_all() -> [rabbit_types:infos()].
--spec info_all(rabbit_types:info_keys()) -> [rabbit_types:infos()].
--spec refresh_config_local() -> 'ok'.
--spec ready_for_close(pid()) -> 'ok'.
--deprecated([{force_event_refresh, 1, eventually}]).
--spec force_event_refresh(reference()) -> 'ok'.
-
-%%----------------------------------------------------------------------------
 
 start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
            VHost, Capabilities, CollectorPid, Limiter) ->
@@ -265,26 +239,49 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol,
                 User, VHost, Capabilities, CollectorPid, Limiter], []).
 
+-spec do(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
+
 do(Pid, Method) ->
     rabbit_channel_common:do(Pid, Method).
+
+-spec do
+        (pid(), rabbit_framing:amqp_method_record(),
+         rabbit_types:maybe(rabbit_types:content())) ->
+            'ok'.
 
 do(Pid, Method, Content) ->
     rabbit_channel_common:do(Pid, Method, Content).
 
+-spec do_flow
+        (pid(), rabbit_framing:amqp_method_record(),
+         rabbit_types:maybe(rabbit_types:content())) ->
+            'ok'.
+
 do_flow(Pid, Method, Content) ->
     rabbit_channel_common:do_flow(Pid, Method, Content).
+
+-spec flush(pid()) -> 'ok'.
 
 flush(Pid) ->
     gen_server2:call(Pid, flush, infinity).
 
+-spec shutdown(pid()) -> 'ok'.
+
 shutdown(Pid) ->
     gen_server2:cast(Pid, terminate).
+
+-spec send_command(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 
 send_command(Pid, Msg) ->
     gen_server2:cast(Pid,  {command, Msg}).
 
+-spec deliver
+        (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg()) -> 'ok'.
+
 deliver(Pid, ConsumerTag, AckRequired, Msg) ->
     gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
+
+-spec deliver_reply(binary(), rabbit_types:delivery()) -> 'ok'.
 
 deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
     case decode_fast_reply_to(Rest) of
@@ -297,6 +294,9 @@ deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
 
 %% We want to ensure people can't use this mechanism to send a message
 %% to an arbitrary process and kill it!
+
+-spec deliver_reply_local(pid(), binary(), rabbit_types:delivery()) -> 'ok'.
+
 deliver_reply_local(Pid, Key, Delivery) ->
     case pg_local:in_group(rabbit_channels, Pid) of
         true  -> gen_server2:cast(Pid, {deliver_reply, Key, Delivery});
@@ -325,20 +325,32 @@ decode_fast_reply_to(Rest) ->
         _             -> error
     end.
 
+-spec send_credit_reply(pid(), non_neg_integer()) -> 'ok'.
+
 send_credit_reply(Pid, Len) ->
     gen_server2:cast(Pid, {send_credit_reply, Len}).
 
+-spec send_drained(pid(), [{rabbit_types:ctag(), non_neg_integer()}]) -> 'ok'.
+
 send_drained(Pid, CTagCredit) ->
     gen_server2:cast(Pid, {send_drained, CTagCredit}).
+
+-spec list() -> [pid()].
 
 list() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
                                      rabbit_channel, list_local, []).
 
+-spec list_local() -> [pid()].
+
 list_local() ->
     pg_local:get_members(rabbit_channels).
 
+-spec info_keys() -> rabbit_types:info_keys().
+
 info_keys() -> ?INFO_KEYS.
+
+-spec info(pid()) -> rabbit_types:infos().
 
 info(Pid) ->
     {Timeout, Deadline} = get_operation_timeout_and_deadline(),
@@ -353,6 +365,8 @@ info(Pid) ->
             throw(timeout)
     end.
 
+-spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
+
 info(Pid, Items) ->
     {Timeout, Deadline} = get_operation_timeout_and_deadline(),
     try
@@ -366,8 +380,12 @@ info(Pid, Items) ->
             throw(timeout)
     end.
 
+-spec info_all() -> [rabbit_types:infos()].
+
 info_all() ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C) end, list()).
+
+-spec info_all(rabbit_types:info_keys()) -> [rabbit_types:infos()].
 
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
@@ -385,6 +403,8 @@ emit_info_local(Items, Ref, AggregatorPid) ->
 emit_info(PidList, InfoItems, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
       AggregatorPid, Ref, fun(C) -> info(C, InfoItems) end, PidList).
+
+-spec refresh_config_local() -> 'ok'.
 
 refresh_config_local() ->
     rabbit_misc:upmap(
@@ -414,8 +434,12 @@ refresh_interceptors() ->
       list_local()),
     ok.
 
+-spec ready_for_close(pid()) -> 'ok'.
+
 ready_for_close(Pid) ->
     rabbit_channel_common:ready_for_close(Pid).
+
+-spec force_event_refresh(reference()) -> 'ok'.
 
 force_event_refresh(Ref) ->
     [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],

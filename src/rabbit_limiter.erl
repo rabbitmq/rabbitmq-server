@@ -147,36 +147,6 @@
 
 -type credit_mode() :: 'manual' | 'drain' | 'auto'.
 
--spec start_link(rabbit_types:proc_name()) ->
-                           rabbit_types:ok_pid_or_error().
--spec new(pid()) -> lstate().
-
--spec limit_prefetch(lstate(), non_neg_integer(), non_neg_integer()) ->
-          lstate().
--spec unlimit_prefetch(lstate()) -> lstate().
--spec is_active(lstate()) -> boolean().
--spec get_prefetch_limit(lstate()) -> non_neg_integer().
--spec ack(lstate(), non_neg_integer()) -> 'ok'.
--spec pid(lstate()) -> pid().
-
--spec client(pid()) -> qstate().
--spec activate(qstate()) -> qstate().
--spec can_send(qstate(), boolean(), rabbit_types:ctag()) ->
-          {'continue' | 'suspend', qstate()}.
--spec resume(qstate()) -> qstate().
--spec deactivate(qstate()) -> qstate().
--spec is_suspended(qstate()) -> boolean().
--spec is_consumer_blocked(qstate(), rabbit_types:ctag()) -> boolean().
--spec credit
-        (qstate(), rabbit_types:ctag(), non_neg_integer(), credit_mode(),
-         boolean()) ->
-            {boolean(), qstate()}.
--spec ack_from_queue(qstate(), rabbit_types:ctag(), non_neg_integer()) ->
-          {boolean(), qstate()}.
--spec drained(qstate()) ->
-          {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}.
--spec forget_consumer(qstate(), rabbit_types:ctag()) -> qstate().
-
 %%----------------------------------------------------------------------------
 
 -record(lim, {prefetch_count = 0,
@@ -194,12 +164,20 @@
 %% API
 %%----------------------------------------------------------------------------
 
+-spec start_link(rabbit_types:proc_name()) ->
+                           rabbit_types:ok_pid_or_error().
+
 start_link(ProcName) -> gen_server2:start_link(?MODULE, [ProcName], []).
+
+-spec new(pid()) -> lstate().
 
 new(Pid) ->
     %% this a 'call' to ensure that it is invoked at most once.
     ok = gen_server:call(Pid, {new, self()}, infinity),
     #lstate{pid = Pid, prefetch_limited = false}.
+
+-spec limit_prefetch(lstate(), non_neg_integer(), non_neg_integer()) ->
+          lstate().
 
 limit_prefetch(L, PrefetchCount, UnackedCount) when PrefetchCount > 0 ->
     ok = gen_server:call(
@@ -207,27 +185,44 @@ limit_prefetch(L, PrefetchCount, UnackedCount) when PrefetchCount > 0 ->
            {limit_prefetch, PrefetchCount, UnackedCount}, infinity),
     L#lstate{prefetch_limited = true}.
 
+-spec unlimit_prefetch(lstate()) -> lstate().
+
 unlimit_prefetch(L) ->
     ok = gen_server:call(L#lstate.pid, unlimit_prefetch, infinity),
     L#lstate{prefetch_limited = false}.
 
+-spec is_active(lstate()) -> boolean().
+
 is_active(#lstate{prefetch_limited = Limited}) -> Limited.
+
+-spec get_prefetch_limit(lstate()) -> non_neg_integer().
 
 get_prefetch_limit(#lstate{prefetch_limited = false}) -> 0;
 get_prefetch_limit(L) ->
     gen_server:call(L#lstate.pid, get_prefetch_limit, infinity).
 
+-spec ack(lstate(), non_neg_integer()) -> 'ok'.
+
 ack(#lstate{prefetch_limited = false}, _AckCount) -> ok;
 ack(L, AckCount) -> gen_server:cast(L#lstate.pid, {ack, AckCount}).
 
+-spec pid(lstate()) -> pid().
+
 pid(#lstate{pid = Pid}) -> Pid.
 
+-spec client(pid()) -> qstate().
+
 client(Pid) -> #qstate{pid = Pid, state = dormant, credits = gb_trees:empty()}.
+
+-spec activate(qstate()) -> qstate().
 
 activate(L = #qstate{state = dormant}) ->
     ok = gen_server:cast(L#qstate.pid, {register, self()}),
     L#qstate{state = active};
 activate(L) -> L.
+
+-spec can_send(qstate(), boolean(), rabbit_types:ctag()) ->
+          {'continue' | 'suspend', qstate()}.
 
 can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
          AckRequired, CTag) ->
@@ -246,17 +241,25 @@ safe_call(Pid, Msg, ExitValue) ->
       fun () -> ExitValue end,
       fun () -> gen_server2:call(Pid, Msg, infinity) end).
 
+-spec resume(qstate()) -> qstate().
+
 resume(L = #qstate{state = suspended}) ->
     L#qstate{state = active};
 resume(L) -> L.
+
+-spec deactivate(qstate()) -> qstate().
 
 deactivate(L = #qstate{state = dormant}) -> L;
 deactivate(L) ->
     ok = gen_server:cast(L#qstate.pid, {unregister, self()}),
     L#qstate{state = dormant}.
 
+-spec is_suspended(qstate()) -> boolean().
+
 is_suspended(#qstate{state = suspended}) -> true;
 is_suspended(#qstate{})                  -> false.
+
+-spec is_consumer_blocked(qstate(), rabbit_types:ctag()) -> boolean().
 
 is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
     case gb_trees:lookup(CTag, Credits) of
@@ -265,6 +268,11 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
         {value, #credit{}}                      -> true
     end.
 
+-spec credit
+        (qstate(), rabbit_types:ctag(), non_neg_integer(), credit_mode(),
+         boolean()) ->
+            {boolean(), qstate()}.
+
 credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Mode, IsEmpty) ->
     {Res, Cr} =
         case IsEmpty andalso Mode =:= drain of
@@ -272,6 +280,9 @@ credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Mode, IsEmpty) ->
             false -> {false, #credit{credit = Crd, mode = Mode}}
         end,
     {Res, Limiter#qstate{credits = enter_credit(CTag, Cr, Credits)}}.
+
+-spec ack_from_queue(qstate(), rabbit_types:ctag(), non_neg_integer()) ->
+          {boolean(), qstate()}.
 
 ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
     {Credits1, Unblocked} =
@@ -284,6 +295,9 @@ ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
         end,
     {Unblocked, Limiter#qstate{credits = Credits1}}.
 
+-spec drained(qstate()) ->
+          {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}.
+
 drained(Limiter = #qstate{credits = Credits}) ->
     Drain = fun(C) -> C#credit{credit = 0, mode = manual} end,
     {CTagCredits, Credits2} =
@@ -294,6 +308,8 @@ drained(Limiter = #qstate{credits = Credits}) ->
                   {Acc, Creds0}
           end, {[], Credits}, Credits),
     {CTagCredits, Limiter#qstate{credits = Credits2}}.
+
+-spec forget_consumer(qstate(), rabbit_types:ctag()) -> qstate().
 
 forget_consumer(Limiter = #qstate{credits = Credits}, CTag) ->
     Limiter#qstate{credits = gb_trees:delete_any(CTag, Credits)}.

@@ -18,6 +18,9 @@
 
 -export([boot/0, force_event_refresh/1, list/0, connect/5,
          start_channel/9, disconnect/2]).
+
+-deprecated([{force_event_refresh, 1, eventually}]).
+
 %% Internal
 -export([list_local/0]).
 
@@ -29,39 +32,24 @@
 %%----------------------------------------------------------------------------
 
 -spec boot() -> 'ok'.
--deprecated([{force_event_refresh, 1, eventually}]).
--spec force_event_refresh(reference()) -> 'ok'.
--spec list() -> [pid()].
--spec list_local() -> [pid()].
--spec connect
-        (({'none', 'none'} | {rabbit_types:username(), 'none'} |
-          {rabbit_types:username(), rabbit_types:password()}),
-         rabbit_types:vhost(), rabbit_types:protocol(), pid(),
-         rabbit_event:event_props()) ->
-            rabbit_types:ok_or_error2(
-              {rabbit_types:user(), rabbit_framing:amqp_table()},
-              'broker_not_found_on_node' |
-              {'auth_failure', string()} | 'access_refused').
--spec start_channel
-        (rabbit_channel:channel_number(), pid(), pid(), string(),
-         rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
-         rabbit_framing:amqp_table(), pid()) ->
-            {'ok', pid()}.
--spec disconnect(pid(), rabbit_event:event_props()) -> 'ok'.
-
-%%----------------------------------------------------------------------------
 
 boot() -> rabbit_sup:start_supervisor_child(
             rabbit_direct_client_sup, rabbit_client_sup,
             [{local, rabbit_direct_client_sup},
              {rabbit_channel_sup, start_link, []}]).
 
+-spec force_event_refresh(reference()) -> 'ok'.
+
 force_event_refresh(Ref) ->
     [Pid ! {force_event_refresh, Ref} || Pid <- list()],
     ok.
 
+-spec list_local() -> [pid()].
+
 list_local() ->
     pg_local:get_members(rabbit_direct).
+
+-spec list() -> [pid()].
 
 list() ->
     rabbit_misc:append_rpc_all_nodes(rabbit_mnesia:cluster_nodes(running),
@@ -81,6 +69,16 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
             Username,
             [{password, Password}, {vhost, VHost}] ++ ExtraAuthProps)
     end.
+
+-spec connect
+        (({'none', 'none'} | {rabbit_types:username(), 'none'} |
+          {rabbit_types:username(), rabbit_types:password()}),
+         rabbit_types:vhost(), rabbit_types:protocol(), pid(),
+         rabbit_event:event_props()) ->
+            rabbit_types:ok_or_error2(
+              {rabbit_types:user(), rabbit_framing:amqp_table()},
+              'broker_not_found_on_node' |
+              {'auth_failure', string()} | 'access_refused').
 
 connect(Creds, VHost, Protocol, Pid, Infos) ->
     ExtraAuthProps = extract_extra_auth_props(Creds, VHost, Pid, Infos),
@@ -200,6 +198,12 @@ connect1(User, VHost, Protocol, Pid, Infos) ->
             {error, Reason}
     end.
 
+-spec start_channel
+        (rabbit_channel:channel_number(), pid(), pid(), string(),
+         rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
+         rabbit_framing:amqp_table(), pid()) ->
+            {'ok', pid()}.
+
 start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
               VHost, Capabilities, Collector) ->
     {ok, _, {ChannelPid, _}} =
@@ -208,6 +212,8 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
           [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
             User, VHost, Capabilities, Collector}]),
     {ok, ChannelPid}.
+
+-spec disconnect(pid(), rabbit_event:event_props()) -> 'ok'.
 
 disconnect(Pid, Infos) ->
     pg_local:leave(rabbit_direct, Pid),

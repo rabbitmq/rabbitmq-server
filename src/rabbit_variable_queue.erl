@@ -428,10 +428,6 @@
              io_batch_size         :: pos_integer(),
              mode                  :: 'default' | 'lazy',
              memory_reduction_run_count :: non_neg_integer()}.
-%% Duplicated from rabbit_backing_queue
--spec ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
-
--spec multiple_routing_keys() -> 'ok'.
 
 -define(BLANK_DELTA, #delta { start_seq_id = undefined,
                               count        = 0,
@@ -703,6 +699,9 @@ drop(AckRequired, State) ->
             {AckTag, State2} = remove(AckRequired, MsgStatus, State1),
             {{MsgStatus#msg_status.msg_id, AckTag}, a(State2)}
     end.
+
+%% Duplicated from rabbit_backing_queue
+-spec ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
 
 ack([], State) ->
     {[], State};
@@ -2791,6 +2790,8 @@ ui(#vqstate{index_state      = IndexState,
 %%----------------------------------------------------------------------------
 %% Upgrading
 %%----------------------------------------------------------------------------
+
+-spec multiple_routing_keys() -> 'ok'.
 
 multiple_routing_keys() ->
     transform_storage(

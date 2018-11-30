@@ -16,7 +16,8 @@
 
 -module(rabbit_mnesia).
 
--export([init/0,
+-export([%% Main interface
+         init/0,
          join_cluster/2,
          reset/0,
          force_reset/0,
@@ -25,6 +26,7 @@
          forget_cluster_node/2,
          force_load_next_boot/0,
 
+         %% Various queries to get the status of the db
          status/0,
          is_clustered/0,
          on_running_node/1,
@@ -35,11 +37,13 @@
          dir/0,
          cluster_status_from_mnesia/0,
 
+         %% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
          init_db_unchecked/2,
          copy_db/1,
          check_cluster_consistency/0,
          ensure_mnesia_dir/0,
 
+         %% Hooks used in `rabbit_node_monitor'
          on_node_up/1,
          on_node_down/1
         ]).
@@ -61,44 +65,11 @@
 -type node_type() :: disc | ram.
 -type cluster_status() :: {[node()], [node()], [node()]}.
 
+%%----------------------------------------------------------------------------
 %% Main interface
+%%----------------------------------------------------------------------------
+
 -spec init() -> 'ok'.
--spec join_cluster(node(), node_type())
-                        -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
--spec reset() -> 'ok'.
--spec force_reset() -> 'ok'.
--spec update_cluster_nodes(node()) -> 'ok'.
--spec change_cluster_node_type(node_type()) -> 'ok'.
--spec forget_cluster_node(node(), boolean()) -> 'ok'.
--spec force_load_next_boot() -> 'ok'.
-
-%% Various queries to get the status of the db
--spec status() -> [{'nodes', [{node_type(), [node()]}]} |
-                         {'running_nodes', [node()]} |
-                         {'partitions', [{node(), [node()]}]}].
--spec is_clustered() -> boolean().
--spec on_running_node(pid()) -> boolean().
--spec is_process_alive(pid() | {atom(), node()}) -> boolean().
--spec is_registered_process_alive(atom()) -> boolean().
--spec cluster_nodes('all' | 'disc' | 'ram' | 'running') -> [node()].
--spec node_type() -> node_type().
--spec dir() -> file:filename().
--spec cluster_status_from_mnesia() -> rabbit_types:ok_or_error2(
-                                              cluster_status(), any()).
-
-%% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
--spec init_db_unchecked([node()], node_type()) -> 'ok'.
--spec copy_db(file:filename()) ->  rabbit_types:ok_or_error(any()).
--spec check_cluster_consistency() -> 'ok'.
--spec ensure_mnesia_dir() -> 'ok'.
-
-%% Hooks used in `rabbit_node_monitor'
--spec on_node_up(node()) -> 'ok'.
--spec on_node_down(node()) -> 'ok'.
-
-%%----------------------------------------------------------------------------
-%% Main interface
-%%----------------------------------------------------------------------------
 
 init() ->
     ensure_mnesia_running(),
@@ -228,6 +199,10 @@ join_discovered_peers(TryNodes, NodeType) ->
 %% Note that we make no attempt to verify that the nodes provided are
 %% all in the same cluster, we simply pick the first online node and
 %% we cluster to its cluster.
+
+-spec join_cluster(node(), node_type())
+                        -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
+
 join_cluster(DiscoveryNode, NodeType) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
@@ -275,10 +250,15 @@ join_cluster(DiscoveryNode, NodeType) ->
 %% return node to its virgin state, where it is not member of any
 %% cluster, has no cluster configuration, no local database, and no
 %% persisted messages
+
+-spec reset() -> 'ok'.
+
 reset() ->
     ensure_mnesia_not_running(),
     rabbit_log:info("Resetting Rabbit~n", []),
     reset_gracefully().
+
+-spec force_reset() -> 'ok'.
 
 force_reset() ->
     ensure_mnesia_not_running(),
@@ -310,6 +290,8 @@ wipe() ->
     ok = rabbit_node_monitor:reset_cluster_status(),
     ok.
 
+-spec change_cluster_node_type(node_type()) -> 'ok'.
+
 change_cluster_node_type(Type) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
@@ -326,6 +308,8 @@ change_cluster_node_type(Type) ->
            end,
     ok = reset(),
     ok = join_cluster(Node, Type).
+
+-spec update_cluster_nodes(node()) -> 'ok'.
 
 update_cluster_nodes(DiscoveryNode) ->
     ensure_mnesia_not_running(),
@@ -353,6 +337,9 @@ update_cluster_nodes(DiscoveryNode) ->
 %%   * This node was, at the best of our knowledge (see comment below)
 %%     the last or second to last after the node we're removing to go
 %%     down
+
+-spec forget_cluster_node(node(), boolean()) -> 'ok'.
+
 forget_cluster_node(Node, RemoveWhenOffline) ->
     forget_cluster_node(Node, RemoveWhenOffline, true).
 
@@ -407,6 +394,10 @@ remove_node_offline_node(Node) ->
 %% Queries
 %%----------------------------------------------------------------------------
 
+-spec status() -> [{'nodes', [{node_type(), [node()]}]} |
+                         {'running_nodes', [node()]} |
+                         {'partitions', [{node(), [node()]}]}].
+
 status() ->
     IfNonEmpty = fun (_,       []) -> [];
                      (Type, Nodes) -> [{Type, Nodes}]
@@ -427,8 +418,12 @@ mnesia_partitions(Nodes) ->
 
 is_running() -> mnesia:system_info(is_running) =:= yes.
 
+-spec is_clustered() -> boolean().
+
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
+
+-spec on_running_node(pid()) -> boolean().
 
 on_running_node(Pid) -> lists:member(node(Pid), cluster_nodes(running)).
 
@@ -436,6 +431,9 @@ on_running_node(Pid) -> lists:member(node(Pid), cluster_nodes(running)).
 %% (i.e. not partitioned or some random node).
 %%
 %% See also rabbit_misc:is_process_alive/1 which does not.
+
+-spec is_process_alive(pid() | {atom(), node()}) -> boolean().
+
 is_process_alive(Pid) when is_pid(Pid) ->
     on_running_node(Pid) andalso
         rpc:call(node(Pid), erlang, is_process_alive, [Pid]) =:= true;
@@ -443,14 +441,22 @@ is_process_alive({Name, Node}) ->
     lists:member(Node, cluster_nodes(running)) andalso
         rpc:call(Node, rabbit_mnesia, is_registered_process_alive, [Name]) =:= true.
 
+-spec is_registered_process_alive(atom()) -> boolean().
+
 is_registered_process_alive(Name) ->
     is_pid(whereis(Name)).
+
+-spec cluster_nodes('all' | 'disc' | 'ram' | 'running') -> [node()].
 
 cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 
 %% This function is the actual source of information, since it gets
 %% the data from mnesia. Obviously it'll work only when mnesia is
 %% running.
+
+-spec cluster_status_from_mnesia() -> rabbit_types:ok_or_error2(
+                                              cluster_status(), any()).
+
 cluster_status_from_mnesia() ->
     case is_running() of
         false ->
@@ -505,6 +511,8 @@ node_info() ->
      mnesia:system_info(protocol_version),
      cluster_status_from_mnesia()}.
 
+-spec node_type() -> node_type().
+
 node_type() ->
     {_AllNodes, DiscNodes, _RunningNodes} =
         rabbit_node_monitor:read_cluster_status(),
@@ -512,6 +520,8 @@ node_type() ->
         true  -> disc;
         false -> ram
     end.
+
+-spec dir() -> file:filename().
 
 dir() -> mnesia:system_info(directory).
 
@@ -552,6 +562,8 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
     rabbit_node_monitor:update_cluster_status(),
     ok.
 
+-spec init_db_unchecked([node()], node_type()) -> 'ok'.
+
 init_db_unchecked(ClusterNodes, NodeType) ->
     init_db(ClusterNodes, NodeType, false).
 
@@ -581,6 +593,8 @@ init_db_with_mnesia(ClusterNodes, NodeType,
     after
         stop_mnesia()
     end.
+
+-spec ensure_mnesia_dir() -> 'ok'.
 
 ensure_mnesia_dir() ->
     MnesiaDir = dir() ++ "/",
@@ -629,12 +643,16 @@ ensure_schema_integrity() ->
             throw({error, {schema_integrity_check_failed, Reason}})
     end.
 
+-spec copy_db(file:filename()) ->  rabbit_types:ok_or_error(any()).
+
 copy_db(Destination) ->
     ok = ensure_mnesia_not_running(),
     rabbit_file:recursive_copy(dir(), Destination).
 
 force_load_filename() ->
     filename:join(dir(), "force_load").
+
+-spec force_load_next_boot() -> 'ok'.
 
 force_load_next_boot() ->
     rabbit_file:write_file(force_load_filename(), <<"">>).
@@ -648,6 +666,9 @@ maybe_force_load() ->
 
 %% This does not guarantee us much, but it avoids some situations that
 %% will definitely end up badly
+
+-spec check_cluster_consistency() -> 'ok'.
+
 check_cluster_consistency() ->
     %% We want to find 0 or 1 consistent nodes.
     case lists:foldl(
@@ -717,11 +738,15 @@ remote_node_info(Node) ->
 %% Hooks for `rabbit_node_monitor'
 %%--------------------------------------------------------------------
 
+-spec on_node_up(node()) -> 'ok'.
+
 on_node_up(Node) ->
     case running_disc_nodes() of
         [Node] -> rabbit_log:info("cluster contains disc nodes again~n");
         _      -> ok
     end.
+
+-spec on_node_down(node()) -> 'ok'.
 
 on_node_down(_Node) ->
     case running_disc_nodes() of
