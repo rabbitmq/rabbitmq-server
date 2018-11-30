@@ -1023,16 +1023,14 @@ i(effective_policy_definition,  #q{q = Q}) ->
         undefined -> [];
         Def       -> Def
     end;
-i(exclusive_consumer_pid, #q{active_consumer = none}) ->
-    '';
-i(exclusive_consumer_pid, #q{active_consumer = {ChPid, _ConsumerTagOrConsumer}}) ->
+i(exclusive_consumer_pid, #q{active_consumer = {ChPid, _ConsumerTag}, single_active_consumer_on = false}) ->
     ChPid;
-i(exclusive_consumer_tag, #q{active_consumer = none}) ->
+i(exclusive_consumer_pid, _) ->
     '';
-i(exclusive_consumer_tag, #q{single_active_consumer_on = true, active_consumer = {_ChPid, Consumer}}) ->
-    rabbit_queue_consumers:consumer_tag(Consumer);
-i(exclusive_consumer_tag, #q{single_active_consumer_on = false, active_consumer = {_ChPid, ConsumerTag}}) ->
+i(exclusive_consumer_tag, #q{active_consumer = {_ChPid, ConsumerTag}, single_active_consumer_on = false}) ->
     ConsumerTag;
+i(exclusive_consumer_tag, _) ->
+    '';
 i(messages_ready, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:len(BQS);
 i(messages_unacknowledged, _) ->
