@@ -14,8 +14,6 @@
 ## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
-  alias RabbitMQ.CLI.Core.Helpers
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @known_levels ["debug", "info", "notice", "warning", "error", "critical", "alert", "emergency", "none"]
 

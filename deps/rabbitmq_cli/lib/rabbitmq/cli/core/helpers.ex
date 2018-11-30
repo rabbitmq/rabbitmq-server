@@ -20,15 +20,40 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   alias RabbitMQ.CLI.Core.Config
   require Record
 
-  def get_rabbit_hostname() do
-    normalise_node(Config.get_option(:node))
+  def get_rabbit_hostname(node_name_type \\ :shortnames) do
+    normalise_node(Config.get_option(:node), node_name_type)
   end
 
-  def normalise_node(nil), do: get_rabbit_hostname()
-  def normalise_node(name) when is_atom(name) do
-    normalise_node(to_string(name))
+  def normalise_node(name, node_name_type \\ :shortnames)
+  def normalise_node(nil, node_name_type) do
+    get_rabbit_hostname(node_name_type)
   end
-  def normalise_node(name) do
+  def normalise_node(name, :longnames) when is_atom(name) do
+    priv_normalise_node(name, :longnames)
+  end
+  def normalise_node(name, node_name_type) when is_atom(name) do
+    priv_normalise_node(to_string(name), node_name_type)
+  end
+  def normalise_node(name, :longnames) do
+    priv_normalise_node(String.to_atom(name), :longnames)
+  end
+  def normalise_node(name, node_name_type) do
+    priv_normalise_node(name, node_name_type)
+  end
+
+  defp priv_normalise_node(name, :longnames) when is_atom(name) do
+    case :net_kernel.get_net_ticktime do
+      :ignored ->
+        raise "distributed Erlang must be active to "
+              "normalise a node with :longnames name type"
+      _ ->
+        :rabbit_nodes_common.make(name)
+    end
+  end
+  defp priv_normalise_node(name, :shortnames) when is_atom(name) do
+    priv_normalise_node(to_string(name), :shortnames)
+  end
+  defp priv_normalise_node(name, :shortnames) do
     case String.split(name, "@", parts: 2) do
       [_,""] ->
         name <> "#{hostname()}" |> String.to_atom
@@ -42,15 +67,16 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
+  def normalise_node_option(options) do
+    node_opt = Config.get_option(:node, options)
+    longnames_opt = Config.get_option(:longnames, options)
+    normalised_node_opt = priv_normalise_node(node_opt, longnames_opt)
+    Map.put(options, :node, normalised_node_opt)
+  end
+
   def hostname, do: :inet_db.gethostname() |> List.to_string
 
   def domain, do: Keyword.get(:inet.get_rc(), :domain)
-
-  def normalise_node_option(options) do
-    node_opt = Config.get_option(:node, options)
-    normalised_node_opt = :rabbit_nodes_common.make(node_opt)
-    Map.put(options, :node, normalised_node_opt)
-  end
 
   def validate_step(:ok, step) do
     case step.() do
