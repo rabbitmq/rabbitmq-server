@@ -92,7 +92,8 @@ defmodule HelpersTest do
   end
 
   test "if input is a hostname without a node name, default node name is added" do
-    want = String.to_atom("rabbit_test@#{hostname()}")
+    default_name = RabbitMQ.CLI.Core.Config.get_option(:node)
+    want = String.to_atom("#{default_name}@#{hostname()}")
     got = @subject.normalise_node("@#{hostname()}")
     assert want == got
   end
