@@ -30,9 +30,15 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   end
   def normalise_node(name) do
     case String.split(name, "@", parts: 2) do
-      [_,""] -> name <> "#{hostname()}" |> String.to_atom
-      [_,_] -> name |> String.to_atom
-      [_] -> name <> "@#{hostname()}" |> String.to_atom
+      [_,""] ->
+        name <> "#{hostname()}" |> String.to_atom
+      ["",hostname] ->
+        default_name = to_string(Config.get_option(:node))
+        default_name <> "@#{hostname}" |> String.to_atom
+      [_,_] ->
+        name |> String.to_atom
+      [_] ->
+        name <> "@#{hostname()}" |> String.to_atom
     end
   end
 
