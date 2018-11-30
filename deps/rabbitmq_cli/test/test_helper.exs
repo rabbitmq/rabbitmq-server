@@ -25,9 +25,9 @@ defmodule TestHelper do
     RabbitMQ.CLI.Core.Helpers.get_rabbit_hostname()
   end
 
-  def hostname() do
-    RabbitMQ.CLI.Core.Helpers.hostname
-  end
+  def hostname, do: Helpers.hostname
+
+  def domain, do: Helpers.domain
 
   def fixture_file_path(filename) do
     Path.join([System.cwd!(), "test", "fixtures", "files", filename])

@@ -13,29 +13,19 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule HelpersTest do
   use ExUnit.Case, async: false
   import TestHelper
 
   @subject RabbitMQ.CLI.Core.Helpers
 
-  setup_all do
-    RabbitMQ.CLI.Core.Distribution.start()
-    on_exit([], fn ->
+  ## --------------------- get_rabbit_hostname()/0 tests -------------------------
 
-      :ok
-    end)
-    :ok
-  end
-
-## --------------------- get_rabbit_hostname()/0 tests -------------------------
-
-test "RabbitMQ hostname is properly formed" do
+  test "RabbitMQ hostname is properly formed" do
     assert @subject.get_rabbit_hostname() |> Atom.to_string =~ ~r/rabbit@\w+/
   end
 
-## ------------------- memory_unit* tests --------------------
+  ## ------------------- memory_unit* tests --------------------
 
   test "an invalid memory unit fails " do
     assert @subject.memory_unit_absolute(10, "gigantibytes") == {:bad_argument, ["gigantibytes"]}
@@ -59,6 +49,23 @@ test "RabbitMQ hostname is properly formed" do
       assert @subject.memory_unit_absolute(10, "")  == 10
   end
 
+  ## ------------------- normalise_node_option tests --------------------
+
+  test "if using longnames and 'rabbit' as node name, correct domain is used" do
+    options = %{node: :rabbit, longnames: true}
+    RabbitMQ.CLI.Core.Distribution.start(options)
+    options = @subject.normalise_node_option(options)
+    assert options[:node] == :"rabbit@#{hostname()}.#{domain()}"
+    RabbitMQ.CLI.Core.Distribution.stop()
+  end
+
+  test "if using shortnames and 'rabbit' as node name, no domain is used" do
+    options = %{node: :rabbit, longnames: false}
+    RabbitMQ.CLI.Core.Distribution.start(options)
+    options = @subject.normalise_node_option(options)
+    assert options[:node] == :"rabbit@#{hostname()}"
+    RabbitMQ.CLI.Core.Distribution.stop()
+  end
 
   ## ------------------- parse_node* tests --------------------
 
