@@ -34,7 +34,7 @@
 -spec wait_for_replicated(retry()) -> 'ok'.
 -spec wait_for_replicated() -> 'ok'.
 -spec wait([atom()]) -> 'ok'.
--spec retry_timeout() -> {non_neg_integer() | infinity, non_neg_integer()}.
+-spec retry_timeout() -> non_neg_integer() | infinity.
 -spec force_load() -> 'ok'.
 -spec is_present() -> boolean().
 -spec is_empty() -> boolean().
@@ -117,8 +117,6 @@ wait(TableNames, Timeout, Retries) ->
             throw(Error);
         {_, {error, Error}} ->
             rabbit_log:warning("Error while waiting for Mnesia tables: ~p~n", [Error]),
-            wait(TableNames, Timeout, Retries - 1);
-        _ ->
             wait(TableNames, Timeout, Retries - 1)
     end.
 

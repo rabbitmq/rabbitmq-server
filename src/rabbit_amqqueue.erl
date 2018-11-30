@@ -453,6 +453,8 @@ not_found_or_absent(Name) ->
         [Q] -> {absent, Q, nodedown} %% Q exists on stopped node
     end.
 
+-spec not_found_or_absent_dirty(name()) -> not_found_or_absent().
+
 not_found_or_absent_dirty(Name) ->
     %% We should read from both tables inside a tx, to get a
     %% consistent view. But the chances of an inconsistency are small,
@@ -465,7 +467,7 @@ not_found_or_absent_dirty(Name) ->
 with(Name, F, E) ->
     with(Name, F, E, 2000).
 
-with(Name, F, E, RetriesLeft) ->
+with(#resource{} = Name, F, E, RetriesLeft) ->
     case lookup(Name) of
         {ok, Q = #amqqueue{state = live}} when RetriesLeft =:= 0 ->
             %% Something bad happened to that queue, we are bailing out
