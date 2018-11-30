@@ -54,7 +54,7 @@ defmodule CloseConnectionCommandTest do
   test "run: a close connection request on an existing connection", context do
     with_connection("/", fn(_) ->
       Process.sleep(500)
-      node = @helpers.parse_node(context[:node])
+      node = @helpers.normalise_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
       [[pid: pid]] = fetch_connection_pids(node, nodes)
       assert :ok == @command.run([:rabbit_misc.pid_to_string(pid), "test"], %{node: node})
@@ -65,7 +65,7 @@ defmodule CloseConnectionCommandTest do
 
   test "run: a close connection request on for a non existing connection returns successfully", context do
     assert match?(:ok,
-      @command.run(["<#{node()}.2.121.12>", "test"], %{node: @helpers.parse_node(context[:node])}))
+      @command.run(["<#{node()}.2.121.12>", "test"], %{node: @helpers.normalise_node(context[:node])}))
   end
 
   test "run: a close_connection request on nonexistent RabbitMQ node returns nodedown" do
