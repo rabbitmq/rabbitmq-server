@@ -43,7 +43,6 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include("amqqueue.hrl").
 
--type ra_server_id() :: {Name :: atom(), Node :: node()}.
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(), rabbit_types:message()}.
 
@@ -68,8 +67,8 @@
 
 %%----------------------------------------------------------------------------
 
--spec init_state(ra_server_id(), rabbit_types:r('queue')) ->
-                        rabbit_fifo_client:state().
+-spec init_state(amqqueue:ra_server_id(), rabbit_amqqueue:name()) ->
+    rabbit_fifo_client:state().
 init_state({Name, _}, QName = #resource{}) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     %% This lookup could potentially return an {error, not_found}, but we do not
@@ -84,7 +83,7 @@ init_state({Name, _}, QName = #resource{}) ->
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
--spec handle_event({'ra_event', ra_server_id(), any()}, rabbit_fifo_client:state()) ->
+-spec handle_event({'ra_event', amqqueue:ra_server_id(), any()}, rabbit_fifo_client:state()) ->
                           {'internal', Correlators :: [term()], rabbit_fifo_client:state()} |
                           {rabbit_fifo:client_msg(), rabbit_fifo_client:state()}.
 
@@ -92,8 +91,7 @@ handle_event({ra_event, From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
 
 -spec declare(amqqueue:amqqueue()) ->
-    {'new', amqqueue:amqqueue()} |
-    {existing, amqqueue:amqqueue()}.
+    {new | existing, amqqueue:amqqueue()} | rabbit_types:channel_exit().
 
 declare(Q) when ?amqqueue_is_quorum(Q) ->
     QName = amqqueue:get_name(Q),
@@ -264,9 +262,9 @@ recover(Queues) ->
              ok ->
                  % queue was restarted, good
                  ok;
-             {error, Err}
-               when Err == not_started orelse
-                    Err == name_not_registered ->
+             {error, Err1}
+               when Err1 == not_started orelse
+                    Err1 == name_not_registered ->
                  % queue was never started on this node
                  % so needs to be started from scratch.
                  Machine = ra_machine(Q0),
@@ -400,7 +398,8 @@ credit(CTag, Credit, Drain, QState) ->
 -spec basic_get(amqqueue:amqqueue(), NoAck :: boolean(), rabbit_types:ctag(),
                 rabbit_fifo_client:state()) ->
     {'ok', 'empty', rabbit_fifo_client:state()} |
-    {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()}.
+    {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()} |
+    {error, timeout | term()}.
 
 basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
     QName = amqqueue:get_name(Q),
@@ -420,6 +419,8 @@ basic_get(Q, NoAck, CTag0, QState0) when ?amqqueue_is_quorum(Q) ->
             IsDelivered = Count > 0,
             Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
             {ok, MsgsReady, {QName, Id, MsgId, IsDelivered, Msg}, QState};
+        {error, _} = Err ->
+            Err;
         {timeout, _} ->
             {error, timeout}
     end.
@@ -482,7 +483,7 @@ basic_cancel(ConsumerTag, ChPid, OkMsg, QState0) ->
     maybe_send_reply(ChPid, OkMsg),
     rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), QState0).
 
--spec stateless_deliver(ra_server_id(), rabbit_types:delivery()) -> 'ok'.
+-spec stateless_deliver(amqqueue:ra_server_id(), rabbit_types:delivery()) -> 'ok'.
 
 stateless_deliver(ServerId, Delivery) ->
     ok = rabbit_fifo_client:untracked_enqueue([ServerId],
@@ -581,7 +582,7 @@ cluster_state(Name) ->
             end
     end.
 
--spec status(rabbit_types:vhost(), Name :: atom()) -> rabbit_types:infos() | {error, term()}.
+-spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> rabbit_types:infos() | {error, term()}.
 
 status(Vhost, QueueName) ->
     %% Handle not found queues
@@ -884,6 +885,8 @@ format(Q) when ?is_amqqueue(Q) ->
 
 is_process_alive(Name, Node) ->
     erlang:is_pid(rpc:call(Node, erlang, whereis, [Name], ?TICK_TIME)).
+
+-spec quorum_messages(atom()) -> non_neg_integer().
 
 quorum_messages(QName) ->
     case ets:lookup(queue_coarse_metrics, QName) of

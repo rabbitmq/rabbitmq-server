@@ -29,7 +29,7 @@
 -export([not_found/1, absent/2]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
-	 emit_info_local/4, emit_info_down/4]).
+         emit_info_local/4, emit_info_down/4]).
 -export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0,
          list_with_possible_retry/1]).
 -export([list_by_type/1]).
@@ -81,11 +81,11 @@
 -type msg_id() :: non_neg_integer().
 -type ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}.
--type absent_reason() :: 'nodedown' | 'crashed'.
--type queue_or_absent() :: amqqueue:amqqueue() |
-                           {'absent', amqqueue:amqqueue(),absent_reason()}.
--type not_found_or_absent() ::
-        'not_found' | {'absent', amqqueue:amqqueue(), absent_reason()}.
+-type absent_reason() :: 'nodedown' | 'crashed' | stopped | timeout.
+-type queue_not_found() :: not_found.
+-type queue_absent() :: {'absent', amqqueue:amqqueue(), absent_reason()}.
+-type not_found_or_absent() :: queue_not_found() | queue_absent().
+-type quorum_states() :: #{Name :: atom() => rabbit_fifo_client:state()}.
 
 %%----------------------------------------------------------------------------
 
@@ -231,13 +231,14 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
                       [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
 
--spec declare
-        (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
-         rabbit_types:maybe(pid()), rabbit_types:username()) ->
-            {'new' | 'existing' | 'absent' | 'owner_died',
-             amqqueue:amqqueue()} |
-            {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
-            rabbit_types:channel_exit().
+-spec declare(name(),
+              boolean(),
+              boolean(),
+              rabbit_framing:amqp_table(),
+              rabbit_types:maybe(pid()),
+              rabbit_types:username()) ->
+    {'new' | 'existing' | 'absent' | 'owner_died', amqqueue:amqqueue()} |
+    rabbit_types:channel_exit().
 
 declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser, node()).
@@ -247,13 +248,17 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
 %% should be. Note that in some cases (e.g. with "nodes" policy in
 %% effect) this might not be possible to satisfy.
 
--spec declare
-        (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
-         rabbit_types:maybe(pid()), rabbit_types:username(), node()) ->
-            {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
-            {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
-            {'absent', amqqueue:amqqueue(), absent_reason()} |
-            rabbit_types:channel_exit().
+-spec declare(name(),
+              boolean(),
+              boolean(),
+              rabbit_framing:amqp_table(),
+              rabbit_types:maybe(pid()),
+              rabbit_types:username(),
+              node()) ->
+    {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
+    {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
+    {'absent', amqqueue:amqqueue(), absent_reason()} |
+    rabbit_types:channel_exit().
 
 declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
@@ -317,7 +322,7 @@ get_queue_type(Args) ->
     end.
 
 -spec internal_declare(amqqueue:amqqueue(), boolean()) ->
-          queue_or_absent() | rabbit_misc:thunk(queue_or_absent()).
+    {created | existing, amqqueue:amqqueue()} | queue_absent().
 
 internal_declare(Q, Recover) ->
     ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
@@ -451,6 +456,8 @@ not_found_or_absent(Name) ->
         [Q] -> {absent, Q, nodedown} %% Q exists on stopped node
     end.
 
+-spec not_found_or_absent_dirty(name()) -> not_found_or_absent().
+
 not_found_or_absent_dirty(Name) ->
     %% We should read from both tables inside a tx, to get a
     %% consistent view. But the chances of an inconsistency are small,
@@ -460,12 +467,15 @@ not_found_or_absent_dirty(Name) ->
         {ok, Q}            -> {absent, Q, nodedown}
     end.
 
--spec with(name(), qfun(A), fun((not_found_or_absent()) -> B)) -> A | B.
+-spec with(name(),
+           qfun(A),
+           fun((not_found_or_absent()) -> rabbit_types:channel_exit())) ->
+    A | rabbit_types:channel_exit().
 
 with(Name, F, E) ->
     with(Name, F, E, 2000).
 
-with(Name, F, E, RetriesLeft) ->
+with(#resource{} = Name, F, E, RetriesLeft) ->
     case lookup(Name) of
         {ok, Q} when ?amqqueue_state_is(Q, live) andalso RetriesLeft =:= 0 ->
             %% Something bad happened to that queue, we are bailing out
@@ -502,6 +512,12 @@ with(Name, F, E, RetriesLeft) ->
             E(not_found_or_absent_dirty(Name))
     end.
 
+-spec retry_wait(amqqueue:amqqueue(),
+                 qfun(A),
+                 fun((not_found_or_absent()) -> rabbit_types:channel_exit()),
+                 non_neg_integer()) ->
+    A | rabbit_types:channel_exit().
+
 retry_wait(Q, F, E, RetriesLeft) ->
     Name = amqqueue:get_name(Q),
     QPid = amqqueue:get_pid(Q),
@@ -535,22 +551,31 @@ with(Name, F) -> with(Name, F, fun (E) -> {error, E} end).
 -spec with_or_die(name(), qfun(A)) -> A | rabbit_types:channel_exit().
 
 with_or_die(Name, F) ->
-    with(Name, F, fun (not_found)           -> not_found(Name);
-                      ({absent, Q, Reason}) -> absent(Q, Reason)
-                  end).
+    with(Name, F, die_fun(Name)).
 
--spec not_found(rabbit_types:r(atom())) -> rabbit_types:channel_exit().
+-spec die_fun(name()) ->
+    fun((not_found_or_absent()) -> rabbit_types:channel_exit()).
+
+die_fun(Name) ->
+    fun (not_found)           -> not_found(Name);
+        ({absent, Q, Reason}) -> absent(Q, Reason)
+    end.
+
+-spec not_found(name()) -> rabbit_types:channel_exit().
 
 not_found(R) -> rabbit_misc:protocol_error(not_found, "no ~s", [rabbit_misc:rs(R)]).
 
--spec absent(amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()) ->
-          rabbit_types:channel_exit().
+-spec absent(amqqueue:amqqueue(), absent_reason()) ->
+    rabbit_types:channel_exit().
 
 absent(Q, AbsentReason) ->
     QueueName = amqqueue:get_name(Q),
     QPid = amqqueue:get_pid(Q),
     IsDurable = amqqueue:is_durable(Q),
     priv_absent(QueueName, QPid, IsDurable, AbsentReason).
+
+-spec priv_absent(name(), pid(), boolean(), absent_reason()) ->
+    rabbit_types:channel_exit().
 
 priv_absent(QueueName, QPid, true, nodedown) ->
     %% The assertion of durability is mainly there because we mention
@@ -1006,7 +1031,7 @@ notify_policy_changed(Q) when ?amqqueue_is_quorum(Q) ->
 
 -spec consumers(amqqueue:amqqueue()) ->
           [{pid(), rabbit_types:ctag(), boolean(), non_neg_integer(),
-            rabbit_framing:amqp_table()}].
+            rabbit_framing:amqp_table(), rabbit_types:username()}].
 
 consumers(Q) when ?amqqueue_is_classic(Q) ->
     QPid = amqqueue:get_pid(Q),
@@ -1189,7 +1214,11 @@ purge(Q) when ?amqqueue_is_quorum(Q) ->
     NodeId = amqqueue:get_pid(Q),
     rabbit_quorum_queue:purge(NodeId).
 
--spec requeue(pid(), [msg_id()],  pid(), #{Name :: atom() => rabbit_fifo_client:state()}) -> 'ok'.
+-spec requeue(pid(),
+              {rabbit_fifo:consumer_tag(), [msg_id()]},
+              pid(),
+              quorum_states()) ->
+    'ok'.
 
 requeue(QPid, {_, MsgIds}, ChPid, QuorumStates) when ?IS_CLASSIC(QPid) ->
     ok = delegate:invoke(QPid, {gen_server2, call, [{requeue, MsgIds, ChPid}, infinity]}),
@@ -1205,7 +1234,11 @@ requeue({Name, _} = QPid, {CTag, MsgIds}, _ChPid, QuorumStates)
             QuorumStates
     end.
 
--spec ack(pid(), [msg_id()], pid(), #{Name :: atom() => rabbit_fifo_client:state()}) -> 'ok'.
+-spec ack(pid(),
+          {rabbit_fifo:consumer_tag(), [msg_id()]},
+          pid(),
+          quorum_states()) ->
+    quorum_states().
 
 ack(QPid, {_, MsgIds}, ChPid, QueueStates) when ?IS_CLASSIC(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]}),
@@ -1221,8 +1254,12 @@ ack({Name, _} = QPid, {CTag, MsgIds}, _ChPid, QuorumStates)
             QuorumStates
     end.
 
--spec reject(pid() | {atom(), node()}, [msg_id()], boolean(), pid(),
-             #{Name :: atom() => rabbit_fifo_client:state()}) -> 'ok'.
+-spec reject(pid() | amqqueue:ra_server_id(),
+             boolean(),
+             {rabbit_fifo:consumer_tag(), [msg_id()]},
+             pid(),
+             quorum_states()) ->
+    quorum_states().
 
 reject(QPid, Requeue, {_, MsgIds}, ChPid, QStates) when ?IS_CLASSIC(QPid) ->
     ok = delegate:invoke_no_result(QPid, {gen_server2, cast,
@@ -1265,17 +1302,20 @@ notify_down_all(QPids, ChPid, Timeout) ->
         Error         -> {error, Error}
     end.
 
--spec activate_limit_all(qpids(), pid()) -> ok_or_errors().
+-spec activate_limit_all(qpids(), pid()) -> ok.
 
 activate_limit_all(QRefs, ChPid) ->
     QPids = [P || P <- QRefs, ?IS_CLASSIC(P)],
     delegate:invoke_no_result(QPids, {gen_server2, cast,
                                       [{activate_limit, ChPid}]}).
 
--spec credit
-        (amqqueue:amqqueue(), pid(), rabbit_types:ctag(), non_neg_integer(),
-         boolean(), #{Name :: atom() => rabbit_fifo_client:state()}) ->
-            'ok'.
+-spec credit(amqqueue:amqqueue(),
+             pid(),
+             rabbit_types:ctag(),
+             non_neg_integer(),
+             boolean(),
+             quorum_states()) ->
+    {'ok', quorum_states()}.
 
 credit(Q, ChPid, CTag, Credit,
        Drain, QStates) when ?amqqueue_is_classic(Q) ->
@@ -1294,7 +1334,9 @@ credit(Q,
 
 -spec basic_get(amqqueue:amqqueue(), pid(), boolean(), pid(), rabbit_types:ctag(),
                 #{Name :: atom() => rabbit_fifo_client:state()}) ->
-          {'ok', non_neg_integer(), qmsg()} | 'empty'.
+          {'ok', non_neg_integer(), qmsg(), quorum_states()} |
+          {'empty', quorum_states()} |
+          rabbit_types:channel_exit().
 
 basic_get(Q, ChPid, NoAck, LimiterPid, _CTag, _)
   when ?amqqueue_is_classic(Q) ->
@@ -1421,10 +1463,7 @@ internal_delete1(QueueName, OnlyDurable, Reason) ->
     %% after the transaction.
     rabbit_binding:remove_for_destination(QueueName, OnlyDurable).
 
--spec internal_delete(name(), rabbit_types:username()) ->
-          'ok' | rabbit_types:connection_exit() |
-          fun (() ->
-              'ok' | rabbit_types:connection_exit()).
+-spec internal_delete(name(), rabbit_types:username()) -> 'ok'.
 
 internal_delete(QueueName, ActingUser) ->
     internal_delete(QueueName, ActingUser, normal).
@@ -1682,7 +1721,9 @@ pseudo_queue(QueueName, Pid) ->
 
 -spec pseudo_queue(name(), pid(), boolean()) -> amqqueue:amqqueue().
 
-pseudo_queue(QueueName, Pid, Durable) ->
+pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
+  when is_pid(Pid) andalso
+       is_boolean(Durable) ->
     amqqueue:new(QueueName,
                  Pid,
                  Durable,
@@ -1704,8 +1745,12 @@ deliver(Qs, Delivery) ->
     deliver(Qs, Delivery, untracked),
     ok.
 
--spec deliver([amqqueue:amqqueue()], rabbit_types:delivery(), #{Name :: atom() => rabbit_fifo_client:state()} | 'untracked') ->
-                        {qpids(), #{Name :: atom() => rabbit_fifo_client:state()}}.
+-spec deliver([amqqueue:amqqueue()],
+              rabbit_types:delivery(),
+              quorum_states() | 'untracked') ->
+    {qpids(),
+     [{amqqueue:ra_server_id(), name()}],
+     quorum_states()}.
 
 deliver([], _Delivery, QueueState) ->
     %% /dev/null optimisation

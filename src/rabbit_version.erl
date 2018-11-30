@@ -214,8 +214,9 @@ check_version_consistency(This, Remote, Name) ->
     check_version_consistency(This, Remote, Name, fun (A, B) -> A =:= B end).
 
 -spec check_version_consistency
-        (string(), string(), string(), string()) ->
-                                          rabbit_types:ok_or_error(any()).
+        (string(), string(), string(),
+         fun((string(), string()) -> boolean())) ->
+    rabbit_types:ok_or_error(any()).
 
 check_version_consistency(This, Remote, Name, Comp) ->
     case Comp(This, Remote) of

@@ -84,14 +84,13 @@ cluster_status_filename() ->
 quorum_filename() ->
     filename:join(rabbit_mnesia:dir(), "quorum").
 
--spec prepare_cluster_status_files() -> 'ok'.
+-spec prepare_cluster_status_files() -> 'ok' | no_return().
 
 prepare_cluster_status_files() ->
     rabbit_mnesia:ensure_mnesia_dir(),
-    Corrupt = fun(F) -> throw({error, corrupt_cluster_status_files, F}) end,
     RunningNodes1 = case try_read_file(running_nodes_filename()) of
                         {ok, [Nodes]} when is_list(Nodes) -> Nodes;
-                        {ok, Other}                       -> Corrupt(Other);
+                        {ok, Other}                       -> corrupt_cluster_status_files(Other);
                         {error, enoent}                   -> []
                     end,
     ThisNode = [node()],
@@ -105,13 +104,18 @@ prepare_cluster_status_files() ->
             {ok, [AllNodes0]} when is_list(AllNodes0) ->
                 {legacy_cluster_nodes(AllNodes0), legacy_disc_nodes(AllNodes0)};
             {ok, Files} ->
-                Corrupt(Files);
+                corrupt_cluster_status_files(Files);
             {error, enoent} ->
                 LegacyNodes = legacy_cluster_nodes([]),
                 {LegacyNodes, LegacyNodes}
         end,
     AllNodes2 = lists:usort(AllNodes1 ++ RunningNodes2),
     ok = write_cluster_status({AllNodes2, DiscNodes, RunningNodes2}).
+
+-spec corrupt_cluster_status_files(any()) -> no_return().
+
+corrupt_cluster_status_files(F) ->
+    throw({error, corrupt_cluster_status_files, F}).
 
 -spec write_cluster_status(rabbit_mnesia:cluster_status()) -> 'ok'.
 

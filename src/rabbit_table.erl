@@ -117,8 +117,6 @@ wait(TableNames, Timeout, Retries) ->
             throw(Error);
         {_, {error, Error}} ->
             rabbit_log:warning("Error while waiting for Mnesia tables: ~p~n", [Error]),
-            wait(TableNames, Timeout, Retries - 1);
-        _ ->
             wait(TableNames, Timeout, Retries - 1)
     end.
 
@@ -131,7 +129,7 @@ retry_timeout(_Retry = true) ->
               end,
     {retry_timeout(), Retries}.
 
--spec retry_timeout() -> {non_neg_integer() | infinity, non_neg_integer()}.
+-spec retry_timeout() -> non_neg_integer() | infinity.
 
 retry_timeout() ->
     case application:get_env(rabbit, mnesia_table_loading_retry_timeout) of

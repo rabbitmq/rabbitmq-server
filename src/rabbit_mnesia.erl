@@ -136,20 +136,14 @@ init_from_config() ->
     {DiscoveredNodes, NodeType} =
         case rabbit_peer_discovery:discover_cluster_nodes() of
             {ok, {Nodes, Type} = Config}
-            when is_list(Nodes) andalso (Type == disc orelse Type == disk orelse Type == ram) ->
+              when is_list(Nodes) andalso
+                   (Type == disc orelse Type == disk orelse Type == ram) ->
                 case lists:foldr(FindBadNodeNames, [], Nodes) of
                     []       -> Config;
                     BadNames -> e({invalid_cluster_node_names, BadNames})
                 end;
             {ok, {_, BadType}} when BadType /= disc andalso BadType /= ram ->
                 e({invalid_cluster_node_type, BadType});
-            {ok, Nodes} when is_list(Nodes) ->
-                %% The legacy syntax (a nodes list without the node
-                %% type) is unsupported.
-                case lists:foldr(FindBadNodeNames, [], Nodes) of
-                    [] -> e(cluster_node_type_mandatory);
-                    _  -> e(invalid_cluster_nodes_conf)
-                end;
             {ok, _} ->
                 e(invalid_cluster_nodes_conf)
         end,
@@ -1025,6 +1019,8 @@ nodes_incl_me(Nodes) -> lists:usort([node()|Nodes]).
 
 nodes_excl_me(Nodes) -> Nodes -- [node()].
 
+-spec e(any()) -> no_return().
+
 e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 
 error_description({invalid_cluster_node_names, BadNames}) ->
@@ -1034,9 +1030,6 @@ error_description({invalid_cluster_node_type, BadType}) ->
     "In the 'cluster_nodes' configuration key, the node type is invalid "
         "(expected 'disc' or 'ram'): " ++
         lists:flatten(io_lib:format("~p", [BadType]));
-error_description(cluster_node_type_mandatory) ->
-    "The 'cluster_nodes' configuration key must indicate the node type: "
-        "either {[...], disc} or {[...], ram}";
 error_description(invalid_cluster_nodes_conf) ->
     "The 'cluster_nodes' configuration key is invalid, it must be of the "
         "form {[Nodes], Type}, where Nodes is a list of node names and "
