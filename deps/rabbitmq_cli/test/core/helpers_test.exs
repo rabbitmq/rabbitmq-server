@@ -115,10 +115,6 @@ defmodule HelpersTest do
 
   ## ------------------- normalise_node tests (:longnames) --------------------
 
-  test "longnames: requires distributed Erlang" do
-    assert_raise(RuntimeError, fn -> @subject.normalise_node(nil, :longnames) end)
-  end
-
   test "longnames: if nil input, retrieve standard rabbit hostname" do
     default_name = Config.get_option(:node)
     options = %{node: default_name, longnames: true}

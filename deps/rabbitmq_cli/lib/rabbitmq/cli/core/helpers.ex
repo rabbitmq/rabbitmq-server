@@ -44,8 +44,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   defp priv_normalise_node(name, :longnames) when is_atom(name) do
     case :net_kernel.get_net_ticktime() do
       :ignored ->
-        raise "distributed Erlang must be active to "
-              "normalise a node with :longnames name type"
+        priv_normalise_node(to_string(name), :shortnames)
       _ ->
         :rabbit_nodes_common.make(name)
     end
