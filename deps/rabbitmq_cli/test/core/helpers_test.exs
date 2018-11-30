@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule HelpersTest do
+  alias RabbitMQ.CLI.Core.{Config, Distribution}
+
   use ExUnit.Case, async: false
   import TestHelper
 
@@ -51,66 +53,89 @@ defmodule HelpersTest do
 
   ## ------------------- normalise_node_option tests --------------------
 
-  test "if using longnames and 'rabbit' as node name, correct domain is used" do
+  test "longnames: 'rabbit' as node name, correct domain is used" do
     options = %{node: :rabbit, longnames: true}
-    RabbitMQ.CLI.Core.Distribution.start(options)
+    Distribution.start(options)
     options = @subject.normalise_node_option(options)
     assert options[:node] == :"rabbit@#{hostname()}.#{domain()}"
-    RabbitMQ.CLI.Core.Distribution.stop()
+    Distribution.stop
   end
 
-  test "if using shortnames and 'rabbit' as node name, no domain is used" do
+  test "shortnames: 'rabbit' as node name, no domain is used" do
     options = %{node: :rabbit, longnames: false}
-    RabbitMQ.CLI.Core.Distribution.start(options)
+    Distribution.start(options)
     options = @subject.normalise_node_option(options)
     assert options[:node] == :"rabbit@#{hostname()}"
-    RabbitMQ.CLI.Core.Distribution.stop()
+    Distribution.stop
   end
 
   ## ------------------- normalise_node tests (:shortnames) --------------------
 
-  test "if nil input, retrieve standard rabbit hostname" do
+  test "shortnames: if nil input, retrieve standard rabbit hostname" do
     assert @subject.normalise_node(nil) == get_rabbit_hostname()
   end
 
-  test "if input is an atom short name, return the atom with hostname" do
+  test "shortnames: if input is an atom short name, return the atom with hostname" do
     want = String.to_atom("rabbit_test@#{hostname()}")
     got = @subject.normalise_node(:rabbit_test)
     assert want == got
   end
 
-  test "if input is a string fully qualified node name, return an atom" do
+  test "shortnames: if input is a string fully qualified node name, return an atom" do
     want = String.to_atom("rabbit_test@#{hostname()}")
     got = @subject.normalise_node("rabbit_test@#{hostname()}")
     assert want == got
   end
 
-  test "if input is a short node name, host name is added" do
+  test "shortnames: if input is a short node name, host name is added" do
     want = String.to_atom("rabbit_test@#{hostname()}")
     got = @subject.normalise_node("rabbit_test")
     assert want == got
   end
 
-  test "if input is a hostname without a node name, default node name is added" do
-    default_name = RabbitMQ.CLI.Core.Config.get_option(:node)
+  test "shortnames: if input is a hostname without a node name, default node name is added" do
+    default_name = Config.get_option(:node)
     want = String.to_atom("#{default_name}@#{hostname()}")
     got = @subject.normalise_node("@#{hostname()}")
     assert want == got
   end
 
-  test "if input is a short node name with an @ and no hostname, local host name is added" do
+  test "shortnames: if input is a short node name with an @ and no hostname, local host name is added" do
     want = String.to_atom("rabbit_test@#{hostname()}")
     got = @subject.normalise_node("rabbit_test@")
     assert want == got
   end
 
-  test "if input contains more than one @, return an atom" do
+  test "shortnames: if input contains more than one @, return an atom" do
     want = String.to_atom("rabbit@rabbit_test@#{hostname()}")
     got = @subject.normalise_node("rabbit@rabbit_test@#{hostname()}")
     assert want == got
   end
 
   ## ------------------- normalise_node tests (:longnames) --------------------
+
+  test "longnames: requires distributed Erlang" do
+    assert_raise(RuntimeError, fn -> @subject.normalise_node(nil, :longnames) end)
+  end
+
+  test "longnames: if nil input, retrieve standard rabbit hostname" do
+    default_name = Config.get_option(:node)
+    options = %{node: default_name, longnames: true}
+    Distribution.start(options)
+    want = get_rabbit_hostname(:longnames)
+    got = @subject.normalise_node(nil, :longnames)
+    assert want == got
+    Distribution.stop
+  end
+
+  test "longnames: if input is an atom short name, return the atom with full hostname" do
+    options = %{node: :rabbit_test, longnames: true}
+    Distribution.start(options)
+    want = String.to_atom("rabbit_test@#{hostname()}.#{domain()}")
+    got = @subject.normalise_node(:rabbit_test, :longnames)
+    assert want == got
+    Distribution.stop
+  end
 
   ## ------------------- require_rabbit/1 tests --------------------
 
