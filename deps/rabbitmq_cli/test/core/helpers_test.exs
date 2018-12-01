@@ -58,7 +58,10 @@ defmodule HelpersTest do
     options = %{node: default_name, longnames: true}
     Distribution.start(options)
     options = @subject.normalise_node_option(options)
-    assert options[:node] == :"rabbit@#{hostname()}.#{domain()}"
+    case domain() do
+      nil -> assert options[:node] == :"rabbit@#{hostname()}.localdomain"
+      _   -> assert options[:node] == :"rabbit@#{hostname()}.#{domain()}"
+    end
     Distribution.stop
   end
 
@@ -128,7 +131,10 @@ defmodule HelpersTest do
   test "longnames: if input is an atom short name, return the atom with full hostname" do
     options = %{node: :rabbit_test, longnames: true}
     Distribution.start(options)
-    want = String.to_atom("rabbit_test@#{hostname()}.#{domain()}")
+    want = case domain() do
+             nil -> String.to_atom("rabbit_test@#{hostname()}.localdomain")
+             _   -> String.to_atom("rabbit_test@#{hostname()}.#{domain()}")
+           end
     got = @subject.normalise_node(:rabbit_test, :longnames)
     assert want == got
     Distribution.stop
