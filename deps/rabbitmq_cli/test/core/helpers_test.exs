@@ -119,6 +119,7 @@ defmodule HelpersTest do
   ## ------------------- normalise_node tests (:longnames) --------------------
 
   test "longnames: if nil input, retrieve standard rabbit hostname" do
+    Distribution.stop
     default_name = Config.get_option(:node)
     options = %{node: default_name, longnames: true}
     Distribution.start(options)
@@ -129,6 +130,7 @@ defmodule HelpersTest do
   end
 
   test "longnames: if input is an atom short name, return the atom with full hostname" do
+    Distribution.stop
     options = %{node: :rabbit_test, longnames: true}
     Distribution.start(options)
     want = case domain() do
