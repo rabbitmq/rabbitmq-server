@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
     :rabbit_misc.rpc_call(node_name,
         :rabbit_mnesia,
         :update_cluster_nodes,
-        [Helpers.parse_node(seed_node)]
+        [Helpers.normalise_node(seed_node)]
       )
   end
 

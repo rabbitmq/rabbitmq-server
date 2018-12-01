@@ -13,31 +13,74 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
-
 # Small helper functions, mostly related to connecting to RabbitMQ and
 # handling memory units.
-alias RabbitMQ.CLI.Core.Config
 
 defmodule RabbitMQ.CLI.Core.Helpers do
+  alias RabbitMQ.CLI.Core.Config
   require Record
 
-  def get_rabbit_hostname() do
-    parse_node(RabbitMQ.CLI.Core.Config.get_option(:node))
+  def get_rabbit_hostname(node_name_type \\ :shortnames) do
+    normalise_node(Config.get_option(:node), node_name_type)
   end
 
-  def parse_node(nil), do: get_rabbit_hostname()
-  def parse_node(name) when is_atom(name) do
-    parse_node(to_string(name))
+  def normalise_node(name, node_name_type \\ :shortnames)
+  def normalise_node(nil, node_name_type) do
+    normalise_node(Config.get_option(:node), node_name_type)
   end
-  def parse_node(name) do
+  def normalise_node(name, :longnames) when is_atom(name) do
+    priv_normalise_node(name, :longnames)
+  end
+  def normalise_node(name, node_name_type) when is_atom(name) do
+    priv_normalise_node(to_string(name), node_name_type)
+  end
+  def normalise_node(name, :longnames) do
+    priv_normalise_node(String.to_atom(name), :longnames)
+  end
+  def normalise_node(name, node_name_type) do
+    priv_normalise_node(name, node_name_type)
+  end
+
+  defp priv_normalise_node(name, :longnames) when is_atom(name) do
+    case :net_kernel.get_net_ticktime() do
+      :ignored ->
+        priv_normalise_node(to_string(name), :shortnames)
+      _ ->
+        :rabbit_nodes_common.make(name)
+    end
+  end
+  defp priv_normalise_node(name, :shortnames) when is_atom(name) do
+    priv_normalise_node(to_string(name), :shortnames)
+  end
+  defp priv_normalise_node(name, :shortnames) do
     case String.split(name, "@", parts: 2) do
-      [_,""] -> name <> "#{hostname()}" |> String.to_atom
-      [_,_] -> name |> String.to_atom
-      [_] -> name <> "@#{hostname()}" |> String.to_atom
+      [_,""] ->
+        name <> "#{hostname()}" |> String.to_atom
+      ["",hostname] ->
+        default_name = to_string(Config.get_option(:node))
+        default_name <> "@#{hostname}" |> String.to_atom
+      [_,_] ->
+        name |> String.to_atom
+      [_] ->
+        name <> "@#{hostname()}" |> String.to_atom
     end
   end
 
-  def hostname, do: :inet.gethostname() |> elem(1) |> List.to_string
+  # rabbitmq/rabbitmq-cli#278
+  def normalise_node_option(options) do
+    node_opt = Config.get_option(:node, options)
+    longnames_opt = Config.get_option(:longnames, options)
+    normalised_node_opt = priv_normalise_node(node_opt, longnames_opt)
+    Map.put(options, :node, normalised_node_opt)
+  end
+
+  # NB: we're using :inet_db here because that's what Erlang/OTP
+  # uses when it creates a node name:
+  # https://github.com/erlang/otp/blob/8ca061c3006ad69c2a8d1c835d0d678438966dfc/lib/kernel/src/net_kernel.erl#L1363-L1445
+  # Using :inet.gethostname() results in a different name sometimes
+  def hostname, do: :inet_db.gethostname() |> List.to_string
+
+  def domain, do: Keyword.get(:inet.get_rc(), :domain)
 
   def validate_step(:ok, step) do
     case step.() do

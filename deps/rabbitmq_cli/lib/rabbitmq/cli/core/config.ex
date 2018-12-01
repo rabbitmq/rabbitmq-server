@@ -18,23 +18,23 @@ defmodule RabbitMQ.CLI.Core.Config do
     raw_option = opts[name] ||
                    get_system_option(name) ||
                    default(name)
-    normalize(name, raw_option)
+    normalise(name, raw_option)
   end
 
-  def normalize(:node, nil), do: nil
-  def normalize(:node, node) when not is_atom(node) do
+  def normalise(:node, nil), do: nil
+  def normalise(:node, node) when not is_atom(node) do
     Rabbitmq.Atom.Coerce.to_atom(node)
   end
-  def normalize(:erlang_cookie, nil), do: nil
-  def normalize(:erlang_cookie, c) when not is_atom(c) do
+  def normalise(:erlang_cookie, nil), do: nil
+  def normalise(:erlang_cookie, c) when not is_atom(c) do
     Rabbitmq.Atom.Coerce.to_atom(c)
   end
-  def normalize(:longnames, true),       do: :longnames
-  def normalize(:longnames, "true"),     do: :longnames
-  def normalize(:longnames, 'true'),     do: :longnames
-  def normalize(:longnames, "\"true\""), do: :longnames
-  def normalize(:longnames, _val),       do: :shortnames
-  def normalize(_, value),           do: value
+  def normalise(:longnames, true),       do: :longnames
+  def normalise(:longnames, "true"),     do: :longnames
+  def normalise(:longnames, 'true'),     do: :longnames
+  def normalise(:longnames, "\"true\""), do: :longnames
+  def normalise(:longnames, _val),       do: :shortnames
+  def normalise(_, value),               do: value
 
   def system_env_variable(name) do
     case name do

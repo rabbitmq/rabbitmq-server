@@ -29,7 +29,6 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def can_set_plugins_with_mode(args, opts) do
-    mode = mode(opts)
     case mode(opts) do
       # can always set offline plugins list
       :offline -> :ok;

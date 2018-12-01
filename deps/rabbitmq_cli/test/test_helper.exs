@@ -21,13 +21,13 @@ defmodule TestHelper do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
   alias RabbitMQ.CLI.Core.{CommandModules, Config, Helpers}
 
-  def get_rabbit_hostname() do
-    RabbitMQ.CLI.Core.Helpers.get_rabbit_hostname()
+  def get_rabbit_hostname(node_name_type \\ :shortnames) do
+    Helpers.get_rabbit_hostname(node_name_type)
   end
 
-  def hostname() do
-    RabbitMQ.CLI.Core.Helpers.hostname
-  end
+  def hostname, do: Helpers.hostname
+
+  def domain, do: Helpers.domain
 
   def fixture_file_path(filename) do
     Path.join([System.cwd!(), "test", "fixtures", "files", filename])

@@ -50,7 +50,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     :rabbit_misc.rpc_call(node_name,
         :rabbit_mnesia,
         :join_cluster,
-        [Helpers.parse_node(target_node), node_type]
+        [Helpers.normalise_node(target_node), node_type]
       )
   end
 
