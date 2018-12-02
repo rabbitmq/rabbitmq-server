@@ -503,7 +503,16 @@
 # Kernel section
 # ======================================
 
+## Timeout used to detect peer unavailability, including CLI tools.
+## Related doc guide: https://www.rabbitmq.com/nettick.html.
+##
 # net_ticktime = 60
+
+## Inter-node communication port range.
+## Related doc guide: https://www.rabbitmq.com/networking.html#epmd-inet-dist-port-range.
+##
+# inet_dist_listen_min = 25672
+# inet_dist_listen_max = 25692
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Management Plugin
