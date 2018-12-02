@@ -1342,6 +1342,16 @@ end}.
     {validators, ["non_zero_positive_integer"]}
 ]}.
 
+{mapping, "inet_dist_listen_min", "kernel.inet_dist_listen_min",[
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "inet_dist_listen_max", "kernel.inet_dist_listen_max",[
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
 % ===============================
 % Validators
 % ===============================
