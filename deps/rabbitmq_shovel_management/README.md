@@ -10,23 +10,24 @@ management plugin.
 
 ## Installing
 
-This plugin ships with RabbitMQ. Enable it with
+This plugin ships with RabbitMQ. Like all [plugins](http://www.rabbitmq.com/plugins.html), it must be enabled
+before it can be used:
 
 ```
-[sudo] rabbitmq-plugins enable rabbitmq_shovel_management
+rabbitmq-plugins enable rabbitmq_shovel_management
 ```
 
 
 ## Usage
 
-When the plugin is enabled, you'll find a shovel management
+When the plugin is enabled, there will be a Shovel management
 link under the Admin tab.
 
 ### HTTP API
 
 The HTTP API adds endpoints for listing, creating, and deleting shovels.
 
-#### `GET /api/shovels[/VHOST]`
+#### `GET /api/shovels[/{vhost}]`
 Lists all shovels, optionally filtering by Virtual Host.
 
 **Example**
@@ -35,8 +36,8 @@ Lists all shovels, optionally filtering by Virtual Host.
 curl -u guest:guest -v http://localhost:15672/api/shovels/%2f
 ```
 
-#### `PUT /api/parameters/shovel/<VHOST>/<NAME>`
-Create a shovel, passing in the configuration as JSON in the request body.
+#### `PUT /api/parameters/shovel/{vhost}/{name}`
+Creates a shovel, passing in the configuration as JSON in the request body.
 
 **Example**
 
@@ -67,9 +68,9 @@ Once created, post the file to the HTTP API:
 curl -u guest:guest -v -X PUT -H 'Content-Type: application/json' -d @./shovel.json \
   http://localhost:15672/api/parameters/shovel/%2F/my-shovel
 ```
-*Note* You can specify either `dest_queue` OR `dest_exchange` in the `value` stanza of the JSON, but not both.
+*Note* Either `dest_queue` OR `dest_exchange` can be specified in the `value` stanza of the JSON, but not both.
 
-#### `GET /api/parameters/shovel/<VHOST>/<NAME>`
+#### `GET /api/parameters/shovel/{vhost}/{name}`
 Shows the configurtion parameters for a shovel.
 
 **Example** 
@@ -78,8 +79,9 @@ Shows the configurtion parameters for a shovel.
 curl -u guest:guest -v http://localhost:15672/api/parameters/shovel/%2F/my-shovel
 ```
 
-#### `DELETE /api/parameters/shovel/<VHOST>/<NAME>`
-Delete a shovel.
+#### `DELETE /api/parameters/shovel/{vhost}/{name}`
+
+Deletes a shovel.
 
 **Example** 
 
