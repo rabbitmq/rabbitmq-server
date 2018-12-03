@@ -6,8 +6,9 @@
 </p>
 <% } else { %>
 <%
-  var sections = {'queue_procs'         : ['queue',  'Queues'],
-                  'queue_slave_procs'   : ['queue',  'Queues (slaves)'],
+  var sections = {'queue_procs'         : ['queue',  'Classic queues'],
+                  'queue_slave_procs'   : ['queue',  'Classic queues (slaves)'],
+                  'quorum_queue_procs'  : ['queue',  'Quorum queues'],
                   'connection_readers'  : ['conn',   'Connection readers'],
                   'connection_writers'  : ['conn',   'Connection writers'],
                   'connection_channels' : ['conn',   'Connection channels'],
@@ -24,7 +25,8 @@
 <%
 var key = [[{name: 'Queues', colour: 'queue',
              keys: [['queue_procs',         'queues'],
-                    ['queue_slave_procs',   'slaves']]}],
+                    ['queue_slave_procs',   'slaves'],
+                    ['quorum_queue_procs',  'quorum']]}],
 
            [{name: 'Connections', colour: 'conn',
              keys: [['connection_readers',  'readers'],
