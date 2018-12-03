@@ -210,7 +210,7 @@
         end).
 
 -define(IS_CLASSIC(QPid), is_pid(QPid)).
--define(IS_QUORUM(QPid), is_tuple(QPid) orelse is_atom(QPid)).
+-define(IS_QUORUM(QPid), is_tuple(QPid)).
 
 %%----------------------------------------------------------------------------
 
