@@ -13,7 +13,7 @@ management plugin.
 This plugin ships with RabbitMQ. Enable it with
 
 ```
-[sudo] rabbitmq-plugins rabbitmq_shovel_management
+[sudo] rabbitmq-plugins enable rabbitmq_shovel_management
 ```
 
 
