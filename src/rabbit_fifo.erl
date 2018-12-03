@@ -395,7 +395,7 @@ apply(_, {down, ConsumerPid, noconnection},
                       [{monitor, node, Node} | Effects0]
               end,
     {State#state{consumers = Cons, enqueuers = Enqs}, Effects, ok};
-apply(_, {down, Pid, _Info} = D, Effects0,
+apply(_, {down, Pid, _Info}, Effects0,
       #state{consumers = Cons0,
              enqueuers = Enqs0} = State0) ->
     % Remove any enqueuer for the same pid and enqueue any pending messages
