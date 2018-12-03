@@ -104,6 +104,7 @@ all_tests() ->
      dead_letter_to_classic_queue,
      dead_letter_to_quorum_queue,
      dead_letter_from_classic_to_quorum_queue,
+     dead_letter_policy,
      cleanup_queue_state_on_channel_after_publish,
      cleanup_queue_state_on_channel_after_subscribe,
      basic_cancel,
@@ -1096,22 +1097,47 @@ dead_letter_to_classic_queue(Config) ->
                                   {<<"x-dead-letter-routing-key">>, longstr, CQ}
                                  ])),
     ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
-    RaName = ra_name(QQ),
-    publish(Ch, QQ),
+    test_dead_lettering(true, Config, Ch, Servers, ra_name(QQ), QQ, CQ).
+
+test_dead_lettering(PolicySet, Config, Ch, Servers, RaName, Source, Destination) ->
+    publish(Ch, Source),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
-    wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>]]),
-    DeliveryTag = consume(Ch, QQ, false),
+    wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]]),
+    DeliveryTag = consume(Ch, Source, false),
     wait_for_messages_ready(Servers, RaName, 0), 
     wait_for_messages_pending_ack(Servers, RaName, 1),
-    wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>]]),
+    wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = false}),
     wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 0),
-    wait_for_messages(Config, [[CQ, <<"1">>, <<"1">>, <<"0">>]]),
-    _ = consume(Ch, CQ, false).
+    case PolicySet of
+        true ->
+            wait_for_messages(Config, [[Destination, <<"1">>, <<"1">>, <<"0">>]]),
+            _ = consume(Ch, Destination, true);
+        false ->
+            wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]])
+    end.
+
+dead_letter_policy(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    CQ = <<"classic-dead_letter_policy">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"dlx">>, <<"dead_letter.*">>, <<"queues">>,
+           [{<<"dead-letter-exchange">>, <<"">>},
+            {<<"dead-letter-routing-key">>, CQ}]),
+    RaName = ra_name(QQ),
+    test_dead_lettering(true, Config, Ch, Servers, RaName, QQ, CQ),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"dlx">>),
+    test_dead_lettering(false, Config, Ch, Servers, RaName, QQ, CQ).
 
 dead_letter_to_quorum_queue(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

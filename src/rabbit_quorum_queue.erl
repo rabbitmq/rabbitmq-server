@@ -34,6 +34,7 @@
 -export([add_member/3]).
 -export([delete_member/3]).
 -export([requeue/3]).
+-export([policy_changed/2]).
 -export([cleanup_data_dir/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -148,12 +149,14 @@ declare(#amqqueue{name = QName,
 
 
 
-ra_machine(Q = #amqqueue{name = QName}) ->
-    {module, rabbit_fifo,
-     #{dead_letter_handler => dlx_mfa(Q),
-       cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
-       become_leader_handler => {?MODULE, become_leader, [QName]},
-       metrics_handler => {?MODULE, update_metrics, [QName]}}}.
+ra_machine(Q) ->
+    {module, rabbit_fifo, ra_machine_config(Q)}.
+
+ra_machine_config(Q = #amqqueue{name = QName}) ->
+    #{dead_letter_handler => dlx_mfa(Q),
+      cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
+      become_leader_handler => {?MODULE, become_leader, [QName]},
+      metrics_handler => {?MODULE, update_metrics, [QName]}}.
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
     Node = node(ChPid),
@@ -410,6 +413,10 @@ maybe_delete_data_dir(UId) ->
         _ ->
             ok
     end.
+
+policy_changed(QName, Node) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    rabbit_fifo_client:update_machine_state(Node, ra_machine_config(Q)).
 
 cluster_state(Name) ->
     case whereis(Name) of
