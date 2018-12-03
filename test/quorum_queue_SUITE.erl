@@ -134,7 +134,7 @@ init_per_group(clustered, Config) ->
 init_per_group(unclustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
 init_per_group(clustered_with_partitions, Config) ->
-    Config;
+    rabbit_ct_helpers:set_config(Config, [{net_ticktime, 10}]);
 init_per_group(Group, Config) ->
     ClusterSize = case Group of
                       single_node -> 1;
@@ -146,7 +146,8 @@ init_per_group(Group, Config) ->
                                            [{rmq_nodes_count, ClusterSize},
                                             {rmq_nodename_suffix, Group},
                                             {tcp_ports_base}]),
-    Config2 = rabbit_ct_helpers:run_steps(Config1,
+    Config1b = rabbit_ct_helpers:set_config(Config1, [{net_ticktime, 10}]),
+    Config2 = rabbit_ct_helpers:run_steps(Config1b,
                                           [fun merge_app_env/1 ] ++
                                           rabbit_ct_broker_helpers:setup_steps()),
     ok = rabbit_ct_broker_helpers:rpc(
@@ -1667,6 +1668,7 @@ cleanup_data_dir(Config) ->
     ?assertExit({{shutdown,
                   {connection_closing, {server_initiated_close, 541, _}}}, _},
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    catch amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
     ?assert(filelib:is_dir(DataDir)),
 
     ?assertEqual(ok,

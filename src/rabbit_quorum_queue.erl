@@ -97,11 +97,12 @@
     rabbit_fifo_client:state().
 init_state({Name, _}, QName) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
-    {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} =
+    {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes}} =
         rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
-    Nodes = [Leader | lists:delete(Leader, Nodes0)],
-    rabbit_fifo_client:init(QName, Nodes, SoftLimit,
+    Servers0 = [{Name, N} || N <- Nodes],
+    Servers = [Leader | lists:delete(Leader, Servers0)],
+    rabbit_fifo_client:init(QName, Servers, SoftLimit,
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
@@ -275,9 +276,10 @@ stop(VHost) ->
 delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = QNodes},
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
+    Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
     Msgs = quorum_messages(Name),
     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-    case ra:delete_cluster([{Name, Node} || Node <- QNodes], 120000) of
+    case ra:delete_cluster([{Name, Node} || Node <- QNodes], Timeout) of
         {ok, {_, LeaderNode} = Leader} ->
             MRef = erlang:monitor(process, Leader),
             receive
