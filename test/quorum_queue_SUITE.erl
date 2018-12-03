@@ -108,7 +108,9 @@ all_tests() ->
      cancel_sync_queue,
      basic_recover,
      idempotent_recover,
-     vhost_with_quorum_queue_is_deleted
+     vhost_with_quorum_queue_is_deleted,
+     delete_immediately,
+     delete_immediately_by_resource
     ].
 
 %% -------------------------------------------------------------------
@@ -1633,6 +1635,45 @@ basic_recover(Config) ->
     amqp_channel:cast(Ch, #'basic.recover'{requeue = true}),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0).
+
+delete_immediately(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, Args)),
+
+    Cmd = ["eval", "{ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<\"/\">>, queue, <<\"" ++ binary_to_list(QQ) ++ "\">>)), Pid = rabbit_amqqueue:pid_of(Q), rabbit_amqqueue:delete_immediately([Pid])."],
+    {ok, Msg} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, Cmd),
+    ?assertEqual(match, re:run(Msg, ".*error.*", [{capture, none}])),
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 amqp_channel:call(Ch, #'queue.declare'{queue     = QQ,
+                                                        durable   = true,
+                                                        passive   = true,
+                                                        auto_delete = false,
+                                                        arguments = Args})).
+
+delete_immediately_by_resource(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    Cmd2 = ["eval", "rabbit_amqqueue:delete_immediately_by_resource([rabbit_misc:r(<<\"/\">>, queue, <<\"" ++ binary_to_list(QQ) ++ "\">>)])."],
+    ?assertEqual({ok, "ok\n"}, rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, Cmd2)),
+
+    %% Check that the application and process are down
+    wait_until(fun() ->
+                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup])
+               end),
+    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
+                                           rpc:call(Server, application, which_applications, []))).
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->

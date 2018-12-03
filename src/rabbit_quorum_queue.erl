@@ -17,7 +17,7 @@
 -module(rabbit_quorum_queue).
 
 -export([init_state/2, handle_event/2]).
--export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
+-export([declare/1, recover/1, stop/1, delete/4, delete_immediately/2]).
 -export([info/1, info/2, stat/1, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/9, basic_cancel/4]).
 -export([credit/4]).
@@ -300,11 +300,10 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
             end
     end.
 
-delete_immediately({Name, _} = QPid) ->
-    QName = queue_name(Name),
-    _ = rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER),
-    ok = ra:delete_cluster([QPid]),
-    rabbit_core_metrics:queue_deleted(QName),
+delete_immediately(Resource, {Name, _} = QPid) ->
+    _ = rabbit_amqqueue:internal_delete(Resource, ?INTERNAL_USER),
+    {ok, _} = ra:delete_cluster([QPid]),
+    rabbit_core_metrics:queue_deleted(Resource),
     ok.
 
 ack(CTag, MsgIds, QState) ->

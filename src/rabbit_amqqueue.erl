@@ -44,6 +44,7 @@
 -export([list_local_followers/0]).
 -export([ensure_rabbit_queue_record_is_initialized/1]).
 -export([format/1]).
+-export([delete_immediately_by_resource/1]).
 
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
@@ -265,6 +266,13 @@ filter_per_type(Queues) ->
 
 filter_pid_per_type(QPids) ->
     lists:partition(fun(QPid) -> ?IS_CLASSIC(QPid) end, QPids).
+
+filter_resource_per_type(Resources) ->
+    Queues = [begin
+                  {ok, #amqqueue{pid = QPid}} = lookup(Resource),
+                  {Resource, QPid}
+              end || Resource <- Resources],
+    lists:partition(fun({Resource, QPid}) -> ?IS_CLASSIC(QPid) end, Queues).
 
 stop(VHost) ->
     %% Classic queues
@@ -954,7 +962,16 @@ delete_exclusive(QPids, ConnId) ->
 delete_immediately(QPids) ->
     {Classic, Quorum} = filter_pid_per_type(QPids),
     [gen_server2:cast(QPid, delete_immediately) || QPid <- Classic],
-    [rabbit_quorum_queue:delete_immediately(QPid) || QPid <- Quorum],
+    case Quorum of
+        [] -> ok;
+        _ -> {error, cannot_delete_quorum_queues, Quorum}
+    end.
+
+delete_immediately_by_resource(Resources) ->
+    {Classic, Quorum} = filter_resource_per_type(Resources),
+    [gen_server2:cast(QPid, delete_immediately) || {_, QPid} <- Classic],
+    [rabbit_quorum_queue:delete_immediately(Resource, QPid)
+     || {Resource, QPid} <- Quorum],
     ok.
 
 delete(#amqqueue{ type = quorum} = Q,
