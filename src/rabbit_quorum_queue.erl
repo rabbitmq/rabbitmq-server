@@ -99,7 +99,7 @@ init_state({Name, _}, QName) ->
     {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} =
         rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
-    Nodes = [Leader | lists:delete(Leader, Nodes0)],
+    Nodes = [Leader | lists:delete(Leader, [{Name, N} || N <- Nodes0])],
     rabbit_fifo_client:init(QName, Nodes, SoftLimit,
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
