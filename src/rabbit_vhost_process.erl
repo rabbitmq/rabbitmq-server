@@ -57,7 +57,7 @@ init([VHost]) ->
         rabbit_vhost_sup_sup:save_vhost_process(VHost, self()),
         Interval = interval(),
         timer:send_interval(Interval, check_vhost),
-        % true = erlang:garbage_collect(),
+        true = erlang:garbage_collect(),
         {ok, VHost}
     catch _:Reason ->
         rabbit_amqqueue:mark_local_durable_queues_stopped(VHost),
