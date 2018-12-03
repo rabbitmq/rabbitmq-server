@@ -181,6 +181,8 @@ queue_sups() ->
     all_vhosts_children(rabbit_amqqueue_sup_sup).
 
 quorum_sups() ->
+    %% TODO: in the future not all ra servers may be queues and we needs
+    %% some way to filter this
     [ra_server_sup].
 
 msg_stores() ->
