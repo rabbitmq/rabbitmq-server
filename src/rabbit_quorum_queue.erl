@@ -99,7 +99,7 @@ init_state({Name, _}, QName) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     %% This lookup could potentially return an {error, not_found}, but we do not
     %% know what to do if the queue has `disappeared`. Let it crash.
-    {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} =
+    {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes}} =
         rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
     Servers0 = [{Name, N} || N <- Nodes],
@@ -336,8 +336,10 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
     case rabbit_fifo_client:dequeue(CTag, Settlement, QState0) of
         {ok, empty, QState} ->
             {ok, empty, QState};
-        {ok, {MsgId, {MsgHeader, Msg}}, QState} ->
-            IsDelivered = maps:is_key(delivery_count, MsgHeader),
+        {ok, {MsgId, {MsgHeader, Msg0}}, QState} ->
+            Count = maps:get(delivery_count, MsgHeader, 0),
+            IsDelivered = Count > 0,
+            Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
             {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg}, QState};
         {timeout, _} ->
             {error, timeout}

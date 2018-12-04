@@ -568,12 +568,27 @@ credential_validator.regexp = ^abc\\d+",
       {delegate_count, 64}
     ]}],
   []},
+
   {kernel_net_ticktime,
    "net_ticktime = 20",
    [{kernel, [
       {net_ticktime, 20}
      ]}],
    []},
+
+  {kernel_inet_dist_listen_min,
+   "inet_dist_listen_min = 16000",
+   [{kernel, [
+      {inet_dist_listen_min, 16000}
+     ]}],
+   []},
+  {kernel_inet_dist_listen_max,
+   "inet_dist_listen_max = 16100",
+   [{kernel, [
+      {inet_dist_listen_max, 16100}
+     ]}],
+   []},
+
   {log_syslog_settings,
    "log.syslog = true
     log.syslog.identity = rabbitmq

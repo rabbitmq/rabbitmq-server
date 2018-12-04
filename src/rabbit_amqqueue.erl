@@ -272,7 +272,7 @@ filter_resource_per_type(Resources) ->
                   {ok, #amqqueue{pid = QPid}} = lookup(Resource),
                   {Resource, QPid}
               end || Resource <- Resources],
-    lists:partition(fun({Resource, QPid}) -> ?IS_CLASSIC(QPid) end, Queues).
+    lists:partition(fun({_Resource, QPid}) -> ?IS_CLASSIC(QPid) end, Queues).
 
 stop(VHost) ->
     %% Classic queues
