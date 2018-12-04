@@ -913,8 +913,11 @@ list_local(VHostPath) ->
     [ Q || #amqqueue{state = State, pid = QPid} = Q <- list(VHostPath),
            State =/= crashed, is_local_to_node(QPid, node()) ].
 
-notify_policy_changed(#amqqueue{pid = QPid}) ->
-    gen_server2:cast(QPid, policy_changed).
+notify_policy_changed(#amqqueue{pid = QPid}) when ?IS_CLASSIC(QPid) ->
+    gen_server2:cast(QPid, policy_changed);
+notify_policy_changed(#amqqueue{pid = QPid,
+                                name = QName}) when ?IS_QUORUM(QPid) ->
+    rabbit_quorum_queue:policy_changed(QName, QPid).
 
 consumers(#amqqueue{ pid = QPid }) ->
     delegate:invoke(QPid, {gen_server2, call, [consumers, infinity]}).

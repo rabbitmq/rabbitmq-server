@@ -34,6 +34,7 @@
 -export([add_member/3]).
 -export([delete_member/3]).
 -export([requeue/3]).
+-export([policy_changed/2]).
 -export([cleanup_data_dir/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -101,8 +102,9 @@ init_state({Name, _}, QName) ->
     {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} =
         rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
-    Nodes = [Leader | lists:delete(Leader, [{Name, N} || N <- Nodes0])],
-    rabbit_fifo_client:init(qname_to_rname(QName), Nodes, SoftLimit,
+    Servers0 = [{Name, N} || N <- Nodes],
+    Servers = [Leader | lists:delete(Leader, Servers0)],
+    rabbit_fifo_client:init(qname_to_rname(QName), Servers, SoftLimit,
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
@@ -150,12 +152,14 @@ declare(#amqqueue{name = QName,
 
 
 
-ra_machine(Q = #amqqueue{name = QName}) ->
-    {module, rabbit_fifo,
-     #{dead_letter_handler => dlx_mfa(Q),
-       cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
-       become_leader_handler => {?MODULE, become_leader, [QName]},
-       metrics_handler => {?MODULE, update_metrics, [QName]}}}.
+ra_machine(Q) ->
+    {module, rabbit_fifo, ra_machine_config(Q)}.
+
+ra_machine_config(Q = #amqqueue{name = QName}) ->
+    #{dead_letter_handler => dlx_mfa(Q),
+      cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
+      become_leader_handler => {?MODULE, become_leader, [QName]},
+      metrics_handler => {?MODULE, update_metrics, [QName]}}.
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
     Node = node(ChPid),
@@ -274,9 +278,10 @@ stop(VHost) ->
 delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = QNodes},
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
+    Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
     Msgs = quorum_messages(Name),
     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-    case ra:delete_cluster([{Name, Node} || Node <- QNodes], 120000) of
+    case ra:delete_cluster([{Name, Node} || Node <- QNodes], Timeout) of
         {ok, {_, LeaderNode} = Leader} ->
             MRef = erlang:monitor(process, Leader),
             receive
@@ -411,6 +416,10 @@ maybe_delete_data_dir(UId) ->
         _ ->
             ok
     end.
+
+policy_changed(QName, Node) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    rabbit_fifo_client:update_machine_state(Node, ra_machine_config(Q)).
 
 cluster_state(Name) ->
     case whereis(Name) of
