@@ -32,13 +32,21 @@
     parse_state,
     proc_state,
     socket,
+    peername,
     stats_timer,
     connection
 }).
 
 init(Req, Opts) ->
+    {PeerAddr, _PeerPort} = maps:get(peer, Req),
     {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
-    {_, Sock} = lists:keyfind(socket, 1, Opts),
+    {_, Sock0} = lists:keyfind(socket, 1, Opts),
+    Sock = case maps:get(proxy_header, Req, undefined) of
+        undefined ->
+            Sock0;
+        ProxyInfo ->
+            {rabbit_proxy_socket, Sock0, ProxyInfo}
+    end,
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             Req2 = case cowboy_req:header(<<"sec-websocket-protocol">>, Req) of
@@ -53,23 +61,26 @@ init(Req, Opts) ->
                 keepalive     = {none, none},
                 keepalive_sup = KeepaliveSup,
                 parse_state   = rabbit_mqtt_frame:initial_state(),
-                socket        = Sock
+                socket        = Sock,
+                peername      = PeerAddr
             }, WsOpts};
         _ ->
             {stop, Req}
     end.
 
-websocket_init(State = #state{conn_name = ConnStr, socket = Sock}) ->
+websocket_init(State = #state{conn_name = ConnStr, socket = Sock, peername = PeerAddr}) ->
     rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
     AdapterInfo0 = #amqp_adapter_info{additional_info=Extra}
         = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
     %% Flow control is not supported for Web-MQTT connections.
     AdapterInfo = AdapterInfo0#amqp_adapter_info{
         additional_info=[{state, running}|Extra]},
+    RealSocket = rabbit_net:unwrap_socket(Sock),
     ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
-        rabbit_mqtt_reader:ssl_login_name(Sock),
+        rabbit_mqtt_reader:ssl_login_name(RealSocket),
         AdapterInfo,
-        fun send_reply/2),
+        fun send_reply/2,
+        PeerAddr),
     process_flag(trap_exit, true),
     {ok,
      rabbit_event:init_stats_timer(
@@ -139,14 +150,13 @@ websocket_info(Msg, State) ->
                     [Msg]),
     {ok, State, hibernate}.
 
+terminate(_, _, #state{ proc_state = undefined }) ->
+    ok;
 terminate(_, _, State = #state{ proc_state = ProcState,
                                 conn_name  = ConnName }) ->
     maybe_emit_stats(State),
     rabbit_log_connection:info("closing WEB-MQTT connection ~p (~s)~n", [self(), ConnName]),
     rabbit_mqtt_processor:close_connection(ProcState),
-    ok;
-terminate(_, _, State) ->
-    maybe_emit_stats(State),
     ok.
 
 %% Internal.
