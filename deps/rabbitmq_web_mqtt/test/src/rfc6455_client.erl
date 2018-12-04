@@ -1,32 +1,49 @@
-%% The contents of this file are subject to the Mozilla Public License
-%% Version 1.1 (the "License"); you may not use this file except in
-%% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%% License for the specific language governing rights and limitations
-%% under the License.
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
 %%
-%% The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Console.
 %%
-%% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2012-2016 Pivotal Software, Inc.  All rights reserved.
+%%   The Initial Developer of the Original Code is GoPivotal, Inc.
+%%   Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rfc6455_client).
 
--export([new/2, open/1, recv/1, send/2, send_binary/2, close/1, close/2]).
+-export([new/2, new/3, new/4, new/5, open/1, recv/1, send/2, send_binary/2, close/1, close/2]).
 
--record(state, {host, port, addr, path, ppid, socket, data, phase}).
+-record(state, {host, port, addr, path, ppid, socket, data, phase, transport}).
 
 %% --------------------------------------------------------------------------
 
 new(WsUrl, PPid) ->
+    new(WsUrl, PPid, undefined, [], <<>>).
+
+new(WsUrl, PPid, AuthInfo) ->
+    new(WsUrl, PPid, AuthInfo, [], <<>>).
+
+new(WsUrl, PPid, AuthInfo, Protocols) ->
+    new(WsUrl, PPid, AuthInfo, Protocols, <<>>).
+
+new(WsUrl, PPid, AuthInfo, Protocols, TcpPreface) ->
     crypto:start(),
-    "ws://" ++ Rest = WsUrl,
-    [Addr, Path] = split("/", Rest, 1),
-    [Host, MaybePort] = split(":", Addr, 1, empty),
+    application:ensure_all_started(ssl),
+    {Transport, Url} = case WsUrl of
+        "ws://" ++ Rest -> {gen_tcp, Rest};
+        "wss://" ++ SslRest -> {ssl, SslRest}
+    end,
+    [Addr, Path] = split("/", Url, 1),
+    [Host0, MaybePort] = split(":", Addr, 1, empty),
+    Host = case inet:parse_ipv4_address(Host0) of
+        {ok, IP} -> IP;
+        _ -> Host0
+    end,
     Port = case MaybePort of
                empty -> 80;
                V     -> {I, ""} = string:to_integer(V), I
@@ -35,9 +52,10 @@ new(WsUrl, PPid) ->
                    port = Port,
                    addr = Addr,
                    path = "/" ++ Path,
-                   ppid = PPid},
-    spawn(fun () ->
-                  start_conn(State)
+                   ppid = PPid,
+                   transport = Transport},
+    spawn_link(fun () ->
+                  start_conn(State, AuthInfo, Protocols, TcpPreface)
           end).
 
 open(WS) ->
@@ -79,16 +97,46 @@ close(WS, WsReason) ->
 
 %% --------------------------------------------------------------------------
 
-start_conn(State) ->
-    {ok, Socket} = gen_tcp:connect(State#state.host, State#state.port,
-                                   [binary,
-                                    {packet, 0}]),
+start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPreface) ->
+    {ok, Socket} = case TcpPreface of
+        <<>> ->
+            Transport:connect(State#state.host, State#state.port,
+                              [binary,
+                               {packet, 0}]);
+        _ ->
+            {ok, Socket0} = gen_tcp:connect(State#state.host, State#state.port,
+                                            [binary,
+                                             {packet, 0}]),
+            gen_tcp:send(Socket0, TcpPreface),
+            case Transport of
+                gen_tcp -> {ok, Socket0};
+                ssl -> Transport:connect(Socket0, [])
+            end
+    end,
+
+    AuthHd = case AuthInfo of
+        undefined -> "";
+        _ ->
+            Login    = proplists:get_value(login, AuthInfo),
+            Passcode = proplists:get_value(passcode, AuthInfo),
+            "Authorization: Basic "
+                ++ base64:encode_to_string(Login ++ ":" ++ Passcode)
+                ++ "\r\n"
+    end,
+
+    ProtocolHd = case Protocols of
+        [] -> "";
+        _  -> "Sec-Websocket-Protocol: " ++ string:join(Protocols, ", ") ++ "\r\n"
+    end,
+
     Key = base64:encode_to_string(crypto:strong_rand_bytes(16)),
-    gen_tcp:send(Socket,
+    Transport:send(Socket,
         "GET " ++ State#state.path ++ " HTTP/1.1\r\n" ++
         "Host: " ++ State#state.addr ++ "\r\n" ++
         "Upgrade: websocket\r\n" ++
         "Connection: Upgrade\r\n" ++
+        AuthHd ++
+        ProtocolHd ++
         "Sec-WebSocket-Key: " ++ Key ++ "\r\n" ++
         "Origin: null\r\n" ++
         "Sec-WebSocket-Version: 13\r\n\r\n"),
@@ -106,7 +154,7 @@ do_recv(State = #state{phase = opening, ppid = PPid, data = Data}) ->
             State#state{phase = open,
                         data = Data1}
     end;
-do_recv(State = #state{phase = Phase, data = Data, socket = Socket, ppid = PPid})
+do_recv(State = #state{phase = Phase, data = Data, socket = Socket, transport = Transport, ppid = PPid})
   when Phase =:= open orelse Phase =:= closing ->
     R = case Data of
             <<F:1, _:3, O:4, 0:1, L:7, Payload:L/binary, Rest/binary>>
@@ -121,7 +169,7 @@ do_recv(State = #state{phase = Phase, data = Data, socket = Socket, ppid = PPid}
 
             <<_:1, _:3, _:4, 1:1, _/binary>> ->
                 %% According o rfc6455 5.1 the server must not mask any frames.
-                die(Socket, PPid, {1006, "Protocol error"}, normal);
+                die(Socket, Transport, PPid, {1006, "Protocol error"}, normal);
             _ ->
                 moredata
         end,
@@ -131,7 +179,7 @@ do_recv(State = #state{phase = Phase, data = Data, socket = Socket, ppid = PPid}
         _ -> do_recv2(State, R)
     end.
 
-do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid}, R) ->
+do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid, transport = Transport}, R) ->
     case R of
         {1, 1, Payload, Rest} ->
             PPid ! {rfc6455, recv, self(), Payload},
@@ -147,14 +195,14 @@ do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid}, R) ->
             case Phase of
                 open -> %% echo
                     do_close(State, WsReason),
-                    gen_tcp:close(Socket);
+                    Transport:close(Socket);
                 closing ->
                     ok
             end,
-            die(Socket, PPid, WsReason, normal);
-        {_, _, _, Rest2} ->
+            die(Socket, Transport, PPid, WsReason, normal);
+        {_, _, _, _Rest} ->
             io:format("Unknown frame type~n"),
-            die(Socket, PPid, {1006, "Unknown frame type"}, normal)
+            die(Socket, Transport, PPid, {1006, "Unknown frame type"}, normal)
     end.
 
 encode_frame(F, O, Payload) ->
@@ -172,39 +220,43 @@ encode_frame(F, O, Payload) ->
            end,
     iolist_to_binary(IoData).
 
-do_send(State = #state{socket = Socket}, Payload) ->
-    gen_tcp:send(Socket, encode_frame(1, 1, Payload)),
+do_send(State = #state{socket = Socket, transport = Transport}, Payload) ->
+    Transport:send(Socket, encode_frame(1, 1, Payload)),
     State.
 
-do_send_binary(State = #state{socket = Socket}, Payload) ->
-    gen_tcp:send(Socket, encode_frame(1, 2, Payload)),
+do_send_binary(State = #state{socket = Socket, transport = Transport}, Payload) ->
+    Transport:send(Socket, encode_frame(1, 2, Payload)),
     State.
 
-do_close(State = #state{socket = Socket}, {Code, Reason}) ->
+do_close(State = #state{socket = Socket, transport = Transport}, {Code, Reason}) ->
     Payload = iolist_to_binary([<<Code:16>>, Reason]),
-    gen_tcp:send(Socket, encode_frame(1, 8, Payload)),
+    Transport:send(Socket, encode_frame(1, 8, Payload)),
     State#state{phase = closing}.
 
 
-loop(State = #state{socket = Socket, ppid = PPid, data = Data,
+loop(State = #state{socket = Socket, transport = Transport, ppid = PPid, data = Data,
                     phase = Phase}) ->
     receive
-        {tcp, Socket, Bin} ->
+        {In, Socket, Bin} when In =:= tcp; In =:= ssl ->
             State1 = State#state{data = iolist_to_binary([Data, Bin])},
             loop(do_recv(State1));
         {send, Payload} when Phase == open ->
             loop(do_send(State, Payload));
         {send_binary, Payload} when Phase == open ->
             loop(do_send_binary(State, Payload));
-        {tcp_closed, Socket} ->
-            die(Socket, PPid, {1006, "Connection closed abnormally"}, normal);
+        {Closed, Socket} when Closed =:= tcp_closed; Closed =:= ssl_closed ->
+            die(Socket, Transport, PPid, {1006, "Connection closed abnormally"}, normal);
         {close, WsReason} when Phase == open ->
-            loop(do_close(State, WsReason))
+            loop(do_close(State, WsReason));
+        {Error, Socket, Reason} when Error =:= tcp_error; Error =:= ssl_error ->
+            die(Socket, Transport, PPid, {1006, "Connection closed abnormally"}, Reason);
+        Other ->
+            error({unknown_message, Other, Socket})
     end.
 
 
-die(Socket, PPid, WsReason, Reason) ->
-    gen_tcp:shutdown(Socket, read_write),
+die(Socket, Transport, PPid, WsReason, Reason) ->
+    Transport:shutdown(Socket, read_write),
     PPid ! {rfc6455, close, self(), WsReason},
     exit(Reason).
 
