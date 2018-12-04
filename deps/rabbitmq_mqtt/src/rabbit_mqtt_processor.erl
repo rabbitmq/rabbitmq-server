@@ -16,7 +16,7 @@
 
 -module(rabbit_mqtt_processor).
 
--export([info/2, initial_state/2, initial_state/4,
+-export([info/2, initial_state/2, initial_state/5,
          process_frame/2, amqp_pub/2, amqp_callback/2, send_will/1,
          close_connection/1]).
 
@@ -33,13 +33,14 @@
 
 initial_state(Socket, SSLLoginName) ->
     RealSocket = rabbit_net:unwrap_socket(Socket),
+    {ok, {PeerAddr, _PeerPort}} = rabbit_net:peername(RealSocket),
     initial_state(RealSocket, SSLLoginName,
         adapter_info(Socket, 'MQTT'),
-        fun send_client/2).
+        fun send_client/2, PeerAddr).
 
 initial_state(Socket, SSLLoginName,
               AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
-              SendFun) ->
+              SendFun, PeerAddr) ->
     %% MQTT connections use exactly one channel. The frame max is not
     %% applicable and there is no way to know what client is used.
     AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info = [
@@ -58,7 +59,8 @@ initial_state(Socket, SSLLoginName,
                  socket         = Socket,
                  adapter_info   = AdapterInfo,
                  ssl_login_name = SSLLoginName,
-                 send_fun       = SendFun }.
+                 send_fun       = SendFun,
+                 peer_addr      = PeerAddr }.
 
 process_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
               PState = #proc_state{ connection = undefined } )
@@ -478,7 +480,8 @@ process_login(UserBin, PassBin, ProtoVersion,
               #proc_state{ channels     = {undefined, undefined},
                            socket       = Sock,
                            adapter_info = AdapterInfo,
-                           ssl_login_name = SslLoginName}) ->
+                           ssl_login_name = SslLoginName,
+                           peer_addr    = Addr}) ->
     {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
     rabbit_log_connection:info(
@@ -492,7 +495,7 @@ process_login(UserBin, PassBin, ProtoVersion,
                 virtual_host = VHost,
                 adapter_info = set_proto_version(AdapterInfo, ProtoVersion)}) of
                 {ok, Connection} ->
-                    case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
+                    case rabbit_access_control:check_user_loopback(UsernameBin, Addr) of
                         ok          ->
                             [{internal_user, InternalUser}] = amqp_connection:info(
                                 Connection, [internal_user]),
