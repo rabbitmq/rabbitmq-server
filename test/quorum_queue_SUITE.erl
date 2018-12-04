@@ -1610,7 +1610,7 @@ cleanup_data_dir(Config) ->
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
     ?assert(filelib:is_dir(DataDir)),
 
-    ?assertEqual(ok,
+    ?assertEqual([Dir],
                  rpc:call(Server1, rabbit_quorum_queue, cleanup_data_dir,
                           [])),
     ?assert(not filelib:is_dir(DataDir)).

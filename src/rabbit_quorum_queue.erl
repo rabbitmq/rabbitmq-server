@@ -395,9 +395,8 @@ cleanup_data_dir() ->
                          <- rabbit_amqqueue:list_by_type(quorum),
                      lists:member(node(), Nodes)],
     Registered = ra_directory:list_registered(),
-    [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
-                                   not lists:member(Name, Names)],
-    ok.
+    lists:append([maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
+                                                not lists:member(Name, Names)]).
 
 maybe_delete_data_dir(UId) ->
     Dir = ra_env:server_data_dir(UId),
@@ -405,9 +404,10 @@ maybe_delete_data_dir(UId) ->
     case maps:get(machine, Config) of
         {module, rabbit_fifo, _} ->
             ra_lib:recursive_delete(Dir),
-            ra_directory:unregister_name(UId);
+            ra_directory:unregister_name(UId),
+            [Dir];
         _ ->
-            ok
+            []
     end.
 
 cluster_state(Name) ->
