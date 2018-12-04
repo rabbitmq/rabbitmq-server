@@ -93,14 +93,16 @@
 %%----------------------------------------------------------------------------
 
 -spec init_state(ra_server_id(), rabbit_types:r('queue')) ->
-    rabbit_fifo_client:state().
+                        rabbit_fifo_client:state().
 init_state({Name, _}, QName) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
+    %% This lookup could potentially return an {error, not_found}, but we do not
+    %% know what to do if the queue has `disappeared`. Let it crash.
     {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} =
         rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
     Nodes = [Leader | lists:delete(Leader, [{Name, N} || N <- Nodes0])],
-    rabbit_fifo_client:init(QName, Nodes, SoftLimit,
+    rabbit_fifo_client:init(qname_to_rname(QName), Nodes, SoftLimit,
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
