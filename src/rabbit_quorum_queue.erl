@@ -307,7 +307,7 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
             end
     end.
 
-delete_immediately(Resource, {Name, _} = QPid) ->
+delete_immediately(Resource, {_Name, _} = QPid) ->
     _ = rabbit_amqqueue:internal_delete(Resource, ?INTERNAL_USER),
     {ok, _} = ra:delete_cluster([QPid]),
     rabbit_core_metrics:queue_deleted(Resource),
