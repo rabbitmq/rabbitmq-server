@@ -1650,7 +1650,7 @@ subscribe_redelivery_count(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0),
     subscribe(Ch, QQ, false),
 
-    DTag = <<"x-redelivery-count">>,
+    DTag = <<"x-delivery-count">>,
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false},
@@ -1695,7 +1695,7 @@ consume_redelivery_count(Config) ->
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
 
-    DTag = <<"x-redelivery-count">>,
+    DTag = <<"x-delivery-count">>,
 
     {#'basic.get_ok'{delivery_tag = DeliveryTag,
                      redelivered = false},

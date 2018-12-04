@@ -2492,4 +2492,4 @@ maybe_monitor_all(Items,  S) -> lists:foldl(fun maybe_monitor/2, S, Items).
 
 add_delivery_count_header(MsgHeader, Msg) ->
     Count = maps:get(delivery_count, MsgHeader, 0),
-    rabbit_basic:add_header(<<"x-redelivery-count">>, long, Count, Msg).
+    rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg).
