@@ -51,7 +51,8 @@
                       %% and rabbit_mqtt_retainer.
                       retainer_pid,
                       auth_state,
-                      send_fun}).
+                      send_fun,
+                      peer_addr}).
 
 -record(auth_state, {username,
                      user,

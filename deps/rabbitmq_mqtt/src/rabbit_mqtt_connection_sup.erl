@@ -27,7 +27,7 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Ref, Sock, _Transport, []) ->
+start_link(Ref, _Sock, _Transport, []) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, KeepaliveSup} = supervisor2:start_child(
                           SupPid,
@@ -37,7 +37,7 @@ start_link(Ref, Sock, _Transport, []) ->
     {ok, ReaderPid} = supervisor2:start_child(
                         SupPid,
                         {rabbit_mqtt_reader,
-                         {rabbit_mqtt_reader, start_link, [KeepaliveSup, Ref, Sock]},
+                         {rabbit_mqtt_reader, start_link, [KeepaliveSup, Ref]},
                          intrinsic, ?WORKER_WAIT, worker, [rabbit_mqtt_reader]}),
     {ok, SupPid, ReaderPid}.
 

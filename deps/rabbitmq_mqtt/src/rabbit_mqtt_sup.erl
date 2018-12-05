@@ -67,10 +67,7 @@ ssl_listener_spec([Address, SocketOpts, SslOpts, NumAcceptors]) ->
       'mqtt/ssl', NumAcceptors, "MQTT TLS listener").
 
 transport(Protocol) ->
-    ProxyProtocol = application:get_env(rabbitmq_mqtt, proxy_protocol, false),
-    case {Protocol, ProxyProtocol} of
-        {mqtt, false}       -> ranch_tcp;
-        {mqtt, true}        -> ranch_proxy;
-        {'mqtt/ssl', false} -> ranch_ssl;
-        {'mqtt/ssl', true}  -> ranch_proxy_ssl
+    case Protocol of
+        mqtt       -> ranch_tcp;
+        'mqtt/ssl' -> ranch_ssl
     end.
