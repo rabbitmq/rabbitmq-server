@@ -208,7 +208,16 @@ delete_storage(VHost) ->
     VhostDir = msg_store_dir_path(VHost),
     rabbit_log:info("Deleting message store directory for vhost '~s' at '~s'~n", [VHost, VhostDir]),
     %% Message store should be closed when vhost supervisor is closed.
-    ok = rabbit_file:recursive_delete([VhostDir]).
+    case rabbit_file:recursive_delete([VhostDir]) of
+        ok                   -> ok;
+        {error, {_, enoent}} ->
+            %% a concurrent delete did the job for us
+            rabbit_log:warning("Tried to delete storage directories for vhost '~s', it failed with an ENOENT", [VHost]),
+            ok;
+        Other                ->
+            rabbit_log:warning("Tried to delete storage directories for vhost '~s': ~p", [VHost, Other]),
+            Other
+    end.
 
 assert_benign(ok, _)                 -> ok;
 assert_benign({ok, _}, _)            -> ok;
