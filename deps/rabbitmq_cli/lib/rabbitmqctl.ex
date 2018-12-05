@@ -15,7 +15,7 @@
 
 
 defmodule RabbitMQCtl do
-  alias RabbitMQ.CLI.Core.{CommandModules, Distribution, ExitCodes, Helpers, Output, Parser}
+  alias RabbitMQ.CLI.Core.{CommandModules, Config, Distribution, ExitCodes, Helpers, Output, Parser}
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
 
@@ -166,7 +166,11 @@ defmodule RabbitMQCtl do
     |> merge_defaults_longnames
   end
 
-  defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: Helpers.get_rabbit_hostname()}, opts)
+  defp merge_defaults_node(%{} = opts) do
+    longnames_opt = Config.get_option(:longnames, opts)
+    default_rabbit_nodename = Helpers.get_rabbit_hostname(longnames_opt)
+    Map.merge(%{node: default_rabbit_nodename}, opts)
+  end
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
