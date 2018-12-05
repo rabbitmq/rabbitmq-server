@@ -2021,7 +2021,9 @@ consume_redelivery_count(Config) ->
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                         multiple     = false,
                                         requeue      = true}),
-
+    %% wait for requeueing
+    timer:sleep(500),
+    
     {#'basic.get_ok'{delivery_tag = DeliveryTag1,
                      redelivered = true},
      #amqp_msg{props = #'P_basic'{headers = H1}}} =
