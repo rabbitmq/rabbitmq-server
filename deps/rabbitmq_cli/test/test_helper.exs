@@ -19,15 +19,15 @@ ExUnit.start()
 defmodule TestHelper do
   import ExUnit.Assertions
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Core.{CommandModules, Config, Helpers}
+  alias RabbitMQ.CLI.Core.{CommandModules, Config, Helpers, NodeName}
 
   def get_rabbit_hostname(node_name_type \\ :shortnames) do
     Helpers.get_rabbit_hostname(node_name_type)
   end
 
-  def hostname, do: Helpers.hostname
+  def hostname, do: NodeName.hostname()
 
-  def domain, do: Helpers.domain
+  def domain, do: NodeName.domain()
 
   def fixture_file_path(filename) do
     Path.join([System.cwd!(), "test", "fixtures", "files", filename])
