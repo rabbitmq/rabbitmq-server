@@ -115,6 +115,11 @@ controlling_process(Sock, Pid) when is_port(Sock) ->
 getstat(Sock, Stats) when ?IS_SSL(Sock) ->
     inet:getstat(ssl_get_socket(Sock), Stats);
 getstat(Sock, Stats) when is_port(Sock) ->
+    inet:getstat(Sock, Stats);
+%% Used by Proxy protocol support in plugins
+getstat({rabbit_proxy_socket, Sock, _}, Stats) when ?IS_SSL(Sock) ->
+    inet:getstat(ssl_get_socket(Sock), Stats);
+getstat({rabbit_proxy_socket, Sock, _}, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
 
 recv(Sock) when ?IS_SSL(Sock) ->
