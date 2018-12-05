@@ -17,7 +17,7 @@
 -module(rabbit_quorum_queue).
 
 -export([init_state/2, handle_event/2]).
--export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
+-export([declare/1, recover/1, stop/1, delete/4, delete_immediately/2]).
 -export([info/1, info/2, stat/1, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/9, basic_cancel/4]).
 -export([credit/4]).
@@ -75,7 +75,7 @@
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
 -spec stat(rabbit_types:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
 -spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
--spec status(rabbit_types:vhost(), Name :: atom()) -> rabbit_types:infos() | {error, term()}.
+-spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> rabbit_types:infos() | {error, term()}.
 
 -define(STATISTICS_KEYS,
         [policy,
@@ -94,15 +94,17 @@
 %%----------------------------------------------------------------------------
 
 -spec init_state(ra_server_id(), rabbit_types:r('queue')) ->
-    rabbit_fifo_client:state().
+                        rabbit_fifo_client:state().
 init_state({Name, _}, QName) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
+    %% This lookup could potentially return an {error, not_found}, but we do not
+    %% know what to do if the queue has `disappeared`. Let it crash.
     {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes}} =
         rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
-    rabbit_fifo_client:init(QName, Servers, SoftLimit,
+    rabbit_fifo_client:init(qname_to_rname(QName), Servers, SoftLimit,
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
@@ -305,11 +307,10 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
             end
     end.
 
-delete_immediately({Name, _} = QPid) ->
-    QName = queue_name(Name),
-    _ = rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER),
-    ok = ra:delete_cluster([QPid]),
-    rabbit_core_metrics:queue_deleted(QName),
+delete_immediately(Resource, {_Name, _} = QPid) ->
+    _ = rabbit_amqqueue:internal_delete(Resource, ?INTERNAL_USER),
+    {ok, _} = ra:delete_cluster([QPid]),
+    rabbit_core_metrics:queue_deleted(Resource),
     ok.
 
 ack(CTag, MsgIds, QState) ->
