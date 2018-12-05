@@ -106,7 +106,7 @@ get_tcp_conf() ->
 get_tls_conf(TLSConf0) ->
     TLSConf1 = [{connection_type, supervisor}|TLSConf0],
     TLSConf2 = case proplists:get_value(port, TLSConf1) of
-                   undefined -> [{port, 15674}|proplists:delete(port, TLSConf1)];
+                   undefined -> [{port, 15675}|proplists:delete(port, TLSConf1)];
                    _ -> TLSConf1
                end,
     get_ip_port(TLSConf2).
