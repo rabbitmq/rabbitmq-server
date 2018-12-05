@@ -1,8 +1,10 @@
 PROJECT = rabbitmq_ct_helpers
 PROJECT_DESCRIPTION = Common Test helpers for RabbitMQ
 
-DEPS = rabbit_common proper
+DEPS = rabbit_common proper inet_tcp_proxy
 TEST_DEPS = rabbit
+
+dep_inet_tcp_proxy = git https://github.com/rabbitmq/inet_tcp_proxy
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
