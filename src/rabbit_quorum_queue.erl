@@ -16,6 +16,12 @@
 
 -module(rabbit_quorum_queue).
 
+-rabbit_boot_step({?MODULE,
+                   [{description, "set data directory"},
+                    {mfa,         {?MODULE, set_data_dir, []}},
+                    {requires,    pre_boot},
+                    {enables,     kernel_ready}]}).
+
 -export([init_state/2, handle_event/2]).
 -export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
 -export([info/1, info/2, stat/1, infos/1]).
@@ -36,6 +42,7 @@
 -export([requeue/3]).
 -export([policy_changed/2]).
 -export([cleanup_data_dir/0]).
+-export([set_data_dir/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -92,6 +99,9 @@
         ]).
 
 %%----------------------------------------------------------------------------
+set_data_dir() ->
+    {ok, BaseDir} = application:get_env(mnesia, dir),
+    application:set_env(ra, data_dir, filename:join(BaseDir, "quorum")).
 
 -spec init_state(ra_server_id(), rabbit_types:r('queue')) ->
     rabbit_fifo_client:state().
