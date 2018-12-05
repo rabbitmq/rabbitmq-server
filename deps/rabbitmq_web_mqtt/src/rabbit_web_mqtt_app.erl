@@ -51,8 +51,9 @@ mqtt_init() ->
     Routes = cowboy_router:compile([{'_', [
         {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
     ]}]),
-    CowboyOpts = CowboyOpts0#{env         => #{dispatch => Routes},
-                              middlewares => [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler]},
+    CowboyOpts = CowboyOpts0#{env          => #{dispatch => Routes},
+                              middlewares  => [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler],
+                              proxy_header => get_env(proxy_protocol, false)},
     {TCPConf, IpStr, Port} = get_tcp_conf(),
 
     case ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
@@ -105,7 +106,7 @@ get_tcp_conf() ->
 get_tls_conf(TLSConf0) ->
     TLSConf1 = [{connection_type, supervisor}|TLSConf0],
     TLSConf2 = case proplists:get_value(port, TLSConf1) of
-                   undefined -> [{port, 15674}|TLSConf1];
+                   undefined -> [{port, 15675}|proplists:delete(port, TLSConf1)];
                    _ -> TLSConf1
                end,
     get_ip_port(TLSConf2).
