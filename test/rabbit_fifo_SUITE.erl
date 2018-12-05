@@ -99,8 +99,13 @@ basics(Config) ->
     _ = ra:stop_server(ServerId),
     _ = ra:restart_server(ServerId),
 
-    % give time to become leader
-    timer:sleep(500),
+    %% wait for leader change to notice server is up again
+    receive
+        {ra_event, _, {machine, leader_change}} -> ok
+    after 5000 ->
+              exit(leader_change_timeout)
+    end,
+
     {ok, FState6} = rabbit_fifo_client:enqueue(two, FState5b),
     % process applied event
     FState6b = process_ra_event(FState6, 250),
@@ -523,8 +528,9 @@ conf(ClusterName, UId, ServerId, _, Peers) ->
 process_ra_event(State, Wait) ->
     receive
         {ra_event, From, Evt} ->
-            % ct:pal("processed ra event ~p~n", [Evt]),
-            {internal, _, _, S} = rabbit_fifo_client:handle_ra_event(From, Evt, State),
+            ct:pal("processed ra event ~p~n", [Evt]),
+            {internal, _, _, S} =
+            rabbit_fifo_client:handle_ra_event(From, Evt, State),
             S
     after Wait ->
               exit(ra_event_timeout)
