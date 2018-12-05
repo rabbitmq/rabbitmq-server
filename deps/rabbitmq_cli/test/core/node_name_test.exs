@@ -45,12 +45,12 @@ defmodule NodeNameTest do
 
   test "longnames: RabbitMQ nodename is properly formed from atom" do
     {:ok, got} = @subject.create(:rabbit, :longnames)
-    assert Atom.to_string(got) =~ ~r/rabbit@\w+\.\w+/
+    assert Atom.to_string(got) =~ ~r/rabbit@[\w\-]+\.\w+/
   end
 
   test "longnames: RabbitMQ nodename is properly formed from string" do
     {:ok, got} = @subject.create("rabbit", :longnames)
-    assert Atom.to_string(got) =~ ~r/rabbit@\w+\.\w+/
+    assert Atom.to_string(got) =~ ~r/rabbit@[\w\-]+\.\w+/
   end
 
   test "longnames: RabbitMQ nodename is properly formed from atom with domain" do
