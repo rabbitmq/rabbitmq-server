@@ -115,6 +115,11 @@ controlling_process(Sock, Pid) when is_port(Sock) ->
 getstat(Sock, Stats) when ?IS_SSL(Sock) ->
     inet:getstat(ssl_get_socket(Sock), Stats);
 getstat(Sock, Stats) when is_port(Sock) ->
+    inet:getstat(Sock, Stats);
+%% Used by Proxy protocol support in plugins
+getstat({rabbit_proxy_socket, Sock, _}, Stats) when ?IS_SSL(Sock) ->
+    inet:getstat(ssl_get_socket(Sock), Stats);
+getstat({rabbit_proxy_socket, Sock, _}, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
 
 recv(Sock) when ?IS_SSL(Sock) ->
@@ -232,15 +237,12 @@ socket_ends(Sock, Direction) when ?IS_SSL(Sock);
         {_, {error, _Reason} = Error} ->
             Error
     end;
-socket_ends(Sock, Direction = inbound) when is_tuple(Sock) ->
-    %% proxy protocol support
-    %% hack: we have to check the record type
-    {ok, {{FromAddress, FromPort}, {_, _}}} = case element(1, Sock) of
-        proxy_socket -> ranch_proxy_protocol:proxyname(undefined, Sock);
-        ssl_socket   -> ranch_proxy_ssl:proxyname(Sock)
-    end,
+socket_ends({rabbit_proxy_socket, CSocket, ProxyInfo}, Direction = inbound) ->
+    #{
+        src_address := FromAddress,
+        src_port := FromPort
+    } = ProxyInfo,
     {_From, To} = sock_funs(Direction),
-    CSocket = unwrap_socket(Sock),
     case To(CSocket) of
         {ok, {ToAddress, ToPort}} ->
             {ok, {rdns(FromAddress), FromPort,
@@ -294,34 +296,12 @@ is_loopback(_)                       -> false.
 
 ipv4(AB, CD) -> {AB bsr 8, AB band 255, CD bsr 8, CD band 255}.
 
-unwrap_socket(Sock) when ?IS_SSL(Sock);
-                         is_port(Sock) ->
+unwrap_socket({rabbit_proxy_socket, Sock, _}) ->
     Sock;
-unwrap_socket(Sock) when is_tuple(Sock) ->
-    %% proxy protocol support
-    %% hack: we have to check the record type
-    case element(1, Sock) of
-        proxy_socket ->
-            ranch_proxy_protocol:get_csocket(Sock);
-        ssl_socket   ->
-            ranch_proxy_ssl:get_csocket(Sock)
-    end;
 unwrap_socket(Sock) ->
     Sock.
 
-maybe_get_proxy_socket(Sock) when ?IS_SSL(Sock);
-                                  is_port(Sock) ->
-    undefined;
-maybe_get_proxy_socket(Sock) when is_tuple(Sock) ->
-    %% proxy protocol support
-    %% hack: we have to check the record type
-    case element(1, Sock) of
-        proxy_socket ->
-            Sock;
-        ssl_socket   ->
-            Sock;
-        _            ->
-            undefined
-    end;
+maybe_get_proxy_socket(Sock={rabbit_proxy_socket, _, _}) ->
+    Sock;
 maybe_get_proxy_socket(_Sock) ->
     undefined.
