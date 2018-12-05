@@ -1094,7 +1094,8 @@ notify_down_all(QPids, ChPid, Timeout) ->
         Error         -> {error, Error}
     end.
 
-activate_limit_all(QPids, ChPid) ->
+activate_limit_all(QRefs, ChPid) ->
+    QPids = [P || P <- QRefs, ?IS_CLASSIC(P)],
     delegate:invoke_no_result(QPids, {gen_server2, cast,
                                       [{activate_limit, ChPid}]}).
 
