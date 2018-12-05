@@ -48,6 +48,8 @@ groups() ->
                        ++ all_tests()},
                       {cluster_size_3, [], [
                                             declare_during_node_down,
+                                            simple_confirm_availability_on_leader_change,
+                                            confirm_availability_on_leader_change,
                                             recover_from_single_failure,
                                             recover_from_multiple_failures,
                                             leadership_takeover,
@@ -113,7 +115,9 @@ all_tests() ->
      cancel_sync_queue,
      basic_recover,
      idempotent_recover,
-     vhost_with_quorum_queue_is_deleted
+     vhost_with_quorum_queue_is_deleted,
+     consume_redelivery_count,
+     subscribe_redelivery_count
     ].
 
 %% -------------------------------------------------------------------
@@ -572,6 +576,19 @@ publish(Config) ->
     Name = ra_name(QQ),
     wait_for_messages_ready(Servers, Name, 1),
     wait_for_messages_pending_ack(Servers, Name, 0).
+
+publish_confirm(Ch, QName) ->
+    publish(Ch, QName),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    ct:pal("waiting for confirms from ~s", [QName]),
+    ok = receive
+             #'basic.ack'{}  -> ok;
+             #'basic.nack'{} -> fail
+         after 2500 ->
+                   exit(confirm_timeout)
+         end,
+    ct:pal("CONFIRMED! ~s", [QName]),
+    ok.
 
 ra_name(Q) ->
     binary_to_atom(<<"%2F_", Q/binary>>, utf8).
@@ -1547,6 +1564,82 @@ declare_during_node_down(Config) ->
     wait_for_messages_ready(Servers, RaName, 1),
     ok.
 
+simple_confirm_availability_on_leader_change(Config) ->
+    [Node1, Node2, _Node3] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    %% declare a queue on node2 - this _should_ host the leader on node 2
+    DCh = rabbit_ct_client_helpers:open_channel(Config, Node2),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(DCh, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    erlang:process_flag(trap_exit, true),
+    %% open a channel to another node
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    publish_confirm(Ch, QQ),
+
+    %% stop the node hosting the leader
+    stop_node(Config, Node2),
+    %% this should not fail as the channel should detect the new leader and
+    %% resend to that
+    publish_confirm(Ch, QQ),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
+    ok.
+
+confirm_availability_on_leader_change(Config) ->
+    [Node1, Node2, _Node3] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    %% declare a queue on node2 - this _should_ host the leader on node 2
+    DCh = rabbit_ct_client_helpers:open_channel(Config, Node2),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(DCh, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    erlang:process_flag(trap_exit, true),
+    Pid = spawn_link(fun () ->
+                             %% open a channel to another node
+                             Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
+                             #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+                             ConfirmLoop = fun Loop() ->
+                                                     publish_confirm(Ch, QQ),
+                                                     receive {done, P} ->
+                                                                 P ! done,
+                                                                 ok
+                                                     after 0 -> Loop() end
+                                             end,
+                             ConfirmLoop()
+                       end),
+
+    timer:sleep(500),
+    %% stop the node hosting the leader
+    stop_node(Config, Node2),
+    %% this should not fail as the channel should detect the new leader and
+    %% resend to that
+    timer:sleep(500),
+    Pid ! {done, self()},
+    receive
+        done -> ok;
+        {'EXIT', Pid, Err} ->
+            exit(Err)
+    after 5500 ->
+              flush(100),
+              exit(bah)
+    end,
+    ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
+    ok.
+
+flush(T) ->
+    receive X ->
+                ct:pal("flushed ~w", [X]),
+                flush(T)
+    after T ->
+              ok
+    end.
+
+
 add_member_not_running(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1820,6 +1913,99 @@ basic_recover(Config) ->
     amqp_channel:cast(Ch, #'basic.recover'{requeue = true}),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0).
+
+subscribe_redelivery_count(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    RaName = ra_name(QQ),
+    publish(Ch, QQ),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+    subscribe(Ch, QQ, false),
+
+    DTag = <<"x-delivery-count">>,
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag,
+                          redelivered  = false},
+         #amqp_msg{props = #'P_basic'{headers = H0}}} ->
+            ?assertMatch({DTag, _, 0}, rabbit_basic:header(DTag, H0)),
+            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                                multiple     = false,
+                                                requeue      = true})
+    end,
+
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag1,
+                          redelivered  = true},
+         #amqp_msg{props = #'P_basic'{headers = H1}}} ->
+            ?assertMatch({DTag, _, 1}, rabbit_basic:header(DTag, H1)),
+            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
+                                                multiple     = false,
+                                                requeue      = true})
+    end,
+
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag2,
+                          redelivered  = true},
+         #amqp_msg{props = #'P_basic'{headers = H2}}} ->
+            ?assertMatch({DTag, _, 2}, rabbit_basic:header(DTag, H2)),
+            amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag2,
+                                               multiple     = false}),
+            wait_for_messages_ready(Servers, RaName, 0),
+            wait_for_messages_pending_ack(Servers, RaName, 0)
+    end.
+
+consume_redelivery_count(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    RaName = ra_name(QQ),
+    publish(Ch, QQ),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+
+    DTag = <<"x-delivery-count">>,
+
+    {#'basic.get_ok'{delivery_tag = DeliveryTag,
+                     redelivered = false},
+     #amqp_msg{props = #'P_basic'{headers = H0}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = QQ,
+                                           no_ack = false}),
+    ?assertMatch({DTag, _, 0}, rabbit_basic:header(DTag, H0)),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple     = false,
+                                        requeue      = true}),
+
+    {#'basic.get_ok'{delivery_tag = DeliveryTag1,
+                     redelivered = true},
+     #amqp_msg{props = #'P_basic'{headers = H1}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = QQ,
+                                           no_ack = false}),
+    ?assertMatch({DTag, _, 1}, rabbit_basic:header(DTag, H1)),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
+                                        multiple     = false,
+                                        requeue      = true}),
+
+    {#'basic.get_ok'{delivery_tag = DeliveryTag2,
+                     redelivered = true},
+     #amqp_msg{props = #'P_basic'{headers = H2}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = QQ,
+                                           no_ack = false}),
+    ?assertMatch({DTag, _, 2}, rabbit_basic:header(DTag, H2)),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag2,
+                                        multiple     = false,
+                                        requeue      = true}).
+
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->
@@ -1871,7 +2057,7 @@ filter_queues(Expected, Got) ->
                  end, Got).
 
 publish(Ch, Queue) ->
-    ok = amqp_channel:call(Ch,
+    ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = Queue},
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                                      payload = <<"msg">>}).
