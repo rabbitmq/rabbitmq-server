@@ -16,19 +16,22 @@
 
 -module(rfc6455_client).
 
--export([new/2, new/3, new/4, open/1, recv/1, send/2, close/1, close/2]).
+-export([new/2, new/3, new/4, new/5, open/1, recv/1, send/2, close/1, close/2]).
 
 -record(state, {host, port, addr, path, ppid, socket, data, phase, transport}).
 
 %% --------------------------------------------------------------------------
 
 new(WsUrl, PPid) ->
-    new(WsUrl, PPid, undefined, []).
+    new(WsUrl, PPid, undefined, [], <<>>).
 
 new(WsUrl, PPid, AuthInfo) ->
-    new(WsUrl, PPid, AuthInfo, []).
+    new(WsUrl, PPid, AuthInfo, [], <<>>).
 
 new(WsUrl, PPid, AuthInfo, Protocols) ->
+    new(WsUrl, PPid, AuthInfo, Protocols, <<>>).
+
+new(WsUrl, PPid, AuthInfo, Protocols, TcpPreface) ->
     crypto:start(),
     application:ensure_all_started(ssl),
     {Transport, Url} = case WsUrl of
@@ -52,7 +55,7 @@ new(WsUrl, PPid, AuthInfo, Protocols) ->
                    ppid = PPid,
                    transport = Transport},
     spawn_link(fun () ->
-                  start_conn(State, AuthInfo, Protocols)
+                  start_conn(State, AuthInfo, Protocols, TcpPreface)
           end).
 
 open(WS) ->
@@ -90,10 +93,22 @@ close(WS, WsReason) ->
 
 %% --------------------------------------------------------------------------
 
-start_conn(State = #state{transport = Transport}, AuthInfo, Protocols) ->
-    {ok, Socket} = Transport:connect(State#state.host, State#state.port,
-                                   [binary,
-                                    {packet, 0}]),
+start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPreface) ->
+    {ok, Socket} = case TcpPreface of
+        <<>> ->
+            Transport:connect(State#state.host, State#state.port,
+                              [binary,
+                               {packet, 0}]);
+        _ ->
+            {ok, Socket0} = gen_tcp:connect(State#state.host, State#state.port,
+                                            [binary,
+                                             {packet, 0}]),
+            gen_tcp:send(Socket0, TcpPreface),
+            case Transport of
+                gen_tcp -> {ok, Socket0};
+                ssl -> Transport:connect(Socket0, [])
+            end
+    end,
 
     AuthHd = case AuthInfo of
         undefined -> "";
