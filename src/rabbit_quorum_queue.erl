@@ -564,8 +564,7 @@ dead_letter_publish(X, RK, QName, ReasonMsgs) ->
             [rabbit_dead_letter:publish(Msg, Reason, Exchange, RK, QName)
              || {Reason, Msg} <- ReasonMsgs];
         {error, not_found} ->
-            rabbit_log:warning("Dead lettering for quorum queue ~p failed: "
-                               "exchange ~p not found", [QName, X])
+            ok
     end.
 
 %% TODO escape hack
