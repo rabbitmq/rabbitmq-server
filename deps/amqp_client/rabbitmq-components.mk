@@ -114,6 +114,7 @@ dep_cowboy = hex 2.6.1
 dep_cowlib = hex 2.7.0
 dep_jsx = hex 2.9.0
 dep_lager = hex 3.6.5
+dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.3.6
 
