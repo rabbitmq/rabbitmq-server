@@ -75,8 +75,9 @@ init(Req, Opts) ->
 websocket_init(State = #state{conn_name = ConnStr, socket = Sock, peername = PeerAddr}) ->
     rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
     AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
+    RealSocket = rabbit_net:unwrap_socket(Sock),
     ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
-        rabbit_mqtt_reader:ssl_login_name(Sock),
+        rabbit_mqtt_reader:ssl_login_name(RealSocket),
         AdapterInfo,
         fun send_reply/2,
         PeerAddr),
