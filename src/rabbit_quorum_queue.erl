@@ -559,9 +559,14 @@ args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
 dead_letter_publish(undefined, _, _, _) ->
     ok;
 dead_letter_publish(X, RK, QName, ReasonMsgs) ->
-    {ok, Exchange} = rabbit_exchange:lookup(X),
-    [rabbit_dead_letter:publish(Msg, Reason, Exchange, RK, QName)
-     || {Reason, Msg} <- ReasonMsgs].
+    case rabbit_exchange:lookup(X) of
+        {ok, Exchange} ->
+            [rabbit_dead_letter:publish(Msg, Reason, Exchange, RK, QName)
+             || {Reason, Msg} <- ReasonMsgs];
+        {error, not_found} ->
+            rabbit_log:warning("Dead lettering for quorum queue ~p failed: "
+                               "exchange ~p not found", [QName, X])
+    end.
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
