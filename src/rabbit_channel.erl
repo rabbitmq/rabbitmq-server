@@ -335,12 +335,29 @@ list_local() ->
 info_keys() -> ?INFO_KEYS.
 
 info(Pid) ->
-    gen_server2:call(Pid, info, infinity).
+    {Timeout, Deadline} = get_operation_timeout_and_deadline(),
+    try
+        case gen_server2:call(Pid, {info, Deadline}, Timeout) of
+            {ok, Res}      -> Res;
+            {error, Error} -> throw(Error)
+        end
+    catch
+        exit:{timeout, _} ->
+            rabbit_log:error("Timed out getting channel ~p info", [Pid]),
+            throw(timeout)
+    end.
 
 info(Pid, Items) ->
-    case gen_server2:call(Pid, {info, Items}, infinity) of
-        {ok, Res}      -> Res;
-        {error, Error} -> throw(Error)
+    {Timeout, Deadline} = get_operation_timeout_and_deadline(),
+    try
+        case gen_server2:call(Pid, {{info, Items}, Deadline}, Timeout) of
+            {ok, Res}      -> Res;
+            {error, Error} -> throw(Error)
+        end
+    catch
+        exit:{timeout, _} ->
+            rabbit_log:error("Timed out getting channel ~p info", [Pid]),
+            throw(timeout)
     end.
 
 info_all() ->
@@ -487,13 +504,20 @@ prioritise_info(Msg, _Len, _State) ->
 handle_call(flush, _From, State) ->
     reply(ok, State);
 
-handle_call(info, _From, State) ->
-    reply(infos(?INFO_KEYS, State), State);
-
-handle_call({info, Items}, _From, State) ->
+handle_call({info, Deadline}, _From, State) ->
     try
-        reply({ok, infos(Items, State)}, State)
-    catch Error -> reply({error, Error}, State)
+        reply({ok, infos(?INFO_KEYS, Deadline, State)}, State)
+    catch
+        Error ->
+            reply({error, Error}, State)
+    end;
+
+handle_call({{info, Items}, Deadline}, _From, State) ->
+    try
+        reply({ok, infos(Items, Deadline, State)}, State)
+    catch
+        Error ->
+            reply({error, Error}, State)
     end;
 
 handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
@@ -2001,6 +2025,17 @@ complete_tx(State = #ch{tx = failed}) ->
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
+infos(Items, Deadline, State) ->
+    [begin
+         Now = now_millis(),
+         if
+             Now > Deadline ->
+                 throw(timeout);
+             true ->
+                {Item, i(Item, State)}
+         end
+     end || Item <- Items].
+
 i(pid,            _)                               -> self();
 i(connection,     #ch{conn_pid         = ConnPid}) -> ConnPid;
 i(number,         #ch{channel          = Channel}) -> Channel;
@@ -2300,3 +2335,13 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
     ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
     _ = rabbit_exchange:lookup_or_die(ExchangeName).
+
+now_millis() ->
+    erlang:monotonic_time(millisecond).
+
+get_operation_timeout_and_deadline() ->
+    % NB: can't use get_operation_timeout because
+    % this code may not be running via the channel Pid
+    Timeout = ?CHANNEL_OPERATION_TIMEOUT,
+    Deadline =  now_millis() + Timeout,
+    {Timeout, Deadline}.
