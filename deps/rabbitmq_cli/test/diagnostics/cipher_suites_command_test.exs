@@ -23,7 +23,6 @@ defmodule CipherSuitesCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     :ok
   end
 
