@@ -21,7 +21,7 @@
 %% is an O(1) operation, in contrast with queue:len/1 which is O(n).
 
 -export([new/0, is_empty/1, len/1, in/2, in_r/2, out/1, out_r/1, join/2,
-         foldl/3, foldr/3, from_list/1, to_list/1, peek/1, peek_r/1]).
+         foldl/3, foldr/3, from_list/1, drop/1, to_list/1, peek/1, peek_r/1]).
 
 -define(QUEUE, queue).
 
@@ -32,6 +32,7 @@
 -type result()    :: 'empty' | {'value', value()}.
 
 -spec new() -> ?MODULE().
+-spec drop(?MODULE()) -> ?MODULE().
 -spec is_empty(?MODULE()) -> boolean().
 -spec len(?MODULE()) -> non_neg_integer().
 -spec in(value(), ?MODULE()) -> ?MODULE().
@@ -47,6 +48,8 @@
 -spec peek_r(?MODULE()) -> result().
 
 new() -> {0, ?QUEUE:new()}.
+
+drop({L, Q}) -> {L - 1, ?QUEUE:drop(Q)}.
 
 is_empty({0, _Q}) -> true;
 is_empty(_)       -> false.
@@ -81,7 +84,8 @@ foldr(Fun, Init, Q) ->
         {{value, V}, Q1} -> foldr(Fun, Fun(V, Init), Q1)
     end.
 
-len({L, _Q}) -> L.
+len({L, _}) -> L.
+
 
 peek({ 0, _Q}) -> empty;
 peek({_L,  Q}) -> ?QUEUE:peek(Q).
