@@ -47,6 +47,9 @@ to_json(ReqData, Context) ->
     case rabbit_health_check:node(Node, Timeout) of
         ok ->
             rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
+        timeout ->
+            ErrMsg = rabbit_mgmt_format:print("node ~p health check timed out", [Node]),
+            failure(ErrMsg, ReqData, Context);
         {badrpc, Err} ->
             failure(rabbit_mgmt_format:print("~p", Err), ReqData, Context);
         {error_string, Err} ->
