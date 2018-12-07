@@ -268,6 +268,7 @@ web-manpages: $(WEB_MANPAGES)
 	    gsub(/<h1/, "<h2", line); \
 	    gsub(/<\/h1>/, "</h2>", line); \
 	    gsub(/class="D1"/, "class=\"D1 sourcecode bash hljs\"", line); \
+	    gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent sourcecode bash hljs\"", line); \
 	    print line; \
 	  } } \
 	  ' > "$@"
