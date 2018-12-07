@@ -27,6 +27,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MaybeStuckCommand do
     {:validation_failure, :too_many_args}
   end
   def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_diagnostics, :maybe_stuck, [], timeout)

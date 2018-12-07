@@ -37,6 +37,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
         {:validation_failure, "unit '#{unit}' is not supported. Please use one of: bytes, mb, gb"}
     end
   end
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vm, :memory, [], timeout)
