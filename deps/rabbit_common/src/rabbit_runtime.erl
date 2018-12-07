@@ -50,4 +50,6 @@ get_gc_info(Pid) ->
 -spec msacc_stats(integer()) -> nonempty_list(#{atom() => any()}).
 msacc_stats(TimeInMs) ->
     msacc:start(TimeInMs),
-    msacc:stats().
+    S = msacc:stats(),
+    msacc:stop(),
+    S.
