@@ -9,6 +9,7 @@ define PROJECT_ENV
 	    {num_tcp_acceptors, 10},
 	    {num_ssl_acceptors, 10},
 	    {cowboy_opts, []},
+	    {proxy_protocol, false},
 	    {ws_frame, text},
 	    {use_http_auth, false}
 	  ]

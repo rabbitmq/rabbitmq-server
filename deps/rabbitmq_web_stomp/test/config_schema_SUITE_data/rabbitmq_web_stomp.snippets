@@ -87,5 +87,24 @@
 {ws_idle_timeout,
   "web_stomp.ws_opts.idle_timeout = 10000",
   [{rabbitmq_web_stomp,[{cowboy_ws_opts,[{idle_timeout, 10000}]}]}],
+  [rabbitmq_web_stomp]},
+
+ %%
+ %% Proxy protocol
+ %%
+
+{ws_proxy_protocol_explicitly_disabled,
+  "web_stomp.proxy_protocol = false",
+  [{rabbitmq_web_stomp,[
+                        {proxy_protocol, false}
+                       ]}],
+  [rabbitmq_web_stomp]},
+
+{ws_proxy_protocol_enabled,
+  "web_stomp.proxy_protocol = true",
+  [{rabbitmq_web_stomp,[
+                        {proxy_protocol, true}
+                       ]}],
   [rabbitmq_web_stomp]}
+
 ].
