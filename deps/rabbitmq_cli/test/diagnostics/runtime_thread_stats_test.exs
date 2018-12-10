@@ -11,21 +11,29 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
-defmodule DiscoverPeersCommandTest do
-  use ExUnit.Case, async: false
+
+defmodule RuntimeThreadStatsCommandTest do
+  use ExUnit.Case
   import TestHelper
 
-  @command RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand
+  @command RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand
+
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
+
     :ok
   end
 
   setup context do
-    {:ok, opts: %{node: get_rabbit_hostname(), timeout: context[:test_timeout]}}
+    {:ok, opts: %{
+        node: get_rabbit_hostname(),
+        timeout: context[:test_timeout] || 10000,
+        sample_interval: 1
+      }}
   end
+
 
   test "validate: providing no arguments passes validation", context do
     assert @command.validate([], context[:opts]) == :ok
@@ -35,9 +43,17 @@ defmodule DiscoverPeersCommandTest do
     assert @command.validate(["a"], context[:opts]) ==
       {:validation_failure, :too_many_args}
   end
-  
-  @tag test_timeout: 15000
-  test "run: returns a list of nodes when the backend isn't configured", context do
-    assert match?({:ok, {[], _}}, @command.run([], context[:opts]))
+
+  @tag test_timeout: 2000
+  test "run: targeting an unreachable node throws a badrpc", context do
+    assert @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})) == {:badrpc, :nodedown}
+  end
+
+  @tag test_timeout: 6000
+  test "run: returns msacc-formatted output", context do
+    res = @command.run([], context[:opts])
+    # the output is long and its values are environment-specific,
+    # so we simply assert that it is non-empty. MK.
+    assert length(res) > 0
   end
 end

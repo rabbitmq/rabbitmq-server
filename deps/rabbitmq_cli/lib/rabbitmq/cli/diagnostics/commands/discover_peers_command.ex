@@ -25,7 +25,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   def validate([_|_], _) do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_peer_discovery, :discover_cluster_nodes, [], timeout)
@@ -48,6 +50,4 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   def usage, do: "discover_peers"
 
   def banner(_,_), do: "Discovering peers nodes ..."
-
-
 end
