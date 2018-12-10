@@ -109,3 +109,11 @@
 {mapping, "web_stomp.ws_opts.idle_timeout", "rabbitmq_web_stomp.cowboy_ws_opts.idle_timeout",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]
 }.
+
+
+%% Whether or not to enable Proxy protocol support.
+%%
+%% {proxy_protocol, false}
+
+{mapping, "web_stomp.proxy_protocol", "rabbitmq_web_stomp.proxy_protocol",
+    [{datatype, {enum, [true, false]}}]}.
