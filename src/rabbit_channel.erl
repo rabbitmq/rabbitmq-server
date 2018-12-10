@@ -1553,7 +1553,7 @@ handle_method(#'tx.commit'{}, _, #ch{tx = none}) ->
 
 handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Msgs, Acks},
                                              limiter = Limiter}) ->
-    State1 = rabbit_misc:queue_fold(fun deliver_to_queues/2, State, Msgs),
+    State1 = queue_fold(fun deliver_to_queues/2, State, Msgs),
     Rev = fun (X) -> lists:reverse(lists:sort(X)) end,
     State2 = lists:foldl(fun ({ack,     A}, Acc) ->
                                  ack(Rev(A), Acc);
@@ -2548,3 +2548,9 @@ get_operation_timeout_and_deadline() ->
     Timeout = ?CHANNEL_OPERATION_TIMEOUT,
     Deadline =  now_millis() + Timeout,
     {Timeout, Deadline}.
+
+queue_fold(Fun, Init, Q) ->
+    case ?QUEUE:out(Q) of
+        {empty, _Q}      -> Init;
+        {{value, V}, Q1} -> queue_fold(Fun, Fun(V, Init), Q1)
+    end.
