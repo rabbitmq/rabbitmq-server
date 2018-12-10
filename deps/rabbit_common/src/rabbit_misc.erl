@@ -1206,12 +1206,11 @@ rpc_call(Node, Mod, Fun, Args, Timeout) ->
             rpc:call(Node, Mod, Fun, Args, Timeout)
     end.
 
+get_gc_info(Pid) ->
+    rabbit_runtime:get_gc_info(Pid).
+
 guess_number_of_cpu_cores() ->
-    case erlang:system_info(logical_processors_available) of
-        unknown -> % Happens on Mac OS X.
-            erlang:system_info(schedulers);
-        N -> N
-    end.
+    rabbit_runtime:guess_number_of_cpu_cores().
 
 %% Discussion of choosen values is at
 %% https://github.com/rabbitmq/rabbitmq-server/issues/151
@@ -1222,18 +1221,6 @@ guess_default_thread_pool_size() ->
 report_default_thread_pool_size() ->
     io:format("~b", [guess_default_thread_pool_size()]),
     erlang:halt(0).
-
-get_gc_info(Pid) ->
-    {garbage_collection, GC} = erlang:process_info(Pid, garbage_collection),
-    case proplists:get_value(max_heap_size, GC) of
-        I when is_integer(I) ->
-            GC;
-        undefined ->
-            GC;
-        Map ->
-            lists:keyreplace(max_heap_size, 1, GC,
-                             {max_heap_size, maps:get(size, Map)})
-    end.
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl
