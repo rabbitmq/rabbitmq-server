@@ -3,6 +3,11 @@
   [{rabbitmq_web_stomp,
     [{tcp_config, [{ip,"127.0.0.1"},{port,12345}]}]}],
   [rabbitmq_web_stomp]},
+ {tcp_listener_none,
+  "web_stomp.tcp.listener = none",
+  [{rabbitmq_web_stomp,
+    [{tcp_config, []}]}],
+  [rabbitmq_web_stomp]},
  {tcp_config,
   "web_stomp.tcp.ip = 127.0.0.4
    web_stomp.tcp.port = 11123",
@@ -13,11 +18,18 @@
   "web_stomp.port = 12345",
   [{rabbitmq_web_stomp,[{port,12345}]}],
   [rabbitmq_web_stomp]},
+
  {ssl_listener,
   "web_stomp.ssl.listener = 127.0.0.4:15672",
   [{rabbitmq_web_stomp,
     [{ssl_config, [{ip,"127.0.0.4"},{port,15672}]}]}],
   [rabbitmq_web_stomp]},
+ {ssl_listener_none,
+  "web_stomp.ssl.listener = none",
+  [{rabbitmq_web_stomp,
+    [{ssl_config, []}]}],
+  [rabbitmq_web_stomp]},
+
  {ssl,
   "web_stomp.ssl.port       = 15671
    web_stomp.ssl.backlog    = 1024
