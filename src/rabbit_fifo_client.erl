@@ -1,3 +1,19 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%
+
 %% @doc Provides an easy to consume API for interacting with the {@link rabbit_fifo.}
 %% state machine implementation running inside a `ra' raft system.
 %%
@@ -21,7 +37,8 @@
          handle_ra_event/3,
          untracked_enqueue/2,
          purge/1,
-         cluster_name/1
+         cluster_name/1,
+         update_machine_state/2
          ]).
 
 -include_lib("ra/include/ra.hrl").
@@ -375,6 +392,14 @@ purge(Node) ->
 cluster_name(#state{cluster_name = ClusterName}) ->
     ClusterName.
 
+update_machine_state(Node, Conf) ->
+    case ra:process_command(Node, {update_state, Conf}) of
+        {ok, ok, _} ->
+            ok;
+        Err ->
+            Err
+    end.
+
 %% @doc Handles incoming `ra_events'. Events carry both internal "bookeeping"
 %% events emitted by the `ra' leader as well as `rabbit_fifo' emitted events such
 %% as message deliveries. All ra events need to be handled by {@module}
@@ -438,7 +463,8 @@ handle_ra_event(From, {applied, Seqs},
                          fun (Cid, {Settled, Returns, Discards}, Acc) ->
                                  add_command(Cid, settle, Settled,
                                              add_command(Cid, return, Returns,
-                                                         add_command(Cid, discard, Discards, Acc)))
+                                                         add_command(Cid, discard,
+                                                                     Discards, Acc)))
                          end, [], State1#state.unsent_commands),
             Node = pick_node(State2),
             %% send all the settlements and returns
@@ -456,10 +482,21 @@ handle_ra_event(From, {applied, Seqs},
     end;
 handle_ra_event(Leader, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
     handle_delivery(Leader, Del, State0);
+handle_ra_event(Leader, {machine, leader_change},
+                #state{leader = Leader} = State) ->
+    %% leader already known
+    {internal, [], [], State};
+handle_ra_event(Leader, {machine, leader_change}, State0) ->
+    %% we need to update leader
+    %% and resend any pending commands
+    State = resend_all_pending(State0#state{leader = Leader}),
+    {internal, [], [], State};
 handle_ra_event(_From, {rejected, {not_leader, undefined, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {internal, [], [], State0};
 handle_ra_event(_From, {rejected, {not_leader, Leader, Seq}}, State0) ->
+    % ?INFO("rabbit_fifo_client: rejected ~b not leader ~w leader: ~w~n",
+    %       [Seq, From, Leader]),
     State1 = State0#state{leader = Leader},
     State = resend(Seq, State1),
     {internal, [], [], State};
@@ -517,7 +554,9 @@ seq_applied({Seq, MaybeAction},
                                                   last_applied = Seq}};
         error ->
             % must have already been resent or removed for some other reason
-            {Corrs, Actions, State}
+            % still need to update last_applied or we may inadvertently resend
+            % stuff later
+            {Corrs, Actions, State#state{last_applied = Seq}}
     end;
 seq_applied(_Seq, Acc) ->
     Acc.
@@ -541,7 +580,7 @@ maybe_add_action(Action, Acc, State) ->
     {[Action | Acc], State}.
 
 do_resends(From, To, State) when From =< To ->
-    ?INFO("doing resends From ~w  To ~w~n", [From, To]),
+    % ?INFO("rabbit_fifo_client: doing resends From ~w  To ~w~n", [From, To]),
     lists:foldl(fun resend/2, State, lists:seq(From, To));
 do_resends(_, _, State) ->
     State.
@@ -555,6 +594,10 @@ resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
         error ->
             State
     end.
+
+resend_all_pending(#state{pending = Pend} = State) ->
+    Seqs = lists:sort(maps:keys(Pend)),
+    lists:foldl(fun resend/2, State, Seqs).
 
 handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
                 #state{consumer_deliveries = CDels0} = State0) ->
@@ -610,6 +653,7 @@ get_missing_deliveries(Leader, From, To, ConsumerTag) ->
     Missing.
 
 pick_node(#state{leader = undefined, servers = [N | _]}) ->
+    %% TODO: pick random rather that first?
     N;
 pick_node(#state{leader = Leader}) ->
     Leader.

@@ -1,3 +1,19 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ.
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(rabbit_fifo).
 
 -behaviour(ra_machine).
@@ -106,7 +122,7 @@
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
 
--define(SHADOW_COPY_INTERVAL, 4096).
+-define(SHADOW_COPY_INTERVAL, 4096 * 4).
 -define(USE_AVG_HALF_LIFE, 10000.0).
 
 -record(consumer,
@@ -147,7 +163,7 @@
          next_msg_num = 1 :: msg_in_id(),
          % list of returned msg_in_ids - when checking out it picks from
          % this list first before taking low_msg_num
-         returns = queue:new() :: queue:queue(msg_in_id()),
+         returns = lqueue:new() :: lqueue:queue(msg_in_id() | '$prefix_msg'),
          % a counter of enqueues - used to trigger shadow copy points
          enqueue_count = 0 :: non_neg_integer(),
          % a map containing all the live processes that have ever enqueued
@@ -180,7 +196,8 @@
          %% it instead takes messages from the `messages' map.
          %% This is done so that consumers are still served in a deterministic
          %% order on recovery.
-         prefix_msg_count = 0 :: non_neg_integer()
+         prefix_msg_counts = {0, 0} :: {Return :: non_neg_integer(),
+                                        PrefixMsgs :: non_neg_integer()}
         }).
 
 -opaque state() :: #state{}.
@@ -207,19 +224,19 @@
 
 -spec init(config()) -> {state(), ra_machine:effects()}.
 init(#{name := Name} = Conf) ->
+    update_state(Conf, #state{name = Name}).
+
+update_state(Conf, State) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
     CCH = maps:get(cancel_consumer_handler, Conf, undefined),
     BLH = maps:get(become_leader_handler, Conf, undefined),
     MH = maps:get(metrics_handler, Conf, undefined),
     SHI = maps:get(shadow_copy_interval, Conf, ?SHADOW_COPY_INTERVAL),
-    #state{name = Name,
-           dead_letter_handler = DLH,
-           cancel_consumer_handler = CCH,
-           become_leader_handler = BLH,
-           metrics_handler = MH,
-           shadow_copy_interval = SHI}.
-
-
+    State#state{dead_letter_handler = DLH,
+                cancel_consumer_handler = CCH,
+                become_leader_handler = BLH,
+                metrics_handler = MH,
+                shadow_copy_interval = SHI}.
 
 % msg_ids are scoped per consumer
 % ra_indexes holds all raft indexes for enqueues currently on queue
@@ -228,9 +245,9 @@ init(#{name := Name} = Conf) ->
     {state(), ra_machine:effects(), Reply :: term()}.
 apply(#{index := RaftIdx}, {enqueue, From, Seq, RawMsg}, Effects0, State00) ->
     case maybe_enqueue(RaftIdx, From, Seq, RawMsg, Effects0, State00) of
-        {ok, State0, Effects} ->
-            State = append_to_master_index(RaftIdx, State0),
-            checkout(State, Effects);
+        {ok, State0, Effects1} ->
+            {State, Effects, ok} = checkout(State0, Effects1),
+            {append_to_master_index(RaftIdx, State), Effects, ok};
         {duplicate, State, Effects} ->
             {State, Effects, ok}
     end;
@@ -263,7 +280,7 @@ apply(_, {return, MsgIds, ConsumerId}, Effects0,
         #{ConsumerId := Con0 = #consumer{checked_out = Checked0}} ->
             Checked = maps:without(MsgIds, Checked0),
             Returned = maps:with(MsgIds, Checked0),
-            MsgNumMsgs = [M || M <- maps:values(Returned)],
+            MsgNumMsgs = maps:values(Returned),
             return(ConsumerId, MsgNumMsgs, Con0, Checked, Effects0, State);
         _ ->
             {State, Effects0, ok}
@@ -313,7 +330,8 @@ apply(_, {credit, NewCredit, RemoteDelCnt, Drain, ConsumerId}, Effects0,
     end;
 apply(_, {checkout, {dequeue, _}, {_Tag, _Pid}}, Effects0,
       #state{messages = M,
-             prefix_msg_count = 0} = State0) when map_size(M) == 0 ->
+             prefix_msg_counts = {0, 0}} = State0) when map_size(M) == 0 ->
+    %% FIXME: also check if there are returned messages
     %% TODO do we need metric visibility of empty get requests?
     {State0, Effects0, {dequeue, empty}};
 apply(Meta, {checkout, {dequeue, settled}, ConsumerId},
@@ -357,7 +375,7 @@ apply(#{index := RaftIdx}, purge, Effects0,
               {StateAcc0, EffectsAcc0, ok}) ->
                   MsgRaftIdxs = [RIdx || {_MsgInId, {RIdx, _}}
                                              <- maps:values(Checked0)],
-                  complete(ConsumerId, MsgRaftIdxs, C,
+                  complete(ConsumerId, MsgRaftIdxs, maps:size(Checked0), C,
                            #{}, EffectsAcc0, StateAcc0)
           end, {State0, Effects0, ok}, Cons0),
         {State, Effects, _} =
@@ -365,7 +383,7 @@ apply(#{index := RaftIdx}, purge, Effects0,
               RaftIdx, Indexes,
               State1#state{ra_indexes = rabbit_fifo_index:empty(),
                            messages = #{},
-                           returns = queue:new(),
+                           returns = lqueue:new(),
                            low_msg_num = undefined}, Effects1),
     {State, [garbage_collection | Effects], {purge, Total}};
 apply(_, {down, ConsumerPid, noconnection},
@@ -374,10 +392,16 @@ apply(_, {down, ConsumerPid, noconnection},
     Node = node(ConsumerPid),
     % mark all consumers and enqueuers as suspect
     % and monitor the node
-    Cons = maps:map(fun({_, P}, C) when node(P) =:= Node ->
-                             C#consumer{suspected_down = true};
-                        (_, C) -> C
-                     end, Cons0),
+    {Cons, State} = maps:fold(fun({_, P} = K, #consumer{checked_out = Checked0} = C,
+                                  {Co, St0}) when node(P) =:= Node ->
+                                      St = return_all(St0, Checked0),
+                                      {maps:put(K, C#consumer{suspected_down = true,
+                                                              checked_out = #{}},
+                                                Co),
+                                       St};
+                                 (K, C, {Co, St}) ->
+                                      {maps:put(K, C, Co), St}
+                              end, {#{}, State0}, Cons0),
     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
                             E#enqueuer{suspected_down = true};
                        (_, E) -> E
@@ -388,7 +412,7 @@ apply(_, {down, ConsumerPid, noconnection},
                   _ ->
                       [{monitor, node, Node} | Effects0]
               end,
-    {State0#state{consumers = Cons, enqueuers = Enqs}, Effects, ok};
+    {State#state{consumers = Cons, enqueuers = Enqs}, Effects, ok};
 apply(_, {down, Pid, _Info}, Effects0,
       #state{consumers = Cons0,
              enqueuers = Enqs0} = State0) ->
@@ -411,7 +435,8 @@ apply(_, {down, Pid, _Info}, Effects0,
     checkout(State2, Effects1);
 apply(_, {nodeup, Node}, Effects0,
       #state{consumers = Cons0,
-             enqueuers = Enqs0} = State0) ->
+             enqueuers = Enqs0,
+             service_queue = SQ0} = State0) ->
     %% A node we are monitoring has come back.
     %% If we have suspected any processes of being
     %% down we should now re-issue the monitors for them to detect if they're
@@ -427,26 +452,48 @@ apply(_, {nodeup, Node}, Effects0,
                         (_, _, Acc) -> Acc
                      end, [], Enqs0),
     Monitors = [{monitor, process, P} || P <- Cons ++ Enqs],
+    Enqs1 = maps:map(fun(P, E) when node(P) =:= Node ->
+                             E#enqueuer{suspected_down = false};
+                        (_, E) -> E
+                     end, Enqs0),
+    {Cons1, SQ, Effects} =
+        maps:fold(fun({_, P} = ConsumerId, C, {CAcc, SQAcc, EAcc})
+                        when node(P) =:= Node ->
+                          update_or_remove_sub(
+                            ConsumerId, C#consumer{suspected_down = false},
+                            CAcc, SQAcc, EAcc);
+                     (_, _, Acc) ->
+                          Acc
+                  end, {Cons0, SQ0, Effects0}, Cons0),
     % TODO: avoid list concat
-    {State0, Monitors ++ Effects0, ok};
+    checkout(State0#state{consumers = Cons1, enqueuers = Enqs1,
+                          service_queue = SQ}, Monitors ++ Effects);
 apply(_, {nodedown, _Node}, Effects, State) ->
-    {State, Effects, ok}.
+    {State, Effects, ok};
+apply(_, {update_state, Conf}, Effects, State) ->
+    {update_state(Conf, State), Effects, ok}.
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
-state_enter(leader, #state{consumers = Custs,
+state_enter(leader, #state{consumers = Cons,
                            enqueuers = Enqs,
                            name = Name,
+                           prefix_msg_counts = {0, 0},
                            become_leader_handler = BLH}) ->
     % return effects to monitor all current consumers and enqueuers
-    ConMons = [{monitor, process, P} || {_, P} <- maps:keys(Custs)],
-    EnqMons = [{monitor, process, P} || P <- maps:keys(Enqs)],
-    Effects = ConMons ++ EnqMons,
+    Pids = lists:usort(maps:keys(Enqs) ++ [P || {_, P} <- maps:keys(Cons)]),
+    Mons = [{monitor, process, P} || P <- Pids],
+    Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
+    Effects = Mons ++ Nots,
     case BLH of
         undefined ->
             Effects;
         {Mod, Fun, Args} ->
             [{mod_call, Mod, Fun, Args ++ [Name]} | Effects]
     end;
+state_enter(recovered, #state{prefix_msg_counts = PrefixMsgCounts})
+  when PrefixMsgCounts =/= {0, 0} ->
+    %% TODO: remove assertion?
+    exit({rabbit_fifo, unexpected_prefix_msg_counts, PrefixMsgCounts});
 state_enter(eol, #state{enqueuers = Enqs, consumers = Custs0}) ->
     Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
     [{send_msg, P, eol, ra_event} || P <- maps:keys(maps:merge(Enqs, Custs))];
@@ -583,9 +630,7 @@ cancel_consumer(ConsumerId,
                 {Effects0, #state{consumers = C0, name = Name} = S0}) ->
     case maps:take(ConsumerId, C0) of
         {#consumer{checked_out = Checked0}, Cons} ->
-            S = maps:fold(fun (_, {MsgNum, Msg}, S) ->
-                                  return_one(MsgNum, Msg, S)
-                          end, S0, Checked0),
+            S = return_all(S0, Checked0),
             Effects = cancel_consumer_effects(ConsumerId, Name, S, Effects0),
             case maps:size(Cons) of
                 0 ->
@@ -678,8 +723,8 @@ return(ConsumerId, MsgNumMsgs, #consumer{lifetime = Life} = Con0, Checked,
           end,
     {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
                                                SQ0, Effects0),
-    State1 = lists:foldl(fun('$prefix_msg', #state{prefix_msg_count = MsgCount} = S0) ->
-                                 S0#state{prefix_msg_count = MsgCount + 1};
+    State1 = lists:foldl(fun('$prefix_msg' = Msg, S0) ->
+                                 return_one(0, Msg, S0);
                             ({MsgNum, Msg}, S0) ->
                                  return_one(MsgNum, Msg, S0)
                          end, State0, MsgNumMsgs),
@@ -688,14 +733,14 @@ return(ConsumerId, MsgNumMsgs, #consumer{lifetime = Life} = Con0, Checked,
              Effects).
 
 % used to processes messages that are finished
-complete(ConsumerId, MsgRaftIdxs,
+complete(ConsumerId, MsgRaftIdxs, NumDiscarded,
          Con0, Checked, Effects0,
          #state{consumers = Cons0, service_queue = SQ0,
                 ra_indexes = Indexes0} = State0) ->
-    %% credit_mode = simple_prefetch should automatically top-up credit as messages
-    %% are simple_prefetch or otherwise returned
+    %% credit_mode = simple_prefetch should automatically top-up credit
+    %% as messages are simple_prefetch or otherwise returned
     Con = Con0#consumer{checked_out = Checked,
-                        credit = increase_credit(Con0, length(MsgRaftIdxs))},
+                        credit = increase_credit(Con0, NumDiscarded)},
     {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
                                                SQ0, Effects0),
     Indexes = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes0, MsgRaftIdxs),
@@ -721,7 +766,10 @@ complete_and_checkout(IncomingRaftIdx, MsgIds, ConsumerId,
     Checked = maps:without(MsgIds, Checked0),
     Discarded = maps:with(MsgIds, Checked0),
     MsgRaftIdxs = [RIdx || {_, {RIdx, _}} <- maps:values(Discarded)],
+    %% need to pass the length of discarded as $prefix_msgs would be filtered
+    %% by the above list comprehension
     {State1, Effects1, _} = complete(ConsumerId, MsgRaftIdxs,
+                                     maps:size(Discarded),
                                      Con0, Checked, Effects0, State0),
     {State, Effects, _} = checkout(State1, Effects1),
     % settle metrics are incremented separately
@@ -749,6 +797,7 @@ cancel_consumer_effects(Pid, Name,
 
 update_smallest_raft_index(IncomingRaftIdx, OldIndexes,
                            #state{ra_indexes = Indexes,
+                                  % prefix_msg_count = 0,
                                   messages = Messages} = State, Effects) ->
     case rabbit_fifo_index:size(Indexes) of
         0 when map_size(Messages) =:= 0 ->
@@ -777,6 +826,9 @@ update_smallest_raft_index(IncomingRaftIdx, OldIndexes,
     end.
 
 % TODO update message then update messages and returns in single operations
+return_one(0, '$prefix_msg',
+           #state{returns = Returns} = State0) ->
+    State0#state{returns = lqueue:in('$prefix_msg', Returns)};
 return_one(MsgNum, {RaftId, {Header0, RawMsg}},
            #state{messages = Messages,
                   returns = Returns} = State0) ->
@@ -786,8 +838,14 @@ return_one(MsgNum, {RaftId, {Header0, RawMsg}},
     Msg = {RaftId, {Header, RawMsg}},
     % this should not affect the release cursor in any way
     State0#state{messages = maps:put(MsgNum, Msg, Messages),
-                 returns = queue:in(MsgNum, Returns)}.
+                 returns = lqueue:in(MsgNum, Returns)}.
 
+return_all(State, Checked) ->
+    maps:fold(fun (_, '$prefix_msg', S) ->
+                      return_one(0, '$prefix_msg', S);
+                  (_, {MsgNum, Msg}, S) ->
+                      return_one(MsgNum, Msg, S)
+              end, State, Checked).
 
 checkout(State, Effects) ->
     checkout0(checkout_one(State), Effects, #{}).
@@ -813,13 +871,20 @@ append_send_msg_effects(Effects0, AccMap) ->
                         end, Effects0, AccMap),
     [{aux, active} | Effects].
 
+next_checkout_message(#state{prefix_msg_counts = {PReturns, P}} = State)
+  when PReturns > 0 ->
+    %% there are prefix returns, these should be served first
+    {'$prefix_msg', State#state{prefix_msg_counts = {PReturns - 1, P}}};
 next_checkout_message(#state{returns = Returns,
                              low_msg_num = Low0,
+                             prefix_msg_counts = {R, P},
                              next_msg_num = NextMsgNum} = State) ->
     %% use peek rather than out there as the most likely case is an empty
     %% queue
-    case queue:peek(Returns) of
-        empty ->
+    case lqueue:peek(Returns) of
+        {value, Next} ->
+            {Next, State#state{returns = lqueue:drop(Returns)}};
+        empty when P == 0 ->
             case Low0 of
                 undefined ->
                     {undefined, State};
@@ -832,25 +897,32 @@ next_checkout_message(#state{returns = Returns,
                             {Low0, State#state{low_msg_num = Low}}
                     end
             end;
-        {value, Next} ->
-            {Next, State#state{returns = queue:drop(Returns)}}
+        empty ->
+            %% There are prefix msgs
+            {'$prefix_msg', State#state{prefix_msg_counts = {R, P - 1}}}
     end.
 
-take_next_msg(#state{prefix_msg_count = 0,
-                     messages = Messages0} = State0) ->
-    {NextMsgInId, State} = next_checkout_message(State0),
-    %% messages are available
-    case maps:take(NextMsgInId, Messages0) of
-        {IdxMsg, Messages} ->
-            {{NextMsgInId, IdxMsg}, State, Messages, 0};
-        error ->
-            error
-    end;
-take_next_msg(#state{prefix_msg_count = MsgCount,
-                     messages = Messages} = State) ->
-    %% there is still a prefix message count for the consumer
-    %% "fake" a '$prefix_msg' message
-    {'$prefix_msg', State, Messages, MsgCount - 1}.
+%% next message is determined as follows:
+%% First we check if there are are prefex returns
+%% Then we check if there are current returns
+%% then we check prefix msgs
+%% then we check current messages
+%%
+%% When we return it is always done to the current return queue
+%% for both prefix messages and current messages
+take_next_msg(#state{messages = Messages0} = State0) ->
+    case next_checkout_message(State0) of
+        {'$prefix_msg', State} ->
+            {'$prefix_msg', State, Messages0};
+        {NextMsgInId, State} ->
+            %% messages are available
+            case maps:take(NextMsgInId, Messages0) of
+                {IdxMsg, Messages} ->
+                    {{NextMsgInId, IdxMsg}, State, Messages};
+                error ->
+                    error
+            end
+    end.
 
 send_msg_effect({CTag, CPid}, Msgs) ->
     {send_msg, CPid, {delivery, CTag, Msgs}, ra_event}.
@@ -861,7 +933,7 @@ checkout_one(#state{service_queue = SQ0,
     case queue:peek(SQ0) of
         {value, ConsumerId} ->
             case take_next_msg(InitState) of
-                {ConsumerMsg, State0, Messages, PrefMsgC} ->
+                {ConsumerMsg, State0, Messages} ->
                     SQ1 = queue:drop(SQ0),
                     %% there are consumers waiting to be serviced
                     %% process consumer checkout
@@ -870,6 +942,8 @@ checkout_one(#state{service_queue = SQ0,
                             %% no credit but was still on queue
                             %% can happen when draining
                             %% recurse without consumer on queue
+                            checkout_one(InitState#state{service_queue = SQ1});
+                        {ok, #consumer{suspected_down = true}} ->
                             checkout_one(InitState#state{service_queue = SQ1});
                         {ok, #consumer{checked_out = Checked0,
                                        next_msg_id = Next,
@@ -885,7 +959,6 @@ checkout_one(#state{service_queue = SQ0,
                                                      Cons0, SQ1, []),
                             State = State0#state{service_queue = SQ,
                                                  messages = Messages,
-                                                 prefix_msg_count = PrefMsgC,
                                                  consumers = Cons},
                             Msg = case ConsumerMsg of
                                       '$prefix_msg' -> '$prefix_msg';
@@ -976,17 +1049,30 @@ maybe_queue_consumer(ConsumerId, #consumer{credit = Credit},
 
 %% creates a dehydrated version of the current state to be cached and
 %% potentially used to for a snaphot at a later point
-dehydrate_state(#state{messages = Messages0,
+dehydrate_state(#state{messages = Messages,
                        consumers = Consumers,
-                       prefix_msg_count = MsgCount} = State) ->
+                       returns = Returns,
+                       prefix_msg_counts = {PrefRetCnt, MsgCount}} = State) ->
+    %% TODO: optimise to avoid having to iterate the queue to get the number
+    %% of current returned messages
+    RetLen = lqueue:len(Returns), % O(1)
+    CurReturns = length([R || R <- lqueue:to_list(Returns),
+                              R =/= '$prefix_msg']),
+    PrefixMsgCnt = MsgCount + maps:size(Messages) - CurReturns,
     State#state{messages = #{},
                 ra_indexes = rabbit_fifo_index:empty(),
                 low_msg_num = undefined,
                 consumers = maps:map(fun (_, C) ->
-                                             C#consumer{checked_out = #{}}
+                                             dehydrate_consumer(C)
                                      end, Consumers),
-                returns = queue:new(),
-                prefix_msg_count = maps:size(Messages0) + MsgCount}.
+                returns = lqueue:new(),
+                %% messages include returns
+                prefix_msg_counts = {RetLen + PrefRetCnt,
+                                     PrefixMsgCnt}}.
+
+dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
+    Checked = maps:map(fun (_, _) -> '$prefix_msg' end, Checked0),
+    Con#consumer{checked_out = Checked}.
 
 
 -ifdef(TEST).
@@ -1289,6 +1375,20 @@ down_with_noconnection_marks_suspect_and_node_is_monitored_test() ->
     ?ASSERT_EFF({monitor, process, P}, P =:= Self, Effects3),
     ok.
 
+down_with_noconnection_returns_unack_test() ->
+    Pid = spawn(fun() -> ok end),
+    Cid = {<<"down_with_noconnect">>, Pid},
+    {State0, _} = enq(1, 1, second, test_init(test)),
+    ?assertEqual(1, maps:size(State0#state.messages)),
+    ?assertEqual(0, lqueue:len(State0#state.returns)),
+    {State1, {_, _}} = deq(2, Cid, unsettled, State0),
+    ?assertEqual(0, maps:size(State1#state.messages)),
+    ?assertEqual(0, lqueue:len(State1#state.returns)),
+    {State2a, _, _} = apply(meta(3), {down, Pid, noconnection}, [], State1),
+    ?assertEqual(1, maps:size(State2a#state.messages)),
+    ?assertEqual(1, lqueue:len(State2a#state.returns)),
+    ok.
+
 down_with_noproc_enqueuer_is_cleaned_up_test() ->
     State00 = test_init(test),
     Pid = spawn(fun() -> ok end),
@@ -1351,7 +1451,7 @@ tick_test() ->
     ok.
 
 enq_deq_snapshot_recover_test() ->
-    Tag = <<"release_cursor_snapshot_state_test">>,
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     % OthPid = spawn(fun () -> ok end),
     % Oth = {<<"oth">>, OthPid},
@@ -1408,20 +1508,49 @@ snapshot_recover_test() ->
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
-enq_deq_return_snapshot_recover_test() ->
+enq_deq_return_settle_snapshot_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
-    OthPid = spawn(fun () -> ok end),
-    Oth = {<<"oth">>, OthPid},
+    Commands = [
+                {enqueue, self(), 1, one}, %% to Cid
+                {checkout, {auto, 1, simple_prefetch}, Cid},
+                {return, [0], Cid}, %% should be re-delivered to Cid
+                {enqueue, self(), 2, two}, %% Cid prefix_msg_count: 2
+                {settle, [1], Cid},
+                {settle, [2], Cid}
+              ],
+    run_snapshot_test(?FUNCTION_NAME, Commands).
+
+return_prefix_msg_count_test() ->
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
+    Cid = {Tag, self()},
     Commands = [
                 {enqueue, self(), 1, one},
-                {enqueue, self(), 2, two},
-                {checkout, {dequeue, unsettled}, Oth},
-                {checkout, {dequeue, unsettled}, Cid},
-                {settle, [0], Oth},
-                {return, [0], Cid},
+                {checkout, {auto, 1, simple_prefetch}, Cid},
+                {checkout, cancel, Cid},
+                {enqueue, self(), 2, two} %% Cid prefix_msg_count: 2
+               ],
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    {State, _Effects} = run_log(test_init(?FUNCTION_NAME), Entries),
+    ?debugFmt("return_prefix_msg_count_test state ~n~p~n", [State]),
+    ok.
+
+
+return_settle_snapshot_test() ->
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
+    Cid = {Tag, self()},
+    Commands = [
+                {enqueue, self(), 1, one}, %% to Cid
+                {checkout, {auto, 1, simple_prefetch}, Cid},
+                {return, [0], Cid}, %% should be re-delivered to Oth
+                {enqueue, self(), 2, two}, %% Cid prefix_msg_count: 2
+                {settle, [1], Cid},
+                {return, [2], Cid},
+                {settle, [3], Cid},
                 {enqueue, self(), 3, three},
-                purge
+                purge,
+                {enqueue, self(), 4, four}
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
@@ -1436,17 +1565,67 @@ enq_check_settle_snapshot_recover_test() ->
                 {settle, [0], Cid},
                 {enqueue, self(), 3, three},
                 {settle, [2], Cid}
-
               ],
          % ?debugFmt("~w running commands ~w~n", [?FUNCTION_NAME, C]),
     run_snapshot_test(?FUNCTION_NAME, Commands).
+
+enq_check_settle_snapshot_purge_test() ->
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
+    Cid = {Tag, self()},
+    Commands = [
+                {checkout, {auto, 2, simple_prefetch}, Cid},
+                {enqueue, self(), 1, one},
+                {enqueue, self(), 2, two},
+                {settle, [1], Cid},
+                {settle, [0], Cid},
+                {enqueue, self(), 3, three},
+                purge
+              ],
+         % ?debugFmt("~w running commands ~w~n", [?FUNCTION_NAME, C]),
+    run_snapshot_test(?FUNCTION_NAME, Commands).
+
+enq_check_settle_duplicate_test() ->
+    %% duplicate settle commands are likely
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
+    Cid = {Tag, self()},
+    Commands = [
+                {checkout, {auto, 2, simple_prefetch}, Cid},
+                {enqueue, self(), 1, one}, %% 0
+                {enqueue, self(), 2, two}, %% 0
+                {settle, [0], Cid},
+                {settle, [1], Cid},
+                {settle, [1], Cid},
+                {enqueue, self(), 3, three},
+                {settle, [2], Cid}
+              ],
+         % ?debugFmt("~w running commands ~w~n", [?FUNCTION_NAME, C]),
+    run_snapshot_test(?FUNCTION_NAME, Commands).
+
+
+multi_return_snapshot_test() ->
+    %% this was discovered using property testing
+    C1 = {<<>>, c:pid(0,6723,1)},
+    C2 = {<<0>>,c:pid(0,6723,1)},
+    E = c:pid(0,6720,1),
+    Commands = [
+                {checkout,{auto,2,simple_prefetch},C1},
+                {enqueue,E,1,msg},
+                {enqueue,E,2,msg},
+                {checkout,cancel,C1}, %% both on returns queue
+                {checkout,{auto,1,simple_prefetch},C2}, % on on return one on C2
+                {return,[0],C2}, %% E1 in returns, E2 with C2
+                {return,[1],C2}, %% E2 in returns E1 with C2
+                {settle,[2],C2} %% E2 with C2
+               ],
+    run_snapshot_test(?FUNCTION_NAME, Commands),
+    ok.
 
 
 run_snapshot_test(Name, Commands) ->
     %% create every incremental permuation of the commands lists
     %% and run the snapshot tests against that
     [begin
-         % ?debugFmt("~w running commands ~w~n", [?FUNCTION_NAME, C]),
+         ?debugFmt("~w running command to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
          run_snapshot_test0(Name, C)
      end || C <- prefixes(Commands, 1, [])].
 
@@ -1459,6 +1638,7 @@ run_snapshot_test0(Name, Commands) ->
          Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
                                        (_) -> false
                                     end, Entries),
+         ?debugFmt("running from snapshot: ~b", [SnapIdx]),
          {S, _} = run_log(SnapState, Filtered),
          % assert log can be restored from any release cursor index
          % ?debugFmt("Name ~p Idx ~p S~p~nState~p~nSnapState ~p~nFiltered ~p~n",
@@ -1474,7 +1654,7 @@ prefixes(Source, N, Acc) ->
     prefixes(Source, N+1, [X | Acc]).
 
 delivery_query_returns_deliveries_test() ->
-    Tag = <<"release_cursor_snapshot_state_test">>,
+    Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
                 {checkout, {auto, 5, simple_prefetch}, Cid},
@@ -1514,18 +1694,29 @@ state_enter_test() ->
     [{mod_call, m, f, [a, the_name]}] = state_enter(leader, S0),
     ok.
 
-leader_monitors_on_state_enter_test() ->
-    Cid = {<<"cid">>, self()},
-    {State0, [_, _]} = enq(1, 1, first, test_init(test)),
-    {State1, _} = check_auto(Cid, 2, State0),
+state_enter_montors_and_notifications_test() ->
+    Oth = spawn(fun () -> ok end),
+    {State0, _} = enq(1, 1, first, test_init(test)),
+    Cid = {<<"adf">>, self()},
+    OthCid = {<<"oth">>, Oth},
+    {State1, _} = check(Cid, 2, State0),
+    {State, _} = check(OthCid, 3, State1),
     Self = self(),
-    %% as we have an enqueuer _and_ a consumer we chould
-    %% get two monitor effects in total, even if they are for the same
-    %% processs
-    [{monitor, process, Self},
-     {monitor, process, Self}] = state_enter(leader, State1),
-    ok.
+    Effects = state_enter(leader, State),
 
+    %% monitor all enqueuers and consumers
+    [{monitor, process, Self},
+     {monitor, process, Oth}] =
+        lists:filter(fun ({monitor, process, _}) -> true;
+                         (_) -> false
+                     end, Effects),
+    [{send_msg, Self, leader_change, ra_event},
+     {send_msg, Oth, leader_change, ra_event}] =
+        lists:filter(fun ({send_msg, _, leader_change, ra_event}) -> true;
+                         (_) -> false
+                     end, Effects),
+    ?ASSERT_EFF({monitor, process, _}, Effects),
+    ok.
 
 purge_test() ->
     Cid = {<<"purge_test">>, self()},

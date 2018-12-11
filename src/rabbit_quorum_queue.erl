@@ -17,7 +17,7 @@
 -module(rabbit_quorum_queue).
 
 -export([init_state/2, handle_event/2]).
--export([declare/1, recover/1, stop/1, delete/4, delete_immediately/1]).
+-export([declare/1, recover/1, stop/1, delete/4, delete_immediately/2]).
 -export([info/1, info/2, stat/1, infos/1]).
 -export([ack/3, reject/4, basic_get/4, basic_consume/9, basic_cancel/4]).
 -export([credit/4]).
@@ -34,6 +34,7 @@
 -export([add_member/3]).
 -export([delete_member/3]).
 -export([requeue/3]).
+-export([policy_changed/2]).
 -export([cleanup_data_dir/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -74,7 +75,7 @@
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
 -spec stat(rabbit_types:amqqueue()) -> {'ok', non_neg_integer(), non_neg_integer()}.
 -spec cluster_state(Name :: atom()) -> 'down' | 'recovering' | 'running'.
--spec status(rabbit_types:vhost(), Name :: atom()) -> rabbit_types:infos() | {error, term()}.
+-spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> rabbit_types:infos() | {error, term()}.
 
 -define(STATISTICS_KEYS,
         [policy,
@@ -93,14 +94,17 @@
 %%----------------------------------------------------------------------------
 
 -spec init_state(ra_server_id(), rabbit_types:r('queue')) ->
-    rabbit_fifo_client:state().
+                        rabbit_fifo_client:state().
 init_state({Name, _}, QName) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
-    {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes0}} =
+    %% This lookup could potentially return an {error, not_found}, but we do not
+    %% know what to do if the queue has `disappeared`. Let it crash.
+    {ok, #amqqueue{pid = Leader, quorum_nodes = Nodes}} =
         rabbit_amqqueue:lookup(QName),
     %% Ensure the leader is listed first
-    Nodes = [Leader | lists:delete(Leader, Nodes0)],
-    rabbit_fifo_client:init(QName, Nodes, SoftLimit,
+    Servers0 = [{Name, N} || N <- Nodes],
+    Servers = [Leader | lists:delete(Leader, Servers0)],
+    rabbit_fifo_client:init(qname_to_rname(QName), Servers, SoftLimit,
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
@@ -148,12 +152,14 @@ declare(#amqqueue{name = QName,
 
 
 
-ra_machine(Q = #amqqueue{name = QName}) ->
-    {module, rabbit_fifo,
-     #{dead_letter_handler => dlx_mfa(Q),
-       cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
-       become_leader_handler => {?MODULE, become_leader, [QName]},
-       metrics_handler => {?MODULE, update_metrics, [QName]}}}.
+ra_machine(Q) ->
+    {module, rabbit_fifo, ra_machine_config(Q)}.
+
+ra_machine_config(Q = #amqqueue{name = QName}) ->
+    #{dead_letter_handler => dlx_mfa(Q),
+      cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
+      become_leader_handler => {?MODULE, become_leader, [QName]},
+      metrics_handler => {?MODULE, update_metrics, [QName]}}.
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
     Node = node(ChPid),
@@ -272,9 +278,10 @@ stop(VHost) ->
 delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = QNodes},
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
+    Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
     Msgs = quorum_messages(Name),
     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-    case ra:delete_cluster([{Name, Node} || Node <- QNodes], 120000) of
+    case ra:delete_cluster([{Name, Node} || Node <- QNodes], Timeout) of
         {ok, {_, LeaderNode} = Leader} ->
             MRef = erlang:monitor(process, Leader),
             receive
@@ -300,11 +307,10 @@ delete(#amqqueue{ type = quorum, pid = {Name, _}, name = QName, quorum_nodes = Q
             end
     end.
 
-delete_immediately({Name, _} = QPid) ->
-    QName = queue_name(Name),
-    _ = rabbit_amqqueue:internal_delete(QName, ?INTERNAL_USER),
-    ok = ra:delete_cluster([QPid]),
-    rabbit_core_metrics:queue_deleted(QName),
+delete_immediately(Resource, {_Name, _} = QPid) ->
+    _ = rabbit_amqqueue:internal_delete(Resource, ?INTERNAL_USER),
+    {ok, _} = ra:delete_cluster([QPid]),
+    rabbit_core_metrics:queue_deleted(Resource),
     ok.
 
 ack(CTag, MsgIds, QState) ->
@@ -330,8 +336,10 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
     case rabbit_fifo_client:dequeue(CTag, Settlement, QState0) of
         {ok, empty, QState} ->
             {ok, empty, QState};
-        {ok, {MsgId, {MsgHeader, Msg}}, QState} ->
-            IsDelivered = maps:is_key(delivery_count, MsgHeader),
+        {ok, {MsgId, {MsgHeader, Msg0}}, QState} ->
+            Count = maps:get(delivery_count, MsgHeader, 0),
+            IsDelivered = Count > 0,
+            Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
             {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg}, QState};
         {timeout, _} ->
             {error, timeout}
@@ -410,6 +418,10 @@ maybe_delete_data_dir(UId) ->
         _ ->
             ok
     end.
+
+policy_changed(QName, Node) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    rabbit_fifo_client:update_machine_state(Node, ra_machine_config(Q)).
 
 cluster_state(Name) ->
     case whereis(Name) of
@@ -547,9 +559,13 @@ args_policy_lookup(Name, Resolve, Q = #amqqueue{arguments = Args}) ->
 dead_letter_publish(undefined, _, _, _) ->
     ok;
 dead_letter_publish(X, RK, QName, ReasonMsgs) ->
-    {ok, Exchange} = rabbit_exchange:lookup(X),
-    [rabbit_dead_letter:publish(Msg, Reason, Exchange, RK, QName)
-     || {Reason, Msg} <- ReasonMsgs].
+    case rabbit_exchange:lookup(X) of
+        {ok, Exchange} ->
+            [rabbit_dead_letter:publish(Msg, Reason, Exchange, RK, QName)
+             || {Reason, Msg} <- ReasonMsgs];
+        {error, not_found} ->
+            ok
+    end.
 
 %% TODO escape hack
 qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
