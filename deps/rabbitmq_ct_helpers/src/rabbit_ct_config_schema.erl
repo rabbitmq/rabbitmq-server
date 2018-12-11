@@ -92,7 +92,8 @@ test_snippet(Config, Snippet, Expected, _Plugins) ->
     case Exp of
         Gen -> ok;
         _         ->
-            ct:pal("Expected: ~p, generated: ~p", [Exp, Gen]),
+            ct:pal("Expected: ~p~ngenerated: ~p", [Expected, Generated]),
+            ct:pal("Expected (sorted): ~p~ngenerated (sorted): ~p", [Exp, Gen]),
             error({config_mismatch, Snippet, Exp, Gen})
     end.
 
