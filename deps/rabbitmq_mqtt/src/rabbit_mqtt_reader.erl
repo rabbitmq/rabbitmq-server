@@ -261,7 +261,7 @@ process_received_bytes(Bytes,
     case parse(Bytes, ParseState) of
         {more, ParseState1} ->
             {noreply,
-             ensure_stats_timer(control_throttle( State #state{ parse_state = ParseState1 })),
+             ensure_stats_timer( State #state{ parse_state = ParseState1 }),
              hibernate};
         {ok, Frame, Rest} ->
             case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
