@@ -16,8 +16,9 @@
     [{datatype, integer}]}.
 {mapping, "web_stomp.tcp.ip", "rabbitmq_web_stomp.tcp_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
-{mapping, "web_stomp.tcp.listener", "rabbitmq_web_stomp.tcp_config",
-    [{datatype, ip}]}.
+{mapping, "web_stomp.tcp.listener", "rabbitmq_web_stomp.tcp_config", [
+    {datatype, [{enum, [none]}, ip]}
+]}.
 
 {mapping, "web_stomp.ws_path", "rabbitmq_web_stomp.ws_path",
     [{datatype, string}]}.
@@ -25,11 +26,12 @@
 {translation,
     "rabbitmq_web_stomp.tcp_config",
     fun(Conf) ->
-        Setting = cuttlefish:conf_get("web_stomp.tcp.listener", Conf),
+        Setting = cuttlefish:conf_get("web_stomp.tcp.listener", Conf, undefined),
         case Setting of
+            none -> [];
+            undefined -> [];
             {Ip, Port} when is_list(Ip), is_integer(Port) ->
-                [{ip, Ip}, {port, Port}];
-            _ -> Setting
+                [{ip, Ip}, {port, Port}]
         end
     end
 }.
@@ -40,8 +42,9 @@
     [{datatype, integer}]}.
 {mapping, "web_stomp.ssl.ip", "rabbitmq_web_stomp.ssl_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
-{mapping, "web_stomp.ssl.listener", "rabbitmq_web_stomp.ssl_config",
-    [{datatype, ip}]}.
+{mapping, "web_stomp.ssl.listener", "rabbitmq_web_stomp.ssl_config", [
+    {datatype, [{enum, [none]}, ip]}
+]}.
 {mapping, "web_stomp.ssl.certfile", "rabbitmq_web_stomp.ssl_config.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 {mapping, "web_stomp.ssl.keyfile", "rabbitmq_web_stomp.ssl_config.keyfile",
@@ -54,11 +57,12 @@
 {translation,
     "rabbitmq_web_stomp.ssl_config",
     fun(Conf) ->
-        Setting = cuttlefish:conf_get("web_stomp.ssl.listener", Conf),
+        Setting = cuttlefish:conf_get("web_stomp.ssl.listener", Conf, undefined),
         case Setting of
+            none -> [];
+            undefined -> [];
             {Ip, Port} when is_list(Ip), is_integer(Port) ->
-                [{ip, Ip}, {port, Port}];
-            _ -> Setting
+                [{ip, Ip}, {port, Port}]
         end
     end
 }.
