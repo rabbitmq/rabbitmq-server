@@ -28,10 +28,6 @@
 
 -spec init() -> ok.
 init() ->
-    Port = get_tcp_port(application:get_all_env(rabbitmq_web_stomp)),
-
-    TcpConf = get_tcp_conf(get_env(tcp_config, []), Port),
-
     WsFrame = get_env(ws_frame, text),
     CowboyOpts0 = maps:from_list(get_env(cowboy_opts, [])),
     CowboyOpts = CowboyOpts0#{proxy_header => get_env(proxy_protocol, false)},
@@ -41,31 +37,39 @@ init() ->
         {get_env(ws_path, "/ws"), rabbit_ws_handler, [{type, WsFrame}, {ws_opts, CowboyWsOpts}]}
     ],
     Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
-    NumTcpAcceptors = case application:get_env(rabbitmq_web_stomp, num_tcp_acceptors) of
-        undefined -> get_env(num_acceptors, 10);
-        {ok, NumTcp}  -> NumTcp
+
+    case get_env(tcp_config, []) of
+        [] ->
+            ok;
+        TCPConf0 ->
+            NumTcpAcceptors = case application:get_env(rabbitmq_web_stomp, num_tcp_acceptors) of
+                undefined -> get_env(num_acceptors, 10);
+                {ok, NumTcp}  -> NumTcp
+            end,
+            Port = get_tcp_port(application:get_all_env(rabbitmq_web_stomp)),
+            TCPConf = get_tcp_conf(TCPConf0, Port),
+            case ranch:start_listener(
+                    http, NumTcpAcceptors,
+                    ranch_tcp, [{connection_type, supervisor}|TCPConf],
+                    rabbit_ws_connection_sup,
+                    CowboyOpts#{env => #{dispatch => Routes},
+                                middlewares => [cowboy_router,
+                                                rabbit_ws_middleware,
+                                                cowboy_handler]}) of
+                {ok, _}                       -> ok;
+                {error, {already_started, _}} -> ok;
+                {error, ErrTCP}                  ->
+                    rabbit_log_connection:error(
+                        "Failed to start a WebSocket (HTTP) listener. Error: ~p,"
+                        " listener settings: ~p~n",
+                        [ErrTCP, TCPConf]),
+                    throw(ErrTCP)
+            end,
+            listener_started('http/web-stomp', TCPConf),
+            rabbit_log_connection:info(
+                "rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
+                [get_binding_address(TCPConf), Port])
     end,
-    case ranch:start_listener(
-            http, NumTcpAcceptors,
-            ranch_tcp, [{connection_type, supervisor}|TcpConf],
-            rabbit_ws_connection_sup,
-            CowboyOpts#{env => #{dispatch => Routes},
-                        middlewares => [cowboy_router,
-                                        rabbit_ws_middleware,
-                                        cowboy_handler]}) of
-        {ok, _}                       -> ok;
-        {error, {already_started, _}} -> ok;
-        {error, Err}                  ->
-            rabbit_log_connection:error(
-                "Failed to start a WebSocket (HTTP) listener. Error: ~p,"
-                " listener settings: ~p~n",
-                [Err, TcpConf]),
-            throw(Err)
-    end,
-    listener_started('http/web-stomp', TcpConf),
-    rabbit_log_connection:info(
-        "rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
-        [get_binding_address(TcpConf), Port]),
     case get_env(ssl_config, []) of
         [] ->
             ok;
@@ -77,14 +81,23 @@ init() ->
                 undefined     -> get_env(num_acceptors, 10);
                 {ok, NumSsl}  -> NumSsl
             end,
-             {ok, _} = ranch:start_listener(
-                            https, NumSslAcceptors,
-                            ranch_ssl, [{connection_type, supervisor}|TLSConf],
-                            rabbit_ws_connection_sup,
-                            CowboyOpts#{env => #{dispatch => Routes},
-                                        middlewares => [cowboy_router,
-                                                        rabbit_ws_middleware,
-                                                        cowboy_handler]}),
+            case ranch:start_listener(
+                   https, NumSslAcceptors,
+                   ranch_ssl, [{connection_type, supervisor}|TLSConf],
+                   rabbit_ws_connection_sup,
+                   CowboyOpts#{env => #{dispatch => Routes},
+                               middlewares => [cowboy_router,
+                                               rabbit_ws_middleware,
+                                               cowboy_handler]}) of
+                {ok, _}                       -> ok;
+                {error, {already_started, _}} -> ok;
+                {error, ErrTLS}                  ->
+                    rabbit_log_connection:error(
+                        "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p,"
+                        " listener settings: ~p~n",
+                        [ErrTLS, TLSConf]),
+                    throw(ErrTLS)
+            end,
             listener_started('https/web-stomp', TLSConf),
             rabbit_log_connection:info(
                 "rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
