@@ -278,17 +278,6 @@
 %% wrapping the message body).
 -define(MAX_MSG_SIZE, 2147383648).
 
-%% First number is maximum size in bytes before we start to
-%% truncate. The following 4-tuple is:
-%%
-%% 1) Maximum size of printable lists and binaries.
-%% 2) Maximum size of any structural term.
-%% 3) Amount to decrease 1) every time we descend while truncating.
-%% 4) Amount to decrease 2) every time we descend while truncating.
-%%
-%% Whole thing feeds into truncate:log_event/2.
--define(LOG_TRUNC, {100000, {2000, 100, 50, 5}}).
-
 -define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
 
 %% For event audit purposes
