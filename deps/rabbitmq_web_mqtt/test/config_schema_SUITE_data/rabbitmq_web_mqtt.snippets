@@ -3,6 +3,11 @@
   [{rabbitmq_web_mqtt,
     [{tcp_config, [{ip,"127.0.0.1"},{port,12345}]}]}],
   [rabbitmq_web_mqtt]},
+ {tcp_listener_none,
+  "web_mqtt.tcp.listener = none",
+  [{rabbitmq_web_mqtt,
+    [{tcp_config, []}]}],
+  [rabbitmq_web_mqtt]},
  {tcp_config,
   "web_mqtt.tcp.ip = 127.0.0.3
    web_mqtt.tcp.port = 11122",
@@ -19,10 +24,16 @@
   [{rabbitmq_web_mqtt,
     [{tcp_config, [{port,34567}]}]}],
   [rabbitmq_web_mqtt]},
+
  {ssl_listener,
   "web_mqtt.ssl.listener = 127.0.0.4:15672",
   [{rabbitmq_web_mqtt,
     [{ssl_config, [{ip,"127.0.0.4"},{port,15672}]}]}],
+  [rabbitmq_web_mqtt]},
+ {ssl_listener_none,
+  "web_mqtt.ssl.listener = none",
+  [{rabbitmq_web_mqtt,
+    [{ssl_config, []}]}],
   [rabbitmq_web_mqtt]},
 
  {ssl,
@@ -151,6 +162,20 @@
 {ws_idle_timeout,
   "web_mqtt.ws_opts.idle_timeout = 10000",
   [{rabbitmq_web_mqtt,[{cowboy_ws_opts,[{idle_timeout, 10000}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ %%
+ %% Proxy Protocol
+ %%
+
+{proxy_protocol_disabled,
+  "web_mqtt.proxy_protocol = false",
+  [{rabbitmq_web_mqtt,[{proxy_protocol,false}]}],
+  [rabbitmq_web_mqtt]},
+
+{proxy_protocol_enabled,
+  "web_mqtt.proxy_protocol = true",
+  [{rabbitmq_web_mqtt,[{proxy_protocol,true}]}],
   [rabbitmq_web_mqtt]}
 ].
 

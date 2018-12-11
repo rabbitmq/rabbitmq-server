@@ -5,8 +5,9 @@
 
 {mapping, "web_mqtt.tcp.backlog", "rabbitmq_web_mqtt.tcp_config.backlog",
     [{datatype, integer}]}.
-{mapping, "web_mqtt.tcp.listener", "rabbitmq_web_mqtt.tcp_config",
-    [{datatype, ip}]}.
+{mapping, "web_mqtt.tcp.listener", "rabbitmq_web_mqtt.tcp_config", [
+    {datatype, [{enum, [none]}, ip]}
+]}.
 {mapping, "web_mqtt.tcp.ip", "rabbitmq_web_mqtt.tcp_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
 {mapping, "web_mqtt.tcp.port", "rabbitmq_web_mqtt.tcp_config.port",
@@ -17,19 +18,21 @@
 {translation,
     "rabbitmq_web_mqtt.tcp_config",
     fun(Conf) ->
-        Setting = cuttlefish:conf_get("web_mqtt.tcp.listener", Conf),
+        Setting = cuttlefish:conf_get("web_mqtt.tcp.listener", Conf, undefined),
         case Setting of
+            none -> [];
+            undefined -> [];
             {Ip, Port} when is_list(Ip), is_integer(Port) ->
-                [{ip, Ip}, {port, Port}];
-            _ -> Setting
+                [{ip, Ip}, {port, Port}]
         end
     end
 }.
 
 {mapping, "web_mqtt.ssl.backlog", "rabbitmq_web_mqtt.ssl_config.backlog",
     [{datatype, integer}]}.
-{mapping, "web_mqtt.ssl.listener", "rabbitmq_web_mqtt.ssl_config",
-    [{datatype, ip}]}.
+{mapping, "web_mqtt.ssl.listener", "rabbitmq_web_mqtt.ssl_config", [
+    {datatype, [{enum, [none]}, ip]}
+]}.
 {mapping, "web_mqtt.ssl.ip", "rabbitmq_web_mqtt.ssl_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
 {mapping, "web_mqtt.ssl.port", "rabbitmq_web_mqtt.ssl_config.port",
@@ -46,8 +49,10 @@
 {translation,
     "rabbitmq_web_mqtt.ssl_config",
     fun(Conf) ->
-        Setting = cuttlefish:conf_get("web_mqtt.ssl.listener", Conf),
+        Setting = cuttlefish:conf_get("web_mqtt.ssl.listener", Conf, undefined),
         case Setting of
+            none -> [];
+            undefined -> [];
             {Ip, Port} when is_list(Ip), is_integer(Port) ->
                 [{ip, Ip}, {port, Port}];
             _ -> Setting
@@ -147,3 +152,10 @@ end}.
 {mapping, "web_mqtt.ws_opts.idle_timeout", "rabbitmq_web_mqtt.cowboy_ws_opts.idle_timeout",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]
 }.
+
+%% Whether or not to enable proxy protocol support.
+%%
+%% {proxy_protocol, false}
+
+{mapping, "web_mqtt.proxy_protocol", "rabbitmq_web_mqtt.proxy_protocol",
+    [{datatype, {enum, [true, false]}}]}.

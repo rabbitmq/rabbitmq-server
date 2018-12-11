@@ -4,11 +4,12 @@ PROJECT_MOD = rabbit_web_mqtt_app
 
 define PROJECT_ENV
 [
-	    {tcp_config, []},
+	    {tcp_config, [{ip, "127.0.0.1"}, {port, 15675}]},
 	    {ssl_config, []},
 	    {num_tcp_acceptors, 10},
 	    {num_ssl_acceptors, 10},
-	    {cowboy_opts, []}
+	    {cowboy_opts, []},
+	    {proxy_protocol, false}
 	  ]
 endef
 
