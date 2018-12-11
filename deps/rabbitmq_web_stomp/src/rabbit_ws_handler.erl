@@ -206,7 +206,8 @@ websocket_info(Msg, State) ->
                     [Msg]),
     {ok, State}.
 
-terminate(_Reason, _Req, _State) ->
+terminate(_Reason, _Req, #state{proc_state = ProcState}) ->
+    rabbit_stomp_processor:flush_and_die(ProcState),
     ok.
 
 %%----------------------------------------------------------------------------
