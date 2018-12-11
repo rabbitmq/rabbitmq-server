@@ -63,6 +63,50 @@
     end
 }.
 
+{mapping, "web_stomp.ssl.honor_cipher_order", "rabbitmq_web_stomp.ssl_config.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.honor_ecc_order", "rabbitmq_web_stomp.ssl_config.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.reuse_sessions", "rabbitmq_web_stomp.ssl_config.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.secure_renegotiate", "rabbitmq_web_stomp.ssl_config.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.client_renegotiation", "rabbitmq_web_stomp.ssl_config.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "web_stomp.ssl.crl_check", "rabbitmq_web_stomp.ssl_config.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "web_stomp.ssl.depth", "rabbitmq_web_stomp.ssl_config.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "web_stomp.ssl.versions.$version", "rabbitmq_web_stomp.ssl_config.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_web_stomp.ssl_config.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("web_stomp.ssl.versions", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
+{mapping, "web_stomp.ssl.ciphers.$cipher", "rabbitmq_web_stomp.ssl_config.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_web_stomp.ssl_config.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("web_stomp.ssl.ciphers", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
+
+%%
+%% Cowboy options
+%%
+
 {mapping, "web_stomp.cowboy_opts.max_empty_lines", "rabbitmq_web_stomp.cowboy_opts.max_empty_lines",
     [{datatype, integer}]}.
 {mapping, "web_stomp.cowboy_opts.max_header_name_length", "rabbitmq_web_stomp.cowboy_opts.max_header_name_length",
