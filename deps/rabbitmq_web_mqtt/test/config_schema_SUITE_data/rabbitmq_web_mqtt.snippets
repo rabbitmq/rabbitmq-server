@@ -38,7 +38,8 @@
   [rabbitmq_web_mqtt]},
 
  {ssl,
-  "web_mqtt.ssl.port       = 15671
+  "web_mqtt.ssl.ip         = 127.0.0.2
+   web_mqtt.ssl.port       = 15671
    web_mqtt.ssl.backlog    = 1024
    web_mqtt.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
    web_mqtt.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
@@ -49,7 +50,9 @@
    web_mqtt.ssl.versions.tls1_1 = tlsv1.1",
   [{rabbitmq_web_mqtt,
        [{ssl_config,
-            [{port,15671},
+            [
+             {ip,"127.0.0.2"},
+             {port,15671},
              {backlog,1024},
              {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
              {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
