@@ -21,7 +21,7 @@
           <td><input type="text" name="routing_key" value=""/></td>
         </tr>
 <% } %>
-        <% if (is_classic(queue)) { %>
+        <% if (mode == 'queue' && is_classic(queue)) { %>
         <tr>
           <th><label>Delivery mode:</label></th>
           <td>
