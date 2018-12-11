@@ -26,8 +26,25 @@
   [rabbitmq_web_stomp]},
  {ssl_listener_none,
   "web_stomp.ssl.listener = none",
+  [],
+  [rabbitmq_web_stomp]},
+
+ {ssl_with_listener,
+  "web_stomp.ssl.listener   = 127.0.0.2:15671
+   web_stomp.ssl.backlog    = 1024
+   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_stomp.ssl.password   = changeme",
   [{rabbitmq_web_stomp,
-    [{ssl_config, []}]}],
+       [{ssl_config,
+            [{ip,"127.0.0.2"},
+             {port,15671},
+             {backlog,1024},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {password,"changeme"}]}]}],
   [rabbitmq_web_stomp]},
 
  {ssl,
