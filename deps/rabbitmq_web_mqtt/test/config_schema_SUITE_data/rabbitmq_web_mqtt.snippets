@@ -90,6 +90,20 @@
 {ws_idle_timeout,
   "web_mqtt.ws_opts.idle_timeout = 10000",
   [{rabbitmq_web_mqtt,[{cowboy_ws_opts,[{idle_timeout, 10000}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ %%
+ %% Proxy Protocol
+ %%
+
+{proxy_protocol_disabled,
+  "web_mqtt.proxy_protocol = false",
+  [{rabbitmq_web_mqtt,[{proxy_protocol,false}]}],
+  [rabbitmq_web_mqtt]},
+
+{proxy_protocol_enabled,
+  "web_mqtt.proxy_protocol = true",
+  [{rabbitmq_web_mqtt,[{proxy_protocol,true}]}],
   [rabbitmq_web_mqtt]}
 ].
 

@@ -103,3 +103,10 @@
 {mapping, "web_mqtt.ws_opts.idle_timeout", "rabbitmq_web_mqtt.cowboy_ws_opts.idle_timeout",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]
 }.
+
+%% Whether or not to enable proxy protocol support.
+%%
+%% {proxy_protocol, false}
+
+{mapping, "web_mqtt.proxy_protocol", "rabbitmq_web_mqtt.proxy_protocol",
+    [{datatype, {enum, [true, false]}}]}.
