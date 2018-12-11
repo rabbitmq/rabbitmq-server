@@ -119,7 +119,8 @@ all_tests() ->
      delete_immediately,
      delete_immediately_by_resource,
      consume_redelivery_count,
-     subscribe_redelivery_count
+     subscribe_redelivery_count,
+     memory_alarm_rolls_wal
     ].
 
 %% -------------------------------------------------------------------
@@ -205,7 +206,10 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
 
 merge_app_env(Config) ->
-    rabbit_ct_helpers:merge_app_env(Config, {rabbit, [{core_metrics_gc_interval, 100}]}).
+    rabbit_ct_helpers:merge_app_env(
+      rabbit_ct_helpers:merge_app_env(Config,
+                                      {rabbit, [{core_metrics_gc_interval, 100}]}),
+      {ra, [{min_wal_roll_over_interval, 30000}]}).
 
 end_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
@@ -2043,6 +2047,27 @@ consume_redelivery_count(Config) ->
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag2,
                                         multiple     = false,
                                         requeue      = true}).
+
+memory_alarm_rolls_wal(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    WalDataDir = rpc:call(Server, ra_env, wal_data_dir, []),
+    [Wal0] = filelib:wildcard(WalDataDir ++ "/*.wal"),
+    ok = rpc:call(Server, rabbit_alarm, set_alarm,
+                  [{{resource_limit, memory, Server}, []}]),
+    timer:sleep(1000),
+    [Wal1] = filelib:wildcard(WalDataDir ++ "/*.wal"),
+    ?assert(Wal0 =/= Wal1),
+    %% roll over shouldn't happen if we trigger a new alarm in less than
+    %% min_wal_roll_over_interval
+    ok = rpc:call(Server, rabbit_alarm, set_alarm,
+                  [{{resource_limit, memory, Server}, []}]),
+    timer:sleep(1000),
+    [Wal2] = filelib:wildcard(WalDataDir ++ "/*.wal"),
+    ?assert(Wal1 == Wal2).
 
 %%----------------------------------------------------------------------------
 
