@@ -21,7 +21,7 @@
         Setting = cuttlefish:conf_get("web_mqtt.tcp.listener", Conf, undefined),
         case Setting of
             none      -> [];
-            undefined -> [{port, 15674}];
+            undefined -> [{port, 15675}];
             {Ip, Port} when is_list(Ip), is_integer(Port) ->
                 [{ip, Ip}, {port, Port}]
         end
