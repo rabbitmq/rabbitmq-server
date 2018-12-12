@@ -3,6 +3,7 @@ cover/
 ebin/
 logs/
 plugins/
+deps/
 test/*.beam
 rabbitmq_web_mqtt.d
 *.swp
