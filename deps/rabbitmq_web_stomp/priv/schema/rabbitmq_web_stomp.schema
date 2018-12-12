@@ -28,8 +28,8 @@
     fun(Conf) ->
         Setting = cuttlefish:conf_get("web_stomp.tcp.listener", Conf, undefined),
         case Setting of
-            none -> [];
-            undefined -> [];
+            none      -> [];
+            undefined -> [{port, 15674}];
             {Ip, Port} when is_list(Ip), is_integer(Port) ->
                 [{ip, Ip}, {port, Port}]
         end
