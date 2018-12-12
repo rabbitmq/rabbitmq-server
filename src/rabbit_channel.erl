@@ -651,7 +651,8 @@ handle_cast({confirm, MsgSeqNos, QPid}, State) ->
 handle_info({ra_event, {Name, _} = From, _} = Evt,
             #ch{queue_states = QueueStates,
                 queue_names = QNames,
-                consumer_mapping = ConsumerMapping} = State0) ->
+                consumer_mapping = ConsumerMapping,
+                unconfirmed = UC} = State0) ->
     case QueueStates of
         #{Name := QState0} ->
             QName = rabbit_quorum_queue:queue_name(QState0),
@@ -684,18 +685,24 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     State = State0#ch{queue_states = maps:put(Name, QState1, QueueStates)},
                     %% execute actions
                     WriterPid = State#ch.writer_pid,
-                    lists:foreach(fun ({send_credit_reply, Avail}) ->
-                                          ok = rabbit_writer:send_command(
-                                                 WriterPid,
-                                                 #'basic.credit_ok'{available =
-                                                                    Avail});
-                                      ({send_drained, {CTag, Credit}}) ->
-                                          ok = rabbit_writer:send_command(
-                                                 WriterPid,
-                                                 #'basic.credit_drained'{consumer_tag   = CTag,
-                                                                         credit_drained = Credit})
-                                  end, Actions),
-                    noreply_coalesce(confirm(MsgSeqNos, Name, State));
+                    {MXs, UC1} =
+                        lists:foldl(fun ({send_credit_reply, Avail}, Acc) ->
+                                            ok = rabbit_writer:send_command(
+                                                   WriterPid,
+                                                   #'basic.credit_ok'{available =
+                                                                          Avail}),
+                                            Acc;
+                                        ({send_drained, {CTag, Credit}}, Acc) ->
+                                            ok = rabbit_writer:send_command(
+                                                   WriterPid,
+                                                   #'basic.credit_drained'{consumer_tag   = CTag,
+                                                                           credit_drained = Credit}),
+                                            Acc;
+                                        ({reject, MsgSeqNo}, {MXAcc, UCAcc}) ->
+                                            {MXs, UC1} = dtree:take_one(MsgSeqNo, UCAcc),
+                                            {[MXs | MXAcc], UC1}
+                                    end, {[], UC}, Actions),
+                    noreply_coalesce(confirm(MsgSeqNos, Name, record_multiple_rejects(MXs, State#ch{unconfirmed = UC1})));
                 eol ->
                     State1 = handle_consuming_queue_down_or_eol(Name, State0),
                     State2 = handle_delivering_queue_down(Name, State1),
@@ -705,7 +712,11 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     erase_queue_stats(QName),
                     noreply_coalesce(
                       State3#ch{queue_states = maps:remove(Name, QueueStates),
-                                queue_names = maps:remove(Name, QNames)})
+                                queue_names = maps:remove(Name, QNames)});
+                {reject_publish, MsgSeqNo, QState1} ->
+                    {MXs, UC1} = dtree:take_one(MsgSeqNo, UC),
+                    State1 = State0#ch{queue_states = maps:put(Name, QState1, QueueStates)},
+                    noreply_coalesce(record_rejects(MXs, State1#ch{unconfirmed = UC1}))
             end;
         _ ->
             %% the assumption here is that the queue state has been cleaned up and
@@ -1098,6 +1109,15 @@ record_rejects(MXs, State = #ch{rejected = R, tx = Tx}) ->
         _    -> failed
     end,
     State#ch{rejected = [MXs | R], tx = Tx1}.
+
+record_multiple_rejects([], State) ->
+    State;
+record_multiple_rejects(MXs, State = #ch{rejected = R, tx = Tx}) ->
+    Tx1 = case Tx of
+        none -> none;
+        _    -> failed
+    end,
+    State#ch{rejected = MXs ++ R, tx = Tx1}.
 
 record_confirms([], State) ->
     State;

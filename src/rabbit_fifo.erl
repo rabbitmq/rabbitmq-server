@@ -32,6 +32,8 @@
          tick/2,
          overview/1,
          get_checked_out/4,
+         init_filter/1,
+         filter/5,
          %% aux
          init_aux/1,
          handle_aux/6,
@@ -118,6 +120,9 @@
 -record(enqueue, {pid :: maybe(pid()),
                   seq :: maybe(msg_seqno()),
                   msg :: raw_msg()}).
+-record(force_enqueue, {pid :: maybe(pid()),
+                        seq :: maybe(msg_seqno()),
+                        msg :: raw_msg()}).
 -record(checkout, {consumer_id :: consumer_id(),
                    spec :: checkout_spec(),
                    meta :: consumer_meta()}).
@@ -138,6 +143,7 @@
 
 -opaque protocol() ::
     #enqueue{} |
+    #force_enqueue{} |
     #checkout{} |
     #settle{} |
     #return{} |
@@ -232,7 +238,10 @@
          prefix_msg_counts = {0, 0} :: {Return :: non_neg_integer(),
                                         PrefixMsgs :: non_neg_integer()},
          msg_bytes_enqueue = 0 :: non_neg_integer(),
-         msg_bytes_checkout = 0 :: non_neg_integer()
+         msg_bytes_checkout = 0 :: non_neg_integer(),
+         max_length :: maybe(non_neg_integer()),
+         max_bytes :: maybe(non_neg_integer()),
+         overflow :: 'drop-head' | 'reject-publish'
         }).
 
 -opaque state() :: #state{}.
@@ -241,7 +250,9 @@
                     queue_resource := rabbit_types:r('queue'),
                     dead_letter_handler => applied_mfa(),
                     become_leader_handler => applied_mfa(),
-                    shadow_copy_interval => non_neg_integer()}.
+                    shadow_copy_interval => non_neg_integer(),
+                    max_length => non_neg_integer(),
+                    max_bytes => non_neg_integer()}.
 
 -export_type([protocol/0,
               delivery/0,
@@ -268,31 +279,34 @@ update_config(Conf, State) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
     BLH = maps:get(become_leader_handler, Conf, undefined),
     SHI = maps:get(shadow_copy_interval, Conf, ?SHADOW_COPY_INTERVAL),
+    MaxLength = maps:get(max_length, Conf, undefined),
+    MaxBytes = maps:get(max_bytes, Conf, undefined),
+    Overflow = maps:get(overflow, Conf, undefined),
     State#state{dead_letter_handler = DLH,
                 become_leader_handler = BLH,
-                shadow_copy_interval = SHI}.
+                shadow_copy_interval = SHI,
+                max_length = MaxLength,
+                max_bytes = MaxBytes,
+                overflow = init_overflow(Overflow)}.
+
+init_overflow(undefined) ->
+    'drop-head';
+init_overflow(Overflow) ->
+    binary_to_existing_atom(Overflow, utf8).
 
 zero(_) ->
     0.
 
 % msg_ids are scoped per consumer
 % ra_indexes holds all raft indexes for enqueues currently on queue
--spec apply(ra_machine:command_meta_data(), command(),
-            state()) ->
-    {state(), Reply :: term(), ra_machine:effects()}.
-apply(#{index := RaftIdx}, #enqueue{pid = From, seq = Seq,
-                                    msg = RawMsg}, State00) ->
-    case maybe_enqueue(RaftIdx, From, Seq, RawMsg, [], State00) of
-        {ok, State0, Effects1} ->
-            %% need to checkout before capturing the shadow copy else
-            %% snapshots may not be complete
-            {State, ok, Effects} = checkout(
-                                     add_bytes_enqueue(RawMsg, State0),
-                                     Effects1),
-            append_to_master_index(RaftIdx, Effects, State);
-        {duplicate, State, Effects} ->
-            {State, ok, lists:reverse(Effects)}
-    end;
+-spec apply(ra_machine:command_meta_data(), command(), state()) ->
+    {state(), ra_machine:effects(), Reply :: term()}.
+apply(Metadata, #enqueue{pid = From, seq = Seq,
+                         msg = RawMsg}, State00) ->
+    apply_enqueue(Metadata, From, Seq, RawMsg, State00, false);
+apply(Metadata, #force_enqueue{pid = From, seq = Seq,
+                               msg = RawMsg}, State00) ->
+    apply_enqueue(Metadata, From, Seq, RawMsg, State00, true);
 apply(#{index := RaftIdx},
       #settle{msg_ids = MsgIds, consumer_id = ConsumerId},
       #state{consumers = Cons0} = State) ->
@@ -587,6 +601,35 @@ overview(#state{consumers = Cons,
       enqueue_message_bytes => EnqueueBytes,
       checkout_message_bytes => CheckoutBytes}.
 
+init_filter(_State) ->
+    #{}.
+
+
+filter(_Meta, Enq, _CmdReply, #state{overflow = 'drop-head'}, FilterState0) ->
+    {Enq, [], FilterState0, false};
+filter(_Meta, #enqueue{pid = From, seq = Seq, msg = RawMsg} = Enq, CmdReply, State, FilterState0) ->
+    %% If we reject, we have to check with the filter state. If the From
+    %% is a pid we have rejected before, we should change the command to a
+    %% force enqueue. will_overflow needs to receive the filter and give
+    %% an update back
+    Bytes = message_size(RawMsg),
+    case {will_overflow(Bytes, From, State, FilterState0), CmdReply} of
+        {{true, FilterState}, {notify_on_consensus, Corr, Pid}} ->
+            {Enq, [{send_msg, Pid, {reject_publish, Corr, self()}, ra_event}],
+             FilterState, true};
+        {{true, FilterState}, _} ->
+            {Enq, [], FilterState, true};
+        {{false, FilterState}, _} ->
+            case maps:get(From, FilterState0, none) of
+                none ->
+                    {Enq, [], FilterState, false};
+                rejected ->
+                    {#force_enqueue{pid = From, seq = Seq, msg = RawMsg}, [], FilterState, false}
+            end
+    end;
+filter(_Meta, Cmd, _ReplyType, _State, FilterState) ->
+    {Cmd, [], FilterState, false}.
+
 -spec get_checked_out(consumer_id(), msg_id(), msg_id(), state()) ->
     [delivery_msg()].
 get_checked_out(Cid, From, To, #state{consumers = Consumers}) ->
@@ -708,6 +751,38 @@ cancel_consumer(ConsumerId,
             {Effects0, S0}
     end.
 
+apply_enqueue(#{index := RaftIdx}, From, Seq, RawMsg, State0, Force) ->
+    Bytes = message_size(RawMsg),
+    case {will_overflow(Bytes, From, State0, undefined), State0#state.overflow} of
+        {{true, _}, 'reject-publish'} ->
+            {filter(From, Seq, State0), reject, []};
+        {{WillOverflow, _}, _} ->
+            {State1, ok, Effects1} = case WillOverflow of
+                                         true -> drop_head(RaftIdx, State0);
+                                         false -> {State0, ok, []}
+                                     end,
+            case maybe_enqueue(RaftIdx, From, Seq, RawMsg, Effects1, State1, Force) of
+                {ok, State2, Effects2} ->
+                    {State, ok, Effects} = checkout(add_bytes_enqueue(Bytes, State2),
+                                                    Effects2),
+                    append_to_master_index(RaftIdx, Effects, State);
+                {duplicate, State, Effects} ->
+                    {State, ok, Effects}
+            end
+    end.
+
+drop_head(RaftIdx, #state{ra_indexes = Indexes} = State) ->
+    %% Delete bytes
+    case take_next_msg(State) of
+        {ConsumerMsg, State0, Messages} ->
+            update_smallest_raft_index(
+              RaftIdx, Indexes,
+              State0#state{messages = Messages},
+              dead_letter_effects(maps:put(none, ConsumerMsg, #{}), State0, []));
+        error ->
+            {State, ok, []}
+    end.
+
 enqueue(RaftIdx, RawMsg, #state{messages = Messages,
                                 low_msg_num = LowMsgNum,
                                 next_msg_num = NextMsgNum} = State0) ->
@@ -744,19 +819,26 @@ enqueue_pending(From, Enq, #state{enqueuers = Enqueuers0} = State) ->
     State#state{enqueuers = Enqueuers0#{From => Enq}}.
 
 maybe_enqueue(RaftIdx, undefined, undefined, RawMsg, Effects,
-              State0) ->
+              State0, _Force) ->
     % direct enqueue without tracking
-    {ok, enqueue(RaftIdx, RawMsg, State0), Effects};
+    State = enqueue(RaftIdx, RawMsg, State0),
+    {ok, State, Effects};
 maybe_enqueue(RaftIdx, From, MsgSeqNo, RawMsg, Effects0,
-              #state{enqueuers = Enqueuers0} = State0) ->
+              #state{enqueuers = Enqueuers0} = State0, Force) ->
     case maps:get(From, Enqueuers0, undefined) of
         undefined ->
             State1 = State0#state{enqueuers = Enqueuers0#{From => #enqueuer{}}},
             {ok, State, Effects} = maybe_enqueue(RaftIdx, From, MsgSeqNo,
-                                                 RawMsg, Effects0, State1),
+                                                 RawMsg, Effects0, State1, Force),
             {ok, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
+            State1 = enqueue(RaftIdx, RawMsg, State0),
+            Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
+            State = enqueue_pending(From, Enq, State1),
+            {ok, State, Effects0};
+        #enqueuer{next_seqno = Next} = Enq0
+          when ((MsgSeqNo > Next) and Force) ->
             State1 = enqueue(RaftIdx, RawMsg, State0),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
             State = enqueue_pending(From, Enq, State1),
@@ -1049,7 +1131,6 @@ checkout_one(#state{service_queue = SQ0,
             end
     end.
 
-
 update_or_remove_sub(ConsumerId, #consumer{lifetime = auto,
                                            credit = 0} = Con,
                      Cons, ServiceQueue, Effects) ->
@@ -1145,6 +1226,39 @@ dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
     Checked = maps:map(fun (_, _) -> '$prefix_msg' end, Checked0),
     Con#consumer{checked_out = Checked}.
 
+will_overflow(_Bytes, _From, #state{max_length = undefined,
+                                    max_bytes = undefined}, FilterState) ->
+    {false, FilterState};
+will_overflow(Bytes, _From, State, undefined) ->
+    {will_overflow(Bytes, State), undefined};
+will_overflow(Bytes, From, State, FilterState) ->
+    case will_overflow(Bytes, State) of
+        true ->
+            {true, maps:put(From, rejected, FilterState)};
+        false ->
+            {false, maps:remove(From, FilterState)}
+    end.
+
+will_overflow(Bytes, #state{max_length = MaxLength, ra_indexes = Indexes,
+                            max_bytes = MaxBytes, msg_bytes_enqueue = BytesEnq} = State) ->
+    ExpectedSize = Bytes + BytesEnq,
+    ((rabbit_fifo_index:size(Indexes) - num_checked_out(State)) >= MaxLength)
+        orelse (ExpectedSize > MaxBytes).
+
+filter(From, MsgSeqNo, #state{enqueuers = Enqueuers0} = State0) ->
+    case maps:get(From, Enqueuers0, undefined) of
+        undefined ->
+            filter(From, MsgSeqNo, State0#state{enqueuers = Enqueuers0#{From => #enqueuer{}}});
+        #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
+            Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
+            State0#state{enqueuers = Enqueuers0#{From => Enq}};
+        #enqueuer{next_seqno = Next}
+          when MsgSeqNo > Next ->
+            State0;
+        #enqueuer{next_seqno = Next} when MsgSeqNo =< Next ->
+            State0
+    end.
+
 -spec make_enqueue(maybe(pid()), maybe(msg_seqno()), raw_msg()) -> protocol().
 make_enqueue(Pid, Seq, Msg) ->
     #enqueue{pid = Pid, seq = Seq, msg = Msg}.
@@ -1181,8 +1295,7 @@ make_purge() -> #purge{}.
 make_update_config(Config) ->
     #update_config{config = Config}.
 
-add_bytes_enqueue(Msg, #state{msg_bytes_enqueue = Enqueue} = State) ->
-    Bytes = message_size(Msg),
+add_bytes_enqueue(Bytes, #state{msg_bytes_enqueue = Enqueue} = State) ->
     State#state{msg_bytes_enqueue = Enqueue + Bytes}.
 
 add_bytes_checkout(Msg, #state{msg_bytes_checkout = Checkout,
@@ -1544,7 +1657,7 @@ down_with_noconnection_returns_unack_test() ->
 down_with_noproc_enqueuer_is_cleaned_up_test() ->
     State00 = test_init(test),
     Pid = spawn(fun() -> ok end),
-    {State0, _, Effects0} = apply(meta(1), {enqueue, Pid, 1, first}, State00),
+    {State0, _, Effects0} = apply(meta(1), make_enqueue(Pid, 1, first), State00),
     ?ASSERT_EFF({monitor, process, _}, Effects0),
     {State1, _, _} = apply(meta(3), {down, Pid, noproc}, State0),
     % ensure there are no enqueuers
