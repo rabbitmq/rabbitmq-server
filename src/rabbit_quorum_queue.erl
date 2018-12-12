@@ -26,7 +26,7 @@
 -export([dead_letter_publish/4]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
--export([cancel_consumer_handler/3, cancel_consumer/3]).
+-export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, update_metrics/2]).
 -export([rpc_delete_metrics/1]).
 -export([format/1]).
@@ -150,20 +150,17 @@ declare(#amqqueue{name = QName,
             Ex
     end.
 
-
-
 ra_machine(Q) ->
     {module, rabbit_fifo, ra_machine_config(Q)}.
 
 ra_machine_config(Q = #amqqueue{name = QName}) ->
     #{dead_letter_handler => dlx_mfa(Q),
-      cancel_consumer_handler => {?MODULE, cancel_consumer, [QName]},
+      queue_resource => QName,
       become_leader_handler => {?MODULE, become_leader, [QName]},
       metrics_handler => {?MODULE, update_metrics, [QName]}}.
 
-cancel_consumer_handler(QName, {ConsumerTag, ChPid}, _Name) ->
+cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
     Node = node(ChPid),
-    % QName = queue_name(Name),
     case Node == node() of
         true -> cancel_consumer(QName, ChPid, ConsumerTag);
         false ->
