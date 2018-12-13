@@ -734,13 +734,19 @@ function update_pages(template, page_start){
 }
 
 function renderQueues() {
-    render({'queues':  {path: url_pagination_template('queues', 1, 100),
-                        options: {sort:true, vhost:true, pagination:true}},
-                        'vhosts': '/vhosts'}, 'queues', '#/queues');
+    ensure_queues_chart_range();
+    render({'queues': {
+        path: url_pagination_template('queues', 1, 100),
+        options: {
+            sort: true,
+            vhost: true,
+            pagination: true
+        }
+    }, 'vhosts': '/vhosts'}, 'queues', '#/queues');
 }
 
 function renderExchanges() {
-    render({'exchanges':  {path: url_pagination_template('exchanges', 1, 100),
+    render({'exchanges': {path: url_pagination_template('exchanges', 1, 100),
                           options: {sort:true, vhost:true, pagination:true}},
                          'vhosts': '/vhosts'}, 'exchanges', '#/exchanges');
 }
@@ -1546,4 +1552,48 @@ function is_quorum(queue) {
 
 function is_classic(queue) {
     return queue["arguments"]["x-queue-type"] == "classic";
+}
+
+function ensure_queues_chart_range() {
+    var range = get_pref('chart-range');
+    // Note: the queues page uses the 'basic' range type
+    var fixup_range;
+    var valid_range = false;
+    var range_type = get_chart_range_type('queues');
+    var chart_periods = CHART_RANGES[range_type];
+    for (var i = 0; i < chart_periods.length; ++i) {
+        var data = chart_periods[i];
+        var val = data[0];
+        if (range === val) {
+            valid_range = true;
+            break;
+        }
+        // If the range needs to be adjusted, use the last
+        // valid one
+        fixup_range = val;
+    }
+    if (!valid_range) {
+        store_pref('chart-range', fixup_range);
+    }
+}
+
+function get_chart_range_type(arg) {
+   /*
+    * 'arg' can be:
+    * lengths-over for the Overview page
+    * lengths-q for the per-queue page
+    * queues for setting up the queues range
+    */
+    if (arg === 'lengths-over') {
+        return 'global';
+    }
+    if (arg === 'lengths-q') {
+        return 'basic';
+    }
+    if (arg === 'queues') {
+        return 'basic';
+    }
+
+    console.log('[WARNING]: range type not found for arg: ' + arg);
+    return 'basic';
 }
