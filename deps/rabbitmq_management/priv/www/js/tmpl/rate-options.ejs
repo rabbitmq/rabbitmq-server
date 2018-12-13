@@ -2,7 +2,7 @@
    var id = span.attr('for');
    var mode = get_pref('rate-mode-' + id);
    var size = get_pref('chart-size-' + id);
-   var range = get_pref('chart-range');
+   var range_pref = get_pref('chart-range');
 %>
 
 <form action="#/rate-options" method="put" class="auto-submit">
@@ -40,9 +40,13 @@
       <th><label>Chart range:</label></th>
       <td>
 <%
-   for (p in CHART_PERIODS) {
+   var range_type = get_chart_range_type(id);
+   for (var i = 0; i < CHART_RANGES[range_type].length; ++i) {
+      var data = CHART_RANGES[range_type][i];
+      var range = data[0];
+      var desc = data[1];
 %>
-    <%= fmt_radio('range', CHART_PERIODS[p], p, range) %>
+    <%= fmt_radio('range', desc, range, range_pref) %>
 <%
    }
 %>

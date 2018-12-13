@@ -38,16 +38,18 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     RatesMode = rabbit_mgmt_agent_config:get_env(rates_mode),
+    SRP = get_sample_retention_policies(),
     %% NB: this duplicates what's in /nodes but we want a global idea
     %% of this. And /nodes is not accessible to non-monitor users.
     ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
-    Overview0 = [{management_version,  version(rabbitmq_management)},
-                 {rates_mode,          RatesMode},
-                 {exchange_types,      ExchangeTypes},
-                 {rabbitmq_version,    version(rabbit)},
-                 {cluster_name,        rabbit_nodes:cluster_name()},
-                 {erlang_version,      erlang_version()},
-                 {erlang_full_version, erlang_full_version()}],
+    Overview0 = [{management_version,        version(rabbitmq_management)},
+                 {rates_mode,                RatesMode},
+                 {sample_retention_policies, SRP},
+                 {exchange_types,            ExchangeTypes},
+                 {rabbitmq_version,          version(rabbit)},
+                 {cluster_name,              rabbit_nodes:cluster_name()},
+                 {erlang_version,            erlang_version()},
+                 {erlang_full_version,       erlang_full_version()}],
     try
         Range = rabbit_mgmt_util:range(ReqData),
         Overview =
@@ -106,3 +108,52 @@ erlang_version() -> list_to_binary(rabbit_misc:otp_release()).
 
 erlang_full_version() ->
     list_to_binary(rabbit_misc:otp_system_version()).
+
+get_sample_retention_policies() ->
+    P = rabbit_mgmt_agent_config:get_env(sample_retention_policies),
+    get_sample_retention_policies(P).
+
+get_sample_retention_policies(undefined) ->
+    [{global, []}, {basic, []}, {detailed, []}];
+get_sample_retention_policies(Policies) ->
+    [transform_retention_policy(Pol, Policies) || Pol <- [global, basic, detailed]].
+
+transform_retention_policy(Pol, Policies) ->
+    case proplists:lookup(Pol, Policies) of
+        none ->
+            {Pol, []};
+        {Pol, Intervals} ->
+            {Pol, transform_retention_intervals(Intervals, [])}
+    end.
+
+transform_retention_intervals([], Acc) ->
+    lists:reverse(Acc);
+transform_retention_intervals([{MaxAgeInSeconds, _}|Rest], Acc) ->
+    %
+    % Seconds | Interval
+    % 60      | last minute
+    % 600     | last 10 minutes
+    % 3600    | last hour
+    % 28800   | last 8 hours
+    % 86400   | last day
+    %
+    % rabbitmq/rabbitmq-management#635
+    %
+    % We check for the max age in seconds to be within 10% of the value above.
+    % The reason being that the default values are "bit higher" to accommodate
+    % edge cases (see deps/rabbitmq_management_agent/Makefile)
+    AccVal = if
+                 MaxAgeInSeconds >= 0 andalso MaxAgeInSeconds =< 66 ->
+                     60;
+                 MaxAgeInSeconds >= 540 andalso MaxAgeInSeconds =< 660 ->
+                     600;
+                 MaxAgeInSeconds >= 3240 andalso MaxAgeInSeconds =< 3960 ->
+                     3600;
+                 MaxAgeInSeconds >= 25920 andalso MaxAgeInSeconds =< 31681 ->
+                     28800;
+                 MaxAgeInSeconds >= 77760 andalso MaxAgeInSeconds =< 95041 ->
+                     86400;
+                 true ->
+                     0
+             end,
+    transform_retention_intervals(Rest, [AccVal|Acc]).

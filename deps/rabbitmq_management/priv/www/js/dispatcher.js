@@ -95,9 +95,8 @@ dispatcher_add(function(sammy) {
         });
 
     sammy.get('#/queues', function() {
-                          renderQueues();
-            });
-
+            renderQueues();
+        });
 
     sammy.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);

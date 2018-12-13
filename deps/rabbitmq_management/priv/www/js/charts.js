@@ -77,7 +77,7 @@ function chart_h3(id, heading, heading_help) {
 }
 
 function prefix_title(mode, range) {
-    var desc = CHART_PERIODS[range];
+    var desc = ALL_CHART_RANGES[range];
     if (mode == 'chart') {
         return desc.toLowerCase();
     }
