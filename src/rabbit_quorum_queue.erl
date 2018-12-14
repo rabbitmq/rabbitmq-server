@@ -152,7 +152,6 @@ ra_machine_config(Q = #amqqueue{name = QName}) ->
     #{dead_letter_handler => dlx_mfa(Q),
       queue_resource => QName,
       become_leader_handler => {?MODULE, become_leader, [QName]},
-      metrics_handler => {?MODULE, update_metrics, [QName]},
       single_active_consumer_on => single_active_consumer_on(Q)}.
 
 single_active_consumer_on(#amqqueue{arguments = QArguments}) ->
@@ -206,14 +205,17 @@ rpc_delete_metrics(QName) ->
     ets:delete(queue_metrics, QName),
     ok.
 
-update_metrics(QName, {Name, MR, MU, M, C}) ->
+update_metrics(QName, {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack}) ->
     R = reductions(Name),
     rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
     Util = case C of
                0 -> 0;
                _ -> rabbit_fifo:usage(Name)
            end,
-    Infos = [{consumers, C}, {consumer_utilisation, Util} | infos(QName)],
+    Infos = [{consumers, C}, {consumer_utilisation, Util},
+             {message_bytes_ready, MsgBytesReady},
+             {message_bytes_unacknowledged, MsgBytesUnack},
+             {message_bytes, MsgBytesReady + MsgBytesUnack} | infos(QName)],
     rabbit_core_metrics:queue_stats(QName, Infos),
     rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
                                                {messages, M},
