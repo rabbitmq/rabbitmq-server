@@ -25,7 +25,7 @@
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, await_startup/1, await_startup/3,
          status/0, is_running/0, alarms/0,
-         is_running/1, environment/0, rotate_logs/0,
+         is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
 
 -export([start/2, stop/1, prep_stop/1]).
@@ -272,6 +272,8 @@
 -spec is_running(node()) -> boolean().
 -spec environment() -> [{param(), term()}].
 -spec rotate_logs() -> rabbit_types:ok_or_error(any()).
+-deprecated([{force_event_refresh, 1, eventually}]).
+-spec force_event_refresh(reference()) -> 'ok'.
 
 -spec log_locations() -> [log_location()].
 
@@ -1044,6 +1046,15 @@ start_logger() ->
 
 log_locations() ->
     rabbit_lager:log_locations().
+
+%% This feature was used by the management API up-to and including
+%% RabbitMQ 3.7.x. It is unused in 3.8.x and thus deprecated. We keep it
+%% to support in-place upgrades to 3.8.x (i.e. mixed-version clusters).
+force_event_refresh(Ref) ->
+    rabbit_direct:force_event_refresh(Ref),
+    rabbit_networking:force_connection_event_refresh(Ref),
+    rabbit_channel:force_event_refresh(Ref),
+    rabbit_amqqueue:force_event_refresh(Ref).
 
 %%---------------------------------------------------------------------------
 %% misc

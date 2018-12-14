@@ -57,7 +57,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/2, info_keys/0, info/1, info/2,
+-export([start_link/2, info_keys/0, info/1, info/2, force_event_refresh/2,
          shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
@@ -65,6 +65,8 @@
 -export([init/3, mainloop/4, recvloop/4]).
 
 -export([conserve_resources/3, server_properties/1]).
+
+-deprecated([{force_event_refresh, 2, eventually}]).
 
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 30).
@@ -161,6 +163,7 @@
 -spec info_keys() -> rabbit_types:info_keys().
 -spec info(pid()) -> rabbit_types:infos().
 -spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
+-spec force_event_refresh(pid(), reference()) -> 'ok'.
 -spec shutdown(pid(), string()) -> 'ok'.
 -type resource_alert() :: {WasAlarmSetForNode :: boolean(),
                            IsThereAnyAlarmsWithSameSourceInTheCluster :: boolean(),
@@ -215,6 +218,9 @@ info(Pid, Items) ->
         {ok, Res}      -> Res;
         {error, Error} -> throw(Error)
     end.
+
+force_event_refresh(Pid, Ref) ->
+    gen_server:cast(Pid, {force_event_refresh, Ref}).
 
 conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
@@ -614,6 +620,17 @@ handle_other({'$gen_call', From, {info, Items}}, State) ->
     gen_server:reply(From, try {ok, infos(Items, State)}
                            catch Error -> {error, Error}
                            end),
+    State;
+handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
+  when ?IS_RUNNING(State) ->
+    rabbit_event:notify(
+      connection_created,
+      augment_infos_with_user_provided_connection_name(
+          [{type, network} | infos(?CREATION_EVENT_KEYS, State)], State),
+      Ref),
+    rabbit_event:init_stats_timer(State, #v1.stats_timer);
+handle_other({'$gen_cast', {force_event_refresh, _Ref}}, State) ->
+    %% Ignore, we will emit a created event once we start running.
     State;
 handle_other(ensure_stats, State) ->
     ensure_stats_timer(State);

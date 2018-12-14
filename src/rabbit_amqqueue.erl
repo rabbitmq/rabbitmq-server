@@ -33,7 +33,7 @@
 -export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0,
          list_with_possible_retry/1]).
 -export([list_by_type/1]).
--export([notify_policy_changed/1]).
+-export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
 -export([basic_get/6, basic_consume/12, basic_cancel/6, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
@@ -140,6 +140,8 @@
 -spec info_all(rabbit_types:vhost()) -> [rabbit_types:infos()].
 -spec info_all(rabbit_types:vhost(), rabbit_types:info_keys()) ->
           [rabbit_types:infos()].
+-deprecated([{force_event_refresh, 1, eventually}]).
+-spec force_event_refresh(reference()) -> 'ok'.
 -spec notify_policy_changed(amqqueue:amqqueue()) -> 'ok'.
 -spec consumers(amqqueue:amqqueue()) ->
           [{pid(), rabbit_types:ctag(), boolean(), non_neg_integer(),
@@ -1035,6 +1037,11 @@ info_local(VHostPath) ->
 list_local(VHostPath) ->
     [Q || Q <- list(VHostPath),
           amqqueue:get_state(Q) =/= crashed, is_local_to_node(amqqueue:get_pid(Q), node())].
+
+force_event_refresh(Ref) ->
+    [gen_server2:cast(amqqueue:get_pid(Q),
+                      {force_event_refresh, Ref}) || Q <- list()],
+    ok.
 
 notify_policy_changed(Q) when ?amqqueue_is_classic(Q) ->
     QPid = amqqueue:get_pid(Q),

@@ -35,7 +35,8 @@
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
-         close_connection/2, handshake/2, tcp_host/1]).
+         close_connection/2, force_connection_event_refresh/1,
+         handshake/2, tcp_host/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
@@ -86,6 +87,8 @@
 -spec connection_info_all(rabbit_types:info_keys()) ->
           [rabbit_types:infos()].
 -spec close_connection(pid(), string()) -> 'ok'.
+-deprecated([{force_connection_event_refresh, 1, eventually}]).
+-spec force_connection_event_refresh(reference()) -> 'ok'.
 
 -spec on_node_down(node()) -> 'ok'.
 -spec tcp_listener_addresses(listener_config()) -> [address()].
@@ -355,6 +358,10 @@ close_connection(Pid, Explanation) ->
                                [Pid, Explanation]),
             ok
     end.
+
+force_connection_event_refresh(Ref) ->
+    [rabbit_reader:force_event_refresh(C, Ref) || C <- connections()],
+    ok.
 
 handshake(Ref, ProxyProtocol) ->
     case ProxyProtocol of

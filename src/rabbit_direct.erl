@@ -16,7 +16,7 @@
 
 -module(rabbit_direct).
 
--export([boot/0, list/0, connect/5,
+-export([boot/0, force_event_refresh/1, list/0, connect/5,
          start_channel/9, disconnect/2]).
 %% Internal
 -export([list_local/0]).
@@ -29,6 +29,8 @@
 %%----------------------------------------------------------------------------
 
 -spec boot() -> 'ok'.
+-deprecated([{force_event_refresh, 1, eventually}]).
+-spec force_event_refresh(reference()) -> 'ok'.
 -spec list() -> [pid()].
 -spec list_local() -> [pid()].
 -spec connect
@@ -53,6 +55,10 @@ boot() -> rabbit_sup:start_supervisor_child(
             rabbit_direct_client_sup, rabbit_client_sup,
             [{local, rabbit_direct_client_sup},
              {rabbit_channel_sup, start_link, []}]).
+
+force_event_refresh(Ref) ->
+    [Pid ! {force_event_refresh, Ref} || Pid <- list()],
+    ok.
 
 list_local() ->
     pg_local:get_members(rabbit_direct).
