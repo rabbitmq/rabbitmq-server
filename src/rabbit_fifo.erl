@@ -39,17 +39,22 @@
          query_processes/1,
          query_ra_indexes/1,
          query_consumer_count/1,
+         query_consumers/1,
          usage/1,
 
          %% misc
-         dehydrate_state/1
-        ]).
+         dehydrate_state/1,
 
--ifdef(TEST).
--export([
-         metrics_handler/1
+         %% protocol helpers
+         make_enqueue/3,
+         make_checkout/3,
+         make_settle/2,
+         make_return/2,
+         make_discard/2,
+         make_credit/4,
+         make_purge/0,
+         make_update_state/1
         ]).
--endif.
 
 -type raw_msg() :: term().
 %% The raw message. It is opaque to rabbit_fifo.
@@ -99,19 +104,43 @@
                          {dequeue, settled | unsettled} |
                          cancel.
 
--type protocol() ::
-    {enqueue, Sender :: maybe(pid()), MsgSeq :: maybe(msg_seqno()),
-     Msg :: raw_msg()} |
-    {checkout, Spec :: checkout_spec(), Consumer :: consumer_id()} |
-    {settle, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
-    {return, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
-    {discard, MsgIds :: [msg_id()], Consumer :: consumer_id()} |
-    {credit,
-     Credit :: non_neg_integer(),
-     DeliveryCount :: non_neg_integer(),
-     Drain :: boolean(),
-     Consumer :: consumer_id()} |
-    purge.
+-type consumer_meta() :: #{ack => boolean(),
+                           username => binary(),
+                           prefetch => non_neg_integer(),
+                           args => list()}.
+%% static meta data associated with a consumer
+
+%% command records representing all the protocol actions that are supported
+-record(enqueue, {pid :: maybe(pid()),
+                  seq :: maybe(msg_seqno()),
+                  msg :: raw_msg()}).
+-record(checkout, {consumer_id :: consumer_id(),
+                   spec :: checkout_spec(),
+                   meta :: consumer_meta()}).
+-record(settle, {consumer_id :: consumer_id(),
+                 msg_ids :: [msg_id()]}).
+-record(return, {consumer_id :: consumer_id(),
+                 msg_ids :: [msg_id()]}).
+-record(discard, {consumer_id :: consumer_id(),
+                  msg_ids :: [msg_id()]}).
+-record(credit, {consumer_id :: consumer_id(),
+                 credit :: non_neg_integer(),
+                 delivery_count :: non_neg_integer(),
+                 drain :: boolean()}).
+-record(purge, {}).
+-record(update_state, {config :: config()}).
+
+
+
+-opaque protocol() ::
+    #enqueue{} |
+    #checkout{} |
+    #settle{} |
+    #return{} |
+    #discard{} |
+    #credit{} |
+    #purge{} |
+    #update_state{}.
 
 -type command() :: protocol() | ra_machine:builtin_command().
 %% all the command types suppored by ra fifo
@@ -126,7 +155,8 @@
 -define(USE_AVG_HALF_LIFE, 10000.0).
 
 -record(consumer,
-        {checked_out = #{} :: #{msg_id() => {msg_in_id(), indexed_msg()}},
+        {meta = #{} :: consumer_meta(),
+         checked_out = #{} :: #{msg_id() => {msg_in_id(), indexed_msg()}},
          next_msg_id = 0 :: msg_id(), % part of snapshot data
          %% max number of messages that can be sent
          %% decremented for each delivery
@@ -153,6 +183,7 @@
 
 -record(state,
         {name :: atom(),
+         queue_resource :: rabbit_types:r('queue'),
          shadow_copy_interval = ?SHADOW_COPY_INTERVAL :: non_neg_integer(),
          % unassigned messages
          messages = #{} :: #{msg_in_id() => indexed_msg()},
@@ -163,7 +194,7 @@
          next_msg_num = 1 :: msg_in_id(),
          % list of returned msg_in_ids - when checking out it picks from
          % this list first before taking low_msg_num
-         returns = lqueue:new() :: lqueue:queue(msg_in_id() | '$prefix_msg'),
+         returns = lqueue:new() :: lqueue:lqueue('$prefix_msg' | msg_in_id()),
          % a counter of enqueues - used to trigger shadow copy points
          enqueue_count = 0 :: non_neg_integer(),
          % a map containing all the live processes that have ever enqueued
@@ -183,9 +214,7 @@
          % needs to be part of snapshot
          service_queue = queue:new() :: queue:queue(consumer_id()),
          dead_letter_handler :: maybe(applied_mfa()),
-         cancel_consumer_handler :: maybe(applied_mfa()),
          become_leader_handler :: maybe(applied_mfa()),
-         metrics_handler :: maybe(applied_mfa()),
          %% This is a special field that is only used for snapshots
          %% It represents the number of queued messages at the time the
          %% dehydrated snapshot state was cached.
@@ -203,16 +232,17 @@
 -opaque state() :: #state{}.
 
 -type config() :: #{name := atom(),
+                    queue_resource := rabbit_types:r('queue'),
                     dead_letter_handler => applied_mfa(),
                     become_leader_handler => applied_mfa(),
-                    cancel_consumer_handler => applied_mfa(),
-                    metrics_handler => applied_mfa(),
                     shadow_copy_interval => non_neg_integer()}.
 
 -export_type([protocol/0,
               delivery/0,
               command/0,
+              credit_mode/0,
               consumer_tag/0,
+              consumer_meta/0,
               consumer_id/0,
               client_msg/0,
               msg/0,
@@ -222,20 +252,18 @@
               state/0,
               config/0]).
 
--spec init(config()) -> {state(), ra_machine:effects()}.
-init(#{name := Name} = Conf) ->
-    update_state(Conf, #state{name = Name}).
+-spec init(config()) -> state().
+init(#{name := Name,
+       queue_resource := Resource} = Conf) ->
+    update_state(Conf, #state{name = Name,
+                              queue_resource = Resource}).
 
 update_state(Conf, State) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
-    CCH = maps:get(cancel_consumer_handler, Conf, undefined),
     BLH = maps:get(become_leader_handler, Conf, undefined),
-    MH = maps:get(metrics_handler, Conf, undefined),
     SHI = maps:get(shadow_copy_interval, Conf, ?SHADOW_COPY_INTERVAL),
     State#state{dead_letter_handler = DLH,
-                cancel_consumer_handler = CCH,
                 become_leader_handler = BLH,
-                metrics_handler = MH,
                 shadow_copy_interval = SHI}.
 
 % msg_ids are scoped per consumer
@@ -243,7 +271,8 @@ update_state(Conf, State) ->
 -spec apply(ra_machine:command_meta_data(), command(),
             ra_machine:effects(), state()) ->
     {state(), ra_machine:effects(), Reply :: term()}.
-apply(#{index := RaftIdx}, {enqueue, From, Seq, RawMsg}, Effects0, State00) ->
+apply(#{index := RaftIdx}, #enqueue{pid = From, seq = Seq,
+                                    msg = RawMsg}, Effects0, State00) ->
     case maybe_enqueue(RaftIdx, From, Seq, RawMsg, Effects0, State00) of
         {ok, State0, Effects1} ->
             {State, Effects, ok} = checkout(State0, Effects1),
@@ -251,7 +280,8 @@ apply(#{index := RaftIdx}, {enqueue, From, Seq, RawMsg}, Effects0, State00) ->
         {duplicate, State, Effects} ->
             {State, Effects, ok}
     end;
-apply(#{index := RaftIdx}, {settle, MsgIds, ConsumerId}, Effects0,
+apply(#{index := RaftIdx},
+      #settle{msg_ids = MsgIds, consumer_id = ConsumerId}, Effects0,
       #state{consumers = Cons0} = State) ->
     case Cons0 of
         #{ConsumerId := Con0} ->
@@ -262,8 +292,8 @@ apply(#{index := RaftIdx}, {settle, MsgIds, ConsumerId}, Effects0,
         _ ->
             {State, Effects0, ok}
     end;
-apply(#{index := RaftIdx}, {discard, MsgIds, ConsumerId}, Effects0,
-      #state{consumers = Cons0} = State0) ->
+apply(#{index := RaftIdx}, #discard{msg_ids = MsgIds, consumer_id = ConsumerId},
+      Effects0, #state{consumers = Cons0} = State0) ->
     case Cons0 of
         #{ConsumerId := Con0} ->
             {State, Effects, Res} = complete_and_checkout(RaftIdx, MsgIds,
@@ -274,7 +304,7 @@ apply(#{index := RaftIdx}, {discard, MsgIds, ConsumerId}, Effects0,
         _ ->
             {State0, Effects0, ok}
     end;
-apply(_, {return, MsgIds, ConsumerId}, Effects0,
+apply(_, #return{msg_ids = MsgIds, consumer_id = ConsumerId}, Effects0,
       #state{consumers = Cons0} = State) ->
     case Cons0 of
         #{ConsumerId := Con0 = #consumer{checked_out = Checked0}} ->
@@ -285,7 +315,8 @@ apply(_, {return, MsgIds, ConsumerId}, Effects0,
         _ ->
             {State, Effects0, ok}
     end;
-apply(_, {credit, NewCredit, RemoteDelCnt, Drain, ConsumerId}, Effects0,
+apply(_, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
+                 drain = Drain, consumer_id = ConsumerId}, Effects0,
       #state{consumers = Cons0,
              service_queue = ServiceQueue0} = State0) ->
     case Cons0 of
@@ -328,25 +359,29 @@ apply(_, {credit, NewCredit, RemoteDelCnt, Drain, ConsumerId}, Effects0,
             %% credit for unknown consumer - just ignore
             {State0, Effects0, ok}
     end;
-apply(_, {checkout, {dequeue, _}, {_Tag, _Pid}}, Effects0,
+apply(_, #checkout{spec = {dequeue, _}}, Effects0,
       #state{messages = M,
              prefix_msg_counts = {0, 0}} = State0) when map_size(M) == 0 ->
     %% FIXME: also check if there are returned messages
     %% TODO do we need metric visibility of empty get requests?
     {State0, Effects0, {dequeue, empty}};
-apply(Meta, {checkout, {dequeue, settled}, ConsumerId},
+apply(Meta, #checkout{spec = {dequeue, settled}, meta = ConsumerMeta,
+                      consumer_id = ConsumerId},
       Effects0, State0) ->
     % TODO: this clause could probably be optimised
-    State1 = update_consumer(ConsumerId, {once, 1, simple_prefetch}, State0),
+    State1 = update_consumer(ConsumerId, ConsumerMeta,
+                             {once, 1, simple_prefetch}, State0),
     % turn send msg effect into reply
     {success, _, MsgId, Msg, State2} = checkout_one(State1),
     % immediately settle
-    {State, Effects, _} = apply(Meta, {settle, [MsgId], ConsumerId},
+    {State, Effects, _} = apply(Meta, make_settle(ConsumerId, [MsgId]),
                                 Effects0, State2),
     {State, Effects, {dequeue, {MsgId, Msg}}};
-apply(_, {checkout, {dequeue, unsettled}, {_Tag, Pid} = Consumer},
+apply(_, #checkout{spec = {dequeue, unsettled},
+                   meta = ConsumerMeta, consumer_id = {_, Pid} = ConsumerId},
       Effects0, State0) ->
-    State1 = update_consumer(Consumer, {once, 1, simple_prefetch}, State0),
+    State1 = update_consumer(ConsumerId, ConsumerMeta,
+                             {once, 1, simple_prefetch}, State0),
     Effects1 = [{monitor, process, Pid} | Effects0],
     {State, Reply, Effects} = case checkout_one(State1) of
                                   {success, _, MsgId, Msg, S} ->
@@ -357,16 +392,17 @@ apply(_, {checkout, {dequeue, unsettled}, {_Tag, Pid} = Consumer},
                                       {S, empty, Effects1}
                               end,
     {State, Effects, {dequeue, Reply}};
-apply(_, {checkout, cancel, ConsumerId}, Effects0, State0) ->
+apply(_, #checkout{spec = cancel, consumer_id = ConsumerId}, Effects0, State0) ->
     {CancelEffects, State1} = cancel_consumer(ConsumerId, {Effects0, State0}),
     % TODO: here we should really demonitor the pid but _only_ if it has no
     % other consumers or enqueuers.
     checkout(State1, CancelEffects);
-apply(_, {checkout, Spec, {_Tag, Pid} = ConsumerId}, Effects0, State0) ->
-    State1 = update_consumer(ConsumerId, Spec, State0),
+apply(_, #checkout{spec = Spec, meta = Meta, consumer_id = {_, Pid} = ConsumerId},
+      Effects0, State0) ->
+    State1 = update_consumer(ConsumerId, Meta, Spec, State0),
     {State, Effects, Res} = checkout(State1, Effects0),
     {State, [{monitor, process, Pid} | Effects], Res};
-apply(#{index := RaftIdx}, purge, Effects0,
+apply(#{index := RaftIdx}, #purge{}, Effects0,
       #state{consumers = Cons0, ra_indexes = Indexes } = State0) ->
     Total = rabbit_fifo_index:size(Indexes),
     {State1, Effects1, _} =
@@ -470,7 +506,7 @@ apply(_, {nodeup, Node}, Effects0,
                           service_queue = SQ}, Monitors ++ Effects);
 apply(_, {nodedown, _Node}, Effects, State) ->
     {State, Effects, ok};
-apply(_, {update_state, Conf}, Effects, State) ->
+apply(_, #update_state{config = Conf}, Effects, State) ->
     {update_state(Conf, State), Effects, ok}.
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
@@ -504,21 +540,17 @@ state_enter(_, _) ->
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
 tick(_Ts, #state{name = Name,
+                 queue_resource = QName,
                  messages = Messages,
                  ra_indexes = Indexes,
-                 metrics_handler = MH,
                  consumers = Cons} = State) ->
     Metrics = {Name,
                maps:size(Messages), % Ready
                num_checked_out(State), % checked out
                rabbit_fifo_index:size(Indexes), %% Total
                maps:size(Cons)}, % Consumers
-    case MH of
-        undefined ->
-            [{aux, emit}];
-        {Mod, Fun, Args} ->
-            [{mod_call, Mod, Fun, Args ++ [Metrics]}, {aux, emit}]
-    end.
+    [{mod_call, rabbit_quorum_queue,
+      update_metrics, [QName, Metrics]}, {aux, emit}].
 
 -spec overview(state()) -> map().
 overview(#state{consumers = Cons,
@@ -582,6 +614,14 @@ query_ra_indexes(#state{ra_indexes = RaIndexes}) ->
 query_consumer_count(#state{consumers = Consumers}) ->
     maps:size(Consumers).
 
+query_consumers(#state{consumers = Consumers}) ->
+    maps:map(fun ({Tag, Pid}, #consumer{meta = Meta}) ->
+                     {Pid, Tag,
+                      maps:get(ack, Meta, undefined),
+                      maps:get(prefetch, Meta, undefined),
+                      maps:get(args, Meta, []),
+                      maps:get(username, Meta, undefined)}
+             end, Consumers).
 %% other
 
 -spec usage(atom()) -> float().
@@ -627,11 +667,11 @@ num_checked_out(#state{consumers = Cons}) ->
                 end, 0, maps:values(Cons)).
 
 cancel_consumer(ConsumerId,
-                {Effects0, #state{consumers = C0, name = Name} = S0}) ->
+                {Effects0, #state{consumers = C0} = S0}) ->
     case maps:take(ConsumerId, C0) of
         {#consumer{checked_out = Checked0}, Cons} ->
             S = return_all(S0, Checked0),
-            Effects = cancel_consumer_effects(ConsumerId, Name, S, Effects0),
+            Effects = cancel_consumer_effects(ConsumerId, S, Effects0),
             case maps:size(Cons) of
                 0 ->
                     {[{aux, inactive} | Effects], S#state{consumers = Cons}};
@@ -787,13 +827,9 @@ dead_letter_effects(Discarded,
                             end, [], Discarded),
     [{mod_call, Mod, Fun, Args ++ [DeadLetters]} | Effects].
 
-cancel_consumer_effects(_, _, #state{cancel_consumer_handler = undefined},
-                        Effects) ->
-    Effects;
-cancel_consumer_effects(Pid, Name,
-                        #state{cancel_consumer_handler = {Mod, Fun, Args}},
-                        Effects) ->
-    [{mod_call, Mod, Fun, Args ++ [Pid, Name]} | Effects].
+cancel_consumer_effects(ConsumerId, #state{queue_resource = QName}, Effects) ->
+    [{mod_call, rabbit_quorum_queue,
+      cancel_consumer_handler, [QName, ConsumerId]} | Effects].
 
 update_smallest_raft_index(IncomingRaftIdx, OldIndexes,
                            #state{ra_indexes = Indexes,
@@ -1017,11 +1053,12 @@ uniq_queue_in(Key, Queue) ->
     end.
 
 
-update_consumer(ConsumerId, {Life, Credit, Mode},
+update_consumer(ConsumerId, Meta, {Life, Credit, Mode},
                 #state{consumers = Cons0,
                        service_queue = ServiceQueue0} = State0) ->
     %% TODO: this logic may not be correct for updating a pre-existing consumer
-    Init = #consumer{lifetime = Life, credit = Credit, credit_mode = Mode},
+    Init = #consumer{lifetime = Life, meta = Meta,
+                     credit = Credit, credit_mode = Mode},
     Cons = maps:update_with(ConsumerId,
                              fun(S) ->
                                      %% remove any in-flight messages from
@@ -1074,6 +1111,41 @@ dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
     Checked = maps:map(fun (_, _) -> '$prefix_msg' end, Checked0),
     Con#consumer{checked_out = Checked}.
 
+-spec make_enqueue(maybe(pid()), maybe(msg_seqno()), raw_msg()) -> protocol().
+make_enqueue(Pid, Seq, Msg) ->
+    #enqueue{pid = Pid, seq = Seq, msg = Msg}.
+-spec make_checkout(consumer_id(),
+                    checkout_spec(), consumer_meta()) -> protocol().
+make_checkout(ConsumerId, Spec, Meta) ->
+    #checkout{consumer_id = ConsumerId,
+              spec = Spec, meta = Meta}.
+
+-spec make_settle(consumer_id(), [msg_id()]) -> protocol().
+make_settle(ConsumerId, MsgIds) ->
+    #settle{consumer_id = ConsumerId, msg_ids = MsgIds}.
+
+-spec make_return(consumer_id(), [msg_id()]) -> protocol().
+make_return(ConsumerId, MsgIds) ->
+    #return{consumer_id = ConsumerId, msg_ids = MsgIds}.
+
+-spec make_discard(consumer_id(), [msg_id()]) -> protocol().
+make_discard(ConsumerId, MsgIds) ->
+    #discard{consumer_id = ConsumerId, msg_ids = MsgIds}.
+
+-spec make_credit(consumer_id(), non_neg_integer(), non_neg_integer(),
+                  boolean()) -> protocol().
+make_credit(ConsumerId, Credit, DeliveryCount, Drain) ->
+    #credit{consumer_id = ConsumerId,
+            credit = Credit,
+            delivery_count = DeliveryCount,
+            drain = Drain}.
+
+-spec make_purge() -> protocol().
+make_purge() -> #purge{}.
+
+-spec make_update_state(config()) -> protocol().
+make_update_state(Config) ->
+    #update_state{config = Config}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -1098,18 +1170,17 @@ dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
 
 test_init(Name) ->
     init(#{name => Name,
-           shadow_copy_interval => 0,
-           metrics_handler => {?MODULE, metrics_handler, []}}).
-
-metrics_handler(_) ->
-    ok.
+           queue_resource => queue_resource,
+           shadow_copy_interval => 0}).
 
 enq_enq_checkout_test() ->
     Cid = {<<"enq_enq_checkout_test">>, self()},
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     {_State3, Effects, _} =
-        apply(meta(3), {checkout, {once, 2, simple_prefetch}, Cid}, [], State2),
+        apply(meta(3),
+              make_checkout(Cid, {once, 2, simple_prefetch}, #{}),
+              [], State2),
     ?ASSERT_EFF({monitor, _, _}, Effects),
     ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, Effects),
     ok.
@@ -1119,7 +1190,8 @@ credit_enq_enq_checkout_settled_credit_test() ->
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     {State3, Effects, _} =
-        apply(meta(3), {checkout, {auto, 1, credited}, Cid}, [], State2),
+        apply(meta(3), make_checkout(Cid, {auto, 1, credited}, #{}),
+              [], State2),
     ?ASSERT_EFF({monitor, _, _}, Effects),
     Deliveries = lists:filter(fun ({send_msg, _, {delivery, _, _}, _}) -> true;
                                   (_) -> false
@@ -1149,12 +1221,13 @@ credit_with_drained_test() ->
     State0 = test_init(test),
     %% checkout with a single credit
     {State1, _, _} =
-        apply(meta(1), {checkout, {auto, 1, credited}, Cid}, [], State0),
+        apply(meta(1), make_checkout(Cid, {auto, 1, credited},#{}),
+              [], State0),
     ?assertMatch(#state{consumers = #{Cid := #consumer{credit = 1,
                                                        delivery_count = 0}}},
                  State1),
     {State, _Effs, Result} =
-         apply(meta(3), {credit, 0, 5, true, Cid}, [], State1),
+         apply(meta(3), make_credit(Cid, 0, 5, true), [], State1),
     ?assertMatch(#state{consumers = #{Cid := #consumer{credit = 0,
                                                        delivery_count = 5}}},
                  State),
@@ -1169,12 +1242,13 @@ credit_and_drain_test() ->
     {State2, _} = enq(2, 2, second, State1),
     %% checkout without any initial credit (like AMQP 1.0 would)
     {State3, CheckEffs, _} =
-        apply(meta(3), {checkout, {auto, 0, credited}, Cid}, [], State2),
+        apply(meta(3), make_checkout(Cid, {auto, 0, credited}, #{}),
+              [], State2),
 
     ?ASSERT_NO_EFF({send_msg, _, {delivery, _, _}}, CheckEffs),
     {State4, Effects, {multi, [{send_credit_reply, 0},
                                {send_drained, [{?FUNCTION_NAME, 2}]}]}} =
-     apply(meta(4), {credit, 4, 0, true, Cid}, [], State3),
+     apply(meta(4), make_credit(Cid, 4, 0, true), [], State3),
     ?assertMatch(#state{consumers = #{Cid := #consumer{credit = 0,
                                                        delivery_count = 4}}},
                  State4),
@@ -1193,7 +1267,8 @@ enq_enq_deq_test() ->
     {State2, _} = enq(2, 2, second, State1),
     % get returns a reply value
     {_State3, [{monitor, _, _}], {dequeue, {0, {_, first}}}} =
-        apply(meta(3), {checkout, {dequeue, unsettled}, Cid}, [], State2),
+        apply(meta(3), make_checkout(Cid, {dequeue, unsettled}, #{}),
+              [], State2),
     ok.
 
 enq_enq_deq_deq_settle_test() ->
@@ -1202,9 +1277,11 @@ enq_enq_deq_deq_settle_test() ->
     {State2, _} = enq(2, 2, second, State1),
     % get returns a reply value
     {State3, [{monitor, _, _}], {dequeue, {0, {_, first}}}} =
-        apply(meta(3), {checkout, {dequeue, unsettled}, Cid}, [], State2),
+        apply(meta(3), make_checkout(Cid, {dequeue, unsettled}, #{}),
+              [], State2),
     {_State4, _Effects4, {dequeue, empty}} =
-        apply(meta(4), {checkout, {dequeue, unsettled}, Cid}, [], State3),
+        apply(meta(4), make_checkout(Cid, {dequeue, unsettled}, #{}),
+              [], State3),
     ok.
 
 enq_enq_checkout_get_settled_test() ->
@@ -1212,23 +1289,28 @@ enq_enq_checkout_get_settled_test() ->
     {State1, _} = enq(1, 1, first, test_init(test)),
     % get returns a reply value
     {_State2, _Effects, {dequeue, {0, {_, first}}}} =
-        apply(meta(3), {checkout, {dequeue, settled}, Cid}, [], State1),
+        apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}),
+              [], State1),
     ok.
 
 checkout_get_empty_test() ->
     Cid = {?FUNCTION_NAME, self()},
     State = test_init(test),
     {_State2, [], {dequeue, empty}} =
-        apply(meta(1), {checkout, {dequeue, unsettled}, Cid}, [], State),
+        apply(meta(1), make_checkout(Cid, {dequeue, unsettled}, #{}),
+              [], State),
     ok.
 
 untracked_enq_deq_test() ->
     Cid = {?FUNCTION_NAME, self()},
     State0 = test_init(test),
-    {State1, _, _} = apply(meta(1), {enqueue, undefined, undefined, first}, [], State0),
+    {State1, _, _} = apply(meta(1),
+                           make_enqueue(undefined, undefined, first), [], State0),
     {_State2, _, {dequeue, {0, {_, first}}}} =
-        apply(meta(3), {checkout, {dequeue, settled}, Cid}, [], State1),
+        apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}),
+              [], State1),
     ok.
+
 release_cursor_test() ->
     Cid = {?FUNCTION_NAME, self()},
     {State1, _} = enq(1, 1, first,  test_init(test)),
@@ -1299,7 +1381,7 @@ return_non_existent_test() ->
     Cid = {<<"cid">>, self()},
     {State0, [_, _Inactive]} = enq(1, 1, second, test_init(test)),
     % return non-existent
-    {_State2, [], _} = apply(meta(3), {return, [99], Cid}, [], State0),
+    {_State2, [], _} = apply(meta(3), make_return(Cid, [99]), [], State0),
     ok.
 
 return_checked_out_test() ->
@@ -1309,7 +1391,8 @@ return_checked_out_test() ->
               {send_msg, _, {delivery, _, [{MsgId, _}]}, _}]} =
         check(Cid, 2, State0),
     % return
-    {_State2, [_, _], _} = apply(meta(3), {return, [MsgId], Cid}, [], State1),
+    {_State2, [_, _], _} = apply(meta(3), make_return(Cid, [MsgId]),
+                                 [], State1),
     ok.
 
 return_auto_checked_out_test() ->
@@ -1322,7 +1405,7 @@ return_auto_checked_out_test() ->
               {send_msg, _, {delivery, _, [{MsgId, _}]}, _} | _]} =
         check_auto(Cid, 2, State0),
     % return should include another delivery
-    {_State2, Effects, _} = apply(meta(3), {return, [MsgId], Cid}, [], State1),
+    {_State2, Effects, _} = apply(meta(3), make_return(Cid, [MsgId]), [], State1),
     ?ASSERT_EFF({send_msg, _,
                  {delivery, _, [{_, {#{delivery_count := 1}, first}}]}, _},
                 Effects),
@@ -1335,19 +1418,22 @@ cancelled_checkout_out_test() ->
     {State0, [_]} = enq(2, 2, second, State00),
     {State1, _} = check_auto(Cid, 2, State0),
     % cancelled checkout should return all pending messages to queue
-    {State2, _, _} = apply(meta(3), {checkout, cancel, Cid}, [], State1),
+    {State2, _, _} = apply(meta(3), make_checkout(Cid, cancel, #{}),
+                           [], State1),
+    ?assertEqual(2, maps:size(State2#state.messages)),
 
     {State3, _, {dequeue, {0, {_, first}}}} =
-        apply(meta(3), {checkout, {dequeue, settled}, Cid}, [], State2),
+        apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}), [], State2),
+    ?debugFmt("State3 ~p", [State3]),
     {_State, _, {dequeue, {_, {_, second}}}} =
-        apply(meta(3), {checkout, {dequeue, settled}, Cid}, [], State3),
+        apply(meta(4), make_checkout(Cid, {dequeue, settled}, #{}), [], State3),
     ok.
 
 down_with_noproc_consumer_returns_unsettled_test() ->
     Cid = {<<"down_consumer_returns_unsettled_test">>, self()},
     {State0, [_, _]} = enq(1, 1, second, test_init(test)),
     {State1, [{monitor, process, Pid} | _]} = check(Cid, 2, State0),
-    {State2, [_, _], _} = apply(meta(3), {down, Pid, noproc}, [], State1),
+    {State2, _, _} = apply(meta(3), {down, Pid, noproc}, [], State1),
     {_State, Effects} = check(Cid, 4, State2),
     ?ASSERT_EFF({monitor, process, _}, Effects),
     ok.
@@ -1416,7 +1502,7 @@ discarded_message_without_dead_letter_handler_is_removed_test() ->
     ?ASSERT_EFF({send_msg, _,
                  {delivery, _, [{0, {#{}, first}}]}, _},
                 Effects1),
-    {_State2, Effects2, _} = apply(meta(1), {discard, [0], Cid}, [], State1),
+    {_State2, Effects2, _} = apply(meta(1), make_discard(Cid, [0]), [], State1),
     ?assertNoEffect({send_msg, _,
                      {delivery, _, [{0, {#{}, first}}]}, _},
                     Effects2),
@@ -1425,6 +1511,7 @@ discarded_message_without_dead_letter_handler_is_removed_test() ->
 discarded_message_with_dead_letter_handler_emits_mod_call_effect_test() ->
     Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
     State00 = init(#{name => test,
+                     queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
                      dead_letter_handler =>
                      {somemod, somefun, [somearg]}}),
     {State0, [_, _]} = enq(1, 1, first, State00),
@@ -1432,7 +1519,8 @@ discarded_message_with_dead_letter_handler_emits_mod_call_effect_test() ->
     ?ASSERT_EFF({send_msg, _,
                  {delivery, _, [{0, {#{}, first}}]}, _},
                 Effects1),
-    {_State2, Effects2, _} = apply(meta(1), {discard, [0], Cid}, [], State1),
+    {_State2, Effects2, _} = apply(meta(1), make_discard(Cid, [0]),
+                                   [], State1),
     % assert mod call effect with appended reason and message
     ?ASSERT_EFF({mod_call, somemod, somefun, [somearg, [{rejected, first}]]},
                 Effects2),
@@ -1445,25 +1533,23 @@ tick_test() ->
     {S1, _} = enq(2, 2, snd, S0),
     {S2, {MsgId, _}} = deq(3, Cid, unsettled, S1),
     {S3, {_, _}} = deq(4, Cid2, unsettled, S2),
-    {S4, _, _} = apply(meta(5), {return, [MsgId], Cid}, [], S3),
+    {S4, _, _} = apply(meta(5), make_return(Cid, [MsgId]), [], S3),
 
-    [{mod_call, _, _, [{test, 1, 1, 2, 1}]}, {aux, emit}] = tick(1, S4),
+    [{mod_call, _, _, [_, {test, 1, 1, 2, 1}]}, {aux, emit}] = tick(1, S4),
     ok.
 
 enq_deq_snapshot_recover_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
-    % OthPid = spawn(fun () -> ok end),
-    % Oth = {<<"oth">>, OthPid},
     Commands = [
-                {enqueue, self(), 1, one},
-                {enqueue, self(), 2, two},
-                {checkout, {dequeue, settled}, Cid},
-                {enqueue, self(), 3, three},
-                {enqueue, self(), 4, four},
-                {checkout, {dequeue, settled}, Cid},
-                {enqueue, self(), 5, five},
-                {checkout, {dequeue, settled}, Cid}
+                make_enqueue(self(), 1, one),
+                make_enqueue(self(), 2, two),
+                make_checkout(Cid, {dequeue, settled}, #{}),
+                make_enqueue(self(), 3, three),
+                make_enqueue(self(), 4, four),
+                make_checkout(Cid, {dequeue, settled}, #{}),
+                make_enqueue(self(), 5, five),
+                make_checkout(Cid, {dequeue, settled}, #{})
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
@@ -1473,10 +1559,10 @@ enq_deq_settle_snapshot_recover_test() ->
     % OthPid = spawn(fun () -> ok end),
     % Oth = {<<"oth">>, OthPid},
     Commands = [
-                {enqueue, self(), 1, one},
-                {enqueue, self(), 2, two},
-                {checkout, {dequeue, unsettled}, Cid},
-                {settle, [0], Cid}
+                make_enqueue(self(), 1, one),
+                make_enqueue(self(), 2, two),
+                make_checkout(Cid, {dequeue, unsettled}, #{}),
+                make_settle(Cid, [0])
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
@@ -1486,13 +1572,13 @@ enq_deq_settle_snapshot_recover_2_test() ->
     OthPid = spawn(fun () -> ok end),
     Oth = {<<"oth">>, OthPid},
     Commands = [
-                {enqueue, self(), 1, one},
-                {enqueue, self(), 2, two},
-                {checkout, {dequeue, unsettled}, Cid},
-                {settle, [0], Cid},
-                {enqueue, self(), 3, two},
-                {checkout, {dequeue, unsettled}, Oth},
-                {settle, [0], Oth}
+                make_enqueue(self(), 1, one),
+                make_enqueue(self(), 2, two),
+                make_checkout(Cid, {dequeue, unsettled}, #{}),
+                make_settle(Cid, [0]),
+                make_enqueue(self(), 3, two),
+                make_checkout(Cid, {dequeue, unsettled}, #{}),
+                make_settle(Oth, [0])
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
@@ -1500,11 +1586,11 @@ snapshot_recover_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 2, simple_prefetch}, Cid},
-                {enqueue, self(), 1, one},
-                {enqueue, self(), 2, two},
-                {enqueue, self(), 3, three},
-                purge
+                make_checkout(Cid, {auto, 2, simple_prefetch}, #{}),
+                make_enqueue(self(), 1, one),
+                make_enqueue(self(), 2, two),
+                make_enqueue(self(), 3, three),
+                make_purge()
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
@@ -1512,12 +1598,12 @@ enq_deq_return_settle_snapshot_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {enqueue, self(), 1, one}, %% to Cid
-                {checkout, {auto, 1, simple_prefetch}, Cid},
-                {return, [0], Cid}, %% should be re-delivered to Cid
-                {enqueue, self(), 2, two}, %% Cid prefix_msg_count: 2
-                {settle, [1], Cid},
-                {settle, [2], Cid}
+                make_enqueue(self(), 1, one), %% to Cid
+                make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+                make_return(Cid, [0]), %% should be re-delivered to Cid
+                make_enqueue(self(), 2, two), %% Cid prefix_msg_count: 2
+                make_settle(Cid, [1]),
+                make_settle(Cid, [2])
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
@@ -1525,10 +1611,10 @@ return_prefix_msg_count_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {enqueue, self(), 1, one},
-                {checkout, {auto, 1, simple_prefetch}, Cid},
-                {checkout, cancel, Cid},
-                {enqueue, self(), 2, two} %% Cid prefix_msg_count: 2
+                make_enqueue(self(), 1, one),
+                make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+                make_checkout(Cid, cancel, #{}),
+                make_enqueue(self(), 2, two) %% Cid prefix_msg_count: 2
                ],
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
@@ -1541,16 +1627,16 @@ return_settle_snapshot_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {enqueue, self(), 1, one}, %% to Cid
-                {checkout, {auto, 1, simple_prefetch}, Cid},
-                {return, [0], Cid}, %% should be re-delivered to Oth
-                {enqueue, self(), 2, two}, %% Cid prefix_msg_count: 2
-                {settle, [1], Cid},
-                {return, [2], Cid},
-                {settle, [3], Cid},
-                {enqueue, self(), 3, three},
-                purge,
-                {enqueue, self(), 4, four}
+                make_enqueue(self(), 1, one), %% to Cid
+                make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+                make_return(Cid, [0]), %% should be re-delivered to Oth
+                make_enqueue(self(), 2, two), %% Cid prefix_msg_count: 2
+                make_settle(Cid, [1]),
+                make_return(Cid, [2]),
+                make_settle(Cid, [3]),
+                make_enqueue(self(), 3, three),
+                make_purge(),
+                make_enqueue(self(), 4, four)
               ],
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
@@ -1558,13 +1644,13 @@ enq_check_settle_snapshot_recover_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 2, simple_prefetch}, Cid},
-                {enqueue, self(), 1, one},
-                {enqueue, self(), 2, two},
-                {settle, [1], Cid},
-                {settle, [0], Cid},
-                {enqueue, self(), 3, three},
-                {settle, [2], Cid}
+                make_checkout(Cid, {auto, 2, simple_prefetch}, #{}),
+                make_enqueue(self(), 1, one),
+                make_enqueue(self(), 2, two),
+                make_settle(Cid, [1]),
+                make_settle(Cid, [0]),
+                make_enqueue(self(), 3, three),
+                make_settle(Cid, [2])
               ],
          % ?debugFmt("~w running commands ~w~n", [?FUNCTION_NAME, C]),
     run_snapshot_test(?FUNCTION_NAME, Commands).
@@ -1573,13 +1659,13 @@ enq_check_settle_snapshot_purge_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 2, simple_prefetch}, Cid},
-                {enqueue, self(), 1, one},
-                {enqueue, self(), 2, two},
-                {settle, [1], Cid},
-                {settle, [0], Cid},
-                {enqueue, self(), 3, three},
-                purge
+                make_checkout(Cid, {auto, 2, simple_prefetch},#{}),
+                make_enqueue(self(), 1, one),
+                make_enqueue(self(), 2, two),
+                make_settle(Cid, [1]),
+                make_settle(Cid, [0]),
+                make_enqueue(self(), 3, three),
+                make_purge()
               ],
          % ?debugFmt("~w running commands ~w~n", [?FUNCTION_NAME, C]),
     run_snapshot_test(?FUNCTION_NAME, Commands).
@@ -1589,37 +1675,17 @@ enq_check_settle_duplicate_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 2, simple_prefetch}, Cid},
-                {enqueue, self(), 1, one}, %% 0
-                {enqueue, self(), 2, two}, %% 0
-                {settle, [0], Cid},
-                {settle, [1], Cid},
-                {settle, [1], Cid},
-                {enqueue, self(), 3, three},
-                {settle, [2], Cid}
+                make_checkout(Cid, {auto, 2, simple_prefetch}, #{}),
+                make_enqueue(self(), 1, one), %% 0
+                make_enqueue(self(), 2, two), %% 0
+                make_settle(Cid, [0]),
+                make_settle(Cid, [1]),
+                make_settle(Cid, [1]),
+                make_enqueue(self(), 3, three),
+                make_settle(Cid, [2])
               ],
          % ?debugFmt("~w running commands ~w~n", [?FUNCTION_NAME, C]),
     run_snapshot_test(?FUNCTION_NAME, Commands).
-
-
-multi_return_snapshot_test() ->
-    %% this was discovered using property testing
-    C1 = {<<>>, c:pid(0,6723,1)},
-    C2 = {<<0>>,c:pid(0,6723,1)},
-    E = c:pid(0,6720,1),
-    Commands = [
-                {checkout,{auto,2,simple_prefetch},C1},
-                {enqueue,E,1,msg},
-                {enqueue,E,2,msg},
-                {checkout,cancel,C1}, %% both on returns queue
-                {checkout,{auto,1,simple_prefetch},C2}, % on on return one on C2
-                {return,[0],C2}, %% E1 in returns, E2 with C2
-                {return,[1],C2}, %% E2 in returns E1 with C2
-                {settle,[2],C2} %% E2 with C2
-               ],
-    run_snapshot_test(?FUNCTION_NAME, Commands),
-    ok.
-
 
 run_snapshot_test(Name, Commands) ->
     %% create every incremental permuation of the commands lists
@@ -1657,11 +1723,11 @@ delivery_query_returns_deliveries_test() ->
     Tag = atom_to_binary(?FUNCTION_NAME, utf8),
     Cid = {Tag, self()},
     Commands = [
-                {checkout, {auto, 5, simple_prefetch}, Cid},
-                {enqueue, self(), 1, one},
-                {enqueue, self(), 2, two},
-                {enqueue, self(), 3, tre},
-                {enqueue, self(), 4, for}
+                make_checkout(Cid, {auto, 5, simple_prefetch}, #{}),
+                make_enqueue(self(), 1, one),
+                make_enqueue(self(), 2, two),
+                make_enqueue(self(), 3, tre),
+                make_enqueue(self(), 4, for)
               ],
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
@@ -1677,7 +1743,8 @@ pending_enqueue_is_enqueued_on_down_test() ->
     {State0, _} = enq(1, 2, first, test_init(test)),
     {State1, _, _} = apply(meta(2), {down, Pid, noproc}, [], State0),
     {_State2, _, {dequeue, {0, {_, first}}}} =
-        apply(meta(3), {checkout, {dequeue, settled}, Cid}, [], State1),
+        apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}),
+              [], State1),
     ok.
 
 duplicate_delivery_test() ->
@@ -1690,6 +1757,7 @@ duplicate_delivery_test() ->
 
 state_enter_test() ->
     S0 = init(#{name => the_name,
+                queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
                 become_leader_handler => {m, f, [a]}}),
     [{mod_call, m, f, [a, the_name]}] = state_enter(leader, S0),
     ok.
@@ -1721,11 +1789,11 @@ state_enter_montors_and_notifications_test() ->
 purge_test() ->
     Cid = {<<"purge_test">>, self()},
     {State1, _} = enq(1, 1, first, test_init(test)),
-    {State2, _, {purge, 1}} = apply(meta(2), purge, [], State1),
+    {State2, _, {purge, 1}} = apply(meta(2), make_purge(), [], State1),
     {State3, _} = enq(3, 2, second, State2),
     % get returns a reply value
     {_State4, [{monitor, _, _}], {dequeue, {0, {_, second}}}} =
-        apply(meta(4), {checkout, {dequeue, unsettled}, Cid}, [], State3),
+        apply(meta(4), make_checkout(Cid, {dequeue, unsettled}, #{}), [], State3),
     ok.
 
 purge_with_checkout_test() ->
@@ -1733,7 +1801,7 @@ purge_with_checkout_test() ->
     {State0, _} = check_auto(Cid, 1, test_init(?FUNCTION_NAME)),
     {State1, _} = enq(2, 1, first, State0),
     {State2, _} = enq(3, 2, second, State1),
-    {State3, _, {purge, 2}} = apply(meta(2), purge, [], State2),
+    {State3, _, {purge, 2}} = apply(meta(2), make_purge(), [], State2),
     #consumer{checked_out = Checked} = maps:get(Cid, State3#state.consumers),
     ?assertEqual(0, maps:size(Checked)),
     ok.
@@ -1743,36 +1811,47 @@ meta(Idx) ->
 
 enq(Idx, MsgSeq, Msg, State) ->
     strip_reply(
-        apply(meta(Idx), {enqueue, self(), MsgSeq, Msg}, [], State)).
+        apply(meta(Idx), make_enqueue(self(), MsgSeq, Msg), [], State)).
 
 deq(Idx, Cid, Settlement, State0) ->
     {State, _, {dequeue, Msg}} =
-        apply(meta(Idx), {checkout, {dequeue,  Settlement}, Cid}, [], State0),
+        apply(meta(Idx),
+              make_checkout(Cid, {dequeue,  Settlement}, #{}),
+              [], State0),
     {State, Msg}.
 
 check_n(Cid, Idx, N, State) ->
-    strip_reply(apply(meta(Idx),
-                      {checkout, {auto, N, simple_prefetch}, Cid}, [], State)).
+    strip_reply(
+      apply(meta(Idx),
+            make_checkout(Cid, {auto, N, simple_prefetch}, #{}),
+            [], State)).
 
 check(Cid, Idx, State) ->
-    strip_reply(apply(meta(Idx),
-                      {checkout, {once, 1, simple_prefetch}, Cid}, [], State)).
+    strip_reply(
+      apply(meta(Idx),
+            make_checkout(Cid, {once, 1, simple_prefetch}, #{}),
+            [], State)).
 
 check_auto(Cid, Idx, State) ->
-    strip_reply(apply(meta(Idx),
-                      {checkout, {auto, 1, simple_prefetch}, Cid}, [], State)).
+    strip_reply(
+      apply(meta(Idx),
+            make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+            [], State)).
 
 check(Cid, Idx, Num, State) ->
-    strip_reply(apply(meta(Idx),
-                      {checkout, {once, Num, simple_prefetch}, Cid}, [], State)).
+    strip_reply(
+      apply(meta(Idx),
+            make_checkout(Cid, {once, Num, simple_prefetch}, #{}),
+            [], State)).
 
 settle(Cid, Idx, MsgId, State) ->
-    strip_reply(apply(meta(Idx), {settle, [MsgId], Cid}, [], State)).
+    strip_reply(apply(meta(Idx), make_settle(Cid, [MsgId]), [], State)).
 
 credit(Cid, Idx, Credit, DelCnt, Drain, State) ->
-    strip_reply(apply(meta(Idx), {credit, Credit, DelCnt, Drain, Cid}, [], State)).
+    strip_reply(apply(meta(Idx), make_credit(Cid, Credit, DelCnt, Drain),
+                      [], State)).
 
-strip_reply({State, Effects, _Replu}) ->
+strip_reply({State, Effects, _Reply}) ->
     {State, Effects}.
 
 run_log(InitState, Entries) ->
@@ -1789,7 +1868,9 @@ run_log(InitState, Entries) ->
 aux_test() ->
     _ = ra_machine_ets:start_link(),
     Aux0 = init_aux(aux_test),
-    MacState = init(#{name => aux_test}),
+    MacState = init(#{name => aux_test,
+                      queue_resource =>
+                      rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
     Log = undefined,
     {no_reply, Aux, undefined} = handle_aux(leader, cast, active, Aux0,
                                             Log, MacState),

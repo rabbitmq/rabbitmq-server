@@ -926,8 +926,12 @@ notify_policy_changed(#amqqueue{pid = QPid,
                                 name = QName}) when ?IS_QUORUM(QPid) ->
     rabbit_quorum_queue:policy_changed(QName, QPid).
 
-consumers(#amqqueue{ pid = QPid }) ->
-    delegate:invoke(QPid, {gen_server2, call, [consumers, infinity]}).
+consumers(#amqqueue{pid = QPid}) when ?IS_CLASSIC(QPid) ->
+    delegate:invoke(QPid, {gen_server2, call, [consumers, infinity]});
+consumers(#amqqueue{pid = QPid}) when ?IS_QUORUM(QPid) ->
+    {ok, {_, Result}, _} = ra:local_query(QPid,
+                                          fun rabbit_fifo:query_consumers/1),
+    maps:values(Result).
 
 consumer_info_keys() -> ?CONSUMER_INFO_KEYS.
 
@@ -1154,14 +1158,15 @@ basic_get(#amqqueue{pid = {Name, _} = Id, type = quorum, name = QName} = Q, _ChP
                                        [rabbit_misc:rs(QName), Reason])
     end.
 
-basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid, LimiterPid,
-              LimiterActive, ConsumerPrefetchCount, ConsumerTag,
+basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid,
+              LimiterPid, LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, ActingUser, QState) ->
     ok = check_consume_arguments(QName, Args),
-    case delegate:invoke(QPid, {gen_server2, call,
-                                [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-                                  ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
-                                  Args, OkMsg, ActingUser}, infinity]}) of
+    case delegate:invoke(QPid,
+                         {gen_server2, call,
+                          [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
+                            ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
+                            Args, OkMsg, ActingUser}, infinity]}) of
         ok ->
             {ok, QState};
         Err ->
@@ -1171,15 +1176,17 @@ basic_consume(#amqqueue{type = quorum}, _NoAck, _ChPid,
               _LimiterPid, true, _ConsumerPrefetchCount, _ConsumerTag,
               _ExclusiveConsume, _Args, _OkMsg, _ActingUser, _QStates) ->
     {error, global_qos_not_supported_for_queue_type};
-basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q, NoAck, ChPid,
-              _LimiterPid, _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
-              ExclusiveConsume, Args, OkMsg, _ActingUser, QStates) ->
+basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q,
+              NoAck, ChPid, _LimiterPid, _LimiterActive, ConsumerPrefetchCount,
+              ConsumerTag, ExclusiveConsume, Args, OkMsg,
+              ActingUser, QStates) ->
     ok = check_consume_arguments(QName, Args),
     QState0 = get_quorum_state(Id, QName, QStates),
     {ok, QState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid,
                                                      ConsumerPrefetchCount,
                                                      ConsumerTag,
                                                      ExclusiveConsume, Args,
+                                                     ActingUser,
                                                      OkMsg, QState0),
     {ok, maps:put(Name, QState, QStates)}.
 
