@@ -1507,7 +1507,10 @@ basic_cancel(Config) ->
             wait_for_messages_pending_ack(Servers, RaName, 1),
             amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>}),
             wait_for_messages_ready(Servers, RaName, 1),
-            wait_for_messages_pending_ack(Servers, RaName, 0)
+            wait_for_messages_pending_ack(Servers, RaName, 0),
+            [] = rpc:call(Server, ets, tab2list, [consumer_created])
+    after 5000 ->
+              exit(basic_deliver_timeout)
     end.
 
 purge(Config) ->
