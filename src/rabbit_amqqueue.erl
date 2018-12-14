@@ -583,27 +583,20 @@ retry_wait(Q = #amqqueue{pid = QPid, name = Name, state = QState}, F, E, Retries
         %% there are no slaves to migrate to
         {stopped, false} ->
             E({absent, Q, stopped});
-        {_, true} ->
-            case rabbit_mnesia:is_process_alive(QPid) of
-                true ->
-                    % rabbitmq-server#1682 - No need to sleep if the
-                    % queue process has become active in the time between
-                    % the case statement above (in with/4) and now
-                    ok;
-                false ->
-                    timer:sleep(30)
-            end,
-            with(Name, F, E, RetriesLeft - 1);
         _ ->
             case rabbit_mnesia:is_process_alive(QPid) of
                 true ->
-                    % rabbitmq-server#1682 - absent & alive is weird,
+                    % rabbitmq-server#1682
+                    % The old check would have crashed here,
+                    % instead, log it and run the exit fun. absent & alive is weird,
                     % but better than crashing with badmatch,true
+                    rabbit_log:debug("Unexpected alive queue process ~p~n", [QPid]),
                     E({absent, Q, alive});
                 false ->
-                    timer:sleep(30),
-                    with(Name, F, E, RetriesLeft - 1)
-            end
+                    ok % Expected result
+            end,
+            timer:sleep(30),
+            with(Name, F, E, RetriesLeft - 1)
     end.
 
 with(Name, F) -> with(Name, F, fun (E) -> {error, E} end).
