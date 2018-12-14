@@ -705,6 +705,7 @@ subscribe(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
+    qos(Ch, 10, false),
     RaName = ra_name(QQ),
     publish(Ch, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
@@ -713,6 +714,14 @@ subscribe(Config) ->
     receive_basic_deliver(false),
     wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 1),
+    %% validate we can retrieve the consumers
+    [Consumer] = rpc:call(Server, rabbit_amqqueue, consumers_all, [<<"/">>]),
+    ct:pal("Consumer ~p", [Consumer]),
+    ?assert(is_pid(proplists:get_value(channel_pid, Consumer))),
+    ?assert(is_binary(proplists:get_value(consumer_tag, Consumer))),
+    ?assertEqual(true, proplists:get_value(ack_required, Consumer)),
+    ?assertEqual(10, proplists:get_value(prefetch_count, Consumer)),
+    ?assertEqual([], proplists:get_value(arguments, Consumer)),
     rabbit_ct_client_helpers:close_channel(Ch),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0).

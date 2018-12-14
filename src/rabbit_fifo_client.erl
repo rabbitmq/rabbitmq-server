@@ -24,8 +24,8 @@
          init/2,
          init/3,
          init/5,
-         checkout/3,
          checkout/4,
+         checkout/5,
          cancel_checkout/2,
          enqueue/2,
          enqueue/3,
@@ -42,6 +42,7 @@
          ]).
 
 -include_lib("ra/include/ra.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(SOFT_LIMIT, 256).
 
@@ -51,7 +52,7 @@
                    {rabbit_fifo:consumer_tag(), non_neg_integer()}}.
 -type actions() :: [action()].
 
--record(consumer, {last_msg_id :: seq(),
+-record(consumer, {last_msg_id :: seq() | -1,
                    delivery_count = 0 :: non_neg_integer()}).
 
 -record(state, {cluster_name :: ra_cluster_name(),
@@ -98,7 +99,7 @@ init(ClusterName, Servers) ->
 %% ensure the leader node is at the head of the list.
 %% @param MaxPending size defining the max number of pending commands.
 -spec init(ra_cluster_name(), [ra_server_id()], non_neg_integer()) -> state().
-init(ClusterName, Servers, SoftLimit) ->
+init(ClusterName = #resource{}, Servers, SoftLimit) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
     #state{cluster_name = ClusterName,
            servers = Servers,
@@ -107,7 +108,7 @@ init(ClusterName, Servers, SoftLimit) ->
 
 -spec init(ra_cluster_name(), [ra_server_id()], non_neg_integer(), fun(() -> ok),
            fun(() -> ok)) -> state().
-init(ClusterName, Servers, SoftLimit, BlockFun, UnblockFun) ->
+init(ClusterName = #resource{}, Servers, SoftLimit, BlockFun, UnblockFun) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
     #state{cluster_name = ClusterName,
            servers = Servers,
@@ -135,7 +136,7 @@ enqueue(Correlation, Msg, State0 = #state{slow = Slow,
     Node = pick_node(State0),
     {Next, State1} = next_enqueue_seq(State0),
     % by default there is no correlation id
-    Cmd = {enqueue, self(), Next, Msg},
+    Cmd = rabbit_fifo:make_enqueue(self(), Next, Msg),
     case send_command(Node, Correlation, Cmd, low, State1) of
         {slow, _} = Ret when not Slow ->
             BlockFun(),
@@ -177,8 +178,11 @@ enqueue(Msg, State) ->
 dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
     Node = pick_node(State0),
     ConsumerId = consumer_id(ConsumerTag),
-    case ra:process_command(Node, {checkout, {dequeue, Settlement},
-                                            ConsumerId}, Timeout) of
+    case ra:process_command(Node,
+                            rabbit_fifo:make_checkout(ConsumerId,
+                                                      {dequeue, Settlement},
+                                                      #{}),
+                            Timeout) of
         {ok, {dequeue, Reply}, Leader} ->
             {ok, Reply, State0#state{leader = Leader}};
         Err ->
@@ -198,7 +202,7 @@ dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
     {ok, state()}.
 settle(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_node(State0),
-    Cmd = {settle, MsgIds, consumer_id(ConsumerTag)},
+    Cmd = rabbit_fifo:make_settle(consumer_id(ConsumerTag), MsgIds),
     case send_command(Node, undefined, Cmd, normal, State0) of
         {slow, S} ->
             % turn slow into ok for this function
@@ -232,7 +236,7 @@ settle(ConsumerTag, [_|_] = MsgIds,
 return(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_node(State0),
     % TODO: make rabbit_fifo return support lists of message ids
-    Cmd = {return, MsgIds, consumer_id(ConsumerTag)},
+    Cmd = rabbit_fifo:make_return(consumer_id(ConsumerTag), MsgIds),
     case send_command(Node, undefined, Cmd, normal, State0) of
         {slow, S} ->
             % turn slow into ok for this function
@@ -265,7 +269,7 @@ return(ConsumerTag, [_|_] = MsgIds,
     {ok | slow, state()}.
 discard(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_node(State0),
-    Cmd = {discard, MsgIds, consumer_id(ConsumerTag)},
+    Cmd = rabbit_fifo:make_discard(consumer_id(ConsumerTag), MsgIds),
     case send_command(Node, undefined, Cmd, normal, State0) of
         {slow, S} ->
             % turn slow into ok for this function
@@ -299,9 +303,10 @@ discard(ConsumerTag, [_|_] = MsgIds,
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
 -spec checkout(rabbit_fifo:consumer_tag(), NumUnsettled :: non_neg_integer(),
+               rabbit_fifo:consumer_meta(),
                state()) -> {ok, state()} | {error | timeout, term()}.
-checkout(ConsumerTag, NumUnsettled, State0) ->
-    checkout(ConsumerTag, NumUnsettled, simple_prefetch, State0).
+checkout(ConsumerTag, NumUnsettled, ConsumerInfo, State0) ->
+    checkout(ConsumerTag, NumUnsettled, simple_prefetch, ConsumerInfo, State0).
 
 %% @doc Register with the rabbit_fifo queue to "checkout" messages as they
 %% become available.
@@ -319,13 +324,17 @@ checkout(ConsumerTag, NumUnsettled, State0) ->
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
--spec checkout(rabbit_fifo:consumer_tag(), NumUnsettled :: non_neg_integer(),
+-spec checkout(rabbit_fifo:consumer_tag(),
+               NumUnsettled :: non_neg_integer(),
                CreditMode :: rabbit_fifo:credit_mode(),
+               Meta :: rabbit_fifo:consumer_meta(),
                state()) -> {ok, state()} | {error | timeout, term()}.
-checkout(ConsumerTag, NumUnsettled, CreditMode, State0) ->
+checkout(ConsumerTag, NumUnsettled, CreditMode, Meta, State0) ->
     Servers = sorted_servers(State0),
     ConsumerId = {ConsumerTag, self()},
-    Cmd = {checkout, {auto, NumUnsettled, CreditMode}, ConsumerId},
+    Cmd = rabbit_fifo:make_checkout(ConsumerId,
+                                    {auto, NumUnsettled, CreditMode},
+                                    Meta),
     try_process_command(Servers, Cmd, State0).
 
 %% @doc Provide credit to the queue
@@ -348,8 +357,8 @@ credit(ConsumerTag, Credit, Drain,
     %% add one as it is 0 indexed
     C = maps:get(ConsumerTag, CDels, #consumer{last_msg_id = -1}),
     Node = pick_node(State0),
-    Cmd = {credit, Credit, C#consumer.last_msg_id + 1, Drain, ConsumerId},
-    ct:pal("sending credit ~w", [Cmd]),
+    Cmd = rabbit_fifo:make_credit(ConsumerId, Credit,
+                                  C#consumer.last_msg_id + 1, Drain),
     case send_command(Node, undefined, Cmd, normal, State0) of
         {slow, S} ->
             % turn slow into ok for this function
@@ -372,7 +381,7 @@ credit(ConsumerTag, Credit, Drain,
 cancel_checkout(ConsumerTag, #state{consumer_deliveries = CDels} = State0) ->
     Servers = sorted_servers(State0),
     ConsumerId = {ConsumerTag, self()},
-    Cmd = {checkout, cancel, ConsumerId},
+    Cmd = rabbit_fifo:make_checkout(ConsumerId, cancel, #{}),
     State = State0#state{consumer_deliveries = maps:remove(ConsumerTag, CDels)},
     try_process_command(Servers, Cmd, State).
 
@@ -380,7 +389,7 @@ cancel_checkout(ConsumerTag, #state{consumer_deliveries = CDels} = State0) ->
 %% of messages purged.
 -spec purge(ra_server_id()) -> {ok, non_neg_integer()} | {error | timeout, term()}.
 purge(Node) ->
-    case ra:process_command(Node, purge) of
+    case ra:process_command(Node, rabbit_fifo:make_purge()) of
         {ok, {purge, Reply}, _} ->
             {ok, Reply};
         Err ->
@@ -393,7 +402,7 @@ cluster_name(#state{cluster_name = ClusterName}) ->
     ClusterName.
 
 update_machine_state(Node, Conf) ->
-    case ra:process_command(Node, {update_state, Conf}) of
+    case ra:process_command(Node, rabbit_fifo:make_update_state(Conf)) of
         {ok, ok, _} ->
             ok;
         Err ->
@@ -520,7 +529,7 @@ handle_ra_event(_Leader, {machine, eol}, _State0) ->
 -spec untracked_enqueue([ra_server_id()], term()) ->
     ok.
 untracked_enqueue([Node | _], Msg) ->
-    Cmd = {enqueue, undefined, undefined, Msg},
+    Cmd = rabbit_fifo:make_enqueue(undefined, undefined, Msg),
     ok = ra:pipeline_command(Node, Cmd),
     ok.
 

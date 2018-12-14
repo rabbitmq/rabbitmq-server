@@ -64,14 +64,14 @@ scenario1(_Config) ->
     E = c:pid(0,6720,1),
 
     Commands = [
-                {checkout,{auto,2,simple_prefetch},C1},
-                {enqueue,E,1,msg1},
-                {enqueue,E,2,msg2},
-                {checkout,cancel,C1}, %% both on returns queue
-                {checkout,{auto,1,simple_prefetch},C2}, % on on return one on C2
-                {return,[0],C2}, %% E1 in returns, E2 with C2
-                {return,[1],C2}, %% E2 in returns E1 with C2
-                {settle,[2],C2} %% E2 with C2
+                make_checkout(C1, {auto,2,simple_prefetch}),
+                make_enqueue(E,1,msg1),
+                make_enqueue(E,2,msg2),
+                make_checkout(C1, cancel), %% both on returns queue
+                make_checkout(C2, {auto,1,simple_prefetch}),
+                make_return(C2, [0]), %% E1 in returns, E2 with C2
+                make_return(C2, [1]), %% E2 in returns E1 with C2
+                make_settle(C2, [2]) %% E2 with C2
                ],
     run_snapshot_test(?FUNCTION_NAME, Commands),
     ok.
@@ -80,13 +80,13 @@ scenario2(_Config) ->
     C1 = {<<>>, c:pid(0,346,1)},
     C2 = {<<>>,c:pid(0,379,1)},
     E = c:pid(0,327,1),
-    Commands = [{checkout,{auto,1,simple_prefetch},C1},
-                {enqueue,E,1,msg1},
-                {checkout,cancel,C1},
-                {enqueue,E,2,msg2},
-                {checkout,{auto,1,simple_prefetch},C2},
-                {settle,[0],C1},
-                {settle,[0],C2}
+    Commands = [make_checkout(C1, {auto,1,simple_prefetch}),
+                make_enqueue(E,1,msg1),
+                make_checkout(C1, cancel),
+                make_enqueue(E,2,msg2),
+                make_checkout(C2, {auto,1,simple_prefetch}),
+                make_settle(C1, [0]),
+                make_settle(C2, [0])
                ],
     run_snapshot_test(?FUNCTION_NAME, Commands),
     ok.
@@ -94,22 +94,24 @@ scenario2(_Config) ->
 scenario3(_Config) ->
     C1 = {<<>>, c:pid(0,179,1)},
     E = c:pid(0,176,1),
-    Commands = [{checkout,{auto,2,simple_prefetch},C1},
-                {enqueue,E,1,msg1},
-                {return,[0],C1},
-                {enqueue,E,2,msg2},
-                {enqueue,E,3,msg3},
-                {settle,[1],C1},
-                {settle,[2],C1}],
+    Commands = [make_checkout(C1, {auto,2,simple_prefetch}),
+                make_enqueue(E,1,msg1),
+                make_return(C1, [0]),
+                make_enqueue(E,2,msg2),
+                make_enqueue(E,3,msg3),
+                make_settle(C1, [1]),
+                make_settle(C1, [2])
+               ],
     run_snapshot_test(?FUNCTION_NAME, Commands),
     ok.
 
 scenario4(_Config) ->
     C1 = {<<>>, c:pid(0,179,1)},
     E = c:pid(0,176,1),
-Commands = [{checkout,{auto,1,simple_prefetch},C1},
-                        {enqueue,E,1,msg},
-                        {settle,[0],C1}],
+    Commands = [make_checkout(C1, {auto,1,simple_prefetch}),
+                make_enqueue(E,1,msg),
+                make_settle(C1, [0])
+               ],
     run_snapshot_test(?FUNCTION_NAME, Commands),
     ok.
 
@@ -167,6 +169,7 @@ checkout_gen(Pid) ->
 
 
 -record(t, {state = rabbit_fifo:init(#{name => proper,
+                                       queue_resource => blah,
                                        shadow_copy_interval => 1})
                 :: rabbit_fifo:state(),
             index = 1 :: non_neg_integer(), %% raft index
@@ -201,7 +204,7 @@ handle_op({enqueue, Pid, When}, #t{enqueuers = Enqs0,
         _ ->
             Enqs = maps:update_with(Pid, fun (Seq) -> Seq + 1 end, 1, Enqs0),
             MsgSeq = maps:get(Pid, Enqs),
-            Cmd = {enqueue, Pid, MsgSeq, msg},
+            Cmd = rabbit_fifo:make_enqueue(Pid, MsgSeq, msg),
             case When of
                 enqueue ->
                     do_apply(Cmd, T#t{enqueuers = Enqs});
@@ -218,7 +221,7 @@ handle_op({checkout, Pid, cancel}, #t{consumers  = Cons0} = T) ->
                        end, Cons0)) of
         [CId | _] ->
             Cons = maps:remove(CId, Cons0),
-            Cmd = {checkout, cancel, CId},
+            Cmd = rabbit_fifo:make_checkout(CId, cancel, #{}),
             do_apply(Cmd, T#t{consumers = Cons});
         _ ->
             T
@@ -230,7 +233,13 @@ handle_op({checkout, CId, Prefetch}, #t{consumers  = Cons0} = T) ->
             T;
         _ ->
             Cons = maps:put(CId, ok,  Cons0),
-            Cmd = {checkout, {auto, Prefetch, simple_prefetch}, CId},
+            Cmd = rabbit_fifo:make_checkout(CId,
+                                            {auto, Prefetch, simple_prefetch},
+                                            #{ack => true,
+                                              prefetch => Prefetch,
+                                              username => <<"user">>,
+                                              args => []}),
+
             do_apply(Cmd, T#t{consumers = Cons})
     end;
 handle_op({down, Pid, Reason} = Cmd, #t{down = Down} = T) ->
@@ -253,14 +262,19 @@ handle_op({input_event, requeue}, #t{effects = Effs} = T) ->
 handle_op({input_event, Settlement}, #t{effects = Effs} = T) ->
     case queue:out(Effs) of
         {{value, {settle, MsgIds, CId}}, Q} ->
-            do_apply({Settlement, MsgIds, CId}, T#t{effects = Q});
-        {{value, {enqueue, _, _, _} = Cmd}, Q} ->
+            Cmd = case Settlement of
+                      settle -> rabbit_fifo:make_settle(CId, MsgIds);
+                      return -> rabbit_fifo:make_return(CId, MsgIds);
+                      discard -> rabbit_fifo:make_discard(CId, MsgIds)
+                  end,
+            do_apply(Cmd, T#t{effects = Q});
+        {{value, Cmd}, Q} when element(1, Cmd) =:= enqueue ->
             do_apply(Cmd, T#t{effects = Q});
         _ ->
             T
     end;
 handle_op(purge, T) ->
-    do_apply(purge, T).
+    do_apply(rabbit_fifo:make_purge(), T).
 
 do_apply(Cmd, #t{effects = Effs, index = Index, state = S0,
                  log = Log} = T) ->
@@ -275,7 +289,7 @@ enq_effs([{send_msg, P, {delivery, CTag, Msgs}, ra_event} | Rem], Q) ->
     MsgIds = [I || {I, _} <- Msgs],
     %% always make settle commands by default
     %% they can be changed depending on the input event later
-    Cmd = {settle, MsgIds, {CTag, P}},
+    Cmd = rabbit_fifo:make_settle({CTag, P}, MsgIds),
     enq_effs(Rem, queue:in(Cmd, Q));
 enq_effs([_ | Rem], Q) ->
     % ct:pal("enq_effs dropping ~w~n", [E]),
@@ -310,18 +324,8 @@ run_snapshot_test0(Name, Commands) ->
          Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
                                        (_) -> false
                                     end, Entries),
-         % L = case Filtered of
-         %         [] -> undefined;
-         %         _ ->lists:last(Filtered)
-         %     end,
-
-         % ct:pal("running from snapshot: ~b to ~w"
-         %        "~n~p~n",
-         %        [SnapIdx, L, SnapState]),
          {S, _} = run_log(SnapState, Filtered),
          % assert log can be restored from any release cursor index
-         % ?debugFmt("Name ~p Idx ~p S~p~nState~p~nSnapState ~p~nFiltered ~p~n",
-         %           [Name, SnapIdx, S, State, SnapState, Filtered]),
          ?assertEqual(State, S)
      end || {release_cursor, SnapIdx, SnapState} <- Effects],
     ok.
@@ -342,7 +346,20 @@ run_log(InitState, Entries) ->
 
 test_init(Name) ->
     rabbit_fifo:init(#{name => Name,
+                       queue_resource => blah,
                        shadow_copy_interval => 0,
                        metrics_handler => {?MODULE, metrics_handler, []}}).
 meta(Idx) ->
     #{index => Idx, term => 1}.
+
+make_checkout(Cid, Spec) ->
+    rabbit_fifo:make_checkout(Cid, Spec, #{}).
+
+make_enqueue(Pid, Seq, Msg) ->
+    rabbit_fifo:make_enqueue(Pid, Seq, Msg).
+
+make_settle(Cid, MsgIds) ->
+    rabbit_fifo:make_settle(Cid, MsgIds).
+
+make_return(Cid, MsgIds) ->
+    rabbit_fifo:make_return(Cid, MsgIds).
