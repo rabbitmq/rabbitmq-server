@@ -37,7 +37,8 @@
 -export([policy_changed/2]).
 -export([cleanup_data_dir/0]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
+%%-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
 -type ra_server_id() :: {Name :: atom(), Node :: node()}.
@@ -151,7 +152,14 @@ ra_machine_config(Q = #amqqueue{name = QName}) ->
     #{dead_letter_handler => dlx_mfa(Q),
       queue_resource => QName,
       become_leader_handler => {?MODULE, become_leader, [QName]},
-      metrics_handler => {?MODULE, update_metrics, [QName]}}.
+      metrics_handler => {?MODULE, update_metrics, [QName]},
+      single_active_consumer_on => single_active_consumer_on(Q)}.
+
+single_active_consumer_on(#amqqueue{arguments = QArguments}) ->
+    case rabbit_misc:table_lookup(QArguments, <<"x-single-active-consumer">>) of
+        {bool, true} -> true;
+        _            -> false
+    end.
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
     Node = node(ChPid),
