@@ -4,6 +4,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 all() ->
     [
@@ -57,8 +58,9 @@ init_per_testcase(TestCase, Config) ->
     ra_server_sup:remove_all(),
     ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
+    ClusterName = rabbit_misc:r("/", queue, atom_to_binary(TestCase, utf8)),
     [
-     {cluster_name, TestCase},
+     {cluster_name, ClusterName},
      {uid, atom_to_binary(TestCase, utf8)},
      {node_id, {TestCase, node()}},
      {uid2, atom_to_binary(ServerName2, utf8)},
@@ -358,7 +360,7 @@ discard(Config) ->
     ServerId = ?config(node_id, Config),
     UId = ?config(uid, Config),
     ClusterName = ?config(cluster_name, Config),
-    Conf = #{cluster_name => ClusterName,
+    Conf = #{cluster_name => ClusterName#resource.name,
              id => ServerId,
              uid => UId,
              log_init_args => #{data_dir => PrivDir, uid => UId},
@@ -498,7 +500,7 @@ dead_letter_handler(Pid, Msgs) ->
     Pid ! {dead_letter, Msgs}.
 
 dequeue(Config) ->
-    ClusterName = ?config(priv_dir, Config),
+    ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     UId = ?config(uid, Config),
     Tag = UId,
@@ -624,7 +626,7 @@ validate_process_down(Name, Num) ->
     end.
 
 start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
-    {ok, Started, _} = ra:start_cluster(ClusterName,
+    {ok, Started, _} = ra:start_cluster(ClusterName#resource.name,
                                         {module, rabbit_fifo, RaFifoConfig},
                                         ServerIds),
     ?assertEqual(length(Started), length(ServerIds)),
@@ -632,7 +634,7 @@ start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
 
 start_cluster(ClusterName, ServerIds) ->
     start_cluster(ClusterName, ServerIds, #{name => some_name,
-                                            queue_resource => resource}).
+                                            queue_resource => ClusterName}).
 
 flush() ->
     receive
