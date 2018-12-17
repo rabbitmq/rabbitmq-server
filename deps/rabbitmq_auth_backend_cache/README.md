@@ -159,7 +159,7 @@ Or using the classic config for both parameters:
  {rabbit, [
    %% ...
  ]},
- {rabbitmq_auth_backend_cache, [{cached_backend, rabbit_auth_backend_ldap}
+ {rabbitmq_auth_backend_cache, [{cached_backend, rabbit_auth_backend_ldap},
                                 {cache_ttl, 5000}]}].
 ```
 
