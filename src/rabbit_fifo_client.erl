@@ -714,7 +714,11 @@ resend_command(Node, Correlation, Command,
     ok = ra:pipeline_command(Node, Command, Seq),
     State#state{pending = Pending#{Seq => {Correlation, Command}}}.
 
-add_command(_Cid, _Tag, [], Acc) ->
+add_command(_, _, [], Acc) ->
     Acc;
-add_command(Cid, Tag, MsgIds, Acc) ->
-    [{Tag, MsgIds, Cid} | Acc].
+add_command(Cid, settle, MsgIds, Acc) ->
+    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc];
+add_command(Cid, return, MsgIds, Acc) ->
+    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc];
+add_command(Cid, discard, MsgIds, Acc) ->
+    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc].
