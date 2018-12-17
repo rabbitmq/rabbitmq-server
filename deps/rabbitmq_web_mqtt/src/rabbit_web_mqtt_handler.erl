@@ -162,6 +162,7 @@ terminate(_, _, State = #state{ proc_state = ProcState,
                                 conn_name  = ConnName }) ->
     maybe_emit_stats(State),
     rabbit_log_connection:info("closing Web MQTT connection ~p (~s)~n", [self(), ConnName]),
+    rabbit_mqtt_processor:send_will(ProcState),
     rabbit_mqtt_processor:close_connection(ProcState),
     ok.
 
