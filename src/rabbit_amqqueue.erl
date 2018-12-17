@@ -504,7 +504,17 @@ retry_wait(Q = #amqqueue{pid = QPid, name = Name, state = QState}, F, E, Retries
         {stopped, false} ->
             E({absent, Q, stopped});
         _ ->
-            false = rabbit_mnesia:is_process_alive(QPid),
+            case rabbit_mnesia:is_process_alive(QPid) of
+                true ->
+                    % rabbitmq-server#1682
+                    % The old check would have crashed here,
+                    % instead, log it and run the exit fun. absent & alive is weird,
+                    % but better than crashing with badmatch,true
+                    rabbit_log:debug("Unexpected alive queue process ~p~n", [QPid]),
+                    E({absent, Q, alive});
+                false ->
+                    ok % Expected result
+            end,
             timer:sleep(30),
             with(Name, F, E, RetriesLeft - 1)
     end.
