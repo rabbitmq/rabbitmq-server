@@ -54,10 +54,6 @@
                  {'ok', rabbit_fifo_client:state()}.
 -spec reject(Confirm :: boolean(), rabbit_types:ctag(), [msg_id()], rabbit_fifo_client:state()) ->
                     {'ok', rabbit_fifo_client:state()}.
--spec basic_get(rabbit_types:amqqueue(), NoAck :: boolean(), rabbit_types:ctag(),
-                rabbit_fifo_client:state()) ->
-                       {'ok', 'empty', rabbit_fifo_client:state()} |
-                       {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()}.
 -spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
                           {'ok', rabbit_fifo_client:state()}.
 -spec stateless_deliver(ra_server_id(), rabbit_types:delivery()) -> 'ok'.
@@ -149,9 +145,11 @@ declare(#amqqueue{name = QName,
 ra_machine(Q) ->
     {module, rabbit_fifo, ra_machine_config(Q)}.
 
-ra_machine_config(Q = #amqqueue{name = QName}) ->
-    #{dead_letter_handler => dlx_mfa(Q),
+ra_machine_config(Q = #amqqueue{name = QName,
+                                pid = {Name, _}}) ->
+    #{name => Name,
       queue_resource => QName,
+      dead_letter_handler => dlx_mfa(Q),
       become_leader_handler => {?MODULE, become_leader, [QName]}}.
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
@@ -278,7 +276,7 @@ stop(VHost) ->
     _ = [ra:stop_server(Pid) || #amqqueue{pid = Pid} <- find_quorum_queues(VHost)],
     ok.
 
--spec delete(rabbit_types:amqqueue(),
+-spec delete(#amqqueue{},
              boolean(), boolean(),
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()}.
@@ -333,6 +331,10 @@ reject(false, CTag, MsgIds, QState) ->
 credit(CTag, Credit, Drain, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), Credit, Drain, QState).
 
+-spec basic_get(#amqqueue{}, NoAck :: boolean(), rabbit_types:ctag(),
+                rabbit_fifo_client:state()) ->
+                       {'ok', 'empty', rabbit_fifo_client:state()} |
+                       {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()}.
 basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
           CTag0, QState0) ->
     CTag = quorum_ctag(CTag0),

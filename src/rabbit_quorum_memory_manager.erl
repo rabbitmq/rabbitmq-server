@@ -15,7 +15,7 @@
 %%
 -module(rabbit_quorum_memory_manager).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
