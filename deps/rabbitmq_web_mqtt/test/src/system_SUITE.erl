@@ -212,7 +212,7 @@ last_will_disabled(Config) ->
     ?assertMatch({ok, ?SUBACK_PACKET(_, _), _}, raw_recv(WS2)),
 
     {close, _} = rfc6455_client:close(WS1),
-    ?assertEqual({error, timeout}, raw_recv(WS2, 5000)),
+    ?assertEqual({error, timeout}, raw_recv(WS2, 3000)),
 
     {close, _} = rfc6455_client:close(WS2),
     ok.
