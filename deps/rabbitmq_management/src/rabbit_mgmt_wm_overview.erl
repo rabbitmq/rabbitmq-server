@@ -127,7 +127,7 @@ transform_retention_policy(Pol, Policies) ->
     end.
 
 transform_retention_intervals([], Acc) ->
-    lists:reverse(Acc);
+    lists:sort(Acc);
 transform_retention_intervals([{MaxAgeInSeconds, _}|Rest], Acc) ->
     %
     % Seconds | Interval
