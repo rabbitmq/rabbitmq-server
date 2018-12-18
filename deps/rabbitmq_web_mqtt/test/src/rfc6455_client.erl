@@ -1,22 +1,22 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rfc6455_client).
 
--export([new/2, new/3, new/4, new/5, open/1, recv/1, send/2, send_binary/2, close/1, close/2]).
+-export([new/2, new/3, new/4, new/5, open/1, recv/1, recv/2, send/2, send_binary/2, close/1, close/2]).
 
 -record(state, {host, port, addr, path, ppid, socket, data, phase, transport}).
 
@@ -74,6 +74,18 @@ recv(WS) ->
             {binary, Payload};
         {rfc6455, close, WS, R} ->
             {close, R}
+    end.
+
+recv(WS, Timeout) ->
+    receive
+        {rfc6455, recv, WS, Payload} ->
+            {ok, Payload};
+        {rfc6455, recv_binary, WS, Payload} ->
+            {binary, Payload};
+        {rfc6455, close, WS, R} ->
+            {close, R}
+    after Timeout ->
+            {error, timeout}
     end.
 
 send(WS, IoData) ->
