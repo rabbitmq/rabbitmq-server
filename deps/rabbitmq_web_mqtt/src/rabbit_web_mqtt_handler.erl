@@ -144,8 +144,7 @@ websocket_info({start_keepalives, Keepalive},
     Heartbeater = rabbit_heartbeat:start(
                     KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
     {ok, State #state { keepalive = Heartbeater }, hibernate};
-websocket_info(keepalive_timeout, State = #state {conn_name = ConnStr,
-                                                       proc_state = PState}) ->
+websocket_info(keepalive_timeout, State = #state{conn_name = ConnStr}) ->
     rabbit_log_connection:error("closing Web MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
     {stop, State};
 websocket_info(emit_stats, State) ->
