@@ -247,7 +247,6 @@ raw_recv(WS) ->
 raw_recv(WS, Timeout) ->
     case rfc6455_client:recv(WS, Timeout) of
         {binary, P} ->
-            ct:pal("raw_recv parsed: ~p", [emqttc_parser:parse(P, emqttc_parser:new())]),
             emqttc_parser:parse(P, emqttc_parser:new());
         {error, timeout} ->
             {error, timeout}
