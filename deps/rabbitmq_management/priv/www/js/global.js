@@ -51,11 +51,8 @@ var NAVIGATION = {'Overview':    ['#/',            "management"],
                      "management"]
                  };
 
-var CHART_PERIODS = {'60|5':       'Last minute',
-                     '600|5':      'Last ten minutes',
-                     '3600|60':    'Last hour',
-                     '28800|600':  'Last eight hours',
-                     '86400|1800': 'Last day'};
+var CHART_RANGES = {'global': [], 'basic': []};
+var ALL_CHART_RANGES = {};
 
 var COLUMNS =
     {'exchanges' :
@@ -606,6 +603,48 @@ function setup_global_vars() {
     queue_type = "classic";
     current_vhost = get_pref('vhost');
     exchange_types = overview.exchange_types;
+
+    setup_chart_ranges(overview.sample_retention_policies);
+}
+
+function setup_chart_ranges(srp) {
+    var range_types = ['global', 'basic'];
+    var default_ranges = {
+        60:    ['60|5', 'Last minute'],
+        600:   ['600|5', 'Last ten minutes'],
+        3600:  ['3600|60', 'Last hour'],
+        28800: ['28800|600', 'Last eight hours'],
+        86400: ['86400|1800', 'Last day']
+    };
+
+    for (var range in default_ranges) {
+        var data = default_ranges[range];
+        var range = data[0];
+        var desc = data[1];
+        ALL_CHART_RANGES[range] = desc;
+    }
+
+    for (var i = 0; i < range_types.length; ++i) {
+        var range_type = range_types[i];
+        if (srp.hasOwnProperty(range_type)) {
+            var srp_range_types = srp[range_type];
+            var last_minute_added = false;
+            for (var j = 0; j < srp_range_types.length; ++j) {
+                var srp_range = srp_range_types[j];
+                if (default_ranges.hasOwnProperty(srp_range)) {
+                    if (srp_range === 60) {
+                        last_minute_added = true;
+                    }
+                    var v = default_ranges[srp_range];
+                    CHART_RANGES[range_type].push(v);
+                }
+            }
+            if (!last_minute_added) {
+                var last_minute = default_ranges[60];
+                CHART_RANGES[range_type].unshift(last_minute);
+            }
+        }
+    }
 }
 
 function expand_user_tags(tags) {
