@@ -622,11 +622,18 @@ handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
                                                 CDels0)}};
         #consumer{last_msg_id = Prev} = C
           when FstId > Prev+1 ->
+            NumMissing = FstId - Prev + 1,
+            %% there may actually be fewer missing messages returned than expected
+            %% This can happen when a node the channel is on gets disconnected
+            %% from the node the leader is on and then reconnected afterwards.
+            %% When the node is disconnected the leader will return all checked
+            %% out messages to the main queue to ensure they don't get stuck in
+            %% case the node never comes back.
             Missing = get_missing_deliveries(Leader, Prev+1, FstId-1, Tag),
             Del = {delivery, Tag, Missing ++ IdMsgs},
             {Del, State0#state{consumer_deliveries =
                                update_consumer(Tag, LastId,
-                                               length(IdMsgs) + length(Missing),
+                                               length(IdMsgs) + NumMissing,
                                                C, CDels0)}};
         #consumer{last_msg_id = Prev}
           when FstId =< Prev ->
