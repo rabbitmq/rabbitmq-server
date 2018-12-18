@@ -602,11 +602,11 @@ function setup_global_vars() {
 function setup_chart_ranges(srp) {
     var range_types = ['global', 'basic'];
     var default_ranges = {
-        '60':    ['60|5', 'Last minute'],
-        '600':   ['600|5', 'Last ten minutes'],
-        '3600':  ['3600|60', 'Last hour'],
-        '28800': ['28800|600', 'Last eight hours'],
-        '86400': ['86400|1800', 'Last day']
+        60:    ['60|5', 'Last minute'],
+        600:   ['600|5', 'Last ten minutes'],
+        3600:  ['3600|60', 'Last hour'],
+        28800: ['28800|600', 'Last eight hours'],
+        86400: ['86400|1800', 'Last day']
     };
 
     for (var range in default_ranges) {
@@ -619,19 +619,21 @@ function setup_chart_ranges(srp) {
     for (var i = 0; i < range_types.length; ++i) {
         var range_type = range_types[i];
         if (srp.hasOwnProperty(range_type)) {
-
-            // The last minute range is always valid but not
-            // returned by RabbitMQ
-            var last_minute = default_ranges['60'];
-            CHART_RANGES[range_type].push(last_minute);
-
             var srp_range_types = srp[range_type];
+            var last_minute_added = false;
             for (var j = 0; j < srp_range_types.length; ++j) {
                 var srp_range = srp_range_types[j];
                 if (default_ranges.hasOwnProperty(srp_range)) {
+                    if (srp_range === 60) {
+                        last_minute_added = true;
+                    }
                     var v = default_ranges[srp_range];
                     CHART_RANGES[range_type].push(v);
                 }
+            }
+            if (!last_minute_added) {
+                var last_minute = default_ranges[60];
+                CHART_RANGES[range_type].unshift(last_minute);
             }
         }
     }
