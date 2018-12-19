@@ -2527,9 +2527,10 @@ maybe_monitor_all([],     S) -> S;                %% optimisation
 maybe_monitor_all([Item], S) -> maybe_monitor(Item, S); %% optimisation
 maybe_monitor_all(Items,  S) -> lists:foldl(fun maybe_monitor/2, S, Items).
 
-add_delivery_count_header(MsgHeader, Msg) ->
-    Count = maps:get(delivery_count, MsgHeader, 0),
-    rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg).
+add_delivery_count_header(#{delivery_count := Count}, Msg) ->
+    rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg);
+add_delivery_count_header(_, Msg) ->
+    Msg.
 
 qpid_to_ref(Pid)  when is_pid(Pid) -> Pid;
 qpid_to_ref({Name, _}) -> Name;

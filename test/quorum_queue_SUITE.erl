@@ -1988,7 +1988,7 @@ subscribe_redelivery_count(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false},
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
-            ?assertMatch({DTag, _, 0}, rabbit_basic:header(DTag, H0)),
+            ?assertMatch(undefined, rabbit_basic:header(DTag, H0)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple     = false,
                                                 requeue      = true})
