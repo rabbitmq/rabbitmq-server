@@ -110,11 +110,5 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
     end
   end
 
-  def output({:error, err}, _opts) do
-    {:error, err}
-  end
-  def output({:stream, stream}, _opts) do
-    {:stream, stream}
-  end
-
+  use RabbitMQ.CLI.Plugins.ErrorOutput
 end

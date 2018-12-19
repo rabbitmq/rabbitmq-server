@@ -11,11 +11,13 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
 defmodule EnablePluginsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
+
+  alias RabbitMQ.CLI.Core.ExitCodes
 
   @command RabbitMQ.CLI.Plugins.Commands.EnableCommand
 
@@ -240,5 +242,24 @@ defmodule EnablePluginsCommandTest do
     {:error, _version_error} = @command.run([], opts)
 
     check_plugins_enabled([], context)
+  end
+
+  test "formats enabled plugins mismatch errors", context do
+    err = {:enabled_plugins_mismatch, '/tmp/a/cli/path', '/tmp/a/server/path'}
+    assert {:error, ExitCodes.exit_dataerr(),
+            "Could not update enabled plugins file at /tmp/a/cli/path: target node #{context[:opts][:node]} uses a different path (/tmp/a/server/path)"}
+      == @command.output({:error, err}, context[:opts])
+  end
+
+  test "formats enabled plugins write errors", context do
+    err1 = {:cannot_write_enabled_plugins_file, "/tmp/a/path", :eacces}
+    assert {:error, ExitCodes.exit_dataerr(),
+            "Could not update enabled plugins file at /tmp/a/path: the file does not exist or permission was denied (EACCES)"} ==
+      @command.output({:error, err1}, context[:opts])
+
+    err2 = {:cannot_write_enabled_plugins_file, "/tmp/a/path", :enoent}
+    assert {:error, ExitCodes.exit_dataerr(),
+            "Could not update enabled plugins file at /tmp/a/path: the file does not exist (ENOENT)"} ==
+      @command.output({:error, err2}, context[:opts])
   end
 end

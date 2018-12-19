@@ -13,6 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
+# Lists predefined error exit codes used by RabbitMQ CLI tools.
+# The codes are adopted from [1], which (according to our team's research)
+# is possibly the most standardized set of codes there is.
+#
+# 1. https://www.freebsd.org/cgi/man.cgi?query=sysexits&apropos=0&sektion=0&manpath=FreeBSD+12.0-RELEASE&arch=default&format=html
 defmodule RabbitMQ.CLI.Core.ExitCodes do
   @exit_ok 0
   @exit_usage 64
