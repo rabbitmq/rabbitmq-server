@@ -53,7 +53,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
       Helpers.with_nodes_in_cluster(node_name, fn(nodes) ->
         RpcStream.receive_list_items(node_name,
           :rabbit_amqqueue, :emit_consumers_all,
-          [nodes, vhost], timeout, info_keys)
+          [nodes, vhost], timeout, info_keys, Kernel.length(nodes))
       end)
   end
 
