@@ -108,9 +108,7 @@ defmodule RabbitMQCtl do
     try do
       command.run(arguments, options) |> command.output(options)
     catch _error_type, error ->
-      {:error, ExitCodes.exit_software,
-       to_string(:io_lib.format("Error: ~n~p~n Stacktrace ~p~n",
-                                [error, System.stacktrace()]))}
+      format_error(error, options, command)
     end
   end
 
@@ -333,8 +331,31 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_code_for(result),
      "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{opts[:timeout]}"}
   end
+  # Plugins
+  defp format_error({:error, {:enabled_plugins_mismatch, cli_path, node_path}}, opts, _module) do
+    {:error, ExitCodes.exit_dataerr(),
+     "Could not update enabled plugins file at #{cli_path}: target node #{opts[:node]} uses a different path (#{node_path})"}
+  end
+  defp format_error({:error, {:cannot_read_enabled_plugins_file, path, :eacces}}, _opts, _module) do
+    {:error, ExitCodes.exit_dataerr(),
+     "Could not read enabled plugins file at #{path}: the file does not exist or permission was denied (EACCES)"}
+  end
+  defp format_error({:error, {:cannot_read_enabled_plugins_file, path, :enoent}}, _opts, _module) do
+    {:error, ExitCodes.exit_dataerr(),
+     "Could not read enabled plugins file at #{path}: the file does not exist (ENOENT)"}
+  end
+  defp format_error({:error, {:cannot_write_enabled_plugins_file, path, :eacces}}, _opts, _module) do
+    {:error, ExitCodes.exit_dataerr(),
+     "Could not update enabled plugins file at #{path}: the file does not exist or permission was denied (EACCES)"}
+  end
+  defp format_error({:error, {:cannot_write_enabled_plugins_file, path, :enoent}}, _opts, _module) do
+    {:error, ExitCodes.exit_dataerr(),
+     "Could not update enabled plugins file at #{path}: the file does not exist (ENOENT)"}
+  end
+  # Catch all
   defp format_error({:error, err} = result, _, _) do
     string_err = Helpers.string_or_inspect(err)
+
     {:error, ExitCodes.exit_code_for(result), "Error:\n#{string_err}"}
   end
 
