@@ -429,6 +429,8 @@ apply(#{index := RaftIdx}, #purge{}, Effects0,
               State1#state{ra_indexes = rabbit_fifo_index:empty(),
                            messages = #{},
                            returns = lqueue:new(),
+                           msg_bytes_enqueue = 0,
+                           msg_bytes_checkout = 0,
                            low_msg_num = undefined}, Effects1),
     {State, [garbage_collection | Effects], {purge, Total}};
 apply(_, {down, ConsumerPid, noconnection},
@@ -1866,9 +1868,14 @@ purge_test() ->
 purge_with_checkout_test() ->
     Cid = {<<"purge_test">>, self()},
     {State0, _} = check_auto(Cid, 1, test_init(?FUNCTION_NAME)),
-    {State1, _} = enq(2, 1, first, State0),
-    {State2, _} = enq(3, 2, second, State1),
+    {State1, _} = enq(2, 1, <<"first">>, State0),
+    {State2, _} = enq(3, 2, <<"second">>, State1),
+    %% assert message bytes are non zero
+    ?assert(State2#state.msg_bytes_checkout > 0),
+    ?assert(State2#state.msg_bytes_enqueue > 0),
     {State3, _, {purge, 2}} = apply(meta(2), make_purge(), [], State2),
+    ?assertEqual(0, State3#state.msg_bytes_checkout),
+    ?assertEqual(0, State3#state.msg_bytes_enqueue),
     #consumer{checked_out = Checked} = maps:get(Cid, State3#state.consumers),
     ?assertEqual(0, maps:size(Checked)),
     ok.
