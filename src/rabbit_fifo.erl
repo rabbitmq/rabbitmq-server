@@ -56,7 +56,7 @@
          make_discard/2,
          make_credit/4,
          make_purge/0,
-         make_update_state/1
+         make_update_config/1
         ]).
 
 -type raw_msg() :: term().
@@ -131,7 +131,7 @@
                  delivery_count :: non_neg_integer(),
                  drain :: boolean()}).
 -record(purge, {}).
--record(update_state, {config :: config()}).
+-record(update_config, {config :: config()}).
 
 
 
@@ -143,7 +143,7 @@
     #discard{} |
     #credit{} |
     #purge{} |
-    #update_state{}.
+    #update_config{}.
 
 -type command() :: protocol() | ra_machine:builtin_command().
 %% all the command types suppored by ra fifo
@@ -260,10 +260,10 @@
 -spec init(config()) -> state().
 init(#{name := Name,
        queue_resource := Resource} = Conf) ->
-    update_state(Conf, #state{name = Name,
+    update_config(Conf, #state{name = Name,
                               queue_resource = Resource}).
 
-update_state(Conf, State) ->
+update_config(Conf, State) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
     BLH = maps:get(become_leader_handler, Conf, undefined),
     SHI = maps:get(shadow_copy_interval, Conf, ?SHADOW_COPY_INTERVAL),
@@ -435,18 +435,24 @@ apply(_, {down, ConsumerPid, noconnection},
       Effects0, #state{consumers = Cons0,
                        enqueuers = Enqs0} = State0) ->
     Node = node(ConsumerPid),
-    % mark all consumers and enqueuers as suspect
-    % and monitor the node
-    {Cons, State} = maps:fold(fun({_, P} = K, #consumer{checked_out = Checked0} = C,
-                                  {Co, St0}) when node(P) =:= Node ->
-                                      St = return_all(St0, Checked0),
-                                      {maps:put(K, C#consumer{suspected_down = true,
-                                                              checked_out = #{}},
-                                                Co),
-                                       St};
-                                 (K, C, {Co, St}) ->
-                                      {maps:put(K, C, Co), St}
-                              end, {#{}, State0}, Cons0),
+    % mark all consumers and enqueuers as suspected down
+    % and monitor the node so that we can find out the final state of the
+    % process at some later point
+    {Cons, State} = maps:fold(
+                      fun({_, P} = K,
+                          #consumer{checked_out = Checked0} = C,
+                          {Co, St0}) when node(P) =:= Node ->
+                              St = return_all(St0, Checked0),
+                              %% TODO: need to increment credit here
+                              %% with the size of the Checked map
+                              Credit = increase_credit(C, maps:size(Checked0)),
+                              {maps:put(K, C#consumer{suspected_down = true,
+                                                      credit = Credit,
+                                                      checked_out = #{}}, Co),
+                               St};
+                         (K, C, {Co, St}) ->
+                              {maps:put(K, C, Co), St}
+                      end, {#{}, State0}, Cons0),
     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
                             E#enqueuer{suspected_down = true};
                        (_, E) -> E
@@ -515,8 +521,8 @@ apply(_, {nodeup, Node}, Effects0,
                           service_queue = SQ}, Monitors ++ Effects);
 apply(_, {nodedown, _Node}, Effects, State) ->
     {State, Effects, ok};
-apply(_, #update_state{config = Conf}, Effects, State) ->
-    {update_state(Conf, State), Effects, ok}.
+apply(_, #update_config{config = Conf}, Effects, State) ->
+    {update_config(Conf, State), Effects, ok}.
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
 state_enter(leader, #state{consumers = Cons,
@@ -587,7 +593,9 @@ overview(#state{consumers = Cons,
 get_checked_out(Cid, From, To, #state{consumers = Consumers}) ->
     case Consumers of
         #{Cid := #consumer{checked_out = Checked}} ->
-            [{K, snd(snd(maps:get(K, Checked)))} || K <- lists:seq(From, To)];
+            [{K, snd(snd(maps:get(K, Checked)))}
+             || K <- lists:seq(From, To),
+                maps:is_key(K, Checked)];
         _ ->
             []
     end.
@@ -769,16 +777,10 @@ maybe_enqueue(RaftIdx, From, MsgSeqNo, RawMsg, Effects0,
 snd(T) ->
     element(2, T).
 
-return(ConsumerId, MsgNumMsgs, #consumer{lifetime = Life} = Con0, Checked,
+return(ConsumerId, MsgNumMsgs, Con0, Checked,
        Effects0, #state{consumers = Cons0, service_queue = SQ0} = State0) ->
-    Con = case Life of
-              auto ->
-                  Num = length(MsgNumMsgs),
-                  Con0#consumer{checked_out = Checked,
-                                credit = increase_credit(Con0, Num)};
-              once ->
-                  Con0#consumer{checked_out = Checked}
-          end,
+    Con = Con0#consumer{checked_out = Checked,
+                        credit = increase_credit(Con0, length(MsgNumMsgs))},
     {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
                                                SQ0, Effects0),
     State1 = lists:foldl(fun('$prefix_msg' = Msg, S0) ->
@@ -900,12 +902,15 @@ return_one(MsgNum, {RaftId, {Header0, RawMsg}},
                      State0#state{messages = maps:put(MsgNum, Msg, Messages),
                                   returns = lqueue:in(MsgNum, Returns)}).
 
-return_all(State, Checked) ->
-    maps:fold(fun (_, '$prefix_msg', S) ->
-                      return_one(0, '$prefix_msg', S);
-                  (_, {MsgNum, Msg}, S) ->
-                      return_one(MsgNum, Msg, S)
-              end, State, Checked).
+return_all(State, Checked0) ->
+    %% need to sort the list so that we return messages in the order
+    %% they were checked out
+    Checked = lists:sort(maps:to_list(Checked0)),
+    lists:foldl(fun ({_, '$prefix_msg'}, S) ->
+                        return_one(0, '$prefix_msg', S);
+                    ({_, {MsgNum, Msg}}, S) ->
+                        return_one(MsgNum, Msg, S)
+                end, State, Checked).
 
 checkout(State, Effects) ->
     checkout0(checkout_one(State), Effects, #{}).
@@ -1170,9 +1175,9 @@ make_credit(ConsumerId, Credit, DeliveryCount, Drain) ->
 -spec make_purge() -> protocol().
 make_purge() -> #purge{}.
 
--spec make_update_state(config()) -> protocol().
-make_update_state(Config) ->
-    #update_state{config = Config}.
+-spec make_update_config(config()) -> protocol().
+make_update_config(Config) ->
+    #update_config{config = Config}.
 
 add_bytes_enqueue(Msg, #state{msg_bytes_enqueue = Enqueue} = State) ->
     Bytes = message_size(Msg),
@@ -1502,11 +1507,14 @@ down_with_noconnection_marks_suspect_and_node_is_monitored_test() ->
     Node = node(Pid),
     {State0, Effects0} = enq(1, 1, second, test_init(test)),
     ?ASSERT_EFF({monitor, process, P}, P =:= Self, Effects0),
-    {State1, Effects1} = check(Cid, 2, State0),
+    {State1, Effects1} = check_auto(Cid, 2, State0),
+    #consumer{credit = 0} = maps:get(Cid, State1#state.consumers),
     ?ASSERT_EFF({monitor, process, P}, P =:= Pid, Effects1),
     % monitor both enqueuer and consumer
     % because we received a noconnection we now need to monitor the node
     {State2a, _Effects2a, _} = apply(meta(3), {down, Pid, noconnection}, [], State1),
+    #consumer{credit = 1} = maps:get(Cid, State2a#state.consumers),
+    %% validate consumer has credit
     {State2, Effects2, _} = apply(meta(3), {down, Self, noconnection}, [], State2a),
     ?ASSERT_EFF({monitor, node, _}, Effects2),
     ?assertNoEffect({demonitor, process, _}, Effects2),
@@ -1865,6 +1873,26 @@ purge_with_checkout_test() ->
     ?assertEqual(0, maps:size(Checked)),
     ok.
 
+down_returns_checked_out_in_order_test() ->
+    S0 = test_init(?FUNCTION_NAME),
+    %% enqueue 100
+    S1 = lists:foldl(fun (Num, FS0) ->
+                         {FS, _} = enq(Num, Num, Num, FS0),
+                         FS
+                     end, S0, lists:seq(1, 100)),
+    ?assertEqual(100, maps:size(S1#state.messages)),
+    Cid = {<<"cid">>, self()},
+    {S2, _} = check(Cid, 101, 1000, S1),
+    #consumer{checked_out = Checked} = maps:get(Cid, S2#state.consumers),
+    ?assertEqual(100, maps:size(Checked)),
+    %% simulate down
+    {S, _, _} = apply(meta(102), {down, self(), noproc}, [], S2),
+    Returns = lqueue:to_list(S#state.returns),
+    ?assertEqual(100, length(Returns)),
+    %% validate returns are in order
+    ?assertEqual(lists:sort(Returns), Returns),
+    ok.
+
 meta(Idx) ->
     #{index => Idx, term => 1}.
 
@@ -1900,7 +1928,7 @@ check_auto(Cid, Idx, State) ->
 check(Cid, Idx, Num, State) ->
     strip_reply(
       apply(meta(Idx),
-            make_checkout(Cid, {once, Num, simple_prefetch}, #{}),
+            make_checkout(Cid, {auto, Num, simple_prefetch}, #{}),
             [], State)).
 
 settle(Cid, Idx, MsgId, State) ->

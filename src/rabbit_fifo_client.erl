@@ -52,10 +52,12 @@
                    {rabbit_fifo:consumer_tag(), non_neg_integer()}}.
 -type actions() :: [action()].
 
+-type cluster_name() :: rabbit_types:r(queue).
+
 -record(consumer, {last_msg_id :: seq() | -1,
                    delivery_count = 0 :: non_neg_integer()}).
 
--record(state, {cluster_name :: ra_cluster_name(),
+-record(state, {cluster_name :: cluster_name(),
                 servers = [] :: [ra_server_id()],
                 leader :: maybe(ra_server_id()),
                 next_seq = 0 :: seq(),
@@ -88,7 +90,7 @@
 %% @param ClusterName the id of the cluster to interact with
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
--spec init(ra_cluster_name(), [ra_server_id()]) -> state().
+-spec init(cluster_name(), [ra_server_id()]) -> state().
 init(ClusterName, Servers) ->
     init(ClusterName, Servers, ?SOFT_LIMIT).
 
@@ -98,7 +100,7 @@ init(ClusterName, Servers) ->
 %% @param Servers The known servers of the queue. If the current leader is known
 %% ensure the leader node is at the head of the list.
 %% @param MaxPending size defining the max number of pending commands.
--spec init(ra_cluster_name(), [ra_server_id()], non_neg_integer()) -> state().
+-spec init(cluster_name(), [ra_server_id()], non_neg_integer()) -> state().
 init(ClusterName = #resource{}, Servers, SoftLimit) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
     #state{cluster_name = ClusterName,
@@ -106,7 +108,7 @@ init(ClusterName = #resource{}, Servers, SoftLimit) ->
            soft_limit = SoftLimit,
            timeout = Timeout}.
 
--spec init(ra_cluster_name(), [ra_server_id()], non_neg_integer(), fun(() -> ok),
+-spec init(cluster_name(), [ra_server_id()], non_neg_integer(), fun(() -> ok),
            fun(() -> ok)) -> state().
 init(ClusterName = #resource{}, Servers, SoftLimit, BlockFun, UnblockFun) ->
     Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
@@ -397,12 +399,12 @@ purge(Node) ->
     end.
 
 %% @doc returns the cluster name
--spec cluster_name(state()) -> ra_cluster_name().
+-spec cluster_name(state()) -> cluster_name().
 cluster_name(#state{cluster_name = ClusterName}) ->
     ClusterName.
 
 update_machine_state(Node, Conf) ->
-    case ra:process_command(Node, rabbit_fifo:make_update_state(Conf)) of
+    case ra:process_command(Node, rabbit_fifo:make_update_config(Conf)) of
         {ok, ok, _} ->
             ok;
         Err ->
@@ -620,11 +622,18 @@ handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,
                                                 CDels0)}};
         #consumer{last_msg_id = Prev} = C
           when FstId > Prev+1 ->
+            NumMissing = FstId - Prev + 1,
+            %% there may actually be fewer missing messages returned than expected
+            %% This can happen when a node the channel is on gets disconnected
+            %% from the node the leader is on and then reconnected afterwards.
+            %% When the node is disconnected the leader will return all checked
+            %% out messages to the main queue to ensure they don't get stuck in
+            %% case the node never comes back.
             Missing = get_missing_deliveries(Leader, Prev+1, FstId-1, Tag),
             Del = {delivery, Tag, Missing ++ IdMsgs},
             {Del, State0#state{consumer_deliveries =
                                update_consumer(Tag, LastId,
-                                               length(IdMsgs) + length(Missing),
+                                               length(IdMsgs) + NumMissing,
                                                C, CDels0)}};
         #consumer{last_msg_id = Prev}
           when FstId =< Prev ->
@@ -714,7 +723,11 @@ resend_command(Node, Correlation, Command,
     ok = ra:pipeline_command(Node, Command, Seq),
     State#state{pending = Pending#{Seq => {Correlation, Command}}}.
 
-add_command(_Cid, _Tag, [], Acc) ->
+add_command(_, _, [], Acc) ->
     Acc;
-add_command(Cid, Tag, MsgIds, Acc) ->
-    [{Tag, MsgIds, Cid} | Acc].
+add_command(Cid, settle, MsgIds, Acc) ->
+    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc];
+add_command(Cid, return, MsgIds, Acc) ->
+    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc];
+add_command(Cid, discard, MsgIds, Acc) ->
+    [rabbit_fifo:make_settle(Cid, MsgIds) | Acc].

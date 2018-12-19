@@ -654,6 +654,7 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                 consumer_mapping = ConsumerMapping} = State0) ->
     case QueueStates of
         #{Name := QState0} ->
+            QName = rabbit_quorum_queue:queue_name(QState0),
             case rabbit_quorum_queue:handle_event(Evt, QState0) of
                 {{delivery, CTag, Msgs}, QState1} ->
                     AckRequired = case maps:find(CTag, ConsumerMapping) of
@@ -670,7 +671,6 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                                   true ->
                                       QState1
                               end,
-                    QName = rabbit_quorum_queue:queue_name(QState2),
                     State = lists:foldl(
                               fun({MsgId, {MsgHeader, Msg}}, Acc) ->
                                       IsDelivered = maps:is_key(delivery_count, MsgHeader),
@@ -702,10 +702,7 @@ handle_info({ra_event, {Name, _} = From, _} = Evt,
                     %% TODO: this should use dtree:take/3
                     {MXs, UC1} = dtree:take(Name, State2#ch.unconfirmed),
                     State3 = record_confirms(MXs, State1#ch{unconfirmed = UC1}),
-                    case maps:find(Name, QNames) of
-                        {ok, QName} -> erase_queue_stats(QName);
-                        error       -> ok
-                    end,
+                    erase_queue_stats(QName),
                     noreply_coalesce(
                       State3#ch{queue_states = maps:remove(Name, QueueStates),
                                 queue_names = maps:remove(Name, QNames)})
