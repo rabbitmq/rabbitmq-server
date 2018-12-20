@@ -25,8 +25,58 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
+deps:: restore-hex-cache-ets-file
+
 include rabbitmq-components.mk
 include erlang.mk
+
+# --------------------------------------------------------------------
+# Mix Hex cache management.
+# --------------------------------------------------------------------
+
+# We restore the initial Hex cache.ets file from an Erlang term created
+# at the time the source archive was prepared.
+#
+# See the `$(SOURCE_DIST)` recipe for the reason behind this step.
+
+restore-hex-cache-ets-file: deps/.hex/cache.ets
+
+deps/.hex/cache.ets: deps/.hex/cache.erl
+	$(gen_verbose) $(call erlang,$(call restore_hex_cache_from_erl_term,$<,$@))
+
+define restore_hex_cache_from_erl_term
+  In = "$(1)",
+  Out = "$(2)",
+  {ok, [Props, Entries]} = file:consult(In),
+  Name = proplists:get_value(name, Props),
+  Type = proplists:get_value(type, Props),
+  Access = proplists:get_value(protection, Props),
+  NamedTable = proplists:get_bool(named_table, Props),
+  Keypos = proplists:get_value(keypos, Props),
+  Heir = proplists:get_value(heir, Props),
+  ReadConc = proplists:get_bool(read_concurrency, Props),
+  WriteConc = proplists:get_bool(write_concurrency, Props),
+  Compressed = proplists:get_bool(compressed, Props),
+  Options0 = [
+    Type,
+    Access,
+    {keypos, Keypos},
+    {heir, Heir},
+    {read_concurrency, ReadConc},
+    {write_concurrency, WriteConc}],
+  Options1 = case NamedTable of
+    true  -> [named_table | Options0];
+    false -> Options0
+  end,
+  Options2 = case Compressed of
+    true  -> [compressed | Options0];
+    false -> Options0
+  end,
+  Tab = ets:new(Name, Options2),
+  [true = ets:insert(Tab, Entry) || Entry <- Entries],
+  ok = ets:tab2file(Tab, Out),
+  init:stop().
+endef
 
 # --------------------------------------------------------------------
 # Distribution.
@@ -65,6 +115,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '_build/'			\
 	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
+	       --exclude 'doc/'				\
 	       --exclude 'ebin/'			\
 	       --exclude 'erl_crash.dump'		\
 	       --exclude 'escript/'			\
@@ -118,8 +169,9 @@ ZIP_V = $(ZIP_V_$(V))
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
 	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
-	$(verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > $@/git-revisions.txt
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> $@/git-revisions.txt
+	$(verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > "$@/git-revisions.txt"
+	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> "$@/git-revisions.txt"
+	$(verbose) echo "$$(TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M%S')" > "$@.git-times.txt"
 	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
 	$(verbose) mkdir -p $@/deps/licensing
 	$(verbose) set -e; for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
@@ -152,7 +204,10 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
 		(cd $$dep; \
 		 echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") \
-		 >> $@/git-revisions.txt; \
+		 >> "$@/git-revisions.txt"; \
+		(cd $$dep; \
+		 echo "$$(env TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')") \
+		 >> "$@.git-times.txt"; \
 	done
 	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
@@ -164,27 +219,79 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		rm $$file.bak; \
 	done
 	$(verbose) echo "PLUGINS := $(PLUGINS)" > $@/plugins.mk
+# Remember the latest Git timestamp.
+	$(verbose) sort -r < "$@.git-times.txt" | head -n 1 > "$@.git-time.txt"
+	$(verbose) rm "$@.git-times.txt"
+# Mix Hex component requires a cache file, otherwise it refuses to build
+# offline... That cache is an ETS table with all the applications we
+# depend on, plus some versioning informations and checksums. There
+# are two problems with that: the table contains a date (`last_update`
+# field) and `ets:tab2file()` produces a different file each time it's
+# called.
+#
+# To make our source archive reproducible, we fix the time of the
+# `last_update` field to the last Git commit and dump the content of the
+# table as an Erlang term to a text file.
+#
+# The ETS file must be recreated before compiling RabbitMQ. See the
+# `restore-hex-cache-ets-file` Make target.
+	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$@,$@.git-time.txt))
+# Fix file timestamps to have reproducible source archives.
+	$(verbose) find $@ -print0 | xargs -0 touch -t "$$(cat "$@.git-time.txt")"
+	$(verbose) rm "$@.git-time.txt"
+
+define dump_hex_cache_to_erl_term
+  In = "$(1)/deps/.hex/cache.ets",
+  Out = "$(1)/deps/.hex/cache.erl",
+  {ok, DateStr} = file:read_file("$(2)"),
+  {match, Date} = re:run(DateStr,
+    "^([0-9]{4})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})\.([0-9]{2})",
+    [{capture, all_but_first, list}]),
+  [Year, Month, Day, Hour, Min, Sec] = [erlang:list_to_integer(V) || V <- Date],
+  {ok, Tab} = ets:file2tab(In),
+  true = ets:insert(Tab, {last_update, {{Year, Month, Day}, {Hour, Min, Sec}}}),
+  Props = [
+    Prop
+    || {Key, _} = Prop <- ets:info(Tab),
+    Key =:= name orelse
+    Key =:= type orelse
+    Key =:= protection orelse
+    Key =:= named_table orelse
+    Key =:= keypos orelse
+    Key =:= heir orelse
+    Key =:= read_concurrency orelse
+    Key =:= write_concurrency orelse
+    Key =:= compressed],
+  Entries = ets:tab2list(Tab),
+  ok = file:write_file(Out, io_lib:format("~p.~n~p.~n", [Props, Entries])),
+  ok = file:delete(In),
+  init:stop().
+endef
 
 $(SOURCE_DIST).manifest: $(SOURCE_DIST)
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
 		find $(notdir $(SOURCE_DIST)) | LC_COLLATE=C sort > $@
 
-# TODO: Fix file timestamps to have reproducible source archives.
-# $(verbose) find $@ -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $@/git-revisions.txt
+TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --uid 0 \
+				    --gid 0 \
+				    --numeric-owner \
+				    --no-acls \
+				    --no-fflags \
+				    --no-xattrs
 
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(TAR) $(TAR_V) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
+		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
 		$(GZIP) --best > $@
 
 $(SOURCE_DIST).tar.bz2: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(TAR) $(TAR_V) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
+		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
 		$(BZIP2) > $@
 
 $(SOURCE_DIST).tar.xz: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(TAR) $(TAR_V) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
+		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
 		$(XZ) > $@
 
 $(SOURCE_DIST).zip: $(SOURCE_DIST).manifest
