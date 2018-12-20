@@ -271,12 +271,18 @@ $(SOURCE_DIST).manifest: $(SOURCE_DIST)
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
 		find $(notdir $(SOURCE_DIST)) | LC_COLLATE=C sort > $@
 
+ifeq ($(shell tar --version | grep -c "GNU tar"),0)
 TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --uid 0 \
 				    --gid 0 \
 				    --numeric-owner \
 				    --no-acls \
 				    --no-fflags \
 				    --no-xattrs
+else
+TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --owner 0 \
+				    --group 0 \
+				    --numeric-owner
+endif
 
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST).manifest
 	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
