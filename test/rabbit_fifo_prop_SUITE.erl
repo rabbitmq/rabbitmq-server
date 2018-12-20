@@ -278,8 +278,16 @@ handle_op(purge, T) ->
 
 do_apply(Cmd, #t{effects = Effs, index = Index, state = S0,
                  log = Log} = T) ->
-    {S, Effects, _} = rabbit_fifo:apply(#{index => Index}, Cmd, [], S0),
-    T#t{state = S,
+    {St, Effects} = case rabbit_fifo:apply(#{index => Index}, Cmd, S0) of
+                       {S, _, E} when is_list(E) ->
+                           {S, E};
+                       {S, _, E} ->
+                           {S, [E]};
+                       {S, _} ->
+                           {S, []}
+                   end,
+
+    T#t{state = St,
         index = Index + 1,
         effects = enq_effs(Effects, Effs),
         log = [Cmd | Log]}.
@@ -338,9 +346,13 @@ prefixes(Source, N, Acc) ->
 
 run_log(InitState, Entries) ->
     lists:foldl(fun ({Idx, E}, {Acc0, Efx0}) ->
-                        case rabbit_fifo:apply(meta(Idx), E, Efx0, Acc0) of
-                            {Acc, Efx, _} ->
-                                {Acc, Efx}
+                        case rabbit_fifo:apply(meta(Idx), E, Acc0) of
+                            {Acc, _, Efx} when is_list(Efx) ->
+                                {Acc, Efx0 ++ Efx};
+                            {Acc, _, Efx}  ->
+                                {Acc, Efx0 ++ [Efx]};
+                            {Acc, _}  ->
+                                {Acc, Efx0}
                         end
                 end, {InitState, []}, Entries).
 
