@@ -221,7 +221,6 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) echo "PLUGINS := $(PLUGINS)" > $@/plugins.mk
 # Remember the latest Git timestamp.
 	$(verbose) sort -r < "$@.git-times.txt" | head -n 1 > "$@.git-time.txt"
-	$(verbose) rm "$@.git-times.txt"
 # Mix Hex component requires a cache file, otherwise it refuses to build
 # offline... That cache is an ETS table with all the applications we
 # depend on, plus some versioning informations and checksums. There
@@ -238,7 +237,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$@,$@.git-time.txt))
 # Fix file timestamps to have reproducible source archives.
 	$(verbose) find $@ -print0 | xargs -0 touch -t "$$(cat "$@.git-time.txt")"
-	$(verbose) rm "$@.git-time.txt"
+	$(verbose) rm "$@.git-times.txt" "$@.git-time.txt"
 
 define dump_hex_cache_to_erl_term
   In = "$(1)/deps/.hex/cache.ets",
