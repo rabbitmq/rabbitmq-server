@@ -25,7 +25,9 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
+ifneq ($(wildcard deps/.hex/cache.erl),)
 deps:: restore-hex-cache-ets-file
+endif
 
 include rabbitmq-components.mk
 include erlang.mk
