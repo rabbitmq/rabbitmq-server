@@ -1417,8 +1417,8 @@ with_fresh_variable_queue(Fun, Mode) ->
                                  shutdown, Fun(VQ1, QName)),
                            Me ! Ref
                        catch
-                           Type:Error ->
-                               Me ! {Ref, Type, Error, erlang:get_stacktrace()}
+                           Type:Error:Stacktrace ->
+                               Me ! {Ref, Type, Error, Stacktrace}
                        end
                end),
     receive
