@@ -168,6 +168,9 @@ define test_rabbitmq_config
 %% vim:ft=erlang:
 
 [
+  {lager, [
+      {error_logger_hwm, 5000}
+    ]},
   {rabbit, [
 $(if $(RABBITMQ_NODE_PORT),      {listeners$(COMMA) [$(RABBITMQ_NODE_PORT)]}$(COMMA),)
       {loopback_users, []},
@@ -186,6 +189,9 @@ define test_rabbitmq_config_with_tls
 %% vim:ft=erlang:
 
 [
+  {lager, [
+      {error_logger_hwm, 5000}
+    ]},
   {rabbit, [
       {loopback_users, []},
       {log, [{file, [{level, debug}]}]},
