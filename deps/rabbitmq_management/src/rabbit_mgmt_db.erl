@@ -386,7 +386,8 @@ detail_queue_stats(Ranges, Objs, Interval) ->
                  {incoming,
                   detail_stats(QueueData, queue_exchange_stats_publish,
                                fine_stats, first(Id), Ranges, Interval)}],
-       {Pid, combine(Props, Obj) ++ Stats ++ StatsD ++ Consumers}
+       Details = augment_details(Obj, []),
+       {Pid, combine(Props, Obj) ++ Stats ++ StatsD ++ Consumers ++ Details}
        end || Obj <- Objs]),
 
    % patch up missing channel details
