@@ -620,8 +620,8 @@ get_stacktrace() ->
     try
         throw(e)
     catch
-        _:e ->
-            erlang:get_stacktrace()
+        _:e:Stacktrace ->
+            Stacktrace
     end.
 
 %%----------------------------------------------------------------------------
