@@ -205,7 +205,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		(cd $$dep; \
 		 echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") \
 		 >> "$@/git-revisions.txt"; \
-		(cd $$dep; \
+		! test -d $$dep/.git || (cd $$dep; \
 		 echo "$$(env TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')") \
 		 >> "$@.git-times.txt"; \
 	done
