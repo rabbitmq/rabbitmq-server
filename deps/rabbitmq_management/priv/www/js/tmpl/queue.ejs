@@ -22,6 +22,12 @@
         <th>Operator policy</th>
         <td><%= fmt_string(queue.operator_policy, '') %></td>
       </tr>
+      <% if (queue.owner_pid_details != undefined) { %>
+        <tr>
+          <th>Exclusive owner</th>
+          <td><%= link_conn(queue.owner_pid_details.name) %></td>
+        </tr>
+      <% } %>
       <tr>
         <th>Effective policy definition</th>
         <td><%= fmt_table_short(queue.effective_policy_definition) %></td>
