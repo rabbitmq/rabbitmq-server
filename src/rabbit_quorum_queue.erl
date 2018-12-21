@@ -157,13 +157,15 @@ cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
     case Node == node() of
         true -> cancel_consumer(QName, ChPid, ConsumerTag);
         false ->
+            %% this could potentially block for a while if the node is
+            %% in disconnected state or tcp buffers are full
             rpc:cast(Node, rabbit_quorum_queue,
                      cancel_consumer,
                      [QName, ChPid, ConsumerTag])
     end.
 
 cancel_consumer(QName, ChPid, ConsumerTag) ->
-    rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
+    catch rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},
                          {channel,      ChPid},
