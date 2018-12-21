@@ -131,29 +131,22 @@ handle_info(#'basic.cancel'{}, State) ->
 handle_info({'EXIT', _Conn, Reason}, State) ->
     {stop, {connection_died, Reason}, State};
 
-handle_info({Tag, Sock, Data},
-            State = #state{ socket = Sock, connection_state = blocked })
-            when Tag =:= tcp; Tag =:= ssl ->
+handle_info({inet_reply, _Ref, ok}, State) ->
+    {noreply, State, hibernate};
+
+handle_info({inet_async, Sock, _Ref, {ok, Data}},
+            State = #state{ socket = Sock, connection_state = blocked }) ->
     {noreply, State#state{ deferred_recv = Data }, hibernate};
 
-handle_info({Tag, Sock, Data},
-            State = #state{ socket = Sock, connection_state = running })
-            when Tag =:= tcp; Tag =:= ssl ->
+handle_info({inet_async, Sock, _Ref, {ok, Data}},
+            State = #state{ socket = Sock, connection_state = running }) ->
     process_received_bytes(
       Data, control_throttle(State #state{ await_recv = false }));
 
-handle_info({Tag, Sock}, State = #state{socket = Sock})
-            when Tag =:= tcp_closed; Tag =:= ssl_closed ->
-    network_error(closed, State);
-
-handle_info({Tag, Sock, Reason}, State = #state{socket = Sock})
-            when Tag =:= tcp_error; Tag =:= ssl_error ->
+handle_info({inet_async, _Sock, _Ref, {error, Reason}}, State = #state {}) ->
     network_error(Reason, State);
 
-handle_info({inet_reply, Sock, ok}, State = #state{socket = Sock}) ->
-    {noreply, State, hibernate};
-
-handle_info({inet_reply, Sock, {error, Reason}}, State = #state{socket = Sock}) ->
+handle_info({inet_reply, _Sock, {error, Reason}}, State = #state {}) ->
     network_error(Reason, State);
 
 handle_info({conserve_resources, Conserve}, State) ->
@@ -355,7 +348,7 @@ run_socket(State = #state{ deferred_recv = Data }) when Data =/= undefined ->
 run_socket(State = #state{ await_recv = true }) ->
     State;
 run_socket(State = #state{ socket = Sock }) ->
-    rabbit_net:setopts(Sock, [{active, once}]),
+    rabbit_net:async_recv(Sock, 0, infinity),
     State#state{ await_recv = true }.
 
 control_throttle(State = #state{ connection_state = Flow,
@@ -374,7 +367,7 @@ control_throttle(State = #state{ connection_state = Flow,
 maybe_process_deferred_recv(State = #state{ deferred_recv = undefined }) ->
     {noreply, State, hibernate};
 maybe_process_deferred_recv(State = #state{ deferred_recv = Data, socket = Sock }) ->
-    handle_info({tcp, Sock, Data},
+    handle_info({inet_async, Sock, noref, {ok, Data}},
                 State#state{ deferred_recv = undefined }).
 
 maybe_emit_stats(undefined) ->
