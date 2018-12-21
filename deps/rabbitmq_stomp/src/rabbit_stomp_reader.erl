@@ -111,19 +111,16 @@ handle_cast(Msg, State) ->
     {stop, {stomp_unexpected_cast, Msg}, State}.
 
 
-handle_info({Tag, Sock, Data}, State=#reader_state{socket=Sock})
-        when Tag =:= tcp; Tag =:= ssl ->
+handle_info({inet_async, _Sock, _Ref, {ok, Data}}, State) ->
     case process_received_bytes(Data, State#reader_state{recv_outstanding = false}) of
       {ok, NewState} ->
           {noreply, ensure_stats_timer(run_socket(control_throttle(NewState))), hibernate};
       {stop, Reason, NewState} ->
           {stop, Reason, NewState}
     end;
-handle_info({Tag, Sock}, State=#reader_state{socket=Sock})
-        when Tag =:= tcp_closed; Tag =:= ssl_closed ->
+handle_info({inet_async, _Sock, _Ref, {error, closed}}, State) ->
     {stop, normal, State};
-handle_info({Tag, Sock, Reason}, State=#reader_state{socket=Sock})
-        when Tag =:= tcp_error; Tag =:= ssl_error ->
+handle_info({inet_async, _Sock, _Ref, {error, Reason}}, State) ->
     {stop, {inet_error, Reason}, State};
 handle_info({inet_reply, _Sock, {error, closed}}, State) ->
     {stop, normal, State};
@@ -267,7 +264,7 @@ run_socket(State = #reader_state{state = blocked}) ->
 run_socket(State = #reader_state{recv_outstanding = true}) ->
     State;
 run_socket(State = #reader_state{socket = Sock}) ->
-    rabbit_net:setopts(Sock, [{active, once}]),
+    _ = rabbit_net:async_recv(Sock, 0, infinity),
     State#reader_state{recv_outstanding = true}.
 
 
