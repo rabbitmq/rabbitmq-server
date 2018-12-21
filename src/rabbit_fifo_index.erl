@@ -56,10 +56,10 @@ return(Key, Value, #?MODULE{data = Data} = State)
   when is_integer(Key) ->
     State#?MODULE{data = maps:put(Key, Value, Data)}.
 
--spec delete(integer(), state()) -> state().
+-spec delete(Index :: integer(), state()) -> state().
 delete(Smallest, #?MODULE{data = Data0,
-                        largest = Largest,
-                        smallest = Smallest} = State) ->
+                          largest = Largest,
+                          smallest = Smallest} = State) ->
     Data = maps:remove(Smallest, Data0),
     case find_next(Smallest + 1, Largest, Data) of
         undefined ->
