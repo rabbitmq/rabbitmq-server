@@ -196,6 +196,7 @@ users(Config) ->
     {ok, ["guest"]} = run_list(Config, l("users")),
     {error, _, _} = run(Config, ["declare", "user", "name=foo"]),
     {ok, _} = run(Config, ["declare", "user", "name=foo", "password=pass", "tags="]),
+    {ok, _} = run(Config, ["declare", "user", "name=foo", "password_hash=0qUsZVcRBQ1aU+sln631sKiEMSP9AOGHxuz4Rk01Jx4hwr2b", "tags="]),
     {ok, ["foo", "guest"]} = run_list(Config, l("users")),
     {ok, _} = run(Config, ["delete", "user", "name=foo"]),
     {ok, ["guest"]} = run_list(Config, l("users")).
