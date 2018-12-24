@@ -447,7 +447,7 @@ defmodule TestHelper do
   def get_opts_with_plugins_directories(context, plugins_directories) do
     opts = context[:opts]
     plugins_dir = opts[:plugins_dir]
-    all_directories = Enum.join([to_string(plugins_dir) | plugins_directories], Helpers.separator())
+    all_directories = Enum.join([to_string(plugins_dir) | plugins_directories], Helpers.path_separator())
     %{opts | plugins_dir: to_charlist(all_directories)}
   end
 
