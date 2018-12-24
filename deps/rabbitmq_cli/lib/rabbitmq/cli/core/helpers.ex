@@ -93,7 +93,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     case Config.get_option(:plugins_dir, opts) do
       nil -> {:error, :no_plugins_dir};
       dir ->
-        paths = String.split(to_string(dir), separator())
+        paths = String.split(to_string(dir), path_separator())
         case Enum.any?(paths, &File.dir?/1) do
           true  -> {:ok, dir};
           false -> {:error, :plugins_dir_does_not_exist}
@@ -151,7 +151,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   def add_plugins_to_load_path(opts) do
     with {:ok, plugins_dir} <- plugins_dir(opts)
     do
-      String.split(to_string(plugins_dir), separator())
+      String.split(to_string(plugins_dir), path_separator())
       |>
       Enum.map(&add_directory_plugins_to_load_path/1)
       :ok
@@ -269,10 +269,17 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     end
   end
 
-  def separator() do
+  def path_separator() do
     case :os.type do
         {:unix, _} ->  ":"
         {:win32, _} -> ";"
+    end
+  end
+
+  def line_separator() do
+    case :os.type do
+        {:unix, _} ->  "\n"
+        {:win32, _} -> "\r\n"
     end
   end
 

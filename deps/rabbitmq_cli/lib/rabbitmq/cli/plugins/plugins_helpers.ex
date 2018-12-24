@@ -181,7 +181,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   defp add_all_to_path(plugins_directories) do
-    directories = String.split(to_string(plugins_directories), CliHelpers.separator())
+    directories = String.split(to_string(plugins_directories), CliHelpers.path_separator())
     Enum.map(directories, fn(directory) ->
         with {:ok, subdirs} <- File.ls(directory)
         do

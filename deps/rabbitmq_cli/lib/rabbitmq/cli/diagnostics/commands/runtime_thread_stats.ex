@@ -38,11 +38,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand do
     end
   end
 
-  def output(result, %{formatter: :json}) when is_list(result) do
+  def output(result, %{formatter: "json"}) when is_list(result) do
     {:error, "JSON formatter is not supported by this command"}
   end
 
-  def output(result, %{formatter: :csv}) when is_list(result) do
+  def output(result, %{formatter: "csv"}) when is_list(result) do
     {:error, "CSV formatter is not supported by this command"}
   end
 

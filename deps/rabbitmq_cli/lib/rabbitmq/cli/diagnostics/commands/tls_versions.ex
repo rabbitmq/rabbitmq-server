@@ -13,32 +13,39 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.TlsVersionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts), do: {args, Map.merge(%{openssl_format: false}, opts)}
+  def merge_defaults(args, opts) do
+    {args, opts}
+  end
 
-  def switches(), do: [openssl_format: :boolean, timeout: :integer]
+  def switches(), do: [timeout: :integer]
   def aliases(), do: [t: :timeout]
 
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
   def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def usage, do: "cipher_suites [--openssl-format]"
+  def usage, do: "tls_versions"
 
-  def run([], %{node: node_name, timeout: timeout, openssl_format: openssl_format}) do
-    args = case openssl_format do
-      true  -> [:openssl]
-      false -> []
-    end
-    :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, args, timeout)
+  def run([], %{node: node_name, timeout: timeout} = _opts) do
+    :rabbit_misc.rpc_call(node_name, :ssl, :versions, [], timeout)
   end
 
-  def banner([], %{openssl_format: true}),  do: "Listing available cipher suites in the OpenSSL format"
-  def banner([], %{openssl_format: false}), do: "Listing available cipher suites in the Erlang term format"
+  def banner([], %{}),  do: "Listing all TLS versions supported by the runtime..."
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
+  def output(result, %{formatter: "json"}) do
+    vs = Map.new(result) |> Map.get(:available)
+
+    {:ok, %{versions: vs}}
+  end
+  def output(result, _opts) do
+    vs = Map.new(result) |> Map.get(:available)
+    {:ok, vs}
+  end
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.StringPerLine
 end
