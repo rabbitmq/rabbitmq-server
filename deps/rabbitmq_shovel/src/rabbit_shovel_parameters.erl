@@ -115,7 +115,7 @@ src_validation(Def, User) ->
     end.
 
 
-amqp10_src_validation(Def, User) ->
+amqp10_src_validation(_Def, User) ->
     [
      {<<"src-uri">>, validate_uri_fun(User), mandatory},
      {<<"src-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
@@ -123,7 +123,7 @@ amqp10_src_validation(Def, User) ->
      {<<"src-delete-after">>, fun validate_delete_after/2, optional}
     ].
 
-amqp091_src_validation(Def, User) ->
+amqp091_src_validation(_Def, User) ->
     [
      {<<"src-uri">>,         validate_uri_fun(User), mandatory},
      {<<"src-exchange">>,    fun rabbit_parameter_validation:binary/2,optional},
@@ -135,14 +135,14 @@ amqp091_src_validation(Def, User) ->
      {<<"src-delete-after">>, fun validate_delete_after/2, optional}
     ].
 
-dest_validation(Def, User) ->
+dest_validation(Def0, User) ->
+    Def = rabbit_data_coercion:to_proplist(Def0),
     case protocols(Def)  of
         {_, amqp091} -> amqp091_dest_validation(Def, User);
         {_, amqp10} -> amqp10_dest_validation(Def, User)
     end.
 
-amqp10_dest_validation(Def0, User) ->
-    Def = rabbit_data_coercion:to_proplist(Def0),
+amqp10_dest_validation(_Def, User) ->
     [{<<"dest-uri">>, validate_uri_fun(User), mandatory},
      {<<"dest-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2, optional},
@@ -153,8 +153,7 @@ amqp10_dest_validation(Def0, User) ->
      {<<"dest-properties">>, fun validate_amqp10_map/2, optional}
     ].
 
-amqp091_dest_validation(Def0, User) ->
-    Def = rabbit_data_coercion:to_proplist(Def0),
+amqp091_dest_validation(_Def, User) ->
     [{<<"dest-uri">>,        validate_uri_fun(User), mandatory},
      {<<"dest-exchange">>,   fun rabbit_parameter_validation:binary/2,optional},
      {<<"dest-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
@@ -447,6 +446,8 @@ list_find(K, [K|_], N) -> N;
 list_find(K, [],   _N) -> exit({not_found, K});
 list_find(K, [_|L], N) -> list_find(K, L, N + 1).
 
+protocols(Def) when is_map(Def) ->
+    protocols(rabbit_data_coercion:to_proplist(Def));
 protocols(Def) ->
     Src = case lists:keyfind(<<"src-protocol">>, 1, Def) of
               {_, SrcProtocol} ->
