@@ -108,7 +108,7 @@ DECLARABLE = {
                                  'routing_key': '', 'arguments': {}}},
     'vhost':      {'mandatory': ['name'],
                    'optional':  {'tracing': None}},
-    'user':       {'mandatory': ['name', 'password', 'tags'],
+    'user':       {'mandatory': ['name', ['password', 'password_hash'], 'tags'],
                    'optional':  {}},
     'permission': {'mandatory': ['vhost', 'user', 'configure', 'write', 'read'],
                    'optional':  {}},
@@ -730,15 +730,28 @@ class Management:
             assert_usage("=" in arg,
                          'Argument "{0}" not in format name=value'.format(arg))
             (name, value) = arg.split("=", 1)
-            assert_usage(name in mandatory or name in optional.keys(),
+            mandatory_keys = []
+            for key in mandatory:
+                if type(key) is list:
+                    for subkey in key:
+                        mandatory_keys.append(subkey)
+                else:
+                    mandatory_keys.append(key)
+            assert_usage(name in mandatory_keys or name in optional.keys(),
                          'Argument "{0}" not recognised'.format(name))
             if 'json' in obj and name in obj['json']:
                 upload[name] = self.parse_json(value)
             else:
                 upload[name] = value
         for m in mandatory:
-            assert_usage(m in upload.keys(),
-                         'mandatory argument "{0}" required'.format(m))
+            if type(m) is list:
+                a_set = set(m)
+                b_set = set(upload.keys())
+                assert_usage((a_set & b_set),
+                             'mandatory one-of arguments "{0}" required'.format(m))
+            else:
+                assert_usage(m in upload.keys(),
+                             'mandatory argument "{0}" required'.format(m))
         if 'vhost' not in mandatory:
             upload['vhost'] = self.options.vhost or self.options.declare_vhost
         uri_args = {}
