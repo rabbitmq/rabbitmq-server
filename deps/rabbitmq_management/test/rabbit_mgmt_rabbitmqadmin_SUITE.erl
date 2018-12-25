@@ -197,13 +197,13 @@ users(Config) ->
     {error, _, _} = run(Config, ["declare", "user", "name=foo"]),
     {ok, _} = run(Config, ["declare", "user", "name=foo", "password=pass", "tags="]),
 
-    {ok, _} = run(Config, ["declare", "user", "name=with_password_hash1", "password_hash=WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=",
+    {ok, _} = run(Config, ["declare", "user", "name=with_password_hash1", "password_hash=MmJiODBkNTM3YjFkYTNlMzhiZDMwMzYxYWE4NTU2ODZiZGUwZWFjZDcxNjJmZWY2YTI1ZmU5N2JmNTI3YTI1Yg==",
                            "tags=management"]),
     {ok, _} = run(Config, ["declare", "user", "name=with_password_hash2",
-                           "hashing_algorithm=rabbit_password_hashing_sha256", "password_hash=WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=",
+                           "hashing_algorithm=rabbit_password_hashing_sha256", "password_hash=MmJiODBkNTM3YjFkYTNlMzhiZDMwMzYxYWE4NTU2ODZiZGUwZWFjZDcxNjJmZWY2YTI1ZmU5N2JmNTI3YTI1Yg==",
                            "tags=management"]),
     {ok, _} = run(Config, ["declare", "user", "name=with_password_hash3",
-                           "hashing_algorithm=rabbit_password_hashing_sha512", "password_hash=WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=",
+                           "hashing_algorithm=rabbit_password_hashing_sha512", "password_hash=YmQyYjFhYWY3ZWY0ZjA5YmU5ZjUyY2UyZDhkNTk5Njc0ZDgxYWE5ZDZhNDQyMTY5NmRjNGQ5M2RkMDYxOWQ2ODJjZTU2YjRkNjRhOWVmMDk3NzYxY2VkOTllMGY2NzI2NWI1Zjc2MDg1ZTViMGVlN2NhNDY5NmIyYWQ2ZmUyYjI=",
                            "tags=management"]),
 
     {error, _, _} = run(Config, ["declare", "user", "name=with_password_hash4",
