@@ -196,9 +196,31 @@ users(Config) ->
     {ok, ["guest"]} = run_list(Config, l("users")),
     {error, _, _} = run(Config, ["declare", "user", "name=foo"]),
     {ok, _} = run(Config, ["declare", "user", "name=foo", "password=pass", "tags="]),
-    {ok, _} = run(Config, ["declare", "user", "name=foo", "password_hash=0qUsZVcRBQ1aU+sln631sKiEMSP9AOGHxuz4Rk01Jx4hwr2b", "tags="]),
-    {ok, ["foo", "guest"]} = run_list(Config, l("users")),
+
+    {ok, _} = run(Config, ["declare", "user", "name=with_password_hash1", "password_hash=WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=",
+                           "tags=management"]),
+    {ok, _} = run(Config, ["declare", "user", "name=with_password_hash2",
+                           "hashing_algorithm=rabbit_password_hashing_sha256", "password_hash=WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=",
+                           "tags=management"]),
+    {ok, _} = run(Config, ["declare", "user", "name=with_password_hash3",
+                           "hashing_algorithm=rabbit_password_hashing_sha512", "password_hash=WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=",
+                           "tags=management"]),
+
+    {error, _, _} = run(Config, ["declare", "user", "name=with_password_hash4",
+                                 "hashing_algorithm=rabbit_password_hashing_sha256", "password_hash=not-base64-encoded",
+                                 "tags=management"]),
+
+
+    {ok, ["foo", "guest",
+          "with_password_hash1",
+          "with_password_hash2",
+          "with_password_hash3"]} = run_list(Config, l("users")),
+
     {ok, _} = run(Config, ["delete", "user", "name=foo"]),
+    {ok, _} = run(Config, ["delete", "user", "name=with_password_hash1"]),
+    {ok, _} = run(Config, ["delete", "user", "name=with_password_hash2"]),
+    {ok, _} = run(Config, ["delete", "user", "name=with_password_hash3"]),
+
     {ok, ["guest"]} = run_list(Config, l("users")).
 
 permissions(Config) ->

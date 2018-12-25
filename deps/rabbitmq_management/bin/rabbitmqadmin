@@ -109,7 +109,7 @@ DECLARABLE = {
     'vhost':      {'mandatory': ['name'],
                    'optional':  {'tracing': None}},
     'user':       {'mandatory': ['name', ['password', 'password_hash'], 'tags'],
-                   'optional':  {}},
+                   'optional':  {'hashing_algorithm': None}},
     'permission': {'mandatory': ['vhost', 'user', 'configure', 'write', 'read'],
                    'optional':  {}},
     'parameter':  {'mandatory': ['component', 'name', 'value'],
@@ -258,10 +258,22 @@ For more help use the help subcommand:
   rabbitmqadmin help config       # For help with the configuration file
 """
 
+def fmt_required_flag(val):
+    # when one of the options is required, e.g.
+    # password vs. password_hash
+    if type(val) is list:
+        # flag1=... OR flag2=... OR flag3=...
+        return "=... OR ".join(val)
+    else:
+        return val
+
+def fmt_optional_flag(val):
+    return val
+
 def fmt_usage_stanza(root, verb):
     def fmt_args(args):
-        res = " ".join(["{0}=...".format(a) for a in args['mandatory']])
-        opts = " ".join("{0}=...".format(o) for o in args['optional'].keys())
+        res = " ".join(["{0}=...".format(fmt_required_flag(a)) for a in args['mandatory']])
+        opts = " ".join("{0}=...".format(fmt_optional_flag(o)) for o in args['optional'].keys())
         if opts != "":
             res += " [{0}]".format(opts)
         return res
@@ -728,8 +740,9 @@ class Management:
                 upload[k] = optional[k]
         for arg in args:
             assert_usage("=" in arg,
-                         'Argument "{0}" not in format name=value'.format(arg))
+                         'Argument "{0}" not in the name=value format'.format(arg))
             (name, value) = arg.split("=", 1)
+            # flatten the list of mandatory keys
             mandatory_keys = []
             for key in mandatory:
                 if type(key) is list:
@@ -737,8 +750,10 @@ class Management:
                         mandatory_keys.append(subkey)
                 else:
                     mandatory_keys.append(key)
+
             assert_usage(name in mandatory_keys or name in optional.keys(),
-                         'Argument "{0}" not recognised'.format(name))
+                         'Argument "{0}" is not recognised'.format(name))
+
             if 'json' in obj and name in obj['json']:
                 upload[name] = self.parse_json(value)
             else:
@@ -748,10 +763,10 @@ class Management:
                 a_set = set(m)
                 b_set = set(upload.keys())
                 assert_usage((a_set & b_set),
-                             'mandatory one-of arguments "{0}" required'.format(m))
+                             'one of mandatory arguments "{0}" is required'.format(m))
             else:
                 assert_usage(m in upload.keys(),
-                             'mandatory argument "{0}" required'.format(m))
+                             'mandatory argument "{0}" is required'.format(m))
         if 'vhost' not in mandatory:
             upload['vhost'] = self.options.vhost or self.options.declare_vhost
         uri_args = {}
