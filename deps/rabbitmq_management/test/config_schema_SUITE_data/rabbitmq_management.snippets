@@ -141,6 +141,59 @@
                         ]}],
   [rabbitmq_management]},
 
+ {tls_listener_cipher_suites,
+  "management.ssl.ip   = 192.168.1.2
+   management.ssl.port = 15671
+   management.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   management.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
+   management.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+
+   management.ssl.honor_cipher_order   = true
+   management.ssl.honor_ecc_order      = true
+   management.ssl.client_renegotiation = false
+   management.ssl.secure_renegotiate   = true
+
+   management.ssl.versions.1 = tlsv1.2
+   management.ssl.versions.2 = tlsv1.1
+
+   management.ssl.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
+   management.ssl.ciphers.2 = ECDHE-RSA-AES256-GCM-SHA384
+   management.ssl.ciphers.3 = ECDHE-ECDSA-AES256-SHA384
+   management.ssl.ciphers.4 = ECDHE-RSA-AES256-SHA384
+   management.ssl.ciphers.5 = ECDH-ECDSA-AES256-GCM-SHA384
+   management.ssl.ciphers.6 = ECDH-RSA-AES256-GCM-SHA384
+   management.ssl.ciphers.7 = ECDH-ECDSA-AES256-SHA384
+   management.ssl.ciphers.8 = ECDH-RSA-AES256-SHA384
+   management.ssl.ciphers.9 = DHE-RSA-AES256-GCM-SHA384",
+  [{rabbitmq_management,[
+                         {ssl_config,[
+                                      {ip, "192.168.1.2"},
+                                      {port,15671},
+                                      {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+                                      {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                                      {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+
+                                      {honor_cipher_order,   true},
+                                      {honor_ecc_order,      true},
+                                      {client_renegotiation, false},
+                                      {secure_renegotiate,   true},
+
+                                      {versions,['tlsv1.2','tlsv1.1']},
+                                      {ciphers, [
+                                                 "DHE-RSA-AES256-GCM-SHA384",
+                                                 "ECDH-ECDSA-AES256-GCM-SHA384",
+                                                 "ECDH-ECDSA-AES256-SHA384",
+                                                 "ECDH-RSA-AES256-GCM-SHA384",
+                                                 "ECDH-RSA-AES256-SHA384",
+                                                 "ECDHE-ECDSA-AES256-GCM-SHA384",
+                                                 "ECDHE-ECDSA-AES256-SHA384",
+                                                 "ECDHE-RSA-AES256-GCM-SHA384",
+                                                 "ECDHE-RSA-AES256-SHA384"
+                                                ]}
+                                     ]}
+                        ]}],
+  [rabbitmq_management]},
+
  {tls_listener_server_opts_compress,
   "management.ssl.compress = true",
   [

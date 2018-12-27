@@ -72,6 +72,42 @@
 {mapping, "management.ssl.password", "rabbitmq_management.ssl_config.password",
     [{datatype, string}]}.
 
+{mapping, "management.ssl.honor_cipher_order", "rabbitmq_management.ssl_config.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.ssl.honor_ecc_order", "rabbitmq_management.ssl_config.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.ssl.reuse_sessions", "rabbitmq_management.ssl_config.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.ssl.secure_renegotiate", "rabbitmq_management.ssl_config.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.ssl.client_renegotiation", "rabbitmq_management.ssl_config.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.ssl.depth", "rabbitmq_management.ssl_config.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "management.ssl.versions.$version", "rabbitmq_management.ssl_config.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_management.ssl_config.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("management.ssl.versions", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
+{mapping, "management.ssl.ciphers.$cipher", "rabbitmq_management.ssl_config.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.ssl_config.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("management.ssl.ciphers", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
 {mapping, "management.ssl.compress", "rabbitmq_management.ssl_config.cowboy_opts.compress",
     [{datatype, {enum, [true, false]}}]}.
 {mapping, "management.ssl.idle_timeout", "rabbitmq_management.ssl_config.cowboy_opts.idle_timeout",
@@ -161,6 +197,32 @@ fun(Conf) ->
     [ list_to_binary(V) || {_, V} <- Settings ]
 end}.
 
+{mapping, "management.listener.ssl_opts.honor_cipher_order", "rabbitmq_management.listener.ssl_opts.honor_cipher_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.honor_ecc_order", "rabbitmq_management.listener.ssl_opts.honor_ecc_order",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.reuse_sessions", "rabbitmq_management.listener.ssl_opts.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.secure_renegotiate", "rabbitmq_management.listener.ssl_opts.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.client_renegotiation", "rabbitmq_management.listener.ssl_opts.client_renegotiation",
+    [{datatype, {enum, [true, false]}}]}.
+
+
+{mapping, "management.listener.ssl_opts.versions.$version", "rabbitmq_management.listener.ssl_opts.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.versions", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+
 {mapping, "management.listener.ssl_opts.cert", "rabbitmq_management.listener.ssl_opts.cert",
     [{datatype, string}]}.
 
@@ -168,9 +230,6 @@ end}.
 fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("management.listener.ssl_opts.cert", Conf))
 end}.
-
-{mapping, "management.listener.ssl_opts.client_renegotiation", "rabbitmq_management.listener.ssl_opts.client_renegotiation",
-    [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "management.listener.ssl_opts.crl_check", "rabbitmq_management.listener.ssl_opts.crl_check",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
@@ -188,9 +247,6 @@ end}.
 
 {mapping, "management.listener.ssl_opts.dhfile", "rabbitmq_management.listener.ssl_opts.dhfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
-
-{mapping, "management.listener.ssl_opts.honor_cipher_order", "rabbitmq_management.listener.ssl_opts.honor_cipher_order",
-    [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "management.listener.ssl_opts.key.RSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key",
     [{datatype, string}]}.
@@ -220,21 +276,6 @@ end}.
 
 {mapping, "management.listener.ssl_opts.psk_identity", "rabbitmq_management.listener.ssl_opts.psk_identity",
     [{datatype, string}]}.
-
-{mapping, "management.listener.ssl_opts.reuse_sessions", "rabbitmq_management.listener.ssl_opts.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
-
-{mapping, "management.listener.ssl_opts.secure_renegotiate", "rabbitmq_management.listener.ssl_opts.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
-
-{mapping, "management.listener.ssl_opts.versions.$version", "rabbitmq_management.listener.ssl_opts.versions",
-    [{datatype, atom}]}.
-
-{translation, "rabbitmq_management.listener.ssl_opts.versions",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.versions", Conf),
-    [ V || {_, V} <- Settings ]
-end}.
 
 
 %% A custom path prefix for all HTTP request handlers.
