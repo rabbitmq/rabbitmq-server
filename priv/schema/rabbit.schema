@@ -554,6 +554,9 @@ end}.
 }.
 
 
+{mapping, "msx_message_size", "rabbit.max_message_size",
+    [{datatype, integer}, {validators, ["less_then_512MB"]}]}.
+
 %% Customising Socket Options.
 %%
 %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
@@ -1359,6 +1362,11 @@ end}.
 {validator, "size_less_than_2G", "Byte size should be less than 2G and greater than 0",
 fun(Size) when is_integer(Size) ->
     Size > 0 andalso Size < 2147483648
+end}.
+
+{validator, "less_then_512MB", "Max message size should be less than 512MB and gre than 0",
+fun(Size) when is_integer(Size) ->
+    Size > 0 andalso Size < 536870912
 end}.
 
 {validator, "less_than_1", "Flooat is not beetween 0 and 1",

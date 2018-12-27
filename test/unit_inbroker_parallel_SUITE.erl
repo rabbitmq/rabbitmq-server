@@ -58,6 +58,7 @@ groups() ->
           set_disk_free_limit_command,
           set_vm_memory_high_watermark_command,
           topic_matching,
+          max_message_size,
           {queue_max_length, [], [
             {max_length_simple, [], MaxLengthTests},
             {max_length_mirrored, [], MaxLengthTests}]}
@@ -1298,6 +1299,84 @@ sync_mirrors(QName, Config) ->
             rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"sync_queue">>, QName]);
         _ -> ok
     end.
+
+gen_binary_mb(N) ->
+    B1M = << <<"_">> || _ <- lists:seq(1, 1024 * 1024) >>,
+    << B1M || _ <- lists:seq(1, N) >>.
+
+assert_channel_alive(Ch) ->
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"nope">>},
+                          #amqp_msg{payload = <<"HI">>}).
+
+assert_channel_fail_max_size(Ch, Monitor, ExpectedException) ->
+    receive
+        {'DOWN', Monitor, process, Ch,
+            {shutdown,
+                {server_initiated_close, 406, Exception}}} ->
+            ?assertMatch(Exception, ExpectedException)
+    after 100000 ->
+        error({channel_exception_expected, max_message_size})
+    end.
+
+max_message_size(Config) ->
+    Binary128M = gen_binary_mb(128),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    %% Default message size is 128MB
+    Size128Mb = 1024 * 1024 * 128,
+    Size128Mb = rabbit_ct_broker_helpers:rpc(Config, 0,
+        application, get_env, [rabbit, max_message_size, undefined]),
+
+    Size128Mb = byte_size(Binary128M),
+    %% Binary is whithin the max size limit
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary128M}),
+    %% Channel process is alive
+    assert_channel_alive(Ch),
+
+    Monitor = monitor(process, Ch),
+    %% This publish should cause a channel exception
+    BinaryBiggerThan128M = <<"_", Binary128M/binary>>,
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = BinaryBiggerThan128M}),
+    ct:pal("Assert channel error 128"),
+    ExpectedException = <<"PRECONDITION_FAILED - message size ",
+                          (integer_to_binary(byte_size(BinaryBiggerThan128M)))/binary,
+                          " larger than configured max size ",
+                          (integer_to_binary(Size128Mb))/binary>>,
+    assert_channel_fail_max_size(Ch, Monitor, ExpectedException),
+
+
+    {_, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+
+    %% Set a bigger message size
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+        application, set_env, [rabbit, max_message_size, 1024 * 1024 * 256]),
+
+    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary128M}),
+    assert_channel_alive(Ch1),
+
+    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = BinaryBiggerThan128M}),
+    assert_channel_alive(Ch1),
+
+    %% Set message size above 512MB.
+    %% The actual limit will be 512MB
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+        application, set_env, [rabbit, max_message_size, 1024 * 1024 * 515]),
+
+    Binary512M = << Binary128M/binary, Binary128M/binary,
+                    Binary128M/binary, Binary128M/binary>>,
+
+    BinaryBiggerThan512M = <<"_", Binary512M/binary>>,
+
+    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary512M}),
+    assert_channel_alive(Ch1),
+
+    Monitor1 = monitor(process, Ch1),
+    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = BinaryBiggerThan512M}),
+    ct:pal("Assert channel error 512"),
+    ExpectedException1 = <<"PRECONDITION_FAILED - message size ",
+                          (integer_to_binary(byte_size(BinaryBiggerThan512M)))/binary,
+                          " larger than max size ",
+                          (integer_to_binary(byte_size(Binary512M)))/binary>>,
+    assert_channel_fail_max_size(Ch1, Monitor1, ExpectedException1).
 
 %% ---------------------------------------------------------------------------
 %% rabbitmqctl helpers.

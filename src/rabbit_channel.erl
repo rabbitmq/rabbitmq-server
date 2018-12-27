@@ -990,7 +990,15 @@ check_msg_size(Content) ->
     case Size > ?MAX_MSG_SIZE of
         true  -> precondition_failed("message size ~B larger than max size ~B",
                                      [Size, ?MAX_MSG_SIZE]);
-        false -> ok
+        false ->
+            case application:get_env(rabbit, max_message_size) of
+                {ok, MaxSize} when is_integer(MaxSize) andalso Size > MaxSize ->
+                    precondition_failed("message size ~B larger than"
+                                            " configured max size ~B",
+                                        [Size, MaxSize]);
+
+                _ -> ok
+            end
     end.
 
 check_vhost_queue_limit(#resource{name = QueueName}, VHost) ->
