@@ -243,9 +243,14 @@ list(VHostPath) ->
                                       destination = VHostResource,
                                       _           = '_'},
                    _       = '_'},
-    [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
-                                                           Route)].
+    implicit_bindings(VHostPath) ++
+        [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
+                                                               Route)].
 
+list_for_source(#resource{kind = exchange,
+                          virtual_host = VHostPath,
+                          name = <<>>}) ->
+    implicit_bindings(VHostPath);
 list_for_source(SrcName) ->
     mnesia:async_dirty(
       fun() ->
@@ -255,16 +260,46 @@ list_for_source(SrcName) ->
       end).
 
 list_for_destination(DstName) ->
-    mnesia:async_dirty(
-      fun() ->
-              Route = #route{binding = #binding{destination = DstName,
-                                                _ = '_'}},
-              [reverse_binding(B) ||
-                  #reverse_route{reverse_binding = B} <-
-                      mnesia:match_object(rabbit_reverse_route,
-                                          reverse_route(Route), read)]
-      end).
+    implicit_for_destination(DstName) ++
+        mnesia:async_dirty(
+          fun() ->
+                  Route = #route{binding = #binding{destination = DstName,
+                                                    _ = '_'}},
+                  [reverse_binding(B) ||
+                      #reverse_route{reverse_binding = B} <-
+                          mnesia:match_object(rabbit_reverse_route,
+                                              reverse_route(Route), read)]
+          end).
 
+implicit_bindings(VHostPath) ->
+    DstQueues = rabbit_amqqueue:list_names(VHostPath),
+    DefaultExchange = #resource{virtual_host = VHostPath,
+                                kind = exchange,
+                                name = <<>>},
+    [ #binding{source = DefaultExchange,
+               destination = DstQueue,
+               key = QName}
+      || DstQueue = #resource{name = QName} <- DstQueues ].
+
+implicit_for_destination(DstQueue = #resource{kind = queue,
+                                             virtual_host = VHostPath,
+                                             name = QName}) ->
+    DefaultExchange = #resource{virtual_host = VHostPath,
+                                kind = exchange,
+                                name = <<>>},
+    [#binding{source = DefaultExchange,
+              destination = DstQueue,
+              key = QName}];
+implicit_for_destination(_) ->
+    [].
+
+list_for_source_and_destination(#resource{kind = exchange,
+                                          virtual_host = VHostPath,
+                                          name = <<>>} = DefaultExchange,
+                                #resource{kind = queue,
+                                          virtual_host = VHostPath,
+                                          name = QName} = DstQueue) ->
+    [#binding{source = DefaultExchange, destination = DstQueue, key = QName}];
 list_for_source_and_destination(SrcName, DstName) ->
     mnesia:async_dirty(
       fun() ->
