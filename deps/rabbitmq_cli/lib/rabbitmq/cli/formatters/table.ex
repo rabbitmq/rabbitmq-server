@@ -74,8 +74,10 @@ defmodule RabbitMQ.CLI.Formatters.Table do
 
   defp format_line(line, escaped) do
     values = Enum.map(line,
-                      fn({_k, v}) ->
-                        FormatterHelpers.format_info_item(v, escaped)
+                      fn({k, v}) ->
+                        String.pad_trailing(
+                          to_string(FormatterHelpers.format_info_item(v, escaped)),
+                          String.length(to_string(k)))
                       end)
     Enum.join(values, "\t")
   end
