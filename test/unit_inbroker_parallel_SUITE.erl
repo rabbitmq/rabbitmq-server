@@ -1343,12 +1343,11 @@ max_message_size(Config) ->
                           (integer_to_binary(Size128Mb))/binary>>,
     assert_channel_fail_max_size(Ch, Monitor, ExpectedException),
 
-
-    {_, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-
     %% Set a bigger message size
     rabbit_ct_broker_helpers:rpc(Config, 0,
         application, set_env, [rabbit, max_message_size, 1024 * 1024 * 256]),
+
+    {_, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary128M}),
     assert_channel_alive(Ch1),
@@ -1361,22 +1360,26 @@ max_message_size(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
         application, set_env, [rabbit, max_message_size, 1024 * 1024 * 515]),
 
+    %% Need a new channel for changes to take effect
+    rabbit_ct_client_helpers:close_channel(Ch1),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config),
+
     Binary512M = << Binary128M/binary, Binary128M/binary,
                     Binary128M/binary, Binary128M/binary>>,
 
     BinaryBiggerThan512M = <<"_", Binary512M/binary>>,
 
-    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary512M}),
-    assert_channel_alive(Ch1),
+    amqp_channel:call(Ch2, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary512M}),
+    assert_channel_alive(Ch2),
 
-    Monitor1 = monitor(process, Ch1),
-    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = BinaryBiggerThan512M}),
+    Monitor2 = monitor(process, Ch2),
+    amqp_channel:call(Ch2, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = BinaryBiggerThan512M}),
     ct:pal("Assert channel error 512"),
     ExpectedException1 = <<"PRECONDITION_FAILED - message size ",
                           (integer_to_binary(byte_size(BinaryBiggerThan512M)))/binary,
                           " larger than max size ",
                           (integer_to_binary(byte_size(Binary512M)))/binary>>,
-    assert_channel_fail_max_size(Ch1, Monitor1, ExpectedException1).
+    assert_channel_fail_max_size(Ch2, Monitor2, ExpectedException1).
 
 %% ---------------------------------------------------------------------------
 %% rabbitmqctl helpers.
