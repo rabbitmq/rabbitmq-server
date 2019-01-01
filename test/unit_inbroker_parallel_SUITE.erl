@@ -1320,16 +1320,18 @@ assert_channel_fail_max_size(Ch, Monitor, ExpectedException) ->
 
 max_message_size(Config) ->
     Binary128M = gen_binary_mb(128),
-    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+
     %% Default message size is 128MB
     Size128Mb = 1024 * 1024 * 128,
+    Size128Mb = byte_size(Binary128M),
+
     Size128Mb = rabbit_ct_broker_helpers:rpc(Config, 0,
         application, get_env, [rabbit, max_message_size, undefined]),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
-    Size128Mb = byte_size(Binary128M),
     %% Binary is whithin the max size limit
     amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary128M}),
-    %% Channel process is alive
+    %% The channel process is alive
     assert_channel_alive(Ch),
 
     Monitor = monitor(process, Ch),
