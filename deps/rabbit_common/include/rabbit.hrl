@@ -273,8 +273,8 @@
 %% Max supported number of priorities for a priority queue.
 -define(MAX_SUPPORTED_PRIORITY, 255).
 
-%% Max message size is set to 512MiB.
-%% This is a hard limit. If user configures bigger max_message_size,
+%% Max message size is hard limited to 512 MiB.
+%% If user configures a greater rabbit.max_message_size,
 %% this value is used instead.
 -define(MAX_MSG_SIZE, 536870912).
 
