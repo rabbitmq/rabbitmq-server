@@ -72,7 +72,7 @@
 -export([get_vhost/1, get_user/1]).
 %% For testing
 -export([build_topic_variable_map/3]).
--export([list_queue_states/1]).
+-export([list_queue_states/1, get_max_message_size/0]).
 
 %% Mgmt HTTP API refactor
 -export([handle_method/5]).
@@ -443,12 +443,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                   _ ->
                       Limiter0
               end,
-    MaxMessageSize = case application:get_env(rabbit, max_message_size) of
-                         {ok, MS} when is_integer(MS) ->
-                             erlang:min(MS, ?MAX_MSG_SIZE);
-                         _ ->
-                             ?MAX_MSG_SIZE
-                     end,
+    MaxMessageSize = get_max_message_size(),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
@@ -802,6 +797,16 @@ code_change(_OldVsn, State, _Extra) ->
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
+-spec get_max_message_size() -> non_neg_integer().
+
+get_max_message_size() ->
+    case application:get_env(rabbit, max_message_size) of
+        {ok, MS} when is_integer(MS) ->
+            erlang:min(MS, ?MAX_MSG_SIZE);
+        _ ->
+            ?MAX_MSG_SIZE
+    end.
+
 %%---------------------------------------------------------------------------
 
 reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
@@ -1000,9 +1005,9 @@ check_msg_size(Content, MaxMessageSize) ->
         S when S > MaxMessageSize ->
             ErrorMessage = case MaxMessageSize of
                 ?MAX_MSG_SIZE ->
-                    "message size ~B larger than max size ~B";
+                    "message size ~B is larger than max size ~B";
                 _ ->
-                    "message size ~B larger than configured max size ~B"
+                    "message size ~B is larger than configured max size ~B"
             end,
             precondition_failed(ErrorMessage,
                                 [Size, MaxMessageSize]);
