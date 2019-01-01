@@ -1539,8 +1539,8 @@ purge(Config) ->
     _DeliveryTag = consume(Ch, QQ, false),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 1),
-    {'queue.purge_ok', 2} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
-    wait_for_messages_pending_ack(Servers, RaName, 0),
+    {'queue.purge_ok', 1} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
+    wait_for_messages_pending_ack(Servers, RaName, 1),
     wait_for_messages_ready(Servers, RaName, 0).
 
 sync_queue(Config) ->
