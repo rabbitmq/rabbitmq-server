@@ -766,7 +766,7 @@ function renderChannels() {
 function update_pages_from_ui(sender) {
     var val = $(sender).val();
     var raw = !!$(sender).attr('data-page-start') ? $(sender).attr('data-page-start') : val;
-    var s   = fmt_strip_tags(raw);
+    var s   = fmt_escape_html(fmt_strip_tags(raw));
     update_pages(current_template, s);
 }
 

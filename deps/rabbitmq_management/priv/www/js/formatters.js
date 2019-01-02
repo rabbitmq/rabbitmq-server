@@ -944,12 +944,11 @@ function fmt_page_size_request(template, defaultPageSize){
 }
 
 function fmt_filter_name_request(template, defaultName){
-    return stored_value_or_default(template + '_current_filter_name', defaultName);
+    return fmt_escape_html(stored_value_or_default(template + '_current_filter_name', defaultName));
 }
 
 function fmt_regex_request(template, defaultName){
-    result = stored_value_or_default(template + '_current_regex', defaultName);
-    return result;
+    return fmt_escape_html(stored_value_or_default(template + '_current_regex', defaultName));
 }
 
 function fmt_vhost_state(vhost){
