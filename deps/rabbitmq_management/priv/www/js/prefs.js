@@ -1,5 +1,3 @@
-// TODO strip out all this cookie nonsense when we drop support for MSIE 7.
-
 function local_storage_available() {
     try {
         return 'localStorage' in window && window['localStorage'] !== null;
