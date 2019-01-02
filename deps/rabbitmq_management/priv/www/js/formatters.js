@@ -920,7 +920,7 @@ function properties_size(obj) {
     return count;
 }
 
-function frm_default_value(template, defaultValue){
+function stored_value_or_default(template, defaultValue){
     var store_value = get_pref(template);
     var result = (((store_value == null)
       || (store_value == undefined)
@@ -933,22 +933,22 @@ function frm_default_value(template, defaultValue){
 function fmt_page_number_request(template, defaultPage){
      if  ((defaultPage == undefined) || (defaultPage <= 0))
          defaultPage = 1;
-    return frm_default_value(template + '_current_page_number', defaultPage);
+    return stored_value_or_default(template + '_current_page_number', defaultPage);
 }
 function fmt_page_size_request(template, defaultPageSize){
     if  ((defaultPageSize == undefined) || (defaultPageSize < 0))
         defaultPageSize = 100;
-    result = frm_default_value(template + '_current_page_size', defaultPageSize);
+    result = stored_value_or_default(template + '_current_page_size', defaultPageSize);
     if (result > 500) result = 500; // max
     return result;
 }
 
 function fmt_filter_name_request(template, defaultName){
-    return frm_default_value(template + '_current_filter_name', defaultName);
+    return stored_value_or_default(template + '_current_filter_name', defaultName);
 }
 
 function fmt_regex_request(template, defaultName){
-    result = frm_default_value(template + '_current_regex', defaultName);
+    result = stored_value_or_default(template + '_current_regex', defaultName);
     return result;
 }
 
