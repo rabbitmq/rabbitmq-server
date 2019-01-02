@@ -30,6 +30,94 @@ fun(Conf) ->
     end
 end}.
 
+{mapping, "stomp.tcp_listen_options", "rabbitmq_stomp.tcp_listen_options", [
+    {datatype, {enum, [none]}}]}.
+
+{translation, "rabbitmq_stomp.tcp_listen_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("stomp.tcp_listen_options", Conf, undefined) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid stomp.tcp_listen_options")
+    end
+end}.
+
+{mapping, "stomp.tcp_listen_options.backlog", "rabbitmq_stomp.tcp_listen_options.backlog", [
+    {datatype, integer}
+]}.
+
+{mapping, "stomp.tcp_listen_options.nodelay", "rabbitmq_stomp.tcp_listen_options.nodelay", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "stomp.tcp_listen_options.buffer", "rabbitmq_stomp.tcp_listen_options.buffer",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.delay_send", "rabbitmq_stomp.tcp_listen_options.delay_send",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.dontroute", "rabbitmq_stomp.tcp_listen_options.dontroute",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.exit_on_close", "rabbitmq_stomp.tcp_listen_options.exit_on_close",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.fd", "rabbitmq_stomp.tcp_listen_options.fd",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.high_msgq_watermark", "rabbitmq_stomp.tcp_listen_options.high_msgq_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.high_watermark", "rabbitmq_stomp.tcp_listen_options.high_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.keepalive", "rabbitmq_stomp.tcp_listen_options.keepalive",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.low_msgq_watermark", "rabbitmq_stomp.tcp_listen_options.low_msgq_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.low_watermark", "rabbitmq_stomp.tcp_listen_options.low_watermark",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.port", "rabbitmq_stomp.tcp_listen_options.port",
+    [{datatype, integer}, {validators, ["port"]}]}.
+
+{mapping, "stomp.tcp_listen_options.priority", "rabbitmq_stomp.tcp_listen_options.priority",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.recbuf", "rabbitmq_stomp.tcp_listen_options.recbuf",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.send_timeout", "rabbitmq_stomp.tcp_listen_options.send_timeout",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.send_timeout_close", "rabbitmq_stomp.tcp_listen_options.send_timeout_close",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.sndbuf", "rabbitmq_stomp.tcp_listen_options.sndbuf",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.tos", "rabbitmq_stomp.tcp_listen_options.tos",
+    [{datatype, integer}]}.
+
+{mapping, "stomp.tcp_listen_options.linger.on", "rabbitmq_stomp.tcp_listen_options.linger",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "stomp.tcp_listen_options.linger.timeout", "rabbitmq_stomp.tcp_listen_options.linger",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbitmq_stomp.tcp_listen_options.linger",
+fun(Conf) ->
+    LingerOn = cuttlefish:conf_get("stomp.tcp_listen_options.linger.on", Conf, false),
+    LingerTimeout = cuttlefish:conf_get("stomp.tcp_listen_options.linger.timeout", Conf, 0),
+    {LingerOn, LingerTimeout}
+end}.
+
+
+%%
+%% TLS
+%%
+
 {mapping, "stomp.listeners.ssl", "rabbitmq_stomp.ssl_listeners",[
     {datatype, {enum, [none]}}
 ]}.
