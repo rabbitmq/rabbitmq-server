@@ -273,12 +273,10 @@
 %% Max supported number of priorities for a priority queue.
 -define(MAX_SUPPORTED_PRIORITY, 255).
 
-%% Trying to send a term across a cluster larger than 2^31 bytes will
-%% cause the VM to exit with "Absurdly large distribution output data
-%% buffer". So we limit the max message size to 2^31 - 10^6 bytes (1MB
-%% to allow plenty of leeway for the #basic_message{} and #content{}
-%% wrapping the message body).
--define(MAX_MSG_SIZE, 2147383648).
+%% Max message size is hard limited to 512 MiB.
+%% If user configures a greater rabbit.max_message_size,
+%% this value is used instead.
+-define(MAX_MSG_SIZE, 536870912).
 
 -define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
 
