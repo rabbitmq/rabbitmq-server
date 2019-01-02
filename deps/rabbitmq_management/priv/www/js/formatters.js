@@ -780,13 +780,13 @@ function paginate_header_ui(pages, context){
     return res;
 }
 
-function pagiante_ui(pages, context){
+function paginate_ui(pages, context){
     var res = paginate_header_ui(pages, context);
     res += '<div class="hider">';
     res += '<h3>Pagination</h3>';
     res += '<div class="filter">';
     res += '<table class="updatable">';
-    res += '<tr>'
+    res += '<tr>';
     res += '<th><label for="'+ context +'-page">Page </label> <select id="'+ context +'-page" class="pagination_class pagination_class_select"  >';
     var page =  fmt_page_number_request(context, pages.page);
     if (pages.page_count > 0 &&  page > pages.page_count){
