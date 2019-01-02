@@ -65,12 +65,14 @@ groups() ->
           set_disk_free_limit_command,
           set_vm_memory_high_watermark_command,
           topic_matching,
+          max_message_size,
+
           {queue_max_length, [], [
                                   {max_length_classic, [], MaxLengthTests},
                                   {max_length_quorum, [], MaxLengthTests},
-                                  {max_length_mirrored, [], MaxLengthTests}]}
-                                 ]},
-          max_message_size
+                                  {max_length_mirrored, [], MaxLengthTests}
+                                 ]}
+       ]}
     ].
 
 suite() ->
@@ -1205,7 +1207,7 @@ max_length_drop_head(Config, ExtraArgs) ->
     Args = ?config(queue_args, Config),
     Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
-    
+
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ Args ++ ExtraArgs, durable = Durable}),
 
