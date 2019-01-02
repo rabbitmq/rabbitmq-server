@@ -25,6 +25,7 @@
 
 -define(TIMEOUT_LIST_OPS_PASS, 5000).
 -define(TIMEOUT, 30000).
+-define(TIMEOUT_CHANNEL_EXCEPTION, 5000).
 
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 
@@ -68,7 +69,13 @@ groups() ->
                                   {max_length_classic, [], MaxLengthTests},
                                   {max_length_quorum, [], MaxLengthTests},
                                   {max_length_mirrored, [], MaxLengthTests}]}
-                                   ]}
+                                 ]},
+          max_message_size
+    ].
+
+suite() ->
+    [
+      {timetrap, {seconds, 60}}
     ].
 
 %% -------------------------------------------------------------------
@@ -1390,6 +1397,74 @@ sync_mirrors(QName, Config) ->
             rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"sync_queue">>, QName]);
         _ -> ok
     end.
+
+gen_binary_mb(N) ->
+    B1M = << <<"_">> || _ <- lists:seq(1, 1024 * 1024) >>,
+    << B1M || _ <- lists:seq(1, N) >>.
+
+assert_channel_alive(Ch) ->
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"nope">>},
+                          #amqp_msg{payload = <<"HI">>}).
+
+assert_channel_fail_max_size(Ch, Monitor) ->
+    receive
+        {'DOWN', Monitor, process, Ch,
+            {shutdown,
+                {server_initiated_close, 406, _Error}}} ->
+            ok
+    after ?TIMEOUT_CHANNEL_EXCEPTION ->
+        error({channel_exception_expected, max_message_size})
+    end.
+
+max_message_size(Config) ->
+    Binary2M  = gen_binary_mb(2),
+    Binary4M  = gen_binary_mb(4),
+    Binary6M  = gen_binary_mb(6),
+    Binary10M = gen_binary_mb(10),
+
+    Size2Mb = 1024 * 1024 * 2,
+    Size2Mb = byte_size(Binary2M),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application, set_env, [rabbit, max_message_size, 1024 * 1024 * 3]),
+
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+
+    %% Binary is whithin the max size limit
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"none">>}, #amqp_msg{payload = Binary2M}),
+    %% The channel process is alive
+    assert_channel_alive(Ch),
+
+    Monitor = monitor(process, Ch),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"none">>}, #amqp_msg{payload = Binary4M}),
+    assert_channel_fail_max_size(Ch, Monitor),
+
+    %% increase the limit
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application, set_env, [rabbit, max_message_size, 1024 * 1024 * 8]),
+
+    {_, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+
+    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary2M}),
+    assert_channel_alive(Ch1),
+
+    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary4M}),
+    assert_channel_alive(Ch1),
+
+    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"nope">>}, #amqp_msg{payload = Binary6M}),
+    assert_channel_alive(Ch1),
+
+    Monitor1 = monitor(process, Ch1),
+    amqp_channel:call(Ch1, #'basic.publish'{routing_key = <<"none">>}, #amqp_msg{payload = Binary10M}),
+    assert_channel_fail_max_size(Ch1, Monitor1),
+
+    %% increase beyond the hard limit
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application, set_env, [rabbit, max_message_size, 1024 * 1024 * 600]),
+    Val = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                       rabbit_channel, get_max_message_size, []),
+
+    ?assertEqual(?MAX_MSG_SIZE, Val).
 
 %% ---------------------------------------------------------------------------
 %% rabbitmqctl helpers.
