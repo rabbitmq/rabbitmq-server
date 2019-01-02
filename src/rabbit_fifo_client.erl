@@ -565,16 +565,16 @@ seq_applied({Seq, MaybeAction},
             end,
     {Actions, State} = maybe_add_action(MaybeAction, Actions0, State1),
     case {maps:take(Seq, State#state.pending), MaybeAction} of
-        {{{undefined, _}, Pending}, reject} = C ->
+        {{{undefined, _}, Pending}, reject} ->
             {Corrs, [{reject, Seq} | Actions], State#state{pending = Pending,
                                          last_applied = Seq}};
-        {{{undefined, _}, Pending}, _} = C ->
+        {{{undefined, _}, Pending}, _} ->
             {Corrs, Actions, State#state{pending = Pending,
                                          last_applied = Seq}};
-        {{{Corr, _}, Pending}, _} = C ->
+        {{{Corr, _}, Pending}, _} ->
             {[Corr | Corrs], Actions, State#state{pending = Pending,
                                                   last_applied = Seq}};
-        {error, _} = C ->
+        {error, _}  ->
             % must have already been resent or removed for some other reason
             % still need to update last_applied or we may inadvertently resend
             % stuff later
