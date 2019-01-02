@@ -290,13 +290,19 @@ ensure_application_srcdir(Config, App, Lang, Module) ->
         P ->
             P
     end,
-    SecondaryPath = case get_config(Config, SecondaryKey) of
-                        undefined ->
-                            filename:join(
-                              ?config(secondary_erlang_mk_depsdir, Config),
-                              AppS);
-                        SP ->
-                            SP
+    SecondaryPath = case ?config(secondary_umbrella, Config) of
+                        false ->
+                            Path;
+                        _ ->
+                            case get_config(Config, SecondaryKey) of
+                                undefined ->
+                                    filename:join(
+                                      ?config(secondary_erlang_mk_depsdir,
+                                              Config),
+                                      AppS);
+                                SP ->
+                                    SP
+                            end
                     end,
     case filelib:is_dir(Path) andalso filelib:is_dir(SecondaryPath) of
         true  -> set_config(Config,
