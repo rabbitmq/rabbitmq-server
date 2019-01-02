@@ -907,11 +907,11 @@ function properties_size(obj) {
 }
 
 function stored_value_or_default(template, defaultValue){
-    var store_value = get_pref(template);
-    var result = (((store_value == null)
-      || (store_value == undefined)
-      || (store_value == '')) ? defaultValue :
-    store_value);
+    var stored_value = get_pref(template);
+    var result = (((stored_value == null)
+      || (stored_value == undefined)
+      || (stored_value == '')) ? defaultValue :
+    stored_value);
 
    return ((result == undefined) ? defaultValue : result);
 }

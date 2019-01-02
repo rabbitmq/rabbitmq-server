@@ -59,15 +59,16 @@ function clear_local_pref(k) {
 }
 
 function get_pref(k) {
-    var r;
+    var val;
     if (local_storage_available()) {
-        r = window.localStorage['rabbitmq.' + k];
+        val = window.localStorage['rabbitmq.' + k];
     }
     else {
-        r = parse_cookie()[short_key(k)];
+        val = parse_cookie()[short_key(k)];
 
     }
-    return r == undefined ? default_pref(k) : r;
+    var res = (val == undefined) ? default_pref(k) : val;
+    return res;
 }
 
 function section_pref(template, name) {
