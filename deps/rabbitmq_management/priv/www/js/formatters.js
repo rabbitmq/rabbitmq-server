@@ -770,9 +770,8 @@ function filter_ui_pg(items, truncate, appendselect) {
 
 
 function filter_ui(items) {
-    current_truncate = (current_truncate == null) ?
-        parseInt(get_pref('truncate')) : current_truncate;
-     var truncate_input = '<input type="text" id="truncate" value="' +
+    var current_truncate = parseInt(get_pref('truncate'));
+    var truncate_input   = '<input type="text" id="truncate" value="' +
         current_truncate + '">';
      var selected = '';
     if (items.length > current_truncate) {
@@ -788,9 +787,9 @@ function filter_ui(items) {
 }
 
 function paginate_header_ui(pages, context){
-     var res = '<h2 class="updatable">' ;
-     res += ' All ' + context +' (' + pages.total_count + ((pages.filtered_count != pages.total_count) ?   ' Filtered: ' + pages.filtered_count  : '') +  ')';
-     res += '</h2>'
+     var res = '<h2 class="updatable">';
+     res += ' All ' + context +' (' + pages.total_count + ((pages.filtered_count != pages.total_count) ?  ', filtered down to ' + pages.filtered_count  : '') +  ')';
+     res += '</h2>';
     return res;
 }
 
@@ -815,10 +814,10 @@ function paginate_ui(pages, context){
     res +=    '<option value="' + i + '"> ' + i + '</option>';
              } };
     res += '</select> </th>';
-    res += '<th><label for="'+ context +'-pageof">of </label>  ' + pages.page_count +'</th>';
-    res += '<th><span><label for="'+ context +'-name"> - Filter: </label> <input id="'+ context +'-name"  data-page-start="1"  class="pagination_class pagination_class_input" type="text"' ;
-    res +=   'value = ' + fmt_filter_name_request(context, "") + '>' ;
-    res +=   '</input></th></span>' ;
+    res += '<th><label for="' + context +'-pageof">of </label>  ' + pages.page_count +'</th>';
+    res += '<th><span><label for="'+ context +'-name"> - Filter: </label> <input id="'+ context +'-name"  data-page-start="1"  class="pagination_class pagination_class_input" type="text"';
+    res +=   'value = ' + fmt_filter_name_request(context, "") + '>';
+    res +=   '</input></th></span>';
 
     res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class pagination_class_checkbox" id="'+ context +'-filter-regex-mode"' ;
 
@@ -829,10 +828,10 @@ function paginate_ui(pages, context){
     res += '<span><label for="'+ context +'-pagesize"> Displaying ' + pages.item_count + '  item'+ ((pages.item_count > 1) ? 's' : '' ) + ' , page size up to: </label> ';
     res +=       ' <input id="'+ context +'-pagesize" data-page-start="1" class="pagination_class shortinput pagination_class_input" type="text" ';
     res +=   'value = "' +  fmt_page_size_request(context, pages.page_size) +'"';
-    res +=   'onkeypress = "return isNumberKey(event)"> </input></span></p>' ;
-    res += '</tr>'
-    res += '</div>'
-    res += '</div>'
+    res +=   'onkeypress = "return isNumberKey(event)"> </input></span></p>';
+    res += '</tr>';
+    res += '</div>';
+    res += '</div>';
     return res;
 }
 
@@ -931,15 +930,21 @@ function stored_value_or_default(template, defaultValue){
 }
 
 function fmt_page_number_request(template, defaultPage){
-     if  ((defaultPage == undefined) || (defaultPage <= 0))
+     if  ((defaultPage == undefined) || (defaultPage <= 0)) {
          defaultPage = 1;
+     }
     return stored_value_or_default(template + '_current_page_number', defaultPage);
 }
 function fmt_page_size_request(template, defaultPageSize){
-    if  ((defaultPageSize == undefined) || (defaultPageSize < 0))
+    if  ((defaultPageSize == undefined) || (defaultPageSize < 0)) {
         defaultPageSize = 100;
-    result = stored_value_or_default(template + '_current_page_size', defaultPageSize);
-    if (result > 500) result = 500; // max
+    }
+        
+    var result = stored_value_or_default(template + '_current_page_size', defaultPageSize);
+    if (result > 500) {
+        // hard limit
+        result = 500;
+    }
     return result;
 }
 
@@ -975,7 +980,7 @@ function fmt_vhost_state(vhost){
 }
 
 function isNumberKey(evt){
-    var charCode = (evt.which) ? evt.which : event.keyCode
+    var charCode = (evt.which) ? evt.which : event.keyCode;
     if (charCode > 31 && (charCode < 48 || charCode > 57))
         return false;
     return true;
