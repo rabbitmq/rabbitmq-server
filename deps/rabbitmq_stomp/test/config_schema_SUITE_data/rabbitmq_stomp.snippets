@@ -7,6 +7,42 @@
    stomp.listeners.tcp.2 = ::1:61613",
   [{rabbitmq_stomp,[{tcp_listeners,[{"127.0.0.1",61613},{"::1",61613}]}]}],
   [rabbitmq_stomp]},
+
+ {listener_tcp_options,
+  "stomp.listeners.tcp.1 = 127.0.0.1:61613
+   stomp.listeners.tcp.2 = ::1:61613
+
+   stomp.tcp_listen_options.backlog = 2048
+   stomp.tcp_listen_options.recbuf = 8192
+   stomp.tcp_listen_options.sndbuf = 8192
+
+   stomp.tcp_listen_options.keepalive = true
+   stomp.tcp_listen_options.nodelay   = true
+
+   stomp.tcp_listen_options.exit_on_close = true
+
+   stomp.tcp_listen_options.send_timeout = 120
+",
+  [{rabbitmq_stomp,[
+                    {tcp_listeners,[
+                                    {"127.0.0.1",61613},
+                                    {"::1",61613}
+                                   ]}
+                    , {tcp_listen_options, [
+                                            {backlog, 2048},
+                                            {exit_on_close, true},
+
+                                            {recbuf, 8192},
+                                            {sndbuf, 8192},
+
+                                            {send_timeout, 120},
+
+                                            {keepalive, true},
+                                            {nodelay,   true}
+                                           ]}
+                   ]}],
+  [rabbitmq_stomp]},
+
  {ssl,
   "ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
    ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
