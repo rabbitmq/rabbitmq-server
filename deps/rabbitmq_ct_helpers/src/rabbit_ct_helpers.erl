@@ -309,7 +309,7 @@ ensure_application_srcdir(Config, App, Lang, Module) ->
                             [{Key, Path},
                              {SecondaryKey, SecondaryPath}]);
         false -> {skip,
-                  AppS ++ "source directory required, " ++
+                  AppS ++ " source directory required, " ++
                   "please set '" ++ AppS ++ "_srcdir' in ct config"}
     end.
 
