@@ -28,6 +28,43 @@
         {tcp_listen_options,[{backlog,128},{nodelay,true}]},
         {proxy_protocol,false}]}],
   [rabbitmq_mqtt]},
+
+ {listener_tcp_options,
+  "mqtt.listeners.tcp.1 = 127.0.0.1:61613
+   mqtt.listeners.tcp.2 = ::1:61613
+
+   mqtt.tcp_listen_options.backlog = 2048
+   mqtt.tcp_listen_options.recbuf = 8192
+   mqtt.tcp_listen_options.sndbuf = 8192
+
+   mqtt.tcp_listen_options.keepalive = true
+   mqtt.tcp_listen_options.nodelay   = true
+
+   mqtt.tcp_listen_options.exit_on_close = true
+
+   mqtt.tcp_listen_options.send_timeout = 120
+",
+  [{rabbitmq_mqtt,[
+                    {tcp_listeners,[
+                                    {"127.0.0.1",61613},
+                                    {"::1",61613}
+                                   ]}
+                    , {tcp_listen_options, [
+                                            {backlog, 2048},
+                                            {exit_on_close, true},
+
+                                            {recbuf, 8192},
+                                            {sndbuf, 8192},
+
+                                            {send_timeout, 120},
+
+                                            {keepalive, true},
+                                            {nodelay,   true}
+                                           ]}
+                   ]}],
+  [rabbitmq_mqtt]},
+
+
  {ssl,
   "ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
    ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
