@@ -255,9 +255,14 @@ list(VHostPath) ->
                                       destination = VHostResource,
                                       _           = '_'},
                    _       = '_'},
-    implicit_bindings(VHostPath) ++
-        [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
-                                                               Route)].
+    %% if there are any default exchange bindings left after an upgrade
+    %% of a pre-3.8 database, filter them out
+    AllBindings = [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
+                                                                         Route)],
+    Filtered    = lists:filter(fun(#binding{source = S}) ->
+                                       S =/= ?DEFAULT_EXCHANGE(VHostPath)
+                               end, AllBindings),
+    implicit_bindings(VHostPath) ++ Filtered.
 
 list_for_source(?DEFAULT_EXCHANGE(VHostPath)) ->
     implicit_bindings(VHostPath);
