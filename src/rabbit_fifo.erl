@@ -620,11 +620,11 @@ filter(_Meta, #enqueue{pid = From, seq = Seq, msg = RawMsg} = Enq, CmdReply, Sta
         {{true, FilterState}, _} ->
             {Enq, [], FilterState, true};
         {{false, FilterState}, _} ->
-            case maps:get(From, FilterState0, none) of
+            case maps:get(From, FilterState, none) of
                 none ->
                     {Enq, [], FilterState, false};
                 rejected ->
-                    {#force_enqueue{pid = From, seq = Seq, msg = RawMsg}, [], FilterState, false}
+                    {#force_enqueue{pid = From, seq = Seq, msg = RawMsg}, [], maps:remove(From, FilterState), false}
             end
     end;
 filter(_Meta, Cmd, _ReplyType, _State, FilterState) ->
@@ -1236,7 +1236,7 @@ will_overflow(Bytes, From, State, FilterState) ->
         true ->
             {true, maps:put(From, rejected, FilterState)};
         false ->
-            {false, maps:remove(From, FilterState)}
+            {false, FilterState}
     end.
 
 will_overflow(Bytes, #state{max_length = MaxLength, ra_indexes = Indexes,
