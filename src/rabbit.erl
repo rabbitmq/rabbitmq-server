@@ -156,6 +156,13 @@
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({rabbit_sysmon_minder,
+                   [{description, "sysmon_handler supervisor"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_sysmon_minder]}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
 -rabbit_boot_step({core_initialized,
                    [{description, "core initialized"},
                     {requires,    kernel_ready}]}).
@@ -225,7 +232,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, rabbit_common, ra, rabbit]).
+-define(APPS, [os_mon, mnesia, rabbit_common, ra, sysmon_handler, rabbit]).
 
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
