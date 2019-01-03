@@ -1377,12 +1377,14 @@ check_max_length_drops_head(Config, QName, Ch, Payload1, Payload2, Payload3) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     %% A single message is published and consumed
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
+    wait_for_consensus(QName, Config),
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
 
     %% Message 1 is replaced by message 2
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
+    wait_for_consensus(QName, Config),
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload2}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
 
@@ -1390,6 +1392,7 @@ check_max_length_drops_head(Config, QName, Ch, Payload1, Payload2, Payload3) ->
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload3}),
+    wait_for_consensus(QName, Config),
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload3}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).
 
