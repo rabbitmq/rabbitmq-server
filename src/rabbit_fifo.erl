@@ -57,7 +57,8 @@
          make_discard/2,
          make_credit/4,
          make_purge/0,
-         make_update_config/1
+         make_update_config/1,
+         make_stat/0
         ]).
 
 -type raw_msg() :: term().
@@ -133,6 +134,7 @@
                  drain :: boolean()}).
 -record(purge, {}).
 -record(update_config, {config :: config()}).
+-record(stat, {}).
 
 
 
@@ -144,7 +146,8 @@
     #discard{} |
     #credit{} |
     #purge{} |
-    #update_config{}.
+    #update_config{} |
+    #stat{}.
 
 -type command() :: protocol() | ra_machine:builtin_command().
 %% all the command types suppored by ra fifo
@@ -431,6 +434,19 @@ apply(#{index := RaftIdx}, #purge{},
     %% reverse the effects ourselves
     {State, {purge, Total},
      lists:reverse([garbage_collection | Effects])};
+apply(_, #stat{}, #state{name = Name,
+                         messages = Messages,
+                         ra_indexes = Indexes,
+                         consumers = Cons,
+                         msg_bytes_enqueue = EnqueueBytes,
+                         msg_bytes_checkout = CheckoutBytes} = State) ->
+    Metrics = {maps:size(Messages), % Ready
+               num_checked_out(State), % checked out
+               rabbit_fifo_index:size(Indexes), %% Total
+               maps:size(Cons), % Consumers
+               EnqueueBytes,
+               CheckoutBytes},
+    {State, {stat, Metrics}, []};
 apply(_, {down, ConsumerPid, noconnection},
       #state{consumers = Cons0,
                        enqueuers = Enqs0} = State0) ->
@@ -1180,6 +1196,9 @@ make_purge() -> #purge{}.
 -spec make_update_config(config()) -> protocol().
 make_update_config(Config) ->
     #update_config{config = Config}.
+
+-spec make_stat() -> protocol().
+make_stat() -> #stat{}.
 
 add_bytes_enqueue(Msg, #state{msg_bytes_enqueue = Enqueue} = State) ->
     Bytes = message_size(Msg),

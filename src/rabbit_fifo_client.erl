@@ -38,7 +38,8 @@
          untracked_enqueue/2,
          purge/1,
          cluster_name/1,
-         update_machine_state/2
+         update_machine_state/2,
+         stat/1
          ]).
 
 -include_lib("ra/include/ra.hrl").
@@ -396,6 +397,23 @@ purge(Node) ->
             {ok, Reply};
         Err ->
             Err
+    end.
+
+-spec stat(ra_server_id()) -> {ok, {non_neg_integer(), non_neg_integer(),
+                                    non_neg_integer(), non_neg_integer(),
+                                    non_neg_integer(), non_neg_integer()}}
+                                  | {error | timeout, term()}.
+stat(Servers) ->
+    try_process_stat(Servers, rabbit_fifo:make_stat()).
+
+try_process_stat([Server | Rem], Cmd) ->
+    case ra:process_command(Server, Cmd, 30000) of
+        {ok, {stat, Reply}, _} ->
+            {ok, Reply};
+        Err when length(Rem) =:= 0 ->
+            Err;
+        _ ->
+            try_process_stat(Rem, Cmd)
     end.
 
 %% @doc returns the cluster name
