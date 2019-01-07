@@ -46,6 +46,8 @@ groups() ->
                                 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case2,
                                 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case3,
                                 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case4,
+                                test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case5,
+                                test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case6,
                                 test_hash_ring_updates_when_exchange_is_deleted,
                                 test_hash_ring_updates_when_queue_is_unbound
                                ]}
@@ -416,6 +418,14 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case4(Config) ->
     test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case(Config, ?FUNCTION_NAME, 100).
 
+%% rabbitmq/rabbitmq-consistent-has-exchange#40
+test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case5(Config) ->
+    test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case(Config, ?FUNCTION_NAME, 268).
+
+%% rabbitmq/rabbitmq-consistent-has-exchange#40
+test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case6(Config) ->
+    test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case(Config, ?FUNCTION_NAME, 1937).
+
 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case(Config, XAsList, Key) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     {ok, Chan} = amqp_connection:open_channel(Conn),
@@ -427,11 +437,12 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
                                   type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
 
-    Queues = [<<"case2-e-q1">>, <<"case2-e-q2">>, <<"case2-e-q3">>,
-              <<"case2-e-q4">>, <<"case2-e-q5">>, <<"case2-e-q6">>],
-    [#'queue.declare_ok'{} =
-         amqp_channel:call(Chan, #'queue.declare' {
-                             queue = Q, exclusive = true }) || Q <- Queues],
+    NumQueues = 6,
+    Queues = [begin
+                  #'queue.declare_ok'{queue = Q} =
+                      amqp_channel:call(Chan, #'queue.declare' {exclusive = true }),
+                  Q
+              end || _ <- lists:seq(1, NumQueues)],
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind' {queue = Q,
                                                 exchange = X,
@@ -440,8 +451,8 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
 
     ct:pal("all hash ring rows: ~p", [hash_ring_rows(Config)]),
 
-    %% length(Queues) x 'Key' buckets per binding
-    ?assertEqual(Key * length(Queues), count_buckets_of_exchange(Config, X)),
+    %% NumQueues x 'Key' buckets per binding
+    ?assertEqual(NumQueues * Key, count_buckets_of_exchange(Config, X)),
     assert_ring_consistency(Config, X),
     ok = amqp_connection:close(Conn),
     timer:sleep(1000),
