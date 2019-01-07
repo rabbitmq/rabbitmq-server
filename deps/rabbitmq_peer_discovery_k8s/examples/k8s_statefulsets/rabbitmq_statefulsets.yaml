@@ -87,8 +87,9 @@ spec:
           exec:
             command: ["rabbitmqctl", "status"]
           initialDelaySeconds: 60
+          # See https://www.rabbitmq.com/monitoring.html for monitoring frequency recommendations.
           periodSeconds: 60
-          timeoutSeconds: 10
+          timeoutSeconds: 15
         readinessProbe:
           exec:
             command: ["rabbitmqctl", "status"]
