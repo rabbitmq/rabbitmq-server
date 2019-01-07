@@ -43,6 +43,7 @@ groups() ->
                                 test_hash_ring_updates_when_queue_is_deleted,
                                 test_hash_ring_updates_when_multiple_queues_are_deleted,
                                 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure,
+                                test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case2,
                                 test_hash_ring_updates_when_exchange_is_deleted,
                                 test_hash_ring_updates_when_queue_is_unbound
                                ]}
@@ -401,6 +402,43 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
     clean_up_test_topology(Config, X, []),
     ok.
 
+%% rabbitmq/rabbitmq-consistent-has-exchange#40, uses higher weights
+test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case2(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+
+    X = <<"test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case2">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare = #'exchange.declare'{exchange = X,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Queues = [<<"case2-e-q1">>, <<"case2-e-q2">>, <<"case2-e-q3">>,
+              <<"case2-e-q4">>, <<"case2-e-q5">>, <<"case2-e-q6">>],
+    [#'queue.declare_ok'{} =
+         amqp_channel:call(Chan, #'queue.declare' {
+                             queue = Q, exclusive = true }) || Q <- Queues],
+    [#'queue.bind_ok'{} =
+         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
+                                                exchange = X,
+                                                routing_key = <<"50">>})
+     || Q <- Queues],
+
+    ct:pal("all hash ring rows: ~p", [hash_ring_rows(Config)]),
+
+    %% 6 queues x 50 buckets per binding
+    ?assertEqual(300, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+    ok = amqp_connection:close(Conn),
+    timer:sleep(1000),
+
+    ct:pal("all hash ring rows after connection closure (case 2): ~p", [hash_ring_rows(Config)]),
+
+    ?assertEqual(0, count_buckets_of_exchange(Config, X)),
+    clean_up_test_topology(Config, X, []),
+    ok.
+
 test_hash_ring_updates_when_exchange_is_deleted(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
 
@@ -485,7 +523,7 @@ hash_ring_rows(Config) ->
 
 assert_ring_consistency(Config, X) ->
     [#chx_hash_ring{bucket_map = M}] = hash_ring_state(Config, X),
-    Buckets = maps:keys(M),
+    Buckets = lists:usort(maps:keys(M)),
     Hi      = lists:last(Buckets),
 
     %% bucket numbers form a sequence without gaps or duplicates
