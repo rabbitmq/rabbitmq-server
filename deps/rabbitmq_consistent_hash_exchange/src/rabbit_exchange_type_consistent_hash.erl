@@ -195,11 +195,11 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
             case maps:size(BucketsOfThisBinding) of
                 0             -> ok;
                 N when N >= 1 ->
-                    KeysOfThisBinding  = maps:keys(BucketsOfThisBinding),
+                    KeysOfThisBinding  = lists:usort(maps:keys(BucketsOfThisBinding)),
                     LastBucket         = lists:last(KeysOfThisBinding),
                     FirstBucket        = hd(KeysOfThisBinding),
                     BucketsDownTheRing = maps:filter(fun (K, _) -> K > LastBucket end, BM0),
-                    UnchangedBuckets = maps:filter(fun (K, _) -> K < FirstBucket end, BM0),
+                    UnchangedBuckets   = maps:filter(fun (K, _) -> K < FirstBucket end, BM0),
 
                     %% final state with "down the ring" buckets updated
                     NewBucketsDownTheRing = maps:fold(
