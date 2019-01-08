@@ -60,21 +60,21 @@ end_per_testcase(Testcase, Config) ->
 all_messages_go_to_one_consumer(Config) ->
     {C, Ch} = connection_and_channel(Config),
     Q = queue_declare(Ch),
-    NbMessages = 5,
-    ConsumerPid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages}]),
+    MessageCount = 5,
+    ConsumerPid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, MessageCount}]),
     #'basic.consume_ok'{consumer_tag = CTag1} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true}, ConsumerPid),
     #'basic.consume_ok'{consumer_tag = CTag2} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true}, ConsumerPid),
 
     Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
-    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(1, NbMessages)],
+    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(1, MessageCount)],
 
     receive
         {consumer_done, {MessagesPerConsumer, MessageCount}} ->
-            ?assertEqual(NbMessages, MessageCount),
+            ?assertEqual(MessageCount, MessageCount),
             ?assertEqual(2, maps:size(MessagesPerConsumer)),
-            ?assertEqual(NbMessages, maps:get(CTag1, MessagesPerConsumer)),
+            ?assertEqual(MessageCount, maps:get(CTag1, MessagesPerConsumer)),
             ?assertEqual(0, maps:get(CTag2, MessagesPerConsumer))
     after 1000 ->
         throw(failed)
@@ -86,8 +86,8 @@ all_messages_go_to_one_consumer(Config) ->
 fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     {C, Ch} = connection_and_channel(Config),
     Q = queue_declare(Ch),
-    NbMessages = 10,
-    ConsumerPid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages}]),
+    MessageCount = 10,
+    ConsumerPid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, MessageCount}]),
     #'basic.consume_ok'{consumer_tag = CTag1} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true}, ConsumerPid),
     #'basic.consume_ok'{consumer_tag = CTag2} =
@@ -96,11 +96,11 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
         amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true}, ConsumerPid),
 
     Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
-    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(1, NbMessages div 2)],
+    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(1, MessageCount div 2)],
 
     #'basic.cancel_ok'{} = amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag1}),
 
-    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(NbMessages div 2 + 1, NbMessages - 1)],
+    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(MessageCount div 2 + 1, MessageCount - 1)],
 
     #'basic.cancel_ok'{} = amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag2}),
 
@@ -108,12 +108,12 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
 
     receive
         {consumer_done, {MessagesPerConsumer, MessageCount}} ->
-            ?assertEqual(NbMessages, MessageCount),
+            ?assertEqual(MessageCount, MessageCount),
             ?assertEqual(3, maps:size(MessagesPerConsumer)),
-            ?assertEqual(NbMessages div 2, maps:get(CTag1, MessagesPerConsumer)),
+            ?assertEqual(MessageCount div 2, maps:get(CTag1, MessagesPerConsumer)),
             Counts = maps:values(MessagesPerConsumer),
-            ?assert(lists:member(NbMessages div 2, Counts)),
-            ?assert(lists:member(NbMessages div 2 - 1, Counts)),
+            ?assert(lists:member(MessageCount div 2, Counts)),
+            ?assert(lists:member(MessageCount div 2 - 1, Counts)),
             ?assert(lists:member(1, Counts))
     after 1000 ->
         throw(failed)
@@ -128,10 +128,10 @@ fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled(Config
     {C2, Ch2} = connection_and_channel(Config),
     {C3, Ch3} = connection_and_channel(Config),
     Q = queue_declare(Ch),
-    NbMessages = 10,
-    Consumer1Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages div 2}]),
-    Consumer2Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages div 2 - 1}]),
-    Consumer3Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, NbMessages div 2 - 1}]),
+    MessageCount = 10,
+    Consumer1Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, MessageCount div 2}]),
+    Consumer2Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, MessageCount div 2 - 1}]),
+    Consumer3Pid = spawn(?MODULE, consume, [{self(), {maps:new(), 0}, MessageCount div 2 - 1}]),
     #'basic.consume_ok'{consumer_tag = CTag1} =
         amqp_channel:subscribe(Ch1, #'basic.consume'{queue = Q, no_ack = true, consumer_tag = <<"1">>}, Consumer1Pid),
     #'basic.consume_ok'{} =
@@ -140,19 +140,19 @@ fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled(Config
         amqp_channel:subscribe(Ch3, #'basic.consume'{queue = Q, no_ack = true, consumer_tag = <<"3">>}, Consumer3Pid),
 
     Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
-    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(1, NbMessages div 2)],
+    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(1, MessageCount div 2)],
 
     {MessagesPerConsumer1, MessageCount1} = consume_results(),
-    ?assertEqual(NbMessages div 2, MessageCount1),
+    ?assertEqual(MessageCount div 2, MessageCount1),
     ?assertEqual(1, maps:size(MessagesPerConsumer1)),
-    ?assertEqual(NbMessages div 2, maps:get(CTag1, MessagesPerConsumer1)),
+    ?assertEqual(MessageCount div 2, maps:get(CTag1, MessagesPerConsumer1)),
 
     ok = amqp_channel:close(Ch1),
 
-    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(NbMessages div 2 + 1, NbMessages - 1)],
+    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(MessageCount div 2 + 1, MessageCount - 1)],
 
     {MessagesPerConsumer2, MessageCount2} = consume_results(),
-    ?assertEqual(NbMessages div 2 - 1, MessageCount2),
+    ?assertEqual(MessageCount div 2 - 1, MessageCount2),
     ?assertEqual(1, maps:size(MessagesPerConsumer2)),
 
     ok = amqp_channel:close(Ch2),
