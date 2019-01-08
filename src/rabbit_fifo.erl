@@ -769,7 +769,7 @@ cancel_consumer0(ConsumerId,
                     {Effects, S#state{consumers = Cons}}
             end;
         error ->
-            % already removed - do nothing
+            %% already removed: do nothing
             {Effects0, S0}
     end.
 
