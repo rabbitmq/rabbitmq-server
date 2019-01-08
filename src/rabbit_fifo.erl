@@ -703,9 +703,9 @@ cancel_consumer(ConsumerId,
                     {[{aux, inactive} | Effects], S#state{consumers = Cons}};
                 _ ->
                     {Effects, S#state{consumers = Cons}}
-                end;
+            end;
         error ->
-            % already removed - do nothing
+            %% already removed: do nothing
             {Effects0, S0}
     end.
 
