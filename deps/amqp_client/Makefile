@@ -12,10 +12,6 @@ endef
 
 define PROJECT_APP_EXTRA_KEYS
 %% Hex.pm package informations.
-	{maintainers, [
-	    "RabbitMQ Team <info@rabbitmq.com>",
-	    "Jean-Sebastien Pedron <jean-sebastien@rabbitmq.com>"
-	  ]},
 	{licenses, ["MPL 1.1"]},
 	{links, [
 	    {"Website", "http://www.rabbitmq.com/"},
