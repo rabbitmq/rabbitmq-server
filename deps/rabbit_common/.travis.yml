@@ -27,8 +27,7 @@ env:
     - secure: fNEx9OXi2UisiYu0FiHJpV9+vWLB9DIUAIKG24GfUHVgZqFQOInBf5fEYrjlVgm5zNezSBS3hFNHXd/EXJF8KNgbf6mI0z4h4RyyQY98N+78tWvINoIawEeYpgC6NTI52MdaCfV+fTVWhiL0uP7mqWhLmll2bKXIy6HA6I9PnmiQSloNe64vUPF+UsVZHzzeabK4DR2VdI3h+BGXzOY9FG8Kt2voiXOLd2RFpVeN86FDTp+uVZY/K9e/MsktoK+XaZZ4qMAgm6lB32LVkzl3KA9ki6y6BY7le1m2c90hxAtBJGWZptkMb+VL0Fem39nEBnLjE0a0vIddp32PLJQmv6eopMfLay5BIkwtkRwv3P0uCwYd0bgYQSHF/gdTCcK1nr7fMhkQveBh6vmnbhrca7OeQRHz08+jo6EquUgNQZKmTZPWXQn9lS9mU/0EDLJJhn4KhJezGw6DcAAqB0KqmQedxtHMUT87by7LzhINwKZnm4y5WKA/W/zLI6dNqvIgc5C6UJh0EVgxa13GRmrnGmttV1dtLRQhiMJCbJykaekjPMULUmli0RbFz7bSFqFqEUsF+wwovyD+Y6D8KGOJdvvEYPdPIFpRPnhGUvH86JzsFdVKNJBicGI9LpCtlXlWNRbQIQ8uV5ze2HhxSJhtM6e6dB4d9yzpp6a81uR77bk=
 
 otp_release:
-  - "19.3"
-  - "20.3"
+  - "21.2"
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
