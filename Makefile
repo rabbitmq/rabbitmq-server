@@ -130,7 +130,9 @@ define PROJECT_ENV
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
 	    {default_consumer_prefetch, {false, 0}},
-	    {channel_queue_cleanup_interval, 60000}
+	    {channel_queue_cleanup_interval, 60000},
+	    %% Default max message size is 128 MB
+	    {max_message_size, 134217728}
 	  ]
 endef
 

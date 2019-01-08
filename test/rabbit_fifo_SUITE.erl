@@ -55,7 +55,7 @@ init_per_testcase(TestCase, Config) ->
     meck:expect(rabbit_quorum_queue, update_metrics, fun (_, _) -> ok end),
     meck:expect(rabbit_quorum_queue, cancel_consumer_handler,
                 fun (_, _) -> ok end),
-    ra_server_sup:remove_all(),
+    ra_server_sup_sup:remove_all(),
     ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
     ClusterName = rabbit_misc:r("/", queue, atom_to_binary(TestCase, utf8)),

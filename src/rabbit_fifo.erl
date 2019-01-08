@@ -428,26 +428,20 @@ apply(_, #checkout{spec = Spec, meta = Meta,
     State1 = update_consumer(ConsumerId, Meta, Spec, State0),
     checkout(State1, [{monitor, process, Pid}]);
 apply(#{index := RaftIdx}, #purge{},
-      #state{consumers = Cons0, ra_indexes = Indexes } = State0) ->
-    Total = rabbit_fifo_index:size(Indexes),
-    {State1, Effects1} =
-        maps:fold(
-          fun(ConsumerId, C = #consumer{checked_out = Checked0},
-              {StateAcc0, EffectsAcc0}) ->
-                  MsgRaftIdxs = [RIdx || {_MsgInId, {RIdx, _}}
-                                             <- maps:values(Checked0)],
-                  complete(ConsumerId, MsgRaftIdxs, maps:size(Checked0), C,
-                           #{}, EffectsAcc0, StateAcc0)
-          end, {State0, []}, Cons0),
-        {State, _, Effects} =
-            update_smallest_raft_index(
-              RaftIdx, Indexes,
-              State1#state{ra_indexes = rabbit_fifo_index:empty(),
-                           messages = #{},
-                           returns = lqueue:new(),
-                           msg_bytes_enqueue = 0,
-                           msg_bytes_checkout = 0,
-                           low_msg_num = undefined}, Effects1),
+      #state{ra_indexes = Indexes0,
+             messages = Messages} = State0) ->
+    Total = maps:size(Messages),
+    Indexes = lists:foldl(fun rabbit_fifo_index:delete/2,
+                          Indexes0,
+                          [I || {I, _} <- lists:sort(maps:values(Messages))]),
+    {State, _, Effects} =
+        update_smallest_raft_index(RaftIdx, Indexes0,
+                                   State0#state{ra_indexes = Indexes,
+                                                messages = #{},
+                                                returns = lqueue:new(),
+                                                msg_bytes_enqueue = 0,
+                                                low_msg_num = undefined},
+                                   []),
     %% as we're not checking out after a purge (no point) we have to
     %% reverse the effects ourselves
     {State, {purge, Total},
@@ -554,7 +548,8 @@ state_enter(leader, #state{consumers = Cons,
     Pids = lists:usort(maps:keys(Enqs) ++ [P || {_, P} <- maps:keys(Cons)]),
     Mons = [{monitor, process, P} || P <- Pids],
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
-    Effects = Mons ++ Nots,
+    NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
+    Effects = Mons ++ Nots ++ NodeMons,
     case BLH of
         undefined ->
             Effects;
@@ -1940,11 +1935,12 @@ purge_with_checkout_test() ->
     %% assert message bytes are non zero
     ?assert(State2#state.msg_bytes_checkout > 0),
     ?assert(State2#state.msg_bytes_enqueue > 0),
-    {State3, {purge, 2}, _} = apply(meta(2), make_purge(), State2),
-    ?assertEqual(0, State3#state.msg_bytes_checkout),
+    {State3, {purge, 1}, _} = apply(meta(2), make_purge(), State2),
+    ?assert(State2#state.msg_bytes_checkout > 0),
     ?assertEqual(0, State3#state.msg_bytes_enqueue),
+    ?assertEqual(1, rabbit_fifo_index:size(State3#state.ra_indexes)),
     #consumer{checked_out = Checked} = maps:get(Cid, State3#state.consumers),
-    ?assertEqual(0, maps:size(Checked)),
+    ?assertEqual(1, maps:size(Checked)),
     ok.
 
 down_returns_checked_out_in_order_test() ->
