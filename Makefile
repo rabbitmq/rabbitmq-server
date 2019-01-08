@@ -183,13 +183,26 @@ tests:: bats
 SLOW_CT_SUITES := backing_queue \
 		  cluster_rename \
 		  clustering_management \
+		  config_schema \
 		  dynamic_ha \
 		  eager_sync \
 		  health_check \
+		  lazy_queue \
+		  metrics \
+		  msg_store \
 		  partitions \
+		  per_user_connection_tracking \
+		  per_vhost_connection_limit \
+		  per_vhost_queue_limit \
+		  policy \
 		  priority_queue \
 		  queue_master_location \
-		  simple_ha
+		  quorum_queue \
+		  rabbit_core_metrics_gc \
+		  simple_ha \
+		  sync_detection \
+		  unit_inbroker_parallel \
+		  vhost
 FAST_CT_SUITES := $(filter-out $(sort $(SLOW_CT_SUITES)),$(CT_SUITES))
 
 ct-fast: CT_SUITES = $(FAST_CT_SUITES)
