@@ -533,7 +533,8 @@ state_enter(leader, #state{consumers = Cons,
     Pids = lists:usort(maps:keys(Enqs) ++ [P || {_, P} <- maps:keys(Cons)]),
     Mons = [{monitor, process, P} || P <- Pids],
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
-    Effects = Mons ++ Nots,
+    NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
+    Effects = Mons ++ Nots ++ NodeMons,
     case BLH of
         undefined ->
             Effects;
