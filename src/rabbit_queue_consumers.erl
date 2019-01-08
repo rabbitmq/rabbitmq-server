@@ -43,7 +43,7 @@
              acktags,
              consumer_count,
              %% Queue of {ChPid, #consumer{}} for consumers which have
-             %% been blocked for any reason
+             %% been blocked (rate/prefetch limited) for any reason
              blocked_consumers,
              %% The limiter itself
              limiter,
@@ -203,7 +203,7 @@ deliver(_FetchFun, _QName, false, State, true, none) ->
         State#state{use = update_use(State#state.use, inactive)}};
 deliver(FetchFun, QName, false, State = #state{consumers = Consumers}, true, SingleActiveConsumer) ->
     {ChPid, Consumer} = SingleActiveConsumer,
-    %% blocked consumers are removed from the queue state, but not the exclusive_consumer field,
+    %% blocked (rate/prefetch limited) consumers are removed from the queue state, but not the exclusive_consumer field,
     %% so we need to do this check to avoid adding the exclusive consumer to the channel record
     %% over and over
     case is_blocked(SingleActiveConsumer) of
