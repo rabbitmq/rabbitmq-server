@@ -727,33 +727,25 @@ cancel_consumer(ConsumerId,
                                   waiting_consumers = WaitingConsumers0 } = State0}) ->
     %% single active consumer on, consumers are waiting
     case maps:take(ConsumerId, Cons0) of
-        {_CurrentActiveConsumer, _} ->
+        {_CurrentActiveConsumer = #consumer{checked_out = Checked0}, _} ->
             % The active consumer is to be removed
             % Cancel it
-            {Effects1, State1} = case maps:take(ConsumerId, Cons0) of
-                                     {#consumer{checked_out = Checked0}, _} ->
-                                         S = return_all(State0, Checked0),
-                                         Effects = cancel_consumer_effects(ConsumerId, S, Effects0),
-                                         {Effects, State0};
-                                     error ->
-                                         {Effects0, State0}
-                                 end,
+            S = return_all(State0, Checked0),
+            Effects = cancel_consumer_effects(ConsumerId, S, Effects0),
             % Take another one from the waiting consumers and put it in consumers
             [{NewActiveConsumerId, NewActiveConsumer} | RemainingWaitingConsumers] = WaitingConsumers0,
             #state{service_queue = ServiceQueue} = State0,
             ServiceQueue1 = maybe_queue_consumer(NewActiveConsumerId, NewActiveConsumer, ServiceQueue),
-            State2 = State1#state{consumers = #{NewActiveConsumerId => NewActiveConsumer},
+            State1 = State0#state{consumers = #{NewActiveConsumerId => NewActiveConsumer},
                                   service_queue = ServiceQueue1,
                                   waiting_consumers = RemainingWaitingConsumers},
-            {Effects1, State2};
+            {Effects, State1};
         error ->
             % The cancelled consumer is not the active one
             % Just remove it from idle_consumers
-            {value, {ConsumerId, #consumer{checked_out = Checked0}}, WaitingConsumers1} =
-                lists:keytake(ConsumerId, 1, WaitingConsumers0),
-            S = return_all(State0, Checked0),
-            Effects = cancel_consumer_effects(ConsumerId, S, Effects0),
-            {Effects, State0#state{waiting_consumers = WaitingConsumers1}}
+            {value, _Consumer, WaitingConsumers1} = lists:keytake(ConsumerId, 1, WaitingConsumers0),
+            % A waiting consumer isn't supposed to have any checked out messages, so nothing special to do here
+            {Effects0, State0#state{waiting_consumers = WaitingConsumers1}}
     end.
 
 cancel_consumer0(ConsumerId,
