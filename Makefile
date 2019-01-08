@@ -198,12 +198,14 @@ SLOW_CT_SUITES := backing_queue \
 		  partitions \
 		  per_user_connection_tracking \
 		  per_vhost_connection_limit \
+		  per_vhost_msg_store \
 		  per_vhost_queue_limit \
 		  policy \
 		  priority_queue \
 		  queue_master_location \
 		  quorum_queue \
 		  rabbit_core_metrics_gc \
+		  rabbit_fifo_prop \
 		  simple_ha \
 		  sync_detection \
 		  unit_inbroker_parallel \
