@@ -1267,18 +1267,19 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
         false ->
             case check_exclusive_access(Holder, ExclusiveConsume, State) of
               in_use -> {error, reply({error, exclusive_consume_unavailable}, State)};
-              ok     -> Consumers1 = rabbit_queue_consumers:add(
-                ChPid, ConsumerTag, NoAck,
-                LimiterPid, LimiterActive,
-                PrefetchCount, Args, is_empty(State),
-                ActingUser, Consumers),
-                ExclusiveConsumer =
-                  if ExclusiveConsume -> {ChPid, ConsumerTag};
-                    true             -> Holder
-                  end,
-                  {state, State#q{consumers          = Consumers1,
-                        has_had_consumers  = true,
-                        active_consumer = ExclusiveConsumer}}
+              ok     ->
+                    Consumers1 = rabbit_queue_consumers:add(
+                                   ChPid, ConsumerTag, NoAck,
+                                   LimiterPid, LimiterActive,
+                                   PrefetchCount, Args, is_empty(State),
+                                   ActingUser, Consumers),
+                    ExclusiveConsumer =
+                        if ExclusiveConsume -> {ChPid, ConsumerTag};
+                           true             -> Holder
+                        end,
+                    {state, State#q{consumers          = Consumers1,
+                                    has_had_consumers  = true,
+                                    active_consumer = ExclusiveConsumer}}
             end
     end,
     case ConsumerRegistration of
