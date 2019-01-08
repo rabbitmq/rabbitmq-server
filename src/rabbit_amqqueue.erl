@@ -29,7 +29,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
--export([list_down/1, count/1, list_names/0, list_local_names/0]).
+-export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0]).
 -export([list_by_type/1]).
 -export([notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
@@ -44,6 +44,7 @@
 -export([list_local_followers/0]).
 -export([ensure_rabbit_queue_record_is_initialized/1]).
 -export([format/1]).
+-export([delete_immediately_by_resource/1]).
 
 -export([pid_of/1, pid_of/2]).
 -export([mark_local_durable_queues_stopped/1]).
@@ -266,6 +267,13 @@ filter_per_type(Queues) ->
 filter_pid_per_type(QPids) ->
     lists:partition(fun(QPid) -> ?IS_CLASSIC(QPid) end, QPids).
 
+filter_resource_per_type(Resources) ->
+    Queues = [begin
+                  {ok, #amqqueue{pid = QPid}} = lookup(Resource),
+                  {Resource, QPid}
+              end || Resource <- Resources],
+    lists:partition(fun({_Resource, QPid}) -> ?IS_CLASSIC(QPid) end, Queues).
+
 stop(VHost) ->
     %% Classic queues
     ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
@@ -429,8 +437,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                           not_found           -> Q1 = rabbit_policy:set(Q),
                                                  Q2 = Q1#amqqueue{state = live},
                                                  ok = store_queue(Q2),
-                                                 B = add_default_binding(Q2),
-                                                 fun () -> B(), {created, Q2} end;
+                                                 fun () -> {created, Q2} end;
                           {absent, _Q, _} = R -> rabbit_misc:const(R)
                       end;
                   [ExistingQ] ->
@@ -493,15 +500,6 @@ policy_changed(Q1 = #amqqueue{decorators = Decorators1},
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
     notify_policy_changed(Q1).
-
-add_default_binding(#amqqueue{name = QueueName}) ->
-    ExchangeName = rabbit_misc:r(QueueName, exchange, <<>>),
-    RoutingKey = QueueName#resource.name,
-    rabbit_binding:add(#binding{source      = ExchangeName,
-                                destination = QueueName,
-                                key         = RoutingKey,
-                                args        = []},
-                       ?INTERNAL_USER).
 
 lookup([])     -> [];                             %% optimisation
 lookup([Name]) -> ets:lookup(rabbit_queue, Name); %% optimisation
@@ -576,7 +574,17 @@ retry_wait(Q = #amqqueue{pid = QPid, name = Name, state = QState}, F, E, Retries
         {stopped, false} ->
             E({absent, Q, stopped});
         _ ->
-            false = rabbit_mnesia:is_process_alive(QPid),
+            case rabbit_mnesia:is_process_alive(QPid) of
+                true ->
+                    % rabbitmq-server#1682
+                    % The old check would have crashed here,
+                    % instead, log it and run the exit fun. absent & alive is weird,
+                    % but better than crashing with badmatch,true
+                    rabbit_log:debug("Unexpected alive queue process ~p~n", [QPid]),
+                    E({absent, Q, alive});
+                false ->
+                    ok % Expected result
+            end,
             timer:sleep(30),
             with(Name, F, E, RetriesLeft - 1)
     end.
@@ -746,6 +754,8 @@ list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
 
 list_names() -> mnesia:dirty_all_keys(rabbit_queue).
 
+list_names(VHost) -> [Q#amqqueue.name || Q <- list(VHost)].
+
 list_local_names() ->
     [ Q#amqqueue.name || #amqqueue{state = State, pid = QPid} = Q <- list(),
            State =/= crashed, is_local_to_node(QPid, node())].
@@ -912,11 +922,18 @@ list_local(VHostPath) ->
     [ Q || #amqqueue{state = State, pid = QPid} = Q <- list(VHostPath),
            State =/= crashed, is_local_to_node(QPid, node()) ].
 
-notify_policy_changed(#amqqueue{pid = QPid}) ->
-    gen_server2:cast(QPid, policy_changed).
+notify_policy_changed(#amqqueue{pid = QPid}) when ?IS_CLASSIC(QPid) ->
+    gen_server2:cast(QPid, policy_changed);
+notify_policy_changed(#amqqueue{pid = QPid,
+                                name = QName}) when ?IS_QUORUM(QPid) ->
+    rabbit_quorum_queue:policy_changed(QName, QPid).
 
-consumers(#amqqueue{ pid = QPid }) ->
-    delegate:invoke(QPid, {gen_server2, call, [consumers, infinity]}).
+consumers(#amqqueue{pid = QPid}) when ?IS_CLASSIC(QPid) ->
+    delegate:invoke(QPid, {gen_server2, call, [consumers, infinity]});
+consumers(#amqqueue{pid = QPid}) when ?IS_QUORUM(QPid) ->
+    {ok, {_, Result}, _} = ra:local_query(QPid,
+                                          fun rabbit_fifo:query_consumers/1),
+    maps:values(Result).
 
 consumer_info_keys() -> ?CONSUMER_INFO_KEYS.
 
@@ -961,7 +978,16 @@ delete_exclusive(QPids, ConnId) ->
 delete_immediately(QPids) ->
     {Classic, Quorum} = filter_pid_per_type(QPids),
     [gen_server2:cast(QPid, delete_immediately) || QPid <- Classic],
-    [rabbit_quorum_queue:delete_immediately(QPid) || QPid <- Quorum],
+    case Quorum of
+        [] -> ok;
+        _ -> {error, cannot_delete_quorum_queues, Quorum}
+    end.
+
+delete_immediately_by_resource(Resources) ->
+    {Classic, Quorum} = filter_resource_per_type(Resources),
+    [gen_server2:cast(QPid, delete_immediately) || {_, QPid} <- Classic],
+    [rabbit_quorum_queue:delete_immediately(Resource, QPid)
+     || {Resource, QPid} <- Quorum],
     ok.
 
 delete(#amqqueue{ type = quorum} = Q,
@@ -1098,7 +1124,8 @@ notify_down_all(QPids, ChPid, Timeout) ->
         Error         -> {error, Error}
     end.
 
-activate_limit_all(QPids, ChPid) ->
+activate_limit_all(QRefs, ChPid) ->
+    QPids = [P || P <- QRefs, ?IS_CLASSIC(P)],
     delegate:invoke_no_result(QPids, {gen_server2, cast,
                                       [{activate_limit, ChPid}]}).
 
@@ -1133,14 +1160,15 @@ basic_get(#amqqueue{pid = {Name, _} = Id, type = quorum, name = QName} = Q, _ChP
                                        [rabbit_misc:rs(QName), Reason])
     end.
 
-basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid, LimiterPid,
-              LimiterActive, ConsumerPrefetchCount, ConsumerTag,
+basic_consume(#amqqueue{pid = QPid, name = QName, type = classic}, NoAck, ChPid,
+              LimiterPid, LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, ActingUser, QState) ->
     ok = check_consume_arguments(QName, Args),
-    case delegate:invoke(QPid, {gen_server2, call,
-                                [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-                                  ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
-                                  Args, OkMsg, ActingUser}, infinity]}) of
+    case delegate:invoke(QPid,
+                         {gen_server2, call,
+                          [{basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
+                            ConsumerPrefetchCount, ConsumerTag, ExclusiveConsume,
+                            Args, OkMsg, ActingUser}, infinity]}) of
         ok ->
             {ok, QState};
         Err ->
@@ -1150,15 +1178,17 @@ basic_consume(#amqqueue{type = quorum}, _NoAck, _ChPid,
               _LimiterPid, true, _ConsumerPrefetchCount, _ConsumerTag,
               _ExclusiveConsume, _Args, _OkMsg, _ActingUser, _QStates) ->
     {error, global_qos_not_supported_for_queue_type};
-basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q, NoAck, ChPid,
-              _LimiterPid, _LimiterActive, ConsumerPrefetchCount, ConsumerTag,
-              ExclusiveConsume, Args, OkMsg, _ActingUser, QStates) ->
+basic_consume(#amqqueue{pid = {Name, _} = Id, name = QName, type = quorum} = Q,
+              NoAck, ChPid, _LimiterPid, _LimiterActive, ConsumerPrefetchCount,
+              ConsumerTag, ExclusiveConsume, Args, OkMsg,
+              ActingUser, QStates) ->
     ok = check_consume_arguments(QName, Args),
     QState0 = get_quorum_state(Id, QName, QStates),
     {ok, QState} = rabbit_quorum_queue:basic_consume(Q, NoAck, ChPid,
                                                      ConsumerPrefetchCount,
                                                      ConsumerTag,
                                                      ExclusiveConsume, Args,
+                                                     ActingUser,
                                                      OkMsg, QState0),
     {ok, maps:put(Name, QState, QStates)}.
 

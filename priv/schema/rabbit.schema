@@ -258,7 +258,7 @@ end}.
 {translation, "rabbit.ssl_options.ciphers",
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("ssl_options.ciphers", Conf),
-    [V || {_, V} <- Settings]
+    lists:reverse([V || {_, V} <- Settings])
 end}.
 
 %% ===========================================================================
@@ -553,6 +553,9 @@ end}.
  end
 }.
 
+
+{mapping, "msx_message_size", "rabbit.max_message_size",
+    [{datatype, integer}, {validators, ["less_then_512MB"]}]}.
 
 %% Customising Socket Options.
 %%
@@ -1342,6 +1345,16 @@ end}.
     {validators, ["non_zero_positive_integer"]}
 ]}.
 
+{mapping, "inet_dist_listen_min", "kernel.inet_dist_listen_min",[
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "inet_dist_listen_max", "kernel.inet_dist_listen_max",[
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
 % ===============================
 % Validators
 % ===============================
@@ -1349,6 +1362,11 @@ end}.
 {validator, "size_less_than_2G", "Byte size should be less than 2G and greater than 0",
 fun(Size) when is_integer(Size) ->
     Size > 0 andalso Size < 2147483648
+end}.
+
+{validator, "less_then_512MB", "Max message size should be less than 512MB and gre than 0",
+fun(Size) when is_integer(Size) ->
+    Size > 0 andalso Size < 536870912
 end}.
 
 {validator, "less_than_1", "Flooat is not beetween 0 and 1",

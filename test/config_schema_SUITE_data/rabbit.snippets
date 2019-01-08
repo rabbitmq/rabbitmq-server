@@ -326,15 +326,15 @@ tcp_listen_options.exit_on_close = false",
         {ssl_options,
             [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
              {ciphers, [
-               "DHE-RSA-AES256-GCM-SHA384",
-               "ECDH-ECDSA-AES256-GCM-SHA384",
-               "ECDH-ECDSA-AES256-SHA384",
-               "ECDH-RSA-AES256-GCM-SHA384",
-               "ECDH-RSA-AES256-SHA384",
                "ECDHE-ECDSA-AES256-GCM-SHA384",
-               "ECDHE-ECDSA-AES256-SHA384",
                "ECDHE-RSA-AES256-GCM-SHA384",
-               "ECDHE-RSA-AES256-SHA384"
+               "ECDHE-ECDSA-AES256-SHA384",
+               "ECDHE-RSA-AES256-SHA384",
+               "ECDH-ECDSA-AES256-GCM-SHA384",
+               "ECDH-RSA-AES256-GCM-SHA384",
+               "ECDH-ECDSA-AES256-SHA384",
+               "ECDH-RSA-AES256-SHA384",
+               "DHE-RSA-AES256-GCM-SHA384"
              ]},
              {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
              {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
@@ -568,12 +568,27 @@ credential_validator.regexp = ^abc\\d+",
       {delegate_count, 64}
     ]}],
   []},
+
   {kernel_net_ticktime,
    "net_ticktime = 20",
    [{kernel, [
       {net_ticktime, 20}
      ]}],
    []},
+
+  {kernel_inet_dist_listen_min,
+   "inet_dist_listen_min = 16000",
+   [{kernel, [
+      {inet_dist_listen_min, 16000}
+     ]}],
+   []},
+  {kernel_inet_dist_listen_max,
+   "inet_dist_listen_max = 16100",
+   [{kernel, [
+      {inet_dist_listen_max, 16100}
+     ]}],
+   []},
+
   {log_syslog_settings,
    "log.syslog = true
     log.syslog.identity = rabbitmq

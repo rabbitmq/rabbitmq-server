@@ -462,7 +462,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% immediately after calling is_duplicate). The msg is
             %% invalid. We will not see this again, nor will we be
             %% further involved in confirming this message, so erase.
-            {true, State #state { seen_status = maps:remove(MsgId, SS) }};
+            {{true, drop}, State #state { seen_status = maps:remove(MsgId, SS) }};
         {ok, Disposition}
           when Disposition =:= confirmed
             %% It got published when we were a slave via gm, and
@@ -477,8 +477,8 @@ is_duplicate(Message = #basic_message { id = MsgId },
             %% Message was discarded while we were a slave. Confirm now.
             %% As above, amqqueue_process will have the entry for the
             %% msg_id_to_channel mapping.
-            {true, State #state { seen_status = maps:remove(MsgId, SS),
-                                  confirmed = [MsgId | Confirmed] }}
+            {{true, drop}, State #state { seen_status = maps:remove(MsgId, SS),
+                                          confirmed = [MsgId | Confirmed] }}
     end.
 
 set_queue_mode(Mode, State = #state { gm                  = GM,

@@ -470,7 +470,7 @@
 ## Disabling background GC may reduce latency for client operations,
 ## keeping it enabled may reduce median RAM usage by the binary heap
 ## (see https://www.erlang-solutions.com/blog/erlang-garbage-collector.html).
-## 
+##
 ## Before trying this option, please take a look at the memory
 ## breakdown (http://www.rabbitmq.com/memory-use.html).
 ##
@@ -503,7 +503,16 @@
 # Kernel section
 # ======================================
 
+## Timeout used to detect peer unavailability, including CLI tools.
+## Related doc guide: https://www.rabbitmq.com/nettick.html.
+##
 # net_ticktime = 60
+
+## Inter-node communication port range.
+## Related doc guide: https://www.rabbitmq.com/networking.html#epmd-inet-dist-port-range.
+##
+# inet_dist_listen_min = 25672
+# inet_dist_listen_max = 25692
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Management Plugin
@@ -524,18 +533,49 @@
 ##
 # management.http_log_dir = /path/to/access.log
 
-## Change the port on which the HTTP listener listens,
-## specifying an interface for the web server to bind to.
-## Also set the listener to use TLS and provide TLS options.
+## HTTP listener and embedded Web server settings.
+# ## See https://rabbitmq.com/management.html for details.
+#
+# management.tcp.port = 15672
+# management.tcp.ip   = 0.0.0.0
+#
+# management.tcp.shutdown_timeout   = 7000
+# management.tcp.max_keepalive      = 120
+# management.tcp.idle_timeout       = 120
+# management.tcp.inactivity_timeout = 120
+# management.tcp.request_timeout    = 120
+# management.tcp.compress           = true
+
+## HTTPS listener settings.
+## See https://rabbitmq.com/management.html and https://rabbitmq.com/ssl.html for details.
 ##
+# management.ssl.port       = 15671
+# management.ssl.cacertfile = /path/to/ca_certificate.pem
+# management.ssl.certfile   = /path/to/server_certificate.pem
+# management.ssl.keyfile    = /path/to/server_key.pem
 
-# management.listener.port = 15672
-# management.listener.ip   = 127.0.0.1
-# management.listener.ssl  = true
+## More TLS options
+# management.ssl.honor_cipher_order   = true
+# management.ssl.honor_ecc_order      = true
+# management.ssl.client_renegotiation = false
+# management.ssl.secure_renegotiate   = true
 
-# management.listener.ssl_opts.cacertfile = /path/to/cacert.pem
-# management.listener.ssl_opts.certfile   = /path/to/cert.pem
-# management.listener.ssl_opts.keyfile    = /path/to/key.pem
+## Supported TLS versions
+# management.ssl.versions.1 = tlsv1.2
+# management.ssl.versions.2 = tlsv1.1
+
+## Cipher suites the server is allowed to use
+# management.ssl.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
+# management.ssl.ciphers.2 = ECDHE-RSA-AES256-GCM-SHA384
+# management.ssl.ciphers.3 = ECDHE-ECDSA-AES256-SHA384
+# management.ssl.ciphers.4 = ECDHE-RSA-AES256-SHA384
+# management.ssl.ciphers.5 = ECDH-ECDSA-AES256-GCM-SHA384
+# management.ssl.ciphers.6 = ECDH-RSA-AES256-GCM-SHA384
+# management.ssl.ciphers.7 = ECDH-ECDSA-AES256-SHA384
+# management.ssl.ciphers.8 = ECDH-RSA-AES256-SHA384
+# management.ssl.ciphers.9 = DHE-RSA-AES256-GCM-SHA384
+
+
 
 ## One of 'basic', 'detailed' or 'none'. See
 ## http://rabbitmq.com/management.html#fine-stats for more details.
@@ -574,13 +614,39 @@
 # STOMP section
 # =======================================
 
-## Network Configuration. The format is generally the same as for the core broker.
-##
-# stomp.listeners.tcp.default = 61613
+## See https://rabbitmq.com/stomp.html for details.
 
-## Same for ssl listeners
+## TCP listeners.
 ##
+# stomp.listeners.tcp.1 = 127.0.0.1:61613
+# stomp.listeners.tcp.2 = ::1:61613
+
+## TCP listener settings
+##
+# stomp.tcp_listen_options.backlog   = 2048
+# stomp.tcp_listen_options.recbuf    = 131072
+# stomp.tcp_listen_options.sndbuf    = 131072
+#
+# stomp.tcp_listen_options.keepalive = true
+# stomp.tcp_listen_options.nodelay   = true
+#
+# stomp.tcp_listen_options.exit_on_close = true
+# stomp.tcp_listen_options.send_timeout  = 120
+
+## Proxy protocol support
+##
+# stomp.proxy_protocol = false
+
+## TLS listeners
+## See https://rabbitmq.com/stomp.html and https://rabbitmq.com/ssl.html for details.
 # stomp.listeners.ssl.default = 61614
+#
+# ssl_options.cacertfile = path/to/cacert.pem
+# ssl_options.certfile   = path/to/cert.pem
+# ssl_options.keyfile    = path/to/key.pem
+# ssl_options.verify     =  verify_peer
+# ssl_options.fail_if_no_peer_cert = true
+
 
 ## Number of Erlang processes that will accept connections for the TCP
 ## and TLS listeners.
@@ -633,6 +699,52 @@
 # MQTT section
 # =======================================
 
+## TCP listener settings.
+##
+# mqtt.listeners.tcp.1 = 127.0.0.1:61613
+# mqtt.listeners.tcp.2 = ::1:61613
+
+## TCP listener options (as per the broker configuration).
+##
+# mqtt.tcp_listen_options.backlog = 4096
+# mqtt.tcp_listen_options.recbuf  = 131072
+# mqtt.tcp_listen_options.sndbuf  = 131072
+#
+# mqtt.tcp_listen_options.keepalive = true
+# mqtt.tcp_listen_options.nodelay   = true
+#
+# mqtt.tcp_listen_options.exit_on_close = true
+# mqtt.tcp_listen_options.send_timeout  = 120
+
+## TLS listener settings
+## ## See https://rabbitmq.com/mqtt.html and https://rabbitmq.com/ssl.html for details.
+#
+# mqtt.listeners.ssl.default = 8883
+#
+# ssl_options.cacertfile = /path/to/tls/ca_certificate_bundle.pem
+# ssl_options.certfile   = /path/to/tls/server_certificate.pem
+# ssl_options.keyfile    = /path/to/tls/server_key.pem
+# ssl_options.verify     = verify_peer
+# ssl_options.fail_if_no_peer_cert  = true
+#
+
+
+## Number of Erlang processes that will accept connections for the TCP
+## and TLS listeners.
+##
+# mqtt.num_acceptors.tcp = 10
+# mqtt.num_acceptors.ssl = 10
+
+## Whether or not to enable proxy protocol support.
+## Once enabled, clients cannot directly connect to the broker
+## anymore. They must connect through a load balancer that sends the
+## proxy protocol header to the broker at connection time.
+## This setting applies only to STOMP clients, other protocols
+## like STOMP or AMQP have their own setting to enable proxy protocol.
+## See the plugins or broker documentation for more information.
+##
+# mqtt.proxy_protocol = false
+
 ## Set the default user name and password used for anonymous connections (when client
 ## provides no credentials). Anonymous connections are highly discouraged!
 ##
@@ -663,34 +775,6 @@
 ##
 # mqtt.prefetch = 10
 
-## TCP/SSL Configuration (as per the broker configuration).
-##
-# mqtt.listeners.tcp.default = 1883
-
-## Same for ssl listener
-##
-# mqtt.listeners.ssl.default = 1884
-
-## Number of Erlang processes that will accept connections for the TCP
-## and TLS listeners.
-##
-# mqtt.num_acceptors.tcp = 10
-# mqtt.num_acceptors.ssl = 10
-
-## TCP listener options (as per the broker configuration).
-##
-# mqtt.tcp_listen_options.backlog = 128
-# mqtt.tcp_listen_options.nodelay = true
-
-## Whether or not to enable proxy protocol support.
-## Once enabled, clients cannot directly connect to the broker
-## anymore. They must connect through a load balancer that sends the
-## proxy protocol header to the broker at connection time.
-## This setting applies only to STOMP clients, other protocols
-## like STOMP or AMQP have their own setting to enable proxy protocol.
-## See the plugins or broker documentation for more information.
-##
-# mqtt.proxy_protocol = false
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ AMQP 1.0 Support

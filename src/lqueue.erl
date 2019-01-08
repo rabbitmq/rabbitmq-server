@@ -21,32 +21,40 @@
 %% is an O(1) operation, in contrast with queue:len/1 which is O(n).
 
 -export([new/0, is_empty/1, len/1, in/2, in_r/2, out/1, out_r/1, join/2,
-         foldl/3, foldr/3, from_list/1, to_list/1, peek/1, peek_r/1]).
+         foldl/3, foldr/3, from_list/1, drop/1, to_list/1, peek/1, peek_r/1]).
 
 -define(QUEUE, queue).
 
--export_type([?MODULE/0]).
+-export_type([
+              ?MODULE/0,
+              ?MODULE/1
+             ]).
 
--opaque ?MODULE() :: {non_neg_integer(), queue:queue()}.
+-opaque ?MODULE() :: {non_neg_integer(), queue:queue(term())}.
+-opaque ?MODULE(T) :: {non_neg_integer(), queue:queue(T)}.
 -type value()     :: any().
--type result()    :: 'empty' | {'value', value()}.
+-type result(T)    :: 'empty' | {'value', T}.
 
--spec new() -> ?MODULE().
--spec is_empty(?MODULE()) -> boolean().
--spec len(?MODULE()) -> non_neg_integer().
--spec in(value(), ?MODULE()) -> ?MODULE().
+-spec new() -> ?MODULE(_).
+-spec drop(?MODULE(T)) -> ?MODULE(T).
+-spec is_empty(?MODULE(_)) -> boolean().
+-spec len(?MODULE(_)) -> non_neg_integer().
+-spec in(T, ?MODULE(T)) -> ?MODULE(T).
 -spec in_r(value(), ?MODULE()) -> ?MODULE().
--spec out(?MODULE()) -> {result(), ?MODULE()}.
--spec out_r(?MODULE()) -> {result(), ?MODULE()}.
--spec join(?MODULE(), ?MODULE()) -> ?MODULE().
--spec foldl(fun ((value(), B) -> B), B, ?MODULE()) -> B.
--spec foldr(fun ((value(), B) -> B), B, ?MODULE()) -> B.
--spec from_list([value()]) -> ?MODULE().
--spec to_list(?MODULE()) -> [value()].
--spec peek(?MODULE()) -> result().
--spec peek_r(?MODULE()) -> result().
+-spec out(?MODULE(T)) -> {result(T), ?MODULE()}.
+-spec out_r(?MODULE(T)) -> {result(T), ?MODULE()}.
+-spec join(?MODULE(A), ?MODULE(B)) -> ?MODULE(A | B).
+-spec foldl(fun ((T, B) -> B), B, ?MODULE(T)) -> B.
+-spec foldr(fun ((T, B) -> B), B, ?MODULE(T)) -> B.
+-spec from_list([T]) -> ?MODULE(T).
+-spec to_list(?MODULE(T)) -> [T].
+% -spec peek(?MODULE()) -> result().
+-spec peek(?MODULE(T)) -> result(T).
+-spec peek_r(?MODULE(T)) -> result(T).
 
 new() -> {0, ?QUEUE:new()}.
+
+drop({L, Q}) -> {L - 1, ?QUEUE:drop(Q)}.
 
 is_empty({0, _Q}) -> true;
 is_empty(_)       -> false.
@@ -81,7 +89,8 @@ foldr(Fun, Init, Q) ->
         {{value, V}, Q1} -> foldr(Fun, Fun(V, Init), Q1)
     end.
 
-len({L, _Q}) -> L.
+len({L, _}) -> L.
+
 
 peek({ 0, _Q}) -> empty;
 peek({_L,  Q}) -> ?QUEUE:peek(Q).

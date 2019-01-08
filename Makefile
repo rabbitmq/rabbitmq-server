@@ -130,7 +130,9 @@ define PROJECT_ENV
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
 	    {default_consumer_prefetch, {false, 0}},
-	    {channel_queue_cleanup_interval, 60000}
+	    {channel_queue_cleanup_interval, 60000},
+	    %% Default max message size is 128 MB
+	    {max_message_size, 134217728}
 	  ]
 endef
 
@@ -268,6 +270,7 @@ web-manpages: $(WEB_MANPAGES)
 	    gsub(/<h1/, "<h2", line); \
 	    gsub(/<\/h1>/, "</h2>", line); \
 	    gsub(/class="D1"/, "class=\"D1 sourcecode bash hljs\"", line); \
+	    gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent sourcecode bash hljs\"", line); \
 	    print line; \
 	  } } \
 	  ' > "$@"
