@@ -259,7 +259,8 @@ handle_op({input_event, requeue}, #t{effects = Effs} = T) ->
         _ ->
             T
     end;
-handle_op({input_event, Settlement}, #t{effects = Effs} = T) ->
+handle_op({input_event, Settlement}, #t{effects = Effs,
+                                        down = Down} = T) ->
     case queue:out(Effs) of
         {{value, {settle, MsgIds, CId}}, Q} ->
             Cmd = case Settlement of
@@ -269,7 +270,14 @@ handle_op({input_event, Settlement}, #t{effects = Effs} = T) ->
                   end,
             do_apply(Cmd, T#t{effects = Q});
         {{value, Cmd}, Q} when element(1, Cmd) =:= enqueue ->
-            do_apply(Cmd, T#t{effects = Q});
+            case maps:is_key(element(2, Cmd), Down) of
+                true ->
+                    %% enqueues cannot arrive after down for the same process
+                    %% drop message
+                    T#t{effects = Q};
+                false ->
+                    do_apply(Cmd, T#t{effects = Q})
+            end;
         _ ->
             T
     end;
