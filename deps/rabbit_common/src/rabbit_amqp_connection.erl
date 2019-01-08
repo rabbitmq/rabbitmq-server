@@ -23,15 +23,19 @@ amqp_params(ConnPid, Timeout) ->
     P = try
             gen_server:call(ConnPid, {info, [amqp_params]}, Timeout)
         catch exit:{noproc, Error} ->
-            rabbit_log:debug("file ~p, line ~p - connection process ~p not alive: ~p~n",
-                             [?FILE, ?LINE, ConnPid, Error]),
+                rabbit_log:debug("file ~p, line ~p - connection process ~p not alive: ~p~n",
+                                 [?FILE, ?LINE, ConnPid, Error]),
+            [];
+              _:Error ->
+                rabbit_log:debug("file ~p, line ~p - failed to get amqp_params from connection process ~p: ~p~n",
+                                 [?FILE, ?LINE, ConnPid, Error]),
             []
         end,
     process_amqp_params_result(P).
 
 process_amqp_params_result({error, {bad_argument, amqp_params}}) ->
-    % Some connection process modules do not handle the {info, [amqp_params]}
-    % message (like rabbit_reader) and throw a bad_argument error
+    %% Some connection process modules do not handle the {info, [amqp_params]}
+    %% message (like rabbit_reader) and throw a bad_argument error
     [];
 process_amqp_params_result({ok, AmqpParams}) ->
     AmqpParams;
