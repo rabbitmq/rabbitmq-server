@@ -20,6 +20,11 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-import(quorum_queue_utils, [wait_for_messages_ready/3,
+                             wait_for_messages_pending_ack/3,
+                             dirty_query/3,
+                             ra_name/1]).
+
 -compile(export_all).
 
 all() ->
@@ -596,9 +601,6 @@ publish_confirm(Ch, QName) ->
          end,
     ct:pal("CONFIRMED! ~s", [QName]),
     ok.
-
-ra_name(Q) ->
-    binary_to_atom(<<"%2F_", Q/binary>>, utf8).
 
 publish_and_restart(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
@@ -2244,49 +2246,6 @@ wait_for_cleanup(Server, Channel, Number, N) ->
             timer:sleep(500),
             wait_for_cleanup(Server, Channel, Number, N - 1)
     end.
-
-
-wait_for_messages_ready(Servers, QName, Ready) ->
-    wait_for_messages(Servers, QName, Ready,
-                      fun rabbit_fifo:query_messages_ready/1, 60).
-
-wait_for_messages_pending_ack(Servers, QName, Ready) ->
-    wait_for_messages(Servers, QName, Ready,
-                      fun rabbit_fifo:query_messages_checked_out/1, 60).
-
-wait_for_messages(Servers, QName, Number, Fun, 0) ->
-    Msgs = dirty_query(Servers, QName, Fun),
-    Totals = lists:map(fun(M) when is_map(M) ->
-                               maps:size(M);
-                          (_) ->
-                               -1
-                       end, Msgs),
-    ?assertEqual(Totals, [Number || _ <- lists:seq(1, length(Servers))]);
-wait_for_messages(Servers, QName, Number, Fun, N) ->
-    Msgs = dirty_query(Servers, QName, Fun),
-    case lists:all(fun(M) when is_map(M) ->
-                           maps:size(M) == Number;
-                      (_) ->
-                           false
-                   end, Msgs) of
-        true ->
-            ok;
-        _ ->
-            timer:sleep(500),
-            wait_for_messages(Servers, QName, Number, Fun, N - 1)
-    end.
-
-dirty_query(Servers, QName, Fun) ->
-    lists:map(
-      fun(N) ->
-              case rpc:call(N, ra, local_query, [{QName, N}, Fun]) of
-                  {ok, {_, Msgs}, _} ->
-                      ct:pal("Msgs ~w", [Msgs]),
-                      Msgs;
-                  _ ->
-                      undefined
-              end
-      end, Servers).
 
 wait_until(Condition) ->
     wait_until(Condition, 60).
