@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue_process).
@@ -36,8 +36,8 @@
 -record(q, {
             %% an #amqqueue record
             q,
-            %% none | {exclusive consumer channel PID, consumer tag}
-            exclusive_consumer,
+            %% none | {exclusive consumer channel PID, consumer tag} | {single active consumer channel PID, consumer}
+            active_consumer,
             %% Set to true if a queue has ever had a consumer.
             %% This is used to determine when to delete auto-delete queues.
             has_had_consumers,
@@ -94,7 +94,9 @@
             %% example.
             mirroring_policy_version = 0,
             %% running | flow | idle
-            status
+            status,
+            %% true | false
+            single_active_consumer_on
            }).
 
 %%----------------------------------------------------------------------------
@@ -155,15 +157,20 @@ init(Q) ->
     ?MODULE}.
 
 init_state(Q) ->
-    State = #q{q                   = Q,
-               exclusive_consumer  = none,
-               has_had_consumers   = false,
-               consumers           = rabbit_queue_consumers:new(),
-               senders             = pmon:new(delegate),
-               msg_id_to_channel   = gb_trees:empty(),
-               status              = running,
-               args_policy_version = 0,
-               overflow            = 'drop-head'},
+    SingleActiveConsumerOn = case rabbit_misc:table_lookup(Q#amqqueue.arguments, <<"x-single-active-consumer">>) of
+        {bool, true} -> true;
+        _            -> false
+    end,
+    State = #q{q                         = Q,
+               active_consumer           = none,
+               has_had_consumers         = false,
+               consumers                 = rabbit_queue_consumers:new(),
+               senders                   = pmon:new(delegate),
+               msg_id_to_channel         = gb_trees:empty(),
+               status                    = running,
+               args_policy_version       = 0,
+               overflow                  = 'drop-head',
+               single_active_consumer_on = SingleActiveConsumerOn},
     rabbit_event:init_stats_timer(State, #q.stats_timer).
 
 init_it(Recover, From, State = #q{q = #amqqueue{exclusive_owner = none}}) ->
@@ -545,7 +552,10 @@ stop_ttl_timer(State) -> rabbit_misc:stop_timer(State, #q.ttl_timer_ref).
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #q.stats_timer, emit_stats).
 
-assert_invariant(State = #q{consumers = Consumers}) ->
+assert_invariant(#q{single_active_consumer_on = true}) ->
+    %% queue may contain messages and have available consumers with exclusive consumer
+    ok;
+assert_invariant(State = #q{consumers = Consumers, single_active_consumer_on = false}) ->
     true = (rabbit_queue_consumers:inactive(Consumers) orelse is_empty(State)).
 
 is_empty(#q{backing_queue = BQ, backing_queue_state = BQS}) -> BQ:is_empty(BQS).
@@ -619,7 +629,8 @@ run_message_queue(ActiveConsumersChanged, State) ->
         true  -> maybe_notify_decorators(ActiveConsumersChanged, State);
         false -> case rabbit_queue_consumers:deliver(
                         fun(AckRequired) -> fetch(AckRequired, State) end,
-                        qname(State), State#q.consumers) of
+                        qname(State), State#q.consumers,
+                        State#q.single_active_consumer_on, State#q.active_consumer) of
                      {delivered, ActiveConsumersChanged1, State1, Consumers} ->
                          run_message_queue(
                            ActiveConsumersChanged or ActiveConsumersChanged1,
@@ -645,7 +656,7 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
                           {{Message, Delivered, AckTag}, {BQS1, MTC}};
                (false) -> {{Message, Delivered, undefined},
                            discard(Delivery, BQ, BQS, MTC)}
-           end, qname(State), State#q.consumers) of
+           end, qname(State), State#q.consumers, State#q.single_active_consumer_on, State#q.active_consumer) of
         {delivered, ActiveConsumersChanged, {BQS1, MTC1}, Consumers} ->
             {delivered,   maybe_notify_decorators(
                             ActiveConsumersChanged,
@@ -814,9 +825,10 @@ should_auto_delete(#q{q = #amqqueue{auto_delete = false}}) -> false;
 should_auto_delete(#q{has_had_consumers = false}) -> false;
 should_auto_delete(State) -> is_unused(State).
 
-handle_ch_down(DownPid, State = #q{consumers          = Consumers,
-                                   exclusive_consumer = Holder,
-                                   senders            = Senders}) ->
+handle_ch_down(DownPid, State = #q{consumers                 = Consumers,
+                                   active_consumer           = Holder,
+                                   single_active_consumer_on = SingleActiveConsumerOn,
+                                   senders                   = Senders}) ->
     State1 = State#q{senders = case pmon:is_monitored(DownPid, Senders) of
                                    false ->
                                        Senders;
@@ -840,12 +852,9 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
         {ChAckTags, ChCTags, Consumers1} ->
             QName = qname(State1),
             [emit_consumer_deleted(DownPid, CTag, QName, ?INTERNAL_USER) || CTag <- ChCTags],
-            Holder1 = case Holder of
-                          {DownPid, _} -> none;
-                          Other        -> Other
-                      end,
+            Holder1 = new_single_active_consumer_after_channel_down(DownPid, Holder, SingleActiveConsumerOn, Consumers1),
             State2 = State1#q{consumers          = Consumers1,
-                              exclusive_consumer = Holder1},
+                              active_consumer    = Holder1},
             notify_decorators(State2),
             case should_auto_delete(State2) of
                 true  ->
@@ -858,6 +867,22 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
                 false -> {ok, requeue_and_run(ChAckTags,
                                               ensure_expiry_timer(State2))}
             end
+    end.
+
+new_single_active_consumer_after_channel_down(DownChPid, CurrentSingleActiveConsumer, _SingleActiveConsumerIsOn = true, Consumers) ->
+    case CurrentSingleActiveConsumer of
+        {DownChPid, _} ->
+            case rabbit_queue_consumers:get_consumer(Consumers) of
+                undefined -> none;
+                Consumer  -> Consumer
+            end;
+        false ->
+            CurrentSingleActiveConsumer
+    end;
+new_single_active_consumer_after_channel_down(DownChPid, CurrentSingleActiveConsumer, _SingleActiveConsumerIsOn = false, _Consumers) ->
+    case CurrentSingleActiveConsumer of
+        {DownChPid, _} -> none;
+        Other          -> Other
     end.
 
 check_exclusive_access({_ChPid, _ConsumerTag}, _ExclusiveConsume, _State) ->
@@ -1007,14 +1032,14 @@ i(effective_policy_definition,  #q{q = Q}) ->
         undefined -> [];
         Def       -> Def
     end;
-i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
-    '';
-i(exclusive_consumer_pid, #q{exclusive_consumer = {ChPid, _ConsumerTag}}) ->
+i(exclusive_consumer_pid, #q{active_consumer = {ChPid, _ConsumerTag}, single_active_consumer_on = false}) ->
     ChPid;
-i(exclusive_consumer_tag, #q{exclusive_consumer = none}) ->
+i(exclusive_consumer_pid, _) ->
     '';
-i(exclusive_consumer_tag, #q{exclusive_consumer = {_ChPid, ConsumerTag}}) ->
+i(exclusive_consumer_tag, #q{active_consumer = {_ChPid, ConsumerTag}, single_active_consumer_on = false}) ->
     ConsumerTag;
+i(exclusive_consumer_tag, _) ->
+    '';
 i(messages_ready, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:len(BQS);
 i(messages_unacknowledged, _) ->
@@ -1213,49 +1238,81 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
              PrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
-            _From, State = #q{consumers          = Consumers,
-                              exclusive_consumer = Holder}) ->
-    case check_exclusive_access(Holder, ExclusiveConsume, State) of
-        in_use -> reply({error, exclusive_consume_unavailable}, State);
-        ok     -> Consumers1 = rabbit_queue_consumers:add(
-                                 ChPid, ConsumerTag, NoAck,
-                                 LimiterPid, LimiterActive,
-                                 PrefetchCount, Args, is_empty(State),
-                                 ActingUser, Consumers),
-                  ExclusiveConsumer =
-                      if ExclusiveConsume -> {ChPid, ConsumerTag};
-                         true             -> Holder
-                      end,
-                  State1 = State#q{consumers          = Consumers1,
-                                   has_had_consumers  = true,
-                                   exclusive_consumer = ExclusiveConsumer},
-                  ok = maybe_send_reply(ChPid, OkMsg),
-		  QName = qname(State1),
-		  AckRequired = not NoAck,
-		  rabbit_core_metrics:consumer_created(
-		    ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-		    PrefetchCount, Args),
-                  emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                        AckRequired, QName, PrefetchCount,
-					Args, none, ActingUser),
-                  notify_decorators(State1),
-                  reply(ok, run_message_queue(State1))
+            _From, State = #q{consumers             = Consumers,
+                              active_consumer = Holder,
+                              single_active_consumer_on = SingleActiveConsumerOn}) ->
+    ConsumerRegistration = case SingleActiveConsumerOn of
+        true ->
+            case ExclusiveConsume of
+                true  ->
+                    {error, reply({error, exclusive_consume_unavailable}, State)};
+                false ->
+                  Consumers1 = rabbit_queue_consumers:add(
+                    ChPid, ConsumerTag, NoAck,
+                    LimiterPid, LimiterActive,
+                    PrefetchCount, Args, is_empty(State),
+                    ActingUser, Consumers),
+
+                  case Holder of
+                      none ->
+                          NewConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, Consumers1),
+                          {state, State#q{consumers          = Consumers1,
+                                          has_had_consumers  = true,
+                                          active_consumer = NewConsumer}};
+                      _    ->
+                          {state, State#q{consumers          = Consumers1,
+                                          has_had_consumers  = true}}
+                  end
+            end;
+        false ->
+            case check_exclusive_access(Holder, ExclusiveConsume, State) of
+              in_use -> {error, reply({error, exclusive_consume_unavailable}, State)};
+              ok     ->
+                    Consumers1 = rabbit_queue_consumers:add(
+                                   ChPid, ConsumerTag, NoAck,
+                                   LimiterPid, LimiterActive,
+                                   PrefetchCount, Args, is_empty(State),
+                                   ActingUser, Consumers),
+                    ExclusiveConsumer =
+                        if ExclusiveConsume -> {ChPid, ConsumerTag};
+                           true             -> Holder
+                        end,
+                    {state, State#q{consumers          = Consumers1,
+                                    has_had_consumers  = true,
+                                    active_consumer = ExclusiveConsumer}}
+            end
+    end,
+    case ConsumerRegistration of
+        {error, Reply} ->
+            Reply;
+        {state, State1} ->
+            ok = maybe_send_reply(ChPid, OkMsg),
+            QName = qname(State1),
+            AckRequired = not NoAck,
+            rabbit_core_metrics:consumer_created(
+                ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
+                PrefetchCount, Args),
+            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                AckRequired, QName, PrefetchCount,
+                Args, none, ActingUser),
+            notify_decorators(State1),
+            reply(ok, run_message_queue(State1))
     end;
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, _From,
-            State = #q{consumers          = Consumers,
-                       exclusive_consumer = Holder}) ->
+            State = #q{consumers                 = Consumers,
+                       active_consumer           = Holder,
+                       single_active_consumer_on = SingleActiveConsumerOn }) ->
     ok = maybe_send_reply(ChPid, OkMsg),
     case rabbit_queue_consumers:remove(ChPid, ConsumerTag, Consumers) of
         not_found ->
             reply(ok, State);
         Consumers1 ->
-            Holder1 = case Holder of
-                          {ChPid, ConsumerTag} -> none;
-                          _                    -> Holder
-                      end,
+            Holder1 = new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag,
+                Holder, SingleActiveConsumerOn, Consumers1
+            ),
             State1 = State#q{consumers          = Consumers1,
-                             exclusive_consumer = Holder1},
+                             active_consumer    = Holder1},
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State1), ActingUser),
             notify_decorators(State1),
             case should_auto_delete(State1) of
@@ -1324,6 +1381,24 @@ handle_call(sync_mirrors, _From, State) ->
 %% By definition if we get this message here we do not have to do anything.
 handle_call(cancel_sync_mirrors, _From, State) ->
     reply({ok, not_syncing}, State).
+
+new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag, CurrentSingleActiveConsumer,
+            _SingleActiveConsumerIsOn = true, Consumers) ->
+    case rabbit_queue_consumers:is_same(ChPid, ConsumerTag, CurrentSingleActiveConsumer) of
+        true ->
+            case rabbit_queue_consumers:get_consumer(Consumers) of
+                undefined -> none;
+                Consumer  -> Consumer
+            end;
+        false ->
+            CurrentSingleActiveConsumer
+    end;
+new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag, CurrentSingleActiveConsumer,
+            _SingleActiveConsumerIsOn = false, _Consumers) ->
+    case CurrentSingleActiveConsumer of
+        {ChPid, ConsumerTag} -> none;
+        _                    -> CurrentSingleActiveConsumer
+    end.
 
 handle_cast(init, State) ->
     try
@@ -1432,7 +1507,6 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
           {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
                                      run_message_queue(true, State1)
       end);
-
 handle_cast(notify_decorators, State) ->
     notify_decorators(State),
     noreply(State);

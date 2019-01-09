@@ -656,6 +656,7 @@ declare_args() ->
      {<<"x-max-priority">>,            fun check_max_priority_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
+     {<<"x-single-active-consumer">>,  fun check_single_active_consumer_arg/2},
      {<<"x-queue-type">>,              fun check_queue_type/2},
      {<<"x-quorum-initial-group-size">>,     fun check_default_quorum_initial_group_size_arg/2}].
 
@@ -696,6 +697,12 @@ check_max_priority_arg({Type, Val}, Args) ->
         ok when Val =< ?MAX_SUPPORTED_PRIORITY -> ok;
         ok                                     -> {error, {max_value_exceeded, Val}};
         Error                                  -> Error
+    end.
+
+check_single_active_consumer_arg({Type, Val}, Args) ->
+    case check_bool_arg({Type, Val}, Args) of
+        ok    -> ok;
+        Error -> Error
     end.
 
 check_default_quorum_initial_group_size_arg({Type, Val}, Args) ->
