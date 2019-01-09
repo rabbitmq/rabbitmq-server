@@ -554,7 +554,7 @@ end}.
 }.
 
 
-{mapping, "msx_message_size", "rabbit.max_message_size",
+{mapping, "max_message_size", "rabbit.max_message_size",
     [{datatype, integer}, {validators, ["less_then_512MB"]}]}.
 
 %% Customising Socket Options.
