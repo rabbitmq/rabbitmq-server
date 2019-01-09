@@ -3,6 +3,8 @@
 -module(rabbit_queue_type).
 
 -export([
+         init/0,
+         in/4,
          handle_down/3
         ]).
 
@@ -10,11 +12,17 @@
 %% tracking. A process using this abstraction should forwad all 'DOWN' messages
 %% for monitors it hasn't created for itself.
 
--record(?MODULE, {monitors = #{} :: #{reference() => queue_id()},
+%% any fields that never or very rarely change go in here
+-record(static, {queue_lookup_fun :: fun((queue_name()) -> queue_def())
+                                         }).
+-record(?MODULE, {config :: #static{},
+                  monitors = #{} :: #{reference() => queue_id()},
                   %% messages in flight between this process and the queue(s)
                   pending_in = #{} :: #{seq_num() => {msg(), [queue_id()]}},
                   %% message nums in flight between here and the external client
                   pending_out = #{} :: #{out_tag() => queue_id()},
+                  %% reverse lookup of queue id
+                  queue_names = #{} :: #{queue_name() => queue_id()},
                   queues = #{} :: #{queue_id() => queue_state()}
                  }).
 
@@ -79,10 +87,12 @@
 %% a list of sequence numbers as settled|rejected actions that have been
 %% confirmed to have been delivered
 %% successfully. The sequence numbers are provided in in/4
--callback handle_info(queue_id(), queue_state(), Info :: term()) ->
+-callback handle_queue_info(queue_id(), queue_state(), Info :: term()) ->
     {queue_state(), actions()}.
 
 %% input to the abstracted queue
+%% TODO: need a way to aggregate queue details for every node (for use with
+%% delegate).
 -callback in(queue_id(), queue_state(),
              SeqNo :: seq_num(), Msg :: term()) ->
     {queue_state(), actions()}.
@@ -122,13 +132,18 @@
 
 -spec init() -> state().
 init() ->
-    #?MODULE{}.
+    #?MODULE{config = #static{}}.
 
 -spec in([queue_name()], seq_num(), term(), state()) ->
     {state(), actions()}.
 in(QueueNames, SeqNum, Delivery, State) ->
-    %% 1. lookup queue_ids() for the queues
-    %% 2. foreach queue pass to `in' callback and aggregate actions
+    %% * lookup queue_ids() for the queues
+    %% * if the queue is new perform queue detail lookup and initialise
+    %% by calling the impl init/1 function
+    %% * stash incoming message in pending_in
+    %% * foreach queue pass to `in' callback and aggregate actions
+    %% TODO: how to aggregate network calls for classic queues (delegate)
+    %% TODO: also credit flow???
     {State, []}.
 
 -spec handle_down(MonitorRef :: reference(),
@@ -139,12 +154,12 @@ handle_down(_MonitorRef, _Reason, State) ->
     {State, []}.
 
 
--spec handle_info(queue_name(), state()) ->
+-spec handle_queue_info(queue_id(), state()) ->
     {state(), actions()}.
-handle_info(_QueueName, State) ->
+handle_queue_info(_QueueId, State) ->
     %% find the state for the queue name - infos should always exists anything
     %% else is an irrecoverable error
-    %% dispatch to the implementation handle_info/3 and update the state
+    %% dispatch to the implementation handle_queue_info/3 and update the state
     %% process any `settle' actions
     {State, []}.
 

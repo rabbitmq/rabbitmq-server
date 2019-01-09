@@ -578,7 +578,7 @@ add_member(#amqqueue{pid = {RaName, _} = ServerRef, name = QName,
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     case ra:start_server(RaName, ServerId, ra_machine(Q),
-                       [{RaName, N} || N <- QNodes]) of
+                         [{RaName, N} || N <- QNodes]) of
         ok ->
             case ra:add_member(ServerRef, ServerId) of
                 {ok, _, Leader} ->

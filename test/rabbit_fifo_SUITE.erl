@@ -51,6 +51,8 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(TestCase, Config) ->
+    %% the requisite mocking of anything that calls into rabbit
+    %% or requires external state
     meck:new(rabbit_quorum_queue, [passthrough]),
     meck:expect(rabbit_quorum_queue, update_metrics, fun (_, _) -> ok end),
     meck:expect(rabbit_quorum_queue, cancel_consumer_handler,
