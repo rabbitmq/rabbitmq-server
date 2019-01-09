@@ -86,6 +86,7 @@ all_tests() ->
      restart_all_types,
      stop_start_rabbit_app,
      publish,
+     publish_confirm,
      publish_and_restart,
      consume,
      consume_first_empty,
@@ -589,6 +590,19 @@ publish(Config) ->
     wait_for_messages_ready(Servers, Name, 1),
     wait_for_messages_pending_ack(Servers, Name, 0).
 
+publish_confirm(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    publish_confirm(Ch, QQ),
+    Name = ra_name(QQ),
+    wait_for_messages_ready(Servers, Name, 1),
+    wait_for_messages_pending_ack(Servers, Name, 0).
+
 publish_confirm(Ch, QName) ->
     publish(Ch, QName),
     amqp_channel:register_confirm_handler(Ch, self()),
@@ -597,6 +611,7 @@ publish_confirm(Ch, QName) ->
              #'basic.ack'{}  -> ok;
              #'basic.nack'{} -> fail
          after 2500 ->
+                   flush(100),
                    exit(confirm_timeout)
          end,
     ct:pal("CONFIRMED! ~s", [QName]),

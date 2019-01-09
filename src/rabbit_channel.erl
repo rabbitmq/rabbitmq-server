@@ -640,7 +640,7 @@ handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
     noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
 
-handle_info({ra_event, {Name, _} = From, _} = Evt,
+handle_info({'$queue_info', _Ref, {{Name, _} = From, _} = Evt},
             #ch{queue_states = QueueStates,
                 queue_names = QNames,
                 consumer_mapping = ConsumerMapping} = State0) ->

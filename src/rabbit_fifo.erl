@@ -32,6 +32,7 @@
          tick/2,
          overview/1,
          get_checked_out/4,
+         event_formatter/0,
          %% aux
          init_aux/1,
          handle_aux/6,
@@ -99,7 +100,7 @@
 -type delivery() :: {delivery, consumer_tag(), [delivery_msg()]}.
 %% Represents the delivery of one or more rabbit_fifo messages.
 
--type consumer_id() :: {consumer_tag(), pid()}.
+-type consumer_id() :: {consumer_tag(), tagged_locator()}.
 %% The entity that receives messages. Uniquely identifies a consumer.
 
 -type credit_mode() :: simple_prefetch | credited.
@@ -117,7 +118,7 @@
 %% static meta data associated with a consumer
 
 %% command records representing all the protocol actions that are supported
--record(enqueue, {pid :: maybe(pid()),
+-record(enqueue, {locator :: maybe(tagged_locator()),
                   seq :: maybe(msg_seqno()),
                   msg :: raw_msg()}).
 -record(checkout, {consumer_id :: consumer_id(),
@@ -208,7 +209,7 @@
          % a map containing all the live processes that have ever enqueued
          % a message to this queue as well as a cached value of the smallest
          % ra_index of all pending enqueues
-         enqueuers = #{} :: #{pid() => #enqueuer{}},
+         enqueuers = #{} :: #{tagged_locator() => #enqueuer{}},
          % master index of all enqueue raft indexes including pending
          % enqueues
          % rabbit_fifo_index can be slow when calculating the smallest
@@ -297,7 +298,7 @@ zero(_) ->
 -spec apply(ra_machine:command_meta_data(), command(),
             state()) ->
     {state(), Reply :: term(), ra_machine:effects()}.
-apply(#{index := RaftIdx}, #enqueue{pid = From, seq = Seq,
+apply(#{index := RaftIdx}, #enqueue{locator = From, seq = Seq,
                                     msg = RawMsg}, State00) ->
     case maybe_enqueue(RaftIdx, From, Seq, RawMsg, [], State00) of
         {ok, State0, Effects1} ->
@@ -407,7 +408,8 @@ apply(Meta, #checkout{spec = {dequeue, settled}, meta = ConsumerMeta,
     {State, _, Effects} = apply(Meta, make_settle(ConsumerId, [MsgId]), State2),
     {State, {dequeue, {MsgId, Msg}}, Effects};
 apply(_, #checkout{spec = {dequeue, unsettled},
-                   meta = ConsumerMeta, consumer_id = {_, Pid} = ConsumerId},
+                   meta = ConsumerMeta,
+                   consumer_id = {_, {_, Pid}} = ConsumerId},
       State0) ->
     State1 = update_consumer(ConsumerId, ConsumerMeta,
                              {once, 1, simple_prefetch}, State0),
@@ -425,7 +427,7 @@ apply(_, #checkout{spec = cancel, consumer_id = ConsumerId}, State0) ->
     % other consumers or enqueuers.
     checkout(State, Effects);
 apply(_, #checkout{spec = Spec, meta = Meta,
-                   consumer_id = {_, Pid} = ConsumerId},
+                   consumer_id = {_, {_, Pid}} = ConsumerId},
       State0) ->
     State1 = update_consumer(ConsumerId, Meta, Spec, State0),
     checkout(State1, [{monitor, process, Pid}]);
@@ -456,7 +458,7 @@ apply(_, {down, ConsumerPid, noconnection},
     % and monitor the node so that we can find out the final state of the
     % process at some later point
     {Cons, State} = maps:fold(
-                      fun({_, P} = K,
+                      fun({_, {_, P}} = K,
                           #consumer{checked_out = Checked0} = C,
                           {Co, St0}) when node(P) =:= Node ->
                               St = return_all(St0, Checked0),
@@ -470,7 +472,7 @@ apply(_, {down, ConsumerPid, noconnection},
                          (K, C, {Co, St}) ->
                               {maps:put(K, C, Co), St}
                       end, {#{}, State0}, Cons0),
-    Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
+    Enqs = maps:map(fun({_, P}, E) when node(P) =:= Node ->
                             E#enqueuer{suspected_down = true};
                        (_, E) -> E
                     end, Enqs0),
@@ -490,19 +492,22 @@ apply(_, {down, Pid, _Info}, #state{consumers = Cons0,
                                     enqueuers = Enqs0} = State0) ->
     % Remove any enqueuer for the same pid and enqueue any pending messages
     % This should be ok as we won't see any more enqueues from this pid
-    State1 = case maps:take(Pid, Enqs0) of
-                 {#enqueuer{pending = Pend}, Enqs} ->
+    State1 = maps:fold(
+             fun({_, P}, #enqueuer{pending = Pend}, S0)
+                   when P =:= Pid ->
                      lists:foldl(fun ({_, RIdx, RawMsg}, S) ->
                                          enqueue(RIdx, RawMsg, S)
-                                 end, State0#state{enqueuers = Enqs}, Pend);
-                 error ->
-                     State0
-             end,
+                                 end, S0, Pend);
+                (L, E, #state{enqueuers = E0} = S) ->
+                    S#state{enqueuers = E0#{L => E}}
+                end,
+                State0#state{enqueuers = #{}}, Enqs0),
+
     {Effects1, State2} = handle_waiting_consumer_down(Pid, State1),
     % return checked out messages to main queue
     % Find the consumers for the down pid
     DownConsumers = maps:keys(
-                      maps:filter(fun({_, P}, _) -> P =:= Pid end, Cons0)),
+                      maps:filter(fun({_, {_, P}}, _) -> P =:= Pid end, Cons0)),
     {State, Effects} = lists:foldl(fun(ConsumerId, {S, E}) ->
                                            cancel_consumer(ConsumerId, S, E)
                                    end, {State2, Effects1}, DownConsumers),
@@ -521,12 +526,12 @@ apply(_, {nodeup, Node}, #state{consumers = Cons0,
     WaitingConsumers = maybe_mark_suspect_waiting_consumers(Node, State0,
                                                             false),
 
-    Enqs1 = maps:map(fun(P, E) when node(P) =:= Node ->
+    Enqs1 = maps:map(fun({_, P}, E) when node(P) =:= Node ->
                              E#enqueuer{suspected_down = false};
                         (_, E) -> E
                      end, Enqs0),
     {Cons1, SQ, Effects} =
-        maps:fold(fun({_, P} = ConsumerId, C, {CAcc, SQAcc, EAcc})
+        maps:fold(fun({_, {_, P}} = ConsumerId, C, {CAcc, SQAcc, EAcc})
                         when node(P) =:= Node ->
                           update_or_remove_sub(
                             ConsumerId, C#consumer{suspected_down = false},
@@ -588,18 +593,14 @@ maybe_mark_suspect_waiting_consumers(Node,
      end || {{_, P} = ConsumerId, Consumer} <- WaitingConsumers].
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
-state_enter(leader, #state{consumers = Cons,
-                           enqueuers = Enqs,
-                           waiting_consumers = WaitingConsumers,
-                           name = Name,
+state_enter(leader, #state{name = Name,
                            prefix_msg_counts = {0, 0},
-                           become_leader_handler = BLH}) ->
+                           become_leader_handler = BLH} = State) ->
     % return effects to monitor all current consumers and enqueuers
-    Pids = lists:usort(maps:keys(Enqs)
-        ++ [P || {_, P} <- maps:keys(Cons)]
-        ++ [P || {{_, P}, _} <- WaitingConsumers]),
+    Locators = active_locators(State),
+    Pids = [P || {_, P} <- Locators],
     Mons = [{monitor, process, P} || P <- Pids],
-    Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
+    Nots = [{send_msg, L, leader_change, ra_event} || L <- Locators],
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
     Effects = Mons ++ Nots ++ NodeMons,
     case BLH of
@@ -612,19 +613,18 @@ state_enter(recovered, #state{prefix_msg_counts = PrefixMsgCounts})
   when PrefixMsgCounts =/= {0, 0} ->
     %% TODO: remove assertion?
     exit({rabbit_fifo, unexpected_prefix_msg_counts, PrefixMsgCounts});
-state_enter(eol, #state{enqueuers = Enqs,
-                        consumers = Custs0,
-                        waiting_consumers = WaitingConsumers0}) ->
-    Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
-    WaitingConsumers1 = lists:foldl(fun({{_, P}, V}, Acc) -> Acc#{P => V} end,
-                                    #{}, WaitingConsumers0),
-    AllConsumers = maps:merge(Custs, WaitingConsumers1),
-    [{send_msg, P, eol, ra_event}
-     || P <- maps:keys(maps:merge(Enqs, AllConsumers))];
+state_enter(eol, State) ->
+    [{send_msg, Loc, eol, ra_event} || Loc <- active_locators(State)];
 state_enter(_, _) ->
     %% catch all as not handling all states
     [].
 
+active_locators(#state{enqueuers = Enqs,
+                       consumers = Cons,
+                       waiting_consumers = Waiting}) ->
+    lists:usort(maps:keys(Enqs) ++
+                [L || {{_, L}, _} <- Waiting] ++
+                [L || {_, L} <- maps:keys(Cons)]).
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
 tick(_Ts, #state{name = Name,
@@ -659,6 +659,11 @@ overview(#state{consumers = Cons,
       num_messages => rabbit_fifo_index:size(Indexes),
       enqueue_message_bytes => EnqueueBytes,
       checkout_message_bytes => CheckoutBytes}.
+
+event_formatter() ->
+    fun({Ref, _}, Leader, Msg) ->
+            {'$queue_info', Ref, {Leader, Msg}}
+    end.
 
 -spec get_checked_out(consumer_id(), msg_id(), msg_id(), state()) ->
     [delivery_msg()].
@@ -760,6 +765,8 @@ query_single_active_consumer(_) ->
 query_stat(#state{messages = M,
                   consumers = Consumers}) ->
     {maps:size(M), maps:size(Consumers)}.
+%%
+%% other
 
 -spec usage(atom()) -> float().
 usage(Name) when is_atom(Name) ->
@@ -917,14 +924,14 @@ enqueue_pending(From, Enq, #state{enqueuers = Enqueuers0} = State) ->
 maybe_enqueue(RaftIdx, undefined, undefined, RawMsg, Effects, State0) ->
     % direct enqueue without tracking
     {ok, enqueue(RaftIdx, RawMsg, State0), Effects};
-maybe_enqueue(RaftIdx, From, MsgSeqNo, RawMsg, Effects0,
+maybe_enqueue(RaftIdx, {_, Pid} = From, MsgSeqNo, RawMsg, Effects0,
               #state{enqueuers = Enqueuers0} = State0) ->
     case maps:get(From, Enqueuers0, undefined) of
         undefined ->
             State1 = State0#state{enqueuers = Enqueuers0#{From => #enqueuer{}}},
             {ok, State, Effects} = maybe_enqueue(RaftIdx, From, MsgSeqNo,
                                                  RawMsg, Effects0, State1),
-            {ok, State, [{monitor, process, From} | Effects]};
+            {ok, State, [{monitor, process, Pid} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
             State1 = enqueue(RaftIdx, RawMsg, State0),
@@ -1161,8 +1168,8 @@ take_next_msg(#state{messages = Messages0} = State0) ->
             end
     end.
 
-send_msg_effect({CTag, CPid}, Msgs) ->
-    {send_msg, CPid, {delivery, CTag, Msgs}, ra_event}.
+send_msg_effect({CTag, CLoc}, Msgs) ->
+    {send_msg, CLoc, {delivery, CTag, Msgs}, ra_event}.
 
 checkout_one(#state{service_queue = SQ0,
                     messages = Messages0,
@@ -1335,9 +1342,14 @@ dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
     Checked = maps:map(fun (_, _) -> '$prefix_msg' end, Checked0),
     Con#consumer{checked_out = Checked}.
 
--spec make_enqueue(maybe(pid()), maybe(msg_seqno()), raw_msg()) -> protocol().
-make_enqueue(Pid, Seq, Msg) ->
-    #enqueue{pid = Pid, seq = Seq, msg = Msg}.
+-spec make_enqueue(maybe(tagged_locator()), maybe(msg_seqno()), raw_msg()) ->
+    protocol().
+make_enqueue(undefined, _, Msg) ->
+    #enqueue{msg = Msg};
+make_enqueue({R, P} = Locator, Seq, Msg)
+  when is_reference(R) andalso is_pid(P) ->
+    #enqueue{locator = Locator, seq = Seq, msg = Msg}.
+
 -spec make_checkout(consumer_id(),
                     checkout_spec(), consumer_meta()) -> protocol().
 make_checkout(ConsumerId, Spec, Meta) ->

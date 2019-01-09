@@ -102,7 +102,7 @@ init_state({Name, _}, QName = #resource{}) ->
                             fun() -> credit_flow:block(Name), ok end,
                             fun() -> credit_flow:unblock(Name), ok end).
 
-handle_event({ra_event, From, Evt}, QState) ->
+handle_event({From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
 
 -spec declare(rabbit_types:amqqueue()) ->
