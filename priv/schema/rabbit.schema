@@ -1352,6 +1352,103 @@ end}.
     {validators, ["non_zero_positive_integer"]}
 ]}.
 
+% ==========================
+% sysmon_handler section
+% ==========================
+
+%% @doc The threshold at which to warn about the number of processes
+%% that are overly busy. Processes with large heaps or that take a
+%% long time to garbage collect will count toward this threshold.
+{mapping, "sysmon_handler.thresholds.busy_processes", "sysmon_handler.process_limit", [
+  {default, 30},
+  {datatype, integer},
+  hidden
+]}.
+
+%% @doc The threshold at which to warn about the number of ports that
+%% are overly busy. Ports with full input buffers count toward this
+%% threshold.
+{mapping, "sysmon_handler.thresholds.busy_ports", "sysmon_handler.port_limit", [
+  {default, 2},
+  {datatype, integer},
+  hidden
+]}.
+
+%% @doc A process will become busy when it exceeds this amount of time
+%% doing garbage collection.
+%%
+%% NOTE: Enabling this setting can cause performance problems on
+%% multi-core systems.
+%% @see sysmon_handler.thresholds.busy_processes
+{mapping, "sysmon_handler.triggers.process.garbage_collection", "sysmon_handler.gc_ms_limit", [
+  {default, off},
+  {datatype, [{atom, off},
+              {duration, ms}]},
+  hidden
+]}.
+
+{translation, "sysmon_handler.gc_ms_limit",
+ fun(Conf) ->
+     case cuttlefish:conf_get("sysmon_handler.triggers.process.garbage_collection", Conf) of
+         off -> 0;
+         Int -> Int
+     end
+ end}.
+
+%% @doc A process will become busy when it exceeds this amount of time
+%% during a single process scheduling & execution cycle.
+{mapping, "sysmon_handler.triggers.process.long_scheduled_execution", "sysmon_handler.schedule_ms_limit", [
+  {default, off},
+  {datatype, [{atom, off},
+              {duration, ms}]},
+  hidden
+]}.
+
+{translation, "sysmon_handler.schedule_ms_limit",
+ fun(Conf) ->
+     case cuttlefish:conf_get("sysmon_handler.triggers.process.long_scheduled_execution", Conf) of
+         off -> 0;
+         Int -> Int
+     end
+ end}.
+
+%% @doc A process will become busy when its heap exceeds this size.
+%% @see sysmon_handler.thresholds.busy_processes
+{mapping, "sysmon_handler.triggers.process.heap_size", "sysmon_handler.heap_word_limit", [
+  {default, "160444000"},
+  {datatype, [bytesize, {atom, off}]},
+  hidden
+]}.
+
+{translation, "sysmon_handler.heap_word_limit",
+ fun(Conf) ->
+    case cuttlefish:conf_get("sysmon_handler.triggers.process.heap_size", Conf) of
+        off -> 0;
+        Bytes ->
+            WordSize = erlang:system_info(wordsize),
+            Bytes div WordSize
+    end
+end}.
+
+%% @doc Whether ports with full input buffers will be counted as
+%% busy. Ports can represent open files or network sockets.
+%% @see sysmon_handler.thresholds.busy_ports
+{mapping, "sysmon_handler.triggers.port", "sysmon_handler.busy_port", [
+  {default, on},
+  {datatype, flag},
+  hidden
+]}.
+
+%% @doc Whether distribution ports with full input buffers will be
+%% counted as busy. Distribution ports connect Erlang nodes within a
+%% single cluster.
+%% @see sysmon_handler.thresholds.busy_ports
+{mapping, "sysmon_handler.triggers.distribution_port", "sysmon_handler.busy_dist_port", [
+  {default, on},
+  {datatype, flag},
+  hidden
+]}.
+
 % ===============================
 % Validators
 % ===============================
