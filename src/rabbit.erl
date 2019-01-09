@@ -523,6 +523,7 @@ start_apps(Apps) ->
 
 start_apps(Apps, RestartTypes) ->
     app_utils:load_applications(Apps),
+    ensure_sysmon_handler_app_config(),
     ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
         undefined ->
             [];
@@ -553,7 +554,6 @@ start_apps(Apps, RestartTypes) ->
         PassPhrase
     },
     decrypt_config(Apps, Algo),
-
     OrderedApps = app_utils:app_dependency_order(Apps, false),
     case lists:member(rabbit, Apps) of
         false -> rabbit_boot_steps:run_boot_steps(Apps); %% plugin activation
@@ -562,6 +562,30 @@ start_apps(Apps, RestartTypes) ->
     ok = app_utils:start_applications(OrderedApps,
                                       handle_app_error(could_not_start),
                                       RestartTypes).
+
+%% rabbitmq/rabbitmq-server#952
+%% This function is to be called after configuration has been optionally generated
+%% and the sysmon_handler application loaded, but not started. It will ensure that
+%% sane defaults are used for configuration settings that haven't been set by the
+%% user
+ensure_sysmon_handler_app_config() ->
+    Defaults = [
+                {process_limit, 100},
+                {port_limit, 100},
+                {gc_ms_limit, 0},
+                {schedule_ms_limit, 0},
+                {heap_word_limit, 10485760},
+                {busy_port, false},
+                {busy_dist_port, true}
+               ],
+    lists:foreach(fun({K, V}) ->
+                          case application:get_env(sysmon_handler, K) of
+                              undefined ->
+                                  application:set_env(sysmon_handler, K, V);
+                              _ ->
+                                  ok
+                          end
+                  end, Defaults).
 
 %% This function retrieves the correct IoDevice for requesting
 %% input. The problem with using the default IoDevice is that
