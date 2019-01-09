@@ -124,7 +124,7 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(1, MessageCount div 2)],
 
     {MessagesPerConsumer1, _} = wait_for_messages(MessageCount div 2),
-    FirstActiveConsumerInList = maps:keys(maps:filter(fun(_CTag, MessageCount) -> MessageCount > 0 end, MessagesPerConsumer1)),
+    FirstActiveConsumerInList = maps:keys(maps:filter(fun(_CTag, Count) -> Count > 0 end, MessagesPerConsumer1)),
     ?assertEqual(1, length(FirstActiveConsumerInList)),
 
     FirstActiveConsumer = lists:nth(1, FirstActiveConsumerInList),
@@ -136,7 +136,7 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
 
     {MessagesPerConsumer2, _} = wait_for_messages(MessageCount div 2 - 1),
     SecondActiveConsumerInList = maps:keys(maps:filter(
-        fun(CTag, MessageCount) -> MessageCount > 0 andalso CTag /= FirstActiveConsumer end,
+        fun(CTag, Count) -> Count > 0 andalso CTag /= FirstActiveConsumer end,
         MessagesPerConsumer2)
     ),
     ?assertEqual(1, length(SecondActiveConsumerInList)),
