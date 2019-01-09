@@ -94,7 +94,7 @@ handle_event({monitor, PidOrPort, Type, Info}, State=#state{timer_ref=TimerRef})
 handle_event({suppressed, Type, Info}, State=#state{timer_ref=TimerRef}) ->
     %% Reset the inactivity timeout
     NewTimerRef = reset_timer(TimerRef),
-    rabbit_log:debug("~p ~w ~w", [?MODULE, Type, Info]),
+    rabbit_log:debug("~p encountered a suppressed event of type ~w: ~w", [?MODULE, Type, Info]),
     {ok, State#state{timer_ref=NewTimerRef}};
 handle_event(Event, State=#state{timer_ref=TimerRef}) ->
     NewTimerRef = reset_timer(TimerRef),
