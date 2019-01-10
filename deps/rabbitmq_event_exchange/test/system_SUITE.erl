@@ -31,7 +31,6 @@ all() ->
      audit_queue,
      audit_exchange,
      audit_binding,
-     audit_default_exchange_binding,
      audit_vhost,
      audit_vhost_deletion,
      audit_channel,
@@ -170,8 +169,6 @@ audit_binding(Config) ->
 
     #'queue.declare_ok'{queue = Q} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
-    %% Default exchange
-    receive_user_in_event(<<"binding.created">>, ?INTERNAL_USER),
 
     #'queue.bind_ok'{} =
         amqp_channel:call(Ch, #'queue.bind'{queue = Q,
@@ -184,23 +181,6 @@ audit_binding(Config) ->
                                               exchange = <<"amq.direct">>,
                                               routing_key = <<"test">>}),
     receive_user_in_event(<<"binding.deleted">>, User),
-
-    rabbit_ct_client_helpers:close_channel(Ch),
-    ok.
-
-audit_default_exchange_binding(Config) ->
-    Ch = declare_event_queue(Config, <<"binding.*">>),
-    %% The binding to the event exchange itself is the first queued event
-    User = proplists:get_value(rmq_username, Config),
-    receive_user_in_event(<<"binding.created">>, User),
-
-    #'queue.declare_ok'{queue = Q} =
-        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
-    receive_user_in_event(<<"binding.created">>, ?INTERNAL_USER),
-
-    #'queue.delete_ok'{} =
-        amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
-    receive_user_in_event(<<"binding.deleted">>, ?INTERNAL_USER),
 
     rabbit_ct_client_helpers:close_channel(Ch),
     ok.
