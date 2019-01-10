@@ -175,9 +175,11 @@ format_pretty_proc_or_port_info(PidOrPort) ->
             Res ->
                 Res
         end
-    catch C:E:S ->
-        {"Pid ~w, ~W ~W at ~w\n",
-            [PidOrPort, C, 20, E, 20, S]}
+    catch C:E ->
+        S = erlang:get_stacktrace(),
+        Fmt = "Pid ~w, ~W ~W at ~w\n",
+        Args = [PidOrPort, C, 20, E, 20, S],
+        {Fmt, Args}
     end.
 
 get_pretty_proc_or_port_info(Pid) when is_pid(Pid) ->
