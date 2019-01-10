@@ -1773,22 +1773,28 @@ cleanup_data_dir(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(100),
 
-    [{_, UId}] = rpc:call(Server1, ra_directory, list_registered, []),
-    DataDir = rpc:call(Server1, ra_env, server_data_dir, [UId]),
-    ?assert(filelib:is_dir(DataDir)),
+    [{_, UId1}] = rpc:call(Server1, ra_directory, list_registered, []),
+    [{_, UId2}] = rpc:call(Server2, ra_directory, list_registered, []),
+    DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [UId1]),
+    DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [UId2]),
+    ?assert(filelib:is_dir(DataDir1)),
+    ?assert(filelib:is_dir(DataDir2)),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
 
-    ?assertExit({{shutdown,
-                  {connection_closing, {server_initiated_close, 541, _}}}, _},
-                amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
-    catch amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
-    ?assert(filelib:is_dir(DataDir)),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    %% data dir 1 should be force deleted at this point
+    ?assert(not filelib:is_dir(DataDir1)),
+    ?assert(filelib:is_dir(DataDir2)),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    timer:sleep(2000),
 
     ?assertEqual(ok,
-                 rpc:call(Server1, rabbit_quorum_queue, cleanup_data_dir,
-                          [])),
-    ?assert(not filelib:is_dir(DataDir)).
+                 rpc:call(Server2, rabbit_quorum_queue, cleanup_data_dir, [])),
+    ?assert(not filelib:is_dir(DataDir2)),
+    ok.
 
 reconnect_consumer_and_publish(Config) ->
     [Server | _] = Servers =
