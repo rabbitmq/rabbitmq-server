@@ -319,7 +319,7 @@ delete(#amqqueue{type = quorum, pid = {Name, _},
                     {ok, Msgs};
                 false ->
                     %% attempt forced deletion of all servers
-                    rabbit_log:info(
+                    rabbit_log:warning(
                       "Could not delete quorum queue '~s', not enough nodes "
                        " online to reach a quorum: ~255p."
                        " Attempting force delete.",
