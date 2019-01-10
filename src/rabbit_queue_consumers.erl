@@ -11,17 +11,18 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_queue_consumers).
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
          unacknowledged_message_count/0, add/10, remove/3, erase_ch/2,
-         send_drained/0, deliver/3, record_ack/3, subtract_acks/3,
+         send_drained/0, deliver/5, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
-         credit/6, utilisation/1]).
+         credit/6, utilisation/1, is_same/3, get_consumer/1, get/3,
+         consumer_tag/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -42,7 +43,7 @@
              acktags,
              consumer_count,
              %% Queue of {ChPid, #consumer{}} for consumers which have
-             %% been blocked for any reason
+             %% been blocked (rate/prefetch limited) for any reason
              blocked_consumers,
              %% The limiter itself
              limiter,
@@ -57,6 +58,9 @@
                         use       :: {'inactive',
                                       time_micros(), time_micros(), ratio()} |
                                      {'active', time_micros(), ratio()}}.
+-type consumer() :: #consumer{tag::rabbit_types:ctag(), ack_required::boolean(),
+                              prefetch::non_neg_integer(), args::rabbit_framing:amqp_table(),
+                              user::rabbit_types:username()}.
 -type ch() :: pid().
 -type ack() :: non_neg_integer().
 -type cr_fun() :: fun ((#cr{}) -> #cr{}).
@@ -81,7 +85,8 @@
                                      state()}.
 -spec send_drained() -> 'ok'.
 -spec deliver(fun ((boolean()) -> {fetch_result(), T}),
-              rabbit_amqqueue:name(), state()) ->
+              rabbit_amqqueue:name(), state(), boolean(),
+              none | {ch(), rabbit_types:ctag()} | {ch(), consumer()}) ->
                      {'delivered',   boolean(), T, state()} |
                      {'undelivered', boolean(), state()}.
 -spec record_ack(ch(), pid(), ack()) -> 'ok'.
@@ -95,6 +100,7 @@
 -spec credit(boolean(), integer(), boolean(), ch(), rabbit_types:ctag(),
              state()) -> 'unchanged' | {'unblocked', state()}.
 -spec utilisation(state()) -> ratio().
+-spec consumer_tag(consumer()) -> rabbit_types:ctag().
 
 %%----------------------------------------------------------------------------
 
@@ -189,10 +195,34 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
 send_drained() -> [update_ch_record(send_drained(C)) || C <- all_ch_record()],
                   ok.
 
-deliver(FetchFun, QName, State) -> deliver(FetchFun, QName, false, State).
+deliver(FetchFun, QName, State, SingleActiveConsumerIsOn, ActiveConsumer) ->
+    deliver(FetchFun, QName, false, State, SingleActiveConsumerIsOn, ActiveConsumer).
 
+deliver(_FetchFun, _QName, false, State, true, none) ->
+    {undelivered, false,
+        State#state{use = update_use(State#state.use, inactive)}};
+deliver(FetchFun, QName, false, State = #state{consumers = Consumers}, true, SingleActiveConsumer) ->
+    {ChPid, Consumer} = SingleActiveConsumer,
+    %% blocked (rate/prefetch limited) consumers are removed from the queue state, but not the exclusive_consumer field,
+    %% so we need to do this check to avoid adding the exclusive consumer to the channel record
+    %% over and over
+    case is_blocked(SingleActiveConsumer) of
+        true ->
+            {undelivered, false,
+                State#state{use = update_use(State#state.use, inactive)}};
+        false ->
+            case deliver_to_consumer(FetchFun, SingleActiveConsumer, QName) of
+                {delivered, R} ->
+                    {delivered, false, R, State};
+                undelivered ->
+                    {ChPid, Consumer} = SingleActiveConsumer,
+                    Consumers1 = remove_consumer(ChPid, Consumer#consumer.tag, Consumers),
+                    {undelivered, true,
+                        State#state{consumers = Consumers1, use = update_use(State#state.use, inactive)}}
+            end
+    end;
 deliver(FetchFun, QName, ConsumersChanged,
-        State = #state{consumers = Consumers}) ->
+    State = #state{consumers = Consumers}, false, _SingleActiveConsumer) ->
     case priority_queue:out_p(Consumers) of
         {empty, _} ->
             {undelivered, ConsumersChanged,
@@ -205,7 +235,7 @@ deliver(FetchFun, QName, ConsumersChanged,
                                                                Tail)}};
                 undelivered ->
                     deliver(FetchFun, QName, true,
-                            State#state{consumers = Tail})
+                            State#state{consumers = Tail}, false, _SingleActiveConsumer)
             end
     end.
 
@@ -245,6 +275,10 @@ deliver_to_consumer(FetchFun,
     update_ch_record(C#cr{acktags              = ChAckTags1,
                           unsent_message_count = Count + 1}),
     R.
+
+is_blocked(Consumer = {ChPid, _C}) ->
+    #cr{blocked_consumers = BlockedConsumers} = lookup_ch(ChPid),
+    priority_queue:member(Consumer, BlockedConsumers).
 
 record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
@@ -356,6 +390,29 @@ utilisation(#state{use = {active, Since, Avg}}) ->
     use_avg(erlang:monotonic_time(micro_seconds) - Since, 0, Avg);
 utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
     use_avg(Active, erlang:monotonic_time(micro_seconds) - Since, Avg).
+
+is_same(ChPid, ConsumerTag, {ChPid, #consumer{tag = ConsumerTag}}) ->
+    true;
+is_same(_ChPid, _ConsumerTag, _Consumer) ->
+    false.
+
+get_consumer(#state{consumers = Consumers}) ->
+    case priority_queue:out_p(Consumers) of
+        {{value, Consumer, _Priority}, _Tail} -> Consumer;
+        {empty, _} -> undefined
+    end.
+
+get(ChPid, ConsumerTag, #state{consumers = Consumers}) ->
+    Consumers1 = priority_queue:filter(fun ({CP, #consumer{tag = CT}}) ->
+                            (CP == ChPid) and (CT == ConsumerTag)
+                          end, Consumers),
+    case priority_queue:out_p(Consumers1) of
+        {empty, _} -> undefined;
+        {{value, Consumer, _Priority}, _Tail} -> Consumer
+    end.
+
+consumer_tag(#consumer{tag = CTag}) ->
+    CTag.
 
 %%----------------------------------------------------------------------------
 

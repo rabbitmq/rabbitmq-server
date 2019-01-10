@@ -115,6 +115,7 @@ dep_lager = hex 3.6.5
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.3.6
+dep_sysmon_handler = hex 1.1.0
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \

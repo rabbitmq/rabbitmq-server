@@ -29,7 +29,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
--export([list_down/1, count/1, list_names/0, list_local_names/0]).
+-export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0]).
 -export([list_by_type/1]).
 -export([notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
@@ -437,8 +437,7 @@ internal_declare(Q = #amqqueue{name = QueueName}, false) ->
                           not_found           -> Q1 = rabbit_policy:set(Q),
                                                  Q2 = Q1#amqqueue{state = live},
                                                  ok = store_queue(Q2),
-                                                 B = add_default_binding(Q2),
-                                                 fun () -> B(), {created, Q2} end;
+                                                 fun () -> {created, Q2} end;
                           {absent, _Q, _} = R -> rabbit_misc:const(R)
                       end;
                   [ExistingQ] ->
@@ -501,15 +500,6 @@ policy_changed(Q1 = #amqqueue{decorators = Decorators1},
     %% Make sure we emit a stats event even if nothing
     %% mirroring-related has changed - the policy may have changed anyway.
     notify_policy_changed(Q1).
-
-add_default_binding(#amqqueue{name = QueueName}) ->
-    ExchangeName = rabbit_misc:r(QueueName, exchange, <<>>),
-    RoutingKey = QueueName#resource.name,
-    rabbit_binding:add(#binding{source      = ExchangeName,
-                                destination = QueueName,
-                                key         = RoutingKey,
-                                args        = []},
-                       ?INTERNAL_USER).
 
 lookup([])     -> [];                             %% optimisation
 lookup([Name]) -> ets:lookup(rabbit_queue, Name); %% optimisation
@@ -666,6 +656,7 @@ declare_args() ->
      {<<"x-max-priority">>,            fun check_max_priority_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
+     {<<"x-single-active-consumer">>,  fun check_single_active_consumer_arg/2},
      {<<"x-queue-type">>,              fun check_queue_type/2},
      {<<"x-quorum-initial-group-size">>,     fun check_default_quorum_initial_group_size_arg/2}].
 
@@ -706,6 +697,12 @@ check_max_priority_arg({Type, Val}, Args) ->
         ok when Val =< ?MAX_SUPPORTED_PRIORITY -> ok;
         ok                                     -> {error, {max_value_exceeded, Val}};
         Error                                  -> Error
+    end.
+
+check_single_active_consumer_arg({Type, Val}, Args) ->
+    case check_bool_arg({Type, Val}, Args) of
+        ok    -> ok;
+        Error -> Error
     end.
 
 check_default_quorum_initial_group_size_arg({Type, Val}, Args) ->
@@ -756,6 +753,8 @@ check_queue_type({Type,    _}, _Args) ->
 list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
 
 list_names() -> mnesia:dirty_all_keys(rabbit_queue).
+
+list_names(VHost) -> [Q#amqqueue.name || Q <- list(VHost)].
 
 list_local_names() ->
     [ Q#amqqueue.name || #amqqueue{state = State, pid = QPid} = Q <- list(),
