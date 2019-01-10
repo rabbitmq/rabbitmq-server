@@ -399,22 +399,12 @@ purge(Node) ->
             Err
     end.
 
--spec stat(ra_server_id()) -> {ok, {non_neg_integer(), non_neg_integer(),
-                                    non_neg_integer(), non_neg_integer(),
-                                    non_neg_integer(), non_neg_integer()}}
+-spec stat(ra_server_id()) -> {ok, {non_neg_integer(), non_neg_integer()}}
                                   | {error | timeout, term()}.
-stat(Servers) ->
-    try_process_stat(Servers, rabbit_fifo:make_stat()).
-
-try_process_stat([Server | Rem], Cmd) ->
-    case ra:process_command(Server, Cmd, 30000) of
-        {ok, {stat, Reply}, _} ->
-            {ok, Reply};
-        Err when length(Rem) =:= 0 ->
-            Err;
-        _ ->
-            try_process_stat(Rem, Cmd)
-    end.
+stat(Leader) ->
+    Query = fun (State) -> rabbit_fifo:query_stat(State) end,
+    {ok, {_, Stat}, _} = ra:local_query(Leader, Query),
+    Stat.
 
 %% @doc returns the cluster name
 -spec cluster_name(state()) -> cluster_name().

@@ -107,7 +107,7 @@ cluster_full_partition_with_autoheal(Config) ->
     Conn4 = open_unmanaged_connection(Config, B),
     Conn5 = open_unmanaged_connection(Config, C),
     Conn6 = open_unmanaged_connection(Config, C),
-    ?assertEqual(6, count_connections_in(Config, VHost)),
+    wait_for_count_connections_in(Config, VHost, 6, 60000),
 
     %% B drops off the network, non-reachable by either A or C
     rabbit_ct_broker_helpers:block_traffic_between(A, B),
@@ -115,14 +115,14 @@ cluster_full_partition_with_autoheal(Config) ->
     timer:sleep(?DELAY),
 
     %% A and C are still connected, so 4 connections are tracked
-    ?assertEqual(4, count_connections_in(Config, VHost)),
+    wait_for_count_connections_in(Config, VHost, 4, 60000),
 
     rabbit_ct_broker_helpers:allow_traffic_between(A, B),
     rabbit_ct_broker_helpers:allow_traffic_between(B, C),
     timer:sleep(?DELAY),
 
     %% during autoheal B's connections were dropped
-    ?assertEqual(4, count_connections_in(Config, VHost)),
+    wait_for_count_connections_in(Config, VHost, 4, 60000),
 
     lists:foreach(fun (Conn) ->
                           (catch rabbit_ct_client_helpers:close_connection(Conn))
@@ -131,10 +131,21 @@ cluster_full_partition_with_autoheal(Config) ->
 
     passed.
 
-
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
+
+wait_for_count_connections_in(Config, VHost, Expected, Time) when Time =< 0 ->
+    ?assertEqual(Expected, count_connections_in(Config, VHost));
+wait_for_count_connections_in(Config, VHost, Expected, Time) ->
+    case count_connections_in(Config, VHost) of
+        Expected ->
+            ok;
+        _ ->
+            Sleep = 3000,
+            timer:sleep(Sleep),
+            wait_for_count_connections_in(Config, VHost, Expected, Time - Sleep)
+    end.
 
 count_connections_in(Config, VHost) ->
     count_connections_in(Config, VHost, 0).

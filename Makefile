@@ -130,13 +130,15 @@ define PROJECT_ENV
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
 	    {default_consumer_prefetch, {false, 0}},
-	    {channel_queue_cleanup_interval, 60000}
+	    {channel_queue_cleanup_interval, 60000},
+	    %% Default max message size is 128 MB
+	    {max_message_size, 134217728}
 	  ]
 endef
 
 LOCAL_DEPS = sasl mnesia os_mon inets
 BUILD_DEPS = rabbitmq_cli syslog
-DEPS = ranch lager rabbit_common ra
+DEPS = ranch lager rabbit_common ra sysmon_handler
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 dep_syslog = git https://github.com/schlagert/syslog 3.4.5
@@ -186,13 +188,28 @@ tests:: bats
 SLOW_CT_SUITES := backing_queue \
 		  cluster_rename \
 		  clustering_management \
+		  config_schema \
 		  dynamic_ha \
 		  eager_sync \
 		  health_check \
+		  lazy_queue \
+		  metrics \
+		  msg_store \
 		  partitions \
+		  per_user_connection_tracking \
+		  per_vhost_connection_limit \
+		  per_vhost_msg_store \
+		  per_vhost_queue_limit \
+		  policy \
 		  priority_queue \
 		  queue_master_location \
-		  simple_ha
+		  quorum_queue \
+		  rabbit_core_metrics_gc \
+		  rabbit_fifo_prop \
+		  simple_ha \
+		  sync_detection \
+		  unit_inbroker_parallel \
+		  vhost
 FAST_CT_SUITES := $(filter-out $(sort $(SLOW_CT_SUITES)),$(CT_SUITES))
 
 ct-fast: CT_SUITES = $(FAST_CT_SUITES)

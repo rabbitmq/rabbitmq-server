@@ -345,7 +345,7 @@ start_queue(Config) ->
     %% Check that the application and one ra node are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup])),
+    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
 
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
@@ -361,7 +361,7 @@ start_queue(Config) ->
     %% Check that the application and process are still up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup])).
+    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])).
 
 start_queue_concurrent(Config) ->
     Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -422,13 +422,13 @@ stop_queue(Config) ->
     %% Check that the application and one ra node are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup])),
+    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
 
     %% Delete the quorum queue
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = LQ})),
     %% Check that the application and process are down
     wait_until(fun() ->
-                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup])
+                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])
                end),
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))).
@@ -447,7 +447,7 @@ restart_queue(Config) ->
     %% Check that the application and one ra node are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup])).
+    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])).
 
 idempotent_recover(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -526,7 +526,7 @@ restart_all_types(Config) ->
     %% Check that the application and two ra nodes are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_,_], rpc:call(Server, supervisor, which_children, [ra_server_sup])),
+    ?assertMatch([_,_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
@@ -568,7 +568,7 @@ stop_start_rabbit_app(Config) ->
     %% Check that the application and two ra nodes are up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_,_], rpc:call(Server, supervisor, which_children, [ra_server_sup])),
+    ?assertMatch([_,_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
@@ -1265,7 +1265,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
                  amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
                        [] == rpc:call(Server, supervisor, which_children,
-                                      [ra_server_sup])
+                                      [ra_server_sup_sup])
                end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Server, NCh1, 0),
@@ -1302,7 +1302,7 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
     wait_for_cleanup(Server, NCh2, 1),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
-                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup])
+                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])
                end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Server, NCh1, 0),
@@ -1966,7 +1966,7 @@ delete_immediately_by_resource(Config) ->
 
     %% Check that the application and process are down
     wait_until(fun() ->
-                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup])
+                       [] == rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])
                end),
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))).
@@ -2237,7 +2237,8 @@ wait_for_cleanup(Server, Channel, Number) ->
     wait_for_cleanup(Server, Channel, Number, 60).
 
 wait_for_cleanup(Server, Channel, Number, 0) ->
-    ?assertEqual(Number, length(rpc:call(Server, rabbit_channel, list_queue_states, [Channel])));
+    ?assertEqual(length(rpc:call(Server, rabbit_channel, list_queue_states, [Channel])),
+                Number);
 wait_for_cleanup(Server, Channel, Number, N) ->
     case length(rpc:call(Server, rabbit_channel, list_queue_states, [Channel])) of
         Length when Number == Length ->

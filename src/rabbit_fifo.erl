@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_fifo).
@@ -42,6 +42,7 @@
          query_ra_indexes/1,
          query_consumer_count/1,
          query_consumers/1,
+         query_stat/1,
          usage/1,
 
          zero/1,
@@ -57,8 +58,7 @@
          make_discard/2,
          make_credit/4,
          make_purge/0,
-         make_update_config/1,
-         make_stat/0
+         make_update_config/1
         ]).
 
 -type raw_msg() :: term().
@@ -146,8 +146,7 @@
     #discard{} |
     #credit{} |
     #purge{} |
-    #update_config{} |
-    #stat{}.
+    #update_config{}.
 
 -type command() :: protocol() | ra_machine:builtin_command().
 %% all the command types suppored by ra fifo
@@ -180,6 +179,8 @@
          lifetime = once :: once | auto,
          suspected_down = false :: boolean()
         }).
+
+-type consumer() :: #consumer{}.
 
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
@@ -235,7 +236,12 @@
          prefix_msg_counts = {0, 0} :: {Return :: non_neg_integer(),
                                         PrefixMsgs :: non_neg_integer()},
          msg_bytes_enqueue = 0 :: non_neg_integer(),
-         msg_bytes_checkout = 0 :: non_neg_integer()
+         msg_bytes_checkout = 0 :: non_neg_integer(),
+         %% whether single active consumer is on or not for this queue
+         consumer_strategy = default :: default | single_active,
+         %% waiting consumers, one is picked active consumer is cancelled or dies
+         %% used only when single active consumer is on
+         waiting_consumers = [] :: [{consumer_id(), consumer()}]
         }).
 
 -opaque state() :: #state{}.
@@ -244,7 +250,8 @@
                     queue_resource := rabbit_types:r('queue'),
                     dead_letter_handler => applied_mfa(),
                     become_leader_handler => applied_mfa(),
-                    shadow_copy_interval => non_neg_integer()}.
+                    shadow_copy_interval => non_neg_integer(),
+                    single_active_consumer_on => boolean()}.
 
 -export_type([protocol/0,
               delivery/0,
@@ -271,9 +278,16 @@ update_config(Conf, State) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
     BLH = maps:get(become_leader_handler, Conf, undefined),
     SHI = maps:get(shadow_copy_interval, Conf, ?SHADOW_COPY_INTERVAL),
+    ConsumerStrategy = case maps:get(single_active_consumer_on, Conf, false) of
+                           true ->
+                               single_active;
+                           false ->
+                               default
+                       end,
     State#state{dead_letter_handler = DLH,
                 become_leader_handler = BLH,
-                shadow_copy_interval = SHI}.
+                shadow_copy_interval = SHI,
+                consumer_strategy = ConsumerStrategy}.
 
 zero(_) ->
     0.
@@ -434,19 +448,6 @@ apply(#{index := RaftIdx}, #purge{},
     %% reverse the effects ourselves
     {State, {purge, Total},
      lists:reverse([garbage_collection | Effects])};
-apply(_, #stat{}, #state{name = Name,
-                         messages = Messages,
-                         ra_indexes = Indexes,
-                         consumers = Cons,
-                         msg_bytes_enqueue = EnqueueBytes,
-                         msg_bytes_checkout = CheckoutBytes} = State) ->
-    Metrics = {maps:size(Messages), % Ready
-               num_checked_out(State), % checked out
-               rabbit_fifo_index:size(Indexes), %% Total
-               maps:size(Cons), % Consumers
-               EnqueueBytes,
-               CheckoutBytes},
-    {State, {stat, Metrics}, []};
 apply(_, {down, ConsumerPid, noconnection},
       #state{consumers = Cons0,
                        enqueuers = Enqs0} = State0) ->
@@ -549,7 +550,8 @@ state_enter(leader, #state{consumers = Cons,
     Pids = lists:usort(maps:keys(Enqs) ++ [P || {_, P} <- maps:keys(Cons)]),
     Mons = [{monitor, process, P} || P <- Pids],
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
-    Effects = Mons ++ Nots,
+    NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
+    Effects = Mons ++ Nots ++ NodeMons,
     case BLH of
         undefined ->
             Effects;
@@ -663,6 +665,11 @@ query_consumers(#state{consumers = Consumers}) ->
                       maps:get(args, Meta, []),
                       maps:get(username, Meta, undefined)}
              end, Consumers).
+
+query_stat(#state{messages = M,
+                  consumers = Consumers}) ->
+    {maps:size(M), maps:size(Consumers)}.
+
 %% other
 
 -spec usage(atom()) -> float().
@@ -708,6 +715,42 @@ num_checked_out(#state{consumers = Cons}) ->
                 end, 0, maps:values(Cons)).
 
 cancel_consumer(ConsumerId,
+                {Effects0, #state{consumer_strategy = default} = S0}) ->
+    %% general case, single active consumer off
+    cancel_consumer0(ConsumerId, {Effects0, S0});
+cancel_consumer(ConsumerId,
+                {Effects0, #state{consumer_strategy  = single_active,
+                                  waiting_consumers  = []  } = S0}) ->
+    %% single active consumer on, no consumers are waiting
+    cancel_consumer0(ConsumerId, {Effects0, S0});
+cancel_consumer(ConsumerId,
+                {Effects0, #state{consumers         = Cons0,
+                                  consumer_strategy = single_active,
+                                  waiting_consumers = WaitingConsumers0 } = State0}) ->
+    %% single active consumer on, consumers are waiting
+    case maps:take(ConsumerId, Cons0) of
+        {_CurrentActiveConsumer = #consumer{checked_out = Checked0}, _} ->
+            % The active consumer is to be removed
+            % Cancel it
+            S = return_all(State0, Checked0),
+            Effects = cancel_consumer_effects(ConsumerId, S, Effects0),
+            % Take another one from the waiting consumers and put it in consumers
+            [{NewActiveConsumerId, NewActiveConsumer} | RemainingWaitingConsumers] = WaitingConsumers0,
+            #state{service_queue = ServiceQueue} = State0,
+            ServiceQueue1 = maybe_queue_consumer(NewActiveConsumerId, NewActiveConsumer, ServiceQueue),
+            State1 = State0#state{consumers = #{NewActiveConsumerId => NewActiveConsumer},
+                                  service_queue = ServiceQueue1,
+                                  waiting_consumers = RemainingWaitingConsumers},
+            {Effects, State1};
+        error ->
+            % The cancelled consumer is not the active one
+            % Just remove it from idle_consumers
+            {value, _Consumer, WaitingConsumers1} = lists:keytake(ConsumerId, 1, WaitingConsumers0),
+            % A waiting consumer isn't supposed to have any checked out messages, so nothing special to do here
+            {Effects0, State0#state{waiting_consumers = WaitingConsumers1}}
+    end.
+
+cancel_consumer0(ConsumerId,
                 {Effects0, #state{consumers = C0} = S0}) ->
     case maps:take(ConsumerId, C0) of
         {#consumer{checked_out = Checked0}, Cons} ->
@@ -718,9 +761,9 @@ cancel_consumer(ConsumerId,
                     {[{aux, inactive} | Effects], S#state{consumers = Cons}};
                 _ ->
                     {Effects, S#state{consumers = Cons}}
-                end;
+            end;
         error ->
-            % already removed - do nothing
+            %% already removed: do nothing
             {Effects0, S0}
     end.
 
@@ -1103,23 +1146,42 @@ uniq_queue_in(Key, Queue) ->
     end.
 
 
+update_consumer(ConsumerId, Meta, Spec,
+                #state{consumer_strategy = default} = State0) ->
+    %% general case, single active consumer off
+    update_consumer0(ConsumerId, Meta, Spec, State0);
+update_consumer(ConsumerId, Meta, Spec,
+                #state{consumers         = Cons0,
+                       consumer_strategy = single_active} = State0) when map_size(Cons0) == 0 ->
+    %% single active consumer on, no one is consuming yet
+    update_consumer0(ConsumerId, Meta, Spec, State0);
 update_consumer(ConsumerId, Meta, {Life, Credit, Mode},
-                #state{consumers = Cons0,
-                       service_queue = ServiceQueue0} = State0) ->
+                #state{consumer_strategy  = single_active,
+                       waiting_consumers  = WaitingConsumers0} = State0) ->
+    %% single active consumer on and one active consumer already
+    %% adding the new consumer to the waiting list
+    Consumer = #consumer{lifetime = Life, meta = Meta,
+                         credit = Credit, credit_mode = Mode},
+    WaitingConsumers1 = WaitingConsumers0 ++ [{ConsumerId, Consumer}],
+    State0#state{waiting_consumers = WaitingConsumers1}.
+
+update_consumer0(ConsumerId, Meta, {Life, Credit, Mode},
+                 #state{consumers = Cons0,
+                        service_queue = ServiceQueue0} = State0) ->
     %% TODO: this logic may not be correct for updating a pre-existing consumer
     Init = #consumer{lifetime = Life, meta = Meta,
                      credit = Credit, credit_mode = Mode},
     Cons = maps:update_with(ConsumerId,
-                             fun(S) ->
-                                     %% remove any in-flight messages from
-                                     %% the credit update
-                                     N = maps:size(S#consumer.checked_out),
-                                     C = max(0, Credit - N),
-                                     S#consumer{lifetime = Life,
-                                                credit = C}
-                             end, Init, Cons0),
+                            fun(S) ->
+                                %% remove any in-flight messages from
+                                %% the credit update
+                                N = maps:size(S#consumer.checked_out),
+                                C = max(0, Credit - N),
+                                S#consumer{lifetime = Life,
+                                    credit = C}
+                            end, Init, Cons0),
     ServiceQueue = maybe_queue_consumer(ConsumerId, maps:get(ConsumerId, Cons),
-                                        ServiceQueue0),
+        ServiceQueue0),
 
     State0#state{consumers = Cons, service_queue = ServiceQueue}.
 
@@ -1196,9 +1258,6 @@ make_purge() -> #purge{}.
 -spec make_update_config(config()) -> protocol().
 make_update_config(Config) ->
     #update_config{config = Config}.
-
--spec make_stat() -> protocol().
-make_stat() -> #stat{}.
 
 add_bytes_enqueue(Msg, #state{msg_bytes_enqueue = Enqueue} = State) ->
     Bytes = message_size(Msg),
@@ -1506,7 +1565,6 @@ cancelled_checkout_out_test() ->
 
     {State3, {dequeue, {0, {_, first}}}, _} =
         apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}), State2),
-    ?debugFmt("State3 ~p", [State3]),
     {_State, {dequeue, {_, {_, second}}}, _} =
         apply(meta(4), make_checkout(Cid, {dequeue, settled}, #{}), State3),
     ok.
@@ -1704,8 +1762,7 @@ return_prefix_msg_count_test() ->
                ],
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
-    {State, _Effects} = run_log(test_init(?FUNCTION_NAME), Entries),
-    ?debugFmt("return_prefix_msg_count_test state ~n~p~n", [State]),
+    {_State, _Effects} = run_log(test_init(?FUNCTION_NAME), Entries),
     ok.
 
 
@@ -1777,7 +1834,6 @@ run_snapshot_test(Name, Commands) ->
     %% create every incremental permuation of the commands lists
     %% and run the snapshot tests against that
     [begin
-         ?debugFmt("~w running command to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
          run_snapshot_test0(Name, C)
      end || C <- prefixes(Commands, 1, [])].
 
@@ -1790,11 +1846,8 @@ run_snapshot_test0(Name, Commands) ->
          Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
                                        (_) -> false
                                     end, Entries),
-         ?debugFmt("running from snapshot: ~b", [SnapIdx]),
          {S, _} = run_log(SnapState, Filtered),
          % assert log can be restored from any release cursor index
-         ?debugFmt("Name ~p~nS~p~nState~p~nn",
-                   [Name, S, State]),
          ?assertEqual(State, S)
      end || {release_cursor, SnapIdx, SnapState} <- Effects],
     ok.
@@ -1915,6 +1968,71 @@ down_returns_checked_out_in_order_test() ->
     ?assertEqual(100, length(Returns)),
     %% validate returns are in order
     ?assertEqual(lists:sort(Returns), Returns),
+    ok.
+
+single_active_consumer_test() ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    shadow_copy_interval => 0,
+                    single_active_consumer_on => true}),
+    ?assertEqual(single_active, State0#state.consumer_strategy),
+    ?assertEqual(0, map_size(State0#state.consumers)),
+
+    % adding some consumers
+    AddConsumer = fun(CTag, State) ->
+                      {NewState, _, _} = apply(
+                          #{},
+                          #checkout{spec = {once, 1, simple_prefetch},
+                                    meta = #{},
+                                    consumer_id = {CTag, self()}},
+                          State),
+                      NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0, [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
+
+    % the first registered consumer is the active one, the others are waiting
+    ?assertEqual(1, map_size(State1#state.consumers)),
+    ?assert(maps:is_key({<<"ctag1">>, self()}, State1#state.consumers)),
+    ?assertEqual(3, length(State1#state.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag2">>, self()}, 1, State1#state.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag3">>, self()}, 1, State1#state.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag4">>, self()}, 1, State1#state.waiting_consumers)),
+
+    % cancelling a waiting consumer
+    {State2, _, _} = apply(#{}, #checkout{spec = cancel, consumer_id = {<<"ctag3">>, self()}}, State1),
+    % the active consumer should still be in place
+    ?assertEqual(1, map_size(State2#state.consumers)),
+    ?assert(maps:is_key({<<"ctag1">>, self()}, State2#state.consumers)),
+    % the cancelled consumer has been removed from waiting consumers
+    ?assertEqual(2, length(State2#state.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag2">>, self()}, 1, State2#state.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag4">>, self()}, 1, State2#state.waiting_consumers)),
+
+    % cancelling the active consumer
+    {State3, _, _} = apply(#{}, #checkout{spec = cancel, consumer_id = {<<"ctag1">>, self()}}, State2),
+    % the second registered consumer is now the active one
+    ?assertEqual(1, map_size(State3#state.consumers)),
+    ?assert(maps:is_key({<<"ctag2">>, self()}, State3#state.consumers)),
+    % the new active consumer is no longer in the waiting list
+    ?assertEqual(1, length(State3#state.waiting_consumers)),
+    ?assertNotEqual(false, lists:keyfind({<<"ctag4">>, self()}, 1, State3#state.waiting_consumers)),
+
+    % cancelling the active consumer
+    {State4, _, _} = apply(#{}, #checkout{spec = cancel, consumer_id = {<<"ctag2">>, self()}}, State3),
+    % the last waiting consumer became the active one
+    ?assertEqual(1, map_size(State4#state.consumers)),
+    ?assert(maps:is_key({<<"ctag4">>, self()}, State4#state.consumers)),
+    % the waiting consumer list is now empty
+    ?assertEqual(0, length(State4#state.waiting_consumers)),
+
+    % cancelling the last consumer
+    {State5, _, _} = apply(#{}, #checkout{spec = cancel, consumer_id = {<<"ctag4">>, self()}}, State4),
+    % no active consumer anymore
+    ?assertEqual(0, map_size(State5#state.consumers)),
+    % still nothing in the waiting list
+    ?assertEqual(0, length(State5#state.waiting_consumers)),
+
     ok.
 
 meta(Idx) ->
