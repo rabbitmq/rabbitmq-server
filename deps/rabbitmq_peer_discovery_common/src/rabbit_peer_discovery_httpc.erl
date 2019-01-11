@@ -171,7 +171,8 @@ get(Scheme, Host, Port, Path, Args) ->
 get(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
   rabbit_log:debug("GET ~s", [URL]),
-  Response = httpc:request(get, {URL, Headers}, HttpOpts, []),
+  HttpOpts1 = ensure_timeout(HttpOpts),
+  Response = httpc:request(get, {URL, Headers}, HttpOpts1, []),
   rabbit_log:debug("Response: ~p", [Response]),
   parse_response(Response).
 
@@ -191,7 +192,8 @@ get(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
 post(Scheme, Host, Port, Path, Args, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
   rabbit_log:debug("POST ~s [~p]", [URL, Body]),
-  Response = httpc:request(post, {URL, [], ?CONTENT_JSON, Body}, [], []),
+  HttpOpts = ensure_timeout(),
+  Response = httpc:request(post, {URL, [], ?CONTENT_JSON, Body}, HttpOpts, []),
   rabbit_log:debug("Response: [~p]", [Response]),
   parse_response(Response).
 
@@ -211,7 +213,8 @@ post(Scheme, Host, Port, Path, Args, Body) ->
 put(Scheme, Host, Port, Path, Args, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
   rabbit_log:debug("PUT ~s [~p]", [URL, Body]),
-  Response = httpc:request(put, {URL, [], ?CONTENT_URLENCODED, Body}, [], []),
+  HttpOpts = ensure_timeout(),
+  Response = httpc:request(put, {URL, [], ?CONTENT_URLENCODED, Body}, HttpOpts, []),
   rabbit_log:debug("Response: [~p]", [Response]),
   parse_response(Response).
 
@@ -231,7 +234,8 @@ put(Scheme, Host, Port, Path, Args, Body) ->
 put(Scheme, Host, Port, Path, Args, Headers, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
   rabbit_log:debug("PUT ~s [~p] [~p]", [URL, Headers, Body]),
-  Response = httpc:request(put, {URL, Headers, ?CONTENT_URLENCODED, Body}, [], []),
+  HttpOpts = ensure_timeout(),
+  Response = httpc:request(put, {URL, Headers, ?CONTENT_URLENCODED, Body}, HttpOpts, []),
   rabbit_log:debug("Response: [~p]", [Response]),
   parse_response(Response).
 
@@ -251,7 +255,8 @@ put(Scheme, Host, Port, Path, Args, Headers, Body) ->
 delete(Scheme, Host, Port, Path, Args, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
   rabbit_log:debug("DELETE ~s [~p]", [URL, Body]),
-  Response = httpc:request(delete, {URL, [], ?CONTENT_URLENCODED, Body}, [], []),
+  HttpOpts = ensure_timeout(),
+  Response = httpc:request(delete, {URL, [], ?CONTENT_URLENCODED, Body}, HttpOpts, []),
   rabbit_log:debug("Response: [~p]", [Response]),
   parse_response(Response).
 
@@ -361,7 +366,6 @@ parse_response({ok,{{_Vsn,Code,_Reason},_,Body}}) ->
   rabbit_log:debug("HTTP Response (~p) ~s", [Code, Body]),
   {error, integer_to_list(Code)}.
 
-
 %% @private
 %% @spec percent_encode(Value) -> string()
 %% @where
@@ -372,3 +376,29 @@ parse_response({ok,{{_Vsn,Code,_Reason},_,Body}}) ->
 %%
 percent_encode(Value) ->
   http_uri:encode(rabbit_peer_discovery_util:as_string(Value)).
+
+%% @private
+%% @doc Ensure that the timeout option is set.
+%% @end
+%%
+-spec ensure_timeout() -> list({atom(), term()}).
+ensure_timeout() ->
+    [{timeout, ?DEFAULT_HTTP_TIMEOUT}].
+
+%% @private
+%% @doc Ensure that the timeout option is set, and does not exceed
+%%      about 1/2 of the default gen_server:call timeout. This gives
+%%      enough time for a long connect and request phase to succeed.
+%% @end
+%%
+-spec ensure_timeout(Options :: list({atom(), term()})) -> list({atom(), term()}).
+ensure_timeout(Options) ->
+    case proplists:get_value(timeout, Options) of
+        undefined ->
+            Options ++ [{timeout, ?DEFAULT_HTTP_TIMEOUT}];
+        Value when is_integer(Value) andalso Value >= 0 andalso Value =< ?DEFAULT_HTTP_TIMEOUT ->
+            Options;
+        _ ->
+            Options1 = proplists:delete(timeout, Options),
+            Options1 ++ [{timeout, ?DEFAULT_HTTP_TIMEOUT}]
+    end.
