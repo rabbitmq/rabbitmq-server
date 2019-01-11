@@ -57,6 +57,8 @@ format_queue_stats({reductions, _}) ->
     [];
 format_queue_stats({exclusive_consumer_pid, _}) ->
     [];
+format_queue_stats({single_active_consumer_pid, _}) ->
+    [];
 format_queue_stats({slave_pids, ''}) ->
     [];
 format_queue_stats({slave_pids, Pids}) ->
