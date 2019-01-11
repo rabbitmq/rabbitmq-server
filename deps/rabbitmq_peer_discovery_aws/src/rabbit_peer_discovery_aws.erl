@@ -31,6 +31,13 @@
 -compile(export_all).
 -endif.
 
+% rabbitmq/rabbitmq-peer-discovery-aws#25
+
+% Note: this timeout must not be greater than the default
+% gen_server:call timeout of 5000ms. Note that `timeout`,
+% when set, is used as the connect and then request timeout
+% by `httpc`
+-define(INSTANCE_ID_TIMEOUT, 2250).
 -define(INSTANCE_ID_URL,
         "http://169.254.169.254/latest/meta-data/instance-id").
 
@@ -101,7 +108,6 @@ list_nodes() ->
         false ->
             get_node_list_from_tags(get_tags())
     end.
-
 
 -spec supports_registration() -> boolean().
 
@@ -357,7 +363,8 @@ select_hostname() ->
 %% @end
 %%
 instance_id() ->
-    case httpc:request(?INSTANCE_ID_URL) of
+    case httpc:request(get, {?INSTANCE_ID_URL, []},
+                       [{timeout, ?INSTANCE_ID_TIMEOUT}], []) of
         {ok, {{_, 200, _}, _, Value}} ->
             rabbit_log:debug("Fetched EC2 instance ID from ~p: ~p",
                              [?INSTANCE_ID_URL, Value]),
