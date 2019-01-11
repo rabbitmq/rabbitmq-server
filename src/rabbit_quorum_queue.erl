@@ -76,7 +76,9 @@
          leader,
          online,
          members,
-         open_files
+         open_files,
+         single_active_consumer_pid,
+         single_active_consumer_ctag
         ]).
 
 -define(TICK_TIME, 1000). %% the ra server tick time
@@ -704,6 +706,10 @@ i(open_files, #amqqueue{pid = {Name, _},
                         quorum_nodes = Nodes}) ->
     {Data, _} = rpc:multicall(Nodes, rabbit_quorum_queue, open_files, [Name]),
     lists:flatten(Data);
+i(single_active_consumer_pid, _Q) ->
+    '';
+i(single_active_consumer_ctag, _Q) ->
+    '';
 i(_K, _Q) -> ''.
 
 open_files(Name) ->

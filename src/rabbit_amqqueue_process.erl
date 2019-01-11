@@ -120,6 +120,8 @@
          effective_policy_definition,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
+         single_active_consumer_pid,
+         single_active_consumer_tag,
          consumers,
          consumer_utilisation,
          memory,
@@ -1039,6 +1041,14 @@ i(exclusive_consumer_pid, _) ->
 i(exclusive_consumer_tag, #q{active_consumer = {_ChPid, ConsumerTag}, single_active_consumer_on = false}) ->
     ConsumerTag;
 i(exclusive_consumer_tag, _) ->
+    '';
+i(single_active_consumer_pid, #q{active_consumer = {ChPid, _Consumer}, single_active_consumer_on = true}) ->
+    ChPid;
+i(single_active_consumer_pid, _) ->
+    '';
+i(single_active_consumer_tag, #q{active_consumer = {_ChPid, Consumer}, single_active_consumer_on = true}) ->
+    rabbit_queue_consumers:consumer_tag(Consumer);
+i(single_active_consumer_tag, _) ->
     '';
 i(messages_ready, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:len(BQS);
