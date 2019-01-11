@@ -55,7 +55,10 @@
 %%      credentials.
 %%
 %%      When the EC2 instance metadata server is checked for but does not exist,
-%%      the operation will timeout in 100ms (``?INSTANCE_CONNECT_TIMEOUT``).
+%%      the operation will timeout in ``?DEFAULT_HTTP_TIMEOUT``ms.
+%%
+%%      When the EC2 instance metadata server exists, but data is not returned
+%%      quickly, the operation will timeout in ``?DEFAULT_HTTP_TIMEOUT``ms.
 %%
 %%      If the service does exist, it will attempt to use the
 %%      ``/meta-data/iam/security-credentials`` endpoint to request expiring
@@ -100,7 +103,10 @@ credentials() ->
 %%      credentials.
 %%
 %%      When the EC2 instance metadata server is checked for but does not exist,
-%%      the operation will timeout in 100ms (``?INSTANCE_CONNECT_TIMEOUT``).
+%%      the operation will timeout in ``?DEFAULT_HTTP_TIMEOUT``ms.
+%%
+%%      When the EC2 instance metadata server exists, but data is not returned
+%%      quickly, the operation will timeout in ``?DEFAULT_HTTP_TIMEOUT``ms.
 %%
 %%      If the service does exist, it will attempt to use the
 %%      ``/meta-data/iam/security-credentials`` endpoint to request expiring
@@ -616,7 +622,7 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
 %% @end
 perform_http_get(URL) ->
   httpc:request(get, {URL, []},
-                [{connect_timeout, ?INSTANCE_CONNECT_TIMEOUT}], []).
+                [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
 
 
 -spec parse_iso8601_timestamp(Timestamp :: string() | binary()) -> calendar:datetime().
