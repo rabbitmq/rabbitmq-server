@@ -14,6 +14,13 @@
 %% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 %%
 
+% rabbitmq/rabbitmq-peer-discovery-aws#25
+% Note: this timeout must not be greater than the default
+% gen_server:call timeout of 5000ms. This `timeout`,
+% when set, is used as the connect and then request timeout
+% by `httpc`
+-define(DEFAULT_HTTP_TIMEOUT, 2250).
+
 -type peer_discovery_config_value() :: atom() | integer() | string() | undefined.
 
 -record(peer_discovery_config_entry_meta,
