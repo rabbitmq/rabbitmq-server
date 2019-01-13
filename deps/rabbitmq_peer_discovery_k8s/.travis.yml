@@ -18,7 +18,7 @@ addons:
       # Use Elixir from Erlang Solutions. The provided Elixir is
       # installed with kiex but is old. We also can't use kiex to
       # install a newer one because of GitHub API rate limiting.
-      - elixir=1.6.0-1
+      - elixir=1.6.6-1
 cache:
   apt: true
 env:
@@ -27,8 +27,8 @@ env:
     - secure: Bqvu0TyVQN/22yPX4F5kboh8Y8XQ31ptAD+yf7Rt9e9rjkl72I8hjmXxx8fBsmgZUIsqiuzUsEtKJ41TVtke2gDUacqWpp6cl9swgIwTqqjX8XI2jwcnn810d00/xX0Fy9k8hi5GIOpArjDz+oXDYiCebTsQi2v6LQ7taDvfhFRF09EBtBb+0A4M1pGT4haUe0RmcN6GtNTVtQKx/SQZFMT4rWTv0NmlZODGH/Bj7w65c71DD7ok37B3LJTlI7BkkSvwokrbCx/kPlKcDICP0LswqEIsHOkPEILTBG4PJR1W+IhaKfFvPqEsrerIcq+k08neZhyKqBzYqJV+Ri4wus8AqzKlZPNPALnJFqhuII3u6j/HSZsceFFOpZo7pq1m5FwT6HXJv3NjAHj8IeJOverJEL/iSf/VXEvRZrmykFgNEVyP9DOhdcLYM5t99VYzFItJMg59sXbyIxG0RzZjSxMMyswi1IK/SCWg5owacyO32+ptD+N6C6pEEaECltMA4hnC/yay3CUlK/KPRjzDyyQFA7dAtJofFlVSl/s59x5yz1cUKXhfcQEOi28dVqL5aNX9RvpLBkwQ22+ZzMEm20JvdoxrDiYs5okQ3b2SC5mGJPprEVbd6/bXbKIy4fXlZqcu39PtF9VVEEaOY5NJgElWHqwL2/Bvi/fOeFW6kYA=
 
 otp_release:
-  - "19.3"
   - "20.3"
+  - "21.2"
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
@@ -46,7 +46,7 @@ before_script:
   - |
     echo YES | kiex implode
     elixir --version
-    elixir --version | grep -q 'Elixir 1.6.0'
+    elixir --version | grep -q 'Elixir 1.6.6'
 
 script:
   - make xref
