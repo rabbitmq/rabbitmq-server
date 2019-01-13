@@ -51,4 +51,4 @@ RabbitMQ server is [licensed under the MPL 1.1](LICENSE-MPL-RabbitMQ).
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2018.
+(c) Pivotal Software Inc., 2007-2019.

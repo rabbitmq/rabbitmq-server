@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(credential_validation_SUITE).
@@ -272,4 +272,3 @@ regexp_that_requires_length_of_at_most(N) when is_integer(N) ->
 
 validator_backend(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_credential_validation, backend, []).
-

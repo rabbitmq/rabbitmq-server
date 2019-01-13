@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 -module(cluster_formation_locking_SUITE).
 
@@ -38,13 +38,13 @@ groups() ->
 init_per_testcase(Testcase, Config) when Testcase == init_with_lock_exits_after_errors;
                                          Testcase == init_with_lock_not_supported;
                                          Testcase == init_with_lock_supported ->
-    application:set_env(rabbit, cluster_formation, 
+    application:set_env(rabbit, cluster_formation,
                         [{peer_discover_backend, peer_discover_classic_config},
                          {lock_acquisition_failure_mode, fail}]),
     ok = meck:new(rabbit_peer_discovery_classic_config, [passthrough]),
     Config;
 init_per_testcase(init_with_lock_ignore_after_errors, Config) ->
-    application:set_env(rabbit, cluster_formation, 
+    application:set_env(rabbit, cluster_formation,
                         [{peer_discover_backend, peer_discover_classic_config},
                          {lock_acquisition_failure_mode, ignore}]),
     ok = meck:new(rabbit_peer_discovery_classic_config, [passthrough]),
@@ -52,7 +52,7 @@ init_per_testcase(init_with_lock_ignore_after_errors, Config) ->
 
 end_per_testcase(_, _) ->
     meck:unload(),
-    application:unset_env(rabbit, cluster_formation).    
+    application:unset_env(rabbit, cluster_formation).
 
 init_with_lock_exits_after_errors(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> {error, "test error"} end),

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_decorator).
@@ -76,7 +76,7 @@
 added_to_rabbit_registry(_Type, _ModuleName) ->
     [maybe_recover(X) || X <- rabbit_exchange:list()],
     ok.
-removed_from_rabbit_registry(_Type) -> 
+removed_from_rabbit_registry(_Type) ->
     [maybe_recover(X) || X <- rabbit_exchange:list()],
     ok.
 
