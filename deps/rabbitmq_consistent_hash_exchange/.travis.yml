@@ -27,7 +27,7 @@ env:
     - secure: WlvV5Vlid2EiEZsVZ8VI8WSvwO5vevIsRNH2W2oiMI89q2qqJA2Ec0JTiqb0ve1KMUNnpdHs66fCCMN8g0TFNLErureFiVh+zobYRfDAJecSrXEdlZdJ+af9zG1H6aNOux01jLq4wLGAoppSVBDsOgtu3d1pwXiOuKezsm7LmDA=
 
 otp_release:
-  - "21.2.2"
+  - "21.2"
 
 before_script:
   # The checkout made by Travis is a "detached HEAD" and branches
