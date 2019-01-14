@@ -44,4 +44,12 @@
      [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]},
       {rabbitmq_auth_backend_cache,
           [{cache_module,rabbit_auth_backend_ets_segmented}]}],
-     [rabbitmq_auth_backend_cache]}].
+     [rabbitmq_auth_backend_cache]},
+ {cache_refusals,
+  "auth_backends.1 = cache
+  auth_cache.cache_refusals = true",
+     [{rabbit,[{auth_backends,[rabbit_auth_backend_cache]}]},
+      {rabbitmq_auth_backend_cache,
+          [{cache_refusals,true}]}],
+     [rabbitmq_auth_backend_cache]}
+].
