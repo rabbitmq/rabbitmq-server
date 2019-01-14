@@ -134,7 +134,6 @@
                  drain :: boolean()}).
 -record(purge, {}).
 -record(update_config, {config :: config()}).
--record(stat, {}).
 
 
 
