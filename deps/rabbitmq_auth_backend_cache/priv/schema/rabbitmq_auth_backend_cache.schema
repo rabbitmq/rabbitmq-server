@@ -56,3 +56,7 @@ end}.
 {mapping, "auth_cache.cache_module", "rabbitmq_auth_backend_cache.cache_module", [
     {datatype, atom}
 ]}.
+
+{mapping, "auth_cache.cache_refusals", "rabbitmq_auth_backend_cache.cache_refusals", [
+    {datatype, {enum, [true, false]}}
+]}.
