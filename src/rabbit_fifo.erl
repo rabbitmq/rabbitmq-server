@@ -42,6 +42,7 @@
          query_ra_indexes/1,
          query_consumer_count/1,
          query_consumers/1,
+         query_stat/1,
          usage/1,
 
          zero/1,
@@ -721,7 +722,10 @@ query_consumers(#state{consumers = Consumers, waiting_consumers = WaitingConsume
                                                     Acc)
                                        end, #{}, WaitingConsumers),
     maps:merge(FromConsumers, FromWaitingConsumers).
-%% other
+
+query_stat(#state{messages = M,
+                  consumers = Consumers}) ->
+    {maps:size(M), maps:size(Consumers)}.
 
 -spec usage(atom()) -> float().
 usage(Name) when is_atom(Name) ->

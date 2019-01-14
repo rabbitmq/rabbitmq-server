@@ -432,8 +432,15 @@ infos(QName) ->
 info(Q, Items) ->
     [{Item, i(Item, Q)} || Item <- Items].
 
-stat(_Q) ->
-    {ok, 0, 0}.  %% TODO length, consumers count
+stat(#amqqueue{pid = Leader}) ->
+    try
+        {Ready, Consumers} = rabbit_fifo_client:stat(Leader),
+        {ok, Ready, Consumers}
+    catch
+        _:_ ->
+            %% Leader is not available, cluster might be in minority
+            {ok, 0, 0}
+    end.
 
 purge(Node) ->
     rabbit_fifo_client:purge(Node).
