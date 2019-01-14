@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2010-2015 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2010-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_prequeue).
@@ -97,4 +97,3 @@ handle_cast(_Msg, _State)            -> exit(unreachable).
 handle_info(_Msg, _State)            -> exit(unreachable).
 terminate(_Reason, _State)           -> exit(unreachable).
 code_change(_OldVsn, _State, _Extra) -> exit(unreachable).
-

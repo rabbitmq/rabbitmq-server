@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2018 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2018-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(quorum_queue_SUITE).
@@ -1141,7 +1141,7 @@ test_dead_lettering(PolicySet, Config, Ch, Servers, RaName, Source, Destination)
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]]),
     DeliveryTag = consume(Ch, Source, false),
-    wait_for_messages_ready(Servers, RaName, 0), 
+    wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 1),
     wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
@@ -1829,7 +1829,7 @@ reconnect_consumer_and_publish(Config) ->
                                                 multiple     = false}),
             wait_for_messages_ready(Servers, RaName, 0),
             wait_for_messages_pending_ack(Servers, RaName, 1)
-    end, 
+    end,
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag2,
                           redelivered = true}, _} ->
@@ -2291,4 +2291,3 @@ get_message_bytes(Leader, QRes) ->
         _ ->
             []
     end.
-

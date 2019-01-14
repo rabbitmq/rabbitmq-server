@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(many_node_ha_SUITE).
@@ -114,4 +114,3 @@ kill_intermediate(Config) ->
     rabbit_ha_test_producer:await_response(ProducerPid),
     rabbit_ha_test_consumer:await_response(ConsumerPid),
     ok.
-

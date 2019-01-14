@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_diagnostics).
@@ -113,12 +113,12 @@ info(Pid, Infos, Default) ->
 
 get_time() ->
     {{Y,M,D}, {H,Min,Sec}} = calendar:local_time(),
-    [ integer_to_list(Y), "-", 
-      prefix_zero(integer_to_list(M)), "-", 
+    [ integer_to_list(Y), "-",
+      prefix_zero(integer_to_list(M)), "-",
       prefix_zero(integer_to_list(D)), " ",
-      prefix_zero(integer_to_list(H)), ":", 
-      prefix_zero(integer_to_list(Min)), ":", 
-      prefix_zero(integer_to_list(Sec)) 
+      prefix_zero(integer_to_list(H)), ":",
+      prefix_zero(integer_to_list(Min)), ":",
+      prefix_zero(integer_to_list(Sec))
       ].
 
 prefix_zero([C]) -> [$0, C];
