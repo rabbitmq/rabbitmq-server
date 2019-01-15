@@ -25,7 +25,8 @@
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
 %% these must all be run inside a mnesia tx
 -export([has_for_source/1, remove_for_source/1,
-         remove_for_destination/2, remove_transient_for_destination/1]).
+         remove_for_destination/2, remove_transient_for_destination/1,
+         remove_default_exchange_binding_rows_of/1]).
 
 -export([implicit_for_destination/1, reverse_binding/1]).
 
@@ -250,6 +251,23 @@ remove(Src, Dst, B, ActingUser) ->
     Deletions = maybe_auto_delete(
                   B#binding.source, [B], new_deletions(), false),
     process_deletions(Deletions, ActingUser).
+
+%% Implicit bindings are implicit as of rabbitmq/rabbitmq-server#1721.
+remove_default_exchange_binding_rows_of(Dst = #resource{}) ->
+    case rabbit_binding:implicit_for_destination(Dst) of
+        [Binding] ->
+            mnesia:dirty_delete(rabbit_route, Binding),
+            mnesia:dirty_delete(rabbit_durable_route, Binding),
+            mnesia:dirty_delete(rabbit_semi_durable_route, Binding),
+
+            RevBinding = rabbit_binding:reverse_binding(Binding),
+            mnesia:dirty_delete(rabbit_reverse_route, RevBinding);
+        _ ->
+            %% no binding to remove or
+            %% a competing tx has beaten us to it?
+            ok
+    end,
+    ok.
 
 list(VHostPath) ->
     VHostResource = rabbit_misc:r(VHostPath, '_'),
