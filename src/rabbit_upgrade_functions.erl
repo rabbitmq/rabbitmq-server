@@ -658,9 +658,10 @@ exchange_options(Table) ->
        operator_policy, decorators, options]).
 
 default_bindings() ->
-    %% The bindings are not used anyway,
-    %% and are replaced by placeholders.
-    %% It should be safe to remove them dirty.
+    %% Default exchange bindings are now implicit
+    %% (not stored in the route tables).
+    %% It should be safe to remove them outside of a
+    %% transaction.
     Queues = mnesia:dirty_all_keys(rabbit_queue),
     [begin
         Binding = rabbit_binding:implicit_for_destination(Q),
