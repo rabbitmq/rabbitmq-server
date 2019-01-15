@@ -27,6 +27,8 @@
 -export([has_for_source/1, remove_for_source/1,
          remove_for_destination/2, remove_transient_for_destination/1]).
 
+-export([implicit_for_destination/1, reverse_binding/1]).
+
 -define(DEFAULT_EXCHANGE(VHostPath), #resource{virtual_host = VHostPath,
                                               kind = exchange,
                                               name = <<>>}).

@@ -64,6 +64,9 @@
 -rabbit_upgrade({queue_quorum_nodes,    mnesia, [queue_type]}).
 -rabbit_upgrade({exchange_options,      mnesia, [operator_policies]}).
 
+%% TODO: move that to feature flags
+-rabbit_upgrade({default_bindings,      mnesia, [semi_durable_route]}).
+
 %% -------------------------------------------------------------------
 
 -spec remove_user_scope() -> 'ok'.
@@ -653,6 +656,21 @@ exchange_options(Table) ->
       end,
       [name, type, durable, auto_delete, internal, arguments, scratches, policy,
        operator_policy, decorators, options]).
+
+default_bindings() ->
+    %% The bindings are not used anyway,
+    %% and are replaced by placeholders.
+    %% It should be safe to remove them dirty.
+    Queues = mnesia:dirty_all_keys(rabbit_queue),
+    [begin
+        Binding = rabbit_binding:implicit_for_destination(Q),
+        mnesia:dirty_delete(rabbit_route, Binding),
+        mnesia:dirty_delete(rabbit_durable_route, Binding),
+        mnesia:dirty_delete(rabbit_semi_durable_route, Binding),
+        mnesia:dirty_delete(rabbit_reverse_route,
+                      rabbit_binding:reverse_binding(Binding))
+     end
+     || Q <- Queues].
 
 %%--------------------------------------------------------------------
 
