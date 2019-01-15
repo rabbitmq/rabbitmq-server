@@ -22,6 +22,7 @@
 
 -import(quorum_queue_utils, [wait_for_messages_ready/3,
                              wait_for_messages_pending_ack/3,
+                             wait_for_messages_total/3,
                              dirty_query/3,
                              ra_name/1]).
 
@@ -37,6 +38,7 @@ all() ->
 groups() ->
     [
      {single_node, [], all_tests()},
+     {single_node, [], memory_tests()},
      {unclustered, [], [
                         {cluster_size_2, [], [add_member]}
                        ]},
@@ -51,6 +53,7 @@ groups() ->
                                             delete_member_not_found,
                                             delete_member]
                        ++ all_tests()},
+                      {cluster_size_2, [], memory_tests()},
                       {cluster_size_3, [], [
                                             declare_during_node_down,
                                             simple_confirm_availability_on_leader_change,
@@ -61,7 +64,8 @@ groups() ->
                                             delete_declare,
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
-                                            consume_in_minority]},
+                                            consume_in_minority
+                                            ]},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent,
                                             quorum_cluster_size_3,
@@ -126,6 +130,11 @@ all_tests() ->
      consume_redelivery_count,
      subscribe_redelivery_count,
      message_bytes_metrics,
+     queue_length_limit_drop_head
+    ].
+
+memory_tests() ->
+    [
      memory_alarm_rolls_wal
     ].
 
@@ -240,7 +249,9 @@ declare_args(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
-    declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                     {<<"x-max-length">>, long, 2000},
+                     {<<"x-max-length-bytes">>, long, 2000}]),
     assert_queue_type(Server, LQ, quorum),
 
     DQ = <<"classic-declare-args-q">>,
@@ -293,16 +304,6 @@ declare_invalid_args(Config) ->
        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                     {<<"x-message-ttl">>, long, 2000}])),
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-max-length">>, long, 2000}])),
-    ?assertExit(
-       {{shutdown, {server_initiated_close, 406, _}}, _},
-       declare(rabbit_ct_client_helpers:open_channel(Config, Server),
-               LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-max-length-bytes">>, long, 2000}])),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
@@ -314,7 +315,7 @@ declare_invalid_args(Config) ->
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                    {<<"x-overflow">>, longstr, <<"drop-head">>}])),
+                    {<<"x-overflow">>, longstr, <<"reject-publish">>}])),
 
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
@@ -1422,7 +1423,7 @@ metrics_cleanup_on_leadership_takeover(Config) ->
                   _ -> false
               end
       end),
-    force_leader_change(Leader, Servers, QQ),
+    force_leader_change(Servers, QQ),
     wait_until(fun () ->
                        [] =:= rpc:call(Leader, ets, lookup, [queue_coarse_metrics, QRes]) andalso
                        [] =:= rpc:call(Leader, ets, lookup, [queue_metrics, QRes])
@@ -2151,6 +2152,32 @@ memory_alarm_rolls_wal(Config) ->
     timer:sleep(1000),
     ok.
 
+queue_length_limit_drop_head(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-max-length">>, long, 1}])),
+
+    RaName = ra_name(QQ),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
+                                     payload = <<"msg1">>}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
+                                     payload = <<"msg2">>}),
+    wait_for_consensus(QQ, Config),
+    wait_for_messages_ready(Servers, RaName, 1),
+    wait_for_messages_pending_ack(Servers, RaName, 0),
+    wait_for_messages_total(Servers, RaName, 1),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg2">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QQ,
+                                                    no_ack = true})).
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->
@@ -2200,6 +2227,9 @@ filter_queues(Expected, Got) ->
     lists:filter(fun([K, _, _, _]) ->
                          lists:member(K, Keys)
                  end, Got).
+
+publish_many(Ch, Queue, Count) ->
+    [publish(Ch, Queue) || _ <- lists:seq(1, Count)].
 
 publish(Ch, Queue) ->
     ok = amqp_channel:cast(Ch,
@@ -2268,14 +2298,16 @@ wait_until(Condition, N) ->
             wait_until(Condition, N - 1)
     end.
 
-force_leader_change(Leader, Servers, Q) ->
+
+force_leader_change([Server | _] = Servers, Q) ->
     RaName = ra_name(Q),
+    {ok, _, {_, Leader}} = ra:members({RaName, Server}),
     [F1, _] = Servers -- [Leader],
     ok = rpc:call(F1, ra, trigger_election, [{RaName, F1}]),
     case ra:members({RaName, Leader}) of
         {ok, _, {_, Leader}} ->
             %% Leader has been re-elected
-            force_leader_change(Leader, Servers, Q);
+            force_leader_change(Servers, Q);
         {ok, _, _} ->
             %% Leader has changed
             ok
@@ -2297,3 +2329,8 @@ get_message_bytes(Leader, QRes) ->
         _ ->
             []
     end.
+
+wait_for_consensus(Name, Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    RaName = ra_name(Name),
+    {ok, _, _} = ra:members({RaName, Server}).
