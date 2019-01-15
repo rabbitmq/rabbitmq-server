@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_dns).
@@ -102,7 +102,7 @@ lookup(SeedHostname, LongNamesUsed, IPv) ->
     IPs   = inet_res:lookup(SeedHostname, in, decode_record(IPv)),
     rabbit_log:info("Addresses discovered via ~s records of ~s: ~s",
 		    [string:to_upper(atom_to_list(decode_record(IPv))),
-		     SeedHostname, 
+		     SeedHostname,
 		     string:join([inet_parse:ntoa(IP) || IP <- IPs], ", ")]),
     Hosts = [extract_host(inet:gethostbyaddr(A), LongNamesUsed, A) ||
 		A <- IPs],

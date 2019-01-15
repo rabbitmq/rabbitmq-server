@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2018 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2018-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(quorum_queue_SUITE).
@@ -19,6 +19,11 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+
+-import(quorum_queue_utils, [wait_for_messages_ready/3,
+                             wait_for_messages_pending_ack/3,
+                             dirty_query/3,
+                             ra_name/1]).
 
 -compile(export_all).
 
@@ -597,9 +602,6 @@ publish_confirm(Ch, QName) ->
     ct:pal("CONFIRMED! ~s", [QName]),
     ok.
 
-ra_name(Q) ->
-    binary_to_atom(<<"%2F_", Q/binary>>, utf8).
-
 publish_and_restart(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
     %% ensure there are no regressions
@@ -1139,7 +1141,7 @@ test_dead_lettering(PolicySet, Config, Ch, Servers, RaName, Source, Destination)
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]]),
     DeliveryTag = consume(Ch, Source, false),
-    wait_for_messages_ready(Servers, RaName, 0), 
+    wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 1),
     wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
@@ -1827,7 +1829,7 @@ reconnect_consumer_and_publish(Config) ->
                                                 multiple     = false}),
             wait_for_messages_ready(Servers, RaName, 0),
             wait_for_messages_pending_ack(Servers, RaName, 1)
-    end, 
+    end,
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag2,
                           redelivered = true}, _} ->
@@ -2246,50 +2248,6 @@ wait_for_cleanup(Server, Channel, Number, N) ->
             wait_for_cleanup(Server, Channel, Number, N - 1)
     end.
 
-
-wait_for_messages_ready(Servers, QName, Ready) ->
-    wait_for_messages(Servers, QName, Ready,
-                      fun rabbit_fifo:query_messages_ready/1, 60).
-
-wait_for_messages_pending_ack(Servers, QName, Ready) ->
-    wait_for_messages(Servers, QName, Ready,
-                      fun rabbit_fifo:query_messages_checked_out/1, 60).
-
-wait_for_messages(Servers, QName, Number, Fun, 0) ->
-    Msgs = dirty_query(Servers, QName, Fun),
-    Totals = lists:map(fun(M) when is_map(M) ->
-                               maps:size(M);
-                          (_) ->
-                               -1
-                       end, Msgs),
-    ?assertEqual([Number || _ <- lists:seq(1, length(Servers))],
-                 Totals);
-wait_for_messages(Servers, QName, Number, Fun, N) ->
-    Msgs = dirty_query(Servers, QName, Fun),
-    case lists:all(fun(M) when is_map(M) ->
-                           maps:size(M) == Number;
-                      (_) ->
-                           false
-                   end, Msgs) of
-        true ->
-            ok;
-        _ ->
-            timer:sleep(500),
-            wait_for_messages(Servers, QName, Number, Fun, N - 1)
-    end.
-
-dirty_query(Servers, QName, Fun) ->
-    lists:map(
-      fun(N) ->
-              case rpc:call(N, ra, local_query, [{QName, N}, Fun]) of
-                  {ok, {_, Msgs}, _} ->
-                      ct:pal("Msgs ~w", [Msgs]),
-                      Msgs;
-                  _ ->
-                      undefined
-              end
-      end, Servers).
-
 wait_until(Condition) ->
     wait_until(Condition, 60).
 
@@ -2333,4 +2291,3 @@ get_message_bytes(Leader, QRes) ->
         _ ->
             []
     end.
-

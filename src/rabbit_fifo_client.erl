@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 %% @doc Provides an easy to consume API for interacting with the {@link rabbit_fifo.}
@@ -38,7 +38,8 @@
          untracked_enqueue/2,
          purge/1,
          cluster_name/1,
-         update_machine_state/2
+         update_machine_state/2,
+         stat/1
          ]).
 
 -include_lib("ra/include/ra.hrl").
@@ -397,6 +398,13 @@ purge(Node) ->
         Err ->
             Err
     end.
+
+-spec stat(ra_server_id()) -> {ok, {non_neg_integer(), non_neg_integer()}}
+                                  | {error | timeout, term()}.
+stat(Leader) ->
+    Query = fun (State) -> rabbit_fifo:query_stat(State) end,
+    {ok, {_, Stat}, _} = ra:local_query(Leader, Query),
+    Stat.
 
 %% @doc returns the cluster name
 -spec cluster_name(state()) -> cluster_name().

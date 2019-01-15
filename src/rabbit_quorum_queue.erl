@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2018 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2018-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_quorum_queue).
@@ -434,8 +434,15 @@ infos(QName) ->
 info(Q, Items) ->
     [{Item, i(Item, Q)} || Item <- Items].
 
-stat(_Q) ->
-    {ok, 0, 0}.  %% TODO length, consumers count
+stat(#amqqueue{pid = Leader}) ->
+    try
+        {Ready, Consumers} = rabbit_fifo_client:stat(Leader),
+        {ok, Ready, Consumers}
+    catch
+        _:_ ->
+            %% Leader is not available, cluster might be in minority
+            {ok, 0, 0}
+    end.
 
 purge(Node) ->
     rabbit_fifo_client:purge(Node).

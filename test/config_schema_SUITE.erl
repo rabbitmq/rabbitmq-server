@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2016-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(config_schema_SUITE).
@@ -61,4 +61,3 @@ run_snippets(Config) ->
 
 run_snippets1(Config) ->
     rabbit_ct_config_schema:run_snippets(Config).
-

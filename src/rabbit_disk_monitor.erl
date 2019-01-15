@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_disk_monitor).
@@ -236,14 +236,14 @@ parse_free_win32(CommandResult) ->
                              [{capture, all_but_first, list}]),
     list_to_integer(lists:reverse(Free)).
 
-interpret_limit({mem_relative, Relative}) 
+interpret_limit({mem_relative, Relative})
     when is_number(Relative) ->
     round(Relative * vm_memory_monitor:get_total_memory());
-interpret_limit(Absolute) -> 
+interpret_limit(Absolute) ->
     case rabbit_resource_monitor_misc:parse_information_unit(Absolute) of
         {ok, ParsedAbsolute} -> ParsedAbsolute;
         {error, parse_error} ->
-            rabbit_log:error("Unable to parse disk_free_limit value ~p", 
+            rabbit_log:error("Unable to parse disk_free_limit value ~p",
                              [Absolute]),
             ?DEFAULT_DISK_FREE_LIMIT
     end.
