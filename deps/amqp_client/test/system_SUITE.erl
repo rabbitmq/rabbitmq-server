@@ -1267,9 +1267,32 @@ connection_failure(Config) ->
             end;
         [{type, network}, {amqp_params, _}] ->
             [{sock, Sock}] = amqp_connection:info(Connection, [sock]),
-            ok = gen_tcp:close(Sock)
+            close_remote_socket(Config, Sock)
     end,
     wait_for_death(Connection).
+
+%% We obtain the socket for the remote end of the connection by
+%% looking through open ports and comparing sockname/peername values.
+%% This is necessary because we cannot close our own socket to test
+%% connection failures; a close is expected.
+%%
+%% We need to convert the IPv4 to IPv6 because the server side
+%% will use the IPv6 format due to it being enabled for other tests.
+close_remote_socket(Config, Socket) when is_port(Socket) ->
+    {ok, {IPv4, Port}} = inet:sockname(Socket),
+    IPv6 = inet:ipv4_mapped_ipv6_address(IPv4),
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, close_remote_socket, [{ok, {IPv6, Port}}]).
+
+close_remote_socket(SockName) ->
+    AllPorts = [{P, erlang:port_info(P)} || P <- erlang:ports()],
+    [RemoteSocket] = [
+        P
+    || {P, I} <- AllPorts,
+        I =/= undefined,
+        proplists:get_value(name, I) =:= "tcp_inet",
+        inet:peername(P) =:= SockName],
+    ok = gen_tcp:close(RemoteSocket).
 
 %% -------------------------------------------------------------------
 
