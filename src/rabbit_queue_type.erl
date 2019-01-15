@@ -20,6 +20,7 @@
                                          }).
 
 -record(queue, {module :: module(),
+                name :: queue_name(),
                 state :: queue_state()}).
 
 -record(?MODULE, {config :: #static{},
@@ -45,21 +46,21 @@
 -type out_tag() :: non_neg_integer().
 -type seq_num() :: non_neg_integer().
 
--type seq_state() ::
-      %% no routes accepted or rejected
-      pending |
-      %% Terminal. all routes accepted
-      accepted |
-      %% at least one route accepted, none rejected
-      mandatory |
-      %% Terminal. All rejected
-      rejected |
-      %% at lest one rejected, none accepted
-      pending_rejected |
-      %% Terminal. at least one accepted and rejected. could have pending entries
-      mandatory_rejected |
-      %% Terminal. all routes invalidated, none accepted nor rejected
-      invalidated.
+% -type seq_state() ::
+%       %% no routes accepted or rejected
+%       pending |
+%       %% Terminal. all routes accepted
+%       accepted |
+%       %% at least one route accepted, none rejected
+%       mandatory |
+%       %% Terminal. All rejected
+%       rejected |
+%       %% at lest one rejected, none accepted
+%       pending_rejected |
+%       %% Terminal. at least one accepted and rejected. could have pending entries
+%       mandatory_rejected |
+%       %% Terminal. all routes invalidated, none accepted nor rejected
+%       invalidated.
 
 -type queue_id() :: reference().
 %% unique identifier for a queue interaction session. Queue type specific.
@@ -158,11 +159,11 @@
 init(#{queue_lookup_fun := Fun}) ->
     #?MODULE{config = #static{queue_lookup_fun = Fun}}.
 
--spec in([queue_name()], seq_num(), term(), state()) ->
+-spec in([queue_name()], seq_num() | undefined, Delivery :: term(), state()) ->
     {state(), actions()}.
 in(Destinations, SeqNum, Delivery,
    #?MODULE{config = #static{queue_lookup_fun = Fun},
-            pending_in = Pend} = State0) ->
+            pending_in = Pend0} = State0) ->
     %% * lookup queue_ids() for the queues and initialise if not found
     {QIds, State} = lists:foldl(
                       fun(Qn, {QIds, #?MODULE{queue_names = QNames,
@@ -175,6 +176,7 @@ in(Destinations, SeqNum, Delivery,
                                 Q = #{module := Mod} = Fun(Qn),
                                 {QState, []} = Mod:init(Q),
                                 Qq = #queue{module = Mod,
+                                            name = Qn,
                                             state = QState},
                                 {[Qid | QIds],
                                  S0#?MODULE{queue_names = QNames#{Qn => Qid},
@@ -189,7 +191,8 @@ in(Destinations, SeqNum, Delivery,
     %% * foreach queue pass to `in' callback and aggregate actions
     %% TODO: how to aggregate network calls for classic queues (delegate)
     %% TODO: also credit flow???
-    {State#?MODULE{pending_in = Pend#{SeqNum => {Delivery, [QIds]}}}, []}.
+    Pend = dtree:insert(SeqNum, QIds, Delivery, Pend0),
+    {State#?MODULE{pending_in = Pend}, []}.
 
 
 
@@ -214,9 +217,15 @@ handle_queue_info(QueueId, Info, #?MODULE{queues = Queues} = State) ->
     %% handle actions
     {Actions, Pend} =
         lists:foldl(fun({msg_state_update, accepted, Seqs} = Evt, {Acc, P}) ->
-                            %% TODO: handle multiple targets
-                            P1 = maps:without(Seqs, P),
-                            {[Evt | Acc], P1}
+                            case dtree:take(Seqs, QueueId, P) of
+                                {[], P1} ->
+                                    {Acc, P1};
+                                {Completed, P1} ->
+                                    CompletedSeqs = [S || {S, _} <- Completed],
+                                    Evt = {msg_state_update, accepted,
+                                           CompletedSeqs},
+                                    {[Evt | Acc], P1}
+                            end
                     end, {[], State#?MODULE.pending_in}, Actions0),
     {State#?MODULE{queues = Queues#{QueueId => Q#queue{state = Qs}},
                    pending_in = Pend}, lists:reverse(Actions)}.
@@ -262,7 +271,7 @@ in_msg_is_accepted_test() ->
     %% extract the assigned queue id
     #?MODULE{queues = Queues, pending_in = P1} = Qs1,
     [QId] = maps:keys(Queues),
-    ?assertEqual(1, maps:size(P1)),
+    ?assertEqual(1, dtree:size(P1)),
 
     %% this is when the channel can send confirms for example
     {Qs2, [{msg_state_update, accepted, [1]}]} =
@@ -270,7 +279,7 @@ in_msg_is_accepted_test() ->
 
     %% no pending should remain inside the state after the queue has accepted
     %% the message
-    ?assertEqual(0, maps:size(Qs2#?MODULE.pending_in)),
+    ?assertEqual(0, dtree:size(Qs2#?MODULE.pending_in)),
     % CustomerTag = UId,
     ok.
 
@@ -302,8 +311,8 @@ in_msg_multi_queue_is_accepted_test() ->
     %% no msg_state_update should be issued for the first one
     {Qs2, []} =
         rabbit_queue_type:handle_queue_info(QId1, {applied, [1]}, Qs1),
-    {Qs2, [{msg_state_update, accepted, [1]}]} =
-        rabbit_queue_type:handle_queue_info(QId2, {applied, [1]}, Qs1),
+    {_, [{msg_state_update, accepted, [1]}]} =
+        rabbit_queue_type:handle_queue_info(QId2, {applied, [1]}, Qs2),
     ok.
 
 make_queue_name(Name) when is_atom(Name) ->
