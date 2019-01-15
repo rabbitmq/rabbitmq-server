@@ -8,17 +8,17 @@
 
 all() ->
     [
-     {group, rabbit_quorum_queue}
+     {group, tests}
     ].
 
 all_tests() ->
     [
-     basics
+     in_msg_is_confirmed
     ].
 
 groups() ->
     [
-     {rabbit_quorum_queue, [], all_tests()}
+     {tests, [], all_tests()}
     ].
 
 init_per_group(Group, Config) ->
@@ -45,7 +45,7 @@ init_per_testcase(TestCase, Config) ->
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
     ClusterName = rabbit_misc:r("/", queue, atom_to_binary(TestCase, utf8)),
     [
-     {cluster_name, ClusterName},
+     {queue_name, ClusterName},
      {uid, atom_to_binary(TestCase, utf8)},
      {node_id, {TestCase, node()}},
      {uid2, atom_to_binary(ServerName2, utf8)},
@@ -58,17 +58,41 @@ end_per_testcase(_, Config) ->
     meck:unload(),
     Config.
 
-basics(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    UId = ?config(uid, Config),
-    Mod = ?config(qt_mod, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    ra:stop_server(ServerId),
-    Qs0 = rabbit_queue_type:init(),
-    {Qs1, _} = rabbit_queue_type:in([ClusterName],
-                                    1, some_delivery, Qs0),
+in_msg_is_confirmed(Config) ->
+    QName = ?config(queue_name, Config),
+    meck:new(?FUNCTION_NAME, [non_strict]),
+    meck:expect(?FUNCTION_NAME, init, fun (Q) -> {Q, []} end),
+    meck:expect(?FUNCTION_NAME, in,
+                fun (_QId, Qs, _Seq, _Msg) ->
+                        {Qs, []}
+                end),
+    meck:expect(?FUNCTION_NAME, handle_queue_info,
+                fun (_QId, {applied, Seqs}, Qs) when is_list(Seqs) ->
+                        %% simply record as accepted
+                        {Qs, [{msg_state_update, accepted, Seqs}]}
+                end),
 
+    LookupFun = fun(Name) ->
+                        #{module => ?FUNCTION_NAME,
+                          name => Name}
+                end,
+    Qs0 = rabbit_queue_type:init(#{queue_lookup_fun => LookupFun}),
+
+    {Qs1, []} = rabbit_queue_type:in([QName], 1, some_delivery, Qs0),
+    %% extract the assigned queue id
+    #{queues := Queues,
+      pending_in := P1} = rabbit_queue_type:to_map(Qs1),
+    [QId] = maps:keys(Queues),
+    ?assertEqual(1, maps:size(P1)),
+
+    %% this is when the channel can send confirms for example
+    {Qs2, [{msg_state_update, accepted, [1]}]} =
+        rabbit_queue_type:handle_queue_info(QId, {applied, [1]}, Qs1),
+
+    #{pending_in := P2} = rabbit_queue_type:to_map(Qs2),
+    %% no pending should remain inside the state after the queue has accepted
+    %% the message
+    ?assertEqual(0, maps:size(P2)),
     % CustomerTag = UId,
     ok.
 
