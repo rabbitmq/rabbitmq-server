@@ -80,6 +80,7 @@
         ]).
 
 -define(TICK_TIME, 1000). %% the ra server tick time
+-define(DELETE_TIMEOUT, 5000). %% the ra server tick time
 
 %%----------------------------------------------------------------------------
 
@@ -294,7 +295,7 @@ delete(#amqqueue{type = quorum, pid = {Name, _},
                  name = QName, quorum_nodes = QNodes},
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
-    Timeout = application:get_env(kernel, net_ticktime, 60000) + 5000,
+    Timeout = ?DELETE_TIMEOUT,
     Msgs = quorum_messages(Name),
     Servers = [{Name, Node} || Node <- QNodes],
     case ra:delete_cluster(Servers, Timeout) of
@@ -303,6 +304,8 @@ delete(#amqqueue{type = quorum, pid = {Name, _},
             receive
                 {'DOWN', MRef, process, _, _} ->
                     ok
+            after Timeout ->
+                    ok = force_delete_queue(Servers)
             end,
             ok = delete_queue_data(QName, ActingUser),
             rpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
@@ -324,21 +327,26 @@ delete(#amqqueue{type = quorum, pid = {Name, _},
                        " online to reach a quorum: ~255p."
                        " Attempting force delete.",
                       [rabbit_misc:rs(QName), Errs]),
-                    [begin
-                         case catch(ra:delete_server(S)) of
-                             ok -> ok;
-                             Err ->
-                                 rabbit_log:warning(
-                                   "Force delete of ~w failed with: ~w"
-                                   "This may require manual data clean up~n",
-                                   [S, Err]),
-                                 ok
-                         end
-                     end || S <- Servers],
+                    ok = force_delete_queue(Servers),
                     delete_queue_data(QName, ActingUser),
                     {ok, Msgs}
             end
     end.
+
+
+force_delete_queue(Servers) ->
+    [begin
+         case catch(ra:delete_server(S)) of
+             ok -> ok;
+             Err ->
+                 rabbit_log:warning(
+                   "Force delete of ~w failed with: ~w"
+                   "This may require manual data clean up~n",
+                   [S, Err]),
+                 ok
+         end
+     end || S <- Servers],
+    ok.
 
 delete_queue_data(QName, ActingUser) ->
     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
