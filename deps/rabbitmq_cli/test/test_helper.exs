@@ -30,11 +30,11 @@ defmodule TestHelper do
   def domain, do: NodeName.domain()
 
   def fixture_file_path(filename) do
-    Path.join([System.cwd!(), "test", "fixtures", "files", filename])
+    Path.join([File.cwd!(), "test", "fixtures", "files", filename])
   end
 
   def fixture_plugins_path(plugins_directory) do
-    Path.join([System.cwd!(), "test", "fixtures", "plugins", plugins_directory])
+    Path.join([File.cwd!(), "test", "fixtures", "plugins", plugins_directory])
   end
 
   def get_cluster_name() do
