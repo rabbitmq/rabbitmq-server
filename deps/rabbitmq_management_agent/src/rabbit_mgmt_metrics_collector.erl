@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 -module(rabbit_mgmt_metrics_collector).
 
@@ -403,7 +403,7 @@ aggregate_entry({Id, Reductions}, NextStats, Ops0,
     Ops = insert_entry_ops(channel_process_stats, Id, false,
                            Entry, Ops0, BPolicies),
     {NextStats, Ops, State};
-aggregate_entry({Id, Exclusive, AckRequired, PrefetchCount, Args},
+aggregate_entry({Id, Exclusive, AckRequired, PrefetchCount, SingleActive, Args},
                 NextStats, Ops0,
                 #state{table = consumer_created} = State) ->
     case ets:lookup(consumer_stats, Id) of
@@ -411,10 +411,27 @@ aggregate_entry({Id, Exclusive, AckRequired, PrefetchCount, Args},
             Fmt = rabbit_mgmt_format:format([{exclusive, Exclusive},
                                              {ack_required, AckRequired},
                                              {prefetch_count, PrefetchCount},
+                                             {single_active, SingleActive},
                                              {arguments, Args}], {[], false}),
             Entry = ?consumer_stats(Id, Fmt),
             Ops = insert_with_index_op(consumer_stats, Id, Entry, Ops0),
-            {NextStats, Ops ,State};
+            {NextStats, Ops , State};
+        [{_K, V}] ->
+            % consumer updated only when promoted to single active consumer
+            CurrentSingleActive = proplists:get_value(single_active, V, undefined),
+            case {SingleActive, CurrentSingleActive} of
+                {true, false} ->
+                    Fmt = rabbit_mgmt_format:format([{exclusive, Exclusive},
+                                                     {ack_required, AckRequired},
+                                                     {prefetch_count, PrefetchCount},
+                                                     {single_active, SingleActive},
+                                                     {arguments, Args}], {[], false}),
+                    Entry = ?consumer_stats(Id, Fmt),
+                    Ops = insert_with_index_op(consumer_stats, Id, Entry, Ops0),
+                    {NextStats, Ops , State};
+                _ ->
+                    {NextStats, Ops0, State}
+            end;
         _ ->
             {NextStats, Ops0, State}
     end;
