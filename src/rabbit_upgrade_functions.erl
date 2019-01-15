@@ -670,7 +670,8 @@ default_bindings() ->
         mnesia:dirty_delete(rabbit_reverse_route,
                       rabbit_binding:reverse_binding(Binding))
      end
-     || Q <- Queues].
+     || Q <- Queues],
+    ok.
 
 %%--------------------------------------------------------------------
 
