@@ -35,8 +35,7 @@
          connection_info/1, connection_info/2,
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
-         close_connection/2, accept_ack/2,
-         handshake/2, tcp_host/1]).
+         close_connection/2, handshake/2, tcp_host/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
@@ -87,7 +86,6 @@
 -spec connection_info_all(rabbit_types:info_keys()) ->
           [rabbit_types:infos()].
 -spec close_connection(pid(), string()) -> 'ok'.
--spec accept_ack(any(), rabbit_net:socket()) -> ok.
 
 -spec on_node_down(node()) -> 'ok'.
 -spec tcp_listener_addresses(listener_config()) -> [address()].
@@ -363,16 +361,16 @@ handshake(Ref, ProxyProtocol) ->
         true ->
             {ok, ProxyInfo} = ranch:recv_proxy_header(Ref, 1000),
             {ok, Sock} = ranch:handshake(Ref),
-            tune_buffer_size(Sock),
-            ok = file_handle_cache:obtain(),
+            setup_socket(Sock),
             {ok, {rabbit_proxy_socket, Sock, ProxyInfo}};
         false ->
-            ranch:handshake(Ref)
+            {ok, Sock} = ranch:handshake(Ref),
+            setup_socket(Sock),
+            {ok, Sock}
     end.
 
-accept_ack(Ref, Sock) ->
-    ok = ranch:accept_ack(Ref),
-    tune_buffer_size(Sock),
+setup_socket(Sock) ->
+    ok = tune_buffer_size(Sock),
     ok = file_handle_cache:obtain().
 
 tune_buffer_size(Sock) ->
