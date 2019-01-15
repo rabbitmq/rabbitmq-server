@@ -43,6 +43,7 @@
          query_consumer_count/1,
          query_consumers/1,
          query_stat/1,
+         query_single_active_consumer/1,
          usage/1,
 
          zero/1,
@@ -622,14 +623,13 @@ tick(_Ts, #state{name = Name,
                  queue_resource = QName,
                  messages = Messages,
                  ra_indexes = Indexes,
-                 consumers = Cons,
                  msg_bytes_enqueue = EnqueueBytes,
                  msg_bytes_checkout = CheckoutBytes} = State) ->
     Metrics = {Name,
                maps:size(Messages), % Ready
                num_checked_out(State), % checked out
                rabbit_fifo_index:size(Indexes), %% Total
-               maps:size(Cons), % Consumers
+               query_consumer_count(State), % Consumers
                EnqueueBytes,
                CheckoutBytes},
     [{mod_call, rabbit_quorum_queue,
@@ -723,6 +723,17 @@ query_consumers(#state{consumers = Consumers, waiting_consumers = WaitingConsume
                                        end, #{}, WaitingConsumers),
     maps:merge(FromConsumers, FromWaitingConsumers).
 
+query_single_active_consumer(#state{consumer_strategy = single_active, consumers = Consumers}) ->
+    case maps:size(Consumers) of
+        1 ->
+            {value, lists:nth(1, maps:keys(Consumers))};
+        _
+          ->
+            {error, illegal_size}
+    end ;
+query_single_active_consumer(_) ->
+    disabled.
+
 query_stat(#state{messages = M,
                   consumers = Consumers}) ->
     {maps:size(M), maps:size(Consumers)}.
@@ -796,7 +807,8 @@ cancel_consumer(ConsumerId,
             State1 = State0#state{consumers = #{NewActiveConsumerId => NewActiveConsumer},
                                   service_queue = ServiceQueue1,
                                   waiting_consumers = RemainingWaitingConsumers},
-            {Effects, State1};
+            Effects1 = consumer_promoted_to_single_active_effects(State1, NewActiveConsumerId, NewActiveConsumer, Effects),
+            {Effects1, State1};
         error ->
             % The cancelled consumer is not the active one
             % Just remove it from idle_consumers
@@ -805,6 +817,13 @@ cancel_consumer(ConsumerId,
             % A waiting consumer isn't supposed to have any checked out messages, so nothing special to do here
             {Effects, State0#state{waiting_consumers = WaitingConsumers1}}
     end.
+
+consumer_promoted_to_single_active_effects(#state{consumer_strategy = single_active,
+                                                  queue_resource    = QName },
+                                           ConsumerId, #consumer{meta = Meta}, Effects) ->
+    [{mod_call, rabbit_quorum_queue, update_consumer_handler,
+        [QName, ConsumerId, false, maps:get(ack, Meta, undefined),
+         maps:get(prefetch, Meta, undefined), true, maps:get(args, Meta, [])]} | Effects].
 
 cancel_consumer0(ConsumerId,
                 {Effects0, #state{consumers = C0} = S0}) ->
@@ -2075,8 +2094,8 @@ single_active_consumer_test() ->
     % the new active consumer is no longer in the waiting list
     ?assertEqual(1, length(State3#state.waiting_consumers)),
     ?assertNotEqual(false, lists:keyfind({<<"ctag4">>, self()}, 1, State3#state.waiting_consumers)),
-    % there are some effects to unregister the consumer
-    ?assertEqual(1, length(Effects2)),
+    % there are some effects to unregister the consumer and to update the new active one (metrics)
+    ?assertEqual(2, length(Effects2)),
 
     % cancelling the active consumer
     {State4, _, Effects3} = apply(#{}, #checkout{spec = cancel, consumer_id = {<<"ctag2">>, self()}}, State3),
@@ -2085,8 +2104,8 @@ single_active_consumer_test() ->
     ?assert(maps:is_key({<<"ctag4">>, self()}, State4#state.consumers)),
     % the waiting consumer list is now empty
     ?assertEqual(0, length(State4#state.waiting_consumers)),
-    % there are some effects to unregister the consumer
-    ?assertEqual(1, length(Effects3)),
+    % there are some effects to unregister the consumer and to update the new active one (metrics)
+    ?assertEqual(2, length(Effects3)),
 
     % cancelling the last consumer
     {State5, _, Effects4} = apply(#{}, #checkout{spec = cancel, consumer_id = {<<"ctag4">>, self()}}, State4),
@@ -2130,8 +2149,8 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test() ->
     ?assertEqual(1, map_size(State2#state.consumers)),
     % there are still waiting consumers
     ?assertEqual(2, length(State2#state.waiting_consumers)),
-    % the effect to unregister the consumer is there
-    ?assertEqual(1, length(Effects)),
+    % effects to unregister the consumer and to update the new active one (metrics) are there
+    ?assertEqual(2, length(Effects)),
 
     % the channel of the active consumer and a waiting consumer goes down
     {State3, _, Effects2} = apply(#{}, {down, Pid2, doesnotmatter}, State2),
@@ -2139,8 +2158,8 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test() ->
     ?assertEqual(1, map_size(State3#state.consumers)),
     % no more waiting consumer
     ?assertEqual(0, length(State3#state.waiting_consumers)),
-    % effects to cancel both consumers of this channel
-    ?assertEqual(2, length(Effects2)),
+    % effects to cancel both consumers of this channel + effect to update the new active one (metrics)
+    ?assertEqual(3, length(Effects2)),
 
     % the last channel goes down
     {State4, _, Effects3} = apply(#{}, {down, Pid3, doesnotmatter}, State3),

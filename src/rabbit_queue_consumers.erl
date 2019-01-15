@@ -22,7 +22,7 @@
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
          credit/6, utilisation/1, is_same/3, get_consumer/1, get/3,
-         consumer_tag/1]).
+         consumer_tag/1, get_infos/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -100,7 +100,9 @@
 -spec credit(boolean(), integer(), boolean(), ch(), rabbit_types:ctag(),
              state()) -> 'unchanged' | {'unblocked', state()}.
 -spec utilisation(state()) -> ratio().
+-spec get(ch(), rabbit_types:ctag(), state()) -> undefined | consumer().
 -spec consumer_tag(consumer()) -> rabbit_types:ctag().
+-spec get_infos(consumer()) -> term().
 
 %%----------------------------------------------------------------------------
 
@@ -411,8 +413,14 @@ get(ChPid, ConsumerTag, #state{consumers = Consumers}) ->
         {{value, Consumer, _Priority}, _Tail} -> Consumer
     end.
 
+get_infos(Consumer) ->
+    {Consumer#consumer.tag,Consumer#consumer.ack_required,
+     Consumer#consumer.prefetch, Consumer#consumer.args}.
+
 consumer_tag(#consumer{tag = CTag}) ->
     CTag.
+
+
 
 %%----------------------------------------------------------------------------
 
