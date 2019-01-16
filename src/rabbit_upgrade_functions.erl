@@ -659,7 +659,7 @@ exchange_options(Table) ->
        operator_policy, decorators, options]).
 
 remove_explicit_default_exchange_bindings() ->
-    Tab = rabbit_queue,
+    Tab = rabbit_durable_queue,
     rabbit_table:wait([Tab]),
     %% Default exchange bindings are now implicit
     %% (not stored in the route tables).
