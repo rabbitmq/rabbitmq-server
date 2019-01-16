@@ -613,7 +613,9 @@ state_enter(recovered, #state{prefix_msg_counts = PrefixMsgCounts})
   when PrefixMsgCounts =/= {0, 0} ->
     %% TODO: remove assertion?
     exit({rabbit_fifo, unexpected_prefix_msg_counts, PrefixMsgCounts});
-state_enter(eol, #state{enqueuers = Enqs, consumers = Custs0, waiting_consumers = WaitingConsumers0}) ->
+state_enter(eol, #state{enqueuers = Enqs,
+                        consumers = Custs0,
+                        waiting_consumers = WaitingConsumers0}) ->
     Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
     WaitingConsumers1 = lists:foldl(fun({{_, P}, V}, Acc) -> Acc#{P => V} end, #{}, WaitingConsumers0),
     AllConsumers = maps:merge(Custs, WaitingConsumers1),
