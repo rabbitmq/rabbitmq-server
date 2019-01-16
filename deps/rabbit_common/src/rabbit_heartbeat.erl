@@ -144,7 +144,13 @@ heartbeater({Sock, TimeoutMillisec, StatName, Threshold, Handler} = Params,
             exit({unexpected_message, Other})
     after TimeoutMillisec ->
               OkFun = fun(StatVal1) ->
-                              if StatVal1 =/= StatVal0 ->
+                              if StatVal0 =:= 0 andalso StatName =:= send_oct ->
+                                     % Note: this clause is necessary to ensure the
+                                     % first RMQ -> client heartbeat is sent at the
+                                     % first interval, instead of waiting the first
+                                     % two intervals
+                                     {run_handler, {StatVal1, 0}};
+                                 StatVal1 =/= StatVal0 ->
                                      {recurse, {StatVal1, 0}};
                                  SameCount < Threshold ->
                                      {recurse, {StatVal1, SameCount +1}};
