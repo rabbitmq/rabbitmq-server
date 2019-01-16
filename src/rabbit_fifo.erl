@@ -609,7 +609,8 @@ state_enter(recovered, #state{prefix_msg_counts = PrefixMsgCounts})
   when PrefixMsgCounts =/= {0, 0} ->
     %% TODO: remove assertion?
     exit({rabbit_fifo, unexpected_prefix_msg_counts, PrefixMsgCounts});
-state_enter(eol, #state{enqueuers = Enqs, consumers = Custs0}) ->
+state_enter(eol, #state{enqueuers = Enqs,
+                        consumers = Custs0}) ->
     Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
     [{send_msg, P, eol, ra_event} || P <- maps:keys(maps:merge(Enqs, Custs))];
 state_enter(_, _) ->
