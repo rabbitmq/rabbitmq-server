@@ -61,14 +61,12 @@ start_infrastructure_fun(Sup, Conn, network) ->
                    {rabbit_writer, start_link,
                     [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL, Conn, ConnName]},
                    transient, ?WORKER_WAIT, worker, [rabbit_writer]}),
-            {ok, Reader} =
+            {ok, _Reader} =
                 supervisor2:start_child(
                   Sup,
                   {main_reader, {amqp_main_reader, start_link,
                                  [Sock, Conn, ChMgr, AState, ConnName]},
                    transient, ?WORKER_WAIT, worker, [amqp_main_reader]}),
-            rabbit_net:controlling_process(Sock, Reader),
-            amqp_main_reader:post_init(Reader),
             {ok, ChMgr, Writer}
     end;
 start_infrastructure_fun(Sup, Conn, direct) ->
