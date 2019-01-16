@@ -32,23 +32,26 @@
 
 -type heartbeat_callback() :: fun (() -> any()).
 
+-export_type([heartbeat_timeout/0]).
+-type heartbeat_timeout() :: non_neg_integer().
+
 -spec start
-        (pid(), rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
-         non_neg_integer(), heartbeat_callback()) ->
+        (pid(), rabbit_net:socket(), heartbeat_timeout(), heartbeat_callback(),
+         heartbeat_timeout(), heartbeat_callback()) ->
             heartbeaters().
 
 -spec start
         (pid(), rabbit_net:socket(), rabbit_types:proc_name(),
-         non_neg_integer(), heartbeat_callback(), non_neg_integer(),
+         heartbeat_timeout(), heartbeat_callback(), heartbeat_timeout(),
          heartbeat_callback()) ->
             heartbeaters().
 
 -spec start_heartbeat_sender
-        (rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
+        (rabbit_net:socket(), heartbeat_timeout(), heartbeat_callback(),
          rabbit_types:proc_type_and_name()) ->
             rabbit_types:ok(pid()).
 -spec start_heartbeat_receiver
-        (rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
+        (rabbit_net:socket(), heartbeat_timeout(), heartbeat_callback(),
          rabbit_types:proc_type_and_name()) ->
             rabbit_types:ok(pid()).
 
