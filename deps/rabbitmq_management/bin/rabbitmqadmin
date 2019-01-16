@@ -53,6 +53,12 @@ else:
     def b64(s):
         return base64.b64encode(s.encode('utf-8')).decode('utf-8')
 
+if sys.version_info[0] == 2:
+    class ConnectionError(OSError):
+        pass
+    class ConnectionRefusedError(ConnectionError):
+        pass
+
 VERSION = '%%VSN%%'
 
 LISTABLE = {'connections': {'vhost': False, 'cols': ['name','user','channels']},
