@@ -16,7 +16,7 @@
 
 -module(rabbit_queue_consumers).
 
--export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
+-export([new/0, max_active_priority/1, inactive/1, all/1, all/2, count/0,
          unacknowledged_message_count/0, add/10, remove/3, erase_ch/2,
          send_drained/0, deliver/5, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
@@ -117,16 +117,25 @@ max_active_priority(#state{consumers = Consumers}) ->
 inactive(#state{consumers = Consumers}) ->
     priority_queue:is_empty(Consumers).
 
-all(#state{consumers = Consumers}) ->
-    lists:foldl(fun (C, Acc) -> consumers(C#cr.blocked_consumers, Acc) end,
-                consumers(Consumers, []), all_ch_record()).
+all(State) ->
+    all(State, none).
 
-consumers(Consumers, Acc) ->
+all(#state{consumers = Consumers}, SingleActiveConsumer) ->
+    lists:foldl(fun (C, Acc) -> consumers(C#cr.blocked_consumers, SingleActiveConsumer, Acc) end,
+                consumers(Consumers, SingleActiveConsumer, []), all_ch_record()).
+
+consumers(Consumers, SingleActiveConsumer, Acc) ->
     priority_queue:fold(
       fun ({ChPid, Consumer}, _P, Acc1) ->
               #consumer{tag = CTag, ack_required = Ack, prefetch = Prefetch,
                         args = Args, user = Username} = Consumer,
-              [{ChPid, CTag, Ack, Prefetch, Args, Username} | Acc1]
+              IsSingleActive = case SingleActiveConsumer of
+                                   {ChPid, Consumer} ->
+                                       true;
+                                   _ ->
+                                       false
+                               end,
+              [{ChPid, CTag, Ack, Prefetch, IsSingleActive, Args, Username} | Acc1]
       end, Acc, Consumers).
 
 count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).

@@ -704,11 +704,21 @@ query_ra_indexes(#state{ra_indexes = RaIndexes}) ->
 query_consumer_count(#state{consumers = Consumers, waiting_consumers = WaitingConsumers}) ->
     maps:size(Consumers) + length(WaitingConsumers).
 
-query_consumers(#state{consumers = Consumers, waiting_consumers = WaitingConsumers}) ->
+query_consumers(#state{consumers = Consumers, waiting_consumers = WaitingConsumers} = State) ->
+    SingleActiveConsumer = query_single_active_consumer(State),
+    IsSingleActiveConsumerFun = fun({Tag, Pid} = _ConsumerId) ->
+                                    case SingleActiveConsumer of
+                                        {value, {Tag, Pid}} ->
+                                            true;
+                                        _ ->
+                                            false
+                                    end
+                                end,
     FromConsumers = maps:map(fun ({Tag, Pid}, #consumer{meta = Meta}) ->
                                     {Pid, Tag,
                                       maps:get(ack, Meta, undefined),
                                       maps:get(prefetch, Meta, undefined),
+                                      IsSingleActiveConsumerFun({Tag, Pid}),
                                       maps:get(args, Meta, []),
                                       maps:get(username, Meta, undefined)}
                              end, Consumers),
@@ -717,6 +727,7 @@ query_consumers(#state{consumers = Consumers, waiting_consumers = WaitingConsume
                                                     {Pid, Tag,
                                                        maps:get(ack, Meta, undefined),
                                                        maps:get(prefetch, Meta, undefined),
+                                                       IsSingleActiveConsumerFun({Tag, Pid}),
                                                        maps:get(args, Meta, []),
                                                        maps:get(username, Meta, undefined)},
                                                     Acc)
