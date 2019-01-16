@@ -209,7 +209,6 @@ init_per_testcase(Test, Config) ->
         basic_get_ipv6_ssl -> "::1";
         _                  -> ?config(rmq_hostname, Config)
     end,
-    {ok, Hostname} = inet:gethostname(),
     {Port, SSLOpts} = if
         Test =:= basic_get_ipv4_ssl orelse
         Test =:= basic_get_ipv6_ssl ->
@@ -1250,6 +1249,16 @@ channel_writer_death(Config) ->
 
 %% -------------------------------------------------------------------
 
+%% Backported from OTP 21, remove and use inet:ipv4_mapped_ipv6_address/1
+%% directly when OTP 20.3 support is discontinued
+ipv4_mapped_ipv6_address({D1,D2,D3,D4})
+  when (D1 bor D2 bor D3 bor D4) < 256 ->
+    {0,0,0,0,0,16#ffff,(D1 bsl 8) bor D2,(D3 bsl 8) bor D4};
+ipv4_mapped_ipv6_address({D1,D2,D3,D4,D5,D6,D7,D8})
+  when (D1 bor D2 bor D3 bor D4 bor D5 bor D6 bor D7 bor D8) < 65536 ->
+{D7 bsr 8,D7 band 255,D8 bsr 8,D8 band 255}.
+
+
 %% The connection should die if the underlying connection is prematurely
 %% closed. For a network connection, this means that the TCP socket is
 %% closed. For a direct connection (remotely only, of course), this means that
@@ -1280,7 +1289,7 @@ connection_failure(Config) ->
 %% will use the IPv6 format due to it being enabled for other tests.
 close_remote_socket(Config, Socket) when is_port(Socket) ->
     {ok, {IPv4, Port}} = inet:sockname(Socket),
-    IPv6 = inet:ipv4_mapped_ipv6_address(IPv4),
+    IPv6 = ipv4_mapped_ipv6_address(IPv4),
     rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, close_remote_socket, [{ok, {IPv6, Port}}]).
 
