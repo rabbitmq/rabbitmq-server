@@ -542,13 +542,6 @@ run_backing_queue(Mod, Fun, State = #state { backing_queue       = BQ,
                                              backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:invoke(Mod, Fun, BQS) }.
 
-send_mandatory(#delivery{mandatory  = false}) ->
-    ok;
-send_mandatory(#delivery{mandatory  = true,
-                         sender     = SenderPid,
-                         msg_seq_no = MsgSeqNo}) ->
-    gen_server2:cast(SenderPid, {mandatory_received, MsgSeqNo}).
-
 send_or_record_confirm(_, #delivery{ confirm = false }, MS, _State) ->
     MS;
 send_or_record_confirm(published, #delivery { sender     = ChPid,
@@ -707,13 +700,11 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
       Q1, rabbit_mirror_queue_master, MasterState, RateTRef, Deliveries, KS1,
       MTC).
 
-%% We reset mandatory to false here because we will have sent the
-%% mandatory_received already as soon as we got the message. We also
-%% need to send an ack for these messages since the channel is waiting
+%% We need to send an ack for these messages since the channel is waiting
 %% for one for the via-GM case and we will not now receive one.
 promote_delivery(Delivery = #delivery{sender = Sender, flow = Flow}) ->
     maybe_flow_ack(Sender, Flow),
-    Delivery#delivery{mandatory = false}.
+    Delivery.
 
 noreply(State) ->
     {NewState, Timeout} = next_state(State),
@@ -832,7 +823,6 @@ maybe_enqueue_message(
   Delivery = #delivery { message = #basic_message { id = MsgId },
                          sender  = ChPid },
   State = #state { sender_queues = SQ, msg_id_status = MS }) ->
-    send_mandatory(Delivery), %% must do this before confirms
     State1 = ensure_monitoring(ChPid, State),
     %% We will never see {published, ChPid, MsgSeqNo} here.
     case maps:find(MsgId, MS) of

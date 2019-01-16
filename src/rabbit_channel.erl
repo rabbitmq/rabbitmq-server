@@ -34,8 +34,6 @@
 %%  * Keeping track of consumers
 %%  * Keeping track of unacknowledged deliveries to consumers
 %%  * Keeping track of publisher confirms
-%%  * Keeping track of mandatory message routing confirmations
-%%    and returns
 %%  * Transaction management
 %%  * Authorisation (enforcing permissions)
 %%  * Publishing trace events if tracing is enabled
@@ -143,9 +141,6 @@
   %% a list of tags for published messages that were
   %% rejected but are yet to be sent to the client
   rejected,
-  %% a dtree used to track oustanding notifications
-  %% for messages published as mandatory
-  mandatory,
   %% same as capabilities in the reader
   capabilities,
   %% tracing exchange resource if tracing is enabled,
@@ -469,7 +464,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 unconfirmed             = dtree:empty(),
                 rejected                = [],
                 confirmed               = [],
-                mandatory               = dtree:empty(),
                 capabilities            = Capabilities,
                 trace_state             = rabbit_trace:init(VHost),
                 consumer_prefetch       = Prefetch,
@@ -502,7 +496,6 @@ prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {confirm,            _MsgSeqNos, _QPid} -> 5;
         {reject_publish,     _MsgSeqNos, _QPid} -> 5;
-        {mandatory_received, _MsgSeqNo,  _QPid} -> 5;
         _                                       -> 0
     end.
 
@@ -636,10 +629,6 @@ handle_cast({send_drained, CTagCredit}, State = #ch{writer_pid = WriterPid}) ->
                                                credit_drained = CreditDrained})
      || {ConsumerTag, CreditDrained} <- CTagCredit],
     noreply(State);
-
-handle_cast({mandatory_received, MsgSeqNo}, State = #ch{mandatory = Mand}) ->
-    %% NB: don't call noreply/1 since we don't want to send confirms.
-    noreply_coalesce(State#ch{mandatory = dtree:drop(MsgSeqNo, Mand)});
 
 handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
     %% It does not matter which queue rejected the message,
@@ -1707,17 +1696,13 @@ track_delivering_queue(NoAck, QPid, QName,
                                      false -> sets:add_element(QRef, DQ)
                                  end}.
 
-handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC,
-                                                       mandatory   = Mand})
+handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC})
   when ?IS_CLASSIC(QPid) ->
-    {MMsgs, Mand1} = dtree:take(QPid, Mand),
-    [basic_return(Msg, State, no_route) || {_, Msg} <- MMsgs],
-    State1 = State#ch{mandatory = Mand1},
     case rabbit_misc:is_abnormal_exit(Reason) of
         true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
-                 record_rejects(MXs, State1#ch{unconfirmed = UC1});
+                 record_rejects(MXs, State#ch{unconfirmed = UC1});
         false -> {MXs, UC1} = dtree:take(QPid, UC),
-                 record_confirms(MXs, State1#ch{unconfirmed = UC1})
+                 record_confirms(MXs, State#ch{unconfirmed = UC1})
 
     end;
 handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
@@ -1972,7 +1957,7 @@ foreach_per_queue(F, UAL, Acc) ->
 
 consumer_queue_refs(Consumers) ->
     lists:usort([qpid_to_ref(QPid) || {_Key, {#amqqueue{pid = QPid}, _CParams}}
-                             <- maps:to_list(Consumers)]).
+                                      <- maps:to_list(Consumers)]).
 
 %% tell the limiter about the number of acks that have been received
 %% for messages delivered to subscribed consumers, but not acks for
@@ -2038,11 +2023,11 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                       queue_monitors = QMons1},
     %% NB: the order here is important since basic.returns must be
     %% sent before confirms.
-    State2 = process_routing_mandatory(Mandatory, AllDeliveredQRefs , MsgSeqNo,
-                                       Message, State1),
-    State3 = process_routing_confirm(Confirm, AllDeliveredQRefs , MsgSeqNo,
-                                     XName, State2),
-    case rabbit_event:stats_level(State3, #ch.stats_timer) of
+    ok = process_routing_mandatory(Mandatory, AllDeliveredQRefs,
+                                   Message, State1),
+    State2 = process_routing_confirm(Confirm, AllDeliveredQRefs , MsgSeqNo,
+                                     XName, State1),
+    case rabbit_event:stats_level(State, #ch.stats_timer) of
         fine ->
             ?INCR_STATS(exchange_stats, XName, 1, publish),
             [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish) ||
@@ -2051,16 +2036,13 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
         _ ->
             ok
     end,
-    State3#ch{queue_states = QueueStates}.
+    State2#ch{queue_states = QueueStates}.
 
-process_routing_mandatory(false, _, _, _, State) ->
-    State;
-process_routing_mandatory(true, [], _, Msg, State) ->
+process_routing_mandatory(true, [], Msg, State) ->
     ok = basic_return(Msg, State, no_route),
-    State;
-process_routing_mandatory(true, QRefs, MsgSeqNo, Msg, State) ->
-    State#ch{mandatory = dtree:insert(MsgSeqNo, QRefs, Msg,
-                                      State#ch.mandatory)}.
+    ok;
+process_routing_mandatory(_, _, _, _) ->
+    ok.
 
 process_routing_confirm(false, _, _, _, State) ->
     State;
