@@ -37,21 +37,21 @@
 
 -spec start
         (pid(), rabbit_net:socket(), heartbeat_timeout(), heartbeat_callback(),
-         non_neg_integer(), heartbeat_callback()) ->
+         heartbeat_timeout(), heartbeat_callback()) ->
             heartbeaters().
 
 -spec start
         (pid(), rabbit_net:socket(), rabbit_types:proc_name(),
-         heartbeat_timeout(), heartbeat_callback(), non_neg_integer(),
+         heartbeat_timeout(), heartbeat_callback(), heartbeat_timeout(),
          heartbeat_callback()) ->
             heartbeaters().
 
 -spec start_heartbeat_sender
-        (rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
+        (rabbit_net:socket(), heartbeat_timeout(), heartbeat_callback(),
          rabbit_types:proc_type_and_name()) ->
             rabbit_types:ok(pid()).
 -spec start_heartbeat_receiver
-        (rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
+        (rabbit_net:socket(), heartbeat_timeout(), heartbeat_callback(),
          rabbit_types:proc_type_and_name()) ->
             rabbit_types:ok(pid()).
 
