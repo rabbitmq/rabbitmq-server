@@ -64,6 +64,9 @@
 -rabbit_upgrade({queue_quorum_nodes,    mnesia, [queue_type]}).
 -rabbit_upgrade({exchange_options,      mnesia, [operator_policies]}).
 
+%% TODO: move that to feature flags
+-rabbit_upgrade({remove_explicit_default_exchange_bindings, mnesia, [queue_state]}).
+
 %% -------------------------------------------------------------------
 
 -spec remove_user_scope() -> 'ok'.
@@ -104,6 +107,7 @@
 -spec queue_quorum_nodes() -> 'ok'.
 -spec exchange_options() -> 'ok'.
 
+-spec remove_explicit_default_exchange_bindings() -> 'ok'.
 
 %%--------------------------------------------------------------------
 
@@ -653,6 +657,24 @@ exchange_options(Table) ->
       end,
       [name, type, durable, auto_delete, internal, arguments, scratches, policy,
        operator_policy, decorators, options]).
+
+remove_explicit_default_exchange_bindings() ->
+    Tab = rabbit_durable_queue,
+    rabbit_table:wait([Tab]),
+    %% Default exchange bindings are now implicit
+    %% (not stored in the route tables).
+    %% It should be safe to remove them outside of a
+    %% transaction.
+    Queues = mnesia:dirty_all_keys(Tab),
+    N      = length(Queues),
+    case N of
+        0 -> ok;
+        _ ->
+            error_logger:info_msg("Will delete explicit default exchange bindings for ~p queues. "
+                                  "This can take some time...", [N]),
+            [rabbit_binding:remove_default_exchange_binding_rows_of(Q) || Q <- Queues]
+    end,
+    ok.
 
 %%--------------------------------------------------------------------
 
