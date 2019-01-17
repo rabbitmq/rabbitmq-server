@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2016-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_http_SUITE).
@@ -137,7 +137,9 @@ all_tests() -> [
     cors_test,
     vhost_limits_list_test,
     vhost_limit_set_test,
-    rates_test].
+    rates_test,
+    single_active_consumer_cq_test,
+    single_active_consumer_qq_test].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -1322,6 +1324,52 @@ consumers_test(Config) ->
                    consumer_tag => <<"my-ctag">>}], http_get(Config, "/consumers")),
     amqp_connection:close(Conn),
     http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
+    passed.
+
+single_active_consumer_cq_test(Config) ->
+    single_active_consumer(Config,
+                           "/queues/%2F/single-active-consumer-cq",
+                           <<"single-active-consumer-cq">>,
+                           [{'x-queue-type', <<"classic">>}]).
+
+single_active_consumer_qq_test(Config) ->
+    single_active_consumer(Config,
+                           "/queues/%2F/single-active-consumer-qq",
+                           <<"single-active-consumer-qq">>,
+                           [{'x-queue-type', <<"quorum">>}]).
+
+single_active_consumer(Config, Url, QName, Args) ->
+    QArgs = [{auto_delete, false}, {durable, true},
+             {arguments, [{'x-single-active-consumer', true}] ++ Args}],
+    http_put(Config, Url, QArgs, {group, '2xx'}),
+    {Conn, _ConnPath, _ChPath, _ConnChPath} = get_conn(Config, "guest", "guest"),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    amqp_channel:subscribe(
+        Ch, #'basic.consume'{queue        = QName,
+            no_ack       = true,
+            consumer_tag = <<"1">> }, self()),
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
+    amqp_channel:subscribe(
+        Ch2, #'basic.consume'{queue        = QName,
+            no_ack       = true,
+            consumer_tag = <<"2">> }, self()),
+    timer:sleep(1500),
+    assert_list([#{exclusive     => false,
+                   ack_required  => false,
+                   single_active => true,
+                   consumer_tag  => <<"1">>},
+                 #{exclusive     => false,
+                   ack_required  => false,
+                   single_active => false,
+                   consumer_tag  => <<"2">>}], http_get(Config, "/consumers")),
+    amqp_channel:close(Ch),
+    timer:sleep(1500),
+    assert_list([#{exclusive     => false,
+                   ack_required  => false,
+                   single_active => true,
+                   consumer_tag  => <<"2">>}], http_get(Config, "/consumers")),
+    amqp_connection:close(Conn),
+    http_delete(Config, Url, {group, '2xx'}),
     passed.
 
 defs(Config, Key, URI, CreateMethod, Args) ->

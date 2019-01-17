@@ -23,7 +23,8 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
                   'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'},
                   'x-queue-master-locator':    {'short': 'ML', 'type': 'string'},
-                  'x-max-priority':            {'short': 'Pri', 'type': 'int'}};
+                  'x-max-priority':            {'short': 'Pri', 'type': 'int'},
+                  'x-single-active-consumer':  {'short': 'SAC', 'type': 'boolean'}};
 
 // Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',    'type': 'boolean'},
@@ -164,6 +165,9 @@ var HELP = {
 
     'queue-dead-letter-routing-key':
       'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/dlx.html">x-dead-letter-routing-key</a>" argument.)',
+
+    'queue-single-active-consumer':
+      'If set, makes sure only one consumer at a time consumes from the queue and fails over to another registered consumer in case the active one is cancelled or dies.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/consumers.html#single-active-consumer">x-single-active-consumer</a>" argument.)',
 
     'queue-max-priority':
       'Maximum number of priority levels for the queue to support; if not set, the queue will not support message priorities.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/priority.html">x-max-priority</a>" argument.)',
