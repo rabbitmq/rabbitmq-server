@@ -120,6 +120,8 @@
          effective_policy_definition,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
+         single_active_consumer_pid,
+         single_active_consumer_tag,
          consumers,
          consumer_utilisation,
          memory,
@@ -362,7 +364,7 @@ terminate_shutdown(Fun, #q{status = Status} = State) ->
                      QName = qname(State),
                      notify_decorators(shutdown, State),
                      [emit_consumer_deleted(Ch, CTag, QName, ActingUser) ||
-                         {Ch, CTag, _, _, _} <-
+                         {Ch, CTag, _, _, _, _, _} <-
                              rabbit_queue_consumers:all(Consumers)],
                      State1#q{backing_queue_state = Fun(BQS)}
     end.
@@ -847,6 +849,7 @@ handle_ch_down(DownPid, State = #q{consumers                 = Consumers,
             Holder1 = new_single_active_consumer_after_channel_down(DownPid, Holder, SingleActiveConsumerOn, Consumers1),
             State2 = State1#q{consumers          = Consumers1,
                               active_consumer    = Holder1},
+            maybe_notify_consumer_updated(State2, Holder, Holder1),
             notify_decorators(State2),
             case should_auto_delete(State2) of
                 true  ->
@@ -864,11 +867,12 @@ handle_ch_down(DownPid, State = #q{consumers                 = Consumers,
 new_single_active_consumer_after_channel_down(DownChPid, CurrentSingleActiveConsumer, _SingleActiveConsumerIsOn = true, Consumers) ->
     case CurrentSingleActiveConsumer of
         {DownChPid, _} ->
+            % the single active consumer is on the down channel, we have to replace it
             case rabbit_queue_consumers:get_consumer(Consumers) of
                 undefined -> none;
                 Consumer  -> Consumer
             end;
-        false ->
+        _ ->
             CurrentSingleActiveConsumer
     end;
 new_single_active_consumer_after_channel_down(DownChPid, CurrentSingleActiveConsumer, _SingleActiveConsumerIsOn = false, _Consumers) ->
@@ -1031,6 +1035,14 @@ i(exclusive_consumer_pid, _) ->
 i(exclusive_consumer_tag, #q{active_consumer = {_ChPid, ConsumerTag}, single_active_consumer_on = false}) ->
     ConsumerTag;
 i(exclusive_consumer_tag, _) ->
+    '';
+i(single_active_consumer_pid, #q{active_consumer = {ChPid, _Consumer}, single_active_consumer_on = true}) ->
+    ChPid;
+i(single_active_consumer_pid, _) ->
+    '';
+i(single_active_consumer_tag, #q{active_consumer = {_ChPid, Consumer}, single_active_consumer_on = true}) ->
+    rabbit_queue_consumers:consumer_tag(Consumer);
+i(single_active_consumer_tag, _) ->
     '';
 i(messages_ready, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:len(BQS);
@@ -1196,8 +1208,10 @@ handle_call({info, Items}, _From, State) ->
     catch Error -> reply({error, Error}, State)
     end;
 
-handle_call(consumers, _From, State = #q{consumers = Consumers}) ->
+handle_call(consumers, _From, State = #q{consumers = Consumers, single_active_consumer_on = false}) ->
     reply(rabbit_queue_consumers:all(Consumers), State);
+handle_call(consumers, _From, State = #q{consumers = Consumers, active_consumer = ActiveConsumer}) ->
+    reply(rabbit_queue_consumers:all(Consumers, ActiveConsumer), State);
 
 handle_call({notify_down, ChPid}, _From, State) ->
     %% we want to do this synchronously, so that auto_deleted queues
@@ -1250,7 +1264,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                           NewConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, Consumers1),
                           {state, State#q{consumers          = Consumers1,
                                           has_had_consumers  = true,
-                                          active_consumer = NewConsumer}};
+                                          active_consumer    = NewConsumer}};
                       _    ->
                           {state, State#q{consumers          = Consumers1,
                                           has_had_consumers  = true}}
@@ -1271,7 +1285,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                         end,
                     {state, State#q{consumers          = Consumers1,
                                     has_had_consumers  = true,
-                                    active_consumer = ExclusiveConsumer}}
+                                    active_consumer    = ExclusiveConsumer}}
             end
     end,
     case ConsumerRegistration of
@@ -1281,9 +1295,16 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
             ok = maybe_send_reply(ChPid, OkMsg),
             QName = qname(State1),
             AckRequired = not NoAck,
+            TheConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, State1#q.consumers),
+            IsSingleActiveConsumer = case {SingleActiveConsumerOn, State1#q.active_consumer} of
+                                         {true, TheConsumer} ->
+                                             true;
+                                         _ ->
+                                             false
+                                     end,
             rabbit_core_metrics:consumer_created(
                 ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-                PrefetchCount, Args),
+                PrefetchCount, IsSingleActiveConsumer, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                 AckRequired, QName, PrefetchCount,
                 Args, none, ActingUser),
@@ -1305,6 +1326,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, _From,
             ),
             State1 = State#q{consumers          = Consumers1,
                              active_consumer    = Holder1},
+            maybe_notify_consumer_updated(State1, Holder, Holder1),
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State1), ActingUser),
             notify_decorators(State1),
             case should_auto_delete(State1) of
@@ -1390,6 +1412,24 @@ new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag, CurrentSingleA
     case CurrentSingleActiveConsumer of
         {ChPid, ConsumerTag} -> none;
         _                    -> CurrentSingleActiveConsumer
+    end.
+
+maybe_notify_consumer_updated(#q{single_active_consumer_on = false}, _, _) ->
+    ok;
+maybe_notify_consumer_updated(#q{single_active_consumer_on = true}, SingleActiveConsumer, SingleActiveConsumer) ->
+    % the single active consumer didn't change, nothing to do
+    ok;
+maybe_notify_consumer_updated(#q{single_active_consumer_on = true} = State, _PreviousConsumer, NewConsumer) ->
+    case NewConsumer of
+        {ChPid, Consumer} ->
+            {Tag, Ack, Prefetch, Args} = rabbit_queue_consumers:get_infos(Consumer),
+            rabbit_core_metrics:consumer_updated(
+                ChPid, Tag, false, Ack, qname(State),
+                Prefetch, true, Args
+            ),
+            ok;
+        _ ->
+            ok
     end.
 
 handle_cast(init, State) ->

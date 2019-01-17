@@ -43,6 +43,7 @@
          query_consumer_count/1,
          query_consumers/1,
          query_stat/1,
+         query_single_active_consumer/1,
          usage/1,
 
          zero/1,
@@ -590,11 +591,14 @@ maybe_mark_suspect_waiting_consumers(Node, #state{consumer_strategy = single_act
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
 state_enter(leader, #state{consumers = Cons,
                            enqueuers = Enqs,
+                           waiting_consumers = WaitingConsumers,
                            name = Name,
                            prefix_msg_counts = {0, 0},
                            become_leader_handler = BLH}) ->
     % return effects to monitor all current consumers and enqueuers
-    Pids = lists:usort(maps:keys(Enqs) ++ [P || {_, P} <- maps:keys(Cons)]),
+    Pids = lists:usort(maps:keys(Enqs)
+        ++ [P || {_, P} <- maps:keys(Cons)]
+        ++ [P || {{_, P}, _} <- WaitingConsumers]),
     Mons = [{monitor, process, P} || P <- Pids],
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
@@ -610,9 +614,12 @@ state_enter(recovered, #state{prefix_msg_counts = PrefixMsgCounts})
     %% TODO: remove assertion?
     exit({rabbit_fifo, unexpected_prefix_msg_counts, PrefixMsgCounts});
 state_enter(eol, #state{enqueuers = Enqs,
-                        consumers = Custs0}) ->
+                        consumers = Custs0,
+                        waiting_consumers = WaitingConsumers0}) ->
     Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
-    [{send_msg, P, eol, ra_event} || P <- maps:keys(maps:merge(Enqs, Custs))];
+    WaitingConsumers1 = lists:foldl(fun({{_, P}, V}, Acc) -> Acc#{P => V} end, #{}, WaitingConsumers0),
+    AllConsumers = maps:merge(Custs, WaitingConsumers1),
+    [{send_msg, P, eol, ra_event} || P <- maps:keys(maps:merge(Enqs, AllConsumers))];
 state_enter(_, _) ->
     %% catch all as not handling all states
     [].
@@ -623,14 +630,13 @@ tick(_Ts, #state{name = Name,
                  queue_resource = QName,
                  messages = Messages,
                  ra_indexes = Indexes,
-                 consumers = Cons,
                  msg_bytes_enqueue = EnqueueBytes,
                  msg_bytes_checkout = CheckoutBytes} = State) ->
     Metrics = {Name,
                maps:size(Messages), % Ready
                num_checked_out(State), % checked out
                rabbit_fifo_index:size(Indexes), %% Total
-               maps:size(Cons), % Consumers
+               query_consumer_count(State), % Consumers
                EnqueueBytes,
                CheckoutBytes},
     [{mod_call, rabbit_quorum_queue,
@@ -705,11 +711,21 @@ query_ra_indexes(#state{ra_indexes = RaIndexes}) ->
 query_consumer_count(#state{consumers = Consumers, waiting_consumers = WaitingConsumers}) ->
     maps:size(Consumers) + length(WaitingConsumers).
 
-query_consumers(#state{consumers = Consumers, waiting_consumers = WaitingConsumers}) ->
+query_consumers(#state{consumers = Consumers, waiting_consumers = WaitingConsumers} = State) ->
+    SingleActiveConsumer = query_single_active_consumer(State),
+    IsSingleActiveConsumerFun = fun({Tag, Pid} = _ConsumerId) ->
+                                    case SingleActiveConsumer of
+                                        {value, {Tag, Pid}} ->
+                                            true;
+                                        _ ->
+                                            false
+                                    end
+                                end,
     FromConsumers = maps:map(fun ({Tag, Pid}, #consumer{meta = Meta}) ->
                                     {Pid, Tag,
                                       maps:get(ack, Meta, undefined),
                                       maps:get(prefetch, Meta, undefined),
+                                      IsSingleActiveConsumerFun({Tag, Pid}),
                                       maps:get(args, Meta, []),
                                       maps:get(username, Meta, undefined)}
                              end, Consumers),
@@ -718,11 +734,23 @@ query_consumers(#state{consumers = Consumers, waiting_consumers = WaitingConsume
                                                     {Pid, Tag,
                                                        maps:get(ack, Meta, undefined),
                                                        maps:get(prefetch, Meta, undefined),
+                                                       IsSingleActiveConsumerFun({Tag, Pid}),
                                                        maps:get(args, Meta, []),
                                                        maps:get(username, Meta, undefined)},
                                                     Acc)
                                        end, #{}, WaitingConsumers),
     maps:merge(FromConsumers, FromWaitingConsumers).
+
+query_single_active_consumer(#state{consumer_strategy = single_active, consumers = Consumers}) ->
+    case maps:size(Consumers) of
+        1 ->
+            {value, lists:nth(1, maps:keys(Consumers))};
+        _
+          ->
+            {error, illegal_size}
+    end ;
+query_single_active_consumer(_) ->
+    disabled.
 
 query_stat(#state{messages = M,
                   consumers = Consumers}) ->
@@ -797,7 +825,8 @@ cancel_consumer(ConsumerId,
             State1 = State0#state{consumers = #{NewActiveConsumerId => NewActiveConsumer},
                                   service_queue = ServiceQueue1,
                                   waiting_consumers = RemainingWaitingConsumers},
-            {Effects, State1};
+            Effects1 = consumer_promoted_to_single_active_effects(State1, NewActiveConsumerId, NewActiveConsumer, Effects),
+            {Effects1, State1};
         error ->
             % The cancelled consumer is not the active one
             % Just remove it from idle_consumers
@@ -806,6 +835,13 @@ cancel_consumer(ConsumerId,
             % A waiting consumer isn't supposed to have any checked out messages, so nothing special to do here
             {Effects, State0#state{waiting_consumers = WaitingConsumers1}}
     end.
+
+consumer_promoted_to_single_active_effects(#state{consumer_strategy = single_active,
+                                                  queue_resource    = QName },
+                                           ConsumerId, #consumer{meta = Meta}, Effects) ->
+    [{mod_call, rabbit_quorum_queue, update_consumer_handler,
+        [QName, ConsumerId, false, maps:get(ack, Meta, undefined),
+         maps:get(prefetch, Meta, undefined), true, maps:get(args, Meta, [])]} | Effects].
 
 cancel_consumer0(ConsumerId,
                 {Effects0, #state{consumers = C0} = S0}) ->
@@ -1371,6 +1407,8 @@ test_init(Name) ->
            queue_resource => rabbit_misc:r("/", queue,
                                            atom_to_binary(Name, utf8)),
            shadow_copy_interval => 0}).
+
+% To launch these tests: make eunit EUNIT_MODS="rabbit_fifo"
 
 enq_enq_checkout_test() ->
     Cid = {<<"enq_enq_checkout_test">>, self()},
@@ -2076,8 +2114,8 @@ single_active_consumer_test() ->
     % the new active consumer is no longer in the waiting list
     ?assertEqual(1, length(State3#state.waiting_consumers)),
     ?assertNotEqual(false, lists:keyfind({<<"ctag4">>, self()}, 1, State3#state.waiting_consumers)),
-    % there are some effects to unregister the consumer
-    ?assertEqual(1, length(Effects2)),
+    % there are some effects to unregister the consumer and to update the new active one (metrics)
+    ?assertEqual(2, length(Effects2)),
 
     % cancelling the active consumer
     {State4, _, Effects3} = apply(#{}, #checkout{spec = cancel, consumer_id = {<<"ctag2">>, self()}}, State3),
@@ -2086,8 +2124,8 @@ single_active_consumer_test() ->
     ?assert(maps:is_key({<<"ctag4">>, self()}, State4#state.consumers)),
     % the waiting consumer list is now empty
     ?assertEqual(0, length(State4#state.waiting_consumers)),
-    % there are some effects to unregister the consumer
-    ?assertEqual(1, length(Effects3)),
+    % there are some effects to unregister the consumer and to update the new active one (metrics)
+    ?assertEqual(2, length(Effects3)),
 
     % cancelling the last consumer
     {State5, _, Effects4} = apply(#{}, #checkout{spec = cancel, consumer_id = {<<"ctag4">>, self()}}, State4),
@@ -2131,8 +2169,8 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test() ->
     ?assertEqual(1, map_size(State2#state.consumers)),
     % there are still waiting consumers
     ?assertEqual(2, length(State2#state.waiting_consumers)),
-    % the effect to unregister the consumer is there
-    ?assertEqual(1, length(Effects)),
+    % effects to unregister the consumer and to update the new active one (metrics) are there
+    ?assertEqual(2, length(Effects)),
 
     % the channel of the active consumer and a waiting consumer goes down
     {State3, _, Effects2} = apply(#{}, {down, Pid2, doesnotmatter}, State2),
@@ -2140,8 +2178,8 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test() ->
     ?assertEqual(1, map_size(State3#state.consumers)),
     % no more waiting consumer
     ?assertEqual(0, length(State3#state.waiting_consumers)),
-    % effects to cancel both consumers of this channel
-    ?assertEqual(2, length(Effects2)),
+    % effects to cancel both consumers of this channel + effect to update the new active one (metrics)
+    ?assertEqual(3, length(Effects2)),
 
     % the last channel goes down
     {State4, _, Effects3} = apply(#{}, {down, Pid3, doesnotmatter}, State3),
@@ -2192,6 +2230,64 @@ single_active_consumer_mark_waiting_consumers_as_suspected_when_down_noconnnecti
 
     ok.
 
+single_active_consumer_state_enter_leader_include_waiting_consumers_test() ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        shadow_copy_interval => 0,
+        single_active_consumer_on => true}),
+
+    DummyFunction = fun() -> ok  end,
+    Pid1 = spawn(DummyFunction),
+    Pid2 = spawn(DummyFunction),
+    Pid3 = spawn(DummyFunction),
+
+    % adding some consumers
+    AddConsumer = fun({CTag, ChannelId}, State) ->
+        {NewState, _, _} = apply(
+            #{},
+            #checkout{spec = {once, 1, simple_prefetch},
+                meta = #{},
+                consumer_id = {CTag, ChannelId}},
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+
+    Effects = state_enter(leader, State1),
+    % 2 effects for each consumer process (channel process), 1 effect for the node
+    ?assertEqual(2 * 3 + 1, length(Effects)).
+
+single_active_consumer_state_enter_eol_include_waiting_consumers_test() ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        shadow_copy_interval => 0,
+        single_active_consumer_on => true}),
+
+    DummyFunction = fun() -> ok  end,
+    Pid1 = spawn(DummyFunction),
+    Pid2 = spawn(DummyFunction),
+    Pid3 = spawn(DummyFunction),
+
+    % adding some consumers
+    AddConsumer = fun({CTag, ChannelId}, State) ->
+        {NewState, _, _} = apply(
+            #{},
+            #checkout{spec = {once, 1, simple_prefetch},
+                meta = #{},
+                consumer_id = {CTag, ChannelId}},
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+
+    Effects = state_enter(eol, State1),
+    % 1 effect for each consumer process (channel process)
+    ?assertEqual(3, length(Effects)).
+
 query_consumers_test() ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,
@@ -2214,7 +2310,7 @@ query_consumers_test() ->
     ?assertEqual(4, query_consumer_count(State1)),
     Consumers = query_consumers(State1),
     ?assertEqual(4, maps:size(Consumers)),
-    maps:fold(fun({_Tag, Pid}, {Pid, _Tag, _, _, _, _}, _Acc) ->
+    maps:fold(fun({_Tag, Pid}, {Pid, _Tag, _, _, _, _, _}, _Acc) ->
                   ?assertEqual(self(), Pid)
               end, [], Consumers).
 

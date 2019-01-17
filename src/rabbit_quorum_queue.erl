@@ -26,6 +26,7 @@
 -export([dead_letter_publish/4]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
+-export([update_consumer_handler/7, update_consumer/8]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, update_metrics/2]).
 -export([rpc_delete_metrics/1]).
@@ -76,7 +77,9 @@
          leader,
          online,
          members,
-         open_files
+         open_files,
+         single_active_consumer_pid,
+         single_active_consumer_ctag
         ]).
 
 -define(TICK_TIME, 1000). %% the ra server tick time
@@ -161,17 +164,16 @@ single_active_consumer_on(#amqqueue{arguments = QArguments}) ->
         _            -> false
     end.
 
+update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired, Prefetch, SingleActive, Args) ->
+    local_or_remote_handler(ChPid, rabbit_quorum_queue, update_consumer,
+        [QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, SingleActive, Args]).
+
+update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, SingleActive, Args) ->
+    catch rabbit_core_metrics:consumer_updated(ChPid, ConsumerTag, Exclusive, AckRequired,
+                                               QName, Prefetch, SingleActive, Args).
+
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
-    Node = node(ChPid),
-    case Node == node() of
-        true -> cancel_consumer(QName, ChPid, ConsumerTag);
-        false ->
-            %% this could potentially block for a while if the node is
-            %% in disconnected state or tcp buffers are full
-            rpc:cast(Node, rabbit_quorum_queue,
-                     cancel_consumer,
-                     [QName, ChPid, ConsumerTag])
-    end.
+    local_or_remote_handler(ChPid, rabbit_quorum_queue, cancel_consumer, [QName, ChPid, ConsumerTag]).
 
 cancel_consumer(QName, ChPid, ConsumerTag) ->
     catch rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
@@ -180,6 +182,17 @@ cancel_consumer(QName, ChPid, ConsumerTag) ->
                          {channel,      ChPid},
                          {queue,        QName},
                          {user_who_performed_action, ?INTERNAL_USER}]).
+
+local_or_remote_handler(ChPid, Module, Function, Args) ->
+    Node = node(ChPid),
+    case Node == node() of
+        true ->
+            erlang:apply(Module, Function, Args);
+        false ->
+            %% this could potentially block for a while if the node is
+            %% in disconnected state or tcp buffers are full
+            rpc:cast(Node, Module, Function, Args)
+    end.
 
 become_leader(QName, Name) ->
     Fun = fun(Q1) ->
@@ -401,7 +414,7 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
                     Args :: rabbit_framing:amqp_table(), ActingUser :: binary(),
                     any(), rabbit_fifo_client:state()) ->
     {'ok', rabbit_fifo_client:state()}.
-basic_consume(#amqqueue{name = QName, type = quorum}, NoAck, ChPid,
+basic_consume(#amqqueue{name = QName, pid = QPid, type = quorum}, NoAck, ChPid,
               ConsumerPrefetchCount, ConsumerTag0, ExclusiveConsume, Args,
               ActingUser, OkMsg, QState0) ->
     %% TODO: validate consumer arguments
@@ -423,10 +436,19 @@ basic_consume(#amqqueue{name = QName, type = quorum}, NoAck, ChPid,
                                                Prefetch,
                                                ConsumerMeta,
                                                QState0),
+    {ok, {_, SacResult}, _} = ra:local_query(QPid,
+                                             fun rabbit_fifo:query_single_active_consumer/1),
+    IsSingleActiveConsumer = case SacResult of
+                                 {value, {ConsumerTag, ChPid}} ->
+                                     true;
+                                 _ ->
+                                     false
+                             end,
+
     %% TODO: emit as rabbit_fifo effect
     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                          not NoAck, QName,
-                                         ConsumerPrefetchCount, Args),
+                                         ConsumerPrefetchCount, IsSingleActiveConsumer, Args),
     {ok, QState}.
 
 basic_cancel(ConsumerTag, ChPid, OkMsg, QState0) ->
@@ -740,6 +762,24 @@ i(open_files, #amqqueue{pid = {Name, _},
                         quorum_nodes = Nodes}) ->
     {Data, _} = rpc:multicall(Nodes, rabbit_quorum_queue, open_files, [Name]),
     lists:flatten(Data);
+i(single_active_consumer_pid, #amqqueue{pid = QPid}) ->
+    {ok, {_, SacResult}, _} = ra:local_query(QPid,
+                                             fun rabbit_fifo:query_single_active_consumer/1),
+    case SacResult of
+        {value, {_ConsumerTag, ChPid}} ->
+            ChPid;
+        _ ->
+            ''
+    end;
+i(single_active_consumer_ctag, #amqqueue{pid = QPid}) ->
+    {ok, {_, SacResult}, _} = ra:local_query(QPid,
+                                             fun rabbit_fifo:query_single_active_consumer/1),
+    case SacResult of
+        {value, {ConsumerTag, _ChPid}} ->
+            ConsumerTag;
+        _ ->
+            ''
+    end;
 i(_K, _Q) -> ''.
 
 open_files(Name) ->
