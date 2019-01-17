@@ -643,7 +643,6 @@ handle_cast({confirm, MsgSeqNos, QPid}, State) ->
 handle_info({'$queue_info', _Ref, {{Name, _} = From, _} = Evt},
             #ch{queue_states = QueueStates,
                 queue_names = QNames,
-                mandatory = Mand,
                 consumer_mapping = ConsumerMapping} = State0) ->
     case QueueStates of
         #{Name := QState0} ->
@@ -674,9 +673,9 @@ handle_info({'$queue_info', _Ref, {{Name, _} = From, _} = Evt},
                               end, State0#ch{queue_states = maps:put(Name, QState2, QueueStates)}, Msgs),
                     noreply(State);
                 {internal, MsgSeqNos, Actions, QState1} ->
-                    State1 = State0#ch{queue_states = maps:put(Name, QState1, QueueStates)},
+                    State = State0#ch{queue_states = maps:put(Name, QState1, QueueStates)},
                     %% execute actions
-                    WriterPid = State1#ch.writer_pid,
+                    WriterPid = State#ch.writer_pid,
                     lists:foreach(fun ({send_credit_reply, Avail}) ->
                                           ok = rabbit_writer:send_command(
                                                  WriterPid,
@@ -688,10 +687,6 @@ handle_info({'$queue_info', _Ref, {{Name, _} = From, _} = Evt},
                                                  #'basic.credit_drained'{consumer_tag   = CTag,
                                                                          credit_drained = Credit})
                                   end, Actions),
-                    Mand1 = lists:foldl(fun (Seq, M) ->
-                                                dtree:drop(Seq, M)
-                                        end, Mand, MsgSeqNos),
-                    State = State1#ch{mandatory = Mand1},
                     noreply_coalesce(confirm(MsgSeqNos, Name, State));
                 eol ->
                     State1 = handle_consuming_queue_down_or_eol(Name, State0),

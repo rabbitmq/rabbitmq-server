@@ -13,7 +13,7 @@
               state/0
               ]).
 
-init(QDef) ->
+init(_QDef) ->
     {#?MODULE{}, []}.
 
 begin_receive(_QId, State, ConsumerTag,
