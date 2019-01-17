@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_core_metrics).
@@ -35,7 +35,8 @@
          channel_queue_exchange_down/1,
          channel_exchange_down/1]).
 
--export([consumer_created/7,
+-export([consumer_created/8,
+         consumer_updated/8,
          consumer_deleted/3]).
 
 -export([queue_stats/2,
@@ -84,7 +85,9 @@
                                    rabbit_exchange:name()}}) -> ok.
 -spec channel_exchange_down({pid(), rabbit_exchange:name()}) -> ok.
 -spec consumer_created(pid(), binary(), boolean(), boolean(),
-                       rabbit_amqqueue:name(), integer(), list()) -> ok.
+                       rabbit_amqqueue:name(), integer(), boolean(), list()) -> ok.
+-spec consumer_updated(pid(), binary(), boolean(), boolean(),
+                       rabbit_amqqueue:name(), integer(), boolean(), list()) -> ok.
 -spec consumer_deleted(pid(), binary(), rabbit_amqqueue:name()) -> ok.
 -spec queue_stats(rabbit_amqqueue:name(), rabbit_types:infos()) -> ok.
 -spec queue_stats(rabbit_amqqueue:name(), integer(), integer(), integer(),
@@ -224,9 +227,15 @@ channel_exchange_down(Id) ->
     ok.
 
 consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-                 PrefetchCount, Args) ->
+                 PrefetchCount, SingleActive, Args) ->
     ets:insert(consumer_created, {{QName, ChPid, ConsumerTag}, ExclusiveConsume,
-                                   AckRequired, PrefetchCount, Args}),
+                                   AckRequired, PrefetchCount, SingleActive, Args}),
+    ok.
+
+consumer_updated(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
+                 PrefetchCount, SingleActive, Args) ->
+    ets:insert(consumer_created, {{QName, ChPid, ConsumerTag}, ExclusiveConsume,
+                                   AckRequired, PrefetchCount, SingleActive, Args}),
     ok.
 
 consumer_deleted(ChPid, ConsumerTag, QName) ->
