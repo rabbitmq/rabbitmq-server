@@ -325,7 +325,7 @@ create_ch(Name) ->
 create_cons(QName, ChName, Tag, Exclusive, AckRequired, PrefetchCount, Args) ->
     rabbit_core_metrics:consumer_created(pid(ChName), Tag, Exclusive,
                                          AckRequired, q(QName),
-                                         PrefetchCount, Args).
+                                         PrefetchCount, false, Args).
 
 stats_series(Fun, ListsOfPairs) ->
     [begin
