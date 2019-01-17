@@ -111,4 +111,36 @@ defmodule ListConsumersCommandTest do
       end
     end)
   end
+
+  test "run: single active field is set properly when requested and feature is enabled", context do
+    queue_types = ["classic", "quorum"]
+    Enum.each queue_types, fn queue_type ->
+      queue_name = "single-active-consumer-" <> queue_type
+      declare_queue(queue_name, @vhost, true, false,
+        [{"x-single-active-consumer", :bool, true}, {"x-queue-type", :longstr, queue_type}])
+      with_channel(@vhost, fn(channel) ->
+        {:ok, tag1} = AMQP.Basic.consume(channel, queue_name)
+        {:ok, tag2} = AMQP.Basic.consume(channel, queue_name)
+        {:ok, tag3} = AMQP.Basic.consume(channel, queue_name)
+        :timer.sleep(100)
+        try do
+          consumers = List.first(run_command_to_list(@command, [["queue_name", "consumer_tag", "single_active"], context[:opts]]))
+          assert Keyword.equal?([{tag1, queue_name, true}, {tag2, queue_name, false}, {tag3, queue_name, false}],
+                   for([queue_name: q, consumer_tag: t, single_active: sa] <- consumers, do: {t, q, sa}))
+          AMQP.Basic.cancel(channel, tag1)
+          :timer.sleep(100)
+          consumers = List.first(run_command_to_list(@command, [["queue_name", "consumer_tag", "single_active"], context[:opts]]))
+          assert Keyword.equal?([{tag2, queue_name, true}, {tag3, queue_name, false}],
+                   for([queue_name: q, consumer_tag: t, single_active: sa] <- consumers, do: {t, q, sa}))
+        after
+          AMQP.Basic.cancel(channel, tag2)
+          AMQP.Basic.cancel(channel, tag3)
+          :timer.sleep(100)
+          delete_queue(queue_name, @vhost)
+        end
+      end)
+    end
+  end
+
+
 end

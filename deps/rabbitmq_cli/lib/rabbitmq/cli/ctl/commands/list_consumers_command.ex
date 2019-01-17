@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   alias RabbitMQ.CLI.Core.Helpers
@@ -27,12 +27,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def aliases(), do: [t: :timeout]
 
   @info_keys ~w(queue_name channel_pid consumer_tag
-                ack_required prefetch_count arguments)a
+                ack_required prefetch_count single_active arguments)a
 
   def info_keys(), do: @info_keys
 
   def merge_defaults([], opts) do
-    {Enum.map(@info_keys, &Atom.to_string/1), Map.merge(%{vhost: "/", table_headers: true}, opts)}
+    {Enum.map(@info_keys -- [:single_active], &Atom.to_string/1), Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
   def merge_defaults(args, opts) do
@@ -50,7 +50,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
 
   def run([_ | _] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
     info_keys = InfoKeys.prepare_info_keys(args)
-
     Helpers.with_nodes_in_cluster(node_name, fn nodes ->
       RpcStream.receive_list_items(
         node_name,
