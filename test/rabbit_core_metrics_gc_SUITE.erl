@@ -300,7 +300,7 @@ consumer_metrics(Config) ->
     CTag = <<"tag">>,
     rabbit_ct_broker_helpers:rpc(Config, A, rabbit_core_metrics,
                                  consumer_created, [DeadPid, CTag, true, true,
-                                                    QName, 1, []]),
+                                                    QName, 1, false, []]),
     Id = {QName, DeadPid, CTag},
     [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup, [consumer_created, Id]),
 
