@@ -1341,6 +1341,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                                 "amq.ctag");
                     Other -> Other
                 end,
+            %% call queue type abstraction here??
             case basic_consume(
                    QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                    ExclusiveConsume, Args, NoWait, State) of
@@ -1949,16 +1950,19 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
     {rabbit_amqqueue:notify_down_all(QPids, self(), Timeout),
      State#ch{state = closing}}.
 
+%% this function takes the list of unacked records and aggregates msg ids
+%% per queue ref, then it folds over the result set with the provided folder
+%% function
 foreach_per_queue(_F, [], Acc) ->
     Acc;
 foreach_per_queue(F, [{_DTag, CTag, {QPid, MsgId}}], Acc) ->
-    %% quorum queue, needs the consumer tag
     F({QPid, CTag}, [MsgId], Acc);
 foreach_per_queue(F, UAL, Acc) ->
     T = lists:foldl(fun ({_DTag, CTag, {QPid, MsgId}}, T) ->
                             rabbit_misc:gb_trees_cons({QPid, CTag}, MsgId, T)
                     end, gb_trees:empty(), UAL),
-    rabbit_misc:gb_trees_fold(fun (Key, Val, Acc0) -> F(Key, Val, Acc0) end, Acc, T).
+    rabbit_misc:gb_trees_fold(fun (Key, Val, Acc0) -> F(Key, Val, Acc0) end,
+                              Acc, T).
 
 consumer_queue_refs(Consumers) ->
     lists:usort([qpid_to_ref(QPid) || {_Key, {#amqqueue{pid = QPid}, _CParams}}
