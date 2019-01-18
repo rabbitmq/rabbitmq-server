@@ -403,7 +403,7 @@ aggregate_entry({Id, Reductions}, NextStats, Ops0,
     Ops = insert_entry_ops(channel_process_stats, Id, false,
                            Entry, Ops0, BPolicies),
     {NextStats, Ops, State};
-aggregate_entry({Id, Exclusive, AckRequired, PrefetchCount, SingleActive, Args},
+aggregate_entry({Id, Exclusive, AckRequired, PrefetchCount, Active, Args},
                 NextStats, Ops0,
                 #state{table = consumer_created} = State) ->
     case ets:lookup(consumer_stats, Id) of
@@ -411,20 +411,19 @@ aggregate_entry({Id, Exclusive, AckRequired, PrefetchCount, SingleActive, Args},
             Fmt = rabbit_mgmt_format:format([{exclusive, Exclusive},
                                              {ack_required, AckRequired},
                                              {prefetch_count, PrefetchCount},
-                                             {single_active, SingleActive},
+                                             {active, Active},
                                              {arguments, Args}], {[], false}),
             Entry = ?consumer_stats(Id, Fmt),
             Ops = insert_with_index_op(consumer_stats, Id, Entry, Ops0),
             {NextStats, Ops , State};
         [{_K, V}] ->
-            % consumer updated only when promoted to single active consumer
-            CurrentSingleActive = proplists:get_value(single_active, V, undefined),
-            case {SingleActive, CurrentSingleActive} of
-                {true, false} ->
+            CurrentActive = proplists:get_value(active, V, undefined),
+            case Active =:= CurrentActive of
+                false ->
                     Fmt = rabbit_mgmt_format:format([{exclusive, Exclusive},
                                                      {ack_required, AckRequired},
                                                      {prefetch_count, PrefetchCount},
-                                                     {single_active, SingleActive},
+                                                     {active, Active},
                                                      {arguments, Args}], {[], false}),
                     Entry = ?consumer_stats(Id, Fmt),
                     Ops = insert_with_index_op(consumer_stats, Id, Entry, Ops0),
