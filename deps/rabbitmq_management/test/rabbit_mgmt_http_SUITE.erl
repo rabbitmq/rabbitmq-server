@@ -95,7 +95,8 @@ all_tests() -> [
     permissions_vhost_test,
     permissions_amqp_test,
     permissions_connection_channel_consumer_test,
-    consumers_test,
+    consumers_cq_test,
+    consumers_qq_test,
     definitions_test,
     definitions_vhost_test,
     definitions_password_test,
@@ -1307,11 +1308,16 @@ permissions_connection_channel_consumer_test(Config) ->
     http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
     passed.
 
+consumers_cq_test(Config) ->
+    consumers_test(Config, [{'x-queue-type', <<"classic">>}]).
 
+consumers_qq_test(Config) ->
+    consumers_test(Config, [{'x-queue-type', <<"quorum">>}]).
 
-
-consumers_test(Config) ->
-    http_put(Config, "/queues/%2F/test", #{}, {group, '2xx'}),
+consumers_test(Config, Args) ->
+    QArgs = [{auto_delete, false}, {durable, true},
+             {arguments, Args}],
+    http_put(Config, "/queues/%2F/test", QArgs, {group, '2xx'}),
     {Conn, _ConnPath, _ChPath, _ConnChPath} = get_conn(Config, "guest", "guest"),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:subscribe(
@@ -1321,6 +1327,7 @@ consumers_test(Config) ->
     timer:sleep(1500),
     assert_list([#{exclusive    => false,
                    ack_required => true,
+                   active       => true,
                    consumer_tag => <<"my-ctag">>}], http_get(Config, "/consumers")),
     amqp_connection:close(Conn),
     http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
@@ -1356,17 +1363,17 @@ single_active_consumer(Config, Url, QName, Args) ->
     timer:sleep(1500),
     assert_list([#{exclusive     => false,
                    ack_required  => false,
-                   single_active => true,
+                   active        => true,
                    consumer_tag  => <<"1">>},
                  #{exclusive     => false,
                    ack_required  => false,
-                   single_active => false,
+                   active        => false,
                    consumer_tag  => <<"2">>}], http_get(Config, "/consumers")),
     amqp_channel:close(Ch),
     timer:sleep(1500),
     assert_list([#{exclusive     => false,
                    ack_required  => false,
-                   single_active => true,
+                   active        => true,
                    consumer_tag  => <<"2">>}], http_get(Config, "/consumers")),
     amqp_connection:close(Conn),
     http_delete(Config, Url, {group, '2xx'}),
