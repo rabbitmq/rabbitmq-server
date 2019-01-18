@@ -164,13 +164,13 @@ single_active_consumer_on(#amqqueue{arguments = QArguments}) ->
         _            -> false
     end.
 
-update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired, Prefetch, SingleActive, Args) ->
+update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired, Prefetch, Active, Args) ->
     local_or_remote_handler(ChPid, rabbit_quorum_queue, update_consumer,
-        [QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, SingleActive, Args]).
+        [QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, Active, Args]).
 
-update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, SingleActive, Args) ->
+update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, Active, Args) ->
     catch rabbit_core_metrics:consumer_updated(ChPid, ConsumerTag, Exclusive, AckRequired,
-                                               QName, Prefetch, SingleActive, Args).
+                                               QName, Prefetch, Active, Args).
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
     local_or_remote_handler(ChPid, rabbit_quorum_queue, cancel_consumer, [QName, ChPid, ConsumerTag]).
@@ -414,7 +414,7 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
                     Args :: rabbit_framing:amqp_table(), ActingUser :: binary(),
                     any(), rabbit_fifo_client:state()) ->
     {'ok', rabbit_fifo_client:state()}.
-basic_consume(#amqqueue{name = QName, pid = QPid, type = quorum}, NoAck, ChPid,
+basic_consume(#amqqueue{name = QName, pid = QPid, type = quorum} = Q, NoAck, ChPid,
               ConsumerPrefetchCount, ConsumerTag0, ExclusiveConsume, Args,
               ActingUser, OkMsg, QState0) ->
     %% TODO: validate consumer arguments
@@ -438,8 +438,12 @@ basic_consume(#amqqueue{name = QName, pid = QPid, type = quorum}, NoAck, ChPid,
                                                QState0),
     {ok, {_, SacResult}, _} = ra:local_query(QPid,
                                              fun rabbit_fifo:query_single_active_consumer/1),
-    IsSingleActiveConsumer = case SacResult of
-                                 {value, {ConsumerTag, ChPid}} ->
+
+    SingleActiveConsumerOn = single_active_consumer_on(Q),
+    IsSingleActiveConsumer = case {SingleActiveConsumerOn, SacResult} of
+                                 {false, _} ->
+                                     true;
+                                 {true, {value, {ConsumerTag, ChPid}}} ->
                                      true;
                                  _ ->
                                      false

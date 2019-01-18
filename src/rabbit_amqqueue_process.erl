@@ -1296,15 +1296,17 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
             QName = qname(State1),
             AckRequired = not NoAck,
             TheConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, State1#q.consumers),
-            IsSingleActiveConsumer = case {SingleActiveConsumerOn, State1#q.active_consumer} of
-                                         {true, TheConsumer} ->
-                                             true;
-                                         _ ->
-                                             false
-                                     end,
+            ConsumerIsActive = case {SingleActiveConsumerOn, State1#q.active_consumer} of
+                                   {true, TheConsumer} ->
+                                       true;
+                                   {true, _} ->
+                                       false;
+                                   {false, _} ->
+                                       true
+                               end,
             rabbit_core_metrics:consumer_created(
                 ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-                PrefetchCount, IsSingleActiveConsumer, Args),
+                PrefetchCount, ConsumerIsActive, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                 AckRequired, QName, PrefetchCount,
                 Args, none, ActingUser),
