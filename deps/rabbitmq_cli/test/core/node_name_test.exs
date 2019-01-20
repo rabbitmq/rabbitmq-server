@@ -15,7 +15,6 @@
 
 defmodule NodeNameTest do
   use ExUnit.Case, async: true
-  import TestHelper
 
   @subject RabbitMQ.CLI.Core.NodeName
 
