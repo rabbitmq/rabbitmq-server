@@ -222,19 +222,35 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname(), :rabbit_disk_monitor, :set_disk_free_limit, [limit])
   end
 
+
+  #
+  # App lifecycle
+  #
+
+  def await_rabbitmq_startup() do
+    :ok = :rabbit_misc.rpc_call(get_rabbit_hostname(), :rabbit, :await_startup, [])
+  end
+
+  def is_rabbitmq_app_running() do
+    :rabbit_misc.rpc_call(node, :rabbit, :is_booted, [])
+  end
+
   def start_rabbitmq_app do
     :rabbit_misc.rpc_call(get_rabbit_hostname(), :rabbit, :start, [])
-    :timer.sleep(1000)
+    await_rabbitmq_startup()
+    :timer.sleep(250)
   end
 
   def stop_rabbitmq_app do
     :rabbit_misc.rpc_call(get_rabbit_hostname(), :rabbit, :stop, [])
-    :timer.sleep(1000)
+    :timer.sleep(1200)
   end
 
   def status do
     :rpc.call(get_rabbit_hostname(), :rabbit, :status, [])
   end
+
+
 
   def error_check(cmd_line, code) do
     assert catch_exit(RabbitMQCtl.main(cmd_line)) == {:shutdown, code}
