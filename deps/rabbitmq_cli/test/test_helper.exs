@@ -232,7 +232,7 @@ defmodule TestHelper do
   end
 
   def is_rabbitmq_app_running() do
-    :rabbit_misc.rpc_call(node, :rabbit, :is_booted, [])
+    :rabbit_misc.rpc_call(get_rabbit_hostname(), :rabbit, :is_booted, [])
   end
 
   def start_rabbitmq_app do
