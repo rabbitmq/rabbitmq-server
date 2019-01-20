@@ -815,6 +815,9 @@ rpc(Config) ->
     Server = amqp_rpc_server:start(Connection, Q, RPCHandler),
     Client = amqp_rpc_client:start(Connection, Q),
     Input = 1,
+    %% give both server and client a moment to initialise,
+    %% set up their topology and so on
+    timer:sleep(2000),
     Reply = amqp_rpc_client:call(Client, term_to_binary(Input)),
     Expected = Fun(Input),
     DecodedReply = binary_to_term(Reply),
@@ -889,7 +892,7 @@ rpc_client_consume_loop(Channel) ->
             rpc_client_consume_loop(Channel);
         _ ->
             rpc_client_consume_loop(Channel)
-    after 3000 ->
+    after 5000 ->
             exit(no_request_received)
     end.
 
