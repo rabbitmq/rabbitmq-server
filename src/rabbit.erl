@@ -31,7 +31,7 @@
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
--export([is_booted/1, is_booting/1]).
+-export([is_booted/1, is_booted/0, is_booting/1, is_booting/0]).
 
 -ifdef(TEST).
 
@@ -697,6 +697,8 @@ await_startup(Node) ->
             end
     end.
 
+is_booting() -> is_booting(node()).
+
 is_booting(Node) ->
     case rpc:call(Node, erlang, whereis, [rabbit_boot]) of
         {badrpc, _} = Err -> Err;
@@ -790,6 +792,8 @@ listeners() ->
 is_running() -> is_running(node()).
 
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
+
+is_booted() -> is_booted(node()).
 
 is_booted(Node) ->
     case is_booting(Node) of
