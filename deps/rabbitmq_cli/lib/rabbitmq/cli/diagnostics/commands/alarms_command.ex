@@ -96,27 +96,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
         # local by definition
         (:file_descriptor_limit) ->
           true
-        # on the target node
-        ({{resource_limit, _, node_name}, _}) ->
-          true
-        # on another node
-        ({{resource_limit, _, _}, _}) ->
-          false
+        ({{:resource_limit, _, a_node}, _}) ->
+          node_name == a_node
       end)
   end
 
   defp clusterwide_alarms(alarms, node_name) do
-    Enum.filter(alarms,
-      fn
-        # local by definition
-        (:file_descriptor_limit) ->
-          false
-        # on the target node
-        ({{resource_limit, _, node_name}, _}) ->
-          false
-        # on another node
-        ({{resource_limit, _, _}, _}) ->
-          true
-      end)
+    alarms
+    |> Enum.reject(fn x -> x == :file_descriptor_limit end)
+    |> Enum.filter(fn ({{:resource_limit, _, a_node}, _}) ->
+      a_node != node_name
+    end)
   end
 end
