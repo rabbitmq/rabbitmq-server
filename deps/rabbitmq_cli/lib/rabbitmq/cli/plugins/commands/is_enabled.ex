@@ -110,10 +110,10 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   end
 
   defp positive_result_message(args, %{online: true, node: node_name}) do
-    String.capitalize "#{plugin_or_plugins(args)} enabled on node #{node_name}"
+    String.capitalize("#{plugin_or_plugins(args)} enabled on node #{node_name}")
   end
   defp positive_result_message(args, %{offline: true}) do
-    String.capitalize "#{plugin_or_plugins(args)} enabled"
+    String.capitalize("#{plugin_or_plugins(args)} enabled")
   end
 
   defp negative_result_message(args, %{online: true, node: node_name}, plugins) do
