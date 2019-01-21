@@ -92,11 +92,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
     {:ok, %{"result" => "ok", "message" => msg}}
   end
   def output({:error, msg}, %{formatter: "json"}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_unavailable,
      %{"result" => "error", "message" => msg}}
   end
   def output({:error, err}, _opts) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software, err}
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_unavailable, err}
   end
   use RabbitMQ.CLI.DefaultOutput
 
