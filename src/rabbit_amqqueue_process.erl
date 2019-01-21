@@ -627,6 +627,18 @@ send_or_record_confirm(#delivery{confirm    = true,
     rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
     {immediately, State}.
 
+%% This feature was used by `rabbit_amqqueue_process` and
+%% `rabbit_mirror_queue_slave` up-to and including RabbitMQ 3.7.x. It is
+%% unused in 3.8.x and thus deprecated. We keep it to support in-place
+%% upgrades to 3.8.x (i.e. mixed-version clusters), but it is a no-op
+%% starting with that version.
+send_mandatory(#delivery{mandatory  = false}) ->
+    ok;
+send_mandatory(#delivery{mandatory  = true,
+                         sender     = SenderPid,
+                         msg_seq_no = MsgSeqNo}) ->
+    gen_server2:cast(SenderPid, {mandatory_received, MsgSeqNo}).
+
 discard(#delivery{confirm = Confirm,
                   sender  = SenderPid,
                   flow    = Flow,
@@ -690,6 +702,7 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
                          State = #q{overflow            = Overflow,
                                     backing_queue       = BQ,
                                     backing_queue_state = BQS}) ->
+    send_mandatory(Delivery), %% must do this before confirms
     case {will_overflow(Delivery, State), Overflow} of
         {true, 'reject-publish'} ->
             %% Drop publish and nack to publisher
