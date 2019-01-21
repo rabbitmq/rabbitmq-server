@@ -601,9 +601,10 @@ send_or_record_confirm(#delivery{confirm    = true,
     MTC1 = gb_trees:insert(MsgId, {SenderPid, MsgSeqNo}, MTC),
     {eventually, State#q{msg_id_to_channel = MTC1}};
 send_or_record_confirm(#delivery{confirm    = true,
+                                 queue_id = QId,
                                  sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo}, State) ->
-    rabbit_misc:confirm_to_sender(SenderPid, [MsgSeqNo]),
+    rabbit_misc:confirm_to_sender(SenderPid, QId, [MsgSeqNo]),
     {immediately, State}.
 
 discard(#delivery{confirm = Confirm,
@@ -1242,7 +1243,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
             reply({ok, BQ:len(BQS), Msg}, State2)
     end;
 
-handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
+handle_call({basic_consume, NoAck, ChPid, QueueId, LimiterPid, LimiterActive,
              PrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
             _From, State = #q{consumers             = Consumers,
                               active_consumer = Holder,
@@ -1254,7 +1255,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                     {error, reply({error, exclusive_consume_unavailable}, State)};
                 false ->
                   Consumers1 = rabbit_queue_consumers:add(
-                    ChPid, ConsumerTag, NoAck,
+                    ChPid, QueueId, ConsumerTag, NoAck,
                     LimiterPid, LimiterActive,
                     PrefetchCount, Args, is_empty(State),
                     ActingUser, Consumers),
@@ -1275,7 +1276,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
               in_use -> {error, reply({error, exclusive_consume_unavailable}, State)};
               ok     ->
                     Consumers1 = rabbit_queue_consumers:add(
-                                   ChPid, ConsumerTag, NoAck,
+                                   ChPid, QueueId, ConsumerTag, NoAck,
                                    LimiterPid, LimiterActive,
                                    PrefetchCount, Args, is_empty(State),
                                    ActingUser, Consumers),
@@ -1450,10 +1451,11 @@ handle_cast({run_backing_queue, Mod, Fun},
     noreply(State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)});
 
 handle_cast({deliver,
-                Delivery = #delivery{sender = Sender,
-                                     flow   = Flow},
-                SlaveWhenPublished},
+             Delivery = #delivery{sender = Sender,
+                                  flow   = Flow},
+             SlaveWhenPublished},
             State = #q{senders = Senders}) ->
+    rabbit_log:info("queue got deliver  ~p", [Delivery]),
     Senders1 = case Flow of
     %% In both credit_flow:ack/1 we are acking messages to the channel
     %% process that sent us the message delivery. See handle_ch_down

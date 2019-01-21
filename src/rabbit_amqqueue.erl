@@ -1074,6 +1074,12 @@ requeue({Name, _} = QPid, {CTag, MsgIds}, _ChPid, QuorumStates)
             QuorumStates
     end.
 
+% ack(QPid, {CTag, MsgIds}, ChPid, QTState0) ->
+%     {QTState, Actions} = rabbit_queue_type:update_msg_state(CTag, QTState0,
+%                                                             MsgIds,
+%                                                             accepted, true),
+%     handle_actions(Actions, QTState).
+
 ack(QPid, {_, MsgIds}, ChPid, QueueStates) when ?IS_CLASSIC(QPid) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [{ack, MsgIds, ChPid}]}),
     QueueStates;

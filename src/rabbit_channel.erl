@@ -55,7 +55,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver/4, deliver_reply/2,
+-export([send_command/2, deliver/5, deliver_reply/2,
          send_credit_reply/2, send_drained/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          emit_info_all/4, info_local/1]).
@@ -155,7 +155,9 @@
   queue_states,
   queue_cleanup_timer,
   %% Message content size limit
-  max_message_size
+  max_message_size,
+  %% the opaque queue type state
+  queue_types
 }).
 
 -define(QUEUE, lqueue).
@@ -237,8 +239,6 @@
 -spec flush(pid()) -> 'ok'.
 -spec shutdown(pid()) -> 'ok'.
 -spec send_command(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
--spec deliver
-        (pid(), rabbit_types:ctag(), boolean(), rabbit_amqqueue:qmsg()) -> 'ok'.
 -spec deliver_reply(binary(), rabbit_types:delivery()) -> 'ok'.
 -spec deliver_reply_local(pid(), binary(), rabbit_types:delivery()) -> 'ok'.
 -spec send_credit_reply(pid(), non_neg_integer()) -> 'ok'.
@@ -279,8 +279,12 @@ shutdown(Pid) ->
 send_command(Pid, Msg) ->
     gen_server2:cast(Pid,  {command, Msg}).
 
-deliver(Pid, ConsumerTag, AckRequired, Msg) ->
-    gen_server2:cast(Pid, {deliver, ConsumerTag, AckRequired, Msg}).
+-spec deliver(pid(), reference(), rabbit_types:ctag(), boolean(),
+              rabbit_amqqueue:qmsg()) -> 'ok'.
+deliver(Pid, QueueId, ConsumerTag, AckRequired, Msg) ->
+    gen_server2:cast(Pid,
+                     {'$queue_info', QueueId,
+                      {deliver, ConsumerTag, AckRequired, Msg}}).
 
 deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
     case decode_fast_reply_to(Rest) of
@@ -439,6 +443,12 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                       Limiter0
               end,
     MaxMessageSize = get_max_message_size(),
+    QueueTypes = rabbit_queue_type:init(#{queue_lookup_fun =>
+                                          fun(N) ->
+                                                  [Q] = rabbit_amqqueue:lookup([N]),
+                                                  {rabbit_classic_queue, Q}
+                                          end}),
+
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
@@ -471,7 +481,9 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 delivery_flow           = Flow,
                 interceptor_state       = undefined,
                 queue_states            = #{},
-                max_message_size        = MaxMessageSize},
+                max_message_size        = MaxMessageSize,
+                queue_types             = QueueTypes
+                },
     State1 = State#ch{
                interceptor_state = rabbit_channel_interceptor:init(State)},
     State2 = rabbit_event:init_stats_timer(State1, #ch.stats_timer),
@@ -582,9 +594,11 @@ handle_cast(terminate, State = #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:flush(WriterPid),
     {stop, normal, State};
 
-handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg}, State) ->
+handle_cast({command, #'basic.consume_ok'{consumer_tag = _CTag} = Msg}, State) ->
     ok = send(Msg, State),
-    noreply(consumer_monitor(CTag, State));
+    %% TODO: how to monitor consuming queue
+    % noreply(consumer_monitor(CTag, State));
+    noreply(State);
 
 handle_cast({command, Msg}, State) ->
     ok = send(Msg, State),
@@ -638,7 +652,35 @@ handle_cast({reject_publish, MsgSeqNo, _QPid}, State = #ch{unconfirmed = UC}) ->
     noreply_coalesce(record_rejects(MXs, State#ch{unconfirmed = UC1}));
 
 handle_cast({confirm, MsgSeqNos, QPid}, State) ->
-    noreply_coalesce(confirm(MsgSeqNos, QPid, State)).
+    noreply_coalesce(confirm(MsgSeqNos, QPid, State));
+handle_cast({'$queue_info', QId, Info},
+            #ch{queue_types = QT0} = State0) ->
+    {QT, Actions} = rabbit_queue_type:handle_queue_info(QId, QT0, Info),
+    State = handle_actions(Actions, State0#ch{queue_types = QT}),
+    noreply(State).
+
+handle_actions([], State) ->
+    State;
+handle_actions([{msg_state_update, accepted, Seqs} | Rem], State) ->
+    [ok = send(#'basic.ack'{delivery_tag = Seq}, State)
+     || Seq <- Seqs],
+    handle_actions(Rem, State);
+handle_actions([{deliveries, Deliveries} | Rem], State0) ->
+    State = lists:foldl(
+              fun({CTag, AckRequired,
+                   Msg
+                   % {MsgId, {MsgHeader, Msg}}
+                  }, Acc) ->
+                      % IsDelivered = maps:is_key(delivery_count, MsgHeader),
+                      % Msg1 = add_delivery_count_header(MsgHeader, Msg),
+                      handle_deliver(CTag, AckRequired, Msg, Acc)
+              end, State0, Deliveries),
+    handle_actions(Rem, State);
+handle_actions([{incr_stats, Type, Key, Inc, Measure} | Rem], State) ->
+    ?INCR_STATS(Type, Key, Inc, Measure, State),
+    handle_actions(Rem, State).
+
+
 
 handle_info({'$queue_info', _Ref, {{Name, _} = From, _} = Evt},
             #ch{queue_states = QueueStates,
@@ -1182,7 +1224,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    conn_name        = ConnName,
                                    delivery_flow    = Flow,
                                    conn_pid         = ConnPid,
-                                   max_message_size = MaxMessageSize}) ->
+                                   max_message_size = MaxMessageSize,
+                                   queue_types = QT0}) ->
     check_msg_size(Content, MaxMessageSize),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, User),
@@ -1210,9 +1253,15 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             QNames = rabbit_exchange:route(Exchange, Delivery),
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),
+            rabbit_log:info("Delivery ~p", [Delivery]),
             DQ = {Delivery#delivery{flow = Flow}, QNames},
             {noreply, case Tx of
-                          none         -> deliver_to_queues(DQ, State1);
+                          none ->
+                              %% call queue types here instead
+                              % Qs = rabbit_amqqueue:lookup(QNames),
+                              {QT, []} = rabbit_queue_type:in(QNames, MsgSeqNo,
+                                                              Delivery, QT0),
+                              State1#ch{queue_types = QT};
                           {Msgs, Acks} -> Msgs1 = ?QUEUE:in(DQ, Msgs),
                                           State1#ch{tx = {Msgs1, Acks}}
                       end};
@@ -1326,6 +1375,8 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                              consumer_mapping  = ConsumerMapping,
                              user              = User,
                              virtual_host      = VHostPath}) ->
+    %% TODO: consumer "mapping" should go inside queue types abstraction?
+    %% effectively the id of a downstream link
     case maps:find(ConsumerTag, ConsumerMapping) of
         error ->
             QueueName = qbin_to_resource(QueueNameBin, VHostPath),
@@ -1613,77 +1664,100 @@ handle_method(_MethodRecord, _Content, _State) ->
 
 %%----------------------------------------------------------------------------
 
+basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
+              _ExclusiveConsume, Args, NoWait,
+              State = #ch{limiter           = Limiter,
+                          user              = #user{username = Username},
+                          queue_types = QT0}) ->
+
+    Credit = case NoAck of
+                 true -> none;
+                 false ->
+                     {simple_prefetch, ConsumerPrefetch}
+             end,
+    OkMsg = ok_msg(NoWait,
+                   #'basic.consume_ok'{consumer_tag = ActualConsumerTag}),
+    ReceiveMeta = #{consumer_args => Args,
+                    credit => Credit,
+                    acting_user => Username,
+                    ok_msg => OkMsg,
+                    limiter => Limiter},
+    {ok, QT, Actions} = rabbit_queue_type:begin_receive(QueueName, QT0,
+                                                        ActualConsumerTag,
+                                                        ReceiveMeta),
+    {ok, handle_actions(Actions, State#ch{queue_types = QT})}.
+
 %% We get the queue process to send the consume_ok on our behalf. This
 %% is for symmetry with basic.cancel - see the comment in that method
 %% for why.
-basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
-              ExclusiveConsume, Args, NoWait,
-              State = #ch{conn_pid          = ConnPid,
-                          limiter           = Limiter,
-                          consumer_mapping  = ConsumerMapping,
-                          user              = #user{username = Username},
-                          queue_states      = QueueStates0}) ->
-    case rabbit_amqqueue:with_exclusive_access_or_die(
-           QueueName, ConnPid,
-           fun (Q) ->
-                   {rabbit_amqqueue:basic_consume(
-                      Q, NoAck, self(),
-                      rabbit_limiter:pid(Limiter),
-                      rabbit_limiter:is_active(Limiter),
-                      ConsumerPrefetch, ActualConsumerTag,
-                      ExclusiveConsume, Args,
-                      ok_msg(NoWait, #'basic.consume_ok'{
-                               consumer_tag = ActualConsumerTag}),
-                      Username, QueueStates0),
-                    Q}
-           end) of
-        {{ok, QueueStates}, Q = #amqqueue{pid = QPid, name = QName}} ->
-            CM1 = maps:put(
-                    ActualConsumerTag,
-                    {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
-                    ConsumerMapping),
-            State1 = track_delivering_queue(
-                       NoAck, QPid, QName,
-                       State#ch{consumer_mapping = CM1,
-                                queue_states = QueueStates}),
-            {ok, case NoWait of
-                     true  -> consumer_monitor(ActualConsumerTag, State1);
-                     false -> State1
-                 end};
-        {ok, Q = #amqqueue{pid = QPid, name = QName}} ->
-            CM1 = maps:put(
-                    ActualConsumerTag,
-                    {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
-                    ConsumerMapping),
-            State1 = track_delivering_queue(
-                       NoAck, QPid, QName,
-                       State#ch{consumer_mapping = CM1}),
-            {ok, case NoWait of
-                     true  -> consumer_monitor(ActualConsumerTag, State1);
-                     false -> State1
-                 end};
-        {{error, exclusive_consume_unavailable} = E, _Q} ->
-            E;
-        {{error, global_qos_not_supported_for_queue_type} = E, _Q} ->
-            E
-    end.
+% basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
+%               ExclusiveConsume, Args, NoWait,
+%               State = #ch{conn_pid          = ConnPid,
+%                           limiter           = Limiter,
+%                           consumer_mapping  = ConsumerMapping,
+%                           user              = #user{username = Username},
+%                           queue_states      = QueueStates0}) ->
+%     case rabbit_amqqueue:with_exclusive_access_or_die(
+%            QueueName, ConnPid,
+%            fun (Q) ->
+%                    {rabbit_amqqueue:basic_consume(
+%                       Q, NoAck, self(),
+%                       rabbit_limiter:pid(Limiter),
+%                       rabbit_limiter:is_active(Limiter),
+%                       ConsumerPrefetch, ActualConsumerTag,
+%                       ExclusiveConsume, Args,
+%                       ok_msg(NoWait, #'basic.consume_ok'{
+%                                consumer_tag = ActualConsumerTag}),
+%                       Username, QueueStates0),
+%                     Q}
+%            end) of
+%         {{ok, QueueStates}, Q = #amqqueue{pid = QPid, name = QName}} ->
+%             CM1 = maps:put(
+%                     ActualConsumerTag,
+%                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
+%                     ConsumerMapping),
+%             State1 = track_delivering_queue(
+%                        NoAck, QPid, QName,
+%                        State#ch{consumer_mapping = CM1,
+%                                 queue_states = QueueStates}),
+%             {ok, case NoWait of
+%                      true  -> consumer_monitor(ActualConsumerTag, State1);
+%                      false -> State1
+%                  end};
+%         {ok, Q = #amqqueue{pid = QPid, name = QName}} ->
+%             CM1 = maps:put(
+%                     ActualConsumerTag,
+%                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
+%                     ConsumerMapping),
+%             State1 = track_delivering_queue(
+%                        NoAck, QPid, QName,
+%                        State#ch{consumer_mapping = CM1}),
+%             {ok, case NoWait of
+%                      true  -> consumer_monitor(ActualConsumerTag, State1);
+%                      false -> State1
+%                  end};
+%         {{error, exclusive_consume_unavailable} = E, _Q} ->
+%             E;
+%         {{error, global_qos_not_supported_for_queue_type} = E, _Q} ->
+%             E
+%     end.
 
 maybe_stat(false, Q) -> rabbit_amqqueue:stat(Q);
 maybe_stat(true, _Q) -> {ok, 0, 0}.
 
-consumer_monitor(ConsumerTag,
-                 State = #ch{consumer_mapping = ConsumerMapping,
-                             queue_monitors   = QMons,
-                             queue_consumers  = QCons}) ->
-    {#amqqueue{pid = QPid}, _} = maps:get(ConsumerTag, ConsumerMapping),
-    QRef = qpid_to_ref(QPid),
-    CTags1 = case maps:find(QRef, QCons) of
-                 {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
-                 error -> gb_sets:singleton(ConsumerTag)
-             end,
-    QCons1 = maps:put(QRef, CTags1, QCons),
-    State#ch{queue_monitors  = maybe_monitor(QRef, QMons),
-             queue_consumers = QCons1}.
+% consumer_monitor(ConsumerTag,
+%                  State = #ch{consumer_mapping = ConsumerMapping,
+%                              queue_monitors   = QMons,
+%                              queue_consumers  = QCons}) ->
+%     {#amqqueue{pid = QPid}, _} = maps:get(ConsumerTag, ConsumerMapping),
+%     QRef = qpid_to_ref(QPid),
+%     CTags1 = case maps:find(QRef, QCons) of
+%                  {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
+%                  error -> gb_sets:singleton(ConsumerTag)
+%              end,
+%     QCons1 = maps:put(QRef, CTags1, QCons),
+%     State#ch{queue_monitors  = maybe_monitor(QRef, QMons),
+%              queue_consumers = QCons1}.
 
 track_delivering_queue(NoAck, QPid, QName,
                        State = #ch{queue_names = QNames,
@@ -1900,24 +1974,20 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
     end.
 
 %% NB: Acked is in youngest-first order
-ack(Acked, State = #ch{queue_names = QNames,
-                       queue_states = QueueStates0}) ->
-    QueueStates =
+ack(Acked, State = #ch{queue_types = QT0}) ->
+    %% TODO: simpler to aggregate per CTag perhaps as presumably you could not
+    %% have the same tag for different queues??? as presumably you could not
+    %% have the same tag for different queues??? - queue types could emit
+    %% effects for stats, etc
+    {QT, Actions} =
         foreach_per_queue(
-          fun ({QPid, CTag}, MsgIds, Acc0) ->
-                  Acc = rabbit_amqqueue:ack(QPid, {CTag, MsgIds}, self(), Acc0),
-                  incr_queue_stats(QPid, QNames, MsgIds, State),
-                  Acc
-          end, Acked, QueueStates0),
+          fun ({_QPid, CTag}, MsgIds, {Acc0, Ac0}) ->
+                  {Acc, Ac} = rabbit_queue_type:update_msg_state(
+                                CTag, Acc0, MsgIds, accepted, true),
+                  {Acc, Ac0 ++ Ac}
+          end, Acked, {QT0, []}),
     ok = notify_limiter(State#ch.limiter, Acked),
-    State#ch{queue_states = QueueStates}.
-
-incr_queue_stats(QPid, QNames, MsgIds, State) ->
-    case maps:find(qpid_to_ref(QPid), QNames) of
-        {ok, QName} -> Count = length(MsgIds),
-                       ?INCR_STATS(queue_stats, QName, Count, ack, State);
-        error       -> ok
-    end.
+    handle_actions(Actions, State#ch{queue_types = QT}).
 
 %% {Msgs, Acks}
 %%

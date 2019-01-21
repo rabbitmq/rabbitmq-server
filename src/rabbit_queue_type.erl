@@ -1,6 +1,7 @@
 %% @doc Abstraction for a process to use to interact with queues and queue like
 %% entities of different types inside RabbitMQ
 -module(rabbit_queue_type).
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
          init/1,
@@ -8,6 +9,7 @@
          handle_queue_info/3,
          handle_down/3,
          begin_receive/4,
+         update_msg_state/5,
 
          to_map/1
         ]).
@@ -17,7 +19,8 @@
 %% for monitors it hasn't created for itself.
 
 %% any fields that never or very rarely change go in here
--record(static, {queue_lookup_fun :: fun((queue_name()) -> queue_def())
+-record(static, {queue_lookup_fun :: fun((queue_name()) ->
+                                            {module(), queue_def()})
                                          }).
 
 -record(queue, {module :: module(),
@@ -30,10 +33,11 @@
                   % pending_in = #{} :: #{seq_num() => {msg(), [queue_id()]}},
                   pending_in = dtree:empty() :: dtree:dtree(),
                   %% message nums in flight between here and the external client
-                  pending_out = #{} :: #{out_tag() => queue_id()},
+                  pending_out = #{} :: #{msg_id() => queue_id()},
                   %% reverse lookup of queue id
                   queue_names = #{} :: #{queue_name() => queue_id()},
-                  queues = #{} :: #{queue_id() => #queue{}}
+                  queues = #{} :: #{queue_id() => #queue{}},
+                  receivers = #{} :: #{receive_tag() => queue_id()}
                  }).
 
 -opaque state() :: #?MODULE{}.
@@ -42,7 +46,7 @@
 %% each queue type will have it's own state
 -type queue_state() :: term().
 
--type out_tag() :: non_neg_integer().
+-type msg_id() :: non_neg_integer().
 -type seq_num() :: non_neg_integer().
 
 % -type seq_state() ::
@@ -83,7 +87,22 @@
 
 -type actions() :: [queue_type_action()].
 
--type deliveries() :: [{out_tag(), term()}].
+-type deliver_msg() :: {queue_name(),
+                        %% TODO: what should this really be?
+                        QueuePid :: undefined | pid(),
+                        %% delivery count? or some kind of
+                        %% meta data map like quorum queues?
+                        Redelivered :: boolean(),
+                        %% AMQP 0.9.1 for now
+                        #basic_message{}}.
+
+-type delivery() :: {msg_id(),
+                     %% TODO: should this be some kind of
+                     %% settlement state?
+                     AckRequired :: boolean(),
+                     deliver_msg()}.
+
+-type deliveries() :: [delivery()].
 %% placeholder to represent deliviers received from a queue
 
 -type credit_def() :: {simple_prefetch, non_neg_integer()} |
@@ -136,11 +155,11 @@
 %% E.g. a "stream" queue could take an optional position argument to
 %% specificy where in the log to begin streaming from.
 -callback begin_receive(queue_id(), queue_state(),
-                        Tag :: term(), Args :: receive_meta()) ->
+                        Tag :: receive_tag(), Args :: receive_meta()) ->
     {queue_state(), actions()}.
 
 %% end a receive using the Tag
--callback end_receive(queue_id(), queue_state(), Tag :: term()) ->
+-callback end_receive(queue_id(), queue_state(), Tag :: receive_tag()) ->
     {queue_state(), actions()}.
 
 %% updates the message state for received messages
@@ -154,7 +173,8 @@
 %% CoAP: may randomise sequence number - seqs may not be sequential
 -callback update_msg_state(queue_id(),
                            queue_state(),
-                           OutTags :: [out_tag()],
+                           receive_tag(),
+                           MsgIds :: [msg_id()],
                            accepted | rejected | released,
                            Settled :: boolean()) ->
     {queue_state(), actions()}.
@@ -166,6 +186,29 @@
 
 %% API
 
+-spec update_msg_state(receive_tag(),
+                       state(),
+                       [msg_id()],
+                       accepted | rejected | released,
+                       Settled :: boolean()) ->
+    {state(), actions()}.
+update_msg_state(ReceiveTag, #?MODULE{receivers = Receivers,
+                                      queues = Queues} = State,
+                 MsgIds, Status, IsSettled) ->
+    QId = maps:get(ReceiveTag, Receivers),
+    Qs0 = maps:get(QId, Queues),
+    Mod = Qs0#queue.module,
+    {Q, Actions} = Mod:update_msg_state(QId, Qs0#queue.state, ReceiveTag,
+                                         MsgIds, Status, IsSettled),
+    StatAction = {incr_stats, queue_stats, Qs0#queue.name,
+                  length(MsgIds), ack},
+    %% TODO: local action eval
+    %% perform lookup by tag
+    {State#?MODULE{queues = Queues#{QId => Qs0#queue{state = Q}}},
+     [StatAction | Actions]}.
+
+
+
 -spec init(map()) -> state().
 init(#{queue_lookup_fun := Fun}) ->
     #?MODULE{config = #static{queue_lookup_fun = Fun}}.
@@ -176,6 +219,7 @@ in(Destinations, SeqNum, Delivery,
    #?MODULE{config = #static{queue_lookup_fun = Fun},
             pending_in = Pend0} = State0) ->
     %% * lookup queue_ids() for the queues and initialise if not found
+    %%
     {QIds, State} = lists:foldl(
                       fun(Qn, {QIds, #?MODULE{queue_names = QNames,
                                               queues = Qs} = S0}) ->
@@ -184,7 +228,7 @@ in(Destinations, SeqNum, Delivery,
                                 {[Qid | QIds], S0};
                             _ ->
                                 Qid = make_ref(),
-                                Q = #{module := Mod} = Fun(Qn),
+                                {Mod, Q} = Fun(Qn),
                                 {QState, []} = Mod:init(Q),
                                 Qq = #queue{module = Mod,
                                             name = Qn,
@@ -198,8 +242,10 @@ in(Destinations, SeqNum, Delivery,
     %% dispatch to each queue type implementation
     {Queues, Actions} = lists:foldl(
                           fun(Qid, {Qus, As}) ->
-                                  #queue{module = Mod} = Q = maps:get(Qid, Qus),
-                                  {Q2, A} = Mod:in(Qid, Q, SeqNum, Delivery),
+                                  #queue{module = Mod,
+                                         state = QS} = Q = maps:get(Qid, Qus),
+                                  {QS2, A} = Mod:in(Qid, QS, SeqNum, Delivery),
+                                  Q2 = Q#queue{state = QS2},
                                   {Qus#{Qid => Q2}, A ++ As}
                           end, {State#?MODULE.queues, []}, QIds),
 
@@ -226,14 +272,14 @@ handle_down(_MonitorRef, _Reason, State) ->
     {State, []}.
 
 
--spec handle_queue_info(queue_id(), term(), state()) ->
+-spec handle_queue_info(queue_id(), state(), term()) ->
     {state(), actions()}.
-handle_queue_info(QueueId, Info, #?MODULE{queues = Queues} = State) ->
+handle_queue_info(QueueId, #?MODULE{queues = Queues} = State, Info) ->
     %% find the state for the queue name - infos should always exists anything
     %% else is an irrecoverable error
     #queue{module = Mod,
            state = Qs0} = Q = maps:get(QueueId, Queues),
-    {Qs, Actions0} = Mod:handle_queue_info(QueueId, Info, Qs0),
+    {Qs, Actions0} = Mod:handle_queue_info(QueueId, Qs0, Info),
     %% dispatch to the implementation handle_queue_info/3 and update the state
     %% process any `settle' actions
     %% handle actions
@@ -248,7 +294,10 @@ handle_queue_info(QueueId, Info, #?MODULE{queues = Queues} = State) ->
                                     Evt = {msg_state_update, DeliveryState,
                                            CompletedSeqs},
                                     {[Evt | Acc], P1}
-                            end
+                            end;
+                       ({deliveries, _} = Evt, {Acc, P}) ->
+                            %% TODO: track pending out msg ids?
+                            {[Evt | Acc], P}
                     end, {[], State#?MODULE.pending_in}, Actions0),
     {State#?MODULE{queues = Queues#{QueueId => Q#queue{state = Qs}},
                    pending_in = Pend}, lists:reverse(Actions)}.
@@ -257,9 +306,18 @@ handle_queue_info(QueueId, Info, #?MODULE{queues = Queues} = State) ->
 -spec begin_receive(queue_name(), state(),
                     receive_tag(), receive_meta()) ->
     {ok, state(), actions()} | {error, duplicate}.
-begin_receive(_QName, State, _Tag, _Args) ->
-    % Module:handle_down(
-    {ok, State, []}.
+begin_receive(#resource{} = QName,
+              #?MODULE{queue_names = Names,
+                       queues = Queues,
+                       receivers = Receivers} = State, Tag, Meta) ->
+    QId = maps:get(QName, Names),
+    #queue{module = Mod,
+           state = Qs0} = Q0 = maps:get(QId, Queues),
+    {ok, Qs, Actions} = Mod:begin_receive(QId, Qs0, Tag, Meta),
+    {ok,
+     State#?MODULE{queues = Queues#{QId => Q0#queue{state = Qs}},
+                   receivers = Receivers#{Tag => QId}},
+     Actions}.
 
 to_map(State) ->
     #{monitors => State#?MODULE.monitors,
@@ -285,10 +343,10 @@ setup_meck_impl(Mod) ->
                         {Qs, []}
                 end),
     meck:expect(Mod, handle_queue_info,
-                fun (_QId, {applied, Seqs}, Qs) when is_list(Seqs) ->
+                fun (_QId, Qs, {applied, Seqs}) when is_list(Seqs) ->
                         %% simply record as accepted
                         {Qs, [{msg_state_update, accepted, Seqs}]};
-                    (_QId, {rejected, Seqs}, Qs) when is_list(Seqs) ->
+                    (_QId, Qs, {rejected, Seqs}) when is_list(Seqs) ->
                         {Qs, [{msg_state_update, rejected, Seqs}]}
                 end),
     ok.
@@ -297,8 +355,7 @@ in_msg_is_accepted_test() ->
     QName = make_queue_name(?FUNCTION_NAME),
     setup_meck_impl(?FUNCTION_NAME),
     LookupFun = fun(Name) ->
-                        #{module => ?FUNCTION_NAME,
-                          name => Name}
+                        {?FUNCTION_NAME, #{name => Name}}
                 end,
     Qs0 = rabbit_queue_type:init(#{queue_lookup_fun => LookupFun}),
 
@@ -311,10 +368,10 @@ in_msg_is_accepted_test() ->
 
     %% this is when the channel can send confirms for example
     {Qs2, [{msg_state_update, accepted, [1]}]} =
-        rabbit_queue_type:handle_queue_info(QId, {applied, [1]}, Qs1),
+        rabbit_queue_type:handle_queue_info(QId, Qs1, {applied, [1]}),
 
     {Qs2, [{msg_state_update, rejected, [1]}]} =
-        rabbit_queue_type:handle_queue_info(QId, {rejected, [1]}, Qs1),
+        rabbit_queue_type:handle_queue_info(QId, Qs1, {rejected, [1]}),
     %% no pending should remain inside the state after the queue has accepted
     %% the message
     ?assertEqual(0, dtree:size(Qs2#?MODULE.pending_in)),
@@ -324,8 +381,7 @@ untracked_in_test() ->
     QName = make_queue_name(?FUNCTION_NAME),
     setup_meck_impl(?FUNCTION_NAME),
     LookupFun = fun(Name) ->
-                        #{module => ?FUNCTION_NAME,
-                          name => Name}
+                        {?FUNCTION_NAME, #{name => Name}}
                 end,
     Qs0 = rabbit_queue_type:init(#{queue_lookup_fun => LookupFun}),
 
@@ -340,8 +396,7 @@ in_msg_multi_queue_is_accepted_test() ->
     QAlt = make_queue_name(alt_queue_name),
     setup_meck_impl(?FUNCTION_NAME),
     LookupFun = fun(Name) ->
-                        #{module => ?FUNCTION_NAME,
-                          name => Name}
+                        {?FUNCTION_NAME, #{name => Name}}
                 end,
     Qs0 = rabbit_queue_type:init(#{queue_lookup_fun => LookupFun}),
 
@@ -351,9 +406,9 @@ in_msg_multi_queue_is_accepted_test() ->
 
     %% no msg_state_update should be issued for the first one
     {Qs2, []} =
-        rabbit_queue_type:handle_queue_info(QId1, {applied, [1]}, Qs1),
+        rabbit_queue_type:handle_queue_info(QId1, Qs1, {applied, [1]}),
     {_, [{msg_state_update, accepted, [1]}]} =
-        rabbit_queue_type:handle_queue_info(QId2, {applied, [1]}, Qs2),
+        rabbit_queue_type:handle_queue_info(QId2, Qs2, {applied, [1]}),
     ?assert(meck:called(?FUNCTION_NAME, in, ['_', '_', '_', '_'])),
     ?assertEqual(2, meck:num_calls(?FUNCTION_NAME, in, '_')),
     meck:unload(),
@@ -363,8 +418,7 @@ begin_end_receive_test() ->
     QName = make_queue_name(?FUNCTION_NAME),
     setup_meck_impl(?FUNCTION_NAME),
     LookupFun = fun(Name) ->
-                        #{module => ?FUNCTION_NAME,
-                          name => Name}
+                        {?FUNCTION_NAME, #{name => Name}}
                 end,
     Qs0 = rabbit_queue_type:init(#{queue_lookup_fun => LookupFun}),
     Tag = <<"my-tag">>,
