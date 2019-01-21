@@ -27,12 +27,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def aliases(), do: [t: :timeout]
 
   @info_keys ~w(queue_name channel_pid consumer_tag
-                ack_required prefetch_count single_active arguments)a
+                ack_required prefetch_count active activity_status arguments)a
 
   def info_keys(), do: @info_keys
 
   def merge_defaults([], opts) do
-    {Enum.map(@info_keys -- [:single_active], &Atom.to_string/1), Map.merge(%{vhost: "/", table_headers: true}, opts)}
+    {Enum.map(@info_keys -- [:active, :activity_status], &Atom.to_string/1), Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
   def merge_defaults(args, opts) do
