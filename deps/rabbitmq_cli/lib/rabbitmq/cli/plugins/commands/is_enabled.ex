@@ -72,19 +72,17 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
       {:error, _} = e -> e
       plugins  ->
         plugins = Enum.map(plugins, &Atom.to_string/1) |> Enum.sort
-        case Enum.reduce(args, true,
-              fn p, acc -> acc && Enum.member?(plugins, p) end) do
-          true  -> {:ok,    positive_result_message(args, opts)}
-          false -> {:error, negative_result_message(args, opts, plugins)}
+        case Enum.filter(args, fn x -> not Enum.member?(plugins, x) end) do
+          [] -> {:ok,    positive_result_message(args, opts)}
+          xs -> {:error, negative_result_message(xs, opts, plugins)}
         end
     end
   end
   def run(args, %{offline: true} = opts) do
     plugins = PluginHelpers.list_names(opts) |> Enum.map(&Atom.to_string/1) |> Enum.sort
-    case Enum.reduce(args, true,
-          fn p, acc -> acc && Enum.member?(plugins, p) end) do
-      true  -> {:ok,    positive_result_message(args, opts)}
-      false -> {:error, negative_result_message(args, opts, plugins)}
+    case Enum.filter(args, fn x -> not Enum.member?(plugins, x) end) do
+      [] -> {:ok,    positive_result_message(args, opts)}
+      xs -> {:error, negative_result_message(xs, opts, plugins)}
     end
   end
 
@@ -116,12 +114,12 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
     String.capitalize("#{plugin_or_plugins(args)} enabled")
   end
 
-  defp negative_result_message(args, %{online: true, node: node_name}, plugins) do
-    String.capitalize("#{plugin_or_plugins(args)} not (all) enabled on node #{node_name}. ")
+  defp negative_result_message(missing, %{online: true, node: node_name}, plugins) do
+    String.capitalize("#{plugin_or_plugins(missing)} not enabled on node #{node_name}. ")
                       <> "Enabled plugins and dependencies: #{PluginHelpers.comma_separated_names(plugins)}"
   end
-  defp negative_result_message(args, %{offline: true}, plugins) do
-    String.capitalize("#{plugin_or_plugins(args)} not (all) enabled. ")
+  defp negative_result_message(missing, %{offline: true}, plugins) do
+    String.capitalize("#{plugin_or_plugins(missing)} not enabled. ")
                       <> "Enabled plugins and dependencies: #{PluginHelpers.comma_separated_names(plugins)}"
   end
 end
