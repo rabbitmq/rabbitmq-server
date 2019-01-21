@@ -13,7 +13,8 @@ all() ->
 
 groups() ->
     [
-     {single_node, [], all_tests()},
+     {classic, [], all_tests()},
+     {quorum, [], all_tests()},
      {clustered, [], [{cluster_size_3, [], [ ]}]}
     ].
 
@@ -41,15 +42,16 @@ init_per_group(clustered, Config) ->
                                   {queue_type, <<"classic">>}]);
 init_per_group(Group, Config) ->
     ClusterSize = case Group of
-                      single_node -> 1;
                       cluster_size_2 -> 2;
                       cluster_size_3 -> 3;
-                      cluster_size_5 -> 5
+                      cluster_size_5 -> 5;
+                      _ -> 1
                   end,
+    QueueType = atom_to_binary(Group, utf8),
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, ClusterSize},
                                             {rmq_nodename_suffix, Group},
-                                            {queue_type, <<"classic">>},
+                                            {queue_type, QueueType},
                                             {tcp_ports_base}]),
     Config1b = rabbit_ct_helpers:set_config(Config1, [{net_ticktime, 10}]),
     Config2 = rabbit_ct_helpers:run_steps(Config1b,
