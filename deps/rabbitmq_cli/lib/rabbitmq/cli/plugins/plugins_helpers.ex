@@ -48,6 +48,10 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     :lists.usort(:rabbit_plugins.list(to_charlist(dir)))
   end
 
+  def list_names(opts) do
+    list(opts) |> plugin_names
+  end
+
   def read_enabled(opts) do
     case enabled_plugins_file(opts) do
       {:ok, enabled} ->
@@ -131,6 +135,14 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
+  def plugin_name(plugin) when is_binary(plugin) do
+    plugin
+  end
+
+  def plugin_name(plugin) when is_atom(plugin) do
+    Atom.to_string(plugin)
+  end
+
   def plugin_name(plugin) do
     plugin(name: name) = plugin
     name
@@ -139,6 +151,15 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   def plugin_names(plugins) do
     for plugin <- plugins, do: plugin_name(plugin)
   end
+
+  def comma_separated_names(plugins) do
+    Enum.join(plugin_names(plugins), ", ")
+  end
+
+
+  #
+  # Implementation
+  #
 
   defp to_list(str) when is_binary(str) do
     :erlang.binary_to_list(str)
