@@ -224,7 +224,7 @@
 
 -define(CONSUMER_INFO_KEYS,
         [queue_name, channel_pid, consumer_tag, ack_required, prefetch_count,
-         single_active, arguments]).
+         active, activity_status, arguments]).
 
 warn_file_limit() ->
     DurableQueues = find_recoverable_queues(),
@@ -958,8 +958,8 @@ emit_consumers_local(VHostPath, Ref, AggregatorPid) ->
 get_queue_consumer_info(Q, ConsumerInfoKeys) ->
     [lists:zip(ConsumerInfoKeys,
                [Q#amqqueue.name, ChPid, CTag,
-                AckRequired, Prefetch, SingleActive, Args]) ||
-        {ChPid, CTag, AckRequired, Prefetch, SingleActive, Args, _} <- consumers(Q)].
+                AckRequired, Prefetch, Active, ActivityStatus, Args]) ||
+        {ChPid, CTag, AckRequired, Prefetch, Active, ActivityStatus, Args, _} <- consumers(Q)].
 
 stat(#amqqueue{type = quorum} = Q) -> rabbit_quorum_queue:stat(Q);
 stat(#amqqueue{pid = QPid}) -> delegate:invoke(QPid, {gen_server2, call, [stat, infinity]}).

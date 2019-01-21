@@ -727,31 +727,48 @@ query_consumer_count(#state{consumers = Consumers,
     maps:size(Consumers) + length(WaitingConsumers).
 
 query_consumers(#state{consumers = Consumers,
-                       waiting_consumers = WaitingConsumers} = State) ->
-    SingleActiveConsumer = query_single_active_consumer(State),
-    IsSingleActiveConsumerFun = fun({Tag, Pid} = _ConsumerId) ->
-                                    case SingleActiveConsumer of
-                                        {value, {Tag, Pid}} ->
-                                            true;
-                                        _ ->
-                                            false
-                                    end
-                                end,
-    FromConsumers = maps:map(fun ({Tag, Pid}, #consumer{meta = Meta}) ->
+                       waiting_consumers = WaitingConsumers,
+                       consumer_strategy = ConsumerStrategy } = State) ->
+    ActiveActivityStatusFun = case ConsumerStrategy of
+                                  default ->
+                                      fun(_ConsumerId, #consumer{suspected_down = SuspectedDown}) ->
+                                          case SuspectedDown of
+                                              true ->
+                                                  {false, suspected_down};
+                                              false ->
+                                                  {true, up}
+                                          end
+                                      end;
+                                  single_active ->
+                                      SingleActiveConsumer = query_single_active_consumer(State),
+                                      fun({Tag, Pid} = _Consumer, _) ->
+                                          case SingleActiveConsumer of
+                                              {value, {Tag, Pid}} ->
+                                                  {true, single_active};
+                                              _ ->
+                                                  {false, waiting}
+                                          end
+                                      end
+                              end,
+    FromConsumers = maps:map(fun ({Tag, Pid}, #consumer{meta = Meta} = Consumer) ->
+                                    {Active, ActivityStatus} = ActiveActivityStatusFun({Tag, Pid}, Consumer),
                                     {Pid, Tag,
                                       maps:get(ack, Meta, undefined),
                                       maps:get(prefetch, Meta, undefined),
-                                      IsSingleActiveConsumerFun({Tag, Pid}),
+                                      Active,
+                                      ActivityStatus,
                                       maps:get(args, Meta, []),
                                       maps:get(username, Meta, undefined)}
                              end, Consumers),
     FromWaitingConsumers =
-        lists:foldl(fun({{Tag, Pid}, #consumer{meta = Meta}}, Acc) ->
+        lists:foldl(fun({{Tag, Pid}, #consumer{meta = Meta} = Consumer}, Acc) ->
+                            {Active, ActivityStatus} = ActiveActivityStatusFun({Tag, Pid}, Consumer),
                             maps:put({Tag, Pid},
                                      {Pid, Tag,
                                       maps:get(ack, Meta, undefined),
                                       maps:get(prefetch, Meta, undefined),
-                                      IsSingleActiveConsumerFun({Tag, Pid}),
+                                      Active,
+                                      ActivityStatus,
                                       maps:get(args, Meta, []),
                                       maps:get(username, Meta, undefined)},
                                      Acc)
@@ -761,6 +778,8 @@ query_consumers(#state{consumers = Consumers,
 query_single_active_consumer(#state{consumer_strategy = single_active,
                                     consumers = Consumers}) ->
     case maps:size(Consumers) of
+        0 ->
+            {error, no_value};
         1 ->
             {value, lists:nth(1, maps:keys(Consumers))};
         _
@@ -2345,6 +2364,44 @@ query_consumers_test() ->
                     queue_resource => rabbit_misc:r("/", queue,
                         atom_to_binary(?FUNCTION_NAME, utf8)),
                     shadow_copy_interval => 0,
+                    single_active_consumer_on => false}),
+
+    % adding some consumers
+    AddConsumer = fun(CTag, State) ->
+        {NewState, _, _} = apply(
+            #{},
+            #checkout{spec = {once, 1, simple_prefetch},
+                meta = #{},
+                consumer_id = {CTag, self()}},
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0, [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
+    Consumers0 = State1#state.consumers,
+    Consumer = maps:get({<<"ctag2">>, self()}, Consumers0),
+    Consumers1 = maps:put({<<"ctag2">>, self()}, Consumer#consumer{suspected_down = true}, Consumers0),
+    State2 = State1#state{consumers = Consumers1},
+
+    ?assertEqual(4, query_consumer_count(State2)),
+    Consumers2 = query_consumers(State2),
+    ?assertEqual(4, maps:size(Consumers2)),
+    maps:fold(fun(_Key, {Pid, Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+        ?assertEqual(self(), Pid),
+        case Tag of
+            <<"ctag2">> ->
+                ?assertNot(Active),
+                ?assertEqual(suspected_down, ActivityStatus);
+            _ ->
+                ?assert(Active),
+                ?assertEqual(up, ActivityStatus)
+        end
+              end, [], Consumers2).
+
+query_consumers_when_single_active_consumer_is_on_test() ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    shadow_copy_interval => 0,
                     single_active_consumer_on => true}),
 
     % adding some consumers
@@ -2362,8 +2419,16 @@ query_consumers_test() ->
     ?assertEqual(4, query_consumer_count(State1)),
     Consumers = query_consumers(State1),
     ?assertEqual(4, maps:size(Consumers)),
-    maps:fold(fun({_Tag, Pid}, {Pid, _Tag, _, _, _, _, _}, _Acc) ->
-                  ?assertEqual(self(), Pid)
+    maps:fold(fun(_Key, {Pid, Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+                  ?assertEqual(self(), Pid),
+                  case Tag of
+                     <<"ctag1">> ->
+                         ?assert(Active),
+                         ?assertEqual(single_active, ActivityStatus);
+                     _ ->
+                         ?assertNot(Active),
+                         ?assertEqual(waiting, ActivityStatus)
+                  end
               end, [], Consumers).
 
 active_flag_updated_when_consumer_suspected_unsuspected_test() ->
