@@ -22,7 +22,7 @@ alias RabbitMQ.CLI.Formatters.FormatterHelpers
 defmodule RabbitMQ.CLI.Formatters.Json do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
-  def format_output(output, _) do
+  def format_output(output, _opts) do
     {:ok, json} = JSON.encode(output)
     json
   end
