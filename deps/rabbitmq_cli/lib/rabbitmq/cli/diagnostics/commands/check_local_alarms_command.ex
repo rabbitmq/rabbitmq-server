@@ -57,7 +57,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
     end
   end
 
-
   def output([], %{formatter: "json"}) do
     {:ok, %{"result"  => "ok"}}
   end
@@ -65,14 +64,12 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
     {:ok, :check_passed}
   end
   def output([], %{node: node_name}) do
-    {:ok, "Node #{node_name} reported no alarms, local or clusterwide"}
+    {:ok, "Node #{node_name} reported no local alarms"}
   end
   def output(alarms, %{node: node_name, formatter: "json"}) do
-    local  = local_alarms(alarms, node_name)
-
     {:ok, %{"result"  => "ok",
-            "local"   => alarm_lines(local, node_name),
-            "message" => "Node #{node_name} reported alarms"}}
+            "local"   => alarm_lines(alarms, node_name),
+            "message" => "Node #{node_name} reported local alarms"}}
   end
   def output(_alarms, %{silent: true}) do
     {:error, :check_failed}
