@@ -453,6 +453,7 @@ clean_plugins(Plugins) ->
 clean_plugin(Plugin, ExpandDir) ->
     {ok, Mods} = application:get_key(Plugin, modules),
     application:unload(Plugin),
+    rabbit_feature_flags:initialize_registry(),
     [begin
          code:soft_purge(Mod),
          code:delete(Mod),

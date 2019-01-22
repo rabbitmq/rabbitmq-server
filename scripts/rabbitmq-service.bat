@@ -232,6 +232,7 @@ if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE!" (
         -s rabbit_prelaunch ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!@localhost ^
         -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+        -rabbit feature_flags_file "!RABBITMQ_FEATURE_FLAGS_FILE!" ^
         -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
         -rabbit plugins_dir "!RABBITMQ_PLUGINS_DIR!" ^
         -extra "!RABBITMQ_NODENAME!"
@@ -323,6 +324,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -rabbit lager_log_root \""!RABBITMQ_LOG_BASE:\=/!"\" ^
 -rabbit lager_default_file !RABBIT_LAGER_HANDLER! ^
 -rabbit lager_upgrade_file !RABBITMQ_LAGER_HANDLER_UPGRADE! ^
+-rabbit feature_flags_file \""!RABBITMQ_FEATURE_FLAGS_FILE:\=/!"\" ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
 -rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^

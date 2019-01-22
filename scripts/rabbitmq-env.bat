@@ -275,6 +275,15 @@ if "!RABBITMQ_BOOT_MODULE!"=="" (
     )
 )
 
+REM [ "x" = "x$RABBITMQ_FEATURE_FLAGS_FILE" ] && RABBITMQ_FEATURE_FLAGS_FILE=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-feature_flags
+if "!RABBITMQ_FEATURE_FLAGS_FILE!"=="" (
+    if "!FEATURE_FLAGS_FILE!"=="" (
+        set RABBITMQ_FEATURE_FLAGS_FILE=!RABBITMQ_MNESIA_BASE!\!RABBITMQ_NODENAME!-feature_flags
+    ) else (
+        set RABBITMQ_FEATURE_FLAGS_FILE=!FEATURE_FLAGS_FILE!
+    )
+)
+
 REM [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${PLUGINS_EXPAND_DIR}
 REM [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-plugins-expand
 if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
@@ -388,6 +397,13 @@ if defined RABBITMQ_DEV_ENV (
     if "!SCRIPT_NAME!" == "rabbitmq-plugins" (
         REM We may need to query the running node for the plugins directory
         REM and the "enabled plugins" file.
+        if not "%RABBITMQ_FEATURE_FLAGS_FILE_source%" == "environment" (
+            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, feature_flags_file), io:format(""~s~n"", [P])."') do @set feature_flags_file=%%F
+            if exist "!feature_flags_file!" (
+                set RABBITMQ_FEATURE_FLAGS_FILE=!feature_flags_file!
+            )
+            REM set feature_flags_file=
+        )
         if not "%RABBITMQ_PLUGINS_DIR_source%" == "environment" (
             for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, plugins_dir), io:format(""~s~n"", [P])."') do @set plugins_dir=%%F
             if exist "!plugins_dir!" (
@@ -467,6 +483,7 @@ exit /b
 REM Environment cleanup
 set BOOT_MODULE=
 set CONFIG_FILE=
+set FEATURE_FLAGS_FILE=
 set ENABLED_PLUGINS_FILE=
 set LOG_BASE=
 set MNESIA_BASE=

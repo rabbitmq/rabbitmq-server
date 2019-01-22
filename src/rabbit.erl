@@ -63,6 +63,12 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({feature_flags,
+                   [{description, "feature flags registry and initial state"},
+                    {mfa,         {rabbit_feature_flags, init, []}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {requires,    file_handle_cache},
@@ -533,6 +539,7 @@ start_apps(Apps) ->
 
 start_apps(Apps, RestartTypes) ->
     app_utils:load_applications(Apps),
+    rabbit_feature_flags:initialize_registry(),
     ensure_sysmon_handler_app_config(),
     ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
         undefined ->
