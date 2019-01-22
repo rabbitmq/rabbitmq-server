@@ -19,6 +19,13 @@ defmodule RabbitMQ.CLI.Core.Output do
   def format_output(:ok, _, _) do
     :ok
   end
+  # the command intends to produce no output
+  def format_output({:ok, nil}, _, _) do
+    :ok
+  end
+  def format_output({:ok, :check_passed}, _, _) do
+    :ok
+  end
   def format_output({:ok, output}, formatter, options) do
     {:ok, formatter.format_output(output, options)}
   end
@@ -35,6 +42,13 @@ defmodule RabbitMQ.CLI.Core.Output do
 
   def print_output_0(:ok, printer, printer_state) do
     printer.print_ok(printer_state)
+    :ok
+  end
+  # the command intends to produce no output
+  def print_output_0({:ok, nil}, printer, printer_state) do
+    :ok
+  end
+  def print_output_0({:ok, :check_passed}, printer, printer_state) do
     :ok
   end
   def print_output_0({:ok, single_value}, printer, printer_state) do

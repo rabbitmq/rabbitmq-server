@@ -13,18 +13,16 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
   @moduledoc """
-  Displays all alarms reported by the target node.
+  Exits with a non-zero code if the target node reports any local alarms.
 
-  Returns a code of 0 unless there were connectivity and authentication
-  errors. This command is not meant to be used in health checks.
+  This command meant to be used in health checks.
   """
 
   alias RabbitMQ.CLI.Core.Helpers
   import RabbitMQ.CLI.Diagnostics.Helpers, only: [alarm_lines: 2,
-                                                  local_alarms: 2,
-                                                  clusterwide_alarms: 2]
+                                                  local_alarms: 2]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -52,38 +50,44 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
     # ]
     #
     # The topmost file_descriptor_limit alarm is node-local.
-    :rabbit_misc.rpc_call(node_name, :rabbit_alarm, :get_alarms, [], timeout)
+    case :rabbit_misc.rpc_call(node_name, :rabbit_alarm, :get_alarms, [], timeout) do
+      []                  -> []
+      xs when is_list(xs) -> local_alarms(xs, node_name)
+      other               -> other
+    end
   end
 
 
-  def output([], %{node: node_name, formatter: "json"}) do
-    {:ok, %{"result"  => "ok",
-            "node"    => node_name,
-            "alarms"  => []}}
+  def output([], %{formatter: "json"}) do
+    {:ok, %{"result"  => "ok"}}
+  end
+  def output([], %{silent: true}) do
+    {:ok, :check_passed}
   end
   def output([], %{node: node_name}) do
     {:ok, "Node #{node_name} reported no alarms, local or clusterwide"}
   end
   def output(alarms, %{node: node_name, formatter: "json"}) do
     local  = local_alarms(alarms, node_name)
-    global = clusterwide_alarms(alarms, node_name)
 
     {:ok, %{"result"  => "ok",
             "local"   => alarm_lines(local, node_name),
-            "global"  => alarm_lines(global, node_name),
             "message" => "Node #{node_name} reported alarms"}}
+  end
+  def output(_alarms, %{silent: true}) do
+    {:error, :check_failed}
   end
   def output(alarms, %{node: node_name}) do
     lines = alarm_lines(alarms, node_name)
 
-    {:ok, Enum.join(lines, Helpers.line_separator())}
+    {:error, Enum.join(lines, Helpers.line_separator())}
   end
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "alarms"
+  def usage, do: "check_local_alarms"
 
   def banner([], %{node: node_name}) do
-    "Asking node #{node_name} to report any known resource alarms ..."
+    "Asking node #{node_name} to report any local resource alarms ..."
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
