@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mqtt_processor).
@@ -21,7 +21,8 @@
          close_connection/1]).
 
 %% for testing purposes
--export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2]).
+-export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2,
+         add_client_id_to_adapter_info/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt_frame.hrl").
@@ -73,6 +74,22 @@ process_frame(Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
         Ret -> Ret
     end.
 
+add_client_id_to_adapter_info(ClientId, #amqp_adapter_info{additional_info = AdditionalInfo0} = AdapterInfo) ->
+    AdditionalInfo1 = [{variable_map, #{<<"client_id">> => ClientId}}
+        | AdditionalInfo0],
+    ClientProperties = proplists:get_value(client_properties, AdditionalInfo1, [])
+        ++ [{client_id, longstr, ClientId}],
+    AdditionalInfo2 = case lists:keysearch(client_properties, 1, AdditionalInfo1) of
+                          {value, _} ->
+                              lists:keyreplace(client_properties,
+                                               1,
+                                               AdditionalInfo1,
+                                               {client_properties, ClientProperties});
+                          false ->
+                              [{client_properties, ClientProperties} | AdditionalInfo1]
+                      end,
+    AdapterInfo#amqp_adapter_info{additional_info = AdditionalInfo2}.
+
 process_request(?CONNECT,
                 #mqtt_frame{ variable = #mqtt_frame_connect{
                                            username   = Username,
@@ -83,14 +100,12 @@ process_request(?CONNECT,
                                            keep_alive = Keepalive} = Var},
                 PState0 = #proc_state{ ssl_login_name = SSLLoginName,
                                        send_fun       = SendFun,
-                                       adapter_info   = AdapterInfo = #amqp_adapter_info{additional_info = Extra} }) ->
+                                       adapter_info   = AdapterInfo}) ->
     ClientId = case ClientId0 of
                    []    -> rabbit_mqtt_util:gen_client_id();
                    [_|_] -> ClientId0
                end,
-    AdapterInfo1 = AdapterInfo#amqp_adapter_info{additional_info = [
-        {variable_map, #{<<"client_id">> => rabbit_data_coercion:to_binary(ClientId)}}
-                | Extra]},
+    AdapterInfo1 = add_client_id_to_adapter_info(rabbit_data_coercion:to_binary(ClientId), AdapterInfo),
     PState = PState0#proc_state{adapter_info = AdapterInfo1},
     {Return, PState1} =
         case {lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)),
