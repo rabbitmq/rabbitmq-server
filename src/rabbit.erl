@@ -314,14 +314,10 @@ ensure_config() ->
             log_boot_error_and_exit(check_config_file, ErrFmt, ErrArgs)
     end,
     case rabbit_config:prepare_and_use_config() of
-        {error, Reason} ->
-            {Format, Arg} = case Reason of
-                {generation_error, Error} -> {"~s", [Error]};
-                Other                     -> {"~p", [Other]}
-            end,
+        {error, {generation_error, Error}} ->
             log_boot_error_and_exit(generate_config_file,
-                                    "~nConfig file generation failed "++Format,
-                                    Arg);
+                                    "~nConfig file generation failed ~s",
+                                    Error);
         ok -> ok
     end.
 
@@ -688,6 +684,7 @@ stop_apps(Apps) ->
     end,
     ok.
 
+-spec handle_app_error(_) -> fun((_, _) -> no_return()).
 handle_app_error(Term) ->
     fun(App, {bad_return, {_MFA, {'EXIT', ExitReason}}}) ->
             throw({Term, App, ExitReason});
@@ -1006,6 +1003,7 @@ boot_error(Class, Reason) ->
       [lager:pr_stacktrace(erlang:get_stacktrace(), {Class, Reason})] ++
       LogLocations).
 
+-spec log_boot_error_and_exit(_, _, _) -> no_return().
 log_boot_error_and_exit(Reason, Format, Args) ->
     rabbit_log:error(Format, Args),
     io:format(standard_error, "~nBOOT FAILED~n===========~n" ++ Format ++ "~n", Args),

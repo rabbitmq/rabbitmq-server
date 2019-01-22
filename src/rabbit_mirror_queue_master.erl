@@ -70,15 +70,18 @@
 %% Backing queue
 %% ---------------------------------------------------------------------------
 
+-spec start(_, _) -> no_return().
 start(_Vhost, _DurableQueues) ->
     %% This will never get called as this module will never be
     %% installed as the default BQ implementation.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
+-spec stop(_) -> no_return().
 stop(_Vhost) ->
     %% Same as start/1.
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
+-spec delete_crashed(_) -> no_return().
 delete_crashed(_QName) ->
     exit({not_valid_for_generic_backing_queue, ?MODULE}).
 
@@ -228,6 +231,7 @@ purge(State = #state { gm                  = GM,
     {Count, BQS1} = BQ:purge(BQS),
     {Count, State #state { backing_queue_state = BQS1 }}.
 
+-spec purge_acks(_) -> no_return().
 purge_acks(_State) -> exit({not_implemented, {?MODULE, purge_acks}}).
 
 publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid, Flow,

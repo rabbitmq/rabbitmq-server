@@ -61,7 +61,8 @@
 
 -spec remove_from_queue
         (rabbit_amqqueue:name(), pid(), [pid()]) ->
-            {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'}.
+            {'ok', pid(), [pid()], [node()]} | {'error', 'not_found'} |
+            {'error', {'not_synced', [pid()]}}.
 
 remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(

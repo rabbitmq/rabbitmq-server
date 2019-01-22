@@ -30,7 +30,7 @@
               ?MODULE/1
              ]).
 
--opaque ?MODULE() :: {non_neg_integer(), queue:queue(term())}.
+-opaque ?MODULE() :: ?MODULE(_).
 -opaque ?MODULE(T) :: {non_neg_integer(), queue:queue(T)}.
 -type value()     :: any().
 -type result(T)    :: 'empty' | {'value', T}.

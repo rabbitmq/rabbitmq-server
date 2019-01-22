@@ -39,8 +39,8 @@
 -record(state, {level :: {'mask', integer()},
                 formatter :: atom(),
                 format_config :: any(),
-                init_exchange_ts = undefined :: rabbit_types:timestamp(),
-                exchange = undefined :: #resource{}}).
+                init_exchange_ts = undefined :: integer() | undefined,
+                exchange = undefined :: #resource{} | undefined}).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
