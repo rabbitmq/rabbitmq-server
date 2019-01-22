@@ -257,7 +257,11 @@ remove(Src, Dst, B, ActingUser) ->
 remove_default_exchange_binding_rows_of(Dst = #resource{}) ->
     case rabbit_binding:implicit_for_destination(Dst) of
         [Binding] ->
-            mnesia:dirty_delete(rabbit_durable_route, Binding);
+            mnesia:dirty_delete(rabbit_durable_route, Binding),
+            mnesia:dirty_delete(rabbit_semi_durable_route, Binding),
+            mnesia:dirty_delete(rabbit_reverse_route,
+                                reverse_binding(Binding)),
+            mnesia:dirty_delete(rabbit_route, Binding);
         _ ->
             %% no binding to remove or
             %% a competing tx has beaten us to it?
