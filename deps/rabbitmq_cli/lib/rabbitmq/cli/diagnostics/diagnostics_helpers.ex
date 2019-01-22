@@ -30,7 +30,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
   def listener_lines(listeners) do
     listeners |> listener_maps |>
     Enum.map(fn %{interface: interface, port: port, protocol: protocol} ->
-      "Interface: #{interface_label(interface)}, port: #{port}, protocol: #{protocol}, purpose: #{protocol_label(to_atom(protocol))}"
+      "Interface: #{interface}, port: #{port}, protocol: #{protocol}, purpose: #{protocol_label(to_atom(protocol))}"
     end)
   end
 
@@ -46,7 +46,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
         %{
           node: node,
           protocol: protocol,
-          interface: to_string(:inet.ntoa(interface)),
+          interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
           port: port,
           purpose: protocol_label(to_atom(protocol))
         }
@@ -59,7 +59,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
         # Listener options are left out intentionally, see above
         [node: node,
          protocol: protocol,
-         interface: to_string(:inet.ntoa(interface)),
+         interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
          purpose: protocol_label(to_atom(protocol))]
     end
   end
@@ -72,7 +72,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
   Enquotes interface values that contain IPv6 addresses,
   networks address ranges, and so on.
   """
-  defp interface_label(value) do
+  defp maybe_enquote_interface(value) do
     # This simplistic way of distinguishing IPv6 addresses,
     # networks address ranges, etc actually works better
     # for the kind of values we can get here than :inet functions. MK.
