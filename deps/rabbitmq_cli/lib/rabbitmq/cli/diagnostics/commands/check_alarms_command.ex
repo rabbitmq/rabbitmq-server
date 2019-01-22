@@ -69,15 +69,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
     local  = local_alarms(alarms, node_name)
     global = clusterwide_alarms(alarms, node_name)
 
-    {:ok, %{"result"  => "ok",
-            "local"   => alarm_lines(local, node_name),
-            "global"  => alarm_lines(global, node_name),
-            "message" => "Node #{node_name} reported alarms"}}
+    {:error, %{"result"  => "ok",
+               "local"   => alarm_lines(local, node_name),
+               "global"  => alarm_lines(global, node_name),
+               "message" => "Node #{node_name} reported alarms"}}
   end
-  def output(_alarms, %{silent: true}) do
+  def output(alarms, %{silent: true} = _opts) when is_list(alarms) do
     {:error, :check_failed}
   end
-  def output(alarms, %{node: node_name}) do
+  def output(alarms, %{node: node_name}) when is_list(alarms) do
     lines = alarm_lines(alarms, node_name)
 
     {:error, Enum.join(lines, Helpers.line_separator())}
