@@ -13,12 +13,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
   @moduledoc """
-  Displays all alarms reported by the target node.
+  Exits with a non-zero code if the target node reports any alarms,
+  local or clusterwide.
 
-  Returns a code of 0 unless there were connectivity and authentication
-  errors. This command is not meant to be used in health checks.
+  This command meant to be used in health checks.
   """
 
   alias RabbitMQ.CLI.Core.Helpers
@@ -56,10 +56,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
   end
 
 
-  def output([], %{node: node_name, formatter: "json"}) do
-    {:ok, %{"result"  => "ok",
-            "node"    => node_name,
-            "alarms"  => []}}
+  def output([], %{formatter: "json"}) do
+    {:ok, %{"result"  => "ok"}}
+  end
+  def output([], %{silent: true}) do
+    {:ok, :check_passed}
   end
   def output([], %{node: node_name}) do
     {:ok, "Node #{node_name} reported no alarms, local or clusterwide"}
@@ -73,17 +74,20 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
             "global"  => alarm_lines(global, node_name),
             "message" => "Node #{node_name} reported alarms"}}
   end
+  def output(_alarms, %{silent: true}) do
+    {:error, :check_failed}
+  end
   def output(alarms, %{node: node_name}) do
     lines = alarm_lines(alarms, node_name)
 
-    {:ok, Enum.join(lines, Helpers.line_separator())}
+    {:error, Enum.join(lines, Helpers.line_separator())}
   end
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "alarms"
+  def usage, do: "check_local_alarms"
 
   def banner([], %{node: node_name}) do
-    "Asking node #{node_name} to report any known resource alarms ..."
+    "Asking node #{node_name} to report any local resource alarms ..."
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.String
