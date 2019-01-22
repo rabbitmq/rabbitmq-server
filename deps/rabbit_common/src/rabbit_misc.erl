@@ -206,8 +206,9 @@
 -spec node_to_fake_pid(atom()) -> pid().
 -spec version_compare(string(), string()) -> 'lt' | 'eq' | 'gt'.
 -spec version_compare
-        (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean().
--spec version_minor_equivalent(string(), string()) -> boolean().
+        (rabbit_semver:version_string(), rabbit_semver:version_string(),
+         ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean().
+-spec version_minor_equivalent(rabbit_semver:version_string(), rabbit_semver:version_string()) -> boolean().
 -spec dict_cons(any(), any(), dict:dict()) -> dict:dict().
 -spec orddict_cons(any(), any(), orddict:orddict()) -> orddict:orddict().
 -spec gb_trees_cons(any(), any(), gb_trees:tree()) -> gb_trees:tree().
