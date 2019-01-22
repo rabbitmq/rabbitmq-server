@@ -136,14 +136,21 @@ defmodule RabbitMQCtl do
        end
   end
 
-  defp handle_shutdown({:error, exit_code, output}) do
-    output_device = case exit_code == ExitCodes.exit_ok do
+  defp output_device(exit_code) do
+    case exit_code == ExitCodes.exit_ok do
       true  -> :stdio;
       false -> :stderr
     end
+  end
+
+  defp handle_shutdown({:error, exit_code, nil}) do
+    exit_program(exit_code)
+  end
+  defp handle_shutdown({:error, exit_code, output}) do
+    device = output_device(exit_code)
 
     for line <- List.flatten([output]) do
-      IO.puts(output_device, Helpers.string_or_inspect(line))
+      IO.puts(device, Helpers.string_or_inspect(line))
     end
     exit_program(exit_code)
   end
@@ -352,6 +359,16 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_dataerr(),
      "Could not update enabled plugins file at #{path}: the file does not exist (ENOENT)"}
   end
+  # Special case health checks. This makes it easier to change
+  # output of all health checks at once.
+  defp format_error({:error, :check_failed}, _, _) do
+    {:error, ExitCodes.exit_unavailable(), nil}
+  end
+  defp format_error({:error, nil}, _, _) do
+    # the command intends to produce no output, e.g. a return code
+    # is sufficient
+    {:error, ExitCodes.exit_unavailable(), nil}
+  end
   # Catch all
   defp format_error({:error, err} = result, _, _) do
     string_err = Helpers.string_or_inspect(err)
@@ -387,7 +404,7 @@ defmodule RabbitMQCtl do
   ## via distribution callback in the command as :cli, :none or {:custom, fun()}.
   ## :cli - default rabbitmqctl node name
   ## :none - do not start a distribution (e.g. offline command)
-  ## {:fun, fun} - run a custom fuction to enable distribution.
+  ## {:fun, fun} - run a custom function to enable distribution.
   ## custom mode is usefult for commands which should have specific node name.
   ## Runs code if distribution is successful, or not needed.
   @spec maybe_with_distribution(module(), options(), (() -> command_result())) :: command_result()
