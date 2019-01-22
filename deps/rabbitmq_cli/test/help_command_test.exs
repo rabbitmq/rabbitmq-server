@@ -31,25 +31,36 @@ defmodule HelpCommandTest do
     assert @command.run([], %{}) =~ ~r/Default node is \"rabbit@server\"/
   end
 
-  test "run: command-specific usage info is printed if command is specified" do
-    CommandModules.module_map
-    |>  Map.keys
-    |>  Enum.each(
-          fn(command) ->
-            assert @command.run([command], %{}) =~ ~r/#{command}/
-          end)
+  test "run: ctl command usage info is printed if command is specified" do
+    ctl_commands = CommandModules.module_map
+    |> Enum.filter(fn({_name, command_mod}) ->
+                     to_string(command_mod) =~ ~r/^RabbitMQ\.CLI\.Ctl\.Commands/
+                   end)
+    |> Enum.map(fn({name, _}) -> name end)
+
+    IO.inspect(ctl_commands)
+    Enum.each(
+      ctl_commands,
+      fn(command) ->
+        assert @command.run([command], %{}) =~ ~r/#{command}/
+      end)
   end
 
   test "run prints command info" do
     assert @command.run([], %{}) =~ ~r/Commands:\n/
 
     # Checks to verify that each module's command appears in the list.
-    CommandModules.module_map
-    |>  Map.keys
-    |>  Enum.each(
-          fn(command) ->
-            assert @command.run([], %{}) =~ ~r/\n    #{command}.*\n/
-          end)
+    ctl_commands = CommandModules.module_map
+    |> Enum.filter(fn({_name, command_mod}) ->
+                     to_string(command_mod) =~ ~r/^RabbitMQ\.CLI\.Ctl\.Commands/
+                   end)
+    |> Enum.map(fn({name, _}) -> name end)
+
+    Enum.each(
+      ctl_commands,
+      fn(command) ->
+        assert @command.run([], %{}) =~ ~r/\n    #{command}.*\n/
+      end)
   end
 
   test "run: sorts commands alphabetically" do
