@@ -93,7 +93,7 @@
 -spec tcp_listener_addresses(listener_config()) -> [address()].
 -spec tcp_listener_spec
         (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
-         protocol(), any(), non_neg_integer(), label()) ->
+         any(), protocol(), non_neg_integer(), label()) ->
             supervisor:child_spec().
 -spec ensure_ssl() -> rabbit_types:infos().
 -spec poodle_check(atom()) -> 'ok' | 'danger'.
@@ -295,6 +295,10 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
                      port = Port,
                      opts = Opts}).
 
+%% @todo Temporary, to be removed before merge. Real fix is
+%% in an OTP PR at https://github.com/erlang/otp/pull/2117
+-dialyzer({nowarn_function, record_distribution_listener/0}).
+
 record_distribution_listener() ->
     {Name, Host} = rabbit_nodes:parts(node()),
     {port, Port, _Version} = erl_epmd:port_please(Name, Host),
@@ -427,6 +431,7 @@ gethostaddr(Host, Family) ->
         {error, Reason} -> host_lookup_error(Host, Reason)
     end.
 
+-spec host_lookup_error(_, _) -> no_return().
 host_lookup_error(Host, Reason) ->
     rabbit_log:error("invalid host ~p - ~p~n", [Host, Reason]),
     throw({error, {invalid_host, Host, Reason}}).

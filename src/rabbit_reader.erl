@@ -178,7 +178,7 @@
 -spec mainloop(_,[binary()], non_neg_integer(), #v1{}) -> any().
 -spec system_code_change(_,_,_,_) -> {'ok',_}.
 -spec system_continue(_,_,{[binary()], non_neg_integer(), #v1{}}) -> any().
--spec system_terminate(_,_,_,_) -> none().
+-spec system_terminate(_,_,_,_) -> no_return().
 
 %%--------------------------------------------------------------------------
 
@@ -451,7 +451,7 @@ log_connection_exception(Severity, Name, Ex) ->
 log_connection_exception_with_severity(Severity, Fmt, Args) ->
     case Severity of
         debug   -> rabbit_log_connection:debug(Fmt, Args);
-        info    -> rabbit_log_connection:info(Fmt, Args);
+%        info    -> rabbit_log_connection:info(Fmt, Args);
         warning -> rabbit_log_connection:warning(Fmt, Args);
         error   -> rabbit_log_connection:error(Fmt, Args)
     end.
@@ -539,6 +539,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             end
     end.
 
+-spec stop(_, #v1{}) -> no_return().
 stop(tcp_healthcheck, State) ->
     %% The connection was closed before any packet was received. It's
     %% probably a load-balancer healthcheck: don't consider this a
@@ -859,6 +860,7 @@ handle_exception(State, Channel, Reason) ->
 
 %% we've "lost sync" with the client and hence must not accept any
 %% more input
+-spec fatal_frame_error(_, _, _, _, _) -> no_return().
 fatal_frame_error(Error, Type, Channel, Payload, State) ->
     frame_error(Error, Type, Channel, Payload, State),
     %% grace period to allow transmission of error
@@ -1097,6 +1099,7 @@ start_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                              connection_state = starting},
                     frame_header, 7).
 
+-spec refuse_connection(_, _, _) -> no_return().
 refuse_connection(Sock, Exception, {A, B, C, D}) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",A,B,C,D>>) end),
     throw(Exception).

@@ -121,9 +121,7 @@ maybe_set_net_ticktime(KernelConfig) ->
                     io:format(standard_error,
                         "~nCouldn't set net_ticktime to ~p "
                         "as net_kernel is busy changing net_ticktime to ~p seconds ~n",
-                        [NetTickTime, NewNetTicktime]);
-                _ ->
-                    ok
+                        [NetTickTime, NewNetTicktime])
             end
     end.
 
