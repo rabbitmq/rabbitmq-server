@@ -28,7 +28,17 @@ defmodule RabbitMQ.CLI.Formatters.Json do
   end
 
   def format_stream(stream, options) do
-    elements = Stream.scan(stream, :empty,
+    ## Flatten list_consumers
+    elements = Stream.flat_map(stream,
+                    fn([first | _] = element) ->
+                        case Keyword.keyword?(first) or is_map(first) do
+                          true  -> element;
+                          false -> [element]
+                        end
+                      (other) ->
+                        [other]
+                    end)
+    |> Stream.scan(:empty,
                            FormatterHelpers.without_errors_2(
                             fn(element, previous) ->
                               separator = case previous do
