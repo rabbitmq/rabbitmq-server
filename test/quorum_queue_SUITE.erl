@@ -28,6 +28,9 @@
 
 -compile(export_all).
 
+suite() ->
+    [{timetrap, 5 * 60000}].
+
 all() ->
     [
       {group, single_node},
@@ -172,17 +175,32 @@ init_per_group(Group, Config) ->
     Config2 = rabbit_ct_helpers:run_steps(Config1b,
                                           [fun merge_app_env/1 ] ++
                                           rabbit_ct_broker_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config2, 0, application, set_env,
-           [rabbit, channel_queue_cleanup_interval, 100]),
-    %% HACK: the larger cluster sizes benefit for a bit more time
-    %% after clustering before running the tests.
-    case Group of
-        cluster_size_5 ->
-            timer:sleep(5000),
-            Config2;
-        _ ->
-            Config2
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(
+              Config2, nodename),
+    Ret = rabbit_ct_broker_helpers:rpc(
+            Config2, 0,
+            rabbit_feature_flags,
+            is_supported_remotely,
+            [Nodes, [quorum_queue], 60000]),
+    case Ret of
+        true ->
+            ok = rabbit_ct_broker_helpers:rpc(
+                    Config2, 0, rabbit_feature_flags, enable, [quorum_queue]),
+            ok = rabbit_ct_broker_helpers:rpc(
+                   Config2, 0, application, set_env,
+                   [rabbit, channel_queue_cleanup_interval, 100]),
+            %% HACK: the larger cluster sizes benefit for a bit more time
+            %% after clustering before running the tests.
+            case Group of
+                cluster_size_5 ->
+                    timer:sleep(5000),
+                    Config2;
+                _ ->
+                    Config2
+            end;
+        false ->
+            end_per_group(Group, Config2),
+            {skip, "Quorum queues are unsupported"}
     end.
 
 end_per_group(clustered, Config) ->
@@ -206,11 +224,28 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
                                             {tcp_ports_base},
                                             {queue_name, Q}
                                            ]),
-    rabbit_ct_helpers:run_steps(Config2,
-                                rabbit_ct_broker_helpers:setup_steps() ++
-                                rabbit_ct_client_helpers:setup_steps() ++
-                                    [fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
-                                     fun rabbit_ct_broker_helpers:cluster_nodes/1]);
+    Config3 = rabbit_ct_helpers:run_steps(
+                Config2,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps() ++
+                [fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
+                 fun rabbit_ct_broker_helpers:cluster_nodes/1]),
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(
+              Config3, nodename),
+    Ret = rabbit_ct_broker_helpers:rpc(
+            Config3, 0,
+            rabbit_feature_flags,
+            is_supported_remotely,
+            [Nodes, [quorum_queue], 60000]),
+    case Ret of
+        true ->
+            ok = rabbit_ct_broker_helpers:rpc(
+                    Config3, 0, rabbit_feature_flags, enable, [quorum_queue]),
+            Config3;
+        false ->
+            end_per_testcase(Testcase, Config3),
+            {skip, "Quorum queues are unsupported"}
+    end;
 init_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),

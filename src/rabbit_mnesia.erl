@@ -547,6 +547,7 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             ok = rabbit_table:wait_for_replicated(_Retry = true),
             ok = rabbit_table:create_local_copy(NodeType)
     end,
+    ensure_feature_flags_are_in_sync(Nodes),
     ensure_schema_integrity(),
     rabbit_node_monitor:update_cluster_status(),
     ok.
@@ -610,6 +611,14 @@ ensure_mnesia_not_running() ->
             ensure_mnesia_not_running();
         Reason when Reason =:= yes; Reason =:= starting ->
             throw({error, mnesia_unexpectedly_running})
+    end.
+
+ensure_feature_flags_are_in_sync(Nodes) ->
+    case rabbit_feature_flags:sync_feature_flags_with_cluster(Nodes) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            throw({error, {incompatible_feature_flags, Reason}})
     end.
 
 ensure_schema_integrity() ->
@@ -857,12 +866,12 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
 check_consistency(Node, OTP, Rabbit, ProtocolVersion) ->
     rabbit_misc:sequence_error(
       [check_mnesia_or_otp_consistency(Node, ProtocolVersion, OTP),
-       check_rabbit_consistency(Rabbit)]).
+       check_rabbit_consistency(Node, Rabbit)]).
 
 check_consistency(Node, OTP, Rabbit, ProtocolVersion, Status) ->
     rabbit_misc:sequence_error(
       [check_mnesia_or_otp_consistency(Node, ProtocolVersion, OTP),
-       check_rabbit_consistency(Rabbit),
+       check_rabbit_consistency(Node, Rabbit),
        check_nodes_consistency(Node, Status)]).
 
 check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
@@ -923,10 +932,12 @@ with_running_or_clean_mnesia(Fun) ->
             Result
     end.
 
-check_rabbit_consistency(Remote) ->
-    rabbit_version:check_version_consistency(
-      rabbit_misc:version(), Remote, "Rabbit",
-      fun rabbit_misc:version_minor_equivalent/2).
+check_rabbit_consistency(RemoteNode, RemoteVersion) ->
+    rabbit_misc:sequence_error(
+      [rabbit_version:check_version_consistency(
+         rabbit_misc:version(), RemoteVersion, "Rabbit",
+         fun rabbit_misc:version_minor_equivalent/2),
+       rabbit_feature_flags:check_node_compatibility(RemoteNode)]).
 
 %% This is fairly tricky.  We want to know if the node is in the state
 %% that a `reset' would leave it in.  We cannot simply check if the
