@@ -212,8 +212,6 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
             Method2#'queue.declare'{queue = SQNG()};
         {exchange, SQNG} when is_function(SQNG) ->
             Method2#'queue.declare'{queue = SQNG()};
-        {'reply-queue', SQNG} when is_function(SQNG) ->
-            Method2#'queue.declare'{queue = SQNG()};
         _ ->
             Method2
     end.
