@@ -35,8 +35,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
   end
 
   def listener_maps(listeners) do
-    for listener(node: node, protocol: protocol,
-        host: host, ip_address: interface, port: port) <- listeners do
+    for listener(node: node, protocol: protocol, ip_address: interface, port: port) <- listeners do
         # Listener options are left out intentionally: they can contain deeply nested values
         # that are impossible to serialise to JSON.
         #
@@ -54,12 +53,12 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
   end
 
   def listener_rows(listeners) do
-    for listener(node: node, protocol: protocol,
-        host: host, ip_address: interface, port: port) <- listeners do
+    for listener(node: node, protocol: protocol, ip_address: interface, port: port) <- listeners do
         # Listener options are left out intentionally, see above
         [node: node,
          protocol: protocol,
          interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
+         port: port,
          purpose: protocol_label(to_atom(protocol))]
     end
   end
@@ -103,10 +102,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
   # Implementation
   #
 
-  @doc """
-  Enquotes interface values that contain IPv6 addresses,
-  networks address ranges, and so on.
-  """
   defp maybe_enquote_interface(value) do
     # This simplistic way of distinguishing IPv6 addresses,
     # networks address ranges, etc actually works better
