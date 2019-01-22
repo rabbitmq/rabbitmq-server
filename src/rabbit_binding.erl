@@ -228,7 +228,7 @@ remove(Src, Dst, B, ActingUser) ->
 
 %% Implicit bindings are implicit as of rabbitmq/rabbitmq-server#1721.
 remove_default_exchange_binding_rows_of(Dst = #resource{}) ->
-    case rabbit_binding:implicit_for_destination(Dst) of
+    case implicit_for_destination(Dst) of
         [Binding] ->
             mnesia:dirty_delete(rabbit_durable_route, Binding),
             mnesia:dirty_delete(rabbit_semi_durable_route, Binding),
@@ -296,8 +296,8 @@ implicit_bindings(VHostPath) ->
       || DstQueue = #resource{name = QName} <- DstQueues ].
 
 implicit_for_destination(DstQueue = #resource{kind = queue,
-                                             virtual_host = VHostPath,
-                                             name = QName}) ->
+                                              virtual_host = VHostPath,
+                                              name = QName}) ->
     [#binding{source = ?DEFAULT_EXCHANGE(VHostPath),
               destination = DstQueue,
               key = QName,
