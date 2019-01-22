@@ -613,6 +613,11 @@ function fmt_client_name(properties) {
     if (properties.version != undefined) {
         res += '<sub>' + fmt_trunc(properties.version) + '</sub>';
     }
+
+    if (properties.client_id != undefined) {
+        res += '<sub>' + fmt_trunc(properties.client_id) + '</sub>';
+    }
+
     return res;
 }
 
