@@ -59,7 +59,7 @@ defmodule ListenersCommandTest do
   test "run: returns a list of node-local listeners", context do
     xs = @command.run([], context[:opts]) |> listener_maps
 
-    assert length(xs) == 3
+    assert length(xs) >= 3
     for p <- [5672, 61613, 25672] do
       assert Enum.any?(xs, fn %{port: port} -> port == p end)
     end
@@ -79,7 +79,7 @@ defmodule ListenersCommandTest do
     {:ok, doc} = @command.output(raw, Map.merge(%{formatter: "json"}, context[:opts]))
     xs         = doc["listeners"]
 
-    assert length(xs) == 3
+    assert length(xs) >= 3
     for p <- [5672, 61613, 25672] do
       assert Enum.any?(xs, fn %{port: port} -> port == p end)
     end
