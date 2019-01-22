@@ -603,10 +603,10 @@ function fmt_uri_with_credentials(uri) {
 function fmt_client_name(properties) {
     var res = [];
     if (properties.product != undefined) {
-        res.push(fmt_trunc(properties.product, 10));
+        res.push(fmt_trunc(properties.product, 120));
     }
     if (properties.platform != undefined) {
-        res.push(fmt_trunc(properties.platform, 10));
+        res.push(fmt_trunc(properties.platform, 120));
     }
     res = res.join(" / ");
 
@@ -615,7 +615,7 @@ function fmt_client_name(properties) {
     }
 
     if (properties.client_id != undefined) {
-        res += '<sub>' + fmt_trunc(properties.client_id) + '</sub>';
+        res += '<sub>' + fmt_trunc(properties.client_id, 120) + '</sub>';
     }
 
     return res;
