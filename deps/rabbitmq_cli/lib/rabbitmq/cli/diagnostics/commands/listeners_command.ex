@@ -72,7 +72,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
             "node"      => node_name,
             "listeners" => []}}
   end
-  def output([], %{node: node_name, formatter: "csv"}) do
+  def output([], %{formatter: "csv"}) do
     {:ok, []}
   end  
   def output([], %{node: node_name}) do
@@ -90,7 +90,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
 
     {:ok, Enum.join(lines, Helpers.line_separator())}
   end
-  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "listeners"
 
