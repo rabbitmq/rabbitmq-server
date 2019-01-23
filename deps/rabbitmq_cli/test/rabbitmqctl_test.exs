@@ -102,7 +102,7 @@ defmodule RabbitMQCtlTest do
 
   test "An errored command returns an error code" do
     command = ["delete_user", "voldemort"]
-    capture_io(:stderr, fn -> error_check(command, exit_software()) end)
+    capture_io(:stderr, fn -> error_check(command, exit_unavailable()) end)
   end
 
   test "A malformed command with an option as the first command-line arg fails gracefully" do
@@ -219,7 +219,7 @@ defmodule RabbitMQCtlTest do
   end
 
   test "generic error" do
-    exit_code = exit_software()
+    exit_code = exit_unavailable()
     {:error, ^exit_code, "Error:\nerror message"} =
       RabbitMQCtl.handle_command_output(
         {:error, "error message"},
@@ -228,7 +228,7 @@ defmodule RabbitMQCtlTest do
   end
 
   test "inspect arbitrary error" do
-    exit_code = exit_software()
+    exit_code = exit_unavailable()
     error = %{i: [am: "arbitrary", error: 1]}
     inspected = inspect(error)
     {:error, ^exit_code, "Error:\n" <> ^inspected} =
@@ -239,7 +239,7 @@ defmodule RabbitMQCtlTest do
   end
 
   test "atom error" do
-    exit_code = exit_software()
+    exit_code = exit_unavailable()
     {:error, ^exit_code, "Error:\nerror_message"} =
       RabbitMQCtl.handle_command_output(
         {:error, :error_message},
