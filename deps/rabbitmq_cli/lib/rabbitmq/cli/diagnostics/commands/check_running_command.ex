@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckRunningCommand do
   @moduledoc """
-  Exits with a non-zero code if RabbitMQ on the target node is not running.
+  Exits with a non-zero code if the RabbitMQ app on the target node is not running.
 
   This command meant to be used in health checks.
   """
