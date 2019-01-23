@@ -14,12 +14,15 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Helpers do
+  import Record, only: [defrecord: 2, extract: 2]
   import RabbitCommon.Records
   import Rabbitmq.Atom.Coerce
 
   #
   # Listeners
   #
+
+  defrecord :hostent, extract(:hostent, from_lib: "kernel/include/inet.hrl")
 
   def listeners_on(listeners, target_node) do
     Enum.filter(listeners, fn listener(node: node) ->
@@ -34,22 +37,25 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
     end)
   end
 
+  def listener_map(listener) do
+    # Listener options are left out intentionally: they can contain deeply nested values
+    # that are impossible to serialise to JSON.
+    #
+    # Management plugin/HTTP API had its fair share of bugs because of that
+    # and now filters out a lot of options. Raw listener data can be seen in
+    # rabbitmq-diagnostics status.
+    listener(node: node, protocol: protocol, ip_address: interface, port: port) = listener
+    %{
+      node: node,
+      protocol: protocol,
+      interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
+      port: port,
+      purpose: protocol_label(to_atom(protocol))
+    }
+  end
+
   def listener_maps(listeners) do
-    for listener(node: node, protocol: protocol, ip_address: interface, port: port) <- listeners do
-        # Listener options are left out intentionally: they can contain deeply nested values
-        # that are impossible to serialise to JSON.
-        #
-        # Management plugin/HTTP API had its fair share of bugs because of that
-        # and now filters out a lot of options. Raw listener data can be seen in
-        # rabbitmq-diagnostics status.
-        %{
-          node: node,
-          protocol: protocol,
-          interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
-          port: port,
-          purpose: protocol_label(to_atom(protocol))
-        }
-    end
+    Enum.map(listeners, &listener_map/1)
   end
 
   def listener_rows(listeners) do
@@ -61,6 +67,25 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
          port: port,
          purpose: protocol_label(to_atom(protocol))]
     end
+  end
+
+  def check_port_connectivity(port, node_name, timeout) do
+    hostname = Regex.replace(~r/^(.+)@/, to_string(node_name), "") |> to_charlist
+    try do
+      case :gen_tcp.connect(hostname, port, [], timeout) do
+        {:error, _} -> false
+        {:ok, port} ->
+          :ok = :gen_tcp.close(port)
+          true
+      end
+    # `gen_tcp:connect/4` will throw if the port is outside of its
+    # expected domain
+    catch :exit, _ -> false
+    end
+  end
+
+  def check_listener_connectivity(%{port: port}, node_name, timeout) do
+    check_port_connectivity(port, node_name, timeout)
   end
 
   def normalize_protocol(proto) do
