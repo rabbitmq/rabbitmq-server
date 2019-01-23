@@ -36,7 +36,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.IsRunningCommand do
     {:ok, "RabbitMQ on node #{node_name} is fully booted and running"}
   end
   def output(false, %{node: node_name} = _options) do
-    {:error, "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"}
+    {:ok, "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"}
   end  
   use RabbitMQ.CLI.DefaultOutput
 
