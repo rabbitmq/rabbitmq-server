@@ -370,6 +370,11 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_unavailable(), nil}
   end
   # Catch all
+  defp format_error({:error, exit_code, err}, _, _) do
+    string_err = Helpers.string_or_inspect(err)
+
+    {:error, exit_code, "Error:\n#{string_err}"}
+  end
   defp format_error({:error, err} = result, _, _) do
     string_err = Helpers.string_or_inspect(err)
 
