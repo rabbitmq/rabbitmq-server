@@ -57,7 +57,7 @@ defmodule IsBootingCommandTest do
 
   test "run: when the RabbitMQ app is fully booted and running, returns false", context do
     await_rabbitmq_startup()
-    
+
     refute @command.run([], context[:opts])
   end
 
@@ -68,5 +68,14 @@ defmodule IsBootingCommandTest do
     refute @command.run([], context[:opts])
 
     start_rabbitmq_app()
+  end
+
+  test "output: when the result is true, returns successfully", context do
+    assert match?({:ok, _}, @command.output(true, context[:opts]))
+  end
+
+  # this is an info command and not a check one
+  test "output: when the result is false, returns successfully", context do
+    assert match?({:ok, _}, @command.output(false, context[:opts]))
   end
 end
