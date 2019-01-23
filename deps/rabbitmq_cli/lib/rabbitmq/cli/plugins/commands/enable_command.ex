@@ -34,7 +34,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
                        all: :boolean]
 
   def validate([], %{all: false}) do
-    {:validation_failure, :not_enough_arguments}
+    {:validation_failure, :not_enough_args}
   end
   def validate([_ | _], %{all: true}) do
     {:validation_failure,

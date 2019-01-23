@@ -67,7 +67,7 @@ defmodule PluginIsEnabledCommandTest do
 
   test "validate: not specifying any plugins to check is reported as invalid", context do
     opts = context[:opts] |> Map.merge(%{online: true, offline: false})
-    assert match?({:validation_failure, :not_enough_arguments}, @command.validate([], opts))
+    assert match?({:validation_failure, :not_enough_args}, @command.validate([], opts))
   end
 
   test "validate_execution_environment: not specifying an enabled_plugins_file is reported as an error", context do

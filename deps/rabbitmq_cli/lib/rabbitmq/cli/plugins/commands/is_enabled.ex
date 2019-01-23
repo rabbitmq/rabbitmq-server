@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
    {:validation_failure, {:bad_argument, "Cannot set online and offline to false"}}
   end
   def validate([], _) do
-    {:validation_failure, :not_enough_arguments}
+    {:validation_failure, :not_enough_args}
   end
   def validate([_ | _], _) do
     :ok
