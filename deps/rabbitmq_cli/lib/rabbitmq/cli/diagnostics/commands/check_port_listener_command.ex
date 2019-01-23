@@ -13,70 +13,68 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckProtocolListenerCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortListenerCommand do
   @moduledoc """
   Exits with a non-zero code if there is no active listener
-  for the given protocol on the target node.
+  for the given port on the target node.
 
   This command is meant to be used in health checks.
   """
 
   import RabbitMQ.CLI.Diagnostics.Helpers, only: [listeners_on: 2,
-                                                  listener_maps: 1,
-                                                  normalize_protocol: 1]
+                                                  listener_maps: 1]
+
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.MergesNoDefaults
-  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
+  use RabbitMQ.CLI.Core.AcceptsOnePositiveIntegerArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([proto], %{node: node_name, timeout: timeout}) do
-    proto = normalize_protocol(proto)
-
+  def run([port], %{node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name,
       :rabbit_networking, :active_listeners, [], timeout) do
       {:error, _}    = err -> err;
       {:error, _, _} = err -> err;
       xs when is_list(xs)  ->
         locals = listeners_on(xs, node_name) |> listener_maps
-        found  = Enum.any?(locals, fn %{protocol: p} ->
-                  to_string(proto) == to_string(p)
+        found  = Enum.any?(locals, fn %{port: p} ->
+                  to_string(port) == to_string(p)
                  end)
         case found do
-          true  -> {true,  proto}
-          false -> {false, proto, locals}
+          true  -> {true,  port}
+          false -> {false, port, locals}
         end;
       other                -> other
     end
   end
 
-  def output({true, proto}, %{node: node_name, formatter: "json"}) do
+  def output({true, port}, %{node: node_name, formatter: "json"}) do
     {:ok, %{"result"   => "ok",
             "node"     => node_name,
-            "protocol" => proto}}
+            "port"     => port}}
   end
-  def output({true, proto}, %{node: node_name}) do
-    {:ok, "A listener for protocol #{proto} is running on node #{node_name}."}
+  def output({true, port}, %{node: node_name}) do
+    {:ok, "A listener for port #{port} is running on node #{node_name}."}
   end
-  def output({false, proto, listeners}, %{formatter: "json"}) do
-    protocols = Enum.map(listeners, fn %{protocol: p} -> p end)
+  def output({false, port, listeners}, %{formatter: "json"}) do
+    ports = Enum.map(listeners, fn %{port: p} -> p end)
     {:error, %{"result"    => "error",
-               "missing"   => proto,
-               "protocols" => protocols,
+               "missing"   => port,
+               "ports"     => ports,
                "listeners" => listeners}}
   end
-  def output({false, proto, listeners}, %{node: node_name}) do
-    protocols = Enum.map(listeners, fn %{protocol: p} -> p end)
-                |> Enum.sort |> Enum.join(", ")
-    {:error, "No listener for protocol #{proto} is active on node #{node_name}. "
-             <> "Found listeners for the following protocols: #{protocols}"}
+  def output({false, port, listeners}, %{node: node_name}) do
+    ports = Enum.map(listeners, fn %{port: p} -> p end)
+            |> Enum.sort |> Enum.join(", ")
+    {:error, "No listener for port #{port} is active on node #{node_name}. "
+             <> "Found listeners that use the following ports: #{ports}"}
   end
 
-  def usage, do: "check_protocol_listener <protocol>"
+  def usage, do: "check_port_listener <port>"
 
-  def banner([proto], %{node: node_name}) do
-    "Asking node #{node_name} if there's an active listener for protocol #{proto} ..."
+  def banner([port], %{node: node_name}) do
+    "Asking node #{node_name} if there's an active listener on port #{port} ..."
   end
 end
