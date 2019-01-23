@@ -28,15 +28,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
-
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, :too_many_args}
-  end
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
 
@@ -89,6 +83,4 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} to report any local resource alarms ..."
   end
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.String
 end

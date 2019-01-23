@@ -17,15 +17,9 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
-
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, :too_many_args}
-  end
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_nodes_common, :cookie_hash, [], timeout)
@@ -40,6 +34,4 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
   end
 
   def usage, do: "erlang_cookie_hash"
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.String
 end

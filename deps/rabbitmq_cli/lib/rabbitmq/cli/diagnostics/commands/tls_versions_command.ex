@@ -16,20 +16,10 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.TlsVersionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def merge_defaults(args, opts) do
-    {args, opts}
-  end
-
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
-
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, :too_many_args}
-  end
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
-  def usage, do: "tls_versions"
 
   def run([], %{node: node_name, timeout: timeout} = _opts) do
     :rabbit_misc.rpc_call(node_name, :ssl, :versions, [], timeout)
@@ -47,5 +37,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.TlsVersionsCommand do
     {:ok, vs}
   end
 
+  def usage, do: "tls_versions"
+  
   def formatter(), do: RabbitMQ.CLI.Formatters.StringPerLine
 end
