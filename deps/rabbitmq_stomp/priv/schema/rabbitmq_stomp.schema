@@ -185,6 +185,15 @@ end}.
     {datatype, string}
 ]}.
 
+{mapping, "stomp.default_topic_exchange", "rabbitmq_stomp.default_topic_exchange", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_stomp.default_topic_exchange",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("stomp.default_topic_exchange", Conf, "amq.topic"))
+end}.
+
 %% If a default user is configured, or you have configured use SSL client
 %% certificate based authentication, you can choose to allow clients to
 %% omit the CONNECT frame entirely. If set to true, the client is

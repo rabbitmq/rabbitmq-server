@@ -1186,19 +1186,19 @@ additional_info(Key,
     proplists:get_value(Key, AddInfo).
 
 maybe_apply_default_topic_exchange("amq.topic"=Exchange) ->
-    FromConfig = application:get_env(rabbitmq_stomp, default_topic_exchange, "amq.topic"),
+    FromConfig = application:get_env(rabbitmq_stomp, default_topic_exchange, <<"amq.topic">>),
     maybe_apply_default_topic_exchange(Exchange, FromConfig);
 maybe_apply_default_topic_exchange(Exchange) ->
     Exchange.
 
-maybe_apply_default_topic_exchange("amq.topic"=Exchange, "amq.topic") ->
+maybe_apply_default_topic_exchange("amq.topic"=Exchange, <<"amq.topic">>) ->
     %% This is the case where the destination is the same
     %% as the default of amq.topic
     Exchange;
 maybe_apply_default_topic_exchange("amq.topic", FromConfig) ->
     %% This is the case where the destination would have been
     %% amq.topic but we have configured a different default
-    FromConfig;
+    binary_to_list(FromConfig);
 maybe_apply_default_topic_exchange(Exchange, _FromConfig) ->
     %% This is the case where the destination is different than
     %% amq.topic, so it must have been specified in the
