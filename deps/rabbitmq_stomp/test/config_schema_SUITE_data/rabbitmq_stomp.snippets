@@ -84,4 +84,9 @@
  {default_vhost,
   "stomp.default_vhost = /",
   [{rabbitmq_stomp,[{default_vhost,<<"/">>}]}],
-  [rabbitmq_stomp]}].
+  [rabbitmq_stomp]},
+ {default_topic_exchange,
+  "stomp.default_topic_exchange = my.fancy.topic",
+  [{rabbitmq_stomp,[{default_topic_exchange,<<"my.fancy.topic">>}]}],
+  [rabbitmq_stomp]}
+].
