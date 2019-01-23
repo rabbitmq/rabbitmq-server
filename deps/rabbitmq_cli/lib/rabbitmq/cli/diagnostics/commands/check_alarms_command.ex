@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
   Exits with a non-zero code if the target node reports any alarms,
   local or clusterwide.
 
-  This command meant to be used in health checks.
+  This command is meant to be used in health checks.
   """
 
   alias RabbitMQ.CLI.Core.Helpers
