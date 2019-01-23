@@ -21,8 +21,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckRunningCommand do
   This command meant to be used in health checks.
   """
 
-  alias RabbitMQ.CLI.Core.ExitCodes
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
