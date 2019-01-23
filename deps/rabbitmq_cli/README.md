@@ -1,13 +1,9 @@
 # RabbitMQ CLI Tools
 
-This is the [next
-generation](https://groups.google.com/forum/#!topic/rabbitmq-users/x0XugmBt-IE)
-implementation of
-[rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and
-other RabbitMQ CLI tools.
+This repository contains [RabbitMQ CLI tools](https://rabbitmq.com/cli.html) ([rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and
+others).
 
-This project first shipped with RabbitMQ `3.7.0`. Please use the version of CLI
-tools that come with the RabbitMQ distribution version installed.
+This generation of CLI tools first shipped with RabbitMQ `3.7.0`.
 
 
 ## Goals
@@ -22,17 +18,21 @@ Team RabbitMQ wanted a set of tools that
 
 ## Supported RabbitMQ Versions
 
-This version of CLI tools targets RabbitMQ master (future
-`3.7.0`). Some operations (for example, the `list_*` ones) will not
-work with earlier server releases.
+Long lived branches in this repository track the same branch in RabbitMQ core and related
+repositories. So `master` tracks `master` in rabbitmq-server, `v3.7.x` tracks branch `v3.7.x` in
+rabbitmq-server and so on.
 
+Please use the version of CLI tools that come with the RabbitMQ distribution version installed.
 
 
 ## Building
 
 ### Requirements
 
-Building this project requires [Elixir](http://elixir-lang.org/) 1.4.4 or greater.
+Building this project requires
+
+ * Erlag/OTP 20.3 (or later)
+ * [Elixir](http://elixir-lang.org/) 1.7.0 (or later).
 
 Command line tools depend on [rabbitmq-common](https://github.com/rabbitmq/rabbitmq-common).
 Dependencies are being resolved by `erlang.mk`
@@ -54,9 +54,15 @@ make
 
 ### `rabbitmqctl`
 
-`rabbitmqctl [-n node] [-t timeout] [-q] {command} [command options...]`
+See the [rabbitmqctl man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) for details.
 
-See the [rabbitmqctl man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) for a full list of options.
+### `rabbitmq-plugins`
+
+See the [rabbitmq-plugins man page](https://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html) for details.
+
+### `rabbitmq-diagnostics`
+
+See `rabbitmq-diagnostics --help`.
 
 
 ## Testing
@@ -106,8 +112,8 @@ command that deletes a queue.
 
 ### Examples
 
-See `lib/rabbitmq/cli/ctl/commands/status_command.ex` and `test/status_command_test.exs` for simple
-examples.
+See `lib/rabbitmq/cli/ctl/commands/status_command.ex` and `test/status_command_test.exs` for minimalistic
+but not entirely trivial examples.
 
 
 ## Copyright and License
@@ -115,4 +121,4 @@ examples.
 The project is [licensed under the MPL](LICENSE-MPL-RabbitMQ), the same license
 as RabbitMQ.
 
-(c) Pivotal Software, Inc, 2016-2017.
+(c) Pivotal Software, Inc, 2016-2019.
