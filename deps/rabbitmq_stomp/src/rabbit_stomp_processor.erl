@@ -324,6 +324,7 @@ login_header(Frame, Key, Default) ->
 %%----------------------------------------------------------------------------
 %% Frame Transformation
 %%----------------------------------------------------------------------------
+
 frame_transformer("1.0") -> fun rabbit_stomp_util:trim_headers/1;
 frame_transformer(_) -> fun(Frame) -> Frame end.
 
@@ -437,6 +438,7 @@ ack_action(Command, Frame,
 %%----------------------------------------------------------------------------
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
+
 server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) ->
     case maps:find(ConsumerTag, Subs) of
         error ->
@@ -752,11 +754,13 @@ do_send(Destination, _DestHdr,
 
             Props = rabbit_stomp_util:message_properties(Frame1),
 
-            {Exchange, RoutingKey} =
+            {Exchange0, RoutingKey} =
                 rabbit_routing_util:parse_routing(Destination),
 
+            Exchange1 = maybe_apply_default_topic_exchange(Exchange0),
+
             Method = #'basic.publish'{
-              exchange = list_to_binary(Exchange),
+              exchange = list_to_binary(Exchange1),
               routing_key = list_to_binary(RoutingKey),
               mandatory = false,
               immediate = false},
@@ -850,6 +854,7 @@ close_connection(State = #proc_state{connection = Connection}) ->
 %%----------------------------------------------------------------------------
 %% Reply-To
 %%----------------------------------------------------------------------------
+
 ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_REPLY_TO) of
         not_found ->
@@ -972,7 +977,6 @@ accumulate_receipts1(DeliveryTag, {_Key, Value, PR}, Acc) ->
         false -> accumulate_receipts1(DeliveryTag,
                                       gb_trees:take_smallest(PR), Acc1)
     end.
-
 
 %%----------------------------------------------------------------------------
 %% Transaction Support
@@ -1147,6 +1151,7 @@ log_error(Message, Detail, ServerPrivateDetail) ->
 %%----------------------------------------------------------------------------
 %% Frame sending utilities
 %%----------------------------------------------------------------------------
+
 send_frame(Command, Headers, BodyFragments, State) ->
     send_frame(#stomp_frame{command     = Command,
                             headers     = Headers,
@@ -1179,3 +1184,23 @@ additional_info(Key,
                 #proc_state{adapter_info =
                                 #amqp_adapter_info{additional_info = AddInfo}}) ->
     proplists:get_value(Key, AddInfo).
+
+maybe_apply_default_topic_exchange("amq.topic"=Exchange) ->
+    FromConfig = application:get_env(rabbitmq_stomp, default_topic_exchange, "amq.topic"),
+    maybe_apply_default_topic_exchange(Exchange, FromConfig);
+maybe_apply_default_topic_exchange(Exchange) ->
+    Exchange.
+
+maybe_apply_default_topic_exchange("amq.topic"=Exchange, "amq.topic") ->
+    %% This is the case where the destination is the same
+    %% as the default of amq.topic
+    Exchange;
+maybe_apply_default_topic_exchange("amq.topic", FromConfig) ->
+    %% This is the case where the destination would have been
+    %% amq.topic but we have configured a different default
+    FromConfig;
+maybe_apply_default_topic_exchange(Exchange, _FromConfig) ->
+    %% This is the case where the destination is different than
+    %% amq.topic, so it must have been specified in the
+    %% message headers
+    Exchange.
