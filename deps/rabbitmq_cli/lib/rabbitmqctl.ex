@@ -193,14 +193,14 @@ defmodule RabbitMQCtl do
     opts
   end
 
-  defp get_formatter(command, %{formatter: formatter}) do
+  def get_formatter(command, %{formatter: formatter}) do
     module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Macro.camelize(formatter))
     case Code.ensure_loaded(module_name) do
       {:module, _}      -> module_name;
       {:error, :nofile} -> default_formatter(command)
     end
   end
-  defp get_formatter(command, _) do
+  def get_formatter(command, _) do
     default_formatter(command)
   end
 
