@@ -37,11 +37,11 @@ defmodule RabbitMQ.CLI.Core.Parser do
         {suggest, command_name, arguments, options, invalid};
       {:alias, alias_module, alias_content} ->
         {[_alias_command_name | cmd_arguments], cmd_options, cmd_invalid} =
-          parse_alias(input, command_name, alias_module, alias_content)
+          parse_alias(input, command_name, alias_module, alias_content, options)
         {alias_module, command_name, cmd_arguments, cmd_options, cmd_invalid};
       command_module when is_atom(command_module) ->
         {[^command_name | cmd_arguments], cmd_options, cmd_invalid} =
-          parse_command_specific(input, command_module)
+          parse_command_specific(input, command_module, options)
         {command_module, command_name, cmd_arguments, cmd_options, cmd_invalid}
     end
   end
@@ -121,18 +121,20 @@ defmodule RabbitMQ.CLI.Core.Parser do
     end
   end
 
-  def parse_alias(input, command_name, module, alias_content) do
+  defp parse_alias(input, command_name, module, alias_content, options) do
     {pre_command_options, tail, invalid} = parse_global_head(input)
     [^command_name | other] = tail
     aliased_input = alias_content ++ other
-    {args, options, command_invalid} = parse_command_specific(aliased_input, module)
+    {args, options, command_invalid} = parse_command_specific(aliased_input, module, options)
     merged_options = Map.merge(options, pre_command_options)
     {args, merged_options, command_invalid ++ invalid}
   end
 
-  def parse_command_specific(input, command) do
-    switches = build_switches(default_switches(), command)
-    aliases = build_aliases(default_aliases(), command)
+  def parse_command_specific(input, command, options \\ %{}) do
+    formatter = RabbitMQCtl.get_formatter(command, options)
+
+    switches = build_switches(default_switches(), command, formatter)
+    aliases = build_aliases(default_aliases(), command, formatter)
     parse_generic(input, switches, aliases)
   end
 
@@ -201,23 +203,54 @@ defmodule RabbitMQ.CLI.Core.Parser do
      t: :timeout]
   end
 
-  defp build_switches(default, command) do
+  defp build_switches(default, command, formatter) do
     command_switches = apply_if_exported(command, :switches, [], [])
-    merge_if_different(default, command_switches,
-                       {:command_invalid,
-                        {command, {:redefining_global_switches,
-                                   command_switches}}})
+    formatter_switches = apply_if_exported(formatter, :switches, [], [])
+
+    assert_no_conflict(command, command_switches, formatter_switches,
+                       :redefining_formatter_switches)
+
+    merge_if_different(default, formatter_switches,
+                       {:formatter_invalid,
+                        {formatter, {:redefining_global_switches,
+                                     default,
+                                     formatter_switches}}})
+    |> merge_if_different(command_switches,
+                          {:command_invalid,
+                           {command, {:redefining_global_switches,
+                                      default,
+                                      command_switches}}})
+
   end
 
-  defp build_aliases(default, command) do
-    command_aliases = apply_if_exported(command, :aliases, [], [])
-    merge_if_different(default, command_aliases,
+  defp assert_no_conflict(command, command_fields, formatter_fields, err) do
+    merge_if_different(formatter_fields, command_fields,
                        {:command_invalid,
+                        {command, {err, formatter_fields, command_fields}}})
+    :ok
+  end
+
+  defp build_aliases(default, command, formatter) do
+    command_aliases = apply_if_exported(command, :aliases, [], [])
+    formatter_aliases = apply_if_exported(formatter, :aliases, [], [])
+
+    assert_no_conflict(command, command_aliases, formatter_aliases,
+                       :redefining_formatter_aliases)
+
+    merge_if_different(default, formatter_aliases,
+                       {:formatter_invalid,
                         {command, {:redefining_global_aliases,
-                                   command_aliases}}})
+                                   default,
+                                   formatter_aliases}}})
+    |> merge_if_different(command_aliases,
+                          {:command_invalid,
+                           {command, {:redefining_global_aliases,
+                                      default,
+                                      command_aliases}}})
   end
 
   defp apply_if_exported(mod, fun, args, default) do
+    Code.ensure_loaded(mod)
     case function_exported?(mod, fun, length(args)) do
       true  -> apply(mod, fun, args);
       false -> default
