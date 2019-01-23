@@ -13,26 +13,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
-defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
-  @behaviour RabbitMQ.CLI.CommandBehaviour
-
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
-  use RabbitMQ.CLI.Core.MergesNoDefaults
-  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
-
-  def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout)
-  end
-
-  def output(result, _options) when is_list(result) do
-    {:ok, result}
-  end
-  use RabbitMQ.CLI.DefaultOutput
-
-  def usage, do: "server_version"
-
-  def banner([], %{node: node_name}) do
-    "Asking node #{node_name} for its RabbitMQ version..."
+# Should be used by commands that require rabbit app to be stopped
+# but need no other execution environment validators.
+defmodule RabbitMQ.CLI.Core.MergesNoDefaults do
+  defmacro __using__(_) do
+    quote do
+      def merge_defaults(args, opts), do: {args, opts}
+    end
   end
 end

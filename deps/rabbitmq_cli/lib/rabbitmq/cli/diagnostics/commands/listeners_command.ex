@@ -29,15 +29,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
-
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, :too_many_args}
-  end
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
 
@@ -74,7 +68,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
   end
   def output([], %{formatter: "csv"}) do
     {:ok, []}
-  end  
+  end
   def output([], %{node: node_name}) do
     {:ok, "Node #{node_name} reported no enabled listeners."}
   end
@@ -84,7 +78,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
   end
   def output(listeners, %{formatter: "csv"}) do
     {:stream, [listener_rows(listeners)]}
-  end  
+  end
   def output(listeners, _opts) do
     lines = listener_lines(listeners)
 
@@ -96,6 +90,4 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} to report its protocol listeners ..."
   end
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.String
 end

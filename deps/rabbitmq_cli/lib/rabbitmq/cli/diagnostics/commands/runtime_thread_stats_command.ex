@@ -24,11 +24,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand do
     {args, Map.merge(%{sample_interval: 5}, opts)}
   end
 
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, :too_many_args}
-  end
-  def validate(_, _), do: :ok
-
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout, sample_interval: interval}) do

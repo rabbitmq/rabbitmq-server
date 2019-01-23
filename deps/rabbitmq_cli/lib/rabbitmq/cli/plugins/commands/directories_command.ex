@@ -20,8 +20,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.String
-
   def merge_defaults(args, %{offline: true} = opts) do
     {args, opts}
   end

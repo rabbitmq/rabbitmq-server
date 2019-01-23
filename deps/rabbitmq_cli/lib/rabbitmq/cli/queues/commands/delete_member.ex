@@ -55,6 +55,4 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMember do
   end
 
   def usage, do: "delete_member [-p <vhost>] <queuename> <node>"
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.String
 end

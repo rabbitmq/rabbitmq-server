@@ -55,6 +55,4 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMember do
   end
 
   def usage, do: "add_member [-p <vhost>] <queuename> <node>"
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.String
 end

@@ -16,15 +16,9 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.IsRunningCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
-
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, :too_many_args}
-  end
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
     # Note: we use is_booted/1 over is_running/1 to avoid
@@ -37,14 +31,12 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.IsRunningCommand do
   end
   def output(false, %{node: node_name} = _options) do
     {:ok, "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"}
-  end  
+  end
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "is_running"
 
   def banner([], %{node: node_name}) do
-    "Checking if RabbitMQ is running on node #{node_name} ..."
+    "Asking node #{node_name} for its status ..."
   end
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.String
 end
