@@ -63,6 +63,59 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
     end
   end
 
+  def normalize_protocol(proto) do
+    val = proto |> to_string |> String.downcase
+    case val do
+      "amqp091"   -> "amqp"
+      "amqp0.9.1" -> "amqp"
+      "amqp0-9-1" -> "amqp"
+      "amqp0_9_1" -> "amqp"
+
+      "amqp10"    -> "amqp"
+      "amqp1.0"   -> "amqp"
+      "amqp1-0"   -> "amqp"
+      "amqp1_0"   -> "amqp"
+
+      "mqtt3.1"   -> "mqtt"
+      "mqtt3.1.1" -> "mqtt"
+      "mqtt31"    -> "mqtt"
+      "mqtt311"   -> "mqtt"
+      "mqtt3_1"   -> "mqtt"
+      "mqtt3_1_1" -> "mqtt"
+
+      "stomp1.0"  -> "stomp"
+      "stomp1.1"  -> "stomp"
+      "stomp1.2"  -> "stomp"
+      "stomp10"   -> "stomp"
+      "stomp11"   -> "stomp"
+      "stomp12"   -> "stomp"
+      "stomp1_0"  -> "stomp"
+      "stomp1_1"  -> "stomp"
+      "stomp1_2"  -> "stomp"
+
+      "https"     -> "http"
+      "http1"     -> "http"
+      "http1.1"    -> "http"
+      "http_api"      -> "http"
+      "management"    -> "http"
+      "management_ui" -> "http"
+      "ui"            -> "http"
+
+      "cli"          -> "clustering"
+      "distribution" -> "clustering"
+
+      "webmqtt"  -> "http/web-mqtt"
+      "web-mqtt" -> "http/web-mqtt"
+      "web_mqtt" -> "http/web-mqtt"
+
+      "webstomp"  -> "http/web-stomp"
+      "web-stomp" -> "http/web-stomp"
+      "web_stomp" -> "http/web-stomp"
+
+      _ -> val
+    end
+  end
+
   #
   # Alarms
   #
@@ -97,7 +150,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
       a_node != node_name
     end)
   end
-  
+
   #
   # Implementation
   #
