@@ -1296,17 +1296,18 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
             QName = qname(State1),
             AckRequired = not NoAck,
             TheConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, State1#q.consumers),
-            ConsumerIsActive = case {SingleActiveConsumerOn, State1#q.active_consumer} of
-                                   {true, TheConsumer} ->
-                                       true;
-                                   {true, _} ->
-                                       false;
-                                   {false, _} ->
-                                       true
-                               end,
+            {ConsumerIsActive, ActivityStatus} =
+                case {SingleActiveConsumerOn, State1#q.active_consumer} of
+                    {true, TheConsumer} ->
+                       {true, single_active};
+                    {true, _} ->
+                       {false, waiting};
+                    {false, _} ->
+                       {true, up}
+                end,
             rabbit_core_metrics:consumer_created(
                 ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-                PrefetchCount, ConsumerIsActive, Args),
+                PrefetchCount, ConsumerIsActive, ActivityStatus, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                 AckRequired, QName, PrefetchCount,
                 Args, none, ActingUser),
@@ -1427,7 +1428,7 @@ maybe_notify_consumer_updated(#q{single_active_consumer_on = true} = State, _Pre
             {Tag, Ack, Prefetch, Args} = rabbit_queue_consumers:get_infos(Consumer),
             rabbit_core_metrics:consumer_updated(
                 ChPid, Tag, false, Ack, qname(State),
-                Prefetch, true, Args
+                Prefetch, true, single_active, Args
             ),
             ok;
         _ ->

@@ -464,7 +464,7 @@ apply(_, {down, ConsumerPid, noconnection},
                                           %% TODO: need to increment credit here
                                           %% with the size of the Checked map
                                           Credit = increase_credit(C, maps:size(Checked0)),
-                                          Eff1 = ConsumerUpdateActiveFun(St, K, C, false, Eff),
+                                          Eff1 = ConsumerUpdateActiveFun(St, K, C, false, suspected_down, Eff),
                                           {maps:put(K, C#consumer{suspected_down = true,
                                                                   credit = Credit,
                                                                   checked_out = #{}}, Co),
@@ -531,7 +531,7 @@ apply(_, {nodeup, Node}, #state{consumers = Cons0,
     {Cons1, SQ, Effects} =
         maps:fold(fun({_, P} = ConsumerId, C, {CAcc, SQAcc, EAcc})
                         when node(P) =:= Node ->
-                          EAcc1 = ConsumerUpdateActiveFun(State0, ConsumerId, C, true, EAcc),
+                          EAcc1 = ConsumerUpdateActiveFun(State0, ConsumerId, C, true, up, EAcc),
                           update_or_remove_sub(
                             ConsumerId, C#consumer{suspected_down = false},
                             CAcc, SQAcc, EAcc1);
@@ -548,11 +548,11 @@ apply(_, #update_config{config = Conf}, State) ->
     {update_config(Conf, State), ok}.
 
 consumer_active_flag_update_function(#state{consumer_strategy = default}) ->
-    fun(State, ConsumerId, Consumer, Active, Effects) ->
-        consumer_update_active_effects(State, ConsumerId, Consumer, Active, Effects)
+    fun(State, ConsumerId, Consumer, Active, ActivityStatus, Effects) ->
+        consumer_update_active_effects(State, ConsumerId, Consumer, Active, ActivityStatus, Effects)
     end;
 consumer_active_flag_update_function(#state{consumer_strategy = single_active}) ->
-    fun(_, _, _, _, Effects) ->
+    fun(_, _, _, _, _, Effects) ->
         Effects
     end.
 
@@ -869,7 +869,8 @@ cancel_consumer(ConsumerId,
                                  service_queue = ServiceQueue1,
                                  waiting_consumers = RemainingWaitingConsumers},
             Effects2 = consumer_update_active_effects(State, NewActiveConsumerId,
-                                                      NewActiveConsumer, true, Effects1),
+                                                      NewActiveConsumer, true,
+                                                      single_active, Effects1),
             {State, Effects2};
         error ->
             % The cancelled consumer is not the active one
@@ -883,7 +884,8 @@ cancel_consumer(ConsumerId,
     end.
 
 consumer_update_active_effects(#state{queue_resource = QName },
-                               ConsumerId, #consumer{meta = Meta}, Active,
+                               ConsumerId, #consumer{meta = Meta},
+                               Active, ActivityStatus,
                                Effects) ->
     Ack = maps:get(ack, Meta, undefined),
     Prefetch = maps:get(prefetch, Meta, undefined),
@@ -891,7 +893,7 @@ consumer_update_active_effects(#state{queue_resource = QName },
     [{mod_call,
       rabbit_quorum_queue,
       update_consumer_handler,
-      [QName, ConsumerId, false, Ack, Prefetch, Active, Args]}
+      [QName, ConsumerId, false, Ack, Prefetch, Active, ActivityStatus, Args]}
       | Effects].
 
 cancel_consumer0(ConsumerId,
