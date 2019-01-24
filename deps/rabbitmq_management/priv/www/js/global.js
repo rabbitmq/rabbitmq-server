@@ -429,9 +429,10 @@ var HELP = {
     (<a href="https://developer.mozilla.org/en/docs/Web/JavaScript/Guide/Regular_Expressions" target="_blank">Regular expression reference</a>)',
 
     'consumer-active' :
-    'Whether the consumer is active or not. Consumers are active by default. For a quorum queue, a consumer can be inactive \
-    because its owning node is suspected down. When single active consumer is enabled for the queue, only one consumer at \
-    a time is active. <br/><br/> \
+    'Whether the consumer is active or not, i.e. whether the consumer can get messages from the queue. \
+    When single active consumer is enabled for the queue, only one consumer at a time is active. \
+    When single active consumer is disabled for the queue, consumers are active by default. \
+    For a quorum queue, a consumer can be inactive because its owning node is suspected down. <br/><br/> \
     (<a href="http://www.rabbitmq.com/consumers.html#active-consumer" target="_blank">Documentation</a>)',
 
     'plugins' :

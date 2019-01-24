@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2016-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_test_db_SUITE).
@@ -325,7 +325,7 @@ create_ch(Name) ->
 create_cons(QName, ChName, Tag, Exclusive, AckRequired, PrefetchCount, Args) ->
     rabbit_core_metrics:consumer_created(pid(ChName), Tag, Exclusive,
                                          AckRequired, q(QName),
-                                         PrefetchCount, false, Args).
+                                         PrefetchCount, false, waiting, Args).
 
 stats_series(Fun, ListsOfPairs) ->
     [begin

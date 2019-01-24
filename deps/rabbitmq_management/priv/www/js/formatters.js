@@ -124,6 +124,10 @@ function fmt_features_short(obj) {
     return res;
 }
 
+function fmt_activity_status(obj) {
+    return obj.replace('_', ' ');
+}
+
 function short_conn(name) {
     var pat = /^(.*)->/;
     var match = pat.exec(name);
