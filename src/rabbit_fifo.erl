@@ -1101,11 +1101,8 @@ update_smallest_raft_index(IncomingRaftIdx, OldIndexes,
                     % effects
                     {State, ok, Effects};
                 {_, {Smallest, Shadow}} when Shadow =/= undefined ->
-                    % ?INFO("RELEASE ~w ~w ~w~n", [IncomingRaftIdx, Smallest,
-                    %                              Shadow]),
                     {State, ok, [{release_cursor, Smallest, Shadow}]};
                  _ -> % smallest
-                    % no shadow taken for this index,
                     % no release cursor increase
                     {State, ok, Effects}
             end
@@ -1135,8 +1132,6 @@ return_all(State0, Checked0) ->
                     ({_, {MsgNum, Msg}}, S) ->
                         return_one(MsgNum, Msg, S)
                 end, State0, Checked).
-
-
 
 %% checkout new messages to consumers
 %% reverses the effects list
@@ -1181,7 +1176,6 @@ evaluate_limit(OldIndexes, Result,
             evaluate_limit(OldIndexes, true, State, Effects);
         false ->
             {State0, Result, Effects0}
-            %% TODO: optimisation: avoid calling if nothing has been dropped?
     end.
 
 append_send_msg_effects(Effects, AccMap) when map_size(AccMap) == 0 ->
@@ -1219,7 +1213,6 @@ take_next_msg(#state{returns = Returns,
                 undefined ->
                     empty;
                 _ ->
-                    %% TODO: defensive?
                     {Msg, Messages} = maps:take(Low0, Messages0),
                     case maps:size(Messages) of
                         0 ->

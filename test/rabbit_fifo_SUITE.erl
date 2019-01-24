@@ -124,7 +124,6 @@ basics(Config) ->
         {ra_event, Frm, E} ->
             case rabbit_fifo_client:handle_ra_event(Frm, E, FState6b) of
                 {internal, _, _, _FState7} ->
-                    ct:pal("unexpected event ~p~n", [E]),
                     exit({unexpected_internal_event, E});
                 {{delivery, Ctag, [{Mid, {_, two}}]}, FState7} ->
                     {ok, _S} = rabbit_fifo_client:return(Ctag, [Mid], FState7),
@@ -218,9 +217,7 @@ usage(Config) ->
     % force tick and usage stats emission
     ServerId ! tick_timeout,
     timer:sleep(50),
-    % ct:pal("ets ~w ~w ~w", [ets:tab2list(rabbit_fifo_usage), ServerId, UId]),
     Use = rabbit_fifo:usage(element(1, ServerId)),
-    ct:pal("Use ~w~n", [Use]),
     ra:stop_server(ServerId),
     ?assert(Use > 0.0),
     ok.
@@ -381,7 +378,6 @@ discard(Config) ->
     {ok, empty, _F4} = rabbit_fifo_client:dequeue(<<"tag1">>, settled, F3),
     receive
         {dead_letter, Letters} ->
-            ct:pal("dead letters ~p~n", [Letters]),
             [{_, msg1}] = Letters,
             ok
     after 500 ->
@@ -484,14 +480,11 @@ test_queries(Config) ->
     {ok, {_, Ready}, _} = ra:local_query(ServerId,
                                          fun rabbit_fifo:query_messages_ready/1),
     ?assertEqual(1, Ready),
-    ct:pal("Ready ~w~n", [Ready]),
     {ok, {_, Checked}, _} = ra:local_query(ServerId,
                                            fun rabbit_fifo:query_messages_checked_out/1),
     ?assertEqual(1, Checked),
-    ct:pal("Checked ~w~n", [Checked]),
     {ok, {_, Processes}, _} = ra:local_query(ServerId,
                                              fun rabbit_fifo:query_processes/1),
-    ct:pal("Processes ~w~n", [Processes]),
     ?assertEqual(2, length(Processes)),
     P !  stop,
     ra:stop_server(ServerId),
@@ -566,7 +559,6 @@ process_ra_events(State, Acc, Wait) ->
 process_ra_events0(State0, Acc, Actions0, Wait, DeliveryFun) ->
     receive
         {ra_event, From, Evt} ->
-            % ct:pal("ra event ~w~n", [Evt]),
             case rabbit_fifo_client:handle_ra_event(From, Evt, State0) of
                 {internal, _, Actions,  State} ->
                     process_ra_events0(State, Acc, Actions0 ++ Actions,
@@ -589,7 +581,6 @@ discard_next_delivery(State0, Wait) ->
                     discard_next_delivery(State, Wait);
                 {{delivery, Tag, Msgs}, State1} ->
                     MsgIds = [element(1, M) || M <- Msgs],
-                    ct:pal("discarding ~p", [Msgs]),
                     {ok, State} = rabbit_fifo_client:discard(Tag, MsgIds,
                                                          State1),
                     State
@@ -606,7 +597,6 @@ return_next_delivery(State0, Wait) ->
                     return_next_delivery(State, Wait);
                 {{delivery, Tag, Msgs}, State1} ->
                     MsgIds = [element(1, M) || M <- Msgs],
-                    ct:pal("returning ~p", [Msgs]),
                     {ok, State} = rabbit_fifo_client:return(Tag, MsgIds,
                                                         State1),
                     State
