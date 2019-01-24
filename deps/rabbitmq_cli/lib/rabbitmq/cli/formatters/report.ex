@@ -13,10 +13,10 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2017 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Formatters.FormatterHelpers
-alias RabbitMQ.CLI.Core.Output
-
 defmodule RabbitMQ.CLI.Formatters.Report do
+  alias RabbitMQ.CLI.Formatters.FormatterHelpers
+  alias RabbitMQ.CLI.Core.{Output, Config}
+
   @behaviour RabbitMQ.CLI.FormatterBehaviour
   def format_output(_, _) do
     raise "format_output is not implemented for report formatter"
@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Formatters.Report do
   end
 
   def format_result(command, output, options) do
-    formatter = RabbitMQCtl.default_formatter(command)
+    formatter = Config.default_formatter(command)
     case Output.format_output(output, formatter, options) do
       :ok               -> [];
       {:ok, val}        -> [val];
