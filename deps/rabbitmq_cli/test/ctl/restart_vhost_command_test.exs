@@ -29,10 +29,6 @@ defmodule RestartVhostCommandTest do
   @timeout 10000
 
   setup do
-    add_vhost @vhost
-    on_exit(fn ->
-      delete_vhost @vhost
-    end)
     {:ok, opts: %{
       node: get_rabbit_hostname(),
       vhost: @vhost,
@@ -65,10 +61,12 @@ defmodule RestartVhostCommandTest do
   end
 
   test "run: restarting an existing vhost returns already_started", context do
+    setup_vhosts()
     {:error, {:already_started, _}} = @command.run([], context[:opts])
   end
 
   test "run: restarting an failed vhost returns ok", context do
+    setup_vhosts()
     vhost = context[:opts][:vhost]
     node_name = context[:opts][:node]
     force_vhost_failure(node_name, vhost)
@@ -76,22 +74,34 @@ defmodule RestartVhostCommandTest do
     {:ok, _} = :rpc.call(node_name, :rabbit_vhost_sup_sup, :get_vhost_sup, [vhost])
   end
 
-  def force_vhost_failure(node_name, vhost) do
+  #
+  # Implementation
+  #
+
+  defp setup_vhosts do
+    add_vhost @vhost
+    # give the vhost a chance to fully start and initialise
+    :timer.sleep(1000)
+    on_exit(fn ->
+      delete_vhost @vhost
+    end)
+  end
+
+  defp force_vhost_failure(node_name, vhost) do
     case :rpc.call(node_name, :rabbit_vhost_sup_sup, :get_vhost_sup, [vhost]) do
       {:ok, sup} ->
         case :lists.keyfind(:msg_store_persistent, 1, :supervisor.which_children(sup)) do
         {_, pid, _, _} ->
           Process.exit(pid, :foo)
-          :timer.sleep(100)
+          :timer.sleep(250)
           force_vhost_failure(node_name, vhost);
         false ->
           Process.exit(sup, :foo)
-          :timer.sleep(100)
+          :timer.sleep(250)
           force_vhost_failure(node_name, vhost)
         end;
       {:error, {:vhost_supervisor_not_running, _}} ->
         :ok
     end
   end
-
 end
