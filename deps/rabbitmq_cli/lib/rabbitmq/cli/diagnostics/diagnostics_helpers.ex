@@ -14,12 +14,15 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Helpers do
+  import Record, only: [defrecord: 2, extract: 2]
   import RabbitCommon.Records
   import Rabbitmq.Atom.Coerce
 
   #
   # Listeners
   #
+
+  defrecord :hostent, extract(:hostent, from_lib: "kernel/include/inet.hrl")
 
   def listeners_on(listeners, target_node) do
     Enum.filter(listeners, fn listener(node: node) ->
@@ -34,22 +37,25 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
     end)
   end
 
+  def listener_map(listener) do
+    # Listener options are left out intentionally: they can contain deeply nested values
+    # that are impossible to serialise to JSON.
+    #
+    # Management plugin/HTTP API had its fair share of bugs because of that
+    # and now filters out a lot of options. Raw listener data can be seen in
+    # rabbitmq-diagnostics status.
+    listener(node: node, protocol: protocol, ip_address: interface, port: port) = listener
+    %{
+      node: node,
+      protocol: protocol,
+      interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
+      port: port,
+      purpose: protocol_label(to_atom(protocol))
+    }
+  end
+
   def listener_maps(listeners) do
-    for listener(node: node, protocol: protocol, ip_address: interface, port: port) <- listeners do
-        # Listener options are left out intentionally: they can contain deeply nested values
-        # that are impossible to serialise to JSON.
-        #
-        # Management plugin/HTTP API had its fair share of bugs because of that
-        # and now filters out a lot of options. Raw listener data can be seen in
-        # rabbitmq-diagnostics status.
-        %{
-          node: node,
-          protocol: protocol,
-          interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
-          port: port,
-          purpose: protocol_label(to_atom(protocol))
-        }
-    end
+    Enum.map(listeners, &listener_map/1)
   end
 
   def listener_rows(listeners) do
@@ -60,6 +66,87 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
          interface: :inet.ntoa(interface) |> to_string |> maybe_enquote_interface,
          port: port,
          purpose: protocol_label(to_atom(protocol))]
+    end
+  end
+
+  def check_port_connectivity(port, node_name, timeout) do
+    hostname = Regex.replace(~r/^(.+)@/, to_string(node_name), "") |> to_charlist
+    try do
+      case :gen_tcp.connect(hostname, port, [], timeout) do
+        {:error, _} -> false
+        {:ok, port} ->
+          :ok = :gen_tcp.close(port)
+          true
+      end
+    # `gen_tcp:connect/4` will throw if the port is outside of its
+    # expected domain
+    catch :exit, _ -> false
+    end
+  end
+
+  def check_listener_connectivity(%{port: port}, node_name, timeout) do
+    check_port_connectivity(port, node_name, timeout)
+  end
+
+  def protocol_label(:amqp),  do: "AMQP 0-9-1 and AMQP 1.0"
+  def protocol_label(:mqtt),  do: "MQTT"
+  def protocol_label(:stomp), do: "STOMP"
+  def protocol_label(:http),  do: "HTTP API"
+  def protocol_label(:"http/web-mqtt"),  do: "MQTT over WebSockets"
+  def protocol_label(:"http/web-stomp"), do: "STOMP over WebSockets"
+  def protocol_label(:clustering),       do: "inter-node and CLI tool communication"
+  def protocol_label(other), do: to_string(other)
+
+  def normalize_protocol(proto) do
+    val = proto |> to_string |> String.downcase
+    case val do
+      "amqp091"   -> "amqp"
+      "amqp0.9.1" -> "amqp"
+      "amqp0-9-1" -> "amqp"
+      "amqp0_9_1" -> "amqp"
+
+      "amqp10"    -> "amqp"
+      "amqp1.0"   -> "amqp"
+      "amqp1-0"   -> "amqp"
+      "amqp1_0"   -> "amqp"
+
+      "mqtt3.1"   -> "mqtt"
+      "mqtt3.1.1" -> "mqtt"
+      "mqtt31"    -> "mqtt"
+      "mqtt311"   -> "mqtt"
+      "mqtt3_1"   -> "mqtt"
+      "mqtt3_1_1" -> "mqtt"
+
+      "stomp1.0"  -> "stomp"
+      "stomp1.1"  -> "stomp"
+      "stomp1.2"  -> "stomp"
+      "stomp10"   -> "stomp"
+      "stomp11"   -> "stomp"
+      "stomp12"   -> "stomp"
+      "stomp1_0"  -> "stomp"
+      "stomp1_1"  -> "stomp"
+      "stomp1_2"  -> "stomp"
+
+      "https"     -> "http"
+      "http1"     -> "http"
+      "http1.1"    -> "http"
+      "http_api"      -> "http"
+      "management"    -> "http"
+      "management_ui" -> "http"
+      "ui"            -> "http"
+
+      "cli"          -> "clustering"
+      "distribution" -> "clustering"
+
+      "webmqtt"  -> "http/web-mqtt"
+      "web-mqtt" -> "http/web-mqtt"
+      "web_mqtt" -> "http/web-mqtt"
+
+      "webstomp"  -> "http/web-stomp"
+      "web-stomp" -> "http/web-stomp"
+      "web_stomp" -> "http/web-stomp"
+
+      _ -> val
     end
   end
 
@@ -97,7 +184,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
       a_node != node_name
     end)
   end
-  
+
   #
   # Implementation
   #
@@ -111,14 +198,4 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
       false -> value
     end
   end
-
-  defp protocol_label(:amqp),  do: "AMQP 0-9-1 and AMQP 1.0"
-  defp protocol_label(:mqtt),  do: "STOMP"
-  defp protocol_label(:stomp), do: "MQTT"
-  defp protocol_label(:http),  do: "HTTP API"
-  defp protocol_label(:"http/web-mqtt"),  do: "MQTT over WebSockets"
-  defp protocol_label(:"http/web-stomp"), do: "STOMP over WebSockets"
-  defp protocol_label(:clustering),       do: "inter-node and CLI tool communication"
-  defp protocol_label(other), do: to_string(other)
-
 end
