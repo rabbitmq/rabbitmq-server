@@ -131,7 +131,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
   end
 
   def parse_command_specific(input, command, options \\ %{}) do
-    formatter = RabbitMQCtl.get_formatter(command, options)
+    formatter = Config.get_formatter(command, options)
 
     switches = build_switches(default_switches(), command, formatter)
     aliases = build_aliases(default_aliases(), command, formatter)
