@@ -14,6 +14,11 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Config do
+
+  #
+  # Environment
+  #
+
   def get_option(name, opts \\ %{}) do
     raw_option = opts[name] ||
                    get_system_option(name) ||
@@ -63,4 +68,42 @@ defmodule RabbitMQ.CLI.Core.Config do
   def default(:script_name), do: :rabbitmqctl
   def default(:node),        do: :rabbit
   def default(_), do: nil
+
+  #
+  # Formatters and Printers
+  #
+
+  def get_formatter(command, %{formatter: formatter}) do
+    module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Macro.camelize(formatter))
+    case Code.ensure_loaded(module_name) do
+      {:module, _}      -> module_name;
+      {:error, :nofile} -> default_formatter(command)
+    end
+  end
+  def get_formatter(command, _) do
+    default_formatter(command)
+  end
+
+  def get_printer(%{printer: printer}) do
+    module_name = String.to_atom("RabbitMQ.CLI.Printers." <> Macro.camelize(printer))
+    case Code.ensure_loaded(module_name) do
+      {:module, _}      -> module_name;
+      {:error, :nofile} -> default_printer()
+    end
+  end
+  def get_printer(_) do
+    default_printer()
+  end
+
+  def default_printer() do
+    RabbitMQ.CLI.Printers.StdIO
+  end
+
+  def default_formatter(command) do
+    case function_exported?(command, :formatter, 0) do
+      true  -> command.formatter;
+      false -> RabbitMQ.CLI.Formatters.String
+    end
+  end
+
 end
