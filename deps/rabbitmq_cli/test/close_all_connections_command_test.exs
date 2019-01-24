@@ -19,9 +19,7 @@ defmodule CloseAllConnectionsCommandTest do
   import TestHelper
 
   alias RabbitMQ.CLI.Ctl.RpcStream
-
   @helpers RabbitMQ.CLI.Core.Helpers
-
   @command RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand
 
   @vhost "/"
@@ -33,8 +31,6 @@ defmodule CloseAllConnectionsCommandTest do
 
     on_exit([], fn ->
       close_all_connections(get_rabbit_hostname())
-
-
     end)
 
     :ok
@@ -140,7 +136,7 @@ defmodule CloseAllConnectionsCommandTest do
   defp fetch_connection_vhosts(node, nodes) do
     fetch_connection_vhosts(node, nodes, 10)
   end
-  
+
   defp fetch_connection_vhosts(node, nodes, retries) do
       stream = RpcStream.receive_list_items(node,
                                             :rabbit_networking,
@@ -159,7 +155,7 @@ defmodule CloseAllConnectionsCommandTest do
           fetch_connection_vhosts(node, nodes, retries - 1)
         _ ->
           xs
-      end      
+      end
   end
 
 end
