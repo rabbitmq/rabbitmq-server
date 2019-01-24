@@ -88,6 +88,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
     check_port_connectivity(port, node_name, timeout)
   end
 
+  def protocol_label(:amqp),  do: "AMQP 0-9-1 and AMQP 1.0"
+  def protocol_label(:mqtt),  do: "MQTT"
+  def protocol_label(:stomp), do: "STOMP"
+  def protocol_label(:http),  do: "HTTP API"
+  def protocol_label(:"http/web-mqtt"),  do: "MQTT over WebSockets"
+  def protocol_label(:"http/web-stomp"), do: "STOMP over WebSockets"
+  def protocol_label(:clustering),       do: "inter-node and CLI tool communication"
+  def protocol_label(other), do: to_string(other)
+
   def normalize_protocol(proto) do
     val = proto |> to_string |> String.downcase
     case val do
@@ -189,14 +198,4 @@ defmodule RabbitMQ.CLI.Diagnostics.Helpers do
       false -> value
     end
   end
-
-  defp protocol_label(:amqp),  do: "AMQP 0-9-1 and AMQP 1.0"
-  defp protocol_label(:mqtt),  do: "STOMP"
-  defp protocol_label(:stomp), do: "MQTT"
-  defp protocol_label(:http),  do: "HTTP API"
-  defp protocol_label(:"http/web-mqtt"),  do: "MQTT over WebSockets"
-  defp protocol_label(:"http/web-stomp"), do: "STOMP over WebSockets"
-  defp protocol_label(:clustering),       do: "inter-node and CLI tool communication"
-  defp protocol_label(other), do: to_string(other)
-
 end
