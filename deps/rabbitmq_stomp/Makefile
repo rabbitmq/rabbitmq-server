@@ -8,6 +8,7 @@ define PROJECT_ENV
 	     [{login, <<"guest">>},
 	      {passcode, <<"guest">>}]},
 	    {default_vhost, <<"/">>},
+	    {default_topic_exchange, <<"amq.topic">>},
 	    {ssl_cert_login, false},
 	    {implicit_connect, false},
 	    {tcp_listeners, [61613]},
