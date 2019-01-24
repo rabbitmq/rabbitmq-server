@@ -24,10 +24,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
     {args, Map.merge(%{details: false}, opts)}
   end
 
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, :too_many_args}
-  end
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout, details: details}) do
     case details do
@@ -48,6 +45,4 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   end
 
   def usage, do: "erlang_version"
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.String
 end

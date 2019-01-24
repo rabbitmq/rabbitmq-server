@@ -124,8 +124,8 @@ defmodule RabbitMQCtl do
   end
 
   defp process_output(output, command, options) do
-    formatter = get_formatter(command, options)
-    printer = get_printer(options)
+    formatter = Config.get_formatter(command, options)
+    printer   = Config.get_printer(options)
 
     output
     |> Output.format_output(formatter, options)
@@ -136,14 +136,21 @@ defmodule RabbitMQCtl do
        end
   end
 
-  defp handle_shutdown({:error, exit_code, output}) do
-    output_device = case exit_code == ExitCodes.exit_ok do
+  defp output_device(exit_code) do
+    case exit_code == ExitCodes.exit_ok do
       true  -> :stdio;
       false -> :stderr
     end
+  end
+
+  defp handle_shutdown({:error, exit_code, nil}) do
+    exit_program(exit_code)
+  end
+  defp handle_shutdown({:error, exit_code, output}) do
+    device = output_device(exit_code)
 
     for line <- List.flatten([output]) do
-      IO.puts(output_device, Helpers.string_or_inspect(line))
+      IO.puts(device, Helpers.string_or_inspect(line))
     end
     exit_program(exit_code)
   end
@@ -184,39 +191,6 @@ defmodule RabbitMQCtl do
   end
   defp normalise_timeout(opts) do
     opts
-  end
-
-  defp get_formatter(command, %{formatter: formatter}) do
-    module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Macro.camelize(formatter))
-    case Code.ensure_loaded(module_name) do
-      {:module, _}      -> module_name;
-      {:error, :nofile} -> default_formatter(command)
-    end
-  end
-  defp get_formatter(command, _) do
-    default_formatter(command)
-  end
-
-  defp get_printer(%{printer: printer}) do
-    module_name = String.to_atom("RabbitMQ.CLI.Printers." <> Macro.camelize(printer))
-    case Code.ensure_loaded(module_name) do
-      {:module, _}      -> module_name;
-      {:error, :nofile} -> default_printer()
-    end
-  end
-  defp get_printer(_) do
-    default_printer()
-  end
-
-  def default_printer() do
-    RabbitMQ.CLI.Printers.StdIO
-  end
-
-  def default_formatter(command) do
-    case function_exported?(command, :formatter, 0) do
-      true  -> command.formatter;
-      false -> RabbitMQ.CLI.Formatters.String
-    end
   end
 
   # Suppress banner if --quiet option is provided
@@ -352,7 +326,22 @@ defmodule RabbitMQCtl do
     {:error, ExitCodes.exit_dataerr(),
      "Could not update enabled plugins file at #{path}: the file does not exist (ENOENT)"}
   end
+  # Special case health checks. This makes it easier to change
+  # output of all health checks at once.
+  defp format_error({:error, :check_failed}, _, _) do
+    {:error, ExitCodes.exit_unavailable(), nil}
+  end
+  defp format_error({:error, nil}, _, _) do
+    # the command intends to produce no output, e.g. a return code
+    # is sufficient
+    {:error, ExitCodes.exit_unavailable(), nil}
+  end
   # Catch all
+  defp format_error({:error, exit_code, err}, _, _) do
+    string_err = Helpers.string_or_inspect(err)
+
+    {:error, exit_code, "Error:\n#{string_err}"}
+  end
   defp format_error({:error, err} = result, _, _) do
     string_err = Helpers.string_or_inspect(err)
 
@@ -387,7 +376,7 @@ defmodule RabbitMQCtl do
   ## via distribution callback in the command as :cli, :none or {:custom, fun()}.
   ## :cli - default rabbitmqctl node name
   ## :none - do not start a distribution (e.g. offline command)
-  ## {:fun, fun} - run a custom fuction to enable distribution.
+  ## {:fun, fun} - run a custom function to enable distribution.
   ## custom mode is usefult for commands which should have specific node name.
   ## Runs code if distribution is successful, or not needed.
   @spec maybe_with_distribution(module(), options(), (() -> command_result())) :: command_result()

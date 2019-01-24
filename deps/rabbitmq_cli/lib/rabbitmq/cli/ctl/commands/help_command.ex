@@ -68,7 +68,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   defp tool_usage(tool_name) do
     ["\nUsage:\n" <>
-     "#{tool_name} [-n <node>] [-l] [-q] <command> [<command options>]"]
+     "#{tool_name} [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"]
   end
 
   def base_usage(command, opts) do

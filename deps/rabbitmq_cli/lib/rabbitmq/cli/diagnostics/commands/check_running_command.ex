@@ -13,8 +13,13 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
+defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckRunningCommand do
+  @moduledoc """
+  Exits with a non-zero code if the RabbitMQ app on the target node is not running.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
+  This command is meant to be used in health checks.
+  """
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
@@ -22,17 +27,22 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout)
+    # Note: we use is_booted/1 over is_running/1 to avoid
+    # returning a positive result when the node is still booting
+    :rabbit_misc.rpc_call(node_name, :rabbit, :is_booted, [node_name], timeout)
   end
 
-  def output(result, _options) when is_list(result) do
-    {:ok, result}
+  def output(true, %{node: node_name} = _options) do
+    {:ok, "RabbitMQ on node #{node_name} is fully booted and running"}
+  end
+  def output(false, %{node: node_name} = _options) do
+    {:error, "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"}
   end
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "server_version"
+  def usage, do: "check_running"
 
   def banner([], %{node: node_name}) do
-    "Asking node #{node_name} for its RabbitMQ version..."
+    "Checking if RabbitMQ is running on node #{node_name} ..."
   end
 end

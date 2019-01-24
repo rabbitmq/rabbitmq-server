@@ -13,11 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule IsRunningCommandTest do
+defmodule AlarmsCommandTest do
   use ExUnit.Case
   import TestHelper
 
-  @command RabbitMQ.CLI.Diagnostics.Commands.IsRunningCommand
+  @command RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -55,18 +55,23 @@ defmodule IsRunningCommandTest do
     assert @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})) == {:badrpc, :nodedown}
   end
 
-  test "run: when the RabbitMQ app is booted and started, returns true", context do
-    await_rabbitmq_startup()
-    
-    assert @command.run([], context[:opts])
+  test "run: when target node has no alarms in effect, returns an empty list", context do
+    assert [] == status()[:alarms]
+
+    assert @command.run([], context[:opts]) == []
   end
 
-  test "run: when the RabbitMQ app is stopped, returns false", context do
-    stop_rabbitmq_app()
+  test "run: when target node has an alarm in effect, returns it", context do
+    old_watermark = status()[:vm_memory_high_watermark]
+    on_exit(fn() ->
+      set_vm_memory_high_watermark(old_watermark)
+    end)
+    # 2000 bytes will trigger an alarm
+    set_vm_memory_high_watermark({:absolute, 2000})
 
-    refute is_rabbitmq_app_running()
-    refute @command.run([], context[:opts])
+    assert [:memory] == status()[:alarms]
+    assert length(@command.run([], context[:opts])) == 1
 
-    start_rabbitmq_app()
+    set_vm_memory_high_watermark(old_watermark)
   end
 end

@@ -14,7 +14,7 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule MemoryBreakdownCommandTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case
   import TestHelper
 
   @command RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand

@@ -28,21 +28,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
     {args, Map.merge(opts, %{timeout: timeout})}
   end
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
-
-  def validate([], _), do: {:validation_failure, :not_enough_args}
-  def validate([_count|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
-
-  def validate([count], _) do
-    case Integer.parse(count) do
-      {n, _} when n >= 1 ->
-        :ok
-      _                  ->
-        {:validation_failure, {:bad_argument, "Expected online node count must be a positive integer"}}
-    end
-  end
-
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  use RabbitMQ.CLI.Core.AcceptsOnePositiveIntegerArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([count], %{node: node_name, timeout: timeout}) do
@@ -65,6 +52,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
   def output({:error, :timeout}, %{node: node_name}) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
      "Error: timed out while waiting. Not enough nodes joined #{node_name}'s cluster."}
-  end  
+  end
   use RabbitMQ.CLI.DefaultOutput
 end

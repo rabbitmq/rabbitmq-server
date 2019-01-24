@@ -16,15 +16,10 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
   alias RabbitMQ.CLI.Core.OsPid
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.String
-
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate([], _), do: :ok
-  def validate([_|_], _), do: {:validation_failure, :too_many_args}
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name}) do
     case :rabbit_misc.rpc_call(node_name, :os, :getpid, []) do
@@ -51,6 +46,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
           "RabbitMQ node #{node_name} running at PID #{pid} successfully shut down"
         end])}
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "shutdown"
 

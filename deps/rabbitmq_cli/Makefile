@@ -140,4 +140,4 @@ clean-mix:
 	$(verbose) echo y | mix clean
 
 repl:
-	$(verbose) iex -S mix
+	$(verbose) iex --sname repl -S mix
