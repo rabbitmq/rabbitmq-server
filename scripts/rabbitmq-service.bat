@@ -213,9 +213,7 @@ if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE!" (
         mkdir "!RABBITMQ_GENERATED_CONFIG_DIR!"
     )
 
-    if not exist "!RABBITMQ_SCHEMA_DIR!\rabbit.schema" (
-        copy "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
-    )
+    copy /Y "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
 
     set RABBITMQ_GENERATED_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
                                       -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
