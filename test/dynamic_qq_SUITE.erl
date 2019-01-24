@@ -133,7 +133,6 @@ force_delete_if_no_consensus(Config) ->
                                arguments = Args,
                                durable = true,
                                passive = true})),
-    %% TODO implement a force delete
     BCh2 = rabbit_ct_client_helpers:open_channel(Config, B),
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(BCh2, #'queue.delete'{queue = QName})),
