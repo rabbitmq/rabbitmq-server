@@ -32,7 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def info_keys(), do: @info_keys
 
   def merge_defaults([], opts) do
-    {Enum.map(@info_keys -- [:active, :activity_status], &Atom.to_string/1), Map.merge(%{vhost: "/", table_headers: true}, opts)}
+    {Enum.map(@info_keys -- [:activity_status], &Atom.to_string/1), Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
   def merge_defaults(args, opts) do

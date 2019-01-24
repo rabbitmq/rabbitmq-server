@@ -7,7 +7,7 @@ defmodule ListConsumersCommandTest do
   @vhost "test1"
   @user "guest"
   @default_timeout :infinity
-  @info_keys ~w(queue_name channel_pid consumer_tag ack_required prefetch_count arguments)
+  @info_keys ~w(queue_name channel_pid consumer_tag ack_required prefetch_count active arguments)
   @default_options %{vhost: "/", table_headers: true}
 
   setup_all do
