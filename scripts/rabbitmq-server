@@ -160,9 +160,7 @@ if [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
         mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
     fi
 
-    if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbit.schema" ]; then
-        cp "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
-    fi
+    cp -f "${RABBITMQ_HOME}/priv/schema/rabbit.schema" "${RABBITMQ_SCHEMA_DIR}"
 
     RABBITMQ_GENERATED_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
                                    -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \

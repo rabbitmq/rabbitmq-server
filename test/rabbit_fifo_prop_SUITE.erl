@@ -25,7 +25,17 @@ all_tests() ->
      scenario1,
      scenario2,
      scenario3,
-     scenario4
+     scenario4,
+     scenario5,
+     scenario6,
+     scenario7,
+     scenario8,
+     scenario9,
+     scenario10,
+     scenario11,
+     scenario12,
+     scenario13,
+     scenario14
     ].
 
 groups() ->
@@ -73,7 +83,7 @@ scenario1(_Config) ->
                 make_return(C2, [1]), %% E2 in returns E1 with C2
                 make_settle(C2, [2]) %% E2 with C2
                ],
-    run_snapshot_test(?FUNCTION_NAME, Commands),
+    run_snapshot_test(#{name => ?FUNCTION_NAME}, Commands),
     ok.
 
 scenario2(_Config) ->
@@ -88,7 +98,7 @@ scenario2(_Config) ->
                 make_settle(C1, [0]),
                 make_settle(C2, [0])
                ],
-    run_snapshot_test(?FUNCTION_NAME, Commands),
+    run_snapshot_test(#{name => ?FUNCTION_NAME}, Commands),
     ok.
 
 scenario3(_Config) ->
@@ -102,7 +112,7 @@ scenario3(_Config) ->
                 make_settle(C1, [1]),
                 make_settle(C1, [2])
                ],
-    run_snapshot_test(?FUNCTION_NAME, Commands),
+    run_snapshot_test(#{name => ?FUNCTION_NAME}, Commands),
     ok.
 
 scenario4(_Config) ->
@@ -112,19 +122,147 @@ scenario4(_Config) ->
                 make_enqueue(E,1,msg),
                 make_settle(C1, [0])
                ],
-    run_snapshot_test(?FUNCTION_NAME, Commands),
+    run_snapshot_test(#{name => ?FUNCTION_NAME}, Commands),
+    ok.
+
+scenario5(_Config) ->
+    C1 = {<<>>, c:pid(0,505,0)},
+    E = c:pid(0,465,9),
+    Commands = [make_enqueue(E,1,<<0>>),
+                make_checkout(C1, {auto,1,simple_prefetch}),
+                make_enqueue(E,2,<<>>),
+                make_settle(C1,[0])],
+    run_snapshot_test(#{name => ?FUNCTION_NAME}, Commands),
+    ok.
+
+scenario6(_Config) ->
+    E = c:pid(0,465,9),
+    Commands = [make_enqueue(E,1,<<>>), %% 1 msg on queue - snap: prefix 1
+                make_enqueue(E,2,<<>>) %% 1. msg on queue - snap: prefix 1
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_length => 1}, Commands),
+    ok.
+
+scenario7(_Config) ->
+    C1 = {<<>>, c:pid(0,208,0)},
+    E = c:pid(0,188,0),
+    Commands = [
+                make_enqueue(E,1,<<>>),
+                make_checkout(C1, {auto,1,simple_prefetch}),
+                make_enqueue(E,2,<<>>),
+                make_enqueue(E,3,<<>>),
+                make_settle(C1,[0])],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_length => 1}, Commands),
+    ok.
+
+scenario8(_Config) ->
+    C1 = {<<>>, c:pid(0,208,0)},
+    E = c:pid(0,188,0),
+    Commands = [
+                make_enqueue(E,1,<<>>),
+                make_enqueue(E,2,<<>>),
+                make_checkout(C1, {auto,1,simple_prefetch}),
+                % make_checkout(C1, cancel),
+                {down, E, noconnection},
+                make_settle(C1, [0])],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_length => 1}, Commands),
+    ok.
+
+scenario9(_Config) ->
+    E = c:pid(0,188,0),
+    Commands = [
+                make_enqueue(E,1,<<>>),
+                make_enqueue(E,2,<<>>),
+                make_enqueue(E,3,<<>>)],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_length => 1}, Commands),
+    ok.
+
+scenario10(_Config) ->
+    C1 = {<<>>, c:pid(0,208,0)},
+    E = c:pid(0,188,0),
+    Commands = [
+                make_checkout(C1, {auto,1,simple_prefetch}),
+                make_enqueue(E,1,<<>>),
+                make_settle(C1, [0])
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_length => 1}, Commands),
+    ok.
+
+scenario11(_Config) ->
+    C1 = {<<>>, c:pid(0,215,0)},
+    E = c:pid(0,217,0),
+    Commands = [
+                make_enqueue(E,1,<<>>),
+                make_checkout(C1, {auto,1,simple_prefetch}),
+                make_checkout(C1, cancel),
+                make_enqueue(E,2,<<>>),
+                make_checkout(C1, {auto,1,simple_prefetch}),
+                make_settle(C1, [0]),
+                make_checkout(C1, cancel)
+                ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_length => 2}, Commands),
+    ok.
+
+scenario12(_Config) ->
+    E = c:pid(0,217,0),
+    Commands = [make_enqueue(E,1,<<0>>),
+                make_enqueue(E,2,<<0>>),
+                make_enqueue(E,3,<<0>>)],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_bytes => 2}, Commands),
+    ok.
+
+scenario13(_Config) ->
+    E = c:pid(0,217,0),
+    Commands = [make_enqueue(E,1,<<0>>),
+                make_enqueue(E,2,<<>>),
+                make_enqueue(E,3,<<>>),
+                make_enqueue(E,4,<<>>)
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_length => 2}, Commands),
+    ok.
+
+scenario14(_Config) ->
+    E = c:pid(0,217,0),
+    Commands = [make_enqueue(E,1,<<0,0>>)],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_bytes => 1}, Commands),
     ok.
 
 snapshots(_Config) ->
     run_proper(
       fun () ->
-              ?FORALL(O, ?LET(Ops, log_gen(), expand(Ops)),
-                      test1_prop(O))
-      end, [], 1000).
+              ?FORALL({Length, Bytes, SingleActiveConsumer},
+                      frequency([{10, {0, 0, false}},
+                                 {5, {non_neg_integer(), non_neg_integer(),
+                                      boolean()}}]),
+                      ?FORALL(O, ?LET(Ops, log_gen(200), expand(Ops)),
+                              collect({Length, Bytes},
+                                      snapshots_prop(
+                                        config(?FUNCTION_NAME,
+                                               Length, Bytes,
+                                               SingleActiveConsumer), O))))
+      end, [], 2000).
 
-test1_prop(Commands) ->
-    ct:pal("Commands: ~p~n", [Commands]),
-    try run_snapshot_test(?FUNCTION_NAME, Commands) of
+config(Name, Length, Bytes, SingleActive) ->
+    #{name => Name,
+      max_length => map_max(Length),
+      max_bytes => map_max(Bytes),
+      single_active_consumer_on => SingleActive}.
+
+map_max(0) -> undefined;
+map_max(N) -> N.
+
+snapshots_prop(Conf, Commands) ->
+    ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
+    try run_snapshot_test(Conf, Commands) of
         _ -> true
     catch
         Err ->
@@ -132,10 +270,10 @@ test1_prop(Commands) ->
             false
     end.
 
-log_gen() ->
+log_gen(Size) ->
     ?LET(EPids, vector(2, pid_gen()),
          ?LET(CPids, vector(2, pid_gen()),
-              resize(200,
+              resize(Size,
                      list(
                        frequency(
                          [{20, enqueue_gen(oneof(EPids))},
@@ -157,15 +295,17 @@ down_gen(Pid) ->
     ?LET(E, {down, Pid, oneof([noconnection, noproc])}, E).
 
 enqueue_gen(Pid) ->
-    ?LET(E, {enqueue, Pid, frequency([{10, enqueue},
-                                      {1, delay}])}, E).
+    ?LET(E, {enqueue, Pid,
+             frequency([{10, enqueue},
+                        {1, delay}]),
+             binary()}, E).
 
 checkout_cancel_gen(Pid) ->
     {checkout, Pid, cancel}.
 
 checkout_gen(Pid) ->
     %% pid, tag, prefetch
-    ?LET(C, {checkout, {binary(), Pid}, choose(1, 10)}, C).
+    ?LET(C, {checkout, {binary(), Pid}, choose(1, 100)}, C).
 
 
 -record(t, {state = rabbit_fifo:init(#{name => proper,
@@ -193,9 +333,10 @@ expand(Ops) ->
     lists:reverse(Log).
 
 
-handle_op({enqueue, Pid, When}, #t{enqueuers = Enqs0,
-                                   down = Down,
-                                   effects = Effs} = T) ->
+handle_op({enqueue, Pid, When, Data},
+          #t{enqueuers = Enqs0,
+             down = Down,
+             effects = Effs} = T) ->
     case Down of
         #{Pid := noproc} ->
             %% if it's a noproc then it cannot exist - can it?
@@ -204,13 +345,12 @@ handle_op({enqueue, Pid, When}, #t{enqueuers = Enqs0,
         _ ->
             Enqs = maps:update_with(Pid, fun (Seq) -> Seq + 1 end, 1, Enqs0),
             MsgSeq = maps:get(Pid, Enqs),
-            Cmd = rabbit_fifo:make_enqueue(Pid, MsgSeq, msg),
+            Cmd = rabbit_fifo:make_enqueue(Pid, MsgSeq, Data),
             case When of
                 enqueue ->
                     do_apply(Cmd, T#t{enqueuers = Enqs});
                 delay ->
                     %% just put the command on the effects queue
-                    ct:pal("delaying ~w", [Cmd]),
                     T#t{effects = queue:in(Cmd, Effs)}
             end
     end;
@@ -308,7 +448,6 @@ enq_effs([{send_msg, P, {delivery, CTag, Msgs}, ra_event} | Rem], Q) ->
     Cmd = rabbit_fifo:make_settle({CTag, P}, MsgIds),
     enq_effs(Rem, queue:in(Cmd, Q));
 enq_effs([_ | Rem], Q) ->
-    % ct:pal("enq_effs dropping ~w~n", [E]),
     enq_effs(Rem, Q).
 
 
@@ -323,29 +462,40 @@ run_proper(Fun, Args, NumTests) ->
                          (F, A) -> ct:pal(?LOW_IMPORTANCE, F, A)
                       end}])).
 
-run_snapshot_test(Name, Commands) ->
+run_snapshot_test(Conf, Commands) ->
     %% create every incremental permuation of the commands lists
     %% and run the snapshot tests against that
     [begin
          % ?debugFmt("~w running command to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
-         run_snapshot_test0(Name, C)
+         run_snapshot_test0(Conf, C)
      end || C <- prefixes(Commands, 1, [])].
 
-run_snapshot_test0(Name, Commands) ->
+run_snapshot_test0(Conf, Commands) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
-    {State, Effects} = run_log(test_init(Name), Entries),
+    {State, Effects} = run_log(test_init(Conf), Entries),
+    % ct:pal("beginning snapshot test run for ~w numn commands ~b",
+    %        [maps:get(name, Conf), length(Commands)]),
 
     [begin
+         %% drop all entries below and including the snapshot
          Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
                                        (_) -> false
                                     end, Entries),
          {S, _} = run_log(SnapState, Filtered),
          % assert log can be restored from any release cursor index
-         ?assertEqual(State, S)
+         case S of
+             State -> ok;
+             _ ->
+                 ct:pal("Snapshot tests failed run log:~n"
+                        "~p~n from ~n~p~n Entries~n~p~n",
+                        [Filtered, SnapState, Entries]),
+                 ?assertEqual(State, S)
+         end
      end || {release_cursor, SnapIdx, SnapState} <- Effects],
     ok.
 
+%% transforms [1,2,3] into [[1,2,3], [1,2], [1]]
 prefixes(Source, N, Acc) when N > length(Source) ->
     lists:reverse(Acc);
 prefixes(Source, N, Acc) ->
@@ -364,11 +514,12 @@ run_log(InitState, Entries) ->
                         end
                 end, {InitState, []}, Entries).
 
-test_init(Name) ->
-    rabbit_fifo:init(#{name => Name,
-                       queue_resource => blah,
-                       shadow_copy_interval => 0,
-                       metrics_handler => {?MODULE, metrics_handler, []}}).
+test_init(Conf) ->
+    Default = #{queue_resource => blah,
+                shadow_copy_interval => 0,
+                metrics_handler => {?MODULE, metrics_handler, []}},
+    rabbit_fifo:init(maps:merge(Default, Conf)).
+
 meta(Idx) ->
     #{index => Idx, term => 1}.
 

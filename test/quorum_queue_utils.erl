@@ -5,6 +5,7 @@
 -export([
          wait_for_messages_ready/3,
          wait_for_messages_pending_ack/3,
+         wait_for_messages_total/3,
          dirty_query/3,
          ra_name/1
         ]).
@@ -17,6 +18,10 @@ wait_for_messages_pending_ack(Servers, QName, Ready) ->
     wait_for_messages(Servers, QName, Ready,
                       fun rabbit_fifo:query_messages_checked_out/1, 60).
 
+wait_for_messages_total(Servers, QName, Total) ->
+    wait_for_messages(Servers, QName, Total,
+                      fun rabbit_fifo:query_messages_total/1, 60).
+
 wait_for_messages(Servers, QName, Number, Fun, 0) ->
     Msgs = dirty_query(Servers, QName, Fun),
     Totals = lists:map(fun(M) when is_map(M) ->
@@ -28,8 +33,8 @@ wait_for_messages(Servers, QName, Number, Fun, 0) ->
 wait_for_messages(Servers, QName, Number, Fun, N) ->
     Msgs = dirty_query(Servers, QName, Fun),
     ct:pal("Got messages ~p", [Msgs]),
-    case lists:all(fun(M) when is_map(M) ->
-                           maps:size(M) == Number;
+    case lists:all(fun(C) when is_integer(C) ->
+                           C == Number;
                       (_) ->
                            false
                    end, Msgs) of

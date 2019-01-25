@@ -4,12 +4,14 @@
          empty/0,
          fetch/2,
          append/3,
+         update_if_present/3,
          return/3,
          delete/2,
          size/1,
          smallest/1,
          next_key_after/2,
-         map/2
+         map/2,
+         to_map/1
         ]).
 
 -include_lib("ra/include/ra.hrl").
@@ -36,12 +38,22 @@ fetch(Key, #?MODULE{data = Data}) ->
 -spec append(integer(), term(), state()) -> state().
 append(Key, Value,
        #?MODULE{data = Data,
-              smallest = Smallest,
-              largest = Largest} = State)
+                smallest = Smallest,
+                largest = Largest} = State)
   when Key > Largest orelse Largest =:= undefined ->
     State#?MODULE{data = maps:put(Key, Value, Data),
-                smallest = ra_lib:default(Smallest, Key),
-                largest = Key}.
+                  smallest = ra_lib:default(Smallest, Key),
+                  largest = Key}.
+
+-spec update_if_present(integer(), term(), state()) -> state().
+update_if_present(Key, Value, #?MODULE{data = Data} = State) ->
+    case Data of
+        #{Key := _} ->
+            State#?MODULE{data = maps:put(Key, Value, Data)};
+        _ ->
+            State
+    end.
+
 
 -spec return(integer(), term(), state()) -> state().
 return(Key, Value, #?MODULE{data = Data, smallest = Smallest} = State)
@@ -75,6 +87,10 @@ delete(Key, #?MODULE{data = Data} = State) ->
 -spec size(state()) -> non_neg_integer().
 size(#?MODULE{data = Data}) ->
     maps:size(Data).
+
+-spec to_map(state()) -> #{integer() => term()}.
+to_map(#?MODULE{data = Data}) ->
+    Data.
 
 -spec smallest(state()) -> undefined | {integer(), term()}.
 smallest(#?MODULE{smallest = undefined}) ->
