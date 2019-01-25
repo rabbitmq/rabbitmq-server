@@ -152,10 +152,15 @@ ra_machine(Q) ->
 
 ra_machine_config(Q = #amqqueue{name = QName,
                                 pid = {Name, _}}) ->
+    %% take the minimum value of the policy and the queue arg if present
+    MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
+    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     #{name => Name,
       queue_resource => QName,
       dead_letter_handler => dlx_mfa(Q),
       become_leader_handler => {?MODULE, become_leader, [QName]},
+      max_length => MaxLength,
+      max_bytes => MaxBytes,
       single_active_consumer_on => single_active_consumer_on(Q)}.
 
 single_active_consumer_on(#amqqueue{arguments = QArguments}) ->
@@ -636,8 +641,10 @@ delete_member(#amqqueue{pid = {RaName, _}, name = QName}, Node) ->
 
 %%----------------------------------------------------------------------------
 dlx_mfa(Q) ->
-    DLX = init_dlx(args_policy_lookup(<<"dead-letter-exchange">>, fun res_arg/2, Q), Q),
-    DLXRKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun res_arg/2, Q),
+    DLX = init_dlx(args_policy_lookup(<<"dead-letter-exchange">>,
+                                      fun res_arg/2, Q), Q),
+    DLXRKey = args_policy_lookup(<<"dead-letter-routing-key">>,
+                                 fun res_arg/2, Q),
     {?MODULE, dead_letter_publish, [DLX, DLXRKey, Q#amqqueue.name]}.
 
 init_dlx(undefined, _Q) ->
@@ -829,9 +836,8 @@ qnode({_, Node}) ->
     Node.
 
 check_invalid_arguments(QueueName, Args) ->
-    Keys = [<<"x-expires">>, <<"x-message-ttl">>, <<"x-max-length">>,
-            <<"x-max-length-bytes">>, <<"x-max-priority">>, <<"x-overflow">>,
-            <<"x-queue-mode">>],
+    Keys = [<<"x-expires">>, <<"x-message-ttl">>,
+            <<"x-max-priority">>, <<"x-queue-mode">>, <<"x-overflow">>],
     [case rabbit_misc:table_lookup(Args, Key) of
          undefined -> ok;
          _TypeVal   -> rabbit_misc:protocol_error(
