@@ -23,7 +23,7 @@
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
-         stop_and_halt/0, await_startup/0, await_startup/1,
+         stop_and_halt/0, await_startup/0, await_startup/1, await_startup/2,
          status/0, is_running/0, alarms/0,
          is_running/1, environment/0, rotate_logs/0,
          start_fhc/0]).
@@ -236,6 +236,12 @@
 
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
+%% 5 minutes
+-define(BOOT_START_TIMEOUT,     300).
+%% 12 hours
+-define(BOOT_FINISH_TIMEOUT,    43200).
+-define(BOOT_STATUS_SAMPLING_INTERVAL, 100).
+
 %%----------------------------------------------------------------------------
 
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
@@ -248,7 +254,11 @@
 -spec boot() -> 'ok'.
 -spec stop() -> 'ok'.
 -spec stop_and_halt() -> no_return().
--spec await_startup() -> 'ok'.
+
+-spec await_startup() -> 'ok' | {'error', 'timeout'}.
+-spec await_startup(node()) -> 'ok' | {'error', 'timeout'}.
+-spec await_startup(node(), non_neg_integer()) -> 'ok' | {'error', 'timeout'}.
+
 -spec status
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -682,10 +692,21 @@ handle_app_error(Term) ->
             throw({Term, App, Reason})
     end.
 
+is_booting() -> is_booting(node()).
+
+is_booting(Node) ->
+    case rpc:call(Node, erlang, whereis, [rabbit_boot]) of
+        {badrpc, _} = Err -> Err;
+        undefined         -> false;
+        P when is_pid(P)  -> true
+    end.
+
 await_startup() ->
     await_startup(node()).
 
-await_startup(Node) ->
+await_startup(Timeout) when is_integer(Timeout) ->
+    await_startup(node(), Timeout);
+await_startup(Node) when is_atom(Node) ->
     case is_booting(Node) of
         true -> wait_for_boot_to_finish(Node);
         false ->
@@ -696,20 +717,31 @@ await_startup(Node) ->
             end
     end.
 
-is_booting() -> is_booting(node()).
-
-is_booting(Node) ->
-    case rpc:call(Node, erlang, whereis, [rabbit_boot]) of
-        {badrpc, _} = Err -> Err;
-        undefined         -> false;
-        P when is_pid(P)  -> true
+await_startup(Node, Timeout) ->
+    case is_booting(Node) of
+        true  -> wait_for_boot_to_finish(Node, Timeout);
+        false ->
+            case is_running(Node) of
+                true  -> ok;
+                false -> wait_for_boot_to_start(Node, Timeout),
+                         wait_for_boot_to_finish(Node, Timeout)
+            end
     end.
 
 wait_for_boot_to_start(Node) ->
+    wait_for_boot_to_start(Node, ?BOOT_START_TIMEOUT).
+
+wait_for_boot_to_start(Node, Timeout) ->
+    Iterations = Timeout div ?BOOT_STATUS_SAMPLING_INTERVAL,
+    do_wait_for_boot_to_start(Node, Iterations).
+
+do_wait_for_boot_to_start(_Node, IterationsLeft) when IterationsLeft =< 0 ->
+    {error, timeout};
+do_wait_for_boot_to_start(Node, IterationsLeft) ->
     case is_booting(Node) of
         false ->
-            timer:sleep(100),
-            wait_for_boot_to_start(Node);
+            timer:sleep(?BOOT_STATUS_SAMPLING_INTERVAL),
+            do_wait_for_boot_to_start(Node, IterationsLeft - 1);
         {badrpc, _} = Err ->
             Err;
         true  ->
@@ -717,6 +749,15 @@ wait_for_boot_to_start(Node) ->
     end.
 
 wait_for_boot_to_finish(Node) ->
+    wait_for_boot_to_finish(Node, ?BOOT_FINISH_TIMEOUT).
+
+wait_for_boot_to_finish(Node, Timeout) ->
+    Iterations = Timeout div ?BOOT_STATUS_SAMPLING_INTERVAL,
+    do_wait_for_boot_to_finish(Node, Iterations).
+
+do_wait_for_boot_to_finish(_Node, IterationsLeft) when IterationsLeft =< 0 ->
+    {error, timeout};
+do_wait_for_boot_to_finish(Node, IterationsLeft) ->
     case is_booting(Node) of
         false ->
             %% We don't want badrpc error to be interpreted as false,
@@ -729,8 +770,8 @@ wait_for_boot_to_finish(Node) ->
         {badrpc, _} = Err ->
             Err;
         true  ->
-            timer:sleep(100),
-            wait_for_boot_to_finish(Node)
+            timer:sleep(?BOOT_STATUS_SAMPLING_INTERVAL),
+            do_wait_for_boot_to_finish(Node, IterationsLeft - 1)
     end.
 
 status() ->
