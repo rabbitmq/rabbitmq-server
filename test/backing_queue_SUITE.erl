@@ -723,7 +723,7 @@ bq_queue_recover1(Config) ->
                                 true, false, [], none, <<"acting-user">>),
     publish_and_confirm(Q, <<>>, Count),
 
-    SupPid = rabbit_ct_broker_helpers:get_queue_sup_pid(Q),
+    SupPid = get_queue_sup_pid(Q),
     true = is_pid(SupPid),
     exit(SupPid, kill),
     exit(QPid, kill),
@@ -750,6 +750,22 @@ bq_queue_recover1(Config) ->
               ok = rabbit_amqqueue:internal_delete(QName, <<"acting-user">>)
       end),
     passed.
+
+%% Return the PID of the given queue's supervisor.
+get_queue_sup_pid(#amqqueue { pid = QPid, name = QName }) ->
+    VHost = QName#resource.virtual_host,
+    {ok, AmqSup} = rabbit_amqqueue_sup_sup:find_for_vhost(VHost, node(QPid)),
+    Sups = supervisor:which_children(AmqSup),
+    get_queue_sup_pid(Sups, QPid).
+
+get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
+    WorkerPids = [Pid || {_, Pid, _, _} <- supervisor:which_children(SupPid)],
+    case lists:member(QueuePid, WorkerPids) of
+        true  -> SupPid;
+        false -> get_queue_sup_pid(Rest, QueuePid)
+    end;
+get_queue_sup_pid([], _QueuePid) ->
+    undefined.
 
 variable_queue_dynamic_duration_change(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,

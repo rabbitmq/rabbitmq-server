@@ -14,31 +14,41 @@
 .\" The Initial Developer of the Original Code is Pivotal Software, Inc.
 .\" Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 .\"
-.Dd April 25, 2017
+.Dd January 25, 2019
 .Dt RABBITMQ-PLUGINS 8
 .Os "RabbitMQ Server"
 .Sh NAME
 .Nm rabbitmq-plugins
-.Nd command line for managing RabbitMQ broker plugins
+.Nd command line for managing RabbitMQ plugins
 .\" ------------------------------------------------------------------
 .Sh SYNOPSIS
 .\" ------------------------------------------------------------------
 .Nm
+.Op Fl q
+.Op Fl s
+.Op Fl l
 .Op Fl n Ar node
+.Op Fl t Ar timeout
 .Ar command
 .Op Ar command_options
 .\" ------------------------------------------------------------------
 .Sh DESCRIPTION
 .\" ------------------------------------------------------------------
 .Nm
-is a command line tool for managing RabbitMQ broker plugins.
-It allows one to enable, disable and browse plugins.
+is a command line tool for managing RabbitMQ plugins.
+See the
+.Lk https://www.rabbitmq.com/plugins.html "RabbitMQ Plugins guide"
+for an overview of RabbitMQ plugins and how they are used.
+
+.Nm
+allows the operator to enable, disable and inspect plugins.
 It must be run by a user with write permissions to the RabbitMQ
 configuration directory.
 .Pp
-Some plugins depend on others to work correctly.
+Plugins can depend on other plugins.
 .Nm
-traverses these dependencies and enables all required plugins.
+resolves the dependencies and enables or disables all dependencies
+so that the user doesn't have to manage them explicitly.
 Plugins listed on the
 .Nm
 command line are marked as explicitly enabled; dependent plugins are
@@ -54,12 +64,66 @@ and
 commands will update the plugins file and then attempt to connect to the
 broker and ensure it is running all enabled plugins.
 By default if it is not possible to connect to the running broker (for
-example if it is stopped) then a warning is displayed.
-Specify
-.Fl -online
-or
+example if it is stopped) the operation will fail.
+If
+.Nm
+is used on the same host as the target node,
 .Fl -offline
-to change this behaviour.
+can be specified to make
+.Nm
+resolve and update plugin state directly (without contacting the node).
+Such changes will only have an effect on next node start.
+To learn more, see the
+.Lk https://www.rabbitmq.com/plugins.html "RabbitMQ Plugins guide"
+.
+.\" ------------------------------------------------------------------
+.Sh OPTIONS
+.\" ------------------------------------------------------------------
+.Bl -tag -width Ds
+.It Fl n Ar node
+Default node is
+.Qq Pf rabbit@ Ar target-hostname ,
+where
+.Ar target-hostname
+is the local host.
+On a host named
+.Qq myserver.example.com ,
+the node name will usually be
+.Qq rabbit@myserver
+(unless
+.Ev RABBITMQ_NODENAME
+has been overridden).
+The output of
+.Qq hostname -s
+is usually the correct suffix to use after the
+.Qq @
+sign.
+See
+.Xr rabbitmq-server 8
+for details of configuring a RabbitMQ node.
+.It Fl q , -quiet
+Quiet output mode is selected.
+Informational messages are reduced when quiet mode is in effect.
+.It Fl s , -silent
+Silent output mode is selected.
+Informational messages are reduced and table headers are suppressed when silent mode is in effect.
+.It Fl t Ar timeout , Fl -timeout Ar timeout
+Operation timeout in seconds.
+Not all commands support timeouts.
+Default is
+.Cm infinity .
+.It Fl l , Fl -longnames
+Must be specified when the cluster is configured to use long (FQDN) node names.
+To learn more, see the
+.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
+.It Fl -erlang-cookie Ar cookie
+Shared secret to use to authenticate to the target node.
+Prefer using a local file or the
+.Ev RABBITMQ_ERLANG_COOKIE
+environment variable instead of specifying this option on the command line.
+To learn more, see the
+.Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
+.El
 .\" ------------------------------------------------------------------
 .Sh COMMANDS
 .\" ------------------------------------------------------------------
@@ -124,9 +188,9 @@ This command lists all implicitly or explicitly enabled RabbitMQ plugins.
 .It Cm enable Oo Fl -offline Oc Oo Fl -online Oc Ar plugin ...
 .Bl -tag -width Ds
 .It Fl -offline
-Just modify the enabled plugins file.
+Modify node's enabled plugin state directly without contacting the node.
 .It Fl -online
-Treat failure to connect to the running broker as fatal.
+Treat a failure to connect to the running broker as fatal.
 .It Ar plugin
 One or more plugins to enable.
 .El
@@ -144,9 +208,9 @@ plugins and all their dependencies:
 .It Cm disable Oo Fl -offline Oc Oo Fl -online Oc Ar plugin ...
 .Bl -tag -width Ds
 .It Fl -offline
-Just modify the enabled plugins file.
+Modify node's enabled plugin state directly without contacting the node.
 .It Fl -online
-Treat failure to connect to the running broker as fatal.
+Treat a failure to connect to the running broker as fatal.
 .It Ar plugin
 One or more plugins to disable.
 .El
@@ -154,19 +218,19 @@ One or more plugins to disable.
 Disables the specified plugins and all their dependencies.
 .Pp
 For example, this command disables
-.Qq amqp_client
+.Qq rabbitmq_management
 and all plugins that depend on it:
 .sp
-.Dl rabbitmq-plugins disable amqp_client
+.Dl rabbitmq-plugins disable rabbitmq_management
 .\" ------------------------------------
 .It Cm set Oo Fl -offline Oc Oo Fl -online Oc Op Ar plugin ...
 .Bl -tag -width Ds
 .It Fl -offline
-Just modify the enabled plugins file.
+Modify node's enabled plugin state directly without contacting the node.
 .It Fl -online
-Treat failure to connect to the running broker as fatal.
+Treat a failure to connect to the running broker as fatal.
 .It Ar plugin
-Zero or more plugins to enable.
+Zero or more plugins to disable.
 .El
 .Pp
 Enables the specified plugins and all their dependencies.
