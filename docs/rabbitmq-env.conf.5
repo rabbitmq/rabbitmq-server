@@ -14,18 +14,18 @@
 .\" The Initial Developer of the Original Code is Pivotal Software, Inc.
 .\" Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 .\"
-.Dd April 25, 2017
+.Dd January 25, 2019
 .Dt RABBITMQ-ENV.CONF 5
 .Os "RabbitMQ Server"
 .Sh NAME
 .Nm rabbitmq-env.conf
-.Nd default settings for RabbitMQ AMQP server
+.Nd environment variables used by RabbitMQ server
 .\" ------------------------------------------------------------------
 .Sh DESCRIPTION
 .\" ------------------------------------------------------------------
 .Nm
-contains variable settings that override the defaults built in to the
-RabbitMQ startup scripts.
+contains environment variables that override the defaults built in to the
+RabbitMQ scripts and CLI tools.
 .Pp
 The file is interpreted by the system shell, and so should consist of a
 sequence of shell environment variable definitions.
@@ -58,20 +58,28 @@ prefix removed:
 from the environment becomes
 .Ev NODE_PORT
 in
-.Nm ,
-etc.
+.Nm .
 .\" ------------------------------------------------------------------
 .Sh EXAMPLES
 .\" ------------------------------------------------------------------
-Here is an example of a complete
+Below is an example of a minimalistic 
 .Nm
-file that overrides the default Erlang node name from "rabbit" to
+file that overrides the default node name prefix from "rabbit" to
 "hare".
 .sp
 .Dl # I am a complete rabbitmq-env.conf file.
 .Dl # Comment lines start with a hash character.
 .Dl # This is a /bin/sh script file - use ordinary envt var syntax
 .Dl NODENAME=hare
+
+In the below
+.Nm
+file RabbitMQ configuration file location is changed to "/data/services/rabbitmq/rabbitmq.conf".
+.sp
+.Dl # I am a complete rabbitmq-env.conf file.
+.Dl # Comment lines start with a hash character.
+.Dl # This is a /bin/sh script file - use ordinary envt var syntax
+.Dl CONFIG_FILE=/data/services/rabbitmq/rabbitmq.conf
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
 .\" ------------------------------------------------------------------

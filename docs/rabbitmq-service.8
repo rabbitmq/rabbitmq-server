@@ -19,7 +19,7 @@
 .Os "RabbitMQ Server"
 .Sh NAME
 .Nm rabbitmq-service.bat
-.Nd manage RabbitMQ AMQP Windows service
+.Nd tool for managing RabbitMQ Windows service
 .\" ------------------------------------------------------------------
 .Sh SYNOPSIS
 .\" ------------------------------------------------------------------
@@ -28,17 +28,14 @@
 .\" ------------------------------------------------------------------
 .Sh DESCRIPTION
 .\" ------------------------------------------------------------------
-RabbitMQ is an implementation of AMQP, the emerging standard for high
-performance enterprise messaging.
-The RabbitMQ server is a robust and scalable implementation of an AMQP
-broker.
+RabbitMQ is an open source multi-protocol messaging broker.
 .Pp
 Running
 .Nm
-allows the RabbitMQ broker to be run as a service on
-NT/2000/2003/XP/Vista® environments.
+allows the RabbitMQ broker to be run as a service in
+Windows® environments.
 The RabbitMQ broker service can be started and stopped using the
-Windows® services applet.
+Windows® services panel.
 .Pp
 By default the service will run in the authentication context of the
 local system account.
@@ -93,25 +90,28 @@ Note: Windows only. Defaults to the application data directory of the
 current user. This is the location of log and database directories.
 .It Ev RABBITMQ_NODENAME
 Defaults to
-.Qq rabbit .
-This can be useful if you want to run more than one node per machine -
+.Qq rabbit@ .
+followed by the computed hostname.
+Can be used to run multiple nodes on the same host.
+Every node in a cluster must have a unique
 .Ev RABBITMQ_NODENAME
-should be unique per erlang-node-and-machine combination.
-See the
-.Lk http://www.rabbitmq.com/clustering.html#single-machine clustering on a single machine guide
-for details.
+To learn more, see the
+.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
 .It Ev RABBITMQ_NODE_IP_ADDRESS
-By default RabbitMQ will bind to all interfaces, on IPv4 and IPv6 if
-available.
-Set this if you only want to bind to one network interface or address
+By default RabbitMQ will bind to all IPv6 and IPv4 interfaces available.
+This variable limits the node to one network interface or address
 family.
+To learn more, see the
+.Lk https://www.rabbitmq.com/networking.html "RabbitMQ Networking guide"
 .It Ev RABBITMQ_NODE_PORT
-Defaults to 5672.
+AMQP 0-9-1 and AMQP 1.0 port. Defaults to 5672.
+To learn more, see the
+.Lk https://www.rabbitmq.com/networking.html "RabbitMQ Networking guide"
 .It Ev ERLANG_SERVICE_MANAGER_PATH
 Defaults to
-.Pa C:\(rsProgram\ Files\(rserl5.5.5\(rserts-5.5.5\(rsbin
+.Pa C:\(rsProgram\ Files\(rserl{version}\(rserts-{version}\(rsbin
 (or
-.Pa C:\(rsProgram\ Files\ (x86)\(rserl5.5.5\(rserts-5.5.5\(rsbin
+.Pa C:\(rsProgram\ Files\ (x86)\(rserl{version}\(rserts-{version}\(rsbin
 for 64-bit environments).
 This is the installation location of the Erlang service manager.
 .It Ev RABBITMQ_CONSOLE_LOG
