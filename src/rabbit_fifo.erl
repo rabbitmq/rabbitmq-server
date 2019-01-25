@@ -464,8 +464,6 @@ apply(_, {down, ConsumerPid, noconnection},
                           #consumer{checked_out = Checked0} = C,
                           {Co, St0}) when node(P) =:= Node ->
                               St = return_all(St0, Checked0),
-                              %% TODO: need to increment credit here
-                              %% with the size of the Checked map
                               Credit = increase_credit(C, maps:size(Checked0)),
                               {maps:put(K, C#consumer{suspected_down = true,
                                                       credit = Credit,
@@ -538,7 +536,7 @@ apply(Meta, {nodeup, Node}, #state{consumers = Cons0,
                      (_, _, Acc) ->
                           Acc
                   end, {Cons0, SQ0, Monitors}, Cons0),
-    % TODO: avoid list concat
+
     checkout(Meta, State0#state{consumers = Cons1, enqueuers = Enqs1,
                                 service_queue = SQ,
                                 waiting_consumers = WaitingConsumers}, Effects);
@@ -694,7 +692,6 @@ handle_aux(_, cast, Cmd, {Name, Use0}, Log, _) ->
 
 %%% Queries
 
-%% TODO: this doesn't take returns into account
 query_messages_ready(State) ->
     messages_ready(State).
 
@@ -1108,7 +1105,6 @@ update_smallest_raft_index(IncomingRaftIdx, OldIndexes,
             end
     end.
 
-% TODO update message then update messages and returns in single operations
 return_one(0, {'$prefix_msg', _} = Msg,
            #state{returns = Returns} = State0) ->
     add_bytes_return(Msg,
