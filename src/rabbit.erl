@@ -255,10 +255,6 @@
 -spec stop() -> 'ok'.
 -spec stop_and_halt() -> no_return().
 
--spec await_startup() -> 'ok' | {'error', 'timeout'}.
--spec await_startup(node() | non_neg_integer()) -> 'ok' | {'error', 'timeout'}.
--spec await_startup(node(), non_neg_integer()) -> 'ok' | {'error', 'timeout'}.
-
 -spec status
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -701,8 +697,13 @@ is_booting(Node) ->
         P when is_pid(P)  -> true
     end.
 
+
+-spec await_startup() -> 'ok' | {'error', 'timeout'}.
+
 await_startup() ->
     await_startup(node()).
+
+-spec await_startup(node() | non_neg_integer()) -> 'ok' | {'error', 'timeout'}.
 
 await_startup(Timeout) when is_integer(Timeout) ->
     await_startup(node(), Timeout);
@@ -716,6 +717,8 @@ await_startup(Node) when is_atom(Node) ->
                          wait_for_boot_to_finish(Node)
             end
     end.
+
+-spec await_startup(node(), non_neg_integer()) -> 'ok'  | {'error', 'timeout'}.
 
 await_startup(Node, Timeout) ->
     case is_booting(Node) of
