@@ -14,20 +14,24 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ShutdownCommandTest do
+defmodule AwaitStartupCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands.ShutdownCommand
+  @command RabbitMQ.CLI.Ctl.Commands.AwaitStartupCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-    :ok
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 300_000}}
   end
 
   setup do
     {:ok, opts: %{node: get_rabbit_hostname()}}
+  end
+
+  test "merge_defaults: default timeout is 5 minutes" do
+    assert @command.merge_defaults([], %{}) == {[], %{timeout: 300}}
   end
 
   test "validate: accepts no arguments", context do
@@ -35,14 +39,19 @@ defmodule ShutdownCommandTest do
   end
 
   test "validate: with extra arguments returns an arg count error", context do
-    assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
+    assert @command.validate(["extra"], context[:opts]) ==
+      {:validation_failure, :too_many_args}
   end
 
   test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
 
-    opts = %{node: target}
+    opts = %{node: target, timeout: 5}
     assert match?({:badrpc, :nodedown}, @command.run([], opts))
+  end
+
+  test "run: request to a fully booted node succeeds", context do
+    assert @command.run([], Map.merge(context[:opts], %{timeout: 5})) == :ok
   end
 
   test "empty banner", context do
