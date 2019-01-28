@@ -23,7 +23,6 @@ defmodule ShutdownCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     :ok
   end
 
@@ -31,15 +30,13 @@ defmodule ShutdownCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname()}}
   end
 
-  test "validate accepts no arguments", context do
+  test "validate: accepts no arguments", context do
     assert @command.validate([], context[:opts]) == :ok
   end
 
   test "validate: with extra arguments returns an arg count error", context do
     assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
-
-  # TODO: we don't have integration tests yet.
 
   test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
