@@ -35,8 +35,8 @@
          channel_queue_exchange_down/1,
          channel_exchange_down/1]).
 
--export([consumer_created/8,
-         consumer_updated/8,
+-export([consumer_created/9,
+         consumer_updated/9,
          consumer_deleted/3]).
 
 -export([queue_stats/2,
@@ -67,6 +67,8 @@
 
 -type(channel_stats_type() :: queue_exchange_stats | queue_stats |
 			      exchange_stats | reductions).
+
+-type(activity_status() :: up | single_active | waiting | suspected_down).
 %%----------------------------------------------------------------------------
 %% Specs
 %%----------------------------------------------------------------------------
@@ -85,9 +87,9 @@
                                    rabbit_exchange:name()}}) -> ok.
 -spec channel_exchange_down({pid(), rabbit_exchange:name()}) -> ok.
 -spec consumer_created(pid(), binary(), boolean(), boolean(),
-                       rabbit_amqqueue:name(), integer(), boolean(), list()) -> ok.
+                       rabbit_amqqueue:name(), integer(), boolean(), activity_status(), list()) -> ok.
 -spec consumer_updated(pid(), binary(), boolean(), boolean(),
-                       rabbit_amqqueue:name(), integer(), boolean(), list()) -> ok.
+                       rabbit_amqqueue:name(), integer(), boolean(), activity_status(), list()) -> ok.
 -spec consumer_deleted(pid(), binary(), rabbit_amqqueue:name()) -> ok.
 -spec queue_stats(rabbit_amqqueue:name(), rabbit_types:infos()) -> ok.
 -spec queue_stats(rabbit_amqqueue:name(), integer(), integer(), integer(),
@@ -227,15 +229,15 @@ channel_exchange_down(Id) ->
     ok.
 
 consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-                 PrefetchCount, SingleActive, Args) ->
+                 PrefetchCount, Active, ActivityStatus, Args) ->
     ets:insert(consumer_created, {{QName, ChPid, ConsumerTag}, ExclusiveConsume,
-                                   AckRequired, PrefetchCount, SingleActive, Args}),
+                                   AckRequired, PrefetchCount, Active, ActivityStatus, Args}),
     ok.
 
 consumer_updated(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-                 PrefetchCount, SingleActive, Args) ->
+                 PrefetchCount, Active, ActivityStatus, Args) ->
     ets:insert(consumer_created, {{QName, ChPid, ConsumerTag}, ExclusiveConsume,
-                                   AckRequired, PrefetchCount, SingleActive, Args}),
+                                   AckRequired, PrefetchCount, Active, ActivityStatus, Args}),
     ok.
 
 consumer_deleted(ChPid, ConsumerTag, QName) ->
