@@ -612,13 +612,14 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                                                       DepsDir,
                                                       SecDepsDir,
                                                       all)),
+                        SecScriptsDir = filename:join([SecDepsDir, "rabbit", "scripts"]),
                         [{"DEPS_DIR=~s", [SecDepsDir]},
                          {"REBAR_DEPS_DIR=~s", [SecDepsDir]},
                          {"ERL_LIBS=~s", [SecErlLibs]},
-                         "RABBITMQ_SERVER=",
-                         "RABBITMQCTL=",
-                         "RABBITMQ_PLUGINS=",
-                         "RABBITMQ_SCRIPTS_DIR="];
+                         {"RABBITMQ_SCRIPTS_DIR=~s", [SecScriptsDir]},
+                         {"RABBITMQ_SERVER=~s/rabbitmq-server", [SecScriptsDir]},
+                         {"RABBITMQCTL=~s/rabbitmqctl", [SecScriptsDir]},
+                         {"RABBITMQ_PLUGINS=~s/rabbitmq-plugins", [SecScriptsDir]}];
                     false ->
                         []
                 end,
