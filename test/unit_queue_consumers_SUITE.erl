@@ -25,7 +25,8 @@ all() ->
     [
         is_same,
         get_consumer,
-        get
+        get,
+        list_consumers
     ].
 
 is_same(_Config) ->
@@ -77,6 +78,33 @@ get_consumer(_Config) ->
         undefined,
         rabbit_queue_consumers:get_consumer(state(consumers([])))
     ),
+    ok.
+
+list_consumers(_Config) ->
+    State = state(consumers([consumer(self(), <<"1">>), consumer(self(), <<"2">>), consumer(self(), <<"3">>)])),
+    Consumer = rabbit_queue_consumers:get_consumer(State),
+    {_Pid, ConsumerRecord} = Consumer,
+    CTag = rabbit_queue_consumers:consumer_tag(ConsumerRecord),
+    ConsumersWithSingleActive = rabbit_queue_consumers:all(State, Consumer, true),
+    ?assertEqual(3, length(ConsumersWithSingleActive)),
+    lists:foldl(fun({Pid, Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+        ?assertEqual(self(), Pid),
+        case Tag of
+            CTag ->
+                ?assert(Active),
+                ?assertEqual(single_active, ActivityStatus);
+            _ ->
+                ?assertNot(Active),
+                ?assertEqual(waiting, ActivityStatus)
+        end
+              end, [], ConsumersWithSingleActive),
+    ConsumersNoSingleActive = rabbit_queue_consumers:all(State, none, false),
+    ?assertEqual(3, length(ConsumersNoSingleActive)),
+    lists:foldl(fun({Pid, _, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+                    ?assertEqual(self(), Pid),
+                    ?assert(Active),
+                    ?assertEqual(up, ActivityStatus)
+                end, [], ConsumersNoSingleActive),
     ok.
 
 consumers([]) ->

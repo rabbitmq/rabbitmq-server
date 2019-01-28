@@ -364,7 +364,7 @@ terminate_shutdown(Fun, #q{status = Status} = State) ->
                      QName = qname(State),
                      notify_decorators(shutdown, State),
                      [emit_consumer_deleted(Ch, CTag, QName, ActingUser) ||
-                         {Ch, CTag, _, _, _, _, _} <-
+                         {Ch, CTag, _, _, _, _, _, _} <-
                              rabbit_queue_consumers:all(Consumers)],
                      State1#q{backing_queue_state = Fun(BQS)}
     end.
@@ -1211,7 +1211,7 @@ handle_call({info, Items}, _From, State) ->
 handle_call(consumers, _From, State = #q{consumers = Consumers, single_active_consumer_on = false}) ->
     reply(rabbit_queue_consumers:all(Consumers), State);
 handle_call(consumers, _From, State = #q{consumers = Consumers, active_consumer = ActiveConsumer}) ->
-    reply(rabbit_queue_consumers:all(Consumers, ActiveConsumer), State);
+    reply(rabbit_queue_consumers:all(Consumers, ActiveConsumer, true), State);
 
 handle_call({notify_down, ChPid}, _From, State) ->
     %% we want to do this synchronously, so that auto_deleted queues
@@ -1296,15 +1296,18 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
             QName = qname(State1),
             AckRequired = not NoAck,
             TheConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, State1#q.consumers),
-            IsSingleActiveConsumer = case {SingleActiveConsumerOn, State1#q.active_consumer} of
-                                         {true, TheConsumer} ->
-                                             true;
-                                         _ ->
-                                             false
-                                     end,
+            {ConsumerIsActive, ActivityStatus} =
+                case {SingleActiveConsumerOn, State1#q.active_consumer} of
+                    {true, TheConsumer} ->
+                       {true, single_active};
+                    {true, _} ->
+                       {false, waiting};
+                    {false, _} ->
+                       {true, up}
+                end,
             rabbit_core_metrics:consumer_created(
                 ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-                PrefetchCount, IsSingleActiveConsumer, Args),
+                PrefetchCount, ConsumerIsActive, ActivityStatus, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                 AckRequired, QName, PrefetchCount,
                 Args, none, ActingUser),
@@ -1425,7 +1428,7 @@ maybe_notify_consumer_updated(#q{single_active_consumer_on = true} = State, _Pre
             {Tag, Ack, Prefetch, Args} = rabbit_queue_consumers:get_infos(Consumer),
             rabbit_core_metrics:consumer_updated(
                 ChPid, Tag, false, Ack, qname(State),
-                Prefetch, true, Args
+                Prefetch, true, single_active, Args
             ),
             ok;
         _ ->

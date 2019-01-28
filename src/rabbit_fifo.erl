@@ -460,22 +460,24 @@ apply(_, {down, ConsumerPid, noconnection},
       #state{consumers = Cons0,
              enqueuers = Enqs0} = State0) ->
     Node = node(ConsumerPid),
+    ConsumerUpdateActiveFun = consumer_active_flag_update_function(State0),
     % mark all consumers and enqueuers as suspected down
     % and monitor the node so that we can find out the final state of the
     % process at some later point
-    {Cons, State} = maps:fold(
-                      fun({_, P} = K,
-                          #consumer{checked_out = Checked0} = C,
-                          {Co, St0}) when node(P) =:= Node ->
-                              St = return_all(St0, Checked0),
-                              Credit = increase_credit(C, maps:size(Checked0)),
-                              {maps:put(K, C#consumer{suspected_down = true,
-                                                      credit = Credit,
-                                                      checked_out = #{}}, Co),
-                               St};
-                         (K, C, {Co, St}) ->
-                              {maps:put(K, C, Co), St}
-                      end, {#{}, State0}, Cons0),
+    {Cons, State, Effects1} = maps:fold(
+                                  fun({_, P} = K,
+                                      #consumer{checked_out = Checked0} = C,
+                                      {Co, St0, Eff}) when node(P) =:= Node ->
+                                          St = return_all(St0, Checked0),
+                                          Credit = increase_credit(C, maps:size(Checked0)),
+                                          Eff1 = ConsumerUpdateActiveFun(St, K, C, false, suspected_down, Eff),
+                                          {maps:put(K, C#consumer{suspected_down = true,
+                                                                  credit = Credit,
+                                                                  checked_out = #{}}, Co),
+                                           St, Eff1};
+                                     (K, C, {Co, St, Eff}) ->
+                                          {maps:put(K, C, Co), St, Eff}
+                                  end, {#{}, State0, []}, Cons0),
     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
                             E#enqueuer{suspected_down = true};
                        (_, E) -> E
@@ -483,17 +485,17 @@ apply(_, {down, ConsumerPid, noconnection},
     % mark waiting consumers as suspected if necessary
     WaitingConsumers = maybe_mark_suspect_waiting_consumers(Node, State0, true),
 
-    Effects = case maps:size(Cons) of
-                  0 ->
-                      [{aux, inactive}, {monitor, node, Node}];
-                  _ ->
-                      [{monitor, node, Node}]
-              end,
+    Effects2 = case maps:size(Cons) of
+                   0 ->
+                       [{aux, inactive}, {monitor, node, Node}];
+                   _ ->
+                       [{monitor, node, Node}]
+               end ++ Effects1,
     %% TODO: should we run a checkout here?
     {State#state{consumers = Cons, enqueuers = Enqs,
-                 waiting_consumers = WaitingConsumers}, ok, Effects};
+                 waiting_consumers = WaitingConsumers}, ok, Effects2};
 apply(Meta, {down, Pid, _Info}, #state{consumers = Cons0,
-                                    enqueuers = Enqs0} = State0) ->
+                                       enqueuers = Enqs0} = State0) ->
     % Remove any enqueuer for the same pid and enqueue any pending messages
     % This should be ok as we won't see any more enqueues from this pid
     State1 = case maps:take(Pid, Enqs0) of
@@ -531,12 +533,14 @@ apply(Meta, {nodeup, Node}, #state{consumers = Cons0,
                              E#enqueuer{suspected_down = false};
                         (_, E) -> E
                      end, Enqs0),
+    ConsumerUpdateActiveFun = consumer_active_flag_update_function(State0),
     {Cons1, SQ, Effects} =
         maps:fold(fun({_, P} = ConsumerId, C, {CAcc, SQAcc, EAcc})
                         when node(P) =:= Node ->
+                          EAcc1 = ConsumerUpdateActiveFun(State0, ConsumerId, C, true, up, EAcc),
                           update_or_remove_sub(
                             ConsumerId, C#consumer{suspected_down = false},
-                            CAcc, SQAcc, EAcc);
+                            CAcc, SQAcc, EAcc1);
                      (_, _, Acc) ->
                           Acc
                   end, {Cons0, SQ0, Monitors}, Cons0),
@@ -548,6 +552,15 @@ apply(_, {nodedown, _Node}, State) ->
     {State, ok};
 apply(Meta, #update_config{config = Conf}, State) ->
     checkout(Meta, update_config(Conf, State), []).
+
+consumer_active_flag_update_function(#state{consumer_strategy = default}) ->
+    fun(State, ConsumerId, Consumer, Active, ActivityStatus, Effects) ->
+        consumer_update_active_effects(State, ConsumerId, Consumer, Active, ActivityStatus, Effects)
+    end;
+consumer_active_flag_update_function(#state{consumer_strategy = single_active}) ->
+    fun(_, _, _, _, _, Effects) ->
+        Effects
+    end.
 
 handle_waiting_consumer_down(_Pid,
                              #state{consumer_strategy = default} = State) ->
@@ -718,31 +731,48 @@ query_consumer_count(#state{consumers = Consumers,
     maps:size(Consumers) + length(WaitingConsumers).
 
 query_consumers(#state{consumers = Consumers,
-                       waiting_consumers = WaitingConsumers} = State) ->
-    SingleActiveConsumer = query_single_active_consumer(State),
-    IsSingleActiveConsumerFun = fun({Tag, Pid} = _ConsumerId) ->
-                                    case SingleActiveConsumer of
-                                        {value, {Tag, Pid}} ->
-                                            true;
-                                        _ ->
-                                            false
-                                    end
-                                end,
-    FromConsumers = maps:map(fun ({Tag, Pid}, #consumer{meta = Meta}) ->
+                       waiting_consumers = WaitingConsumers,
+                       consumer_strategy = ConsumerStrategy } = State) ->
+    ActiveActivityStatusFun = case ConsumerStrategy of
+                                  default ->
+                                      fun(_ConsumerId, #consumer{suspected_down = SuspectedDown}) ->
+                                          case SuspectedDown of
+                                              true ->
+                                                  {false, suspected_down};
+                                              false ->
+                                                  {true, up}
+                                          end
+                                      end;
+                                  single_active ->
+                                      SingleActiveConsumer = query_single_active_consumer(State),
+                                      fun({Tag, Pid} = _Consumer, _) ->
+                                          case SingleActiveConsumer of
+                                              {value, {Tag, Pid}} ->
+                                                  {true, single_active};
+                                              _ ->
+                                                  {false, waiting}
+                                          end
+                                      end
+                              end,
+    FromConsumers = maps:map(fun ({Tag, Pid}, #consumer{meta = Meta} = Consumer) ->
+                                    {Active, ActivityStatus} = ActiveActivityStatusFun({Tag, Pid}, Consumer),
                                     {Pid, Tag,
                                       maps:get(ack, Meta, undefined),
                                       maps:get(prefetch, Meta, undefined),
-                                      IsSingleActiveConsumerFun({Tag, Pid}),
+                                      Active,
+                                      ActivityStatus,
                                       maps:get(args, Meta, []),
                                       maps:get(username, Meta, undefined)}
                              end, Consumers),
     FromWaitingConsumers =
-        lists:foldl(fun({{Tag, Pid}, #consumer{meta = Meta}}, Acc) ->
+        lists:foldl(fun({{Tag, Pid}, #consumer{meta = Meta} = Consumer}, Acc) ->
+                            {Active, ActivityStatus} = ActiveActivityStatusFun({Tag, Pid}, Consumer),
                             maps:put({Tag, Pid},
                                      {Pid, Tag,
                                       maps:get(ack, Meta, undefined),
                                       maps:get(prefetch, Meta, undefined),
-                                      IsSingleActiveConsumerFun({Tag, Pid}),
+                                      Active,
+                                      ActivityStatus,
                                       maps:get(args, Meta, []),
                                       maps:get(username, Meta, undefined)},
                                      Acc)
@@ -752,6 +782,8 @@ query_consumers(#state{consumers = Consumers,
 query_single_active_consumer(#state{consumer_strategy = single_active,
                                     consumers = Consumers}) ->
     case maps:size(Consumers) of
+        0 ->
+            {error, no_value};
         1 ->
             {value, lists:nth(1, maps:keys(Consumers))};
         _
@@ -852,8 +884,10 @@ cancel_consumer(ConsumerId,
                                                NewActiveConsumer},
                                  service_queue = ServiceQueue1,
                                  waiting_consumers = RemainingWaitingConsumers},
-            add_consumer_promotion_effect(State, NewActiveConsumerId,
-                                          NewActiveConsumer, Effects1);
+            Effects2 = consumer_update_active_effects(State, NewActiveConsumerId,
+                                                      NewActiveConsumer, true,
+                                                      single_active, Effects1),
+            {State, Effects2};
         error ->
             % The cancelled consumer is not the active one
             % Just remove it from idle_consumers
@@ -865,18 +899,18 @@ cancel_consumer(ConsumerId,
             {State0#state{waiting_consumers = WaitingConsumers}, Effects}
     end.
 
-add_consumer_promotion_effect(#state{consumer_strategy = single_active,
-                                     queue_resource = QName} = State,
-                              ConsumerId, #consumer{meta = Meta},
-                              Effects) ->
+consumer_update_active_effects(#state{queue_resource = QName },
+                               ConsumerId, #consumer{meta = Meta},
+                               Active, ActivityStatus,
+                               Effects) ->
     Ack = maps:get(ack, Meta, undefined),
     Prefetch = maps:get(prefetch, Meta, undefined),
     Args = maps:get(args, Meta, []),
-    {State, [{mod_call,
-              rabbit_quorum_queue,
-              update_consumer_handler,
-              [QName, ConsumerId, false, Ack, Prefetch, true, Args]}
-             | Effects]}.
+    [{mod_call,
+      rabbit_quorum_queue,
+      update_consumer_handler,
+      [QName, ConsumerId, false, Ack, Prefetch, Active, ActivityStatus, Args]}
+      | Effects].
 
 cancel_consumer0(ConsumerId,
                 #state{consumers = C0} = S0, Effects0) ->
@@ -2429,6 +2463,44 @@ query_consumers_test() ->
                     queue_resource => rabbit_misc:r("/", queue,
                         atom_to_binary(?FUNCTION_NAME, utf8)),
                     shadow_copy_interval => 0,
+                    single_active_consumer_on => false}),
+
+    % adding some consumers
+    AddConsumer = fun(CTag, State) ->
+        {NewState, _, _} = apply(
+            #{index => 1},
+            #checkout{spec = {once, 1, simple_prefetch},
+                meta = #{},
+                consumer_id = {CTag, self()}},
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0, [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
+    Consumers0 = State1#state.consumers,
+    Consumer = maps:get({<<"ctag2">>, self()}, Consumers0),
+    Consumers1 = maps:put({<<"ctag2">>, self()}, Consumer#consumer{suspected_down = true}, Consumers0),
+    State2 = State1#state{consumers = Consumers1},
+
+    ?assertEqual(4, query_consumer_count(State2)),
+    Consumers2 = query_consumers(State2),
+    ?assertEqual(4, maps:size(Consumers2)),
+    maps:fold(fun(_Key, {Pid, Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+        ?assertEqual(self(), Pid),
+        case Tag of
+            <<"ctag2">> ->
+                ?assertNot(Active),
+                ?assertEqual(suspected_down, ActivityStatus);
+            _ ->
+                ?assert(Active),
+                ?assertEqual(up, ActivityStatus)
+        end
+              end, [], Consumers2).
+
+query_consumers_when_single_active_consumer_is_on_test() ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    shadow_copy_interval => 0,
                     single_active_consumer_on => true}),
     Meta = #{index => 1},
     % adding some consumers
@@ -2446,9 +2518,83 @@ query_consumers_test() ->
     ?assertEqual(4, query_consumer_count(State1)),
     Consumers = query_consumers(State1),
     ?assertEqual(4, maps:size(Consumers)),
-    maps:fold(fun({_Tag, Pid}, {Pid, _Tag, _, _, _, _, _}, _Acc) ->
-                  ?assertEqual(self(), Pid)
+    maps:fold(fun(_Key, {Pid, Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+                  ?assertEqual(self(), Pid),
+                  case Tag of
+                     <<"ctag1">> ->
+                         ?assert(Active),
+                         ?assertEqual(single_active, ActivityStatus);
+                     _ ->
+                         ?assertNot(Active),
+                         ?assertEqual(waiting, ActivityStatus)
+                  end
               end, [], Consumers).
+
+active_flag_updated_when_consumer_suspected_unsuspected_test() ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        shadow_copy_interval => 0,
+        single_active_consumer_on => false}),
+
+    DummyFunction = fun() -> ok  end,
+    Pid1 = spawn(DummyFunction),
+    Pid2 = spawn(DummyFunction),
+    Pid3 = spawn(DummyFunction),
+
+    % adding some consumers
+    AddConsumer = fun({CTag, ChannelId}, State) ->
+        {NewState, _, _} = apply(
+            #{index => 1},
+            #checkout{spec = {once, 1, simple_prefetch},
+                meta = #{},
+                consumer_id = {CTag, ChannelId}},
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+
+    {State2, _, Effects2} = apply(#{}, {down, Pid1, noconnection}, State1),
+    % 1 effect to update the metrics of each consumer (they belong to the same node), 1 more effect to monitor the node
+    ?assertEqual(4 + 1, length(Effects2)),
+
+    {_, _, Effects3} = apply(#{index => 1}, {nodeup, node(self())}, State2),
+    % for each consumer: 1 effect to update the metrics, 1 effect to monitor the consumer PID
+    ?assertEqual(4 + 4, length(Effects3)).
+
+active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_consumer_is_on_test() ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+        queue_resource => rabbit_misc:r("/", queue,
+            atom_to_binary(?FUNCTION_NAME, utf8)),
+        shadow_copy_interval => 0,
+        single_active_consumer_on => true}),
+
+    DummyFunction = fun() -> ok  end,
+    Pid1 = spawn(DummyFunction),
+    Pid2 = spawn(DummyFunction),
+    Pid3 = spawn(DummyFunction),
+
+    % adding some consumers
+    AddConsumer = fun({CTag, ChannelId}, State) ->
+        {NewState, _, _} = apply(
+            #{index => 1},
+            #checkout{spec = {once, 1, simple_prefetch},
+                meta = #{},
+                consumer_id = {CTag, ChannelId}},
+            State),
+        NewState
+                  end,
+    State1 = lists:foldl(AddConsumer, State0,
+        [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
+
+    {State2, _, Effects2} = apply(#{}, {down, Pid1, noconnection}, State1),
+    % only 1 effect to monitor the node
+    ?assertEqual(1, length(Effects2)),
+
+    {_, _, Effects3} = apply(#{index => 1}, {nodeup, node(self())}, State2),
+    % for each consumer: 1 effect to monitor the consumer PID
+    ?assertEqual(4, length(Effects3)).
 
 meta(Idx) ->
     #{index => Idx, term => 1}.

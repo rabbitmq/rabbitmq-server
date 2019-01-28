@@ -160,7 +160,7 @@ gc_process_and_entity(Table, GbSet) ->
                  ({{Pid, Id} = Key, _, _, _, _}, none)
                     when Table == channel_exchange_metrics ->
                       gc_process_and_entity(Id, Pid, Table, Key, GbSet);
-                 ({{Id, Pid, _} = Key, _, _, _, _, _}, none)
+                 ({{Id, Pid, _} = Key, _, _, _, _, _, _}, none)
                     when Table == consumer_created ->
                       gc_process_and_entity(Id, Pid, Table, Key, GbSet);
                  ({{{Pid, Id}, _} = Key, _, _, _, _}, none) ->

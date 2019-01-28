@@ -26,7 +26,7 @@
 -export([dead_letter_publish/4]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
--export([update_consumer_handler/7, update_consumer/8]).
+-export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, update_metrics/2]).
 -export([rpc_delete_metrics/1]).
@@ -169,13 +169,13 @@ single_active_consumer_on(#amqqueue{arguments = QArguments}) ->
         _            -> false
     end.
 
-update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired, Prefetch, SingleActive, Args) ->
+update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired, Prefetch, Active, ActivityStatus, Args) ->
     local_or_remote_handler(ChPid, rabbit_quorum_queue, update_consumer,
-        [QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, SingleActive, Args]).
+        [QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, Active, ActivityStatus, Args]).
 
-update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, SingleActive, Args) ->
+update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch, Active, ActivityStatus, Args) ->
     catch rabbit_core_metrics:consumer_updated(ChPid, ConsumerTag, Exclusive, AckRequired,
-                                               QName, Prefetch, SingleActive, Args).
+                                               QName, Prefetch, Active, ActivityStatus, Args).
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
     local_or_remote_handler(ChPid, rabbit_quorum_queue, cancel_consumer, [QName, ChPid, ConsumerTag]).
@@ -419,7 +419,7 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
                     Args :: rabbit_framing:amqp_table(), ActingUser :: binary(),
                     any(), rabbit_fifo_client:state()) ->
     {'ok', rabbit_fifo_client:state()}.
-basic_consume(#amqqueue{name = QName, pid = QPid, type = quorum}, NoAck, ChPid,
+basic_consume(#amqqueue{name = QName, pid = QPid, type = quorum} = Q, NoAck, ChPid,
               ConsumerPrefetchCount, ConsumerTag0, ExclusiveConsume, Args,
               ActingUser, OkMsg, QState0) ->
     %% TODO: validate consumer arguments
@@ -443,17 +443,22 @@ basic_consume(#amqqueue{name = QName, pid = QPid, type = quorum}, NoAck, ChPid,
                                                QState0),
     {ok, {_, SacResult}, _} = ra:local_query(QPid,
                                              fun rabbit_fifo:query_single_active_consumer/1),
-    IsSingleActiveConsumer = case SacResult of
-                                 {value, {ConsumerTag, ChPid}} ->
-                                     true;
-                                 _ ->
-                                     false
-                             end,
+
+    SingleActiveConsumerOn = single_active_consumer_on(Q),
+    {IsSingleActiveConsumer, ActivityStatus} = case {SingleActiveConsumerOn, SacResult} of
+                                                   {false, _} ->
+                                                       {true, up};
+                                                   {true, {value, {ConsumerTag, ChPid}}} ->
+                                                       {true, single_active};
+                                                   _ ->
+                                                       {false, waiting}
+                                               end,
 
     %% TODO: emit as rabbit_fifo effect
     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                          not NoAck, QName,
-                                         ConsumerPrefetchCount, IsSingleActiveConsumer, Args),
+                                         ConsumerPrefetchCount, IsSingleActiveConsumer,
+                                         ActivityStatus, Args),
     {ok, QState}.
 
 basic_cancel(ConsumerTag, ChPid, OkMsg, QState0) ->
