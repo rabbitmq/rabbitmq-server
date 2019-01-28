@@ -404,21 +404,22 @@ apply(Meta, #checkout{spec = {dequeue, Settlement},
         _ when Exists ->
             %% a dequeue using the same consumer_id isn't possible at this point
             {State0, {dequeue, empty}};
-        _ ->
+        Ready ->
             State1 = update_consumer(ConsumerId, ConsumerMeta,
                                      {once, 1, simple_prefetch}, State0),
             {success, _, MsgId, Msg, State2} = checkout_one(State1),
             case Settlement of
                 unsettled ->
                     {_, Pid} = ConsumerId,
-                    {State2, {dequeue, {MsgId, Msg}},
+                    {State2, {dequeue, {MsgId, Msg}, Ready-1},
                      [{monitor, process, Pid}]};
                 settled ->
                     %% immediately settle the checkout
                     {State, _, Effects} = apply(Meta,
-                                                make_settle(ConsumerId, [MsgId]),
+                                                make_settle(ConsumerId,
+                                                            [MsgId]),
                                                 State2),
-                    {State, {dequeue, {MsgId, Msg}}, Effects}
+                    {State, {dequeue, {MsgId, Msg}, Ready-1}, Effects}
             end
     end;
 apply(Meta, #checkout{spec = cancel, consumer_id = ConsumerId}, State0) ->
@@ -793,9 +794,8 @@ query_single_active_consumer(#state{consumer_strategy = single_active,
 query_single_active_consumer(_) ->
     disabled.
 
-query_stat(#state{messages = M,
-                  consumers = Consumers}) ->
-    {maps:size(M), maps:size(Consumers)}.
+query_stat(#state{consumers = Consumers} = State) ->
+    {messages_ready(State), maps:size(Consumers)}.
 
 -spec usage(atom()) -> float().
 usage(Name) when is_atom(Name) ->
@@ -1666,7 +1666,8 @@ enq_enq_deq_test() ->
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     % get returns a reply value
-    {_State3, {dequeue, {0, {_, first}}}, [{monitor, _, _}]} =
+    NumReady = 1,
+    {_State3, {dequeue, {0, {_, first}}, NumReady}, [{monitor, _, _}]} =
         apply(meta(3), make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
     ok.
@@ -1676,7 +1677,7 @@ enq_enq_deq_deq_settle_test() ->
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     % get returns a reply value
-    {State3, {dequeue, {0, {_, first}}}, [{monitor, _, _}]} =
+    {State3, {dequeue, {0, {_, first}}, 1}, [{monitor, _, _}]} =
         apply(meta(3), make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
     {_State4, {dequeue, empty}} =
@@ -1688,7 +1689,7 @@ enq_enq_checkout_get_settled_test() ->
     Cid = {?FUNCTION_NAME, self()},
     {State1, _} = enq(1, 1, first, test_init(test)),
     % get returns a reply value
-    {_State2, {dequeue, {0, {_, first}}}, _Effs} =
+    {_State2, {dequeue, {0, {_, first}}, _}, _Effs} =
         apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}),
               State1),
     ok.
@@ -1706,7 +1707,7 @@ untracked_enq_deq_test() ->
     {State1, _, _} = apply(meta(1),
                            make_enqueue(undefined, undefined, first),
                            State0),
-    {_State2, {dequeue, {0, {_, first}}}, _} =
+    {_State2, {dequeue, {0, {_, first}}, _}, _} =
         apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}), State1),
     ok.
 
@@ -1823,9 +1824,9 @@ cancelled_checkout_out_test() ->
     ?assertEqual(1, maps:size(State2#state.messages)),
     ?assertEqual(1, lqueue:len(State2#state.returns)),
 
-    {State3, {dequeue, {0, {_, first}}}, _} =
+    {State3, {dequeue, {0, {_, first}}, _}, _} =
         apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}), State2),
-    {_State, {dequeue, {_, {_, second}}}, _} =
+    {_State, {dequeue, {_, {_, second}}, _}, _} =
         apply(meta(4), make_checkout(Cid, {dequeue, settled}, #{}), State3),
     ok.
 
@@ -2141,7 +2142,7 @@ pending_enqueue_is_enqueued_on_down_test() ->
     Pid = self(),
     {State0, _} = enq(1, 2, first, test_init(test)),
     {State1, _, _} = apply(meta(2), {down, Pid, noproc}, State0),
-    {_State2, {dequeue, {0, {_, first}}}, _} =
+    {_State2, {dequeue, {0, {_, first}}, 0}, _} =
         apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}), State1),
     ok.
 
@@ -2190,7 +2191,7 @@ purge_test() ->
     {State2, {purge, 1}, _} = apply(meta(2), make_purge(), State1),
     {State3, _} = enq(3, 2, second, State2),
     % get returns a reply value
-    {_State4, {dequeue, {0, {_, second}}}, [{monitor, _, _}]} =
+    {_State4, {dequeue, {0, {_, second}}, _}, [{monitor, _, _}]} =
         apply(meta(4), make_checkout(Cid, {dequeue, unsettled}, #{}), State3),
     ok.
 
@@ -2604,11 +2605,11 @@ enq(Idx, MsgSeq, Msg, State) ->
         apply(meta(Idx), make_enqueue(self(), MsgSeq, Msg), State)).
 
 deq(Idx, Cid, Settlement, State0) ->
-    {State, {dequeue, Msg}, _} =
+    {State, {dequeue, {MsgId, Msg}, _}, _} =
         apply(meta(Idx),
               make_checkout(Cid, {dequeue, Settlement}, #{}),
               State0),
-    {State, Msg}.
+    {State, {MsgId, Msg}}.
 
 check_n(Cid, Idx, N, State) ->
     strip_reply(
