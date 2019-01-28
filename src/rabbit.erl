@@ -23,7 +23,7 @@
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
-         stop_and_halt/0, await_startup/0, await_startup/1,
+         stop_and_halt/0, await_startup/0, await_startup/1, await_startup/3,
          status/0, is_running/0, alarms/0,
          is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
@@ -689,20 +689,6 @@ handle_app_error(Term) ->
             throw({Term, App, Reason})
     end.
 
-await_startup() ->
-    await_startup(node()).
-
-await_startup(Node) ->
-    case is_booting(Node) of
-        true -> wait_for_boot_to_finish(Node);
-        false ->
-            case is_running(Node) of
-                true -> ok;
-                false -> wait_for_boot_to_start(Node),
-                         wait_for_boot_to_finish(Node)
-            end
-    end.
-
 is_booting() -> is_booting(node()).
 
 is_booting(Node) ->
@@ -710,6 +696,41 @@ is_booting(Node) ->
         {badrpc, _} = Err -> Err;
         undefined         -> false;
         P when is_pid(P)  -> true
+    end.
+
+
+-spec await_startup() -> 'ok' | {'error', 'timeout'}.
+await_startup() ->
+    await_startup(node(), false).
+
+-spec await_startup(node() | non_neg_integer()) -> 'ok' | {'error', 'timeout'}.
+await_startup(Node) when is_atom(Node) ->
+    await_startup(Node, false);
+  await_startup(Timeout) when is_integer(Timeout) ->
+      await_startup(node(), false, Timeout).
+
+-spec await_startup(node(), boolean()) -> 'ok'  | {'error', 'timeout'}.
+await_startup(Node, PrintProgressReports) ->
+    case is_booting(Node) of
+        true  -> wait_for_boot_to_finish(Node, PrintProgressReports);
+        false ->
+            case is_running(Node) of
+                true  -> ok;
+                false -> wait_for_boot_to_start(Node),
+                         wait_for_boot_to_finish(Node, PrintProgressReports)
+            end
+    end.
+
+-spec await_startup(node(), boolean(), non_neg_integer()) -> 'ok'  | {'error', 'timeout'}.
+await_startup(Node, PrintProgressReports, Timeout) ->
+    case is_booting(Node) of
+        true  -> wait_for_boot_to_finish(Node, PrintProgressReports, Timeout);
+        false ->
+            case is_running(Node) of
+                true  -> ok;
+                false -> wait_for_boot_to_start(Node, Timeout),
+                         wait_for_boot_to_finish(Node, PrintProgressReports, Timeout)
+            end
     end.
 
 wait_for_boot_to_start(Node) ->
@@ -733,15 +754,18 @@ do_wait_for_boot_to_start(Node, IterationsLeft) ->
     end.
 
 wait_for_boot_to_finish(Node) ->
-    wait_for_boot_to_finish(Node, ?BOOT_FINISH_TIMEOUT).
+    wait_for_boot_to_finish(Node, false, ?BOOT_FINISH_TIMEOUT).
 
-wait_for_boot_to_finish(Node, Timeout) ->
+wait_for_boot_to_finish(Node, PrintProgressReports) ->
+    wait_for_boot_to_finish(Node, PrintProgressReports, ?BOOT_FINISH_TIMEOUT).
+
+wait_for_boot_to_finish(Node, PrintProgressReports, Timeout) ->
     Iterations = Timeout div ?BOOT_STATUS_CHECK_INTERVAL,
-    do_wait_for_boot_to_finish(Node, Iterations).
+    do_wait_for_boot_to_finish(Node, PrintProgressReports, Iterations).
 
-do_wait_for_boot_to_finish(_Node, IterationsLeft) when IterationsLeft =< 0 ->
+do_wait_for_boot_to_finish(_Node, _PrintProgressReports, IterationsLeft) when IterationsLeft =< 0 ->
     {error, timeout};
-do_wait_for_boot_to_finish(Node, IterationsLeft) ->
+do_wait_for_boot_to_finish(Node, PrintProgressReports, IterationsLeft) ->
     case is_booting(Node) of
         false ->
             %% We don't want badrpc error to be interpreted as false,
@@ -754,15 +778,20 @@ do_wait_for_boot_to_finish(Node, IterationsLeft) ->
         {badrpc, _} = Err ->
             Err;
         true  ->
-            case IterationsLeft rem 100 of
-              %% This will be printed on the CLI command end to illustrate some
-              %% progress.
-              0 -> io:format("Still booting, will check again in 10 seconds...~n");
-              _ -> ok
-            end,
+            maybe_print_boot_progress(PrintProgressReports, IterationsLeft),
             timer:sleep(?BOOT_STATUS_CHECK_INTERVAL),
-            do_wait_for_boot_to_finish(Node, IterationsLeft - 1)
+            do_wait_for_boot_to_finish(Node, PrintProgressReports, IterationsLeft - 1)
     end.
+
+maybe_print_boot_progress(false = _PrintProgressReports, _IterationsLeft) ->
+  ok;
+maybe_print_boot_progress(true, IterationsLeft) ->
+  case IterationsLeft rem 100 of
+    %% This will be printed on the CLI command end to illustrate some
+    %% progress.
+    0 -> io:format("Still booting, will check again in 10 seconds...~n");
+    _ -> ok
+  end.
 
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
