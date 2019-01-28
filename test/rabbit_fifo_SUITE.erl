@@ -145,7 +145,7 @@ return(Config) ->
     {ok, F0} = rabbit_fifo_client:enqueue(1, msg1, F00),
     {ok, F1} = rabbit_fifo_client:enqueue(2, msg2, F0),
     {_, _, F2} = process_ra_events(F1, 100),
-    {ok, {MsgId, _}, F} = rabbit_fifo_client:dequeue(<<"tag">>, unsettled, F2),
+    {ok, {{MsgId, _}, _}, F} = rabbit_fifo_client:dequeue(<<"tag">>, unsettled, F2),
     {ok, _F2} = rabbit_fifo_client:return(<<"tag">>, [MsgId], F),
 
     ra:stop_server(ServerId),
@@ -237,9 +237,9 @@ resends_lost_command(Config) ->
     meck:unload(ra),
     {ok, F3} = rabbit_fifo_client:enqueue(msg3, F2),
     {_, _, F4} = process_ra_events(F3, 500),
-    {ok, {_, {_, msg1}}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
-    {ok, {_, {_, msg2}}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
-    {ok, {_, {_, msg3}}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
+    {ok, {{_, {_, msg1}}, _}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
+    {ok, {{_, {_, msg2}}, _}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
+    {ok, {{_, {_, msg3}}, _}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
     ra:stop_server(ServerId),
     ok.
 
@@ -299,7 +299,7 @@ returns_after_down(Config) ->
     receive checkout_done -> ok after 1000 -> exit(checkout_done_timeout) end,
     timer:sleep(1000),
     % message should be available for dequeue
-    {ok, {_, {_, msg1}}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F2),
+    {ok, {{_, {_, msg1}}, _}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F2),
     ra:stop_server(ServerId),
     ok.
 
@@ -322,9 +322,9 @@ resends_after_lost_applied(Config) ->
     % send another message
     {ok, F3} = rabbit_fifo_client:enqueue(msg3, F2),
     {_, _, F4} = process_ra_events(F3, 500),
-    {ok, {_, {_, msg1}}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
-    {ok, {_, {_, msg2}}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
-    {ok, {_, {_, msg3}}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
+    {ok, {{_, {_, msg1}}, _}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
+    {ok, {{_, {_, msg2}}, _}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
+    {ok, {{_, {_, msg3}}, _}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
     ra:stop_server(ServerId),
     ok.
 
@@ -395,7 +395,7 @@ cancel_checkout(Config) ->
     {ok, F2} = rabbit_fifo_client:checkout(<<"tag">>, 10, undefined, F1),
     {_, _, F3} = process_ra_events0(F2, [], [], 250, fun (_, S) -> S end),
     {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, F3),
-    {ok, {_, {_, m1}}, _} = rabbit_fifo_client:dequeue(<<"d1">>, settled, F4),
+    {ok, {{_, {_, m1}}, _}, _} = rabbit_fifo_client:dequeue(<<"d1">>, settled, F4),
     ok.
 
 credit(Config) ->
@@ -445,7 +445,7 @@ untracked_enqueue(Config) ->
     ok = rabbit_fifo_client:untracked_enqueue([ServerId], msg1),
     timer:sleep(100),
     F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
-    {ok, {_, {_, msg1}}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F0),
+    {ok, {{_, {_, msg1}}, _}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F0),
     ra:stop_server(ServerId),
     ok.
 
@@ -504,10 +504,10 @@ dequeue(Config) ->
     {ok, F2_} = rabbit_fifo_client:enqueue(msg1, F1b),
     {_, _, F2} = process_ra_events(F2_, 100),
 
-    {ok, {0, {_, msg1}}, F3} = rabbit_fifo_client:dequeue(Tag, settled, F2),
+    {ok, {{0, {_, msg1}}, _}, F3} = rabbit_fifo_client:dequeue(Tag, settled, F2),
     {ok, F4_} = rabbit_fifo_client:enqueue(msg2, F3),
     {_, _, F4} = process_ra_events(F4_, 100),
-    {ok, {MsgId, {_, msg2}}, F5} = rabbit_fifo_client:dequeue(Tag, unsettled, F4),
+    {ok, {{MsgId, {_, msg2}}, _}, F5} = rabbit_fifo_client:dequeue(Tag, unsettled, F4),
     {ok, _F6} = rabbit_fifo_client:settle(Tag, [MsgId], F5),
     ra:stop_server(ServerId),
     ok.
@@ -521,7 +521,7 @@ enq_deq_n(0, F0, Acc) ->
 enq_deq_n(N, F, Acc) ->
     {ok, F1} = rabbit_fifo_client:enqueue(N, F),
     {_, _, F2} = process_ra_events(F1, 10),
-    {ok, {_, {_, Deq}}, F3} = rabbit_fifo_client:dequeue(term_to_binary(N), settled, F2),
+    {ok, {{_, {_, Deq}}, _}, F3} = rabbit_fifo_client:dequeue(term_to_binary(N), settled, F2),
 
     {_, _, F4} = process_ra_events(F3, 5),
     enq_deq_n(N-1, F4, [Deq | Acc]).

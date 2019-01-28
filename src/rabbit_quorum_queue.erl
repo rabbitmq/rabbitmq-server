@@ -310,11 +310,11 @@ stop(VHost) ->
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()}.
 delete(#amqqueue{type = quorum, pid = {Name, _},
-                 name = QName, quorum_nodes = QNodes},
+                 name = QName, quorum_nodes = QNodes} = Q,
        _IfUnused, _IfEmpty, ActingUser) ->
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Timeout = ?DELETE_TIMEOUT,
-    Msgs = quorum_messages(Name),
+    {ok, ReadyMsgs, _} = stat(Q),
     Servers = [{Name, Node} || Node <- QNodes],
     case ra:delete_cluster(Servers, Timeout) of
         {ok, {_, LeaderNode} = Leader} ->
@@ -328,7 +328,7 @@ delete(#amqqueue{type = quorum, pid = {Name, _},
             ok = delete_queue_data(QName, ActingUser),
             rpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
                      ?TICK_TIME),
-            {ok, Msgs};
+            {ok, ReadyMsgs};
         {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
                               (_) -> false
@@ -337,7 +337,7 @@ delete(#amqqueue{type = quorum, pid = {Name, _},
                     %% If all ra nodes were already down, the delete
                     %% has succeed
                     delete_queue_data(QName, ActingUser),
-                    {ok, Msgs};
+                    {ok, ReadyMsgs};
                 false ->
                     %% attempt forced deletion of all servers
                     rabbit_log:warning(
@@ -347,14 +347,14 @@ delete(#amqqueue{type = quorum, pid = {Name, _},
                       [rabbit_misc:rs(QName), Errs]),
                     ok = force_delete_queue(Servers),
                     delete_queue_data(QName, ActingUser),
-                    {ok, Msgs}
+                    {ok, ReadyMsgs}
             end
     end.
 
 
 force_delete_queue(Servers) ->
     [begin
-         case catch(ra:delete_server(S)) of
+         case catch(ra:force_delete_server(S)) of
              ok -> ok;
              Err ->
                  rabbit_log:warning(
@@ -390,9 +390,9 @@ credit(CTag, Credit, Drain, QState) ->
 
 -spec basic_get(#amqqueue{}, NoAck :: boolean(), rabbit_types:ctag(),
                 rabbit_fifo_client:state()) ->
-                       {'ok', 'empty', rabbit_fifo_client:state()} |
-                       {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()}.
-basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
+    {'ok', 'empty', rabbit_fifo_client:state()} |
+    {'ok', QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()}.
+basic_get(#amqqueue{name = QName, pid = Id, type = quorum}, NoAck,
           CTag0, QState0) ->
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
@@ -404,11 +404,11 @@ basic_get(#amqqueue{name = QName, pid = {Name, _} = Id, type = quorum}, NoAck,
     case rabbit_fifo_client:dequeue(CTag, Settlement, QState0) of
         {ok, empty, QState} ->
             {ok, empty, QState};
-        {ok, {MsgId, {MsgHeader, Msg0}}, QState} ->
+        {ok, {{MsgId, {MsgHeader, Msg0}}, MsgsReady}, QState} ->
             Count = maps:get(delivery_count, MsgHeader, 0),
             IsDelivered = Count > 0,
             Msg = rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0),
-            {ok, quorum_messages(Name), {QName, Id, MsgId, IsDelivered, Msg}, QState};
+            {ok, MsgsReady, {QName, Id, MsgId, IsDelivered, Msg}, QState};
         {timeout, _} ->
             {error, timeout}
     end.
@@ -490,8 +490,12 @@ info(Q, Items) ->
 
 stat(#amqqueue{pid = Leader}) ->
     try
-        {Ready, Consumers} = rabbit_fifo_client:stat(Leader),
-        {ok, Ready, Consumers}
+        case rabbit_fifo_client:stat(Leader) of
+            {ok, _, _} = Stat ->
+                Stat;
+            _ ->
+                {ok, 0, 0}
+        end
     catch
         _:_ ->
             %% Leader is not available, cluster might be in minority

@@ -177,7 +177,8 @@ enqueue(Msg, State) ->
 %% @returns `{ok, IdMsg, State}' or `{error | timeout, term()}'
 -spec dequeue(rabbit_fifo:consumer_tag(),
               Settlement :: settled | unsettled, state()) ->
-    {ok, rabbit_fifo:delivery_msg() | empty, state()} | {error | timeout, term()}.
+    {ok, {rabbit_fifo:delivery_msg(), non_neg_integer()}
+     | empty, state()} | {error | timeout, term()}.
 dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
     Node = pick_node(State0),
     ConsumerId = consumer_id(ConsumerTag),
@@ -186,8 +187,10 @@ dequeue(ConsumerTag, Settlement, #state{timeout = Timeout} = State0) ->
                                                       {dequeue, Settlement},
                                                       #{}),
                             Timeout) of
-        {ok, {dequeue, Reply}, Leader} ->
-            {ok, Reply, State0#state{leader = Leader}};
+        {ok, {dequeue, empty}, Leader} ->
+            {ok, empty, State0#state{leader = Leader}};
+        {ok, {dequeue, Msg, NumReady}, Leader} ->
+            {ok, {Msg, NumReady}, State0#state{leader = Leader}};
         Err ->
             Err
     end.
@@ -399,12 +402,18 @@ purge(Node) ->
             Err
     end.
 
--spec stat(ra_server_id()) -> {ok, {non_neg_integer(), non_neg_integer()}}
-                                  | {error | timeout, term()}.
+-spec stat(ra_server_id()) ->
+    {ok, non_neg_integer(), non_neg_integer()}
+    | {error | timeout, term()}.
 stat(Leader) ->
-    Query = fun (State) -> rabbit_fifo:query_stat(State) end,
-    {ok, {_, Stat}, _} = ra:local_query(Leader, Query),
-    Stat.
+    %% short timeout as we don't want to spend too long if it is going to
+    %% fail anyway
+    case ra:local_query(Leader, fun rabbit_fifo:query_stat/1, 250) of
+        {ok, {_, {R, C}}, _} ->
+            {ok, R, C};
+        Err ->
+            Err
+    end.
 
 %% @doc returns the cluster name
 -spec cluster_name(state()) -> cluster_name().
