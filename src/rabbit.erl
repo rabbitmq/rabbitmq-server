@@ -255,7 +255,7 @@
 -spec boot() -> 'ok'.
 -spec stop() -> 'ok'.
 -spec stop_and_halt() -> no_return().
--spec await_startup() -> 'ok'.
+
 -spec status
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
