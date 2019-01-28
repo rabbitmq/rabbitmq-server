@@ -236,6 +236,12 @@
 
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
+%% 1 minute
+-define(BOOT_START_TIMEOUT,     1 * 60 * 1000).
+%% 12 hours
+-define(BOOT_FINISH_TIMEOUT,    12 * 60 * 60 * 1000).
+-define(BOOT_STATUS_CHECK_INTERVAL, 100).
+
 %%----------------------------------------------------------------------------
 
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
@@ -707,10 +713,19 @@ is_booting(Node) ->
     end.
 
 wait_for_boot_to_start(Node) ->
+    wait_for_boot_to_start(Node, ?BOOT_START_TIMEOUT).
+
+wait_for_boot_to_start(Node, Timeout) ->
+    Iterations = Timeout div ?BOOT_STATUS_CHECK_INTERVAL,
+    do_wait_for_boot_to_start(Node, Iterations).
+
+do_wait_for_boot_to_start(_Node, IterationsLeft) when IterationsLeft =< 0 ->
+    {error, timeout};
+do_wait_for_boot_to_start(Node, IterationsLeft) ->
     case is_booting(Node) of
         false ->
-            timer:sleep(100),
-            wait_for_boot_to_start(Node);
+            timer:sleep(?BOOT_STATUS_CHECK_INTERVAL),
+            do_wait_for_boot_to_start(Node, IterationsLeft - 1);
         {badrpc, _} = Err ->
             Err;
         true  ->
@@ -718,6 +733,15 @@ wait_for_boot_to_start(Node) ->
     end.
 
 wait_for_boot_to_finish(Node) ->
+    wait_for_boot_to_finish(Node, ?BOOT_FINISH_TIMEOUT).
+
+wait_for_boot_to_finish(Node, Timeout) ->
+    Iterations = Timeout div ?BOOT_STATUS_CHECK_INTERVAL,
+    do_wait_for_boot_to_finish(Node, Iterations).
+
+do_wait_for_boot_to_finish(_Node, IterationsLeft) when IterationsLeft =< 0 ->
+    {error, timeout};
+do_wait_for_boot_to_finish(Node, IterationsLeft) ->
     case is_booting(Node) of
         false ->
             %% We don't want badrpc error to be interpreted as false,
@@ -730,8 +754,14 @@ wait_for_boot_to_finish(Node) ->
         {badrpc, _} = Err ->
             Err;
         true  ->
-            timer:sleep(100),
-            wait_for_boot_to_finish(Node)
+            case IterationsLeft rem 100 of
+              %% This will be printed on the CLI command end to illustrate some
+              %% progress.
+              0 -> io:format("Still booting, will check again in 10 seconds...~n");
+              _ -> ok
+            end,
+            timer:sleep(?BOOT_STATUS_CHECK_INTERVAL),
+            do_wait_for_boot_to_finish(Node, IterationsLeft - 1)
     end.
 
 status() ->
