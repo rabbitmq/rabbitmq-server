@@ -256,7 +256,7 @@
 -spec stop_and_halt() -> no_return().
 
 -spec await_startup() -> 'ok' | {'error', 'timeout'}.
--spec await_startup(node()) -> 'ok' | {'error', 'timeout'}.
+-spec await_startup(node() | non_neg_integer()) -> 'ok' | {'error', 'timeout'}.
 -spec await_startup(node(), non_neg_integer()) -> 'ok' | {'error', 'timeout'}.
 
 -spec status
