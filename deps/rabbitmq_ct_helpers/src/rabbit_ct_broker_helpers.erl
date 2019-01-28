@@ -602,34 +602,35 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
             end,
             StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
     end,
-    Options = case UseSecondaryUmbrella of
-                  true ->
-                      DepsDir = ?config(erlang_mk_depsdir, Config),
-                      ErlLibs = os:getenv("ERL_LIBS"),
-                      SecDepsDir = ?config(secondary_erlang_mk_depsdir, Config),
-                      SecErlLibs = lists:flatten(
-                                     string:replace(ErlLibs,
-                                                    DepsDir,
-                                                    SecDepsDir,
-                                                    all)),
-                      [{env, [{"DEPS_DIR", SecDepsDir},
-                              {"REBAR_DEPS_DIR", SecDepsDir},
-                              {"ERL_LIBS", SecErlLibs},
-                              {"RABBITMQ_SERVER", ""},
-                              {"RABBITMQCTL", ""},
-                              {"RABBITMQ_PLUGINS", ""},
-                              {"RABBITMQ_SCRIPTS_DIR", ""}]}];
-                  false ->
-                      []
-              end,
+    ExtraArgs = case UseSecondaryUmbrella of
+                    true ->
+                        DepsDir = ?config(erlang_mk_depsdir, Config),
+                        ErlLibs = os:getenv("ERL_LIBS"),
+                        SecDepsDir = ?config(secondary_erlang_mk_depsdir, Config),
+                        SecErlLibs = lists:flatten(
+                                       string:replace(ErlLibs,
+                                                      DepsDir,
+                                                      SecDepsDir,
+                                                      all)),
+                        [{"DEPS_DIR=~s", [SecDepsDir]},
+                         {"REBAR_DEPS_DIR=~s", [SecDepsDir]},
+                         {"ERL_LIBS=~s", [SecErlLibs]},
+                         "RABBITMQ_SERVER=",
+                         "RABBITMQCTL=",
+                         "RABBITMQ_PLUGINS=",
+                         "RABBITMQ_SCRIPTS_DIR="];
+                    false ->
+                        []
+                end,
     Cmd = ["start-background-broker",
       {"RABBITMQ_NODENAME=~s", [Nodename]},
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
       {"RABBITMQ_CONFIG_FILE=~s", [ConfigFile]},
       {"RABBITMQ_SERVER_START_ARGS=~s", [StartArgs1]},
-      {"TEST_TMPDIR=~s", [PrivDir]}],
-    case rabbit_ct_helpers:make(Config, SrcDir, Cmd, Options) of
+      {"TEST_TMPDIR=~s", [PrivDir]}
+      | ExtraArgs],
+    case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
         {ok, _} -> query_node(Config, NodeConfig);
         _       -> {skip, "Failed to initialize RabbitMQ"}
     end.
