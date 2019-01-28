@@ -31,6 +31,7 @@ endif
 
 include rabbitmq-components.mk
 include erlang.mk
+include stats.mk
 
 # --------------------------------------------------------------------
 # Mix Hex cache management.
