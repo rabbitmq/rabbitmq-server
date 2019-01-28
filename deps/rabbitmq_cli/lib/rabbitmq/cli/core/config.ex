@@ -26,6 +26,10 @@ defmodule RabbitMQ.CLI.Core.Config do
     normalise(name, raw_option)
   end
 
+  def output_less?(opts) do
+    Map.get(opts, :silent, false) || Map.get(opts, :quiet, false)
+  end
+
   def normalise(:node, nil), do: nil
   def normalise(:node, node) when not is_atom(node) do
     Rabbitmq.Atom.Coerce.to_atom(node)
