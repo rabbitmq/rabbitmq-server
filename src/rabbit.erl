@@ -240,6 +240,7 @@
 -define(BOOT_START_TIMEOUT,     300).
 %% 12 hours
 -define(BOOT_FINISH_TIMEOUT,    43200).
+%% 100ms
 -define(BOOT_STATUS_SAMPLING_INTERVAL, 100).
 
 %%----------------------------------------------------------------------------
