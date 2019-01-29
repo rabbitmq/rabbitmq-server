@@ -581,7 +581,7 @@ ensure_sysmon_handler_app_config() ->
                 {port_limit, 100},
                 {gc_ms_limit, 0},
                 {schedule_ms_limit, 0},
-                {heap_word_limit, 10485760},
+                {heap_word_limit, 0},
                 {busy_port, false},
                 {busy_dist_port, true}
                ],
