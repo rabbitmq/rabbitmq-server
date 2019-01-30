@@ -78,7 +78,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
   end
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "check_local_alarms"
+  def usage, do: "check_alarms"
 
   def banner([], %{node: node_name}) do
     "Asking node #{node_name} to report any local resource alarms ..."
