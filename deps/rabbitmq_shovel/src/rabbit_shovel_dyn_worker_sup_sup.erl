@@ -26,9 +26,12 @@
 -define(SUPERVISOR, ?MODULE).
 
 start_link() ->
-    {ok, Pid} = mirrored_supervisor:start_link(
+    Pid = case mirrored_supervisor:start_link(
                   {local, ?SUPERVISOR}, ?SUPERVISOR,
-                  fun rabbit_misc:execute_mnesia_transaction/1, ?MODULE, []),
+                  fun rabbit_misc:execute_mnesia_transaction/1, ?MODULE, []) of
+            {ok, Pid0}                       -> Pid0;
+            {error, {already_started, Pid0}} -> Pid0
+          end,
     Shovels = rabbit_runtime_parameters:list_component(<<"shovel">>),
     [start_child({pget(vhost, Shovel), pget(name, Shovel)},
                  pget(value, Shovel)) || Shovel <- Shovels],
