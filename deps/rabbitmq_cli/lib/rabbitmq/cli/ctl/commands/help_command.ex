@@ -113,6 +113,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     ["General options:
     short            | long          | description
     -----------------|---------------|--------------------------------
+    -?               | --help        | displays command usage information
     -n <node>        | --node <node> | connect to node <node>
     -l               | --longnames   | use long host names
     -q               | --quiet       | suppress informational messages
