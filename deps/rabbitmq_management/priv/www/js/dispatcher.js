@@ -202,6 +202,15 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
+    path('#/feature-flags', {'feature_flags': {path:    '/feature-flags',
+                                               options: {sort:true}},
+                             'permissions': '/permissions'}, 'feature-flags');
+    sammy.put('#/feature-flags-enable', function() {
+            if (sync_put(this, '/feature-flags/:name/enable'))
+                update();
+            return false;
+        });
+
     sammy.put('#/permissions', function() {
             if (sync_put(this, '/permissions/:vhost/:username'))
                 update();

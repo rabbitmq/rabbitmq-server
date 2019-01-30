@@ -329,6 +329,11 @@ abbr.warning { background: red; }
 
 .status-red abbr, .status-yellow abbr, .status-green abbr, .status-grey abbr, small abbr, abbr.normal { background: none; color: inherit; padding: 0; border-bottom: 1px dotted; cursor: default; }
 
+abbr.status-grey { background: #ddd; }
+abbr.status-green { background: #98f898; }
+abbr.status-yellow { background: #ffff7b; }
+abbr.status-red { background: #ff7a7a; color: white; }
+
 abbr.type { background: none; color: inherit; padding: 0; border-bottom: 1px dotted #ddd; cursor: default; }
 
 div.bindings-wrapper { display: inline-block; }
