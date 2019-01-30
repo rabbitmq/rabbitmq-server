@@ -27,7 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [timeout: :integer, table_headers: :boolean]
+  def switches(), do: [timeout: :integer]
   def aliases(), do: [t: :timeout]
 
   def merge_defaults([], opts) do

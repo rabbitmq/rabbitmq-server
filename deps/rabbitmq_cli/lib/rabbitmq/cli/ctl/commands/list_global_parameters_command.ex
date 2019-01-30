@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
   end
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, table_headers: :boolean]
+  def switches(), do: [timeout: :integer]
   def aliases(), do: [t: :timeout]
 
   def validate([_ | _], _) do
