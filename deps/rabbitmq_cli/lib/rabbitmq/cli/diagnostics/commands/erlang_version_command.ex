@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -30,6 +29,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
     case details do
       true ->
         :rabbit_misc.rpc_call(node_name, :rabbit_misc, :otp_system_version, [], timeout)
+
       false ->
         :rabbit_misc.rpc_call(node_name, :rabbit_misc, :platform_and_version, [], timeout)
     end
@@ -38,6 +38,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   def output(result, _options) when is_list(result) do
     {:ok, result}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def banner([], %{node: node_name}) do

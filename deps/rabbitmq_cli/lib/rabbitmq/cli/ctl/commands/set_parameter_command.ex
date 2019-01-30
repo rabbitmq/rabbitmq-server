@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -28,11 +27,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) < 3 do
+  def validate([_ | _] = args, _) when length(args) < 3 do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) > 3 do
+  def validate([_ | _] = args, _) when length(args) > 3 do
     {:validation_failure, :too_many_args}
   end
 
@@ -41,7 +40,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([component_name, name, value], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_runtime_parameters,
       :parse_set,
       [vhost, component_name, name, value, Helpers.cli_acting_user()]
@@ -51,6 +51,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
   def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"
 
   def banner([component_name, name, value], %{vhost: vhost}) do
-    "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" in vhost \"#{vhost}\" ..."
+    "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" in vhost \"#{
+      vhost
+    }\" ..."
   end
 end

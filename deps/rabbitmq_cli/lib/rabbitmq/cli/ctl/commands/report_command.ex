@@ -13,12 +13,21 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
-  alias RabbitMQ.CLI.Ctl.Commands.{ClusterStatusCommand, EnvironmentCommand,
-    ListBindingsCommand, ListChannelsCommand, ListConnectionsCommand,
-    ListExchangesCommand, ListGlobalParametersCommand, ListParametersCommand,
-    ListPermissionsCommand, ListPoliciesCommand, ListQueuesCommand, StatusCommand}
+  alias RabbitMQ.CLI.Ctl.Commands.{
+    ClusterStatusCommand,
+    EnvironmentCommand,
+    ListBindingsCommand,
+    ListChannelsCommand,
+    ListConnectionsCommand,
+    ListExchangesCommand,
+    ListGlobalParametersCommand,
+    ListParametersCommand,
+    ListPermissionsCommand,
+    ListPoliciesCommand,
+    ListQueuesCommand,
+    StatusCommand
+  }
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -29,13 +38,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
-  def validate([_|_] = args, _) when length(args) != 0, do: {:validation_failure, :too_many_args}
+  def validate([_ | _] = args, _) when length(args) != 0,
+    do: {:validation_failure, :too_many_args}
+
   def validate([], %{formatter: formatter}) do
     case formatter do
       "report" -> :ok
-      _other   -> {:validation_failure, "Only report formatter is supported"}
+      _other -> {:validation_failure, "Only report formatter is supported"}
     end
   end
+
   def validate([], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
@@ -44,26 +56,32 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
     case :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :list, []) do
       {:badrpc, _} = err ->
         err
+
       vhosts ->
-        data =
-          [run_command(StatusCommand, [], opts),
-           run_command(ClusterStatusCommand, [], opts),
-           run_command(EnvironmentCommand, [], opts),
-           run_command(ListConnectionsCommand, info_keys(ListConnectionsCommand), opts),
-           run_command(ListChannelsCommand, info_keys(ListChannelsCommand), opts)]
+        data = [
+          run_command(StatusCommand, [], opts),
+          run_command(ClusterStatusCommand, [], opts),
+          run_command(EnvironmentCommand, [], opts),
+          run_command(ListConnectionsCommand, info_keys(ListConnectionsCommand), opts),
+          run_command(ListChannelsCommand, info_keys(ListChannelsCommand), opts)
+        ]
 
         vhost_data =
-            vhosts
-            |> Enum.flat_map(fn v ->
-              opts = Map.put(opts, :vhost, v)
-              [run_command(ListQueuesCommand, info_keys(ListQueuesCommand), opts),
-               run_command(ListExchangesCommand, info_keys(ListExchangesCommand), opts),
-               run_command(ListBindingsCommand, info_keys(ListBindingsCommand), opts),
-               run_command(ListPermissionsCommand, [], opts),
-               run_command(ListPoliciesCommand, [], opts),
-               run_command(ListGlobalParametersCommand, [], opts),
-               run_command(ListParametersCommand, [], opts)]
-            end)
+          vhosts
+          |> Enum.flat_map(fn v ->
+            opts = Map.put(opts, :vhost, v)
+
+            [
+              run_command(ListQueuesCommand, info_keys(ListQueuesCommand), opts),
+              run_command(ListExchangesCommand, info_keys(ListExchangesCommand), opts),
+              run_command(ListBindingsCommand, info_keys(ListBindingsCommand), opts),
+              run_command(ListPermissionsCommand, [], opts),
+              run_command(ListPoliciesCommand, [], opts),
+              run_command(ListGlobalParametersCommand, [], opts),
+              run_command(ListParametersCommand, [], opts)
+            ]
+          end)
+
         data ++ vhost_data
     end
   end
@@ -75,7 +93,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
     {command, banner, command_result}
   end
 
-
   defp info_keys(command) do
     command.info_keys()
     |> Enum.map(&Atom.to_string/1)
@@ -83,5 +100,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def usage, do: "report"
 
-  def banner(_,%{node: node_name}), do: "Reporting server status of node #{node_name} ..."
+  def banner(_, %{node: node_name}), do: "Reporting server status of node #{node_name} ..."
 end

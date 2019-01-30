@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -28,9 +27,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RuntimeThreadStatsCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout, sample_interval: interval}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_runtime, :msacc_stats, [interval * 1000], timeout) do
-      {:ok, stats} -> stats;
-      other        -> other
+    case :rabbit_misc.rpc_call(
+           node_name,
+           :rabbit_runtime,
+           :msacc_stats,
+           [interval * 1000],
+           timeout
+         ) do
+      {:ok, stats} -> stats
+      other -> other
     end
   end
 

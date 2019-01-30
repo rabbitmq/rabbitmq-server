@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -28,15 +27,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand do
     {args, Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
-  def validate([_|_], _) do
+  def validate([_ | _], _) do
     {:validation_failure, :too_many_args}
   end
+
   def validate([], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_auth_backend_internal,
       :list_vhost_permissions,
       [vhost],
@@ -47,5 +48,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand do
   def usage, do: "list_permissions [-p <vhost>] [--no-table-headers]"
 
   def banner(_, %{vhost: vhost}), do: "Listing permissions for vhost \"#{vhost}\" ..."
-
 end

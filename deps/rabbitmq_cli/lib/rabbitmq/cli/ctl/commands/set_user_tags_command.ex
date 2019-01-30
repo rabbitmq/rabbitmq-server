@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -28,7 +27,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([user | tags], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_auth_backend_internal,
       :set_tags,
       [user, tags, Helpers.cli_acting_user()]

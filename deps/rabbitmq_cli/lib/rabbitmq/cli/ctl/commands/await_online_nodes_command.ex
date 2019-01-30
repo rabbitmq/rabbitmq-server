@@ -13,18 +13,19 @@
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
 ## Copyright (c) 2016-2018 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   @default_timeout 300_000
 
   def merge_defaults(args, opts) do
-    timeout = case opts[:timeout] do
-      nil       -> @default_timeout;
-      :infinity -> @default_timeout;
-      other     -> other
-    end
+    timeout =
+      case opts[:timeout] do
+        nil -> @default_timeout
+        :infinity -> @default_timeout
+        other -> other
+      end
+
     {args, Map.merge(opts, %{timeout: timeout})}
   end
 
@@ -34,8 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
 
   def run([count], %{node: node_name, timeout: timeout}) do
     {n, _} = Integer.parse(count)
-    :rabbit_misc.rpc_call(node_name,
-      :rabbit_nodes, :await_running_count, [n, timeout])
+    :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :await_running_count, [n, timeout])
   end
 
   def usage() do
@@ -43,15 +43,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
   end
 
   def banner([count], %{node: node_name, timeout: timeout}) when is_number(timeout) do
-    "Will wait for at least #{count} nodes to join the cluster of #{node_name}. Timeout: #{trunc(timeout / 1000)} seconds."
+    "Will wait for at least #{count} nodes to join the cluster of #{node_name}. Timeout: #{
+      trunc(timeout / 1000)
+    } seconds."
   end
+
   def banner([count], %{node: node_name, timeout: _timeout}) do
     "Will wait for at least #{count} nodes to join the cluster of #{node_name}."
   end
 
   def output({:error, :timeout}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      "Error: timed out while waiting. Not enough nodes joined #{node_name}'s cluster."}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 end

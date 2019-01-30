@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -30,11 +29,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) < 3 do
+  def validate([_ | _] = args, _) when length(args) < 3 do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) > 3 do
+  def validate([_ | _] = args, _) when length(args) > 3 do
     {:validation_failure, :too_many_args}
   end
 
@@ -42,25 +41,27 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([name, pattern, definition], %{node: node_name,
-                                         vhost: vhost,
-                                         priority: priority,
-                                         apply_to: apply_to}) do
-    :rabbit_misc.rpc_call(node_name,
+  def run([name, pattern, definition], %{
+        node: node_name,
+        vhost: vhost,
+        priority: priority,
+        apply_to: apply_to
+      }) do
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_policy,
       :parse_set,
-      [vhost,
-       name,
-       pattern,
-       definition,
-       priority,
-       apply_to,
-       Helpers.cli_acting_user()])
+      [vhost, name, pattern, definition, priority, apply_to, Helpers.cli_acting_user()]
+    )
   end
 
-  def usage, do: "set_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern> <definition>"
+  def usage,
+    do:
+      "set_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern> <definition>"
 
   def banner([name, pattern, definition], %{vhost: vhost, priority: priority}) do
-    "Setting policy \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{priority}\" for vhost \"#{vhost}\" ..."
+    "Setting policy \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{
+      priority
+    }\" for vhost \"#{vhost}\" ..."
   end
 end

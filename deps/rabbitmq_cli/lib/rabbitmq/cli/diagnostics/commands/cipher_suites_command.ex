@@ -25,6 +25,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, _), do: :ok
 
   def usage, do: "cipher_suites [--openssl-format]"

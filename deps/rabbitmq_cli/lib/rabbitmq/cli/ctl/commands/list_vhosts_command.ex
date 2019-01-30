@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   alias RabbitMQ.CLI.Ctl.InfoKeys
 
@@ -33,6 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   def merge_defaults([], opts) do
     merge_defaults(["name"], opts)
   end
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{table_headers: true}, opts)}
   end
@@ -46,7 +46,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([_|_] = args, %{node: node_name, timeout: time_out}) do
+  def run([_ | _] = args, %{node: node_name, timeout: time_out}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :info_all, [], time_out)
     |> filter_by_arg(args)
   end
@@ -61,17 +61,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
     vhosts
   end
 
-  defp filter_by_arg(vhosts, [_|_] = args) do
+  defp filter_by_arg(vhosts, [_ | _] = args) do
     symbol_args = InfoKeys.prepare_info_keys(args)
+
     vhosts
-    |> Enum.map(
-      fn(vhost) ->
-        symbol_args
-        |> Enum.filter(fn(arg) -> vhost[arg] != nil end)
-        |> Enum.map(fn(arg) -> {arg, vhost[arg]} end)
-      end
-    )
+    |> Enum.map(fn vhost ->
+      symbol_args
+      |> Enum.filter(fn arg -> vhost[arg] != nil end)
+      |> Enum.map(fn arg -> {arg, vhost[arg]} end)
+    end)
   end
 
-  def banner(_,_), do: "Listing vhosts ..."
+  def banner(_, _), do: "Listing vhosts ..."
 end

@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -28,19 +27,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) < 4 do
+  def validate([_ | _] = args, _) when length(args) < 4 do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) > 4 do
+  def validate([_ | _] = args, _) when length(args) > 4 do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([user, conf, write, read], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_auth_backend_internal,
       :set_permissions,
       [user, vhost, conf, write, read, Helpers.cli_acting_user()]
@@ -49,5 +50,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
 
   def usage, do: "set_permissions [-p <vhost>] <username> <conf> <write> <read>"
 
-  def banner([user|_], %{vhost: vhost}), do: "Setting permissions for user \"#{user}\" in vhost \"#{vhost}\" ..."
+  def banner([user | _], %{vhost: vhost}),
+    do: "Setting permissions for user \"#{user}\" in vhost \"#{vhost}\" ..."
 end

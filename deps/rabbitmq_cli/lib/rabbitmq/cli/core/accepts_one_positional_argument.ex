@@ -19,11 +19,13 @@ defmodule RabbitMQ.CLI.Core.AcceptsOnePositionalArgument do
   defmacro __using__(_) do
     quote do
       def validate(args, _) when length(args) == 0 do
-          {:validation_failure, :not_enough_args}
+        {:validation_failure, :not_enough_args}
       end
+
       def validate(args, _) when length(args) > 1 do
-          {:validation_failure, :too_many_args}
+        {:validation_failure, :too_many_args}
       end
+
       # Note: this will accept everything, so it must be the
       # last validation clause defined!
       def validate(_, _), do: :ok

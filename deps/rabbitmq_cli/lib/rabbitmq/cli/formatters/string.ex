@@ -25,10 +25,11 @@ defmodule RabbitMQ.CLI.Formatters.String do
   end
 
   def format_stream(stream, options) do
-    Stream.map(stream,
-      FormatterHelpers.without_errors_1(
-        fn(el) ->
-            format_output(el, options)
-        end))
+    Stream.map(
+      stream,
+      FormatterHelpers.without_errors_1(fn el ->
+        format_output(el, options)
+      end)
+    )
   end
 end

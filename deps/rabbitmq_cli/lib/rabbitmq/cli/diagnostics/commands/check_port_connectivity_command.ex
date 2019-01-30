@@ -22,11 +22,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
   """
 
   alias RabbitMQ.CLI.Core.Helpers
-  import RabbitMQ.CLI.Diagnostics.Helpers, only: [listeners_on: 2,
-                                                  listener_lines: 1,
-                                                  listener_map: 1,
-                                                  listener_maps: 1,
-                                                  check_listener_connectivity: 3]
+
+  import RabbitMQ.CLI.Diagnostics.Helpers,
+    only: [
+      listeners_on: 2,
+      listener_lines: 1,
+      listener_map: 1,
+      listener_maps: 1,
+      check_listener_connectivity: 3
+    ]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -35,11 +39,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   def merge_defaults(args, opts) do
-    timeout = case opts[:timeout] do
-      nil       -> @default_timeout;
-      :infinity -> @default_timeout;
-      other     -> other
-    end
+    timeout =
+      case opts[:timeout] do
+        nil -> @default_timeout
+        :infinity -> @default_timeout
+        other -> other
+      end
+
     {args, Map.merge(opts, %{timeout: timeout})}
   end
 
@@ -47,38 +53,51 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
-    case :rabbit_misc.rpc_call(node_name,
-      :rabbit_networking, :active_listeners, [], timeout) do
-      {:error, _}    = err -> err
-      {:error, _, _} = err -> err
-      xs when is_list(xs)  ->
+    case :rabbit_misc.rpc_call(node_name, :rabbit_networking, :active_listeners, [], timeout) do
+      {:error, _} = err ->
+        err
+
+      {:error, _, _} = err ->
+        err
+
+      xs when is_list(xs) ->
         locals = listeners_on(xs, node_name)
+
         case locals do
           [] -> {true, locals}
-          _  -> check_connectivity_of(locals, node_name, timeout)
-        end;
-      other                -> other
+          _ -> check_connectivity_of(locals, node_name, timeout)
+        end
+
+      other ->
+        other
     end
   end
 
   def output({true, listeners}, %{node: node_name, formatter: "json"}) do
-    {:ok, %{"result"    => "ok",
-            "node"      => node_name,
-            "listeners" => listener_maps(listeners)}}
+    {:ok, %{"result" => "ok", "node" => node_name, "listeners" => listener_maps(listeners)}}
   end
+
   def output({true, listeners}, %{node: node_name}) do
-    ports = listeners |> listener_maps |> Enum.map(fn %{port: p} -> p end)
-            |> Enum.sort  |> Enum.join(", ")
+    ports =
+      listeners
+      |> listener_maps
+      |> Enum.map(fn %{port: p} -> p end)
+      |> Enum.sort()
+      |> Enum.join(", ")
+
     {:ok, "Successfully connected to ports #{ports} on node #{node_name}."}
   end
+
   def output({false, failures}, %{formatter: "json", node: node_name}) do
-    {:error, %{"result"   => "error",
-               "node"     => node_name,
-               "failures" => listener_maps(failures)}}
+    {:error, %{"result" => "error", "node" => node_name, "failures" => listener_maps(failures)}}
   end
+
   def output({false, failures}, %{node: node_name}) do
-    lines = ["Connection to ports of the following listeners on node #{node_name} failed: "
-              | listener_lines(failures)]
+    lines = [
+      "Connection to ports of the following listeners on node #{node_name} failed: "
+      | listener_lines(failures)
+    ]
+
     {:error, Enum.join(lines, Helpers.line_separator())}
   end
 
@@ -94,9 +113,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckPortConnectivityCommand do
 
   defp check_connectivity_of(listeners, node_name, timeout) do
     # per listener timeout
-    t        = Kernel.trunc(timeout / (length(listeners) + 1))
-    failures = Enum.reject(listeners,
-                fn l -> check_listener_connectivity(listener_map(l), node_name, t) end)
+    t = Kernel.trunc(timeout / (length(listeners) + 1))
+
+    failures =
+      Enum.reject(
+        listeners,
+        fn l -> check_listener_connectivity(listener_map(l), node_name, t) end
+      )
+
     case failures do
       [] -> {true, listeners}
       fs -> {false, fs}

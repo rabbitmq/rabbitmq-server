@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
   alias RabbitMQ.CLI.Core.{ExitCodes, Helpers, Validators}
@@ -26,63 +25,71 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
     {args, Map.merge(%{online: false, offline: false}, opts)}
   end
 
-  def distribution(%{offline: true}),  do: :none
+  def distribution(%{offline: true}), do: :none
   def distribution(%{offline: false}), do: :cli
 
-  def switches(), do: [online: :boolean,
-                       offline: :boolean]
+  def switches(), do: [online: :boolean, offline: :boolean]
 
   def validate(_, %{online: true, offline: true}) do
     {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}
   end
+
   def validate(_, _) do
     :ok
   end
 
   def validate_execution_environment(args, opts) do
-    Validators.chain([&PluginHelpers.can_set_plugins_with_mode/2,
-                      &Helpers.require_rabbit_and_plugins/2,
-                      &PluginHelpers.enabled_plugins_file/2,
-                      &Helpers.plugins_dir/2],
-                     [args, opts])
+    Validators.chain(
+      [
+        &PluginHelpers.can_set_plugins_with_mode/2,
+        &Helpers.require_rabbit_and_plugins/2,
+        &PluginHelpers.enabled_plugins_file/2,
+        &Helpers.plugins_dir/2
+      ],
+      [args, opts]
+    )
   end
 
   def usage, do: "set [<plugin>] [--offline] [--online]"
 
   def banner(plugins, %{node: node_name}) do
-      ["Enabling plugins on node #{node_name}:" | plugins]
+    ["Enabling plugins on node #{node_name}:" | plugins]
   end
-
 
   def run(plugin_names, opts) do
     plugins = for s <- plugin_names, do: String.to_atom(s)
+
     case PluginHelpers.validate_plugins(plugins, opts) do
-      :ok   -> do_run(plugins, opts)
+      :ok -> do_run(plugins, opts)
       other -> other
     end
   end
 
   def do_run(plugins, %{node: node_name} = opts) do
-
     all = PluginHelpers.list(opts)
     mode = PluginHelpers.mode(opts)
 
     case PluginHelpers.set_enabled_plugins(plugins, opts) do
       {:ok, enabled_plugins} ->
-        {:stream, Stream.concat(
-            [[:rabbit_plugins.strictly_plugins(enabled_plugins, all)],
-             RabbitMQ.CLI.Core.Helpers.defer(
-               fn() ->
-                 case PluginHelpers.update_enabled_plugins(enabled_plugins,
-                                                           mode,
-                                                           node_name,
-                                                           opts) do
-                   %{set: _} = map ->
-                     filter_strictly_plugins(map, all, [:set, :started, :stopped]);
-                   {:error, _} = err ->
-                     err
-                 end
-               end)])};
+        {:stream,
+         Stream.concat([
+           [:rabbit_plugins.strictly_plugins(enabled_plugins, all)],
+           RabbitMQ.CLI.Core.Helpers.defer(fn ->
+             case PluginHelpers.update_enabled_plugins(
+                    enabled_plugins,
+                    mode,
+                    node_name,
+                    opts
+                  ) do
+               %{set: _} = map ->
+                 filter_strictly_plugins(map, all, [:set, :started, :stopped])
+
+               {:error, _} = err ->
+                 err
+             end
+           end)
+         ])}
+
       {:error, _} = err ->
         err
     end
@@ -91,10 +98,12 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   defp filter_strictly_plugins(map, _all, []) do
     map
   end
+
   defp filter_strictly_plugins(map, all, [head | tail]) do
     case map[head] do
       nil ->
-        filter_strictly_plugins(map, all, tail);
+        filter_strictly_plugins(map, all, tail)
+
       other ->
         value = :rabbit_plugins.strictly_plugins(other, all)
         filter_strictly_plugins(Map.put(map, head, value), all, tail)
@@ -105,5 +114,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
     {:error, ExitCodes.exit_dataerr(),
      "The following plugins were not found: #{Enum.join(Enum.to_list(missing), ", ")}"}
   end
+
   use RabbitMQ.CLI.Plugins.ErrorOutput
 end

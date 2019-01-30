@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -22,7 +21,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
-  def validate([_|_], _) do
+  def validate([_ | _], _) do
     {:validation_failure, :too_many_args}
   end
 
@@ -40,14 +39,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
     # TODO: use a new or command-specific formatter instead?
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_ok(), "No peers discovered"}
   end
+
   def output({:ok, {nodes, _}}, _options) do
     {:ok, nodes}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def usage, do: "discover_peers"
 
-  def banner(_,_), do: "Discovering peers nodes ..."
+  def banner(_, _), do: "Discovering peers nodes ..."
 end

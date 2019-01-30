@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   alias RabbitMQ.CLI.Core.OsPid
@@ -25,26 +24,30 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
     case :rabbit_misc.rpc_call(node_name, :os, :getpid, []) do
       pid when is_list(pid) ->
         shutdown_node_and_wait_pid_to_stop(node_name, pid)
-      other -> other
+
+      other ->
+        other
     end
   end
 
   def shutdown_node_and_wait_pid_to_stop(node_name, pid) do
     {:stream,
-      RabbitMQ.CLI.Core.Helpers.stream_until_error([
-        fn() -> "Shutting down RabbitMQ node #{node_name} running at PID #{pid}" end,
-        fn() ->
-          res = :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
-          case res do
-            :ok               -> "Waiting for PID #{pid} to terminate";
-            {:badrpc, err}    -> {:error, err}
-            {:error, _} = err -> err
-          end
-        end,
-        fn() ->
-          OsPid.wait_for_os_process_death(pid)
-          "RabbitMQ node #{node_name} running at PID #{pid} successfully shut down"
-        end])}
+     RabbitMQ.CLI.Core.Helpers.stream_until_error([
+       fn -> "Shutting down RabbitMQ node #{node_name} running at PID #{pid}" end,
+       fn ->
+         res = :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
+
+         case res do
+           :ok -> "Waiting for PID #{pid} to terminate"
+           {:badrpc, err} -> {:error, err}
+           {:error, _} = err -> err
+         end
+       end,
+       fn ->
+         OsPid.wait_for_os_process_death(pid)
+         "RabbitMQ node #{node_name} running at PID #{pid} successfully shut down"
+       end
+     ])}
   end
 
   use RabbitMQ.CLI.DefaultOutput

@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -35,8 +34,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([cluster_name], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
-      :rabbit_nodes, :set_cluster_name, [cluster_name, Helpers.cli_acting_user()])
+    :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :set_cluster_name, [
+      cluster_name,
+      Helpers.cli_acting_user()
+    ])
   end
 
   def banner([cluster_name], _) do

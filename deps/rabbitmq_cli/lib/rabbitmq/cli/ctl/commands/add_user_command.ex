@@ -13,9 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
-
   alias RabbitMQ.CLI.Core.{ExitCodes, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -34,14 +32,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
     {:validation_failure, {:bad_argument, "user cannot be empty string."}}
   end
 
-  def validate([_,_], _), do: :ok
+  def validate([_, _], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([_, _] = args, %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_auth_backend_internal,
-      :add_user, args ++ [Helpers.cli_acting_user()])
+      :add_user,
+      args ++ [Helpers.cli_acting_user()]
+    )
   end
 
   def usage, do: "add_user <username> <password>"
@@ -51,5 +52,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
   def output({:error, {:user_already_exists, username}}, _) do
     {:error, ExitCodes.exit_software(), "User \"#{username}\" already exists"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 end

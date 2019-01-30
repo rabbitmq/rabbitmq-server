@@ -21,8 +21,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
   """
 
   alias RabbitMQ.CLI.Core.Helpers
-  import RabbitMQ.CLI.Diagnostics.Helpers, only: [alarm_lines: 2,
-                                                  local_alarms: 2]
+  import RabbitMQ.CLI.Diagnostics.Helpers, only: [alarm_lines: 2, local_alarms: 2]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -30,7 +29,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
 
   def run([], %{node: node_name, timeout: timeout}) do
     # Example response when there are alarms:
@@ -45,34 +43,43 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
     #
     # The topmost file_descriptor_limit alarm is node-local.
     case :rabbit_misc.rpc_call(node_name, :rabbit_alarm, :get_alarms, [], timeout) do
-      []                  -> []
+      [] -> []
       xs when is_list(xs) -> local_alarms(xs, node_name)
-      other               -> other
+      other -> other
     end
   end
 
   def output([], %{formatter: "json"}) do
-    {:ok, %{"result"  => "ok"}}
+    {:ok, %{"result" => "ok"}}
   end
+
   def output([], %{silent: true}) do
     {:ok, :check_passed}
   end
+
   def output([], %{node: node_name}) do
     {:ok, "Node #{node_name} reported no local alarms"}
   end
+
   def output(alarms, %{node: node_name, formatter: "json"}) do
-    {:ok, %{"result"  => "ok",
-            "local"   => alarm_lines(alarms, node_name),
-            "message" => "Node #{node_name} reported local alarms"}}
+    {:ok,
+     %{
+       "result" => "ok",
+       "local" => alarm_lines(alarms, node_name),
+       "message" => "Node #{node_name} reported local alarms"
+     }}
   end
+
   def output(_alarms, %{silent: true}) do
     {:error, :check_failed}
   end
+
   def output(alarms, %{node: node_name}) do
     lines = alarm_lines(alarms, node_name)
 
     {:error, Enum.join(lines, Helpers.line_separator())}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "check_local_alarms"

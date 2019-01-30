@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -28,11 +27,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) < 2 do
+  def validate([_ | _] = args, _) when length(args) < 2 do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) > 2 do
+  def validate([_ | _] = args, _) when length(args) > 2 do
     {:validation_failure, :too_many_args}
   end
 
@@ -41,7 +40,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([name, value], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_runtime_parameters,
       :parse_set_global,
       [name, value, Helpers.cli_acting_user()]

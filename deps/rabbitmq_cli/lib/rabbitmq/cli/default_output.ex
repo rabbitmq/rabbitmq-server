@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.DefaultOutput do
   # When `use RabbitMQ.CLI.DefaultOutput` is invoked,
   # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/3.
@@ -33,7 +32,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
 
   def mnesia_running_error(node_name) do
     "Mnesia is still running on node #{node_name}.\n" <>
-    "Please stop RabbitMQ with 'rabbitmqctl stop_app' first."
+      "Please stop RabbitMQ with 'rabbitmqctl stop_app' first."
   end
 
   defp normalize_output(:ok), do: :ok
@@ -43,13 +42,16 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output({:badrpc, :nodedown} = input), do: {:error, input}
   defp normalize_output({:badrpc, :timeout} = input), do: {:error, input}
   defp normalize_output({:badrpc, {:EXIT, reason}}), do: {:error, reason}
+
   defp normalize_output({:error, format, args})
-    when (is_list(format) or is_binary(format)) and is_list(args) do
-      {:error, to_string(:rabbit_misc.format(format, args))}
+       when (is_list(format) or is_binary(format)) and is_list(args) do
+    {:error, to_string(:rabbit_misc.format(format, args))}
   end
+
   defp normalize_output({:error_string, string}) do
     {:error, to_string(string)}
   end
+
   defp normalize_output({:error, _} = input), do: input
   defp normalize_output(unknown) when is_atom(unknown), do: {:error, unknown}
   defp normalize_output({unknown, _} = input) when is_atom(unknown), do: {:error, input}
@@ -58,26 +60,32 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp format_output({:error, _} = result) do
     result
   end
+
   defp format_output(:ok) do
     :ok
   end
+
   defp format_output({:ok, output}) do
     case Enumerable.impl_for(output) do
       nil ->
-        {:ok, output};
+        {:ok, output}
+
       ## Do not streamify plain maps
       Enumerable.Map ->
-        {:ok, output};
+        {:ok, output}
+
       ## Do not streamify keyword lists
       Enumerable.List ->
         case Keyword.keyword?(output) do
-          true  -> {:ok, output};
+          true -> {:ok, output}
           false -> {:stream, output}
-        end;
+        end
+
       _ ->
         {:stream, output}
     end
   end
+
   defp format_output({:stream, stream}) do
     {:stream, stream}
   end

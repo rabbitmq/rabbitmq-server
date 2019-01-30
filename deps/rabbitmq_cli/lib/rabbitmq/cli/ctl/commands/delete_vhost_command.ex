@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -23,7 +22,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([], _), do: {:validation_failure, :not_enough_args}
-  def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+  def validate([_ | _] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning

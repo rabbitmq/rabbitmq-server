@@ -16,55 +16,63 @@
 alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
 defmodule RabbitMQ.CLI.Formatters.Csv do
-
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_stream(stream, _) do
     ## Flatten list_consumers
-    Stream.flat_map(stream,
-                    fn([first | _] = element) ->
-                        case Keyword.keyword?(first) or is_map(first) do
-                          true  -> element;
-                          false -> [element]
-                        end
-                      (other) ->
-                        [other]
-                    end)
+    Stream.flat_map(
+      stream,
+      fn
+        [first | _] = element ->
+          case Keyword.keyword?(first) or is_map(first) do
+            true -> element
+            false -> [element]
+          end
+
+        other ->
+          [other]
+      end
+    )
     ## Add info_items names
-    |> Stream.transform(:init,
-                        FormatterHelpers.without_errors_2(
-                          fn(element, :init) ->
-                              {
-                                case keys(element) do
-                                  nil -> [values(element)];
-                                  ks  -> [ks, values(element)]
-                                end,
-                                :next
-                               };
-                            (element, :next) ->
-                              {[values(element)], :next}
-                            end))
-    |> CSV.encode([delimiter: ""])
+    |> Stream.transform(
+      :init,
+      FormatterHelpers.without_errors_2(fn
+        element, :init ->
+          {
+            case keys(element) do
+              nil -> [values(element)]
+              ks -> [ks, values(element)]
+            end,
+            :next
+          }
+
+        element, :next ->
+          {[values(element)], :next}
+      end)
+    )
+    |> CSV.encode(delimiter: "")
   end
 
   def format_output(output, _) do
     case keys(output) do
-      nil -> [values(output)];
-      ks  -> [ks, values(output)]
+      nil -> [values(output)]
+      ks -> [ks, values(output)]
     end
-    |> CSV.encode
-    |> Enum.join
+    |> CSV.encode()
+    |> Enum.join()
   end
 
   defp keys(map) when is_map(map) do
     Map.keys(map)
   end
+
   defp keys(list) when is_list(list) do
     case Keyword.keyword?(list) do
-      true  -> Keyword.keys(list);
+      true -> Keyword.keys(list)
       false -> nil
     end
   end
+
   defp keys(_other) do
     nil
   end
@@ -72,19 +80,21 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
   defp values(map) when is_map(map) do
     Map.values(map)
   end
+
   defp values([]) do
     []
   end
+
   defp values(list) when is_list(list) do
     case Keyword.keyword?(list) do
-      true  -> Keyword.values(list);
+      true -> Keyword.values(list)
       false -> list
     end
   end
+
   defp values(other) do
     other
   end
-
 end
 
 defimpl CSV.Encode, for: PID do

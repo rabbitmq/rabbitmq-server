@@ -13,9 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
-
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -23,18 +21,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
-  def validate([_|_] = args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
+  def validate([_ | _] = args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([_user, _] = args, %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
-      :rabbit_auth_backend_internal, :change_password, args ++ [Helpers.cli_acting_user()])
+    :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_auth_backend_internal,
+      :change_password,
+      args ++ [Helpers.cli_acting_user()]
+    )
   end
 
   def usage, do: "change_password <username> <password>"
 
-  def banner([user| _], _), do: "Changing password for user \"#{user}\" ..."
-
+  def banner([user | _], _), do: "Changing password for user \"#{user}\" ..."
 end

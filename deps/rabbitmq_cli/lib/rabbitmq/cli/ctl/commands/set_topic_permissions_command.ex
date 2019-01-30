@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -27,26 +26,32 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
-  def validate([_|_] = args, _) when length(args) < 4 do
+
+  def validate([_ | _] = args, _) when length(args) < 4 do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) > 4 do
+  def validate([_ | _] = args, _) when length(args) > 4 do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([user, exchange, write_pattern, read_pattern], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_auth_backend_internal,
       :set_topic_permissions,
       [user, vhost, exchange, write_pattern, read_pattern, Helpers.cli_acting_user()]
     )
   end
 
-  def usage, do: "set_topic_permissions [-p <vhost>] <username> <exchange> <write_pattern> <read_pattern>"
+  def usage,
+    do: "set_topic_permissions [-p <vhost>] <username> <exchange> <write_pattern> <read_pattern>"
 
-  def banner([user, exchange, _, _], %{vhost: vhost}), do: "Setting topic permissions on \"#{exchange}\" for user \"#{user}\" in vhost \"#{vhost}\" ..."
+  def banner([user, exchange, _, _], %{vhost: vhost}),
+    do:
+      "Setting topic permissions on \"#{exchange}\" for user \"#{user}\" in vhost \"#{vhost}\" ..."
 end

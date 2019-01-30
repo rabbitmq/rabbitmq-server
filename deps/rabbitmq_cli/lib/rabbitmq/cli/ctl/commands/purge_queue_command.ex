@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -38,20 +37,27 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([queue], %{node: node_name, vhost: vhost, timeout: timeout}) do
-    res = :rabbit_misc.rpc_call(node_name,
-      :rabbit_amqqueue, :lookup, [:rabbit_misc.r(vhost, :queue, queue)], timeout)
+    res =
+      :rabbit_misc.rpc_call(
+        node_name,
+        :rabbit_amqqueue,
+        :lookup,
+        [:rabbit_misc.r(vhost, :queue, queue)],
+        timeout
+      )
 
     case res do
       {:ok, q} -> purge(node_name, q, timeout)
-      _        -> res
+      _ -> res
     end
   end
 
   defp purge(node_name, q, timeout) do
     res = :rabbit_misc.rpc_call(node_name, :rabbit_amqqueue, :purge, [q], timeout)
+
     case res do
       {:ok, _message_count} -> :ok
-      _                     -> res
+      _ -> res
     end
   end
 

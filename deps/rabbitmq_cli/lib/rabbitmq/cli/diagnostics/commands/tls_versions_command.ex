@@ -25,19 +25,20 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.TlsVersionsCommand do
     :rabbit_misc.rpc_call(node_name, :ssl, :versions, [], timeout)
   end
 
-  def banner([], %{}),  do: "Listing all TLS versions supported by the runtime..."
+  def banner([], %{}), do: "Listing all TLS versions supported by the runtime..."
 
   def output(result, %{formatter: "json"}) do
     vs = Map.new(result) |> Map.get(:available)
 
     {:ok, %{versions: vs}}
   end
+
   def output(result, _opts) do
     vs = Map.new(result) |> Map.get(:available)
     {:ok, vs}
   end
 
   def usage, do: "tls_versions"
-  
+
   def formatter(), do: RabbitMQ.CLI.Formatters.StringPerLine
 end

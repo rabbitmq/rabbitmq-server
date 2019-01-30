@@ -21,9 +21,10 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   def mode(opts) do
     %{online: online, offline: offline} = opts
+
     case {online, offline} do
-      {true, false}  -> :online;
-      {false, true}  -> :offline;
+      {true, false} -> :online
+      {false, true} -> :offline
       {false, false} -> :best_effort
     end
   end
@@ -31,14 +32,19 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   def can_set_plugins_with_mode(args, opts) do
     case mode(opts) do
       # can always set offline plugins list
-      :offline -> :ok;
+      :offline ->
+        :ok
+
       # assume online mode, fall back to offline mode in case of errors
-      :best_effort -> :ok;
+      :best_effort ->
+        :ok
+
       # a running node is required
       :online ->
-        Validators.chain([&Validators.node_is_running/2,
-                          &Validators.rabbit_is_running/2],
-                          [args, opts])
+        Validators.chain(
+          [&Validators.node_is_running/2, &Validators.rabbit_is_running/2],
+          [args, opts]
+        )
     end
   end
 
@@ -55,7 +61,8 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   def read_enabled(opts) do
     case enabled_plugins_file(opts) do
       {:ok, enabled} ->
-        :rabbit_plugins.read_enabled(to_charlist(enabled));
+        :rabbit_plugins.read_enabled(to_charlist(enabled))
+
       # Existence of enabled_plugins_file should be validated separately
       {:error, :no_plugins_file} ->
         []
@@ -64,7 +71,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   def enabled_plugins_file(opts) do
     case Config.get_option(:enabled_plugins_file, opts) do
-      nil  -> {:error, :no_plugins_file};
+      nil -> {:error, :no_plugins_file}
       file -> {:ok, file}
     end
   end
@@ -80,57 +87,71 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     write_enabled_plugins(plugin_atoms, plugins_file, opts)
   end
 
-  @spec update_enabled_plugins([atom()],
-                               :online | :offline | :best_effort,
-                               node(),
-                               map()) :: map() | {:error, any()}
+  @spec update_enabled_plugins(
+          [atom()],
+          :online | :offline | :best_effort,
+          node(),
+          map()
+        ) :: map() | {:error, any()}
   def update_enabled_plugins(enabled_plugins, mode, node_name, opts) do
     {:ok, plugins_file} = enabled_plugins_file(opts)
+
     case mode do
       :online ->
         case update_enabled_plugins(node_name, plugins_file) do
           {:ok, started, stopped} ->
-            %{mode: :online,
+            %{
+              mode: :online,
               started: Enum.sort(started),
               stopped: Enum.sort(stopped),
-              set: Enum.sort(enabled_plugins)};
-          {:error, _} = err -> err
-        end;
-      :best_effort  ->
+              set: Enum.sort(enabled_plugins)
+            }
+
+          {:error, _} = err ->
+            err
+        end
+
+      :best_effort ->
         case update_enabled_plugins(node_name, plugins_file) do
           {:ok, started, stopped} ->
-            %{mode: :online,
+            %{
+              mode: :online,
               started: Enum.sort(started),
               stopped: Enum.sort(stopped),
-              set: Enum.sort(enabled_plugins)};
+              set: Enum.sort(enabled_plugins)
+            }
+
           {:error, :offline} ->
-            %{mode: :offline, set: Enum.sort(enabled_plugins)};
+            %{mode: :offline, set: Enum.sort(enabled_plugins)}
+
           {:error, {:enabled_plugins_mismatch, _, _}} = err ->
             err
-        end;
+        end
+
       :offline ->
-        %{mode: :offline,
-          set: Enum.sort(enabled_plugins)}
+        %{mode: :offline, set: Enum.sort(enabled_plugins)}
     end
   end
 
   def validate_plugins(requested_plugins, opts) do
     ## Maybe check all plugins
-    plugins = case opts do
-      %{all: true} -> plugin_names(list(opts))
-      _            -> requested_plugins
-    end
+    plugins =
+      case opts do
+        %{all: true} -> plugin_names(list(opts))
+        _ -> requested_plugins
+      end
 
     all = list(opts)
     deps = :rabbit_plugins.dependencies(false, plugins, all)
 
-    deps_plugins = Enum.filter(all, fn(plugin) ->
-      name = plugin_name(plugin)
-      Enum.member?(deps, name)
-    end)
+    deps_plugins =
+      Enum.filter(all, fn plugin ->
+        name = plugin_name(plugin)
+        Enum.member?(deps, name)
+      end)
 
     case :rabbit_plugins.validate_plugins(deps_plugins) do
-      {_, []}     -> :ok;
+      {_, []} -> :ok
       {_, invalid} -> {:error, :rabbit_plugins.format_invalid_plugins(invalid)}
     end
   end
@@ -156,7 +177,6 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     Enum.join(plugin_names(plugins), ", ")
   end
 
-
   #
   # Implementation
   #
@@ -174,44 +194,47 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   defp write_enabled_plugins(plugins, plugins_file, opts) do
-    all              = list(opts)
+    all = list(opts)
     all_plugin_names = Enum.map(all, &plugin_name/1)
     missing = MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names))
+
     case Enum.empty?(missing) do
       true ->
         case :rabbit_file.write_term_file(to_charlist(plugins_file), [plugins]) do
           :ok ->
             all_enabled = :rabbit_plugins.dependencies(false, plugins, all)
-            {:ok, Enum.sort(all_enabled)};
+            {:ok, Enum.sort(all_enabled)}
+
           {:error, reason} ->
             {:error, {:cannot_write_enabled_plugins_file, plugins_file, reason}}
-        end;
+        end
+
       false ->
         {:error, {:plugins_not_found, Enum.to_list(missing)}}
     end
   end
 
   defp update_enabled_plugins(node_name, plugins_file) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_plugins,
-                                          :ensure, [to_list(plugins_file)]) do
-      {:badrpc, :nodedown}          -> {:error, :offline};
-      {:error, :rabbit_not_running} -> {:error, :offline};
-      {:ok, start, stop}   -> {:ok, start, stop};
-      {:error, _} = err    -> err
+    case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :ensure, [to_list(plugins_file)]) do
+      {:badrpc, :nodedown} -> {:error, :offline}
+      {:error, :rabbit_not_running} -> {:error, :offline}
+      {:ok, start, stop} -> {:ok, start, stop}
+      {:error, _} = err -> err
     end
   end
 
   defp add_all_to_path(plugins_directories) do
     directories = String.split(to_string(plugins_directories), CliHelpers.path_separator())
-    Enum.map(directories, fn(directory) ->
-        with {:ok, subdirs} <- File.ls(directory)
-        do
-          for subdir <- subdirs do
-            Path.join([directory, subdir, "ebin"])
-            |> Code.append_path
-          end
+
+    Enum.map(directories, fn directory ->
+      with {:ok, subdirs} <- File.ls(directory) do
+        for subdir <- subdirs do
+          Path.join([directory, subdir, "ebin"])
+          |> Code.append_path()
         end
+      end
     end)
+
     :ok
   end
 end

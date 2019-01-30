@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -44,6 +43,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
     rescue
       ex in SyntaxError ->
         {:validation_failure, "SyntaxError: " <> Exception.message(ex)}
+
       _ ->
         :ok
     end
@@ -53,8 +53,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
     try do
       {val, _} = Code.eval_string(expr, [options: opts], __ENV__)
       {:ok, val}
-    rescue ex ->
-      {:error, Exception.message(ex)}
+    rescue
+      ex ->
+        {:error, Exception.message(ex)}
     end
   end
 

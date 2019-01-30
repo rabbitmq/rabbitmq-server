@@ -20,56 +20,76 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def switches() do
-      [
-        cipher: :atom,
-        hash: :atom,
-        iterations: :integer
-      ]
+    [
+      cipher: :atom,
+      hash: :atom,
+      iterations: :integer
+    ]
   end
 
   def distribution(_), do: :none
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{
-        cipher:       :rabbit_pbe.default_cipher(),
-        hash:         :rabbit_pbe.default_hash(),
-        iterations:   :rabbit_pbe.default_iterations()
-        }, opts)
-    }
+    {args,
+     Map.merge(
+       %{
+         cipher: :rabbit_pbe.default_cipher(),
+         hash: :rabbit_pbe.default_hash(),
+         iterations: :rabbit_pbe.default_iterations()
+       },
+       opts
+     )}
   end
+
   def validate(args, _) when length(args) < 2 do
-      {:validation_failure,
-       {:bad_argument, "Please provide a value to decode and a passphrase."}}
+    {:validation_failure, {:bad_argument, "Please provide a value to decode and a passphrase."}}
   end
+
   def validate(args, _) when length(args) > 2 do
-      {:validation_failure, :too_many_args}
+    {:validation_failure, :too_many_args}
   end
+
   def validate(args, opts) when length(args) === 2 do
     case {supports_cipher(opts.cipher), supports_hash(opts.hash), opts.iterations > 0} do
-      {false, _, _}      -> {:validation_failure, {:bad_argument, "The requested cipher is not supported."}}
-      {_, false, _}      -> {:validation_failure, {:bad_argument, "The requested hash is not supported"}}
-      {_, _, false}      -> {:validation_failure, {:bad_argument, "The requested number of iterations is incorrect (must be a positive integer)"}}
-      {true, true, true} -> :ok
+      {false, _, _} ->
+        {:validation_failure, {:bad_argument, "The requested cipher is not supported."}}
+
+      {_, false, _} ->
+        {:validation_failure, {:bad_argument, "The requested hash is not supported"}}
+
+      {_, _, false} ->
+        {:validation_failure,
+         {:bad_argument,
+          "The requested number of iterations is incorrect (must be a positive integer)"}}
+
+      {true, true, true} ->
+        :ok
     end
   end
 
   def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do
     try do
       term_value = Helpers.evaluate_input_as_term(value)
-      term_to_decrypt = case term_value do
-        {:encrypted, encrypted_term} -> encrypted_term
-        _                            -> term_value
-      end
+
+      term_to_decrypt =
+        case term_value do
+          {:encrypted, encrypted_term} -> encrypted_term
+          _ -> term_value
+        end
+
       result = :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, term_to_decrypt)
       {:ok, result}
-    catch _, _ ->
-      {:error, "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
+    catch
+      _, _ ->
+        {:error,
+         "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
     end
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
-  def usage, do: "decode value passphrase [--cipher cipher] [--hash hash] [--iterations iterations]"
+  def usage,
+    do: "decode value passphrase [--cipher cipher] [--hash hash] [--iterations iterations]"
 
   def banner([_, _], _) do
     "Decrypting value ..."
@@ -78,5 +98,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
   defp supports_cipher(cipher), do: Enum.member?(:rabbit_pbe.supported_ciphers(), cipher)
 
   defp supports_hash(hash), do: Enum.member?(:rabbit_pbe.supported_hashes(), hash)
-
 end

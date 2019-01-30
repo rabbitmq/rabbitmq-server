@@ -13,13 +13,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearGlobalParameterCommand do
-
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+
   def merge_defaults(args, opts) do
     {args, opts}
   end
@@ -27,18 +26,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearGlobalParameterCommand do
   def validate(args, _) when is_list(args) and length(args) < 1 do
     {:validation_failure, :not_enough_args}
   end
-  def validate([_|_] = args, _) when length(args) > 1 do
+
+  def validate([_ | _] = args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
+
   def validate([_], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([key], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_runtime_parameters,
       :clear_global,
-      [key, Helpers.cli_acting_user()])
+      [key, Helpers.cli_acting_user()]
+    )
   end
 
   def usage, do: "clear_global_parameter <key>"

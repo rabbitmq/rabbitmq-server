@@ -19,10 +19,11 @@ defmodule RabbitMQ.CLI.Plugins.ErrorOutput do
 
   defmacro __using__(_) do
     quote do
-
       def output({:error, {:enabled_plugins_mismatch, cli_path, node_path}}, opts) do
         {:error, ExitCodes.exit_dataerr(),
-         "Could not update enabled plugins file at #{cli_path}: target node #{opts[:node]} uses a different path (#{node_path})"}
+         "Could not update enabled plugins file at #{cli_path}: target node #{opts[:node]} uses a different path (#{
+           node_path
+         })"}
       end
 
       def output({:error, {:cannot_read_enabled_plugins_file, path, :eacces}}, _opts) do
@@ -34,7 +35,7 @@ defmodule RabbitMQ.CLI.Plugins.ErrorOutput do
         {:error, ExitCodes.exit_dataerr(),
          "Could not read enabled plugins file at #{path}: the file does not exist (ENOENT)"}
       end
-      
+
       def output({:error, {:cannot_write_enabled_plugins_file, path, :eacces}}, _opts) do
         {:error, ExitCodes.exit_dataerr(),
          "Could not update enabled plugins file at #{path}: the file does not exist or permission was denied (EACCES)"}
@@ -52,7 +53,12 @@ defmodule RabbitMQ.CLI.Plugins.ErrorOutput do
       def output({:stream, stream}, _opts) do
         {:stream, stream}
       end
+    end
 
-    end # quote
-  end # defmacro
-end # defmodule
+    # quote
+  end
+
+  # defmacro
+end
+
+# defmodule

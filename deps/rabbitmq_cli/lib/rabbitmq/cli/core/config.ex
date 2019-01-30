@@ -14,15 +14,16 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Config do
-
   #
   # Environment
   #
 
   def get_option(name, opts \\ %{}) do
-    raw_option = opts[name] ||
-                   get_system_option(name) ||
-                   default(name)
+    raw_option =
+      opts[name] ||
+        get_system_option(name) ||
+        default(name)
+
     normalise(name, raw_option)
   end
 
@@ -31,46 +32,51 @@ defmodule RabbitMQ.CLI.Core.Config do
   end
 
   def normalise(:node, nil), do: nil
+
   def normalise(:node, node) when not is_atom(node) do
     Rabbitmq.Atom.Coerce.to_atom(node)
   end
+
   def normalise(:erlang_cookie, nil), do: nil
+
   def normalise(:erlang_cookie, c) when not is_atom(c) do
     Rabbitmq.Atom.Coerce.to_atom(c)
   end
-  def normalise(:longnames, true),       do: :longnames
-  def normalise(:longnames, "true"),     do: :longnames
-  def normalise(:longnames, 'true'),     do: :longnames
+
+  def normalise(:longnames, true), do: :longnames
+  def normalise(:longnames, "true"), do: :longnames
+  def normalise(:longnames, 'true'), do: :longnames
   def normalise(:longnames, "\"true\""), do: :longnames
-  def normalise(:longnames, _val),       do: :shortnames
-  def normalise(_, value),               do: value
+  def normalise(:longnames, _val), do: :shortnames
+  def normalise(_, value), do: value
 
   def system_env_variable(name) do
     case name do
-      :longnames            -> "RABBITMQ_USE_LONGNAME";
-      :rabbitmq_home        -> "RABBITMQ_HOME";
-      :mnesia_dir           -> "RABBITMQ_MNESIA_DIR";
-      :plugins_dir          -> "RABBITMQ_PLUGINS_DIR";
-      :plugins_expand_dir   -> "RABBITMQ_PLUGINS_EXPAND_DIR";
-      :enabled_plugins_file -> "RABBITMQ_ENABLED_PLUGINS_FILE";
-      :node                 -> "RABBITMQ_NODENAME";
-      :aliases_file         -> "RABBITMQ_CLI_ALIASES_FILE";
-      :erlang_cookie        -> "RABBITMQ_ERLANG_COOKIE";
+      :longnames -> "RABBITMQ_USE_LONGNAME"
+      :rabbitmq_home -> "RABBITMQ_HOME"
+      :mnesia_dir -> "RABBITMQ_MNESIA_DIR"
+      :plugins_dir -> "RABBITMQ_PLUGINS_DIR"
+      :plugins_expand_dir -> "RABBITMQ_PLUGINS_EXPAND_DIR"
+      :enabled_plugins_file -> "RABBITMQ_ENABLED_PLUGINS_FILE"
+      :node -> "RABBITMQ_NODENAME"
+      :aliases_file -> "RABBITMQ_CLI_ALIASES_FILE"
+      :erlang_cookie -> "RABBITMQ_ERLANG_COOKIE"
       _ -> ""
     end
   end
 
   def get_system_option(:script_name) do
     Path.basename(:escript.script_name())
-    |> Path.rootname
-    |> String.to_atom
+    |> Path.rootname()
+    |> String.to_atom()
   end
+
   def get_system_option(name) do
     System.get_env(system_env_variable(name))
   end
 
   def default(:script_name), do: :rabbitmqctl
-  def default(:node),        do: :rabbit
+  def default(:node), do: :rabbit
   def default(_), do: nil
 
   #
@@ -79,22 +85,26 @@ defmodule RabbitMQ.CLI.Core.Config do
 
   def get_formatter(command, %{formatter: formatter}) do
     module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Macro.camelize(formatter))
+
     case Code.ensure_loaded(module_name) do
-      {:module, _}      -> module_name;
+      {:module, _} -> module_name
       {:error, :nofile} -> default_formatter(command)
     end
   end
+
   def get_formatter(command, _) do
     default_formatter(command)
   end
 
   def get_printer(%{printer: printer}) do
     module_name = String.to_atom("RabbitMQ.CLI.Printers." <> Macro.camelize(printer))
+
     case Code.ensure_loaded(module_name) do
-      {:module, _}      -> module_name;
+      {:module, _} -> module_name
       {:error, :nofile} -> default_printer()
     end
   end
+
   def get_printer(_) do
     default_printer()
   end
@@ -105,9 +115,8 @@ defmodule RabbitMQ.CLI.Core.Config do
 
   def default_formatter(command) do
     case function_exported?(command, :formatter, 0) do
-      true  -> command.formatter;
+      true -> command.formatter
       false -> RabbitMQ.CLI.Formatters.String
     end
   end
-
 end

@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -30,54 +29,70 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate(["absolute"|_] = args, _) when length(args) > 2 do
+  def validate(["absolute" | _] = args, _) when length(args) > 2 do
     {:validation_failure, :too_many_args}
   end
 
   def validate(["absolute", arg], _) do
     case Integer.parse(arg) do
-      :error        ->  {:validation_failure, :bad_argument}
+      :error ->
+        {:validation_failure, :bad_argument}
+
       {_, rest} ->
-        case Enum.member?(Helpers.memory_units, rest) do
-          true -> :ok
-          false -> case Float.parse(arg) do
-                     {_, orest} when orest == rest ->
-                       {:validation_failure, {:bad_argument, "Invalid units."}}
-                     _ ->
-                       {:validation_failure, {:bad_argument, "The threshold should be an integer."}}
-                   end
+        case Enum.member?(Helpers.memory_units(), rest) do
+          true ->
+            :ok
+
+          false ->
+            case Float.parse(arg) do
+              {_, orest} when orest == rest ->
+                {:validation_failure, {:bad_argument, "Invalid units."}}
+
+              _ ->
+                {:validation_failure, {:bad_argument, "The threshold should be an integer."}}
+            end
         end
     end
   end
 
-  def validate([_|_] = args, _) when length(args) > 1 do
+  def validate([_ | _] = args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
 
   def validate([arg], _) when is_number(arg) and (arg < 0.0 or arg > 1.0) do
-    {:validation_failure, {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
+    {:validation_failure,
+     {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
   end
+
   def validate([arg], %{}) when is_binary(arg) do
     case Float.parse(arg) do
       {arg, ""} when is_number(arg) and (arg < 0.0 or arg > 1.0) ->
-               {:validation_failure, {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
-      {_, ""}   ->  :ok
-      _           ->  {:validation_failure, :bad_argument}
+        {:validation_failure,
+         {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
+
+      {_, ""} ->
+        :ok
+
+      _ ->
+        {:validation_failure, :bad_argument}
     end
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run(["absolute", arg], opts) do
     case Integer.parse(arg) do
-      {num, rest}   ->  valid_units = rest in Helpers.memory_units
-                        set_vm_memory_high_watermark_absolute({num, rest}, valid_units, opts)
+      {num, rest} ->
+        valid_units = rest in Helpers.memory_units()
+        set_vm_memory_high_watermark_absolute({num, rest}, valid_units, opts)
     end
   end
 
   def run([arg], %{node: node_name}) when is_number(arg) and arg >= 0.0 do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :vm_memory_monitor,
       :set_vm_memory_high_watermark,
       [arg]
@@ -86,20 +101,31 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
 
   def run([arg], %{} = opts) when is_binary(arg) do
     case Float.parse(arg) do
-      {num, ""}   ->  run([num], opts)
+      {num, ""} -> run([num], opts)
     end
   end
 
-  defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name}) when num > 0 do
-      val = Helpers.memory_unit_absolute(num, rest)
-      :rabbit_misc.rpc_call(node_name,
-        :vm_memory_monitor,
-        :set_vm_memory_high_watermark,
-        [{:absolute, val}])
+  defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name})
+       when num > 0 do
+    val = Helpers.memory_unit_absolute(num, rest)
+
+    :rabbit_misc.rpc_call(
+      node_name,
+      :vm_memory_monitor,
+      :set_vm_memory_high_watermark,
+      [{:absolute, val}]
+    )
   end
 
-  def usage, do: ["set_vm_memory_high_watermark <fraction>", "set_vm_memory_high_watermark absolute <value>"]
+  def usage,
+    do: [
+      "set_vm_memory_high_watermark <fraction>",
+      "set_vm_memory_high_watermark absolute <value>"
+    ]
 
-  def banner(["absolute", arg], %{node: node_name}), do: "Setting memory threshold on #{node_name} to #{arg} bytes ..."
-  def banner([arg], %{node: node_name}), do: "Setting memory threshold on #{node_name} to #{arg} ..."
+  def banner(["absolute", arg], %{node: node_name}),
+    do: "Setting memory threshold on #{node_name} to #{arg} bytes ..."
+
+  def banner([arg], %{node: node_name}),
+    do: "Setting memory threshold on #{node_name} to #{arg} ..."
 end
