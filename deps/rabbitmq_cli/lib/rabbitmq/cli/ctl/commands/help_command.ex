@@ -134,8 +134,8 @@ i.e. \"--no-quiet\" or \"--no-table-headers\"
 Quiet output mode is selected with the \"-q\" flag. Informational messages are
 suppressed when quiet mode is in effect.
 
-If RabbitMQ broker uses long node names for erlang distribution, \"longnames\"
-option should be specified.
+If target RabbitMQ node is configured to use long node names, the \"--longnames\"
+option must be specified.
 
 Some commands accept an optional virtual host parameter for which
 to display results. The default value is \"/\"."]
