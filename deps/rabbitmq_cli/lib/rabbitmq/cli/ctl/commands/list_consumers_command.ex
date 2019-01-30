@@ -32,7 +32,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def info_keys(), do: @info_keys
 
   def merge_defaults([], opts) do
-    {Enum.map(@info_keys -- [:activity_status], &Atom.to_string/1), Map.merge(%{vhost: "/", table_headers: true}, opts)}
+    {Enum.map(@info_keys -- [:activity_status], &Atom.to_string/1),
+     Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
   def merge_defaults(args, opts) do
@@ -50,6 +51,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
 
   def run([_ | _] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
     info_keys = InfoKeys.prepare_info_keys(args)
+
     Helpers.with_nodes_in_cluster(node_name, fn nodes ->
       RpcStream.receive_list_items(
         node_name,

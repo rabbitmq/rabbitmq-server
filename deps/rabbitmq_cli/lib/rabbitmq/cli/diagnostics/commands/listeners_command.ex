@@ -22,10 +22,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
   """
 
   alias RabbitMQ.CLI.Core.Helpers
-  import RabbitMQ.CLI.Diagnostics.Helpers, only: [listeners_on: 2,
-                                                  listener_lines: 1,
-                                                  listener_maps: 1,
-                                                  listener_rows: 1]
+
+  import RabbitMQ.CLI.Diagnostics.Helpers,
+    only: [listeners_on: 2, listener_lines: 1, listener_maps: 1, listener_rows: 1]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -33,7 +32,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
 
   def run([], %{node: node_name, timeout: timeout}) do
     # Example listener list:
@@ -52,33 +50,34 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListenersCommand do
     #           {0,0,0,0,0,0,0,0},
     #           61613,
     #           [{backlog,128},{nodelay,true}]}]
-    case :rabbit_misc.rpc_call(node_name,
-      :rabbit_networking, :active_listeners, [], timeout) do
-      {:error, _}    = err -> err
+    case :rabbit_misc.rpc_call(node_name, :rabbit_networking, :active_listeners, [], timeout) do
+      {:error, _} = err -> err
       {:error, _, _} = err -> err
-      xs when is_list(xs)  -> listeners_on(xs, node_name)
-      other                -> other
+      xs when is_list(xs) -> listeners_on(xs, node_name)
+      other -> other
     end
   end
 
   def output([], %{node: node_name, formatter: "json"}) do
-    {:ok, %{"result"    => "ok",
-            "node"      => node_name,
-            "listeners" => []}}
+    {:ok, %{"result" => "ok", "node" => node_name, "listeners" => []}}
   end
+
   def output([], %{formatter: "csv"}) do
     {:ok, []}
   end
+
   def output([], %{node: node_name}) do
     {:ok, "Node #{node_name} reported no enabled listeners."}
   end
+
   def output(listeners, %{formatter: "json"}) do
-    {:ok, %{"result"    => "ok",
-            "listeners" => listener_maps(listeners)}}
+    {:ok, %{"result" => "ok", "listeners" => listener_maps(listeners)}}
   end
+
   def output(listeners, %{formatter: "csv"}) do
     {:stream, [listener_rows(listeners)]}
   end
+
   def output(listeners, _opts) do
     lines = listener_lines(listeners)
 

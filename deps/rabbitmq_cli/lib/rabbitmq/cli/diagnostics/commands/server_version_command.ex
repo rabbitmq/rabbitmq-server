@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -28,6 +27,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
   def output(result, _options) when is_list(result) do
     {:ok, result}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "server_version"

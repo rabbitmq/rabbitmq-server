@@ -23,14 +23,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
     {args, Map.merge(default_opts(), opts)}
   end
 
-  def validate([], _),  do: {:validation_failure, :not_enough_args}
+  def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
-  def validate(_, _),   do: {:validation_failure, :too_many_args}
+  def validate(_, _), do: {:validation_failure, :too_many_args}
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([queue], %{vhost: vhost, node: node_name}) do
-    :rpc.call(node_name,
+    :rpc.call(
+      node_name,
       :rabbit_mirror_queue_misc,
       :sync_queue,
       [:rabbit_misc.r(vhost, :queue, queue)],

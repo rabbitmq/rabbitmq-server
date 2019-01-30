@@ -23,8 +23,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
 
   def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
 
-  def validate([], _),  do: :ok
-  def validate(_, _),   do: {:validation_failure, :too_many_args}
+  def validate([], _), do: :ok
+  def validate(_, _), do: {:validation_failure, :too_many_args}
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
@@ -34,20 +34,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
 
   def usage, do: "restart_vhost [-p <vhost>]"
 
-  def banner(_,%{node: node_name, vhost: vhost}) do
+  def banner(_, %{node: node_name, vhost: vhost}) do
     "Trying to restart vhost '#{vhost}' on node '#{node_name}' ..."
   end
 
   def output({:ok, _pid}, %{vhost: vhost, node: node_name}) do
     {:ok, "Successfully restarted vhost '#{vhost}' on node '#{node_name}'"}
   end
+
   def output({:error, {:already_started, _pid}}, %{vhost: vhost, node: node_name}) do
     {:ok, "Vhost '#{vhost}' is already running on node '#{node_name}'"}
   end
+
   def output({:error, err}, %{vhost: vhost, node: node_name}) do
     {:error, ExitCodes.exit_software(),
-     ["Failed to start vhost '#{vhost}' on node '#{node_name}'",
-      "Reason: #{inspect(err)}"]}
+     ["Failed to start vhost '#{vhost}' on node '#{node_name}'", "Reason: #{inspect(err)}"]}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 end

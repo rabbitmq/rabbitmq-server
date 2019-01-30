@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -24,7 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
-  def validate([_|_], _), do: {:validation_failure, :too_many_args}
+  def validate([_ | _], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
 
   def run([], %{node: node_name}) do

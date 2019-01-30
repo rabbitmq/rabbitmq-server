@@ -13,9 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
-
   alias RabbitMQ.CLI.Core.{CommandModules, Config, ExitCodes}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -30,27 +28,34 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def switches(), do: [list_commands: :boolean]
 
-  def run([command_name|_], opts) do
+  def run([command_name | _], opts) do
     CommandModules.load(opts)
-    case CommandModules.module_map[command_name] do
+
+    case CommandModules.module_map()[command_name] do
       nil ->
-        all_usage(opts);
+        all_usage(opts)
+
       command ->
-        Enum.join([base_usage(command, opts)] ++
-                  options_usage() ++
-                  additional_usage(command), "\n\n")
+        Enum.join(
+          [base_usage(command, opts)] ++
+            options_usage() ++
+            additional_usage(command),
+          "\n\n"
+        )
     end
   end
+
   def run(_, opts) do
     CommandModules.load(opts)
+
     case opts[:list_commands] do
-      true  -> commands();
-      _     -> all_usage(opts)
+      true -> commands()
+      _ -> all_usage(opts)
     end
   end
 
   def output(result, _) do
-    {:error, ExitCodes.exit_ok, result}
+    {:error, ExitCodes.exit_ok(), result}
   end
 
   def program_name(opts) do
@@ -58,35 +63,46 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   end
 
   def all_usage(opts) do
-    Enum.join(tool_usage(program_name(opts)) ++
-              options_usage() ++
-              [Enum.join(["Commands:"] ++ commands(), "\n")] ++
-              additional_usage(), "\n\n")
+    Enum.join(
+      tool_usage(program_name(opts)) ++
+        options_usage() ++
+        [Enum.join(["Commands:"] ++ commands(), "\n")] ++
+        additional_usage(),
+      "\n\n"
+    )
   end
 
   def usage(), do: "help (<command> | [--list-commands])"
 
   defp tool_usage(tool_name) do
-    ["\nUsage:\n" <>
-     "#{tool_name} [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"]
+    [
+      "\nUsage:\n" <>
+        "#{tool_name} [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"
+    ]
   end
 
   def base_usage(command, opts) do
     tool_name = program_name(opts)
-    maybe_timeout = case command_supports_timeout(command) do
-      true  -> " [-t <timeout>]"
-      false -> ""
-    end
-    Enum.join(["\nUsage:\n",
-               "#{tool_name} [-n <node>] [-l] [-q] " <>
-               flatten_string(command.usage(), maybe_timeout)])
+
+    maybe_timeout =
+      case command_supports_timeout(command) do
+        true -> " [-t <timeout>]"
+        false -> ""
+      end
+
+    Enum.join([
+      "\nUsage:\n",
+      "#{tool_name} [-n <node>] [-l] [-q] " <>
+        flatten_string(command.usage(), maybe_timeout)
+    ])
   end
 
   defp flatten_string(list, additional) when is_list(list) do
     list
-    |> Enum.map(fn(line) -> line <> additional end)
+    |> Enum.map(fn line -> line <> additional end)
     |> Enum.join("\n")
   end
+
   defp flatten_string(str, additional) when is_binary(str) do
     str <> additional
   end
@@ -125,36 +141,43 @@ to display results. The default value is \"/\"."]
   def commands() do
     # Enum.map obtains the usage string for each command module.
     # Enum.each prints them all.
-    CommandModules.module_map
-    |>  Map.values
-    |>  Enum.sort
-    |>  Enum.map( fn(cmd) ->
-                    maybe_timeout = case command_supports_timeout(cmd) do
-                      true  -> " [-t <timeout>]"
-                      false -> ""
-                    end
-                    case cmd.usage() do
-                      bin when is_binary(bin) ->
-                        bin <> maybe_timeout;
-                      list when is_list(list) ->
-                        Enum.map(list, fn(line) -> line <> maybe_timeout end)
-                    end
-                  end)
-    |>  List.flatten
-    |>  Enum.sort
-    |>  Enum.map(fn(cmd_usage) -> "    #{cmd_usage}" end)
+    CommandModules.module_map()
+    |> Map.values()
+    |> Enum.sort()
+    |> Enum.map(fn cmd ->
+      maybe_timeout =
+        case command_supports_timeout(cmd) do
+          true -> " [-t <timeout>]"
+          false -> ""
+        end
+
+      case cmd.usage() do
+        bin when is_binary(bin) ->
+          bin <> maybe_timeout
+
+        list when is_list(list) ->
+          Enum.map(list, fn line -> line <> maybe_timeout end)
+      end
+    end)
+    |> List.flatten()
+    |> Enum.sort()
+    |> Enum.map(fn cmd_usage -> "    #{cmd_usage}" end)
   end
 
   defp additional_usage(command) do
     if :erlang.function_exported(command, :usage_additional, 0) do
       case command.usage_additional() do
-        list when is_list(list) -> ["<timeout> - operation timeout in seconds. Default is \"infinity\"." | list];
-        bin when is_binary(bin) -> ["<timeout> - operation timeout in seconds. Default is \"infinity\".", bin]
+        list when is_list(list) ->
+          ["<timeout> - operation timeout in seconds. Default is \"infinity\"." | list]
+
+        bin when is_binary(bin) ->
+          ["<timeout> - operation timeout in seconds. Default is \"infinity\".", bin]
       end
     else
       case command_supports_timeout(command) do
         true ->
-          ["<timeout> - operation timeout in seconds. Default is \"infinity\"."];
+          ["<timeout> - operation timeout in seconds. Default is \"infinity\"."]
+
         false ->
           []
       end
@@ -162,20 +185,22 @@ to display results. The default value is \"/\"."]
   end
 
   defp additional_usage() do
-    ["<timeout> - operation timeout in seconds. Default is \"infinity\".",
-     CommandModules.module_map
-     |> Map.values
-     |> Enum.filter(&:erlang.function_exported(&1, :usage_additional, 0))
-     |> Enum.map(&(&1.usage_additional))
-     |> Enum.join("\n\n")]
+    [
+      "<timeout> - operation timeout in seconds. Default is \"infinity\".",
+      CommandModules.module_map()
+      |> Map.values()
+      |> Enum.filter(&:erlang.function_exported(&1, :usage_additional, 0))
+      |> Enum.map(& &1.usage_additional)
+      |> Enum.join("\n\n")
+    ]
   end
 
   defp command_supports_timeout(command) do
     case :erlang.function_exported(command, :switches, 0) do
-      true  -> nil != command.switches[:timeout];
+      true -> nil != command.switches[:timeout]
       false -> false
     end
   end
 
-  def banner(_,_), do: nil
+  def banner(_, _), do: nil
 end

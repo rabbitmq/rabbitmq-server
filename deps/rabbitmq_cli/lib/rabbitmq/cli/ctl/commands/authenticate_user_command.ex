@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -21,12 +20,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
 
   def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
   def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
-  def validate([_,_], _), do: :ok
+  def validate([_, _], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([user, password], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_access_control,
       :check_user_pass_login,
       [user, password]
@@ -38,12 +38,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   def banner([username, _password], _), do: "Authenticating user \"#{username}\" ..."
 
   def output({:refused, user, msg, args}, _) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_dataerr,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_dataerr(),
      "Error: failed to authenticate user \"#{user}\"\n" <>
-     to_string(:io_lib.format(msg, args))}
+       to_string(:io_lib.format(msg, args))}
   end
+
   def output({:ok, _user}, _) do
     {:ok, "Success"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 end

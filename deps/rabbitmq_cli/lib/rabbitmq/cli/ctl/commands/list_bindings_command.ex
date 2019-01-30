@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
 
@@ -35,42 +34,48 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
     merge_defaults(
       ~w(source_name source_kind
         destination_name destination_kind
-        routing_key arguments), opts)
+        routing_key arguments),
+      opts
+    )
   end
+
   def merge_defaults(args, opts) do
     {args, Map.merge(default_opts(), opts)}
   end
 
   def validate(args, _) do
-      case InfoKeys.validate_info_keys(args, @info_keys) do
-        {:ok, _} -> :ok
-        err -> err
-      end
+    case InfoKeys.validate_info_keys(args, @info_keys) do
+      {:ok, _} -> :ok
+      err -> err
+    end
   end
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
-      info_keys = InfoKeys.prepare_info_keys(args)
+  def run([_ | _] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
+    info_keys = InfoKeys.prepare_info_keys(args)
 
-      RpcStream.receive_list_items(node_name, :rabbit_binding, :info_all,
-        [vhost, info_keys],
-        timeout,
-        info_keys)
+    RpcStream.receive_list_items(
+      node_name,
+      :rabbit_binding,
+      :info_all,
+      [vhost, info_keys],
+      timeout,
+      info_keys
+    )
   end
 
   def usage() do
-      "list_bindings [-p <vhost>] [--no-table-headers] [<bindinginfoitem> ...]"
+    "list_bindings [-p <vhost>] [--no-table-headers] [<bindinginfoitem> ...]"
   end
 
   def usage_additional() do
-      "<bindinginfoitem> must be a member of the list [" <>
+    "<bindinginfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."
   end
 
   defp default_opts() do
-    %{vhost: "/",
-      table_headers: true}
+    %{vhost: "/", table_headers: true}
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."

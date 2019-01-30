@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -35,13 +34,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
 
   def validate([limit], _) do
     case Integer.parse(limit) do
-      {_, ""} -> :ok
+      {_, ""} ->
+        :ok
+
       {limit_val, units} ->
         case Helpers.memory_unit_absolute(limit_val, units) do
           scaled_limit when is_integer(scaled_limit) -> :ok
           _ -> {:validation_failure, :bad_argument}
         end
-      _ -> {:validation_failure,  :bad_argument}
+
+      _ ->
+        {:validation_failure, :bad_argument}
     end
   end
 
@@ -52,7 +55,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
     end
   end
 
-  def validate([_|rest], _) when length(rest) > 0 do
+  def validate([_ | rest], _) when length(rest) > 0 do
     {:validation_failure, :too_many_args}
   end
 
@@ -62,11 +65,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
     set_disk_free_limit_relative(args, opts)
   end
 
-
   def run([limit], %{node: _} = opts) when is_binary(limit) do
     case Integer.parse(limit) do
-      {limit_val, ""}     -> set_disk_free_limit_absolute([limit_val], opts)
-      {limit_val, units}  -> set_disk_free_limit_in_units([limit_val, units], opts)
+      {limit_val, ""} -> set_disk_free_limit_absolute([limit_val], opts)
+      {limit_val, units} -> set_disk_free_limit_in_units([limit_val, units], opts)
     end
   end
 
@@ -77,17 +79,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
   ## ----------------------- Memory-Relative Call ----------------------------
 
   defp set_disk_free_limit_relative(["mem_relative", fraction], %{node: node_name})
-      when is_float(fraction) do
+       when is_float(fraction) do
     make_rpc_call(node_name, [{:mem_relative, fraction}])
   end
 
   defp set_disk_free_limit_relative(["mem_relative", integer_input], %{node: node_name})
-      when is_integer(integer_input) do
+       when is_integer(integer_input) do
     make_rpc_call(node_name, [{:mem_relative, integer_input * 1.0}])
   end
 
   defp set_disk_free_limit_relative(["mem_relative", fraction_str], %{node: _} = opts)
-      when is_binary(fraction_str) do
+       when is_binary(fraction_str) do
     {fraction_val, ""} = Float.parse(fraction_str)
     set_disk_free_limit_relative(["mem_relative", fraction_val], opts)
   end
@@ -99,7 +101,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
   end
 
   defp set_disk_free_limit_absolute([limit], %{node: _} = opts) when is_float(limit) do
-    set_disk_free_limit_absolute([limit |> Float.floor |> round], opts)
+    set_disk_free_limit_absolute([limit |> Float.floor() |> round], opts)
   end
 
   defp set_disk_free_limit_in_units([limit_val, units], opts) do
@@ -119,8 +121,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
     "Setting disk free limit on #{node_name} to #{arg} times the total RAM ..."
   end
 
-  def banner([arg], %{node: node_name}), do: "Setting disk free limit on #{node_name} to #{arg} bytes ..."
-
+  def banner([arg], %{node: node_name}),
+    do: "Setting disk free limit on #{node_name} to #{arg} bytes ..."
 
   def usage, do: "set_disk_free_limit <disk_limit>\nset_disk_free_limit mem_relative <fraction>"
 end

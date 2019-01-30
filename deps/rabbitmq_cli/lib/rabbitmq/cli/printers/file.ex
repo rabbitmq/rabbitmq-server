@@ -18,11 +18,13 @@ defmodule RabbitMQ.CLI.Printers.File do
 
   def init(options) do
     file = options[:file]
+
     case File.open(file) do
-      {:ok, io_device} -> {:ok, %{device: io_device}};
-      {:error, err}    -> {:error, err}
+      {:ok, io_device} -> {:ok, %{device: io_device}}
+      {:error, err} -> {:error, err}
     end
   end
+
   def finish(%{device: io_device}) do
     :ok = File.close(io_device)
   end
@@ -32,6 +34,7 @@ defmodule RabbitMQ.CLI.Printers.File do
       IO.puts(io_device, line)
     end
   end
+
   def print_output(output, %{device: io_device}) do
     IO.puts(io_device, output)
   end

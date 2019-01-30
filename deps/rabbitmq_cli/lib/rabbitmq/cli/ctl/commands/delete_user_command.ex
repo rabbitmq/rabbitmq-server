@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -29,7 +28,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([username], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_auth_backend_internal,
       :delete_user,
       [username, Helpers.cli_acting_user()]
@@ -39,5 +39,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
   def usage, do: "delete_user <username>"
 
   def banner([arg], _), do: "Deleting user \"#{arg}\" ..."
-
 end

@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   require RabbitMQ.CLI.Ctl.InfoKeys
   require RabbitMQ.CLI.Ctl.RpcStream
@@ -40,27 +39,36 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [offline: :boolean, online: :boolean, local: :boolean, timeout: :integer,
-                       table_headers: :boolean]
+  def switches(),
+    do: [
+      offline: :boolean,
+      online: :boolean,
+      local: :boolean,
+      timeout: :integer,
+      table_headers: :boolean
+    ]
+
   def aliases(), do: [t: :timeout]
 
   defp default_opts() do
-    %{vhost: "/",
-      offline: false,
-      online: false,
-      local: false,
-      table_headers: true}
+    %{vhost: "/", offline: false, online: false, local: false, table_headers: true}
   end
 
-  def merge_defaults([_|_] = args, opts) do
-    timeout = case opts[:timeout] do
-      nil       -> @default_timeout;
-      :infinity -> @default_timeout;
-      other     -> other
-    end
-    {args, Map.merge(default_opts(),
-        Map.merge(opts, %{timeout: timeout}))}
+  def merge_defaults([_ | _] = args, opts) do
+    timeout =
+      case opts[:timeout] do
+        nil -> @default_timeout
+        :infinity -> @default_timeout
+        other -> other
+      end
+
+    {args,
+     Map.merge(
+       default_opts(),
+       Map.merge(opts, %{timeout: timeout})
+     )}
   end
+
   def merge_defaults([], opts) do
     merge_defaults(~w(name messages), opts)
   end
@@ -76,30 +84,47 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   # it lists queues with unavailable masters
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost,
-                          online: online_opt, offline: offline_opt,
-                          local: local_opt}) do
-    {online, offline} = case {online_opt, offline_opt} do
-        {false, false} -> {true, true};
-        other          -> other
-    end
+  def run([_ | _] = args, %{
+        node: node_name,
+        timeout: timeout,
+        vhost: vhost,
+        online: online_opt,
+        offline: offline_opt,
+        local: local_opt
+      }) do
+    {online, offline} =
+      case {online_opt, offline_opt} do
+        {false, false} -> {true, true}
+        other -> other
+      end
+
     info_keys = InfoKeys.prepare_info_keys(args)
-    Helpers.with_nodes_in_cluster(node_name, fn(nodes) ->
+
+    Helpers.with_nodes_in_cluster(node_name, fn nodes ->
       offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
       local_mfa = {:rabbit_amqqueue, :emit_info_local, [vhost, info_keys]}
-      online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
-      {chunks, mfas} = case {local_opt, offline, online} do
-        # Local takes precedence
-        {true, _, _}      -> {1, [local_mfa]};
-        {_, true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
-        {_, false, true}  -> {Kernel.length(nodes), [online_mfa]};
-        {_, true, false}  -> {1, [offline_mfa]}
-      end
-      RpcStream.receive_list_items_with_fun(node_name, mfas, timeout, info_keys, chunks,
-        fn({{:error, {:badrpc, {:timeout, to}}}, :finished}) ->
-          {{:error, {:badrpc, {:timeout, to, "Some queue(s) are unresponsive, use list_unresponsive_queues command."}}}, :finished};
-          (any) -> any
-        end)
+      online_mfa = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
+
+      {chunks, mfas} =
+        case {local_opt, offline, online} do
+          # Local takes precedence
+          {true, _, _} -> {1, [local_mfa]}
+          {_, true, true} -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]}
+          {_, false, true} -> {Kernel.length(nodes), [online_mfa]}
+          {_, true, false} -> {1, [offline_mfa]}
+        end
+
+      RpcStream.receive_list_items_with_fun(node_name, mfas, timeout, info_keys, chunks, fn
+        {{:error, {:badrpc, {:timeout, to}}}, :finished} ->
+          {{:error,
+            {:badrpc,
+             {:timeout, to,
+              "Some queue(s) are unresponsive, use list_unresponsive_queues command."}}},
+           :finished}
+
+        any ->
+          any
+      end)
     end)
   end
 
@@ -111,8 +136,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
     ["<queueinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."]
   end
 
-  def banner(_,%{vhost: vhost, timeout: timeout}) do
-    ["Timeout: #{timeout / 1000} seconds ...",
-     "Listing queues for vhost #{vhost} ..."]
+  def banner(_, %{vhost: vhost, timeout: timeout}) do
+    ["Timeout: #{timeout / 1000} seconds ...", "Listing queues for vhost #{vhost} ..."]
   end
 end

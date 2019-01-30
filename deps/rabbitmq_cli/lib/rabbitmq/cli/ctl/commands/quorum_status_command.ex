@@ -13,9 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -29,10 +27,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
 
   def merge_defaults(args, opts), do: {args, Map.merge(default_opts(), opts)}
 
-  def validate([_|_] = args, _) when length(args) > 1 do
+  def validate([_ | _] = args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
+
   def validate([_], _), do: :ok
+
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
@@ -42,7 +42,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
   def run([name] = _args, %{node: node_name, vhost: vhost}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :status, [vhost, name]) do
       {:error, :classic_queue_not_supported} ->
-        {:error, "Cannot get quorum status of a classic queue"};
+        {:error, "Cannot get quorum status of a classic queue"}
+
       other ->
         other
     end
@@ -52,5 +53,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.QuorumStatusCommand do
     "quorum_status [-p <vhost>] <queuename>"
   end
 
-  def banner([name], %{node: node_name}), do: "Status of quorum queue #{name} on node #{node_name} ..."
+  def banner([name], %{node: node_name}),
+    do: "Status of quorum queue #{name} on node #{node_name} ..."
 end

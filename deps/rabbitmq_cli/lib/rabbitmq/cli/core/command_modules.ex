@@ -60,25 +60,31 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
 
   def plugin_modules(opts) do
     Helpers.require_rabbit(opts)
+
     enabled_plugins =
       try do
         PluginsHelpers.read_enabled(opts)
-      catch err ->
-        {:ok, enabled_plugins_file} = PluginsHelpers.enabled_plugins_file(opts)
-        require Logger
-        Logger.warn("Unable to read the enebled plugins file.\n" <>
-                    "  Reason: #{inspect(err)}\n" <>
-                    "  Commands provided by plugins will not be available.\n" <>
-                    "  Please make sure your user has sufficient permissions to read to\n" <>
-                    "    #{enabled_plugins_file}")
-        []
+      catch
+        err ->
+          {:ok, enabled_plugins_file} = PluginsHelpers.enabled_plugins_file(opts)
+          require Logger
+
+          Logger.warn(
+            "Unable to read the enebled plugins file.\n" <>
+              "  Reason: #{inspect(err)}\n" <>
+              "  Commands provided by plugins will not be available.\n" <>
+              "  Please make sure your user has sufficient permissions to read to\n" <>
+              "    #{enabled_plugins_file}"
+          )
+
+          []
       end
 
     partitioned =
-      Enum.group_by(enabled_plugins, fn(app) ->
+      Enum.group_by(enabled_plugins, fn app ->
         case Application.load(app) do
-          :ok -> :loaded;
-          {:error, {:already_loaded, ^app}} -> :loaded;
+          :ok -> :loaded
+          {:error, {:already_loaded, ^app}} -> :loaded
           _ -> :not_found
         end
       end)
@@ -87,36 +93,37 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
     missing = partitioned[:not_found] || []
     ## If plugins are not in ERL_LIBS, they should be loaded from plugins_dir
     case missing do
-      [] -> :ok;
-      _  ->
+      [] ->
+        :ok
+
+      _ ->
         Helpers.add_plugins_to_load_path(opts)
-        Enum.each(missing, fn(app) -> Application.load(app) end)
+        Enum.each(missing, fn app -> Application.load(app) end)
     end
 
-    Enum.flat_map(loaded ++ missing, fn(app) ->
+    Enum.flat_map(loaded ++ missing, fn app ->
       Application.spec(app, :modules) || []
     end)
   end
 
   defp make_module_map(modules, scope) do
     commands_ns = Regex.recompile!(@commands_ns)
+
     modules
-    |> Enum.filter(fn(mod) ->
-                     to_string(mod) =~ commands_ns
-                     and
-                     module_exists?(mod)
-                     and
-                     implements_command_behaviour?(mod)
-                     and
-                     command_in_scope(mod, scope)
-                   end)
+    |> Enum.filter(fn mod ->
+      to_string(mod) =~ commands_ns and
+        module_exists?(mod) and
+        implements_command_behaviour?(mod) and
+        command_in_scope(mod, scope)
+    end)
     |> Enum.map(&command_tuple/1)
-    |> Map.new
+    |> Map.new()
   end
 
   defp module_exists?(nil) do
     false
   end
+
   defp module_exists?(mod) do
     Code.ensure_loaded?(mod)
   end
@@ -124,9 +131,12 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   defp implements_command_behaviour?(nil) do
     false
   end
+
   defp implements_command_behaviour?(module) do
-    Enum.member?(module.module_info(:attributes)[:behaviour] || [],
-                 RabbitMQ.CLI.CommandBehaviour)
+    Enum.member?(
+      module.module_info(:attributes)[:behaviour] || [],
+      RabbitMQ.CLI.CommandBehaviour
+    )
   end
 
   def module_to_command(mod) do
@@ -144,16 +154,16 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   def strip_namespace(str) do
     str
     |> String.split(".")
-    |> List.last
+    |> List.last()
   end
 
-  def to_snake_case(<<c, str :: binary>>) do
+  def to_snake_case(<<c, str::binary>>) do
     tail = for <<c <- str>>, into: "", do: snake(c)
-    <<to_lower_char(c), tail :: binary >>
+    <<to_lower_char(c), tail::binary>>
   end
 
   defp snake(c) do
-    if (c >= ?A) and (c <= ?Z) do
+    if c >= ?A and c <= ?Z do
       <<"_", c + 32>>
     else
       <<c>>
@@ -161,7 +171,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   defp to_lower_char(c) do
-    if (c >= ?A) and (c <= ?Z) do
+    if c >= ?A and c <= ?Z do
       c + 32
     else
       c
@@ -171,21 +181,23 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   defp command_in_scope(_cmd, :all) do
     true
   end
+
   defp command_in_scope(cmd, scope) do
     Enum.member?(command_scopes(cmd), scope)
   end
 
   defp command_scopes(cmd) do
     case :erlang.function_exported(cmd, :scopes, 0) do
-      true  ->
+      true ->
         cmd.scopes()
+
       false ->
         Regex.recompile!(@commands_ns)
         |> Regex.run(to_string(cmd), capture: :all_but_first)
-        |> List.first
+        |> List.first()
         |> to_snake_case
-        |> String.to_atom
-        |> List.wrap
+        |> String.to_atom()
+        |> List.wrap()
     end
   end
 end

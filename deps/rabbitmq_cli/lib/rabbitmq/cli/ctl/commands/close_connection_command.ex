@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -21,14 +20,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand do
 
   def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
   def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
-  def validate([_,_], _), do: :ok
+  def validate([_, _], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-  
+
   def run([pid, explanation], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_networking,
-      :close_connection,
-      [:rabbit_misc.string_to_pid(pid), explanation])
+    :rabbit_misc.rpc_call(node_name, :rabbit_networking, :close_connection, [
+      :rabbit_misc.string_to_pid(pid),
+      explanation
+    ])
   end
 
   def usage, do: "close_connection <connectionpid> <explanation>"

@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -22,14 +21,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
     {[], Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def validate([_|_], _), do: {:validation_failure, :too_many_args}
+  def validate([_ | _], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, vhost: vhost}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_trace, :stop, [vhost]) do
-      :ok   -> {:ok, "Trace disabled for vhost #{vhost}"};
+      :ok -> {:ok, "Trace disabled for vhost #{vhost}"}
       other -> other
     end
   end

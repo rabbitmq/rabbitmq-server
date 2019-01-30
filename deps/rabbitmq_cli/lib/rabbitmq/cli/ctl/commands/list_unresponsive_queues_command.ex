@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   require RabbitMQ.CLI.Ctl.InfoKeys
   require RabbitMQ.CLI.Ctl.RpcStream
@@ -33,17 +32,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [queue_timeout: :integer, local: :boolean, timeout: :integer,
-                       table_headers: :boolean]
+  def switches(),
+    do: [queue_timeout: :integer, local: :boolean, timeout: :integer, table_headers: :boolean]
+
   def aliases(), do: [t: :timeout]
 
   defp default_opts() do
     %{vhost: "/", local: false, queue_timeout: 15, table_headers: true}
   end
 
-  def merge_defaults([_|_] = args, opts) do
+  def merge_defaults([_ | _] = args, opts) do
     {args, Map.merge(default_opts(), opts)}
   end
+
   def merge_defaults([], opts) do
     merge_defaults(~w(name), opts)
   end
@@ -57,19 +58,28 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run(args, %{node: node_name, vhost: vhost, timeout: timeout,
-                  queue_timeout: qtimeout, local: local_opt}) do
+  def run(args, %{
+        node: node_name,
+        vhost: vhost,
+        timeout: timeout,
+        queue_timeout: qtimeout,
+        local: local_opt
+      }) do
     info_keys = InfoKeys.prepare_info_keys(args)
     queue_timeout = qtimeout * 1000
-    Helpers.with_nodes_in_cluster(node_name, fn(nodes) ->
-      local_mfa  = {:rabbit_amqqueue, :emit_unresponsive_local, [vhost, info_keys, queue_timeout]}
-      all_mfa  = {:rabbit_amqqueue, :emit_unresponsive, [nodes, vhost, info_keys, queue_timeout]}
-      {chunks, mfas} = case local_opt do
-          true  -> {1, [local_mfa]};
+
+    Helpers.with_nodes_in_cluster(node_name, fn nodes ->
+      local_mfa = {:rabbit_amqqueue, :emit_unresponsive_local, [vhost, info_keys, queue_timeout]}
+      all_mfa = {:rabbit_amqqueue, :emit_unresponsive, [nodes, vhost, info_keys, queue_timeout]}
+
+      {chunks, mfas} =
+        case local_opt do
+          true -> {1, [local_mfa]}
           false -> {Kernel.length(nodes), [all_mfa]}
         end
-        RpcStream.receive_list_items(node_name, mfas, timeout, info_keys, chunks)
-      end)
+
+      RpcStream.receive_list_items(node_name, mfas, timeout, info_keys, chunks)
+    end)
   end
 
   def usage() do
@@ -77,9 +87,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   end
 
   def usage_additional() do
-      "<unresponsive_queueinfoitem> must be a member of the list [" <>
+    "<unresponsive_queueinfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."
   end
 
-  def banner(_,%{vhost: vhost}), do: "Listing unresponsive queues for vhost #{vhost} ..."
+  def banner(_, %{vhost: vhost}), do: "Listing unresponsive queues for vhost #{vhost} ..."
 end

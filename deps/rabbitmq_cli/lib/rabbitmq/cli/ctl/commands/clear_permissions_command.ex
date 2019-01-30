@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -28,18 +27,23 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
-  def validate([_|_] = args, _) when length(args) > 1 do
+
+  def validate([_ | _] = args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
+
   def validate([_], _), do: :ok
 
   def run([username], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name,
-      :rabbit_auth_backend_internal, :clear_permissions, [username, vhost, Helpers.cli_acting_user()])
+    :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :clear_permissions, [
+      username,
+      vhost,
+      Helpers.cli_acting_user()
+    ])
   end
 
   def usage, do: "clear_permissions [-p vhost] <username>"
 
-  def banner([username], %{vhost: vhost}), do: "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
-
+  def banner([username], %{vhost: vhost}),
+    do: "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
 end

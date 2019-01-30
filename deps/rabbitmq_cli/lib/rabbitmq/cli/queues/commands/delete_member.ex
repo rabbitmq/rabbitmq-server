@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Queues.Commands.DeleteMember do
   import Rabbitmq.Atom.Coerce
 
@@ -33,16 +32,19 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMember do
     {:validation_failure, :too_many_args}
   end
 
-  def validate([_,_], _), do: :ok
+  def validate([_, _], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([name, node] = _args, %{vhost: vhost, node: node_name}) do
-    case :rabbit_misc.rpc_call(node_name,
-                               :rabbit_quorum_queue, :delete_member,
-                               [vhost, name, to_atom(node)]) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :delete_member, [
+           vhost,
+           name,
+           to_atom(node)
+         ]) do
       {:error, :classic_queue_not_supported} ->
-        {:error, "Cannot add members to a classic queue"};
+        {:error, "Cannot add members to a classic queue"}
+
       other ->
         other
     end

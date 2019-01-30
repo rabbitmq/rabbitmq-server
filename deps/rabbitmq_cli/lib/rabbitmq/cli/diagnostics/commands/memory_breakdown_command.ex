@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   alias RabbitMQ.CLI.InformationUnit, as: IU
 
@@ -29,14 +28,17 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, %{unit: unit}) do
     case IU.known_unit?(unit) do
       true ->
         :ok
+
       false ->
         {:validation_failure, "unit '#{unit}' is not supported. Please use one of: bytes, mb, gb"}
     end
   end
+
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
@@ -46,17 +48,21 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   def output(result, %{formatter: "json"} = _opts) do
     {:ok, compute_relative_values(result)}
   end
+
   def output(result, %{formatter: "csv"} = _opts) do
-    flattened = compute_relative_values(result)
-    |> Enum.flat_map(fn({k, %{bytes: b, percentage: p}}) ->
-        [{"#{k}.bytes", b}, {"#{k}.percentage", p}] end)
-    |> Enum.sort_by(fn({key, _val}) -> key end, &>=/2)
+    flattened =
+      compute_relative_values(result)
+      |> Enum.flat_map(fn {k, %{bytes: b, percentage: p}} ->
+        [{"#{k}.bytes", b}, {"#{k}.percentage", p}]
+      end)
+      |> Enum.sort_by(fn {key, _val} -> key end, &>=/2)
 
     headers = Enum.map(flattened, fn {k, _v} -> k end)
-    values  = Enum.map(flattened, fn {_k, v} -> v end)
+    values = Enum.map(flattened, fn {_k, v} -> v end)
 
     {:stream, [headers, values]}
   end
+
   def output(result, _opts) do
     {:ok, compute_relative_values(result)}
   end
@@ -74,23 +80,23 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
     @behaviour RabbitMQ.CLI.FormatterBehaviour
 
     def format_output(output, %{unit: unit}) do
-      Enum.reduce(output, "", fn({key, %{bytes: bytes, percentage: percentage}}, acc) ->
+      Enum.reduce(output, "", fn {key, %{bytes: bytes, percentage: percentage}}, acc ->
         u = String.downcase(unit)
         acc <> "#{key}: #{IU.convert(bytes, u)} #{u} (#{percentage}%)\n"
       end)
     end
 
     def format_stream(stream, options) do
-      Stream.map(stream,
-        FormatterHelpers.without_errors_1(
-          fn(el) ->
-            format_output(el, options)
-          end))
+      Stream.map(
+        stream,
+        FormatterHelpers.without_errors_1(fn el ->
+          format_output(el, options)
+        end)
+      )
     end
   end
 
   def formatter(), do: Formatter
-
 
   #
   # Implementation
@@ -100,20 +106,21 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
     num_pairs = Keyword.delete(all_pairs, :strategy)
     # Includes RSS, allocated and runtime-used ("erlang") values.
     # See https://github.com/rabbitmq/rabbitmq-server/pull/1404.
-    totals    = Keyword.get(num_pairs, :total)
-    pairs     = Keyword.delete(num_pairs, :total)
-    total     = max_of(totals) ||
-                # Should not be necessary but be more defensive.
-                Keyword.get(totals, :rss) ||
-                Keyword.get(totals, :allocated) ||
-                Keyword.get(totals, :erlang)
+    totals = Keyword.get(num_pairs, :total)
+    pairs = Keyword.delete(num_pairs, :total)
+    # Should not be necessary but be more defensive.
+    total =
+      max_of(totals) ||
+        Keyword.get(totals, :rss) ||
+        Keyword.get(totals, :allocated) ||
+        Keyword.get(totals, :erlang)
 
     pairs
-    |> Enum.map(fn({k, v}) ->
+    |> Enum.map(fn {k, v} ->
       pg = (v / total) |> fraction_to_percent()
       {k, %{bytes: v, percentage: pg}}
     end)
-    |> Enum.sort_by(fn({_key, %{bytes: bytes}}) -> bytes end, &>=/2)
+    |> Enum.sort_by(fn {_key, %{bytes: bytes}} -> bytes end, &>=/2)
   end
 
   defp fraction_to_percent(x) do
@@ -121,6 +128,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   end
 
   defp max_of(m) do
-    Keyword.values(m) |> Enum.max
+    Keyword.values(m) |> Enum.max()
   end
 end

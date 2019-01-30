@@ -20,10 +20,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListHashesCommand do
   def merge_defaults(args, opts) do
     {args, opts}
   end
+
   def validate(args, _) when length(args) > 0 do
-      {:validation_failure,
-       {:bad_argument, :too_many_args}}
+    {:validation_failure, {:bad_argument, :too_many_args}}
   end
+
   def validate(_, _), do: :ok
 
   def distribution(_), do: :none
@@ -37,5 +38,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListHashesCommand do
   def usage, do: "list_hashes"
 
   def banner(_, _), do: "Listing supported hash algorithms ..."
-
 end

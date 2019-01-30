@@ -26,17 +26,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     {args, Map.merge(%{offline: false}, opts)}
   end
 
-  def validate([], _),  do: {:validation_failure, :not_enough_args}
-  def validate([_,_|_], _), do: {:validation_failure, :too_many_args}
+  def validate([], _), do: {:validation_failure, :not_enough_args}
+  def validate([_, _ | _], _), do: {:validation_failure, :too_many_args}
   def validate([_], _), do: :ok
 
-
   def validate_execution_environment([_node_to_remove] = args, %{offline: true} = opts) do
-    Validators.chain([&Validators.node_is_not_running/2,
-                      &Validators.mnesia_dir_is_set/2,
-                      &Validators.rabbit_is_loaded/2],
-                     [args, opts])
+    Validators.chain(
+      [
+        &Validators.node_is_not_running/2,
+        &Validators.mnesia_dir_is_set/2,
+        &Validators.rabbit_is_loaded/2
+      ],
+      [args, opts]
+    )
   end
+
   def validate_execution_environment([_], %{offline: false}) do
     :ok
   end
@@ -44,16 +48,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   def run([node_to_remove], %{node: node_name, offline: true} = opts) do
     Stream.concat([
       become(node_name, opts),
-      RabbitMQ.CLI.Core.Helpers.defer(fn() ->
+      RabbitMQ.CLI.Core.Helpers.defer(fn ->
         :rabbit_event.start_link()
         :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
-      end)])
+      end)
+    ])
   end
 
   def run([node_to_remove], %{node: node_name, offline: false}) do
-    :rabbit_misc.rpc_call(node_name,
-                          :rabbit_mnesia, :forget_cluster_node,
-                          [to_atom(node_to_remove), false])
+    :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, [
+      to_atom(node_to_remove),
+      false
+    ])
   end
 
   def usage() do
@@ -64,22 +70,27 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     "Removing node #{node_to_remove} from the cluster"
   end
 
-
   defp become(node_name, opts) do
     :error_logger.tty(false)
+
     case :net_adm.ping(node_name) do
-        :pong -> exit({:node_running, node_name});
-        :pang -> :ok = :net_kernel.stop()
-                 Stream.concat([
-                   ["  * Impersonating node: #{node_name}..."],
-                   RabbitMQ.CLI.Core.Helpers.defer(fn() ->
-                     {:ok, _} = Distribution.start_as(node_name, opts)
-                     " done"
-                   end),
-                   RabbitMQ.CLI.Core.Helpers.defer(fn() ->
-                     dir = :mnesia.system_info(:directory)
-                     "  * Mnesia directory: #{dir}..."
-                   end)])
+      :pong ->
+        exit({:node_running, node_name})
+
+      :pang ->
+        :ok = :net_kernel.stop()
+
+        Stream.concat([
+          ["  * Impersonating node: #{node_name}..."],
+          RabbitMQ.CLI.Core.Helpers.defer(fn ->
+            {:ok, _} = Distribution.start_as(node_name, opts)
+            " done"
+          end),
+          RabbitMQ.CLI.Core.Helpers.defer(fn ->
+            dir = :mnesia.system_info(:directory)
+            "  * Mnesia directory: #{dir}..."
+          end)
+        ])
     end
   end
 end

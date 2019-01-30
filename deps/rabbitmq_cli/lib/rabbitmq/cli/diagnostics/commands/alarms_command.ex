@@ -22,9 +22,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
   """
 
   alias RabbitMQ.CLI.Core.Helpers
-  import RabbitMQ.CLI.Diagnostics.Helpers, only: [alarm_lines: 2,
-                                                  local_alarms: 2,
-                                                  clusterwide_alarms: 2]
+
+  import RabbitMQ.CLI.Diagnostics.Helpers,
+    only: [alarm_lines: 2, local_alarms: 2, clusterwide_alarms: 2]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -32,7 +32,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-
 
   def run([], %{node: node_name, timeout: timeout}) do
     # Example response when there are alarms:
@@ -49,29 +48,33 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.AlarmsCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_alarm, :get_alarms, [], timeout)
   end
 
-
   def output([], %{node: node_name, formatter: "json"}) do
-    {:ok, %{"result"  => "ok",
-            "node"    => node_name,
-            "alarms"  => []}}
+    {:ok, %{"result" => "ok", "node" => node_name, "alarms" => []}}
   end
+
   def output([], %{node: node_name}) do
     {:ok, "Node #{node_name} reported no alarms, local or clusterwide"}
   end
+
   def output(alarms, %{node: node_name, formatter: "json"}) do
-    local  = local_alarms(alarms, node_name)
+    local = local_alarms(alarms, node_name)
     global = clusterwide_alarms(alarms, node_name)
 
-    {:ok, %{"result"  => "ok",
-            "local"   => alarm_lines(local, node_name),
-            "global"  => alarm_lines(global, node_name),
-            "message" => "Node #{node_name} reported alarms"}}
+    {:ok,
+     %{
+       "result" => "ok",
+       "local" => alarm_lines(local, node_name),
+       "global" => alarm_lines(global, node_name),
+       "message" => "Node #{node_name} reported alarms"
+     }}
   end
+
   def output(alarms, %{node: node_name}) do
     lines = alarm_lines(alarms, node_name)
 
     {:ok, Enum.join(lines, Helpers.line_separator())}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "alarms"

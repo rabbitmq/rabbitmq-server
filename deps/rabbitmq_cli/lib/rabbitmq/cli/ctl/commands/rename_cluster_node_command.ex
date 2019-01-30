@@ -24,36 +24,44 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
-  def validate([], _),  do: {:validation_failure, :not_enough_args}
+  def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: {:validation_failure, :not_enough_args}
+
   def validate(_, _) do
     :ok
   end
 
   def validate_execution_environment(args, opts) do
-    Validators.chain([&validate_args_count_even/2,
-                      &Validators.node_is_not_running/2,
-                      &Validators.mnesia_dir_is_set/2,
-                      &Validators.rabbit_is_loaded/2],
-                     [args, opts])
+    Validators.chain(
+      [
+        &validate_args_count_even/2,
+        &Validators.node_is_not_running/2,
+        &Validators.mnesia_dir_is_set/2,
+        &Validators.rabbit_is_loaded/2
+      ],
+      [args, opts]
+    )
   end
 
   def run(nodes, %{node: node_name}) do
     node_pairs = make_node_pairs(nodes)
+
     try do
       :rabbit_mnesia_rename.rename(node_name, node_pairs)
-    catch _, reason ->
-      {:rename_failed, reason}
+    catch
+      _, reason ->
+        {:rename_failed, reason}
     end
   end
 
-
   defp validate_args_count_even(args, _) do
     case agrs_count_even?(args) do
-      true  -> :ok;
+      true ->
+        :ok
+
       false ->
         {:validation_failure,
-          {:bad_argument, "Argument list should contain even number of nodes"}}
+         {:bad_argument, "Argument list should contain even number of nodes"}}
     end
   end
 
@@ -64,6 +72,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   defp make_node_pairs([]) do
     []
   end
+
   defp make_node_pairs([from, to | rest]) do
     [{to_atom(from), to_atom(to)} | make_node_pairs(rest)]
   end
@@ -73,9 +82,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   end
 
   def banner(args, _) do
-    ["Renaming cluster nodes: \n ",
-     for {node_from, node_to} <- make_node_pairs(args) do "#{node_from} -> #{node_to} \n" end]
-    |> List.flatten
-    |> Enum.join
+    [
+      "Renaming cluster nodes: \n ",
+      for {node_from, node_to} <- make_node_pairs(args) do
+        "#{node_from} -> #{node_to} \n"
+      end
+    ]
+    |> List.flatten()
+    |> Enum.join()
   end
 end

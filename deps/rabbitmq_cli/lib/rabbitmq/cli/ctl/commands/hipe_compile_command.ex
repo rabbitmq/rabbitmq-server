@@ -31,29 +31,37 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
 
   def usage, do: "hipe_compile <directory>"
 
-  def validate([], _),  do: {:validation_failure, :not_enough_args}
+  def validate([], _), do: {:validation_failure, :not_enough_args}
+
   def validate([target_dir], opts) do
     :ok
-    |> Helpers.validate_step(fn() ->
+    |> Helpers.validate_step(fn ->
       case acceptable_path?(target_dir) do
-        true  -> :ok
+        true -> :ok
         false -> {:error, {:bad_argument, "Target directory path cannot be blank"}}
       end
     end)
-    |> Helpers.validate_step(fn() ->
+    |> Helpers.validate_step(fn ->
       case File.dir?(target_dir) do
-        true  -> :ok
+        true ->
+          :ok
+
         false ->
           case File.mkdir_p(target_dir) do
-            :ok              -> :ok
+            :ok ->
+              :ok
+
             {:error, perm} when perm == :eperm or perm == :eacces ->
-              {:error, {:bad_argument, "Cannot create target directory #{target_dir}: insufficient permissions"}}
+              {:error,
+               {:bad_argument,
+                "Cannot create target directory #{target_dir}: insufficient permissions"}}
           end
       end
     end)
-    |> Helpers.validate_step(fn() -> Helpers.require_rabbit(opts) end)
+    |> Helpers.validate_step(fn -> Helpers.require_rabbit(opts) end)
   end
-  def validate(_, _),   do: {:validation_failure, :too_many_args}
+
+  def validate(_, _), do: {:validation_failure, :too_many_args}
 
   def run([target_dir], _opts) do
     Code.ensure_loaded(:rabbit_hipe)
@@ -77,10 +85,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
     case :rabbit_hipe.can_hipe_compile() do
       true ->
         case :rabbit_hipe.compile_to_directory(target_dir) do
-          {:ok, _, _}              -> :ok
+          {:ok, _, _} -> :ok
           {:ok, :already_compiled} -> {:ok, "already compiled"}
-          {:error, message}        -> {:error, message}
+          {:error, message} -> {:error, message}
         end
+
       false ->
         {:error, "HiPE compilation is not supported"}
     end

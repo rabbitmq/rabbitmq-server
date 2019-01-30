@@ -29,31 +29,57 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
   end
 
   def receive_list_items(node, mfas, timeout, info_keys, chunks_init) do
-    receive_list_items_with_fun(node, mfas, timeout, info_keys, chunks_init, fn(v) -> v end)
+    receive_list_items_with_fun(node, mfas, timeout, info_keys, chunks_init, fn v -> v end)
   end
 
   def receive_list_items_with_fun(node, mfas, timeout, info_keys, chunks_init, response_fun) do
-    pid = Kernel.self
-    ref = Kernel.make_ref
-    for {m,f,a} <- mfas, do: init_items_stream(node, m, f, a, timeout, pid, ref)
-    Stream.unfold({chunks_init, :continue},
+    pid = Kernel.self()
+    ref = Kernel.make_ref()
+    for {m, f, a} <- mfas, do: init_items_stream(node, m, f, a, timeout, pid, ref)
+
+    Stream.unfold(
+      {chunks_init, :continue},
       fn
-        :finished -> response_fun.(nil);
+        :finished ->
+          response_fun.(nil)
+
         {chunks, :continue} ->
-          received = receive do
-            {^ref, :finished} when chunks === 1 -> nil;
-            {^ref, :finished}         -> {[], {chunks - 1, :continue}};
-            {^ref, {:timeout, t}}     -> {{:error, {:badrpc, {:timeout, (t / 1000)}}}, :finished};
-            {^ref, []}                -> {[], {chunks, :continue}};
-            {^ref, :error, {:badrpc, :timeout}} -> {{:error, {:badrpc, {:timeout, (timeout / 1000)}}}, :finished};
-            {^ref, result, :continue} -> {result, {chunks, :continue}};
-            {:error, _} = error       -> {error,  :finished};
-            {^ref, :error, error}     -> {{:error, simplify_emission_error(error)}, :finished};
-            {:DOWN, _mref, :process, _pid, :normal} -> {[], {chunks, :continue}};
-            {:DOWN, _mref, :process, _pid, reason}  ->  {{:error, simplify_emission_error(reason)}, :finished}
-          end
+          received =
+            receive do
+              {^ref, :finished} when chunks === 1 ->
+                nil
+
+              {^ref, :finished} ->
+                {[], {chunks - 1, :continue}}
+
+              {^ref, {:timeout, t}} ->
+                {{:error, {:badrpc, {:timeout, t / 1000}}}, :finished}
+
+              {^ref, []} ->
+                {[], {chunks, :continue}}
+
+              {^ref, :error, {:badrpc, :timeout}} ->
+                {{:error, {:badrpc, {:timeout, timeout / 1000}}}, :finished}
+
+              {^ref, result, :continue} ->
+                {result, {chunks, :continue}}
+
+              {:error, _} = error ->
+                {error, :finished}
+
+              {^ref, :error, error} ->
+                {{:error, simplify_emission_error(error)}, :finished}
+
+              {:DOWN, _mref, :process, _pid, :normal} ->
+                {[], {chunks, :continue}}
+
+              {:DOWN, _mref, :process, _pid, reason} ->
+                {{:error, simplify_emission_error(reason)}, :finished}
+            end
+
           response_fun.(received)
-      end)
+      end
+    )
     |> display_list_items(info_keys)
   end
 
@@ -71,15 +97,21 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
 
   defp display_list_items(items, info_keys) do
     items
-    |> Stream.filter(fn([]) -> false; (_) -> true end)
-    |> Stream.map(
-        fn({:error, _} = error) -> error;
-          # here item is a list of keyword lists:
-          ([[{_, _} | _] | _] = item) ->
-            Enum.map(item, fn(i) -> InfoKeys.info_for_keys(i, info_keys) end);
-          (item) ->
-            InfoKeys.info_for_keys(item, info_keys)
-        end)
+    |> Stream.filter(fn
+      [] -> false
+      _ -> true
+    end)
+    |> Stream.map(fn
+      {:error, _} = error ->
+        error
+
+      # here item is a list of keyword lists:
+      [[{_, _} | _] | _] = item ->
+        Enum.map(item, fn i -> InfoKeys.info_for_keys(i, info_keys) end)
+
+      item ->
+        InfoKeys.info_for_keys(item, info_keys)
+    end)
   end
 
   defp init_items_stream(node, mod, fun, args, timeout, pid, ref) do
@@ -90,6 +122,7 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
   defp set_stream_timeout(_, _, :infinity) do
     :ok
   end
+
   defp set_stream_timeout(pid, ref, timeout) do
     Process.send_after(pid, {ref, {:timeout, timeout}}, timeout)
   end

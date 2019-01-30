@@ -19,21 +19,27 @@ defmodule RabbitMQ.CLI.Formatters.Inspect do
 
   def format_output(output, _) do
     case is_binary(output) do
-      true  -> output;
+      true -> output
       false -> inspect(output)
     end
   end
 
   def format_stream(stream, options) do
-    elements = Stream.scan(stream, :empty,
-                           FormatterHelpers.without_errors_2(
-                            fn(element, previous) ->
-                              separator = case previous do
-                                :empty -> "";
-                                _      -> ","
-                              end
-                              format_element(element, separator, options)
-                            end))
+    elements =
+      Stream.scan(
+        stream,
+        :empty,
+        FormatterHelpers.without_errors_2(fn element, previous ->
+          separator =
+            case previous do
+              :empty -> ""
+              _ -> ","
+            end
+
+          format_element(element, separator, options)
+        end)
+      )
+
     Stream.concat([["["], elements, ["]"]])
   end
 

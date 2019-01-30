@@ -35,9 +35,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitStartupCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout} = opts) do
-    :rabbit_misc.rpc_call(node_name, :rabbit, :await_startup,
-                          [node_name, not output_less?(opts), timeout])
+    :rabbit_misc.rpc_call(node_name, :rabbit, :await_startup, [
+      node_name,
+      not output_less?(opts),
+      timeout
+    ])
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "await_startup"

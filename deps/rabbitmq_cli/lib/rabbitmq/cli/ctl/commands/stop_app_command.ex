@@ -13,14 +13,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.StopAppCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-
   def merge_defaults(args, opts), do: {args, opts}
-  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
+  def validate([_ | _] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
 
   def run([], %{node: node_name}) do
@@ -28,7 +26,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopAppCommand do
   end
 
   def usage, do: "stop_app"
-
 
   def banner(_, %{node: node_name}), do: "Stopping rabbit application on node #{node_name} ..."
 end

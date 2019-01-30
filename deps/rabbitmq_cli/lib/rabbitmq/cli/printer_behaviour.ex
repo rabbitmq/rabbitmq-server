@@ -17,6 +17,6 @@ defmodule RabbitMQ.CLI.PrinterBehaviour do
   @callback init(options :: map()) :: {:ok, printer_state :: any} | {:error, error :: any}
   @callback finish(printer_state :: any) :: :ok
 
-  @callback print_output(output :: String.t | [String.t], printer_state :: any) :: :ok
+  @callback print_output(output :: String.t() | [String.t()], printer_state :: any) :: :ok
   @callback print_ok(printer_state :: any) :: :ok
 end

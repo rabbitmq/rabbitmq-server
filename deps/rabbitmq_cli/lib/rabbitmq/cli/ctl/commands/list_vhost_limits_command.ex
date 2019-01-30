@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -25,24 +24,32 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
   def merge_defaults(args, %{global: true} = opts) do
     {args, Map.merge(%{table_headers: true}, opts)}
   end
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
-  def validate([_|_], _) do
+  def validate([_ | _], _) do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, global: true}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :list, []) do
-      []              -> []
-      {:error, err}   -> {:error, err}
-      {:badrpc, node} -> {:badrpc, node}
-      val             ->
-        Enum.map(val, fn({vhost, val}) ->
+      [] ->
+        []
+
+      {:error, err} ->
+        {:error, err}
+
+      {:badrpc, node} ->
+        {:badrpc, node}
+
+      val ->
+        Enum.map(val, fn {vhost, val} ->
           {:ok, val_encoded} = JSON.encode(Map.new(val))
           [vhost: vhost, limits: val_encoded]
         end)
@@ -51,10 +58,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
 
   def run([], %{node: node_name, vhost: vhost}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :list, [vhost]) do
-      []              -> []
-      {:error, err}   -> {:error, err}
-      {:badrpc, node} -> {:badrpc, node}
-      val when is_list(val) or is_map(val)  ->
+      [] ->
+        []
+
+      {:error, err} ->
+        {:error, err}
+
+      {:badrpc, node} ->
+        {:badrpc, node}
+
+      val when is_list(val) or is_map(val) ->
         JSON.encode(Map.new(val))
     end
   end
@@ -64,6 +77,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
   def banner([], %{global: true}) do
     "Listing limits for all vhosts ..."
   end
+
   def banner([], %{vhost: vhost}) do
     "Listing limits for vhost \"#{vhost}\" ..."
   end

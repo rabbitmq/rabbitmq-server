@@ -13,13 +13,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearOperatorPolicyCommand do
-
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
@@ -27,20 +26,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearOperatorPolicyCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
-  def validate([_,_|_], _) do
+
+  def validate([_, _ | _], _) do
     {:validation_failure, :too_many_args}
   end
+
   def validate([_], _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([key], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name,
-      :rabbit_policy, :delete_op, [vhost, key, Helpers.cli_acting_user()])
+    :rabbit_misc.rpc_call(node_name, :rabbit_policy, :delete_op, [
+      vhost,
+      key,
+      Helpers.cli_acting_user()
+    ])
   end
 
   def usage, do: "clear_operator_policy [-p <vhost>] <key>"
-
 
   def banner([key], %{vhost: vhost}) do
     "Clearing operator policy \"#{key}\" on vhost \"#{vhost}\" ..."

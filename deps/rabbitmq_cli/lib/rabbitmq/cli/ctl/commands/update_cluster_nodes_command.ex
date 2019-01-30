@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -23,18 +22,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
     {args, opts}
   end
 
-  def validate([], _),  do: {:validation_failure, :not_enough_args}
+  def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
-  def validate(_, _),   do: {:validation_failure, :too_many_args}
+  def validate(_, _), do: {:validation_failure, :too_many_args}
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
   def run([seed_node], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name,
-        :rabbit_mnesia,
-        :update_cluster_nodes,
-        [Helpers.normalise_node(seed_node)]
-      )
+    :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_mnesia,
+      :update_cluster_nodes,
+      [Helpers.normalise_node(seed_node)]
+    )
   end
 
   def usage() do
@@ -46,12 +46,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   end
 
   def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
   end
+
   def output({:error, :cannot_cluster_node_with_itself}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      "Error: cannot cluster node with itself: #{node_name}"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 end

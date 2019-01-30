@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -27,27 +26,33 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
 
   def validate([], _), do: :ok
   def validate([_pidfile_path], _), do: :ok
-  def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+  def validate([_ | _] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
 
   def run([], %{node: node_name, idempotent: true}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, []) do
-      {:badrpc, :nodedown} -> {:ok, "Node #{node_name} is no longer running"};
-      any                  -> any
+      {:badrpc, :nodedown} -> {:ok, "Node #{node_name} is no longer running"}
+      any -> any
     end
   end
+
   def run([], %{node: node_name, idempotent: false}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
   end
+
   def run([pidfile_path], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
 
     case OsPid.read_pid_from_file(pidfile_path, true) do
-      {:error, details} -> {:error, "could not read pid from file #{pidfile_path}. Error: #{details}"};
-      {:error, :could_not_read_pid_from_file,
-        {:contents, s}} -> {:error, "could not read pid from file #{pidfile_path}. File contents: #{s}"};
-      {:error, :could_not_read_pid_from_file,
-        details}        -> {:error, "could not read pid from file #{pidfile_path}. Error: #{details}"};
-      pid               ->
+      {:error, details} ->
+        {:error, "could not read pid from file #{pidfile_path}. Error: #{details}"}
+
+      {:error, :could_not_read_pid_from_file, {:contents, s}} ->
+        {:error, "could not read pid from file #{pidfile_path}. File contents: #{s}"}
+
+      {:error, :could_not_read_pid_from_file, details} ->
+        {:error, "could not read pid from file #{pidfile_path}. Error: #{details}"}
+
+      pid ->
         OsPid.wait_for_os_process_death(pid)
         {:ok, "process #{pid} (take from pid file #{pidfile_path}) is no longer running"}
     end
@@ -58,5 +63,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
   def banner([pidfile_path], %{node: node_name}) do
     "Stopping and halting node #{node_name} (will monitor pid file #{pidfile_path}) ..."
   end
+
   def banner(_, %{node: node_name}), do: "Stopping and halting node #{node_name} ..."
 end

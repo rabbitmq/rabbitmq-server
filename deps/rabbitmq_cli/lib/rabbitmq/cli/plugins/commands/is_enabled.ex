@@ -22,35 +22,43 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   def merge_defaults(args, %{offline: true} = opts) do
     {args, opts}
   end
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{online: true, offline: false}, opts)}
   end
 
-  def distribution(%{offline: true}),  do: :none
+  def distribution(%{offline: true}), do: :none
   def distribution(%{offline: false}), do: :cli
 
-  def switches(), do: [online: :boolean,
-                       offline: :boolean]
+  def switches(), do: [online: :boolean, offline: :boolean]
 
   def validate(_, %{online: true, offline: true}) do
-   {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}
+    {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}
   end
+
   def validate(_, %{online: false, offline: false}) do
-   {:validation_failure, {:bad_argument, "Cannot set online and offline to false"}}
+    {:validation_failure, {:bad_argument, "Cannot set online and offline to false"}}
   end
+
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
+
   def validate([_ | _], _) do
     :ok
   end
 
   def validate_execution_environment(args, %{offline: true} = opts) do
-    Validators.chain([&Helpers.require_rabbit_and_plugins/2,
-                      &PluginHelpers.enabled_plugins_file/2,
-                      &Helpers.plugins_dir/2],
-                     [args, opts])
+    Validators.chain(
+      [
+        &Helpers.require_rabbit_and_plugins/2,
+        &PluginHelpers.enabled_plugins_file/2,
+        &Helpers.plugins_dir/2
+      ],
+      [args, opts]
+    )
   end
+
   def validate_execution_environment(args, %{online: true} = opts) do
     Validators.node_is_running(args, opts)
   end
@@ -67,19 +75,24 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
 
   def run(args, %{online: true, node: node_name} = opts) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :active, []) do
-      {:error, _} = e -> e
-      plugins  ->
-        plugins = Enum.map(plugins, &Atom.to_string/1) |> Enum.sort
+      {:error, _} = e ->
+        e
+
+      plugins ->
+        plugins = Enum.map(plugins, &Atom.to_string/1) |> Enum.sort()
+
         case Enum.filter(args, fn x -> not Enum.member?(plugins, x) end) do
-          [] -> {:ok,    positive_result_message(args, opts)}
+          [] -> {:ok, positive_result_message(args, opts)}
           xs -> {:error, negative_result_message(xs, opts, plugins)}
         end
     end
   end
+
   def run(args, %{offline: true} = opts) do
-    plugins = PluginHelpers.list_names(opts) |> Enum.map(&Atom.to_string/1) |> Enum.sort
+    plugins = PluginHelpers.list_names(opts) |> Enum.map(&Atom.to_string/1) |> Enum.sort()
+
     case Enum.filter(args, fn x -> not Enum.member?(plugins, x) end) do
-      [] -> {:ok,    positive_result_message(args, opts)}
+      [] -> {:ok, positive_result_message(args, opts)}
       xs -> {:error, negative_result_message(xs, opts, plugins)}
     end
   end
@@ -87,20 +100,22 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   def output({:ok, msg}, %{formatter: "json"}) do
     {:ok, %{"result" => "ok", "message" => msg}}
   end
+
   def output({:error, msg}, %{formatter: "json"}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_unavailable,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_unavailable(),
      %{"result" => "error", "message" => msg}}
   end
+
   def output({:error, err}, _opts) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_unavailable, err}
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_unavailable(), err}
   end
+
   use RabbitMQ.CLI.DefaultOutput
-
-
 
   def plugin_or_plugins(args) when length(args) == 1 do
     "plugin #{PluginHelpers.comma_separated_names(args)} is"
   end
+
   def plugin_or_plugins(args) when length(args) > 1 do
     "plugins #{PluginHelpers.comma_separated_names(args)} are"
   end
@@ -108,16 +123,18 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   defp positive_result_message(args, %{online: true, node: node_name}) do
     String.capitalize("#{plugin_or_plugins(args)} enabled on node #{node_name}")
   end
+
   defp positive_result_message(args, %{offline: true}) do
     String.capitalize("#{plugin_or_plugins(args)} enabled")
   end
 
   defp negative_result_message(missing, %{online: true, node: node_name}, plugins) do
-    String.capitalize("#{plugin_or_plugins(missing)} not enabled on node #{node_name}. ")
-                      <> "Enabled plugins and dependencies: #{PluginHelpers.comma_separated_names(plugins)}"
+    String.capitalize("#{plugin_or_plugins(missing)} not enabled on node #{node_name}. ") <>
+      "Enabled plugins and dependencies: #{PluginHelpers.comma_separated_names(plugins)}"
   end
+
   defp negative_result_message(missing, %{offline: true}, plugins) do
-    String.capitalize("#{plugin_or_plugins(missing)} not enabled. ")
-                      <> "Enabled plugins and dependencies: #{PluginHelpers.comma_separated_names(plugins)}"
+    String.capitalize("#{plugin_or_plugins(missing)} not enabled. ") <>
+      "Enabled plugins and dependencies: #{PluginHelpers.comma_separated_names(plugins)}"
   end
 end

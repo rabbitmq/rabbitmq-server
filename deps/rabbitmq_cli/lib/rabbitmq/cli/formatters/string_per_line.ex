@@ -25,19 +25,23 @@ defmodule RabbitMQ.CLI.Formatters.StringPerLine do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_output(output, _) do
-    Enum.map(output, fn(el) -> Helpers.string_or_inspect(el) end)
+    Enum.map(output, fn el -> Helpers.string_or_inspect(el) end)
   end
 
   def format_stream(stream, options) do
-    Stream.scan(stream, :empty,
-                FormatterHelpers.without_errors_2(
-                 fn(element, previous) ->
-                   separator = case previous do
-                     :empty -> "";
-                     _      -> Helpers.line_separator()
-                   end
-                   format_element(element, separator, options)
-                 end))
+    Stream.scan(
+      stream,
+      :empty,
+      FormatterHelpers.without_errors_2(fn element, previous ->
+        separator =
+          case previous do
+            :empty -> ""
+            _ -> Helpers.line_separator()
+          end
+
+        format_element(element, separator, options)
+      end)
+    )
   end
 
   def format_element(val, separator, options) do

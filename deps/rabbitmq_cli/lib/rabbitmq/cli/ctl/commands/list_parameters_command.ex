@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -29,17 +28,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
     {args, Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
-  def validate([_|_], _) do
+  def validate([_ | _], _) do
     {:validation_failure, :too_many_args}
   end
+
   def validate([], _), do: :ok
 
   def run([], %{node: node_name, timeout: timeout, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(
+      node_name,
       :rabbit_runtime_parameters,
       :list_formatted,
       [vhost],
-      timeout)
+      timeout
+    )
   end
 
   def usage, do: "list_parameters [-p <vhost>] [--no-table-headers]"

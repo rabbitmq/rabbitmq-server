@@ -20,24 +20,27 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
   def merge_defaults(args, %{erlang_format: true} = opts) do
     {args, opts}
   end
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{openssl_format: true, erlang_format: false}, opts)}
   end
 
-  def switches(), do: [timeout: :integer,
-                       openssl_format: :boolean,
-                       erlang_format: :boolean]
+  def switches(), do: [timeout: :integer, openssl_format: :boolean, erlang_format: :boolean]
   def aliases(), do: [t: :timeout]
 
   def validate(_, %{openssl_format: true, erlang_format: true}) do
-   {:validation_failure, {:bad_argument, "Cannot use both formats together"}}
+    {:validation_failure, {:bad_argument, "Cannot use both formats together"}}
   end
+
   def validate(_, %{openssl_format: false, erlang_format: false}) do
-   {:validation_failure, {:bad_argument, "Either OpenSSL or Erlang term format must be selected"}}
+    {:validation_failure,
+     {:bad_argument, "Either OpenSSL or Erlang term format must be selected"}}
   end
+
   def validate(args, _) when length(args) > 0 do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, _), do: :ok
 
   def usage, do: "cipher_suites [--openssl-format] [--erlang-format]"
@@ -45,16 +48,20 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
   def run([], %{node: node_name, timeout: timeout, openssl_format: true} = _opts) do
     :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [:openssl], timeout)
   end
+
   def run([], %{node: node_name, timeout: timeout, openssl_format: false} = _opts) do
     :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [], timeout)
   end
+
   def run([], %{node: node_name, timeout: timeout, erlang_format: true} = _opts) do
     :rabbit_misc.rpc_call(node_name, :ssl, :cipher_suites, [], timeout)
   end
 
-  def banner([], %{openssl_format: true}),  do: "Listing available cipher suites in the OpenSSL format"
-  def banner([], %{erlang_format: true}),   do: "Listing available cipher suites in the Erlang term format"
+  def banner([], %{openssl_format: true}),
+    do: "Listing available cipher suites in the OpenSSL format"
 
+  def banner([], %{erlang_format: true}),
+    do: "Listing available cipher suites in the Erlang term format"
 
   defmodule Formatter do
     alias RabbitMQ.CLI.Formatters.FormatterHelpers
@@ -62,11 +69,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
     @behaviour RabbitMQ.CLI.FormatterBehaviour
 
     def format_output(item, %{openssl_format: false} = _opts) do
-      to_string :io_lib.format("~p", [item])
+      to_string(:io_lib.format("~p", [item]))
     end
+
     def format_output(item, %{erlang_format: true} = _opts) do
-      to_string :io_lib.format("~p", [item])
+      to_string(:io_lib.format("~p", [item]))
     end
+
     def format_output(item, %{openssl_format: true} = opts) do
       RabbitMQ.CLI.Formatters.String.format_output(item, opts)
     end
@@ -74,27 +83,36 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
     def format_stream(stream, %{openssl_format: false} = opts) do
       comma_separated(stream, opts)
     end
+
     def format_stream(stream, %{erlang_format: true} = opts) do
       comma_separated(stream, opts)
     end
+
     def format_stream(stream, %{openssl_format: true} = opts) do
-      Stream.map(stream,
-        FormatterHelpers.without_errors_1(
-          fn(el) ->
-            format_output(el, opts)
-          end))
+      Stream.map(
+        stream,
+        FormatterHelpers.without_errors_1(fn el ->
+          format_output(el, opts)
+        end)
+      )
     end
 
     defp comma_separated(stream, opts) do
-      elements = Stream.scan(stream, :empty,
-                             FormatterHelpers.without_errors_2(
-                              fn(element, previous) ->
-                                separator = case previous do
-                                  :empty -> "";
-                                  _      -> ","
-                                end
-                                format_element(element, separator, opts)
-                              end))
+      elements =
+        Stream.scan(
+          stream,
+          :empty,
+          FormatterHelpers.without_errors_2(fn element, previous ->
+            separator =
+              case previous do
+                :empty -> ""
+                _ -> ","
+              end
+
+            format_element(element, separator, opts)
+          end)
+        )
+
       Stream.concat([["["], elements, ["]"]])
     end
 

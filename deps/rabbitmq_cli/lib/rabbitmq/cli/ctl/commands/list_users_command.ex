@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -24,13 +23,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   def switches(), do: [timeout: :integer, table_headers: :boolean]
   def aliases(), do: [t: :timeout]
 
-def merge_defaults(args, opts) do
+  def merge_defaults(args, opts) do
     {args, Map.merge(%{table_headers: true}, opts)}
   end
 
-  def validate([_|_], _) do
+  def validate([_ | _], _) do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
@@ -41,5 +41,5 @@ def merge_defaults(args, opts) do
 
   def usage, do: "list_users [--no-table-headers]"
 
-  def banner(_,_), do: "Listing users ..."
+  def banner(_, _), do: "Listing users ..."
 end

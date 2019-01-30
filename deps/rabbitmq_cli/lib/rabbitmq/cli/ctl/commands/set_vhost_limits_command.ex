@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
@@ -28,7 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_|_] = args, _) when length(args) > 1 do
+  def validate([_ | _] = args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
 
@@ -37,8 +36,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([definition], %{node: node_name, vhost: vhost}) do
-    :rabbit_misc.rpc_call(node_name,
-                          :rabbit_vhost_limit, :parse_set, [vhost, definition, Helpers.cli_acting_user()])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :parse_set, [
+      vhost,
+      definition,
+      Helpers.cli_acting_user()
+    ])
   end
 
   def usage, do: "set_vhost_limits [-p <vhost>] <definition>"

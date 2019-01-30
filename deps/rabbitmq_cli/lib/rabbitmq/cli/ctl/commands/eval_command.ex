@@ -29,17 +29,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
   def validate([expr | _], _) do
     case parse_expr(expr) do
-      {:ok, _}      -> :ok;
+      {:ok, _} -> :ok
       {:error, err} -> {:validation_failure, err}
     end
   end
 
-  def run([expr | arguments],  %{node: node_name} = opts) do
+  def run([expr | arguments], %{node: node_name} = opts) do
     {:ok, parsed} = parse_expr(expr)
     bindings = make_bindings(arguments, opts)
+
     case :rabbit_misc.rpc_call(node_name, :erl_eval, :exprs, [parsed, bindings]) do
-      {:value, value, _} -> {:ok, value};
-      err                -> err
+      {:value, value, _} -> {:ok, value}
+      err -> err
     end
   end
 
@@ -51,23 +52,26 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
   defp make_bindings(arguments, opts) do
     Enum.with_index(arguments, 1)
-    |> Enum.map(fn({val, index}) -> {String.to_atom("_#{index}"), val} end)
+    |> Enum.map(fn {val, index} -> {String.to_atom("_#{index}"), val} end)
     |> Enum.concat(option_bindings(opts))
   end
 
   defp option_bindings(opts) do
     Enum.to_list(opts)
-    |> Enum.map(fn({key, val}) -> {String.to_atom("_#{key}"), val} end)
+    |> Enum.map(fn {key, val} -> {String.to_atom("_#{key}"), val} end)
   end
+
   defp parse_expr(expr) do
     expr_str = to_charlist(expr)
+
     case :erl_scan.string(expr_str) do
       {:ok, scanned, _} ->
         case :erl_parse.parse_exprs(scanned) do
-          {:ok, parsed} -> {:ok, parsed};
+          {:ok, parsed} -> {:ok, parsed}
           {:error, err} -> {:error, format_parse_error(err)}
-        end;
-      {:error, err, _}  ->
+        end
+
+      {:error, err, _} ->
         {:error, format_parse_error(err)}
     end
   end

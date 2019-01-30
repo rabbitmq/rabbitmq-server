@@ -13,7 +13,6 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-
 defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   alias RabbitMQ.CLI.Core.Helpers
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
@@ -39,38 +38,42 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   def merge_defaults([], opts) do
     merge_defaults(~w(user peer_host peer_port state), opts)
   end
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{table_headers: true}, opts)}
   end
 
   def validate(args, _) do
-      case InfoKeys.validate_info_keys(args, @info_keys) do
-        {:ok, _} -> :ok
-        err -> err
-      end
+    case InfoKeys.validate_info_keys(args, @info_keys) do
+      {:ok, _} -> :ok
+      err -> err
+    end
   end
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([_|_] = args, %{node: node_name, timeout: timeout}) do
-      info_keys = InfoKeys.prepare_info_keys(args)
-      Helpers.with_nodes_in_cluster(node_name, fn(nodes) ->
-        RpcStream.receive_list_items(node_name,
-                                     :rabbit_networking,
-                                     :emit_connection_info_all,
-                                     [nodes, info_keys],
-                                     timeout,
-                                     info_keys,
-                                     Kernel.length(nodes))
-      end)
+  def run([_ | _] = args, %{node: node_name, timeout: timeout}) do
+    info_keys = InfoKeys.prepare_info_keys(args)
+
+    Helpers.with_nodes_in_cluster(node_name, fn nodes ->
+      RpcStream.receive_list_items(
+        node_name,
+        :rabbit_networking,
+        :emit_connection_info_all,
+        [nodes, info_keys],
+        timeout,
+        info_keys,
+        Kernel.length(nodes)
+      )
+    end)
   end
 
   def usage() do
-      "list_connections [--no-table-headers] [<connectioninfoitem> ...]"
+    "list_connections [--no-table-headers] [<connectioninfoitem> ...]"
   end
 
   def usage_additional() do
-      "<connectioninfoitem> must be a member of the list [" <>
+    "<connectioninfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."
   end
 

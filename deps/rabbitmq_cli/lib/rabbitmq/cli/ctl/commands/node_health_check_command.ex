@@ -23,11 +23,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do
-    timeout = case opts[:timeout] do
-      nil       -> @default_timeout;
-      :infinity -> @default_timeout;
-      other     -> other
-    end
+    timeout =
+      case opts[:timeout] do
+        nil -> @default_timeout
+        :infinity -> @default_timeout
+        other -> other
+      end
+
     {args, Map.merge(opts, %{timeout: timeout})}
   end
 
@@ -38,17 +40,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def run([], %{node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_health_check, :node, [node_name, timeout]) do
-      :ok                                      ->
+      :ok ->
         :ok
-      true                                     ->
+
+      true ->
         :ok
-      {:badrpc, _} = err                       ->
+
+      {:badrpc, _} = err ->
         err
-      {:error_string, error_message}           ->
+
+      {:error_string, error_message} ->
         {:healthcheck_failed, error_message}
+
       {:node_is_ko, error_message, _exit_code} ->
         {:healthcheck_failed, error_message}
-      other                                    ->
+
+      other ->
         other
     end
   end
@@ -56,16 +63,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   def output(:ok, _) do
     {:ok, "Health check passed"}
   end
+
   def output({:healthcheck_failed, message}, _) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      "Error: healthcheck failed. Message: #{message}"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "node_health_check"
 
   def banner(_, %{node: node_name, timeout: timeout}) do
-    ["Timeout: #{trunc(timeout / 1000)} seconds ...",
-     "Checking health of node #{node_name} ..."]
+    ["Timeout: #{trunc(timeout / 1000)} seconds ...", "Checking health of node #{node_name} ..."]
   end
 end
