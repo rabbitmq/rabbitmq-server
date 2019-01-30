@@ -218,7 +218,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
       plugins_dir: :string,
       enabled_plugins_file: :string,
       aliases_file: :string,
-      erlang_cookie: :atom
+      erlang_cookie: :atom,
+      help: :boolean
     ]
   end
 
@@ -231,7 +232,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
       l: :longnames,
       # for backwards compatibility,
       # not all commands support timeouts
-      t: :timeout
+      t: :timeout,
+      "?": :help
     ]
   end
 
