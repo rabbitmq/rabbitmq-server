@@ -139,5 +139,8 @@ clean-mix:
 	$(gen_verbose) rm -f $(ESCRIPTS)
 	$(verbose) echo y | mix clean
 
+format:
+	$(verbose) mix format lib/**/*.ex
+
 repl:
 	$(verbose) iex --sname repl -S mix
