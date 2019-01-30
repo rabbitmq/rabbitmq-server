@@ -33,6 +33,12 @@ except ImportError:
     pass
 
 import sys
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+
 if sys.version_info[0] < 2 or (sys.version_info[0] == 2 and sys.version_info[1] < 6):
     eprint("Sorry, rabbitmqadmin requires at least Python 2.6 (2.7.9 when HTTPS is enabled).")
     sys.exit(1)
@@ -488,10 +494,6 @@ def main():
     method()
 
 
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
-
-
 def die(s):
     eprint("*** {0}\n".format(s))
     sys.exit(1)
@@ -586,7 +588,9 @@ class Management:
         except socket.timeout:
             die("Timed out getting HTTP response (request timeout: {0} seconds)".format(
                 self.options.request_timeout))
-        except:
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except (Exception):
             e_fmt = traceback.format_exc()
             die("Error getting HTTP response:\n\n{0}".format(e_fmt))
         if resp.status == 400:
