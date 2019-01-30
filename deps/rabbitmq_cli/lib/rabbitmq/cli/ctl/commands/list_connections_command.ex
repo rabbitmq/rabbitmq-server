@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, table_headers: :boolean]
+  def switches(), do: [timeout: :integer]
   def aliases(), do: [t: :timeout]
 
   @info_keys ~w(pid name port host peer_port peer_host ssl ssl_protocol

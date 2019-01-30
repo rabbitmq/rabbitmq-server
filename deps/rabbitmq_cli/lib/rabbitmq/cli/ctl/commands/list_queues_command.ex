@@ -44,8 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       offline: :boolean,
       online: :boolean,
       local: :boolean,
-      timeout: :integer,
-      table_headers: :boolean
+      timeout: :integer
     ]
 
   def aliases(), do: [t: :timeout]

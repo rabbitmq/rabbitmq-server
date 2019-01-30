@@ -24,7 +24,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [table_headers: :boolean]
 
   @info_keys ~w(pid connection name number user vhost transactional
                 confirm consumer_count messages_unacknowledged

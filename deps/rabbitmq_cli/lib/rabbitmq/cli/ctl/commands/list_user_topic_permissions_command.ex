@@ -20,7 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserTopicPermissionsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer, table_headers: :boolean]
+  def switches(), do: [timeout: :integer]
   def aliases(), do: [t: :timeout]
 
   def merge_defaults(args, opts) do

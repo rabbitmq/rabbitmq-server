@@ -18,7 +18,7 @@ alias RabbitMQ.CLI.Formatters.FormatterHelpers
 defmodule RabbitMQ.CLI.Formatters.Table do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
-  def switches(), do: [pad_to_header: :boolean]
+  def switches(), do: [table_headers: :boolean, pad_to_header: :boolean]
 
   def format_stream(stream, options) do
     # Flatten for list_consumers

@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   def scopes(), do: [:ctl, :diagnostics]
 
   def switches(),
-    do: [queue_timeout: :integer, local: :boolean, timeout: :integer, table_headers: :boolean]
+    do: [queue_timeout: :integer, local: :boolean, timeout: :integer]
 
   def aliases(), do: [t: :timeout]
 
