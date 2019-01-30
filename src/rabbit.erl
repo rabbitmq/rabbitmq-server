@@ -531,6 +531,9 @@ start_apps(Apps) ->
 start_apps(Apps, RestartTypes) ->
     app_utils:load_applications(Apps),
     ensure_sysmon_handler_app_config(),
+    %% make Ra use a custom logger that dispatches to lager instead of the
+    %% default OTP logger
+    application:set_env(ra, logger_module, rabbit_ra_logger),
     ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
         undefined ->
             [];
