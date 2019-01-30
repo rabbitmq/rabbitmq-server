@@ -160,6 +160,8 @@ dispatcher() ->
      {"/users/:user",                                          rabbit_mgmt_wm_user, []},
      {"/users/:user/permissions",                              rabbit_mgmt_wm_permissions_user, []},
      {"/users/:user/topic-permissions",                        rabbit_mgmt_wm_topic_permissions_user, []},
+     {"/feature-flags",                                        rabbit_mgmt_wm_feature_flags, []},
+     {"/feature-flags/:name/enable",                           rabbit_mgmt_wm_feature_flag_enable, []},
      {"/whoami",                                               rabbit_mgmt_wm_whoami, []},
      {"/permissions",                                          rabbit_mgmt_wm_permissions, []},
      {"/permissions/:vhost/:user",                             rabbit_mgmt_wm_permission, []},
