@@ -80,38 +80,44 @@ defmodule RabbitMQCtl do
 
       _ ->
         options = parsed_options |> merge_all_defaults |> normalise_options
-        {arguments, options} = command.merge_defaults(arguments, options)
 
-        maybe_with_distribution(command, options, fn ->
-          # rabbitmq/rabbitmq-cli#278
-          options = Helpers.normalise_node_option(options)
+        case options[:help] do
+          true ->
+            {:error, ExitCodes.exit_ok(), HelpCommand.all_usage(command, options)};
+          _ ->
+            {arguments, options} = command.merge_defaults(arguments, options)
 
-          # The code below implements a tiny decision tree that has
-          # to do with CLI argument and environment state validation.
+            maybe_with_distribution(command, options, fn ->
+              # rabbitmq/rabbitmq-cli#278
+              options = Helpers.normalise_node_option(options)
 
-          # validate CLI arguments
-          case command.validate(arguments, options) do
-            :ok ->
-              # then optionally validate execution environment
-              case maybe_validate_execution_environment(command, arguments, options) do
+              # The code below implements a tiny decision tree that has
+              # to do with CLI argument and environment state validation.
+
+              # validate CLI arguments
+              case command.validate(arguments, options) do
                 :ok ->
-                  result = proceed_to_execution(command, arguments, options)
-                  handle_command_output(result, command, options, output_fun)
+                  # then optionally validate execution environment
+                  case maybe_validate_execution_environment(command, arguments, options) do
+                    :ok ->
+                      result = proceed_to_execution(command, arguments, options)
+                      handle_command_output(result, command, options, output_fun)
+
+                    {:validation_failure, err} ->
+                      environment_validation_error_output(err, command, unparsed_command, options)
+
+                    {:error, _} = err ->
+                      format_error(err, options, command)
+                  end
 
                 {:validation_failure, err} ->
-                  environment_validation_error_output(err, command, unparsed_command, options)
+                  argument_validation_error_output(err, command, unparsed_command, options)
 
                 {:error, _} = err ->
                   format_error(err, options, command)
               end
-
-            {:validation_failure, err} ->
-              argument_validation_error_output(err, command, unparsed_command, options)
-
-            {:error, _} = err ->
-              format_error(err, options, command)
-          end
-        end)
+            end)
+        end
     end
   end
 

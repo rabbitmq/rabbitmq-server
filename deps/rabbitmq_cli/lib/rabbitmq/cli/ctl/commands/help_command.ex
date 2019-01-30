@@ -36,12 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
         all_usage(opts)
 
       command ->
-        Enum.join(
-          [base_usage(command, opts)] ++
-            options_usage() ++
-            additional_usage(command),
-          "\n\n"
-        )
+        all_usage(command, opts)
     end
   end
 
@@ -70,6 +65,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
         additional_usage(),
       "\n\n"
     )
+  end
+
+  def all_usage(command, opts) do
+    Enum.join([base_usage(command, opts)] ++
+              options_usage() ++
+              additional_usage(command),
+              "\n\n")
   end
 
   def usage(), do: "help (<command> | [--list-commands])"

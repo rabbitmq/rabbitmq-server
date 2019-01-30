@@ -29,6 +29,15 @@ defmodule RabbitMQCtlTest do
     :ok
   end
 
+## ------------------------ --help option -------------------------------------
+
+  test "--help option prints help for command and exits normally" do
+    command = ["status", "--help"]
+    assert capture_io(fn ->
+      error_check(command, exit_ok())
+    end) =~ ~r/Usage:/
+  end
+
 ## ------------------------ Error Messages ------------------------------------
   test "print error message on a bad connection" do
     command = ["status", "-n", "sandwich@pastrami"]
