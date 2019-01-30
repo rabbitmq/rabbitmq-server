@@ -43,7 +43,21 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_vm, :memory, [], timeout)
   end
 
-  def output(result, _options) do
+  def output(result, %{formatter: "json"} = _opts) do
+    {:ok, compute_relative_values(result)}
+  end
+  def output(result, %{formatter: "csv"} = _opts) do
+    flattened = compute_relative_values(result)
+    |> Enum.flat_map(fn({k, %{bytes: b, percentage: p}}) ->
+        [{"#{k}.bytes", b}, {"#{k}.percentage", p}] end)
+    |> Enum.sort_by(fn({key, _val}) -> key end, &>=/2)
+
+    headers = Enum.map(flattened, fn {k, _v} -> k end)
+    values  = Enum.map(flattened, fn {_k, v} -> v end)
+
+    {:stream, [headers, values]}
+  end
+  def output(result, _opts) do
     {:ok, compute_relative_values(result)}
   end
 
