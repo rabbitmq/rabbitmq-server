@@ -20,6 +20,45 @@ defmodule RabbitMQ.CLI.Core.Parser do
   # the English language is 5.
   @levenshtein_distance_limit 5
 
+  def default_switches() do
+    [
+      node: :atom,
+      quiet: :boolean,
+      silent: :boolean,
+      dry_run: :boolean,
+      vhost: :string,
+      # for backwards compatibility,
+      # not all commands support timeouts
+      timeout: :integer,
+      longnames: :boolean,
+      formatter: :string,
+      printer: :string,
+      file: :string,
+      script_name: :atom,
+      rabbitmq_home: :string,
+      mnesia_dir: :string,
+      plugins_dir: :string,
+      enabled_plugins_file: :string,
+      aliases_file: :string,
+      erlang_cookie: :atom,
+      help: :boolean
+    ]
+  end
+
+  def default_aliases() do
+    [
+      p: :vhost,
+      n: :node,
+      q: :quiet,
+      s: :silent,
+      l: :longnames,
+      # for backwards compatibility,
+      # not all commands support timeouts
+      t: :timeout,
+      "?": :help
+    ]
+  end
+
   @spec parse([String.t()]) ::
           {command :: :no_command | atom() | {:suggest, String.t()}, command_name :: String.t(),
            arguments :: [String.t()], options :: map(),
@@ -196,45 +235,6 @@ defmodule RabbitMQ.CLI.Core.Parser do
 
     norm_options = normalize_options(options, switches) |> Map.new()
     {args, norm_options, invalid}
-  end
-
-  def default_switches() do
-    [
-      node: :atom,
-      quiet: :boolean,
-      silent: :boolean,
-      dry_run: :boolean,
-      vhost: :string,
-      # for backwards compatibility,
-      # not all commands support timeouts
-      timeout: :integer,
-      longnames: :boolean,
-      formatter: :string,
-      printer: :string,
-      file: :string,
-      script_name: :atom,
-      rabbitmq_home: :string,
-      mnesia_dir: :string,
-      plugins_dir: :string,
-      enabled_plugins_file: :string,
-      aliases_file: :string,
-      erlang_cookie: :atom,
-      help: :boolean
-    ]
-  end
-
-  def default_aliases() do
-    [
-      p: :vhost,
-      n: :node,
-      q: :quiet,
-      s: :silent,
-      l: :longnames,
-      # for backwards compatibility,
-      # not all commands support timeouts
-      t: :timeout,
-      "?": :help
-    ]
   end
 
   defp build_switches(default, command, formatter) do
