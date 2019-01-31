@@ -51,6 +51,7 @@
 
          %% misc
          dehydrate_state/1,
+         normalize/1,
 
          %% protocol helpers
          make_enqueue/3,
@@ -163,7 +164,7 @@
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
 
--define(SHADOW_COPY_INTERVAL, 4096 * 8).
+-define(RELEASE_CURSOR_EVERY, 64000).
 -define(USE_AVG_HALF_LIFE, 10000.0).
 
 -record(consumer,
@@ -198,7 +199,7 @@
 -record(state,
         {name :: atom(),
          queue_resource :: rabbit_types:r('queue'),
-         shadow_copy_interval = ?SHADOW_COPY_INTERVAL :: non_neg_integer(),
+         release_cursor_interval = ?RELEASE_CURSOR_EVERY :: non_neg_integer(),
          % unassigned messages
          messages = #{} :: #{msg_in_id() => indexed_msg()},
          % defines the lowest message in id available in the messages map
@@ -222,6 +223,8 @@
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
+         release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
+                                                          ra_index(), state()}),
          % consumers need to reflect consumer state at time of snapshot
          % needs to be part of snapshot
          consumers = #{} :: #{consumer_id() => #consumer{}},
@@ -258,7 +261,7 @@
                     queue_resource := rabbit_types:r('queue'),
                     dead_letter_handler => applied_mfa(),
                     become_leader_handler => applied_mfa(),
-                    shadow_copy_interval => non_neg_integer(),
+                    release_cursor_interval => non_neg_integer(),
                     max_length => non_neg_integer(),
                     max_bytes => non_neg_integer(),
                     single_active_consumer_on => boolean()}.
@@ -287,7 +290,7 @@ init(#{name := Name,
 update_config(Conf, State) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
     BLH = maps:get(become_leader_handler, Conf, undefined),
-    SHI = maps:get(shadow_copy_interval, Conf, ?SHADOW_COPY_INTERVAL),
+    SHI = maps:get(release_cursor_interval, Conf, ?RELEASE_CURSOR_EVERY),
     MaxLength = maps:get(max_length, Conf, undefined),
     MaxBytes = maps:get(max_bytes, Conf, undefined),
     ConsumerStrategy = case maps:get(single_active_consumer_on, Conf, false) of
@@ -298,7 +301,7 @@ update_config(Conf, State) ->
                        end,
     State#state{dead_letter_handler = DLH,
                 become_leader_handler = BLH,
-                shadow_copy_interval = SHI,
+                release_cursor_interval = SHI,
                 max_length = MaxLength,
                 max_bytes = MaxBytes,
                 consumer_strategy = ConsumerStrategy}.
@@ -438,14 +441,12 @@ apply(#{index := RaftIdx}, #purge{},
              returns = Returns,
              messages = Messages} = State0) ->
     Total = messages_ready(State0),
-    Indexes1 = lists:foldl(fun rabbit_fifo_index:delete/2,
-                          Indexes0,
+    Indexes1 = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes0,
                           [I || {I, _} <- lists:sort(maps:values(Messages))]),
-    Indexes = lists:foldl(fun rabbit_fifo_index:delete/2,
-                          Indexes1,
+    Indexes = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes1,
                           [I || {_, {I, _}} <- lqueue:to_list(Returns)]),
     {State, _, Effects} =
-        update_smallest_raft_index(RaftIdx, Indexes0,
+        update_smallest_raft_index(RaftIdx,
                                    State0#state{ra_indexes = Indexes,
                                                 messages = #{},
                                                 returns = lqueue:new(),
@@ -664,6 +665,7 @@ tick(_Ts, #state{name = Name,
 -spec overview(state()) -> map().
 overview(#state{consumers = Cons,
                 enqueuers = Enqs,
+                release_cursors = Cursors,
                 msg_bytes_enqueue = EnqueueBytes,
                 msg_bytes_checkout = CheckoutBytes} = State) ->
     #{type => ?MODULE,
@@ -672,6 +674,7 @@ overview(#state{consumers = Cons,
       num_enqueuers => maps:size(Enqs),
       num_ready_messages => messages_ready(State),
       num_messages => messages_total(State),
+      num_release_cursors => lqueue:len(Cursors),
       enqueue_message_bytes => EnqueueBytes,
       checkout_message_bytes => CheckoutBytes}.
 
@@ -815,7 +818,6 @@ messages_ready(#state{messages = M,
 
 messages_total(#state{ra_indexes = I,
                       prefix_msgs = {PreR, PreM}}) ->
-
     rabbit_fifo_index:size(I) + length(PreR) + length(PreM).
 
 update_use({inactive, _, _, _} = CUInfo, inactive) ->
@@ -971,26 +973,32 @@ enqueue(RaftIdx, RawMsg, #state{messages = Messages,
 append_to_master_index(RaftIdx,
                        #state{ra_indexes = Indexes0} = State0) ->
     State = incr_enqueue_count(State0),
-    Indexes = rabbit_fifo_index:append(RaftIdx, undefined, Indexes0),
+    Indexes = rabbit_fifo_index:append(RaftIdx, Indexes0),
     State#state{ra_indexes = Indexes}.
 
 incr_enqueue_count(#state{enqueue_count = C,
-                          shadow_copy_interval = C} = State0) ->
+                          release_cursor_interval = C} = State0) ->
     % this will trigger a dehydrated version of the state to be stored
     % at this raft index for potential future snapshot generation
     State0#state{enqueue_count = 0};
 incr_enqueue_count(#state{enqueue_count = C} = State) ->
     State#state{enqueue_count = C + 1}.
 
-maybe_store_dehydrated_state(RaftIdx, #state{enqueue_count = 0,
-                                             ra_indexes = Indexes} = State) ->
-    Dehydrated = dehydrate_state(State),
-    State#state{ra_indexes =
-                rabbit_fifo_index:update_if_present(RaftIdx, Dehydrated,
-                                                    Indexes)};
+maybe_store_dehydrated_state(RaftIdx,
+                             #state{ra_indexes = Indexes,
+                                    enqueue_count = 0,
+                                    release_cursors = Cursors} = State) ->
+    case rabbit_fifo_index:exists(RaftIdx, Indexes) of
+        false ->
+            %% the incoming enqueue must already have been dropped
+            State;
+        true ->
+            Dehydrated = dehydrate_state(State),
+            Cursor = {release_cursor, RaftIdx, Dehydrated},
+            State#state{release_cursors = lqueue:in(Cursor, Cursors)}
+    end;
 maybe_store_dehydrated_state(_RaftIdx, State) ->
     State.
-
 
 enqueue_pending(From,
                 #enqueuer{next_seqno = Next,
@@ -1062,7 +1070,8 @@ complete(ConsumerId, MsgRaftIdxs, NumDiscarded,
                         credit = increase_credit(Con0, NumDiscarded)},
     {Cons, SQ, Effects} = update_or_remove_sub(ConsumerId, Con, Cons0,
                                                SQ0, Effects0),
-    Indexes = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes0, MsgRaftIdxs),
+    Indexes = lists:foldl(fun rabbit_fifo_index:delete/2, Indexes0,
+                          MsgRaftIdxs),
     {State0#state{consumers = Cons,
                   ra_indexes = Indexes,
                   service_queue = SQ}, Effects}.
@@ -1081,7 +1090,7 @@ increase_credit(#consumer{credit = Current}, Credit) ->
 
 complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
                       #consumer{checked_out = Checked0} = Con0,
-                      Effects0, #state{ra_indexes = Indexes0} = State0) ->
+                      Effects0, State0) ->
     Checked = maps:without(MsgIds, Checked0),
     Discarded = maps:with(MsgIds, Checked0),
     MsgRaftIdxs = [RIdx || {_, {RIdx, _}} <- maps:values(Discarded)],
@@ -1097,7 +1106,7 @@ complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
                                   Con0, Checked, Effects0, State1),
     {State, ok, Effects} = checkout(Meta, State2, Effects1),
     % settle metrics are incremented separately
-    update_smallest_raft_index(IncomingRaftIdx, Indexes0, State, Effects).
+    update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 dead_letter_effects(_Discarded,
                     #state{dead_letter_handler = undefined},
@@ -1115,30 +1124,42 @@ cancel_consumer_effects(ConsumerId, #state{queue_resource = QName}, Effects) ->
     [{mod_call, rabbit_quorum_queue,
       cancel_consumer_handler, [QName, ConsumerId]} | Effects].
 
-update_smallest_raft_index(IncomingRaftIdx, OldIndexes,
+update_smallest_raft_index(IncomingRaftIdx,
                            #state{ra_indexes = Indexes,
-                                  messages = Messages} = State, Effects) ->
+                                  release_cursors = Cursors0} = State0,
+                           Effects) ->
     case rabbit_fifo_index:size(Indexes) of
-        0 when map_size(Messages) =:= 0 ->
+        0 ->
             % there are no messages on queue anymore and no pending enqueues
             % we can forward release_cursor all the way until
-            % the last received command
-            {State, ok, [{release_cursor, IncomingRaftIdx, State} | Effects]};
+            % the last received command, hooray
+            State = State0#state{release_cursors = lqueue:new()},
+            {State, ok,
+             [{release_cursor, IncomingRaftIdx, State} | Effects]};
         _ ->
-            NewSmallest = rabbit_fifo_index:smallest(Indexes),
-            % Take the smallest raft index available in the index when starting
-            % to process this command
-            case {NewSmallest, rabbit_fifo_index:smallest(OldIndexes)} of
-                {{Smallest, _}, {Smallest, _}} ->
-                    % smallest has not changed, do not issue release cursor
-                    % effects
-                    {State, ok, Effects};
-                {_, {Smallest, Shadow}} when Shadow =/= undefined ->
-                    {State, ok, [{release_cursor, Smallest, Shadow}]};
-                 _ -> % smallest
-                    % no release cursor increase
-                    {State, ok, Effects}
+            Smallest = rabbit_fifo_index:smallest(Indexes),
+            case find_next_cursor(Smallest, Cursors0) of
+                {empty, Cursors} ->
+                    {State0#state{release_cursors = Cursors},
+                     ok, Effects};
+                {Cursor, Cursors} ->
+                    %% we can emit a release cursor we've passed the smallest
+                    %% release cursor available.
+                    {State0#state{release_cursors = Cursors}, ok,
+                     [Cursor | Effects]}
             end
+    end.
+
+find_next_cursor(Idx, Cursors) ->
+    find_next_cursor(Idx, Cursors, empty).
+
+find_next_cursor(Smallest, Cursors0, Potential) ->
+    case lqueue:out(Cursors0) of
+        {{value, {_, Idx, _} = Cursor}, Cursors} when Idx < Smallest ->
+            %% we found one but it may not be the largest one
+            find_next_cursor(Smallest, Cursors, Cursor);
+        _ ->
+            {Potential, Cursors0}
     end.
 
 return_one(0, {'$prefix_msg', _} = Msg,
@@ -1173,8 +1194,7 @@ checkout(#{index := Index}, State0, Effects0) ->
     case evaluate_limit(State0#state.ra_indexes, false,
                         State1, Effects1) of
         {State, true, Effects} ->
-            update_smallest_raft_index(Index, State0#state.ra_indexes,
-                                       State, Effects);
+            update_smallest_raft_index(Index, State, Effects);
         {State, false, Effects} ->
             {State, ok, Effects}
     end.
@@ -1431,6 +1451,7 @@ dehydrate_state(#state{messages = Messages,
                            lists:sort(maps:to_list(Messages))),
     State#state{messages = #{},
                 ra_indexes = rabbit_fifo_index:empty(),
+                release_cursors = lqueue:new(),
                 low_msg_num = undefined,
                 consumers = maps:map(fun (_, C) ->
                                              dehydrate_consumer(C)
@@ -1446,6 +1467,10 @@ dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
                                {'$prefix_msg', message_size(Raw)}
                        end, Checked0),
     Con#consumer{checked_out = Checked}.
+
+%% make the state suitable for equality comparison
+normalize(#state{release_cursors = Cursors} = State) ->
+    State#state{release_cursors = lqueue:from_list(lqueue:to_list(Cursors))}.
 
 is_over_limit(#state{max_length = undefined,
                      max_bytes = undefined}) ->
@@ -1570,7 +1595,7 @@ test_init(Name) ->
     init(#{name => Name,
            queue_resource => rabbit_misc:r("/", queue,
                                            atom_to_binary(Name, utf8)),
-           shadow_copy_interval => 0}).
+           release_cursor_interval => 0}).
 
 % To launch these tests: make eunit EUNIT_MODS="rabbit_fifo"
 
@@ -2109,7 +2134,7 @@ run_snapshot_test0(Name, Commands) ->
                                     end, Entries),
          {S, _} = run_log(SnapState, Filtered),
          % assert log can be restored from any release cursor index
-         ?assertEqual(State, S)
+         ?assertEqual(normalize(State), normalize(S))
      end || {release_cursor, SnapIdx, SnapState} <- Effects],
     ok.
 
@@ -2235,7 +2260,7 @@ single_active_consumer_test() ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,
                         atom_to_binary(?FUNCTION_NAME, utf8)),
-                    shadow_copy_interval => 0,
+                    release_cursor_interval => 0,
                     single_active_consumer_on => true}),
     ?assertEqual(single_active, State0#state.consumer_strategy),
     ?assertEqual(0, map_size(State0#state.consumers)),
@@ -2309,7 +2334,7 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test() ->
     State0 = init(#{name => ?FUNCTION_NAME,
         queue_resource => rabbit_misc:r("/", queue,
             atom_to_binary(?FUNCTION_NAME, utf8)),
-        shadow_copy_interval => 0,
+        release_cursor_interval => 0,
         single_active_consumer_on => true}),
 
     DummyFunction = fun() -> ok  end,
@@ -2363,7 +2388,7 @@ single_active_consumer_mark_waiting_consumers_as_suspected_when_down_noconnnecti
     State0 = init(#{name => ?FUNCTION_NAME,
         queue_resource => rabbit_misc:r("/", queue,
             atom_to_binary(?FUNCTION_NAME, utf8)),
-        shadow_copy_interval => 0,
+        release_cursor_interval => 0,
         single_active_consumer_on => true}),
 
     Meta = #{index => 1},
@@ -2403,7 +2428,7 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test() ->
     State0 = init(#{name => ?FUNCTION_NAME,
         queue_resource => rabbit_misc:r("/", queue,
             atom_to_binary(?FUNCTION_NAME, utf8)),
-        shadow_copy_interval => 0,
+        release_cursor_interval => 0,
         single_active_consumer_on => true}),
 
     DummyFunction = fun() -> ok  end,
@@ -2433,7 +2458,7 @@ single_active_consumer_state_enter_eol_include_waiting_consumers_test() ->
     State0 = init(#{name => ?FUNCTION_NAME,
         queue_resource => rabbit_misc:r("/", queue,
             atom_to_binary(?FUNCTION_NAME, utf8)),
-        shadow_copy_interval => 0,
+        release_cursor_interval => 0,
         single_active_consumer_on => true}),
 
     DummyFunction = fun() -> ok  end,
@@ -2463,7 +2488,7 @@ query_consumers_test() ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,
                         atom_to_binary(?FUNCTION_NAME, utf8)),
-                    shadow_copy_interval => 0,
+                    release_cursor_interval => 0,
                     single_active_consumer_on => false}),
 
     % adding some consumers
@@ -2501,7 +2526,7 @@ query_consumers_when_single_active_consumer_is_on_test() ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,
                         atom_to_binary(?FUNCTION_NAME, utf8)),
-                    shadow_copy_interval => 0,
+                    release_cursor_interval => 0,
                     single_active_consumer_on => true}),
     Meta = #{index => 1},
     % adding some consumers
@@ -2535,7 +2560,7 @@ active_flag_updated_when_consumer_suspected_unsuspected_test() ->
     State0 = init(#{name => ?FUNCTION_NAME,
         queue_resource => rabbit_misc:r("/", queue,
             atom_to_binary(?FUNCTION_NAME, utf8)),
-        shadow_copy_interval => 0,
+        release_cursor_interval => 0,
         single_active_consumer_on => false}),
 
     DummyFunction = fun() -> ok  end,
@@ -2568,7 +2593,7 @@ active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_co
     State0 = init(#{name => ?FUNCTION_NAME,
         queue_resource => rabbit_misc:r("/", queue,
             atom_to_binary(?FUNCTION_NAME, utf8)),
-        shadow_copy_interval => 0,
+        release_cursor_interval => 0,
         single_active_consumer_on => true}),
 
     DummyFunction = fun() -> ok  end,

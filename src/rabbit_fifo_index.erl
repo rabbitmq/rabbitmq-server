@@ -2,25 +2,26 @@
 
 -export([
          empty/0,
-         fetch/2,
-         append/3,
-         update_if_present/3,
-         return/3,
+         exists/2,
+         append/2,
          delete/2,
          size/1,
          smallest/1,
-         next_key_after/2,
-         map/2,
-         to_map/1
+         map/2
         ]).
 
 -include_lib("ra/include/ra.hrl").
 -compile({no_auto_import, [size/1]}).
 
--record(?MODULE, {data = #{} :: #{integer() => term()},
+%% the empty atom is a lot smaller (4 bytes) than e.g. `undefined` (13 bytes).
+%% This matters as the data map gets persisted as part of the snapshot
+-define(NIL, '').
+
+-record(?MODULE, {data = #{} :: #{integer() => ?NIL},
                   smallest :: undefined | non_neg_integer(),
                   largest :: undefined | non_neg_integer()
                  }).
+
 
 -opaque state() :: #?MODULE{}.
 
@@ -30,43 +31,20 @@
 empty() ->
     #?MODULE{}.
 
--spec fetch(integer(), state()) -> undefined | term().
-fetch(Key, #?MODULE{data = Data}) ->
-    maps:get(Key, Data, undefined).
+-spec exists(integer(), state()) -> boolean().
+exists(Key, #?MODULE{data = Data}) ->
+    maps:is_key(Key, Data).
 
 % only integer keys are supported
--spec append(integer(), term(), state()) -> state().
-append(Key, Value,
+-spec append(integer(), state()) -> state().
+append(Key,
        #?MODULE{data = Data,
                 smallest = Smallest,
                 largest = Largest} = State)
   when Key > Largest orelse Largest =:= undefined ->
-    State#?MODULE{data = maps:put(Key, Value, Data),
+    State#?MODULE{data = maps:put(Key, ?NIL, Data),
                   smallest = ra_lib:default(Smallest, Key),
                   largest = Key}.
-
--spec update_if_present(integer(), term(), state()) -> state().
-update_if_present(Key, Value, #?MODULE{data = Data} = State) ->
-    case Data of
-        #{Key := _} ->
-            State#?MODULE{data = maps:put(Key, Value, Data)};
-        _ ->
-            State
-    end.
-
-
--spec return(integer(), term(), state()) -> state().
-return(Key, Value, #?MODULE{data = Data, smallest = Smallest} = State)
-  when is_integer(Key) andalso Key < Smallest ->
-    % TODO: this could potentially result in very large gaps which would
-    % result in poor performance of smallest/1
-    % We could try to persist a linked list of "smallests" to make it quicker
-    % to skip from one to the other - needs measurement
-    State#?MODULE{data = maps:put(Key, Value, Data),
-                smallest = Key};
-return(Key, Value, #?MODULE{data = Data} = State)
-  when is_integer(Key) ->
-    State#?MODULE{data = maps:put(Key, Value, Data)}.
 
 -spec delete(Index :: integer(), state()) -> state().
 delete(Smallest, #?MODULE{data = Data0,
@@ -76,8 +54,8 @@ delete(Smallest, #?MODULE{data = Data0,
     case find_next(Smallest + 1, Largest, Data) of
         undefined ->
             State#?MODULE{data = Data,
-                        smallest = undefined,
-                        largest = undefined};
+                          smallest = undefined,
+                          largest = undefined};
         Next ->
             State#?MODULE{data = Data, smallest = Next}
     end;
@@ -88,33 +66,10 @@ delete(Key, #?MODULE{data = Data} = State) ->
 size(#?MODULE{data = Data}) ->
     maps:size(Data).
 
--spec to_map(state()) -> #{integer() => term()}.
-to_map(#?MODULE{data = Data}) ->
-    Data.
+-spec smallest(state()) -> undefined | integer().
+smallest(#?MODULE{smallest = Smallest}) ->
+    Smallest.
 
--spec smallest(state()) -> undefined | {integer(), term()}.
-smallest(#?MODULE{smallest = undefined}) ->
-    undefined;
-smallest(#?MODULE{smallest = Smallest, data = Data}) ->
-    {Smallest, maps:get(Smallest, Data)}.
-
-
--spec next_key_after(non_neg_integer(), state()) -> undefined | integer().
-next_key_after(_Idx, #?MODULE{smallest = undefined}) ->
-    % map must be empty
-    undefined;
-next_key_after(Idx, #?MODULE{smallest = Smallest,
-                           largest = Largest})
-  when Idx+1 < Smallest orelse Idx+1 > Largest ->
-    undefined;
-next_key_after(Idx, #?MODULE{data = Data} = State) ->
-    Next = Idx+1,
-    case maps:is_key(Next, Data) of
-        true ->
-            Next;
-        false ->
-            next_key_after(Next, State)
-    end.
 
 -spec map(fun(), state()) -> state().
 map(F, #?MODULE{data = Data} = State) ->
@@ -142,40 +97,24 @@ find_next(Next, Last, Map) ->
 
 append_test() ->
     S0 = empty(),
-    undefined = fetch(99, S0),
+    false = exists(99, S0),
     undefined = smallest(S0),
     0 = size(S0),
-    S1 = append(1, one, S0),
-    undefined = fetch(99, S1),
-    one = fetch(1, S1),
+    S1 = append(1, S0),
+    false = exists(99, S1),
+    true = exists(1, S1),
     1 = size(S1),
-    {1, one} = smallest(S1),
-    S2 = append(2, two, S1),
-    two = fetch(2, S2),
+    1 = smallest(S1),
+    S2 = append(2, S1),
+    true = exists(2, S2),
     2 = size(S2),
-    {1, one} = smallest(S2),
+    1 = smallest(S2),
     S3 = delete(1, S2),
-    {2, two} = smallest(S3),
+    2 = smallest(S3),
     1 = size(S3),
-    S4 = return(1, one, S3),
-    one = fetch(1, S4),
-    2 = size(S4),
-    {1, one} = smallest(S4),
-    S5 = delete(2, delete(1, S4)),
+    S5 = delete(2, S3),
     undefined = smallest(S5),
     0 = size(S0),
-    ok.
-
-next_after_test() ->
-    S = append(3, three,
-               append(2, two,
-                      append(1, one,
-                             empty()))),
-    1 = next_key_after(0, S),
-    2 = next_key_after(1, S),
-    3 = next_key_after(2, S),
-    undefined = next_key_after(3, S),
-    undefined = next_key_after(4, S),
     ok.
 
 -endif.
