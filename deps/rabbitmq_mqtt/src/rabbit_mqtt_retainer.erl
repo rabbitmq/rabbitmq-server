@@ -42,16 +42,16 @@ start_link(RetainStoreMod, VHost) ->
     gen_server2:start_link(?MODULE, [RetainStoreMod, VHost], []).
 
 retain(Pid, Topic, Msg = #mqtt_msg{retain = true}) ->
-    gen_server2:cast(Pid, {retain, Topic, Msg});
+    gen_server2:cast(Pid, {retain, rabbit_mqtt_util:amqp2mqtt(Topic), Msg});
 
 retain(_Pid, _Topic, Msg = #mqtt_msg{retain = false}) ->
     throw({error, {retain_is_false, Msg}}).
 
 fetch(Pid, Topic) ->
-    gen_server2:call(Pid, {fetch, Topic}, ?TIMEOUT).
+    gen_server2:call(Pid, {fetch, rabbit_mqtt_util:amqp2mqtt(Topic)}, ?TIMEOUT).
 
 clear(Pid, Topic) ->
-    gen_server2:cast(Pid, {clear, Topic}).
+    gen_server2:cast(Pid, {clear, rabbit_mqtt_util:amqp2mqtt(Topic)}).
 
 %%----------------------------------------------------------------------------
 

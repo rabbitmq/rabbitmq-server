@@ -334,7 +334,7 @@ maybe_send_retained_message(RPid, #mqtt_topic{name = S, qos = SubscribeQos}, Msg
                     retain = Msg#mqtt_msg.retain
                  }, variable = #mqtt_frame_publish{
                     message_id = Id,
-                    topic_name = S
+                    topic_name = rabbit_mqtt_util:amqp2mqtt(S)
                  },
                  payload = Msg#mqtt_msg.payload}, PState),
                  case Qos of
