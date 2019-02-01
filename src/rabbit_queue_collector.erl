@@ -33,12 +33,11 @@
 %%----------------------------------------------------------------------------
 
 -spec start_link(rabbit_types:proc_name()) -> rabbit_types:ok_pid_or_error().
--spec register(pid(), pid()) -> 'ok'.
-
-%%----------------------------------------------------------------------------
 
 start_link(ProcName) ->
     gen_server:start_link(?MODULE, [ProcName], []).
+
+-spec register(pid(), pid()) -> 'ok'.
 
 register(CollectorPid, Q) ->
     gen_server:call(CollectorPid, {register, Q}, infinity).

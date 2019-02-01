@@ -25,13 +25,15 @@
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, await_startup/1, await_startup/3,
          status/0, is_running/0, alarms/0,
-         is_running/1, environment/0, rotate_logs/0,
+         is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
 
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
 -export([is_booted/1, is_booted/0, is_booting/1, is_booting/0]).
+
+-deprecated([{force_event_refresh, 1, eventually}]).
 
 -ifdef(TEST).
 
@@ -60,6 +62,12 @@
 -rabbit_boot_step({rabbit_alarm,
                    [{description, "alarm handler"},
                     {mfa,         {rabbit_alarm, start, []}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
+-rabbit_boot_step({feature_flags,
+                   [{description, "feature flags registry and initial state"},
+                    {mfa,         {rabbit_feature_flags, init, []}},
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
@@ -251,40 +259,6 @@
 -type param() :: atom().
 -type app_name() :: atom().
 
--spec start() -> 'ok'.
--spec boot() -> 'ok'.
--spec stop() -> 'ok'.
--spec stop_and_halt() -> no_return().
-
--spec status
-        () -> [{pid, integer()} |
-               {running_applications, [{atom(), string(), string()}]} |
-               {os, {atom(), atom()}} |
-               {erlang_version, string()} |
-               {memory, any()}].
--spec is_running() -> boolean().
--spec is_running(node()) -> boolean().
--spec environment() -> [{param(), term()}].
--spec rotate_logs() -> rabbit_types:ok_or_error(any()).
-
--spec log_locations() -> [log_location()].
-
--spec start('normal',[]) ->
-          {'error',
-           {'erlang_version_too_old',
-            {'found',string(),string()},
-            {'required',string(),string()}}} |
-          {'ok',pid()}.
--spec stop(_) -> 'ok'.
-
--spec maybe_insert_default_data() -> 'ok'.
--spec boot_delegate() -> 'ok'.
--spec recover() -> 'ok'.
--spec start_apps([app_name()]) -> 'ok'.
--spec start_apps([app_name()],
-                 #{app_name() => restart_type()}) -> 'ok'.
--spec stop_apps([app_name()]) -> 'ok'.
-
 %%----------------------------------------------------------------------------
 
 ensure_application_loaded() ->
@@ -295,6 +269,8 @@ ensure_application_loaded() ->
         ok                                -> ok;
         {error, {already_loaded, rabbit}} -> ok
     end.
+
+-spec start() -> 'ok'.
 
 start() ->
     start_it(fun() ->
@@ -308,6 +284,8 @@ start() ->
                      rabbit_mnesia:check_cluster_consistency(),
                      broker_start()
              end).
+
+-spec boot() -> 'ok'.
 
 boot() ->
     start_it(fun() ->
@@ -486,6 +464,8 @@ start_it(StartFun) ->
                 Marker ! stop
     end.
 
+-spec stop() -> 'ok'.
+
 stop() ->
     case whereis(rabbit_boot) of
         undefined -> ok;
@@ -499,6 +479,8 @@ stop() ->
     %% as needed
     stop_apps(app_utils:app_dependency_order(Apps, true)),
     rabbit_log:info("Successfully stopped RabbitMQ and its dependencies~n", []).
+
+-spec stop_and_halt() -> no_return().
 
 stop_and_halt() ->
     try
@@ -525,11 +507,17 @@ stop_and_halt() ->
     end,
     ok.
 
+-spec start_apps([app_name()]) -> 'ok'.
+
 start_apps(Apps) ->
     start_apps(Apps, #{}).
 
+-spec start_apps([app_name()],
+                 #{app_name() => restart_type()}) -> 'ok'.
+
 start_apps(Apps, RestartTypes) ->
     app_utils:load_applications(Apps),
+    rabbit_feature_flags:initialize_registry(),
     ensure_sysmon_handler_app_config(),
     %% make Ra use a custom logger that dispatches to lager instead of the
     %% default OTP logger
@@ -584,7 +572,7 @@ ensure_sysmon_handler_app_config() ->
                 {port_limit, 100},
                 {gc_ms_limit, 0},
                 {schedule_ms_limit, 0},
-                {heap_word_limit, 10485760},
+                {heap_word_limit, 0},
                 {busy_port, false},
                 {busy_dist_port, true}
                ],
@@ -669,6 +657,8 @@ decrypt_list([{Key, Value}|Tail], Algo, Acc) when Key =/= encrypted ->
 decrypt_list([Value|Tail], Algo, Acc) ->
     decrypt_list(Tail, Algo, [decrypt(Value, Algo)|Acc]).
 
+-spec stop_apps([app_name()]) -> 'ok'.
+
 stop_apps([]) ->
     ok;
 stop_apps(Apps) ->
@@ -703,16 +693,19 @@ is_booting(Node) ->
 
 
 -spec await_startup() -> 'ok' | {'error', 'timeout'}.
+
 await_startup() ->
     await_startup(node(), false).
 
 -spec await_startup(node() | non_neg_integer()) -> 'ok' | {'error', 'timeout'}.
+
 await_startup(Node) when is_atom(Node) ->
     await_startup(Node, false);
   await_startup(Timeout) when is_integer(Timeout) ->
       await_startup(node(), false, Timeout).
 
 -spec await_startup(node(), boolean()) -> 'ok'  | {'error', 'timeout'}.
+
 await_startup(Node, PrintProgressReports) ->
     case is_booting(Node) of
         true  -> wait_for_boot_to_finish(Node, PrintProgressReports);
@@ -725,6 +718,7 @@ await_startup(Node, PrintProgressReports) ->
     end.
 
 -spec await_startup(node(), boolean(), non_neg_integer()) -> 'ok'  | {'error', 'timeout'}.
+
 await_startup(Node, PrintProgressReports, Timeout) ->
     case is_booting(Node) of
         true  -> wait_for_boot_to_finish(Node, PrintProgressReports, Timeout);
@@ -796,6 +790,13 @@ maybe_print_boot_progress(true, IterationsLeft) ->
     _ -> ok
   end.
 
+-spec status
+        () -> [{pid, integer()} |
+               {running_applications, [{atom(), string(), string()}]} |
+               {os, {atom(), atom()}} |
+               {erlang_version, string()} |
+               {memory, any()}].
+
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
@@ -851,7 +852,12 @@ listeners() ->
 %% TODO this only determines if the rabbit application has started,
 %% not if it is running, never mind plugins. It would be nice to have
 %% more nuance here.
+
+-spec is_running() -> boolean().
+
 is_running() -> is_running(node()).
+
+-spec is_running(node()) -> boolean().
 
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
 
@@ -864,6 +870,8 @@ is_booted(Node) ->
         _ -> false
     end.
 
+-spec environment() -> [{param(), term()}].
+
 environment() ->
     %% The timeout value is twice that of gen_server:call/2.
     [{A, environment(A)} ||
@@ -873,6 +881,8 @@ environment(App) ->
     Ignore = [default_pass, included_applications],
     lists:keysort(1, [P || P = {K, _} <- application:get_all_env(App),
                            not lists:member(K, Ignore)]).
+
+-spec rotate_logs() -> rabbit_types:ok_or_error(any()).
 
 rotate_logs() ->
     rabbit_lager:fold_sinks(
@@ -896,6 +906,13 @@ rotate_logs() ->
       end, ok).
 
 %%--------------------------------------------------------------------
+
+-spec start('normal',[]) ->
+          {'error',
+           {'erlang_version_too_old',
+            {'found',string(),string()},
+            {'required',string(),string()}}} |
+          {'ok',pid()}.
 
 start(normal, []) ->
     case erts_version_check() of
@@ -928,6 +945,8 @@ start(normal, []) ->
 prep_stop(State) ->
   rabbit_peer_discovery:maybe_unregister(),
   State.
+
+-spec stop(_) -> 'ok'.
 
 stop(_State) ->
     ok = rabbit_alarm:stop(),
@@ -983,13 +1002,19 @@ log_boot_error_and_exit(Reason, Format, Args) ->
 %%---------------------------------------------------------------------------
 %% boot step functions
 
+-spec boot_delegate() -> 'ok'.
+
 boot_delegate() ->
     {ok, Count} = application:get_env(rabbit, delegate_count),
     rabbit_sup:start_supervisor_child(delegate_sup, [Count]).
 
+-spec recover() -> 'ok'.
+
 recover() ->
     rabbit_policy:recover(),
     rabbit_vhost:recover().
+
+-spec maybe_insert_default_data() -> 'ok'.
 
 maybe_insert_default_data() ->
     case rabbit_table:needs_default_data() of
@@ -1035,8 +1060,22 @@ start_logger() ->
     rabbit_lager:start_logger(),
     ok.
 
+-spec log_locations() -> [log_location()].
+
 log_locations() ->
     rabbit_lager:log_locations().
+
+%% This feature was used by the management API up-to and including
+%% RabbitMQ 3.7.x. It is unused in 3.8.x and thus deprecated. We keep it
+%% to support in-place upgrades to 3.8.x (i.e. mixed-version clusters).
+
+-spec force_event_refresh(reference()) -> 'ok'.
+
+force_event_refresh(Ref) ->
+    rabbit_direct:force_event_refresh(Ref),
+    rabbit_networking:force_connection_event_refresh(Ref),
+    rabbit_channel:force_event_refresh(Ref),
+    rabbit_amqqueue:force_event_refresh(Ref).
 
 %%---------------------------------------------------------------------------
 %% misc

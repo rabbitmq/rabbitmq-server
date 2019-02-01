@@ -99,10 +99,24 @@ init_per_group(max_length_classic, Config) ->
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
        {queue_durable, false}]);
 init_per_group(max_length_quorum, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
-       {queue_durable, true}]);
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(
+              Config, nodename),
+    Ret = rabbit_ct_broker_helpers:rpc(
+            Config, 0,
+            rabbit_feature_flags,
+            is_supported_remotely,
+            [Nodes, [quorum_queue], 60000]),
+    case Ret of
+        true ->
+            ok = rabbit_ct_broker_helpers:rpc(
+                    Config, 0, rabbit_feature_flags, enable, [quorum_queue]),
+            rabbit_ct_helpers:set_config(
+              Config,
+              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+               {queue_durable, true}]);
+        false ->
+            {skip, "Quorum queues are unsupported"}
+    end;
 init_per_group(max_length_mirrored, Config) ->
     rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
         <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
@@ -269,8 +283,7 @@ wait_for_confirms(Unconfirmed) ->
     end.
 
 test_amqqueue(Durable) ->
-    (rabbit_amqqueue:pseudo_queue(test_queue(), self()))
-        #amqqueue { durable = Durable }.
+    rabbit_amqqueue:pseudo_queue(test_queue(), self(), Durable).
 
 assert_prop(List, Prop, Value) ->
     case proplists:get_value(Prop, List)of
@@ -695,7 +708,7 @@ head_message_timestamp1(_Config) ->
     QRes = rabbit_misc:r(<<"/">>, queue, QName),
 
     {ok, Q1} = rabbit_amqqueue:lookup(QRes),
-    QPid = Q1#amqqueue.pid,
+    QPid = amqqueue:get_pid(Q1),
 
     %% Set up event receiver for queue
     dummy_event_receiver:start(self(), [node()], [queue_stats]),
@@ -944,7 +957,7 @@ confirms1(_Config) ->
     QName2 = DeclareBindDurableQueue(),
     %% Get the first one's pid (we'll crash it later)
     {ok, Q1} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName1)),
-    QPid1 = Q1#amqqueue.pid,
+    QPid1 = amqqueue:get_pid(Q1),
     %% Enable confirms
     rabbit_channel:do(Ch, #'confirm.select'{}),
     receive

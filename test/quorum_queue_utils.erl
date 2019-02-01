@@ -6,6 +6,7 @@
          wait_for_messages_ready/3,
          wait_for_messages_pending_ack/3,
          wait_for_messages_total/3,
+         wait_for_messages/2,
          dirty_query/3,
          ra_name/1
         ]).
@@ -45,6 +46,29 @@ wait_for_messages(Servers, QName, Number, Fun, N) ->
             wait_for_messages(Servers, QName, Number, Fun, N - 1)
     end.
 
+wait_for_messages(Config, Stats) ->
+    wait_for_messages(Config, lists:sort(Stats), 10).
+
+wait_for_messages(Config, Stats, 0) ->
+    ?assertEqual(Stats,
+                 lists:sort(
+                   filter_queues(Stats,
+                                 rabbit_ct_broker_helpers:rabbitmqctl_list(
+                                   Config, 0, ["list_queues", "name", "messages", "messages_ready",
+                                               "messages_unacknowledged"]))));
+wait_for_messages(Config, Stats, N) ->
+    case lists:sort(
+           filter_queues(Stats,
+                         rabbit_ct_broker_helpers:rabbitmqctl_list(
+                           Config, 0, ["list_queues", "name", "messages", "messages_ready",
+                                       "messages_unacknowledged"]))) of
+        Stats0 when Stats0 == Stats ->
+            ok;
+        _ ->
+            timer:sleep(500),
+            wait_for_messages(Config, Stats, N - 1)
+    end.
+
 dirty_query(Servers, QName, Fun) ->
     lists:map(
       fun(N) ->
@@ -59,3 +83,8 @@ dirty_query(Servers, QName, Fun) ->
 ra_name(Q) ->
     binary_to_atom(<<"%2F_", Q/binary>>, utf8).
 
+filter_queues(Expected, Got) ->
+    Keys = [K || [K, _, _, _] <- Expected],
+    lists:filter(fun([K, _, _, _]) ->
+                         lists:member(K, Keys)
+                 end, Got).

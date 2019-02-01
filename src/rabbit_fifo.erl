@@ -335,7 +335,7 @@ apply(Meta, #discard{msg_ids = MsgIds, consumer_id = ConsumerId},
     case Cons0 of
         #{ConsumerId := Con0} ->
             Discarded = maps:with(MsgIds, Con0#consumer.checked_out),
-            Effects = dead_letter_effects(Discarded, State0, []),
+            Effects = dead_letter_effects(rejected, Discarded, State0, []),
             complete_and_checkout(Meta, MsgIds, ConsumerId, Con0,
                                   Effects, State0);
         _ ->
@@ -950,7 +950,7 @@ drop_head(#state{ra_indexes = Indexes0} = State0, Effects0) ->
             Indexes = rabbit_fifo_index:delete(RaftIdxToDrop, Indexes0),
             Bytes = message_size(Msg),
             State = add_bytes_drop(Bytes, State1#state{ra_indexes = Indexes}),
-            Effects = dead_letter_effects(maps:put(none, FullMsg, #{}),
+            Effects = dead_letter_effects(maxlen, maps:put(none, FullMsg, #{}),
                                           State, Effects0),
             {State, Effects};
         {{'$prefix_msg', Bytes}, State1} ->
@@ -1108,15 +1108,15 @@ complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
     % settle metrics are incremented separately
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
-dead_letter_effects(_Discarded,
+dead_letter_effects(_Reason, _Discarded,
                     #state{dead_letter_handler = undefined},
                     Effects) ->
     Effects;
-dead_letter_effects(Discarded,
+dead_letter_effects(Reason, Discarded,
                     #state{dead_letter_handler = {Mod, Fun, Args}}, Effects) ->
     DeadLetters = maps:fold(fun(_, {_, {_, {_Header, Msg}}},
                                 % MsgId, MsgIdID, RaftId, Header
-                                Acc) -> [{rejected, Msg} | Acc]
+                                Acc) -> [{Reason, Msg} | Acc]
                             end, [], Discarded),
     [{mod_call, Mod, Fun, Args ++ [DeadLetters]} | Effects].
 

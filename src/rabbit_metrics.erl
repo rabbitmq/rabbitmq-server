@@ -25,11 +25,12 @@
 
 -define(SERVER, ?MODULE).
 
--spec start_link() -> rabbit_types:ok_pid_or_error().
-
 %%----------------------------------------------------------------------------
 %% Starts the raw metrics storage and owns the ETS tables.
 %%----------------------------------------------------------------------------
+
+-spec start_link() -> rabbit_types:ok_pid_or_error().
+
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 

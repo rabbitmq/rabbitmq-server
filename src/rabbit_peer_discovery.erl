@@ -105,9 +105,15 @@ maybe_init() ->
     end.
 
 
--spec discover_cluster_nodes() -> {ok, Nodes :: list()} |
-                                  {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
-                                  {error, Reason :: string()}.
+%% This module doesn't currently sanity-check the return value of
+%% `Backend:list_nodes()`. Therefore, it could return something invalid:
+%% thus the `{œk, any()} in the spec.
+%%
+%% `rabbit_mnesia:init_from_config()` does some verifications.
+
+-spec discover_cluster_nodes() ->
+    {ok, {Nodes :: [node()], NodeType :: rabbit_types:node_type()} | any()} |
+    {error, Reason :: string()}.
 
 discover_cluster_nodes() ->
     Backend = backend(),
@@ -156,10 +162,7 @@ maybe_inject_randomized_delay() ->
 -spec inject_randomized_delay() -> ok.
 
 inject_randomized_delay() ->
-    {Min, Max} = case randomized_delay_range_in_ms() of
-                     {A, B} -> {A, B};
-                     [A, B] -> {A, B}
-                 end,
+    {Min, Max} = randomized_delay_range_in_ms(),
     case {Min, Max} of
         %% When the max value is set to 0, consider the delay to be disabled.
         %% In addition, `rand:uniform/1` will fail with a "no function clause"
@@ -258,12 +261,15 @@ unlock(Data) ->
 %% Implementation
 %%
 
--spec normalize(Nodes :: list() |
-                {Nodes :: list(), NodeType :: rabbit_types:node_type()} |
-                {ok, Nodes :: list()} |
-                {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
-                {error, Reason :: string()}) -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
-                                                {error, Reason :: string()}.
+-spec normalize(Nodes :: [node()] |
+                {Nodes :: [node()],
+                 NodeType :: rabbit_types:node_type()} |
+                {ok, Nodes :: [node()]} |
+                {ok, {Nodes :: [node()],
+                      NodeType :: rabbit_types:node_type()}} |
+                {error, Reason :: string()}) ->
+    {ok, {Nodes :: [node()], NodeType :: rabbit_types:node_type()}} |
+    {error, Reason :: string()}.
 
 normalize(Nodes) when is_list(Nodes) ->
   {ok, {Nodes, disc}};
@@ -296,14 +302,12 @@ node_prefix() ->
 
 
 
--spec append_node_prefix(Value :: binary() | list()) -> atom().
+-spec append_node_prefix(Value :: binary() | string()) -> string().
 
-append_node_prefix(Value) ->
+append_node_prefix(Value) when is_binary(Value) orelse is_list(Value) ->
     Val = rabbit_data_coercion:to_list(Value),
     Hostname = case string:tokens(Val, ?NODENAME_PART_SEPARATOR) of
-                   [_ExistingPrefix, Val] ->
-                       Val;
-                   [Val]                  ->
-                       Val
+                   [_ExistingPrefix, HN] -> HN;
+                   [HN]                  -> HN
                end,
     string:join([node_prefix(), Hostname], ?NODENAME_PART_SEPARATOR).

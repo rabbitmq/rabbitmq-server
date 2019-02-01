@@ -43,7 +43,9 @@ on a dedicated CLI tool communication port and authenticating
 using a shared secret (known as the cookie file).
 .Pp
 Diagnostic information is displayed if connection failed,
-the target node was not running, or .Nm could not authenticate to
+the target node was not running, or
+.Nm
+could not authenticate to
 the target node successfully.
 To learn more, see the
 .Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
@@ -55,7 +57,7 @@ and
 .Bl -tag -width Ds
 .It Fl n Ar node
 Default node is
-.Qq Pf rabbit@ Ar target-hostname ,
+.Qq Ar rabbit@target-hostname ,
 where
 .Ar target-hostname
 is the local host.

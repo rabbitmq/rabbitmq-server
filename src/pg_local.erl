@@ -44,15 +44,6 @@
 
 -type name() :: term().
 
--spec start_link() -> {'ok', pid()} | {'error', any()}.
--spec start() -> {'ok', pid()} | {'error', any()}.
--spec join(name(), pid()) -> 'ok'.
--spec leave(name(), pid()) -> 'ok'.
--spec get_members(name()) -> [pid()].
--spec in_group(name(), pid()) -> boolean().
-
--spec sync() -> 'ok'.
-
 %%----------------------------------------------------------------------------
 
 -define(TABLE, pg_local_table).
@@ -61,23 +52,35 @@
 %%% Exported functions
 %%%
 
+-spec start_link() -> {'ok', pid()} | {'error', any()}.
+
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+-spec start() -> {'ok', pid()} | {'error', any()}.
+
 start() ->
     ensure_started().
+
+-spec join(name(), pid()) -> 'ok'.
 
 join(Name, Pid) when is_pid(Pid) ->
     _ = ensure_started(),
     gen_server:cast(?MODULE, {join, Name, Pid}).
 
+-spec leave(name(), pid()) -> 'ok'.
+
 leave(Name, Pid) when is_pid(Pid) ->
     _ = ensure_started(),
     gen_server:cast(?MODULE, {leave, Name, Pid}).
 
+-spec get_members(name()) -> [pid()].
+
 get_members(Name) ->
     _ = ensure_started(),
     group_members(Name).
+
+-spec in_group(name(), pid()) -> boolean().
 
 in_group(Name, Pid) ->
     _ = ensure_started(),
@@ -88,6 +91,8 @@ in_group(Name, Pid) ->
         false -> sync(),
                  member_present(Name, Pid)
     end.
+
+-spec sync() -> 'ok'.
 
 sync() ->
     _ = ensure_started(),

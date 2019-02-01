@@ -136,7 +136,7 @@ define PROJECT_ENV
 	  ]
 endef
 
-LOCAL_DEPS = sasl mnesia os_mon inets
+LOCAL_DEPS = sasl mnesia os_mon inets compiler public_key crypto ssl syntax_tools
 BUILD_DEPS = rabbitmq_cli syslog
 DEPS = ranch lager rabbit_common ra sysmon_handler
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
@@ -231,6 +231,10 @@ ifdef CREDIT_FLOW_TRACING
 RMQ_ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
 endif
 
+ifdef DEBUG_FF
+RMQ_ERLC_OPTS += -DDEBUG_QUORUM_QUEUE_FF=true
+endif
+
 ifndef USE_PROPER_QC
 # PropEr needs to be installed for property checking
 # http://proper.softlab.ntua.gr/
@@ -284,8 +288,8 @@ web-manpages: $(WEB_MANPAGES)
 	    gsub(/<\/h2>/, "</h3>", line); \
 	    gsub(/<h1/, "<h2", line); \
 	    gsub(/<\/h1>/, "</h2>", line); \
-	    gsub(/class="D1"/, "class=\"D1 sourcecode bash hljs\"", line); \
-	    gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent sourcecode bash hljs\"", line); \
+	    gsub(/class="D1"/, "class=\"D1 lang-bash\"", line); \
+	    gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent lang-bash\"", line); \
 	    print line; \
 	  } } \
 	  ' > "$@"

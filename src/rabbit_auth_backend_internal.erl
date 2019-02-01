@@ -47,46 +47,6 @@
 
 -type regexp() :: binary().
 
--spec add_user(rabbit_types:username(), rabbit_types:password(),
-               rabbit_types:username()) -> 'ok' | {'error', string()}.
--spec delete_user(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
--spec lookup_user
-        (rabbit_types:username()) ->
-            rabbit_types:ok(rabbit_types:internal_user()) |
-            rabbit_types:error('not_found').
--spec change_password
-        (rabbit_types:username(), rabbit_types:password(), rabbit_types:username()) -> 'ok'.
--spec clear_password(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
--spec hash_password
-        (module(), rabbit_types:password()) -> rabbit_types:password_hash().
--spec change_password_hash
-        (rabbit_types:username(), rabbit_types:password_hash()) -> 'ok'.
--spec set_tags(rabbit_types:username(), [atom()], rabbit_types:username()) -> 'ok'.
--spec set_permissions
-        (rabbit_types:username(), rabbit_types:vhost(), regexp(), regexp(),
-         regexp(), rabbit_types:username()) ->
-            'ok'.
--spec clear_permissions
-        (rabbit_types:username(), rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
--spec user_info_keys() -> rabbit_types:info_keys().
--spec perms_info_keys() -> rabbit_types:info_keys().
--spec user_perms_info_keys() -> rabbit_types:info_keys().
--spec vhost_perms_info_keys() -> rabbit_types:info_keys().
--spec user_vhost_perms_info_keys() -> rabbit_types:info_keys().
--spec list_users() -> [rabbit_types:infos()].
--spec list_users(reference(), pid()) -> 'ok'.
--spec list_permissions() -> [rabbit_types:infos()].
--spec list_user_permissions
-        (rabbit_types:username()) -> [rabbit_types:infos()].
--spec list_user_permissions
-        (rabbit_types:username(), reference(), pid()) -> 'ok'.
--spec list_vhost_permissions
-        (rabbit_types:vhost()) -> [rabbit_types:infos()].
--spec list_vhost_permissions
-        (rabbit_types:vhost(), reference(), pid()) -> 'ok'.
--spec list_user_vhost_permissions
-        (rabbit_types:username(), rabbit_types:vhost()) -> [rabbit_types:infos()].
-
 %%----------------------------------------------------------------------------
 %% Implementation of rabbit_auth_backend
 
@@ -238,6 +198,9 @@ validate_and_alternate_credentials(Username, Password, ActingUser, Fun) ->
             {error, Err}
     end.
 
+-spec add_user(rabbit_types:username(), rabbit_types:password(),
+               rabbit_types:username()) -> 'ok' | {'error', string()}.
+
 add_user(Username, Password, ActingUser) ->
     validate_and_alternate_credentials(Username, Password, ActingUser,
                                        fun add_user_sans_validation/3).
@@ -265,6 +228,8 @@ add_user_sans_validation(Username, Password, ActingUser) ->
                                        {user_who_performed_action, ActingUser}]),
     R.
 
+-spec delete_user(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
+
 delete_user(Username, ActingUser) ->
     rabbit_log:info("Deleting user '~s'~n", [Username]),
     R = rabbit_misc:execute_mnesia_transaction(
@@ -291,8 +256,16 @@ delete_user(Username, ActingUser) ->
                          {user_who_performed_action, ActingUser}]),
     R.
 
+-spec lookup_user
+        (rabbit_types:username()) ->
+            rabbit_types:ok(rabbit_types:internal_user()) |
+            rabbit_types:error('not_found').
+
 lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).
+
+-spec change_password
+        (rabbit_types:username(), rabbit_types:password(), rabbit_types:username()) -> 'ok'.
 
 change_password(Username, Password, ActingUser) ->
     validate_and_alternate_credentials(Username, Password, ActingUser,
@@ -310,6 +283,8 @@ change_password_sans_validation(Username, Password, ActingUser) ->
                          {user_who_performed_action, ActingUser}]),
     R.
 
+-spec clear_password(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
+
 clear_password(Username, ActingUser) ->
     rabbit_log:info("Clearing password for '~s'~n", [Username]),
     R = change_password_hash(Username, <<"">>),
@@ -318,8 +293,14 @@ clear_password(Username, ActingUser) ->
                          {user_who_performed_action, ActingUser}]),
     R.
 
+-spec hash_password
+        (module(), rabbit_types:password()) -> rabbit_types:password_hash().
+
 hash_password(HashingMod, Cleartext) ->
     rabbit_password:hash(HashingMod, Cleartext).
+
+-spec change_password_hash
+        (rabbit_types:username(), rabbit_types:password_hash()) -> 'ok'.
 
 change_password_hash(Username, PasswordHash) ->
     change_password_hash(Username, PasswordHash, rabbit_password:hashing_mod()).
@@ -332,6 +313,8 @@ change_password_hash(Username, PasswordHash, HashingAlgorithm) ->
                                     hashing_algorithm = HashingAlgorithm }
                           end).
 
+-spec set_tags(rabbit_types:username(), [atom()], rabbit_types:username()) -> 'ok'.
+
 set_tags(Username, Tags, ActingUser) ->
     ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
     rabbit_log:info("Setting user tags for user '~s' to ~p~n",
@@ -342,6 +325,11 @@ set_tags(Username, Tags, ActingUser) ->
     rabbit_event:notify(user_tags_set, [{name, Username}, {tags, ConvertedTags},
                                         {user_who_performed_action, ActingUser}]),
     R.
+
+-spec set_permissions
+        (rabbit_types:username(), rabbit_types:vhost(), regexp(), regexp(),
+         regexp(), rabbit_types:username()) ->
+            'ok'.
 
 set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, ActingUser) ->
     rabbit_log:info("Setting permissions for "
@@ -377,6 +365,9 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm, ActingU
                                              {read,      ReadPerm},
                                              {user_who_performed_action, ActingUser}]),
     R.
+
+-spec clear_permissions
+        (rabbit_types:username(), rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
 
 clear_permissions(Username, VHostPath, ActingUser) ->
     R = rabbit_misc:execute_mnesia_transaction(
@@ -481,11 +472,24 @@ clear_topic_permissions(Username, VHostPath, Exchange, ActingUser) ->
 -define(PERMS_INFO_KEYS, [configure, write, read]).
 -define(USER_INFO_KEYS, [user, tags]).
 
+-spec user_info_keys() -> rabbit_types:info_keys().
+
 user_info_keys() -> ?USER_INFO_KEYS.
 
+-spec perms_info_keys() -> rabbit_types:info_keys().
+
 perms_info_keys()            -> [user, vhost | ?PERMS_INFO_KEYS].
+
+-spec vhost_perms_info_keys() -> rabbit_types:info_keys().
+
 vhost_perms_info_keys()      -> [user | ?PERMS_INFO_KEYS].
+
+-spec user_perms_info_keys() -> rabbit_types:info_keys().
+
 user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
+
+-spec user_vhost_perms_info_keys() -> rabbit_types:info_keys().
+
 user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
 
 topic_perms_info_keys()            -> [user, vhost, exchange, write, read].
@@ -493,15 +497,21 @@ user_topic_perms_info_keys()       -> [vhost, exchange, write, read].
 vhost_topic_perms_info_keys()      -> [user, exchange, write, read].
 user_vhost_topic_perms_info_keys() -> [exchange, write, read].
 
+-spec list_users() -> [rabbit_types:infos()].
+
 list_users() ->
     [extract_internal_user_params(U) ||
         U <- mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
+
+-spec list_users(reference(), pid()) -> 'ok'.
 
 list_users(Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref,
       fun(U) -> extract_internal_user_params(U) end,
       mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})).
+
+-spec list_permissions() -> [rabbit_types:infos()].
 
 list_permissions() ->
     list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
@@ -517,10 +527,16 @@ list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
 
+-spec list_user_permissions
+        (rabbit_types:username()) -> [rabbit_types:infos()].
+
 list_user_permissions(Username) ->
     list_permissions(
       user_perms_info_keys(),
       rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
+
+-spec list_user_permissions
+        (rabbit_types:username(), reference(), pid()) -> 'ok'.
 
 list_user_permissions(Username, Ref, AggregatorPid) ->
     list_permissions(
@@ -528,16 +544,25 @@ list_user_permissions(Username, Ref, AggregatorPid) ->
       rabbit_misc:with_user(Username, match_user_vhost(Username, '_')),
       Ref, AggregatorPid).
 
+-spec list_vhost_permissions
+        (rabbit_types:vhost()) -> [rabbit_types:infos()].
+
 list_vhost_permissions(VHostPath) ->
     list_permissions(
       vhost_perms_info_keys(),
       rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath))).
+
+-spec list_vhost_permissions
+        (rabbit_types:vhost(), reference(), pid()) -> 'ok'.
 
 list_vhost_permissions(VHostPath, Ref, AggregatorPid) ->
     list_permissions(
       vhost_perms_info_keys(),
       rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath)),
       Ref, AggregatorPid).
+
+-spec list_user_vhost_permissions
+        (rabbit_types:username(), rabbit_types:vhost()) -> [rabbit_types:infos()].
 
 list_user_vhost_permissions(Username, VHostPath) ->
     list_permissions(

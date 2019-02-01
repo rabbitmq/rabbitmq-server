@@ -59,8 +59,19 @@
 -type slave_sync_state() :: {[{rabbit_types:msg_id(), ack()}], timer:tref(),
                              bqs()}.
 
+%% ---------------------------------------------------------------------------
+%% Master
+
 -spec master_prepare(reference(), rabbit_amqqueue:name(),
                                log_fun(), [pid()]) -> pid().
+
+master_prepare(Ref, QName, Log, SPids) ->
+    MPid = self(),
+    spawn_link(fun () ->
+                       ?store_proc_name(QName),
+                       syncer(Ref, Log, MPid, SPids)
+               end).
+
 -spec master_go(pid(), reference(), log_fun(),
                       rabbit_mirror_queue_master:stats_fun(),
                       rabbit_mirror_queue_master:stats_fun(),
@@ -69,21 +80,6 @@
                           {'already_synced', bqs()} | {'ok', bqs()} |
                           {'shutdown', any(), bqs()} |
                           {'sync_died', any(), bqs()}.
--spec slave(non_neg_integer(), reference(), timer:tref(), pid(),
-                  bq(), bqs(), fun((bq(), bqs()) -> {timer:tref(), bqs()})) ->
-                      'denied' |
-                      {'ok' | 'failed', slave_sync_state()} |
-                      {'stop', any(), slave_sync_state()}.
-
-%% ---------------------------------------------------------------------------
-%% Master
-
-master_prepare(Ref, QName, Log, SPids) ->
-    MPid = self(),
-    spawn_link(fun () ->
-                       ?store_proc_name(QName),
-                       syncer(Ref, Log, MPid, SPids)
-               end).
 
 master_go(Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, BQ, BQS) ->
     Args = {Syncer, Ref, Log, HandleInfo, EmitStats, rabbit_misc:get_parent()},
@@ -320,6 +316,12 @@ wait_for_resources(Ref, SPids) ->
 %% Syncer
 %% ---------------------------------------------------------------------------
 %% Slave
+
+-spec slave(non_neg_integer(), reference(), timer:tref(), pid(),
+                  bq(), bqs(), fun((bq(), bqs()) -> {timer:tref(), bqs()})) ->
+                      'denied' |
+                      {'ok' | 'failed', slave_sync_state()} |
+                      {'stop', any(), slave_sync_state()}.
 
 slave(0, Ref, _TRef, Syncer, _BQ, _BQS, _UpdateRamDuration) ->
     Syncer ! {sync_deny, Ref, self()},

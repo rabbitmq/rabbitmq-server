@@ -38,8 +38,6 @@
          module(), any(), mfargs(), mfargs(), integer(), string()) ->
                            rabbit_types:ok_pid_or_error().
 
-%%----------------------------------------------------------------------------
-
 start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
            ConcurrentAcceptorCount, Label) ->
     supervisor:start_link(
