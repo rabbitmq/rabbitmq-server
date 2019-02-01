@@ -17,6 +17,7 @@
 -module(rabbit_federation_upstream).
 
 -include("rabbit_federation.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -export([federate/1, for/1, for/2, params_to_string/1, to_params/2]).
@@ -58,7 +59,7 @@ upstreams(XorQ) ->
 params_table(SafeURI, XorQ) ->
     Key = case XorQ of
               #exchange{} -> <<"exchange">>;
-              #amqqueue{} -> <<"queue">>
+              Q when ?is_amqqueue(Q) -> <<"queue">>
           end,
     [{<<"uri">>,          longstr, SafeURI},
      {Key,                longstr, name(XorQ)}].
@@ -154,5 +155,5 @@ a2b(A) -> list_to_binary(atom_to_list(A)).
 with_name(#upstream{exchange_name = XNameBin}, VHostBin, X = #exchange{}) ->
     X#exchange{name = rabbit_misc:r(VHostBin, exchange, XNameBin)};
 
-with_name(#upstream{queue_name = QNameBin}, VHostBin, Q = #amqqueue{}) ->
-    Q#amqqueue{name = rabbit_misc:r(VHostBin, queue, QNameBin)}.
+with_name(#upstream{queue_name = QNameBin}, VHostBin, Q) when ?is_amqqueue(Q) ->
+    amqqueue:set_name(Q, rabbit_misc:r(VHostBin, queue, QNameBin)).

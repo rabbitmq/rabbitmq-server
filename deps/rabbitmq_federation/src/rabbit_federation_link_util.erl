@@ -16,6 +16,7 @@
 
 -module(rabbit_federation_link_util).
 
+-include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
@@ -90,8 +91,8 @@ get_connection_name(#upstream{name = UpstreamName},
     connection_name(UpstreamName, PolicyName);
 
 get_connection_name(#upstream{name = UpstreamName},
-    #upstream_params{x_or_q = Resource}) when is_record(Resource, amqqueue)->
-    Policy = Resource#amqqueue.policy,
+    #upstream_params{x_or_q = Resource}) when ?is_amqqueue(Resource) ->
+    Policy = amqqueue:get_policy(Resource),
     PolicyName = proplists:get_value(name, Policy),
     connection_name(UpstreamName, PolicyName);
 

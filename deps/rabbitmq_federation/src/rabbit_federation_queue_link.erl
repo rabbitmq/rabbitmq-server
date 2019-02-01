@@ -16,6 +16,7 @@
 
 -module(rabbit_federation_queue_link).
 
+-include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
@@ -63,7 +64,8 @@ federation_up() ->
 
 %%----------------------------------------------------------------------------
 
-init({Upstream, Queue = #amqqueue{name = QName}}) ->
+init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
+    QName = amqqueue:get_name(Queue),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
             UParams = rabbit_federation_upstream:to_params(Upstream, Queue),
@@ -140,12 +142,13 @@ handle_info(#'basic.nack'{} = Nack, State = #state{ch      = Ch,
 handle_info({#'basic.deliver'{redelivered = Redelivered,
                               exchange    = X,
                               routing_key = K} = DeliverMethod, Msg},
-            State = #state{queue           = #amqqueue{name = QName},
+            State = #state{queue           = Q,
                            upstream        = Upstream,
                            upstream_params = UParams,
                            ch              = Ch,
                            dch             = DCh,
-                           unacked         = Unacked}) ->
+                           unacked         = Unacked}) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     PublishMethod = #'basic.publish'{exchange    = <<"">>,
                                      routing_key = QName#resource.name},
     HeadersFun = fun (H) -> update_headers(UParams, Redelivered, X, K, H) end,
@@ -157,9 +160,10 @@ handle_info({#'basic.deliver'{redelivered = Redelivered,
     {noreply, State#state{unacked = Unacked1}};
 
 handle_info(#'basic.cancel'{},
-            State = #state{queue           = #amqqueue{name = QName},
+            State = #state{queue           = Q,
                            upstream        = Upstream,
-                           upstream_params = UParams}) ->
+                           upstream_params = UParams}) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     rabbit_federation_link_util:connection_error(
       local, basic_cancel, Upstream, UParams, QName, State);
 
@@ -168,7 +172,8 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
                            ch              = Ch,
                            upstream        = Upstream,
                            upstream_params = UParams,
-                           queue           = #amqqueue{name = QName}}) ->
+                           queue           = Q}) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     rabbit_federation_link_util:handle_down(
       Pid, Reason, Ch, DCh, {Upstream, UParams, QName}, State);
 
@@ -177,7 +182,8 @@ handle_info(Msg, State) ->
 
 terminate(Reason, #not_started{upstream        = Upstream,
                                upstream_params = UParams,
-                               queue           = #amqqueue{name = QName}}) ->
+                               queue           = Q}) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
     ok;
 
@@ -185,7 +191,8 @@ terminate(Reason, #state{dconn           = DConn,
                          conn            = Conn,
                          upstream        = Upstream,
                          upstream_params = UParams,
-                         queue           = #amqqueue{name = QName}}) ->
+                         queue           = Q}) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
     rabbit_federation_link_util:ensure_connection_closed(DConn),
     rabbit_federation_link_util:ensure_connection_closed(Conn),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
@@ -200,11 +207,12 @@ go(S0 = #not_started{run             = Run,
                      upstream        = Upstream = #upstream{
                                          prefetch_count = Prefetch},
                      upstream_params = UParams,
-                     queue           = Queue = #amqqueue{name = QName}}) ->
-    #upstream_params{x_or_q = UQueue = #amqqueue{
-                                durable     = Durable,
-                                auto_delete = AutoDelete,
-                                arguments   = Args}} = UParams,
+                     queue           = Queue}) when ?is_amqqueue(Queue) ->
+    QName = amqqueue:get_name(Queue),
+    #upstream_params{x_or_q = UQueue} = UParams,
+    Durable = amqqueue:is_durable(UQueue),
+    AutoDelete = amqqueue:is_auto_delete(UQueue),
+    Args = amqqueue:get_arguments(UQueue),
     Unacked = rabbit_federation_link_util:unacked_new(),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->

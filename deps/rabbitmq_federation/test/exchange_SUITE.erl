@@ -828,7 +828,7 @@ has_internal_federated_queue(Config, Node, VHost) ->
     lists:any(
       fun(Q) ->
               {'longstr', <<"federation">>} ==
-                  rabbit_misc:table_lookup(Q#amqqueue.arguments, <<"x-internal-purpose">>)
+                  rabbit_misc:table_lookup(amqqueue:get_arguments(Q), <<"x-internal-purpose">>)
       end, rabbit_ct_broker_helpers:rpc(Config, Node,
                                         rabbit_amqqueue, list, [VHost])).
 

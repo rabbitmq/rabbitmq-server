@@ -19,6 +19,7 @@
 -behaviour(supervisor2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 -define(SUPERVISOR, ?MODULE).
 
 %% Supervises the upstream links for all queues (but not exchanges). We need
@@ -68,5 +69,7 @@ init([]) ->
 %% frequently.  Note that since we take down all the links and start
 %% again when policies change, the policy will always be correct, so
 %% we don't clear it out here and can trust it.
-id(Q = #amqqueue{policy = Policy}) -> Q1 = rabbit_amqqueue:immutable(Q),
-                                      Q1#amqqueue{policy = Policy}.
+id(Q) when ?is_amqqueue(Q) ->
+    Policy = amqqueue:get_policy(Q),
+    Q1 = rabbit_amqqueue:immutable(Q),
+    amqqueue:set_policy(Q1, Policy).
