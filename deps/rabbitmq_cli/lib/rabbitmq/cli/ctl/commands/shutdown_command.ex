@@ -21,10 +21,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name}) do
+    ## TODO: should this be a validator?
     case :rabbit_misc.rpc_call(node_name, :os, :getpid, []) do
       pid when is_list(pid) ->
-        shutdown_node_and_wait_pid_to_stop(node_name, pid)
-
+        hostname = :inet_db.gethostname()
+        case :rabbit_misc.rpc_call(node_name, :inet_db, :gethostname, []) do
+          {:badrpc, _} = err -> err
+          remote_hostname    ->
+            case hostname == remote_hostname do
+              true  -> shutdown_node_and_wait_pid_to_stop(node_name, pid);
+              false -> {:error, "The RabbitMQ host #{remote_hostname} is not local." <>
+                                " This command can only run on the local host."}
+            end
+        end;
       other ->
         other
     end
