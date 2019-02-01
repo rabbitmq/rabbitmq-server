@@ -24,7 +24,7 @@
               unencoded_content/0, encoded_content/0, message_properties/0,
               vhost/0, ctag/0, amqp_error/0, r/1, r2/2, r3/3, listener/0,
               binding/0, binding_source/0, binding_destination/0,
-              amqqueue/0, exchange/0,
+              exchange/0,
               connection/0, protocol/0, auth_user/0, user/0, internal_user/0,
               username/0, password/0, password_hash/0,
               ok/1, error/1, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
@@ -110,16 +110,6 @@
                  destination :: binding_destination(),
                  key         :: rabbit_binding:key(),
                  args        :: rabbit_framing:amqp_table()}).
-
--type(amqqueue() ::
-        #amqqueue{name            :: rabbit_amqqueue:name(),
-                  durable         :: boolean(),
-                  auto_delete     :: boolean(),
-                  exclusive_owner :: rabbit_types:maybe(pid()),
-                  arguments       :: rabbit_framing:amqp_table(),
-                  pid             :: rabbit_types:maybe(pid()),
-                  slave_pids      :: [pid()],
-                  vhost           :: rabbit_types:vhost()}).
 
 -type(exchange() ::
         #exchange{name        :: rabbit_exchange:name(),

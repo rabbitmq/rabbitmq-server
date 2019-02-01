@@ -11,8 +11,10 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
+%% Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 %%
+
+-include("resource.hrl").
 
 %% Passed around most places
 -record(user, {username,
@@ -111,14 +113,6 @@
          payload_fragments_rev %% list of binaries, in reverse order (!)
          }).
 
--record(resource, {
-    virtual_host,
-    %% exchange, queue, ...
-    kind,
-    %% name as a binary
-    name
-}).
-
 %% fields described as 'transient' here are cleared when writing to
 %% rabbit_durable_<thing>
 -record(exchange, {
@@ -128,24 +122,6 @@
           operator_policy, %% durable, implicitly updated when policy changes
           decorators,
           options = #{}}).    %% transient, recalculated in store/1 (i.e. recovery)
-
--record(amqqueue, {
-          name, durable, auto_delete, exclusive_owner = none, %% immutable
-          arguments,                   %% immutable
-          pid,                         %% durable (just so we know home node)
-          slave_pids, sync_slave_pids, %% transient
-          recoverable_slaves,          %% durable
-          policy,                      %% durable, implicit update as above
-          operator_policy,             %% durable, implicit update as above
-          gm_pids,                     %% transient
-          decorators,                  %% transient, recalculated as above
-          state,                       %% durable (have we crashed?)
-          policy_version,
-          slave_pids_pending_shutdown,
-          vhost,                       %% secondary index
-          options = #{},
-          type = classic,
-          quorum_nodes }).
 
 -record(exchange_serial, {name, next}).
 

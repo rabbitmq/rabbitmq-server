@@ -29,7 +29,6 @@
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4, quit/1,
          protocol_error/3, protocol_error/4, protocol_error/1]).
--export([not_found/1, absent/2]).
 -export([type_class/1, assert_args_equivalence/4, assert_field_equivalence/4]).
 -export([dirty_read/1]).
 -export([table_lookup/2, set_table_value/4]).
@@ -56,7 +55,7 @@
 -export([pid_to_string/1, string_to_pid/1,
          pid_change_node/2, node_to_fake_pid/1]).
 -export([version_compare/2, version_compare/3]).
--export([version_minor_equivalent/2]).
+-export([version_minor_equivalent/2, strict_version_minor_equivalent/2]).
 -export([dict_cons/3, orddict_cons/3, maps_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
@@ -129,9 +128,6 @@
             channel_or_connection_exit().
 -spec protocol_error(rabbit_types:amqp_error()) ->
           channel_or_connection_exit().
--spec not_found(rabbit_types:r(atom())) -> rabbit_types:channel_exit().
--spec absent(rabbit_types:amqqueue(), rabbit_amqqueue:absent_reason()) ->
-          rabbit_types:channel_exit().
 -spec type_class(rabbit_framing:amqp_field_type()) -> atom().
 -spec assert_args_equivalence
         (rabbit_framing:amqp_table(), rabbit_framing:amqp_table(),
@@ -302,29 +298,6 @@ protocol_error(Name, ExplanationFormat, Params, Method) ->
 
 protocol_error(#amqp_error{} = Error) ->
     exit(Error).
-
-not_found(R) -> protocol_error(not_found, "no ~s", [rs(R)]).
-
-absent(#amqqueue{name = QueueName, pid = QPid, durable = true}, nodedown) ->
-    %% The assertion of durability is mainly there because we mention
-    %% durability in the error message. That way we will hopefully
-    %% notice if at some future point our logic changes s.t. we get
-    %% here with non-durable queues.
-    protocol_error(not_found,
-                   "home node '~s' of durable ~s is down or inaccessible",
-                   [node(QPid), rs(QueueName)]);
-
-absent(#amqqueue{name = QueueName}, stopped) ->
-    protocol_error(not_found,
-                   "~s process is stopped by supervisor", [rs(QueueName)]);
-
-absent(#amqqueue{name = QueueName}, crashed) ->
-    protocol_error(not_found,
-                   "~s has crashed and failed to restart", [rs(QueueName)]);
-
-absent(#amqqueue{name = QueueName}, timeout) ->
-    protocol_error(not_found,
-                   "failed to perform operation on ~s due to timeout", [rs(QueueName)]).
 
 type_class(byte)          -> int;
 type_class(short)         -> int;
@@ -761,6 +734,12 @@ version_compare(A, B) ->
                  end
     end.
 
+%% For versions starting from 3.7.x:
+%% Versions are considered compatible (except for special cases; see
+%% below). The feature flags will determine if they are actually
+%% compatible.
+%%
+%% For versions up-to 3.7.x:
 %% a.b.c and a.b.d match, but a.b.c and a.d.e don't. If
 %% versions do not match that pattern, just compare them.
 %%
@@ -768,6 +747,36 @@ version_compare(A, B) ->
 %% e.g. 3.6.6 is not compatible with 3.6.5
 %% This special case can be removed once 3.6.x reaches EOL
 version_minor_equivalent(A, B) ->
+    {{MajA, MinA, PatchA, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(A)),
+    {{MajB, MinB, PatchB, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(B)),
+
+    case {MajA, MinA, MajB, MinB} of
+        {3, 6, 3, 6} ->
+            if
+                PatchA >= 6 -> PatchB >= 6;
+                PatchA < 6  -> PatchB < 6;
+                true -> false
+            end;
+        _
+          when (MajA < 3 orelse (MajA =:= 3 andalso MinA =< 6))
+               orelse
+               (MajB < 3 orelse (MajB =:= 3 andalso MinB =< 6)) ->
+            MajA =:= MajB andalso MinA =:= MinB;
+        _ ->
+            %% Starting with RabbitMQ 3.7.x, we consider this
+            %% minor release series and all subsequent series to
+            %% be possibly compatible, based on just the version.
+            %% The real compatibility check is deferred to the
+            %% rabbit_feature_flags module in rabbitmq-server.
+            true
+    end.
+
+%% This is the same as above except that e.g. 3.7.x and 3.8.x are
+%% considered incompatible (as if there were no feature flags). This is
+%% useful to check plugin compatibility (`broker_versions_requirement`
+%% field in plugins).
+
+strict_version_minor_equivalent(A, B) ->
     {{MajA, MinA, PatchA, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(A)),
     {{MajB, MinB, PatchB, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(B)),
 
