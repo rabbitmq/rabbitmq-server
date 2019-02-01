@@ -17,7 +17,6 @@ defmodule RabbitCommon.Records do
   require Record
   import Record, only: [defrecord: 2, extract: 2]
 
-  defrecord :amqqueue, extract(:amqqueue, from_lib: "rabbit_common/include/rabbit.hrl")
   defrecord :listener, extract(:listener, from_lib: "rabbit_common/include/rabbit.hrl")
   defrecord :plugin, extract(:plugin, from_lib: "rabbit_common/include/rabbit.hrl")
   defrecord :resource, extract(:resource, from_lib: "rabbit_common/include/rabbit.hrl")
