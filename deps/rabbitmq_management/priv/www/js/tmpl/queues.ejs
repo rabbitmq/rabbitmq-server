@@ -209,10 +209,6 @@
         <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
 <% } %>
         <tr>
-          <th><label>Name:</label></th>
-          <td><input type="text" name="name"/><span class="mand">*</span></td>
-        </tr>
-        <tr>
           <th><label>Type:</label></th>
           <td>
             <select name="queuetype" onchange="select_queue_type(queuetype)">
@@ -225,7 +221,11 @@
             </select>
           </td>
         </tr>
-        <% if (queue_type == "classic") { %>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+<% if (queue_type == "classic") { %>
         <tr>
           <th><label>Durability:</label></th>
           <td>
@@ -235,6 +235,7 @@
             </select>
           </td>
         </tr>
+<% } %>
 <%
   if (nodes_interesting) {
    var nodes = JSON.parse(sync_get('/nodes'));
@@ -250,6 +251,7 @@
           </td>
         </tr>
 <% } %>
+<% if (queue_type == "classic") { %>
         <tr>
           <th><label>Auto delete: <span class="help" id="queue-auto-delete"></span></label></th>
           <td>
