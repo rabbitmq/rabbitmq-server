@@ -20,6 +20,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(TEST_X, <<"sharding.test">>).
@@ -323,8 +324,8 @@ policy_definition(SPN, RK) ->
 queue_nodes(Qs) ->
     [queue_node(Q) || Q <- Qs].
 
-queue_node(#amqqueue{pid = Pid}) ->
-    node(Pid).
+queue_node(Q) when ?is_amqqueue(Q) ->
+    amqqueue:qnode(Q).
 
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 qr(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
