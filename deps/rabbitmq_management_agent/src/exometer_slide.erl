@@ -55,6 +55,7 @@
          to_list/2,
          to_list/3,
          foldl/5,
+         map/2,
          to_normalized_list/5]).
 
 -export([timestamp/0,
@@ -338,6 +339,15 @@ foldl(_Now, _Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
 foldl(Now, Start0, Fun, Acc, #slide{max_n = _MaxN, buf2 = _Buf2,
                                     interval = _Interval} = Slide) ->
     lists:foldl(Fun, Acc, element(2, to_list_from(Now, Start0, Slide)) ++ [last]).
+
+map(Fun, #slide{buf1 = Buf1, buf2 = Buf2, total = Total} = Slide) ->
+    BufFun = fun({Timestamp, Value}) ->
+                     {Timestamp, Fun(Value)}
+             end,
+    MappedBuf1 = lists:map(BufFun, Buf1),
+    MappedBuf2 = lists:map(BufFun, Buf2),
+    MappedTotal = Fun(Total),
+    Slide#slide{buf1 = MappedBuf1, buf2 = MappedBuf2, total = MappedTotal}.
 
 maybe_add_last_sample(_Now, #slide{total = T, n = N,
                                    buf1 = [{_, T} | _] = Buf1}) ->
