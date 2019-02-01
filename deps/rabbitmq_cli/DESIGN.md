@@ -48,10 +48,10 @@ CLI core consists of several modules implementing command execution process:
 #### Arguments parsing
 
 Command line arguments are parsed with [OptionParser](http://elixir-lang.org/docs/stable/elixir/OptionParser.html)
-Parser returns a list of unnamed arguments and a map of options (named arguemtns)
+Parser returns a list of unnamed arguments and a map of options (named arguments)
 First unnamed argument is a command name.
 Named arguments can be global or command specific.
-Command specific argument names and types are apecified in the `switches/0` callback.
+Command specific argument names and types are specified in the `switches/0` callback.
 Global argument names are described in [Global arguments]
 
 #### Command discovery
@@ -177,7 +177,7 @@ using functions from the [`rabbit_data_coercion` module](https://github.com/rabb
  which should format the output to a specific type.
  (see [Output formatting](#output-formatting))
 
- Output callback can return an an error, with a specific exit code.
+ Output callback can return an error, with a specific exit code.
 
 #### Printing and formatting
 
@@ -481,4 +481,3 @@ By default it will be loaded from environment variables, same as used in rabbitm
 | node                 | RABBITMQ_NODENAME             |
 | aliases-file         | RABBITMQ_CLI_ALIASES_FILE     |
 | erlang-cookie        | RABBITMQ_ERLANG_COOKIE        |
-
