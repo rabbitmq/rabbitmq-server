@@ -46,6 +46,22 @@ defmodule RabbitMQCtl do
     |> handle_shutdown
   end
 
+  def exec_command([] = unparsed_command, _) do
+    {_args, parsed_options, _} = Parser.parse_global(unparsed_command)
+
+    # this invocation is considered to be invalid. curl and grep do the
+    # same thing.
+    {:error, ExitCodes.exit_usage(), HelpCommand.all_usage(parsed_options)};
+  end
+
+  def exec_command(["--help"] = unparsed_command, _) do
+    {_args, parsed_options, _} = Parser.parse_global(unparsed_command)
+
+    # the user asked for --help and we are displaying it to her,
+    # reporting a success
+    {:ok, ExitCodes.exit_ok(), HelpCommand.all_usage(parsed_options)};
+  end
+
   def exec_command(unparsed_command, output_fun) do
     {command, command_name, arguments, parsed_options, invalid} = Parser.parse(unparsed_command)
 
@@ -83,7 +99,7 @@ defmodule RabbitMQCtl do
 
         case options[:help] do
           true ->
-            {:error, ExitCodes.exit_ok(), HelpCommand.all_usage(command, options)};
+            {:ok, ExitCodes.exit_ok(), HelpCommand.all_usage(command, options)};
           _ ->
             {arguments, options} = command.merge_defaults(arguments, options)
 
@@ -183,7 +199,7 @@ defmodule RabbitMQCtl do
     exit_program(exit_code)
   end
 
-  defp handle_shutdown({:error, exit_code, output}) do
+  defp handle_shutdown({_, exit_code, output}) do
     device = output_device(exit_code)
 
     for line <- List.flatten([output]) do
