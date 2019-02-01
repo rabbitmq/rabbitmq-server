@@ -756,8 +756,8 @@ i(pid, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     whereis(Name);
 i(messages, Q) when ?is_amqqueue(Q) ->
-    {Name, _} = amqqueue:get_pid(Q),
-    quorum_messages(Name);
+    QName = amqqueue:get_name(Q),
+    quorum_messages(QName);
 i(messages_ready, Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
     case ets:lookup(queue_coarse_metrics, QName) of
