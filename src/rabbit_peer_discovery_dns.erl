@@ -28,12 +28,13 @@
 %% API
 %%
 
--spec list_nodes() -> {ok, Nodes :: list()} | {error, Reason :: string()}.
+-spec list_nodes() ->
+    {ok, {Nodes :: [node()], rabbit_types:node_type()}}.
 
 list_nodes() ->
     case application:get_env(rabbit, cluster_formation) of
       undefined         ->
-        {[], disc};
+            {ok, {[], disc}};
       {ok, ClusterFormation} ->
         case proplists:get_value(peer_discovery_dns, ClusterFormation) of
             undefined ->
@@ -41,11 +42,11 @@ list_nodes() ->
                                  "but final config does not contain rabbit.cluster_formation.peer_discovery_dns. "
                                  "Cannot discover any nodes because seed hostname is not configured!",
                                  [?MODULE]),
-              {[], disc};
+              {ok, {[], disc}};
             Proplist  ->
               Hostname = rabbit_data_coercion:to_list(proplists:get_value(hostname, Proplist)),
 
-              {discover_nodes(Hostname, net_kernel:longnames()), rabbit_peer_discovery:node_type()}
+              {ok, {discover_nodes(Hostname, net_kernel:longnames()), rabbit_peer_discovery:node_type()}}
         end
     end.
 

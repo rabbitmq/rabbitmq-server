@@ -66,56 +66,28 @@
 -type cr_fun() :: fun ((#cr{}) -> #cr{}).
 -type fetch_result() :: {rabbit_types:basic_message(), boolean(), ack()}.
 
--spec new() -> state().
--spec max_active_priority(state()) -> integer() | 'infinity' | 'empty'.
--spec inactive(state()) -> boolean().
--spec all(state()) -> [{ch(), rabbit_types:ctag(), boolean(),
-                        non_neg_integer(), rabbit_framing:amqp_table(),
-                        rabbit_types:username()}].
--spec count() -> non_neg_integer().
--spec unacknowledged_message_count() -> non_neg_integer().
--spec add(ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
-          non_neg_integer(), rabbit_framing:amqp_table(), boolean(),
-          rabbit_types:username(), state())
-         -> state().
--spec remove(ch(), rabbit_types:ctag(), state()) ->
-                    'not_found' | state().
--spec erase_ch(ch(), state()) ->
-                      'not_found' | {[ack()], [rabbit_types:ctag()],
-                                     state()}.
--spec send_drained() -> 'ok'.
--spec deliver(fun ((boolean()) -> {fetch_result(), T}),
-              rabbit_amqqueue:name(), state(), boolean(),
-              none | {ch(), rabbit_types:ctag()} | {ch(), consumer()}) ->
-                     {'delivered',   boolean(), T, state()} |
-                     {'undelivered', boolean(), state()}.
--spec record_ack(ch(), pid(), ack()) -> 'ok'.
--spec subtract_acks(ch(), [ack()], state()) ->
-                           'not_found' | 'unchanged' | {'unblocked', state()}.
--spec possibly_unblock(cr_fun(), ch(), state()) ->
-                              'unchanged' | {'unblocked', state()}.
--spec resume_fun()                       -> cr_fun().
--spec notify_sent_fun(non_neg_integer()) -> cr_fun().
--spec activate_limit_fun()               -> cr_fun().
--spec credit(boolean(), integer(), boolean(), ch(), rabbit_types:ctag(),
-             state()) -> 'unchanged' | {'unblocked', state()}.
--spec utilisation(state()) -> ratio().
--spec get(ch(), rabbit_types:ctag(), state()) -> undefined | consumer().
--spec consumer_tag(consumer()) -> rabbit_types:ctag().
--spec get_infos(consumer()) -> term().
-
 %%----------------------------------------------------------------------------
+
+-spec new() -> state().
 
 new() -> #state{consumers = priority_queue:new(),
                 use       = {active,
                              erlang:monotonic_time(micro_seconds),
                              1.0}}.
 
+-spec max_active_priority(state()) -> integer() | 'infinity' | 'empty'.
+
 max_active_priority(#state{consumers = Consumers}) ->
     priority_queue:highest(Consumers).
 
+-spec inactive(state()) -> boolean().
+
 inactive(#state{consumers = Consumers}) ->
     priority_queue:is_empty(Consumers).
+
+-spec all(state()) -> [{ch(), rabbit_types:ctag(), boolean(),
+                        non_neg_integer(), rabbit_framing:amqp_table(),
+                        rabbit_types:username()}].
 
 all(State) ->
     all(State, none, false).
@@ -146,10 +118,19 @@ consumers(Consumers, SingleActiveConsumer, SingleActiveConsumerOn, Acc) ->
               [{ChPid, CTag, Ack, Prefetch, Active, ActivityStatus, Args, Username} | Acc1]
       end, Acc, Consumers).
 
+-spec count() -> non_neg_integer().
+
 count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
+
+-spec unacknowledged_message_count() -> non_neg_integer().
 
 unacknowledged_message_count() ->
     lists:sum([?QUEUE:len(C#cr.acktags) || C <- all_ch_record()]).
+
+-spec add(ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
+          non_neg_integer(), rabbit_framing:amqp_table(), boolean(),
+          rabbit_types:username(), state())
+         -> state().
 
 add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     Username, State = #state{consumers = Consumers,
@@ -176,6 +157,9 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers),
                 use       = update_use(CUInfo, active)}.
 
+-spec remove(ch(), rabbit_types:ctag(), state()) ->
+                    'not_found' | state().
+
 remove(ChPid, CTag, State = #state{consumers = Consumers}) ->
     case lookup_ch(ChPid) of
         not_found ->
@@ -196,6 +180,10 @@ remove(ChPid, CTag, State = #state{consumers = Consumers}) ->
                             remove_consumer(ChPid, CTag, Consumers)}
     end.
 
+-spec erase_ch(ch(), state()) ->
+                      'not_found' | {[ack()], [rabbit_types:ctag()],
+                                     state()}.
+
 erase_ch(ChPid, State = #state{consumers = Consumers}) ->
     case lookup_ch(ChPid) of
         not_found ->
@@ -211,8 +199,16 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
              State#state{consumers = remove_consumers(ChPid, Consumers)}}
     end.
 
+-spec send_drained() -> 'ok'.
+
 send_drained() -> [update_ch_record(send_drained(C)) || C <- all_ch_record()],
                   ok.
+
+-spec deliver(fun ((boolean()) -> {fetch_result(), T}),
+              rabbit_amqqueue:name(), state(), boolean(),
+              none | {ch(), rabbit_types:ctag()} | {ch(), consumer()}) ->
+                     {'delivered',   boolean(), T, state()} |
+                     {'undelivered', boolean(), state()}.
 
 deliver(FetchFun, QName, State, SingleActiveConsumerIsOn, ActiveConsumer) ->
     deliver(FetchFun, QName, false, State, SingleActiveConsumerIsOn, ActiveConsumer).
@@ -299,10 +295,15 @@ is_blocked(Consumer = {ChPid, _C}) ->
     #cr{blocked_consumers = BlockedConsumers} = lookup_ch(ChPid),
     priority_queue:member(Consumer, BlockedConsumers).
 
+-spec record_ack(ch(), pid(), ack()) -> 'ok'.
+
 record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
     update_ch_record(C#cr{acktags = ?QUEUE:in({AckTag, none}, ChAckTags)}),
     ok.
+
+-spec subtract_acks(ch(), [ack()], state()) ->
+                           'not_found' | 'unchanged' | {'unblocked', state()}.
 
 subtract_acks(ChPid, AckTags, State) ->
     case lookup_ch(ChPid) of
@@ -341,6 +342,9 @@ subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
             subtract_acks([], Prefix, CTagCounts, AckQ)
     end.
 
+-spec possibly_unblock(cr_fun(), ch(), state()) ->
+                              'unchanged' | {'unblocked', state()}.
+
 possibly_unblock(Update, ChPid, State) ->
     case lookup_ch(ChPid) of
         not_found -> unchanged;
@@ -370,23 +374,31 @@ unblock(C = #cr{blocked_consumers = BlockedQ, limiter = Limiter},
                          use       = update_use(Use, active)}}
     end.
 
+-spec resume_fun()                       -> cr_fun().
+
 resume_fun() ->
     fun (C = #cr{limiter = Limiter}) ->
             C#cr{limiter = rabbit_limiter:resume(Limiter)}
     end.
+
+-spec notify_sent_fun(non_neg_integer()) -> cr_fun().
 
 notify_sent_fun(Credit) ->
     fun (C = #cr{unsent_message_count = Count}) ->
             C#cr{unsent_message_count = Count - Credit}
     end.
 
+-spec activate_limit_fun()               -> cr_fun().
+
 activate_limit_fun() ->
     fun (C = #cr{limiter = Limiter}) ->
             C#cr{limiter = rabbit_limiter:activate(Limiter)}
     end.
 
-credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
+-spec credit(boolean(), integer(), boolean(), ch(), rabbit_types:ctag(),
+             state()) -> 'unchanged' | {'unblocked', state()}.
 
+credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             unchanged;
@@ -405,6 +417,8 @@ credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
 drain_mode(true)  -> drain;
 drain_mode(false) -> manual.
 
+-spec utilisation(state()) -> ratio().
+
 utilisation(#state{use = {active, Since, Avg}}) ->
     use_avg(erlang:monotonic_time(micro_seconds) - Since, 0, Avg);
 utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
@@ -421,6 +435,8 @@ get_consumer(#state{consumers = Consumers}) ->
         {empty, _} -> undefined
     end.
 
+-spec get(ch(), rabbit_types:ctag(), state()) -> undefined | consumer().
+
 get(ChPid, ConsumerTag, #state{consumers = Consumers}) ->
     Consumers1 = priority_queue:filter(fun ({CP, #consumer{tag = CT}}) ->
                             (CP == ChPid) and (CT == ConsumerTag)
@@ -430,9 +446,13 @@ get(ChPid, ConsumerTag, #state{consumers = Consumers}) ->
         {{value, Consumer, _Priority}, _Tail} -> Consumer
     end.
 
+-spec get_infos(consumer()) -> term().
+
 get_infos(Consumer) ->
     {Consumer#consumer.tag,Consumer#consumer.ack_required,
      Consumer#consumer.prefetch, Consumer#consumer.args}.
+
+-spec consumer_tag(consumer()) -> rabbit_types:ctag().
 
 consumer_tag(#consumer{tag = CTag}) ->
     CTag.

@@ -21,18 +21,19 @@
 %% Internal API
 -export([local/0]).
 
--spec node(node(), timeout()) -> ok | {badrpc, term()} | {error_string, string()}.
--spec local() -> ok | {error_string, string()}.
-
 %%----------------------------------------------------------------------------
 %% External functions
 %%----------------------------------------------------------------------------
+
+-spec node(node(), timeout()) -> ok | {badrpc, term()} | {error_string, string()}.
 
 node(Node) ->
     %% same default as in CLI
     node(Node, 70000).
 node(Node, Timeout) ->
     rabbit_misc:rpc_call(Node, rabbit_health_check, local, [], Timeout).
+
+-spec local() -> ok | {error_string, string()}.
 
 local() ->
     run_checks([list_channels, list_queues, alarms, rabbit_node_monitor]).

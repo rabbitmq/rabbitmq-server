@@ -25,10 +25,10 @@
 
 -type reason() :: 'expired' | 'rejected' | 'maxlen'.
 
+%%----------------------------------------------------------------------------
+
 -spec publish(rabbit_types:message(), reason(), rabbit_types:exchange(),
               'undefined' | binary(), rabbit_amqqueue:name()) -> 'ok'.
-
-%%----------------------------------------------------------------------------
 
 publish(Msg, Reason, X, RK, QName) ->
     DLMsg = make_msg(Msg, Reason, X#exchange.name, RK, QName),

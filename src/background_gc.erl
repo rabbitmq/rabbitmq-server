@@ -32,13 +32,11 @@
 %%----------------------------------------------------------------------------
 
 -spec start_link() -> {'ok', pid()} | {'error', any()}.
--spec run() -> 'ok'.
--spec gc() -> 'ok'.
-
-%%----------------------------------------------------------------------------
 
 start_link() -> gen_server2:start_link({local, ?MODULE}, ?MODULE, [],
                                        [{timeout, infinity}]).
+
+-spec run() -> 'ok'.
 
 run() -> gen_server2:cast(?MODULE, run).
 
@@ -72,6 +70,8 @@ interval_gc(State = #state{last_interval = LastInterval}) ->
                        ?MAX_RATIO, ?MAX_INTERVAL, IdealInterval, LastInterval),
     erlang:send_after(Interval, self(), run),
     State#state{last_interval = Interval}.
+
+-spec gc() -> 'ok'.
 
 gc() ->
     Enabled = rabbit_misc:get_env(rabbit, background_gc_enabled, false),

@@ -28,19 +28,9 @@
 
 -type state() :: rabbit_types:exchange() | 'none'.
 
--spec init(rabbit_types:vhost()) -> state().
--spec enabled(rabbit_types:vhost()) -> boolean().
--spec tap_in(rabbit_types:basic_message(), [rabbit_amqqueue:name()],
-                   binary(), rabbit_channel:channel_number(),
-                   rabbit_types:username(), state()) -> 'ok'.
--spec tap_out(rabbit_amqqueue:qmsg(), binary(),
-                    rabbit_channel:channel_number(),
-                    rabbit_types:username(), state()) -> 'ok'.
-
--spec start(rabbit_types:vhost()) -> 'ok'.
--spec stop(rabbit_types:vhost()) -> 'ok'.
-
 %%----------------------------------------------------------------------------
+
+-spec init(rabbit_types:vhost()) -> state().
 
 init(VHost) ->
     case enabled(VHost) of
@@ -50,9 +40,15 @@ init(VHost) ->
                  X
     end.
 
+-spec enabled(rabbit_types:vhost()) -> boolean().
+
 enabled(VHost) ->
     {ok, VHosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
     lists:member(VHost, VHosts).
+
+-spec tap_in(rabbit_types:basic_message(), [rabbit_amqqueue:name()],
+                   binary(), rabbit_channel:channel_number(),
+                   rabbit_types:username(), state()) -> 'ok'.
 
 tap_in(_Msg, _QNames, _ConnName, _ChannelNum, _Username, none) -> ok;
 tap_in(Msg = #basic_message{exchange_name = #resource{name         = XName,
@@ -65,6 +61,10 @@ tap_in(Msg = #basic_message{exchange_name = #resource{name         = XName,
            {<<"user">>,          longstr,   Username},
            {<<"routed_queues">>, array,
             [{longstr, QName#resource.name} || QName <- QNames]}]).
+
+-spec tap_out(rabbit_amqqueue:qmsg(), binary(),
+                    rabbit_channel:channel_number(),
+                    rabbit_types:username(), state()) -> 'ok'.
 
 tap_out(_Msg, _ConnName, _ChannelNum, _Username, none) -> ok;
 tap_out({#resource{name = QName, virtual_host = VHost},
@@ -80,9 +80,13 @@ tap_out({#resource{name = QName, virtual_host = VHost},
 
 %%----------------------------------------------------------------------------
 
+-spec start(rabbit_types:vhost()) -> 'ok'.
+
 start(VHost) ->
     rabbit_log:info("Enabling tracing for vhost '~s'~n", [VHost]),
     update_config(fun (VHosts) -> [VHost | VHosts -- [VHost]] end).
+
+-spec stop(rabbit_types:vhost()) -> 'ok'.
 
 stop(VHost) ->
     rabbit_log:info("Disabling tracing for vhost '~s'~n", [VHost]),

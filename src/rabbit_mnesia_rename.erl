@@ -44,9 +44,6 @@
 %%----------------------------------------------------------------------------
 
 -spec rename(node(), [{node(), node()}]) -> 'ok'.
--spec maybe_finish([node()]) -> 'ok'.
-
-%%----------------------------------------------------------------------------
 
 rename(Node, NodeMapList) ->
     try
@@ -138,6 +135,8 @@ restore_backup(Backup) ->
     start_mnesia(),
     stop_mnesia(),
     rabbit_mnesia:force_load_next_boot().
+
+-spec maybe_finish([node()]) -> 'ok'.
 
 maybe_finish(AllNodes) ->
     case rabbit_file:read_term_file(rename_config_name()) of

@@ -136,7 +136,7 @@ define PROJECT_ENV
 	  ]
 endef
 
-LOCAL_DEPS = sasl mnesia os_mon inets
+LOCAL_DEPS = sasl mnesia os_mon inets compiler public_key crypto ssl syntax_tools
 BUILD_DEPS = rabbitmq_cli syslog
 DEPS = ranch lager rabbit_common ra sysmon_handler
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
@@ -229,6 +229,10 @@ endif
 
 ifdef CREDIT_FLOW_TRACING
 RMQ_ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
+endif
+
+ifdef DEBUG_FF
+RMQ_ERLC_OPTS += -DDEBUG_QUORUM_QUEUE_FF=true
 endif
 
 ifndef USE_PROPER_QC

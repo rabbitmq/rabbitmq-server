@@ -436,16 +436,6 @@
 -type group_name() :: any().
 -type txn_fun() :: fun((fun(() -> any())) -> any()).
 
--spec create_tables() -> 'ok' | {'aborted', any()}.
--spec start_link(group_name(), atom(), any(), txn_fun()) ->
-          rabbit_types:ok_pid_or_error().
--spec leave(pid()) -> 'ok'.
--spec broadcast(pid(), any()) -> 'ok'.
--spec confirmed_broadcast(pid(), any()) -> 'ok'.
--spec info(pid()) -> rabbit_types:infos().
--spec validate_members(pid(), [pid()]) -> 'ok'.
--spec forget_group(group_name()) -> 'ok'.
-
 %% The joined, members_changed and handle_msg callbacks can all return
 %% any of the following terms:
 %%
@@ -490,6 +480,8 @@
 -callback handle_terminate(Args :: term(), Reason :: term()) ->
     ok | term().
 
+-spec create_tables() -> 'ok' | {'aborted', any()}.
+
 create_tables() ->
     create_tables([?TABLE]).
 
@@ -506,26 +498,41 @@ table_definitions() ->
     {Name, Attributes} = ?TABLE,
     [{Name, [?TABLE_MATCH | Attributes]}].
 
+-spec start_link(group_name(), atom(), any(), txn_fun()) ->
+          rabbit_types:ok_pid_or_error().
+
 start_link(GroupName, Module, Args, TxnFun) ->
     gen_server2:start_link(?MODULE, [GroupName, Module, Args, TxnFun],
                        [{spawn_opt, [{fullsweep_after, 0}]}]).
 
+-spec leave(pid()) -> 'ok'.
+
 leave(Server) ->
     gen_server2:cast(Server, leave).
+
+-spec broadcast(pid(), any()) -> 'ok'.
 
 broadcast(Server, Msg) -> broadcast(Server, Msg, 0).
 
 broadcast(Server, Msg, SizeHint) ->
     gen_server2:cast(Server, {broadcast, Msg, SizeHint}).
 
+-spec confirmed_broadcast(pid(), any()) -> 'ok'.
+
 confirmed_broadcast(Server, Msg) ->
     gen_server2:call(Server, {confirmed_broadcast, Msg}, infinity).
+
+-spec info(pid()) -> rabbit_types:infos().
 
 info(Server) ->
     gen_server2:call(Server, info, infinity).
 
+-spec validate_members(pid(), [pid()]) -> 'ok'.
+
 validate_members(Server, Members) ->
     gen_server2:cast(Server, {validate_members, Members}).
+
+-spec forget_group(group_name()) -> 'ok'.
 
 forget_group(GroupName) ->
     {atomic, ok} = mnesia:sync_transaction(

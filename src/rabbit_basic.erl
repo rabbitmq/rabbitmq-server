@@ -37,67 +37,35 @@
 -type exchange_input() :: rabbit_types:exchange() | rabbit_exchange:name().
 -type body_input() :: binary() | [binary()].
 
--spec publish
-        (exchange_input(), rabbit_router:routing_key(), properties_input(),
-         body_input()) ->
-            publish_result().
--spec publish
-        (exchange_input(), rabbit_router:routing_key(), boolean(),
-         properties_input(), body_input()) ->
-            publish_result().
--spec publish(rabbit_types:delivery()) -> publish_result().
--spec delivery
-        (boolean(), boolean(), rabbit_types:message(), undefined | integer()) ->
-            rabbit_types:delivery().
--spec message
-        (rabbit_exchange:name(), rabbit_router:routing_key(), properties_input(),
-         binary()) ->
-            rabbit_types:message().
--spec message
-        (rabbit_exchange:name(), rabbit_router:routing_key(),
-         rabbit_types:decoded_content()) ->
-            rabbit_types:ok_or_error2(rabbit_types:message(), any()).
--spec properties
-        (properties_input()) -> rabbit_framing:amqp_property_record().
-
--spec prepend_table_header
-        (binary(), rabbit_framing:amqp_table(), headers()) -> headers().
-
--spec header(header(), headers()) -> 'undefined' | any().
--spec header(header(), headers(), any()) -> 'undefined' | any().
-
--spec extract_headers(rabbit_types:content()) -> headers().
-
--spec map_headers
-        (fun((headers()) -> headers()), rabbit_types:content()) ->
-            rabbit_types:content().
-
--spec header_routes(undefined | rabbit_framing:amqp_table()) -> [string()].
--spec build_content
-        (rabbit_framing:amqp_property_record(), binary() | [binary()]) ->
-            rabbit_types:content().
--spec from_content
-        (rabbit_types:content()) ->
-            {rabbit_framing:amqp_property_record(), binary()}.
--spec parse_expiration
-        (rabbit_framing:amqp_property_record()) ->
-            rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any()).
-
 %%----------------------------------------------------------------------------
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
+
+-spec publish
+        (exchange_input(), rabbit_router:routing_key(), properties_input(),
+         body_input()) ->
+            publish_result().
+
 publish(Exchange, RoutingKeyBin, Properties, Body) ->
     publish(Exchange, RoutingKeyBin, false, Properties, Body).
 
 %% Convenience function, for avoiding round-trips in calls across the
 %% erlang distributed network.
+
+-spec publish
+        (exchange_input(), rabbit_router:routing_key(), boolean(),
+         properties_input(), body_input()) ->
+            publish_result().
+
 publish(X = #exchange{name = XName}, RKey, Mandatory, Props, Body) ->
     Message = message(XName, RKey, properties(Props), Body),
     publish(X, delivery(Mandatory, false, Message, undefined));
 publish(XName, RKey, Mandatory, Props, Body) ->
     Message = message(XName, RKey, properties(Props), Body),
     publish(delivery(Mandatory, false, Message, undefined)).
+
+-spec publish(rabbit_types:delivery()) -> publish_result().
 
 publish(Delivery = #delivery{
           message = #basic_message{exchange_name = XName}}) ->
@@ -111,9 +79,17 @@ publish(X, Delivery) ->
     DeliveredQPids = rabbit_amqqueue:deliver(Qs, Delivery),
     {ok, DeliveredQPids}.
 
+-spec delivery
+        (boolean(), boolean(), rabbit_types:message(), undefined | integer()) ->
+            rabbit_types:delivery().
+
 delivery(Mandatory, Confirm, Message, MsgSeqNo) ->
     #delivery{mandatory = Mandatory, confirm = Confirm, sender = self(),
               message = Message, msg_seq_no = MsgSeqNo, flow = noflow}.
+
+-spec build_content
+        (rabbit_framing:amqp_property_record(), binary() | [binary()]) ->
+            rabbit_types:content().
 
 build_content(Properties, BodyBin) when is_binary(BodyBin) ->
     build_content(Properties, [BodyBin]);
@@ -127,6 +103,10 @@ build_content(Properties, PFR) ->
              properties_bin = none,
              protocol = none,
              payload_fragments_rev = PFR}.
+
+-spec from_content
+        (rabbit_types:content()) ->
+            {rabbit_framing:amqp_property_record(), binary()}.
 
 from_content(Content) ->
     #content{class_id = ClassId,
@@ -153,6 +133,11 @@ strip_header(#content{properties = Props = #'P_basic'{headers = Headers}}
                                              headers = Headers0}})
     end.
 
+-spec message
+        (rabbit_exchange:name(), rabbit_router:routing_key(),
+         rabbit_types:decoded_content()) ->
+            rabbit_types:ok_or_error2(rabbit_types:message(), any()).
+
 message(XName, RoutingKey, #content{properties = Props} = DecodedContent) ->
     try
         {ok, #basic_message{
@@ -166,11 +151,19 @@ message(XName, RoutingKey, #content{properties = Props} = DecodedContent) ->
         {error, _Reason} = Error -> Error
     end.
 
+-spec message
+        (rabbit_exchange:name(), rabbit_router:routing_key(), properties_input(),
+         binary()) ->
+            rabbit_types:message().
+
 message(XName, RoutingKey, RawProperties, Body) ->
     Properties = properties(RawProperties),
     Content = build_content(Properties, Body),
     {ok, Msg} = message(XName, RoutingKey, Content),
     Msg.
+
+-spec properties
+        (properties_input()) -> rabbit_framing:amqp_property_record().
 
 properties(P = #'P_basic'{}) ->
     P;
@@ -184,6 +177,9 @@ properties(P) when is_list(P) ->
                             N -> setelement(N + 1, Acc, Value)
                         end
                 end, #'P_basic'{}, P).
+
+-spec prepend_table_header
+        (binary(), rabbit_framing:amqp_table(), headers()) -> headers().
 
 prepend_table_header(Name, Info, undefined) ->
     prepend_table_header(Name, Info, []);
@@ -224,6 +220,8 @@ update_invalid(Name, Value, ExistingHdr, Header) ->
     NewHdr = rabbit_misc:set_table_value(ExistingHdr, Name, array, Values),
     set_invalid(NewHdr, Header).
 
+-spec header(header(), headers()) -> 'undefined' | any().
+
 header(_Header, undefined) ->
     undefined;
 header(_Header, []) ->
@@ -231,11 +229,15 @@ header(_Header, []) ->
 header(Header, Headers) ->
     header(Header, Headers, undefined).
 
+-spec header(header(), headers(), any()) -> 'undefined' | any().
+
 header(Header, Headers, Default) ->
     case lists:keysearch(Header, 1, Headers) of
         false        -> Default;
         {value, Val} -> Val
     end.
+
+-spec extract_headers(rabbit_types:content()) -> headers().
 
 extract_headers(Content) ->
     #content{properties = #'P_basic'{headers = Headers}} =
@@ -246,6 +248,10 @@ extract_timestamp(Content) ->
     #content{properties = #'P_basic'{timestamp = Timestamp}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     Timestamp.
+
+-spec map_headers
+        (fun((headers()) -> headers()), rabbit_types:content()) ->
+            rabbit_types:content().
 
 map_headers(F, Content) ->
     Content1 = rabbit_binary_parser:ensure_content_decoded(Content),
@@ -270,6 +276,9 @@ is_message_persistent(#content{properties = #'P_basic'{
     end.
 
 %% Extract CC routes from headers
+
+-spec header_routes(undefined | rabbit_framing:amqp_table()) -> [string()].
+
 header_routes(undefined) ->
     [];
 header_routes(HeadersTable) ->
@@ -280,6 +289,10 @@ header_routes(HeadersTable) ->
            {Type, _Val}    -> throw({error, {unacceptable_type_in_header,
                                              binary_to_list(HeaderKey), Type}})
        end || HeaderKey <- ?ROUTING_HEADERS]).
+
+-spec parse_expiration
+        (rabbit_framing:amqp_property_record()) ->
+            rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any()).
 
 parse_expiration(#'P_basic'{expiration = undefined}) ->
     {ok, undefined};

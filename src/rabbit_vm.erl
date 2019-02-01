@@ -23,12 +23,6 @@
 %%----------------------------------------------------------------------------
 
 -spec memory() -> rabbit_types:infos().
--spec binary() -> rabbit_types:infos().
--spec ets_tables_memory(Owners) -> rabbit_types:infos()
-     when Owners :: all | OwnerProcessName | [OwnerProcessName],
-          OwnerProcessName :: atom().
-
-%%----------------------------------------------------------------------------
 
 memory() ->
     All = interesting_sups(),
@@ -115,6 +109,8 @@ memory() ->
 %% claims about negative memory. See
 %% http://erlang.org/pipermail/erlang-questions/2012-September/069320.html
 
+-spec binary() -> rabbit_types:infos().
+
 binary() ->
     All = interesting_sups(),
     {Sums, Rest} =
@@ -152,6 +148,10 @@ mnesia_memory() ->
 
 ets_memory(Owners) ->
     lists:sum([V || {_K, V} <- ets_tables_memory(Owners)]).
+
+-spec ets_tables_memory(Owners) -> rabbit_types:infos()
+     when Owners :: all | OwnerProcessName | [OwnerProcessName],
+          OwnerProcessName :: atom().
 
 ets_tables_memory(all) ->
     [{ets:info(T, name), bytes(ets:info(T, memory))}

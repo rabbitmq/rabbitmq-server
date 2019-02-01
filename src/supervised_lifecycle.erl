@@ -39,8 +39,6 @@
 -spec start_link(atom(), rabbit_types:mfargs(), rabbit_types:mfargs()) ->
           rabbit_types:ok_pid_or_error().
 
-%%----------------------------------------------------------------------------
-
 start_link(Name, StartMFA, StopMFA) ->
     gen_server:start_link({local, Name}, ?MODULE, [StartMFA, StopMFA], []).
 

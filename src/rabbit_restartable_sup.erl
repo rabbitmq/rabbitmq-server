@@ -31,8 +31,6 @@
 -spec start_link(atom(), rabbit_types:mfargs(), boolean()) ->
                            rabbit_types:ok_pid_or_error().
 
-%%----------------------------------------------------------------------------
-
 start_link(Name, {_M, _F, _A} = Fun, Delay) ->
     supervisor2:start_link({local, Name}, ?MODULE, [Fun, Delay]).
 

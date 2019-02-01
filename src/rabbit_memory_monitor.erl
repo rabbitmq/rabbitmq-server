@@ -54,30 +54,32 @@
 -define(EPSILON, 0.000001). %% less than this and we clamp to 0
 
 %%----------------------------------------------------------------------------
-
--spec start_link() -> rabbit_types:ok_pid_or_error().
--spec register(pid(), {atom(),atom(),[any()]}) -> 'ok'.
--spec deregister(pid()) -> 'ok'.
--spec report_ram_duration
-        (pid(), float() | 'infinity') -> number() | 'infinity'.
--spec stop() -> 'ok'.
-
-%%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
+
+-spec start_link() -> rabbit_types:ok_pid_or_error().
 
 start_link() ->
     gen_server2:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+-spec register(pid(), {atom(),atom(),[any()]}) -> 'ok'.
+
 register(Pid, MFA = {_M, _F, _A}) ->
     gen_server2:call(?SERVER, {register, Pid, MFA}, infinity).
+
+-spec deregister(pid()) -> 'ok'.
 
 deregister(Pid) ->
     gen_server2:cast(?SERVER, {deregister, Pid}).
 
+-spec report_ram_duration
+        (pid(), float() | 'infinity') -> number() | 'infinity'.
+
 report_ram_duration(Pid, QueueDuration) ->
     gen_server2:call(?SERVER,
                      {report_ram_duration, Pid, QueueDuration}, infinity).
+
+-spec stop() -> 'ok'.
 
 stop() ->
     gen_server2:cast(?SERVER, stop).

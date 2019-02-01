@@ -31,27 +31,19 @@
 %% Specs
 %%----------------------------------------------------------------------------
 
--spec names(string()) ->
-          rabbit_types:ok_or_error2([{string(), integer()}], term()).
--spec diagnostics([node()]) -> string().
--spec cookie_hash() -> string().
--spec is_running(node(), atom()) -> boolean().
--spec is_process_running(node(), atom()) -> boolean().
--spec cluster_name() -> binary().
--spec set_cluster_name(binary(), rabbit_types:username()) -> 'ok'.
--spec all_running() -> [node()].
--spec running_count() -> integer().
-
-%%----------------------------------------------------------------------------
-
 name_type() ->
     case os:getenv("RABBITMQ_USE_LONGNAME") of
         "true" -> longnames;
         _      -> shortnames
     end.
 
+-spec names(string()) ->
+          rabbit_types:ok_or_error2([{string(), integer()}], term()).
+
 names(Hostname) ->
     rabbit_nodes_common:names(Hostname).
+
+-spec diagnostics([node()]) -> string().
 
 diagnostics(Nodes) ->
     rabbit_nodes_common:diagnostics(Nodes).
@@ -62,14 +54,22 @@ make(NodeStr) ->
 parts(NodeStr) ->
     rabbit_nodes_common:parts(NodeStr).
 
+-spec cookie_hash() -> string().
+
 cookie_hash() ->
     rabbit_nodes_common:cookie_hash().
+
+-spec is_running(node(), atom()) -> boolean().
 
 is_running(Node, Application) ->
     rabbit_nodes_common:is_running(Node, Application).
 
+-spec is_process_running(node(), atom()) -> boolean().
+
 is_process_running(Node, Process) ->
     rabbit_nodes_common:is_process_running(Node, Process).
+
+-spec cluster_name() -> binary().
 
 cluster_name() ->
     rabbit_runtime_parameters:value_global(
@@ -80,6 +80,8 @@ cluster_name_default() ->
     FQDN = rabbit_net:hostname(),
     list_to_binary(atom_to_list(make({ID, FQDN}))).
 
+-spec set_cluster_name(binary(), rabbit_types:username()) -> 'ok'.
+
 set_cluster_name(Name, Username) ->
     %% Cluster name should be binary
     BinaryName = rabbit_data_coercion:to_binary(Name),
@@ -88,7 +90,11 @@ set_cluster_name(Name, Username) ->
 ensure_epmd() ->
     rabbit_nodes_common:ensure_epmd().
 
+-spec all_running() -> [node()].
+
 all_running() -> rabbit_mnesia:cluster_nodes(running).
+
+-spec running_count() -> integer().
 
 running_count() -> length(all_running()).
 

@@ -29,10 +29,6 @@
 -define(CHECK_FREQUENCY, 60000).
 
 %%----------------------------------------------------------------------------
-
--spec start_link() -> rabbit_types:ok_pid_or_error().
-
-%%----------------------------------------------------------------------------
 %% It's possible for epmd to be killed out from underneath us. If that
 %% happens, then obviously clustering and rabbitmqctl stop
 %% working. This process checks up on epmd and restarts it /
@@ -47,6 +43,8 @@
 %% 2) Some packagings of (non-RabbitMQ?) Erlang apps might do "killall
 %%    epmd" as a shutdown or uninstall step.
 %% ----------------------------------------------------------------------------
+
+-spec start_link() -> rabbit_types:ok_pid_or_error().
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
