@@ -261,11 +261,11 @@ map_max(0) -> undefined;
 map_max(N) -> N.
 
 snapshots_prop(Conf, Commands) ->
-    ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
     try run_snapshot_test(Conf, Commands) of
         _ -> true
     catch
         Err ->
+            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
             ct:pal("Err: ~p~n", [Err]),
             false
     end.
@@ -310,7 +310,7 @@ checkout_gen(Pid) ->
 
 -record(t, {state = rabbit_fifo:init(#{name => proper,
                                        queue_resource => blah,
-                                       shadow_copy_interval => 1})
+                                       release_cursor_interval => 1})
                 :: rabbit_fifo:state(),
             index = 1 :: non_neg_integer(), %% raft index
             enqueuers = #{} :: #{pid() => term()},
@@ -473,16 +473,16 @@ run_snapshot_test(Conf, Commands) ->
 run_snapshot_test0(Conf, Commands) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
-    {State, Effects} = run_log(test_init(Conf), Entries),
-    % ct:pal("beginning snapshot test run for ~w numn commands ~b",
-    %        [maps:get(name, Conf), length(Commands)]),
+    {State0, Effects} = run_log(test_init(Conf), Entries),
+    State = rabbit_fifo:normalize(State0),
 
     [begin
          %% drop all entries below and including the snapshot
          Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
                                        (_) -> false
                                     end, Entries),
-         {S, _} = run_log(SnapState, Filtered),
+         {S0, _} = run_log(SnapState, Filtered),
+         S = rabbit_fifo:normalize(S0),
          % assert log can be restored from any release cursor index
          case S of
              State -> ok;
@@ -516,7 +516,7 @@ run_log(InitState, Entries) ->
 
 test_init(Conf) ->
     Default = #{queue_resource => blah,
-                shadow_copy_interval => 0,
+                release_cursor_interval => 0,
                 metrics_handler => {?MODULE, metrics_handler, []}},
     rabbit_fifo:init(maps:merge(Default, Conf)).
 
