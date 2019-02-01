@@ -706,7 +706,7 @@ i(durable,            #amqqueue{durable            = Dur}) -> Dur;
 i(auto_delete,        #amqqueue{auto_delete        = AD}) -> AD;
 i(arguments,          #amqqueue{arguments          = Args}) -> Args;
 i(pid,                #amqqueue{pid                = {Name, _}}) -> whereis(Name);
-i(messages,           #amqqueue{pid                = {Name, _}}) ->
+i(messages,           #amqqueue{name               = Name}) ->
     quorum_messages(Name);
 i(messages_ready,     #amqqueue{name               = QName}) ->
     case ets:lookup(queue_coarse_metrics, QName) of
