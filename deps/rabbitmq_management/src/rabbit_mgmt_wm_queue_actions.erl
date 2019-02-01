@@ -22,6 +22,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -62,11 +63,13 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-action(<<"sync">>, #amqqueue{pid = QPid}, ReqData, Context) ->
+action(<<"sync">>, Q, ReqData, Context) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
     spawn(fun() -> rabbit_amqqueue:sync_mirrors(QPid) end),
     {true, ReqData, Context};
 
-action(<<"cancel_sync">>, #amqqueue{pid = QPid}, ReqData, Context) ->
+action(<<"cancel_sync">>, Q, ReqData, Context) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
     _ = rabbit_amqqueue:cancel_sync_mirrors(QPid),
     {true, ReqData, Context};
 

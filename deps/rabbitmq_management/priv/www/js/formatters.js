@@ -201,10 +201,10 @@ function fmt_sync_state(queue) {
 
 function fmt_members(queue) {
     var res = '';
-    var IsMayority = (queue.online.length >= (Math.floor(queue.members.length / 2) + 1));
+    var isMajority = (queue.online.length >= (Math.floor(queue.members.length / 2) + 1));
     var followers = queue.online;
     followers.splice(followers.indexOf(queue.node), 1);
-    if (IsMayority) {
+    if (isMajority) {
         res += ' <abbr title="Followers: ' + followers + '">+' +
             followers.length + '</abbr>';
     } else {
