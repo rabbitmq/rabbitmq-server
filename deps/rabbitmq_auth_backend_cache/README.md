@@ -183,7 +183,7 @@ Cache module can be set via sysctl config format:
 
     auth_cache.cache_module = rabbit_auth_backend_ets_segmented
 
-Additional cache modulee arguments can only be defined via the [advanced config](http://www.rabbitmq.com/configure.html#advanced-config-file) or classic config format:
+Additional cache module arguments can only be defined via the [advanced config](http://www.rabbitmq.com/configure.html#advanced-config-file) or classic config format:
 
 ``` erlang
 [
