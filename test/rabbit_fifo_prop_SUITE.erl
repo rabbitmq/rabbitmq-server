@@ -261,11 +261,11 @@ map_max(0) -> undefined;
 map_max(N) -> N.
 
 snapshots_prop(Conf, Commands) ->
-    ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
     try run_snapshot_test(Conf, Commands) of
         _ -> true
     catch
         Err ->
+            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
             ct:pal("Err: ~p~n", [Err]),
             false
     end.
@@ -475,18 +475,12 @@ run_snapshot_test0(Conf, Commands) ->
     Entries = lists:zip(Indexes, Commands),
     {State0, Effects} = run_log(test_init(Conf), Entries),
     State = rabbit_fifo:normalize(State0),
-    % ct:pal("beginning snapshot test run for ~w numn commands ~b",
-    %        [maps:get(name, Conf), length(Commands)]),
 
     [begin
          %% drop all entries below and including the snapshot
          Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
                                        (_) -> false
                                     end, Entries),
-         % ct:pal("running from snapshot at ~w ~p", [SnapIdx, SnapState]),
-         % ct:pal("Snapshot tests run log:~n"
-         %        "~p~n from ~n~p~n Entries~n~p~n",
-         %        [Filtered, SnapState, Entries]),
          {S0, _} = run_log(SnapState, Filtered),
          S = rabbit_fifo:normalize(S0),
          % assert log can be restored from any release cursor index
