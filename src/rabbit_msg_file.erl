@@ -41,15 +41,10 @@
         fun (({rabbit_types:msg_id(), msg_size(), position(), binary()}, A) ->
             A).
 
+%%----------------------------------------------------------------------------
+
 -spec append(io_device(), rabbit_types:msg_id(), msg()) ->
           rabbit_types:ok_or_error2(msg_size(), any()).
--spec read(io_device(), msg_size()) ->
-          rabbit_types:ok_or_error2({rabbit_types:msg_id(), msg()},
-                                    any()).
--spec scan(io_device(), file_size(), message_accumulator(A), A) ->
-          {'ok', A, position()}.
-
-%%----------------------------------------------------------------------------
 
 append(FileHdl, MsgId, MsgBody)
   when is_binary(MsgId) andalso size(MsgId) =:= ?MSG_ID_SIZE_BYTES ->
@@ -65,6 +60,10 @@ append(FileHdl, MsgId, MsgBody)
         KO -> KO
     end.
 
+-spec read(io_device(), msg_size()) ->
+          rabbit_types:ok_or_error2({rabbit_types:msg_id(), msg()},
+                                    any()).
+
 read(FileHdl, TotalSize) ->
     Size = TotalSize - ?FILE_PACKING_ADJUSTMENT,
     BodyBinSize = Size - ?MSG_ID_SIZE_BYTES,
@@ -76,6 +75,9 @@ read(FileHdl, TotalSize) ->
             {ok, {MsgId, binary_to_term(MsgBodyBin)}};
         KO -> KO
     end.
+
+-spec scan(io_device(), file_size(), message_accumulator(A), A) ->
+          {'ok', A, position()}.
 
 scan(FileHdl, FileSize, Fun, Acc) when FileSize >= 0 ->
     scan(FileHdl, FileSize, <<>>, 0, 0, Fun, Acc).

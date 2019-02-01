@@ -364,11 +364,9 @@ cluster_queue_metrics(Config) ->
 
     % Synchronize
     Name = rabbit_misc:r(VHost, queue, QueueName),
-    [#amqqueue{pid = QPid}] = rabbit_ct_broker_helpers:rpc(Config, Node0,
-                                                           ets, lookup,
-                                                           [rabbit_queue, Name]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, Node0, rabbit_amqqueue,
-                                      sync_mirrors, [QPid]),
+    [Q] = rabbit_ct_broker_helpers:rpc(Config, Node0, ets, lookup, [rabbit_queue, Name]),
+    QPid = amqqueue:get_pid(Q),
+    ok = rabbit_ct_broker_helpers:rpc(Config, Node0, rabbit_amqqueue, sync_mirrors, [QPid]),
 
     % Check ETS table for data
     wait_for(fun () ->

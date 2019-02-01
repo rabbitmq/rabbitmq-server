@@ -27,14 +27,6 @@
 
 %% -------------------------------------------------------------------
 
--spec maybe_upgrade_mnesia() -> 'ok'.
--spec maybe_upgrade_local() ->
-          'ok' |
-          'version_not_available' |
-          'starting_from_scratch'.
-
-%% -------------------------------------------------------------------
-
 %% The upgrade logic is quite involved, due to the existence of
 %% clusters.
 %%
@@ -125,6 +117,8 @@ remove_backup() ->
     ok = rabbit_file:recursive_delete([backup_dir()]),
     info("upgrades: Mnesia backup removed~n", []).
 
+-spec maybe_upgrade_mnesia() -> 'ok'.
+
 maybe_upgrade_mnesia() ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
     ok = rabbit_mnesia_rename:maybe_finish(AllNodes),
@@ -180,24 +174,33 @@ upgrade_mode(AllNodes) ->
             end;
         [Another|_] ->
             MyVersion = rabbit_version:desired_for_scope(mnesia),
-            ErrFun = fun (ClusterVersion) ->
-                             %% The other node(s) are running an
-                             %% unexpected version.
-                             die("Cluster upgrade needed but other nodes are "
-                                 "running ~p~nand I want ~p",
-                                 [ClusterVersion, MyVersion])
-                     end,
             case rpc:call(Another, rabbit_version, desired_for_scope,
                           [mnesia]) of
-                {badrpc, {'EXIT', {undef, _}}} -> ErrFun(unknown_old_version);
-                {badrpc, Reason}               -> ErrFun({unknown, Reason});
-                CV                             -> case rabbit_version:matches(
-                                                         MyVersion, CV) of
-                                                      true  -> secondary;
-                                                      false -> ErrFun(CV)
-                                                  end
+                {badrpc, {'EXIT', {undef, _}}} ->
+                    die_because_cluster_upgrade_needed(unknown_old_version,
+                                                       MyVersion);
+                {badrpc, Reason} ->
+                    die_because_cluster_upgrade_needed({unknown, Reason},
+                                                       MyVersion);
+                CV -> case rabbit_version:matches(
+                             MyVersion, CV) of
+                          true  -> secondary;
+                          false -> die_because_cluster_upgrade_needed(
+                                     CV, MyVersion)
+                      end
             end
     end.
+
+-spec die_because_cluster_upgrade_needed(any(), any()) -> no_return().
+
+die_because_cluster_upgrade_needed(ClusterVersion, MyVersion) ->
+    %% The other node(s) are running an
+    %% unexpected version.
+    die("Cluster upgrade needed but other nodes are "
+        "running ~p~nand I want ~p",
+        [ClusterVersion, MyVersion]).
+
+-spec die(string(), list()) -> no_return().
 
 die(Msg, Args) ->
     %% We don't throw or exit here since that gets thrown
@@ -243,6 +246,11 @@ nodes_running(Nodes) ->
     [N || N <- Nodes, rabbit:is_running(N)].
 
 %% -------------------------------------------------------------------
+
+-spec maybe_upgrade_local() ->
+          'ok' |
+          'version_not_available' |
+          'starting_from_scratch'.
 
 maybe_upgrade_local() ->
     case rabbit_version:upgrades_required(local) of

@@ -27,29 +27,20 @@
 
 -type permission_atom() :: 'configure' | 'read' | 'write'.
 
+%%----------------------------------------------------------------------------
+
 -spec check_user_pass_login
         (rabbit_types:username(), rabbit_types:password()) ->
             {'ok', rabbit_types:user()} |
             {'refused', rabbit_types:username(), string(), [any()]}.
+
+check_user_pass_login(Username, Password) ->
+    check_user_login(Username, [{password, Password}]).
+
 -spec check_user_login
         (rabbit_types:username(), [{atom(), any()}]) ->
             {'ok', rabbit_types:user()} |
             {'refused', rabbit_types:username(), string(), [any()]}.
--spec check_user_loopback
-        (rabbit_types:username(), rabbit_net:socket() | inet:ip_address()) ->
-            'ok' | 'not_allowed'.
--spec check_vhost_access
-        (rabbit_types:user(), rabbit_types:vhost(),
-         rabbit_net:socket() | #authz_socket_info{}) ->
-            'ok' | rabbit_types:channel_exit().
--spec check_resource_access
-        (rabbit_types:user(), rabbit_types:r(atom()), permission_atom()) ->
-            'ok' | rabbit_types:channel_exit().
-
-%%----------------------------------------------------------------------------
-
-check_user_pass_login(Username, Password) ->
-    check_user_login(Username, [{password, Password}]).
 
 check_user_login(Username, AuthProps) ->
     {ok, Modules} = application:get_env(rabbit, auth_backends),
@@ -122,6 +113,10 @@ auth_user(#user{username = Username, tags = Tags}, Impl) ->
                tags     = Tags,
                impl     = Impl}.
 
+-spec check_user_loopback
+        (rabbit_types:username(), rabbit_net:socket() | inet:ip_address()) ->
+            'ok' | 'not_allowed'.
+
 check_user_loopback(Username, SockOrAddr) ->
     {ok, Users} = application:get_env(rabbit, loopback_users),
     case rabbit_net:is_loopback(SockOrAddr)
@@ -129,6 +124,11 @@ check_user_loopback(Username, SockOrAddr) ->
         true  -> ok;
         false -> not_allowed
     end.
+
+-spec check_vhost_access
+        (rabbit_types:user(), rabbit_types:vhost(),
+         rabbit_net:socket() | #authz_socket_info{}) ->
+            'ok' | rabbit_types:channel_exit().
 
 check_vhost_access(User = #user{username       = Username,
                                 authz_backends = Modules}, VHostPath, Sock) ->
@@ -145,6 +145,10 @@ check_vhost_access(User = #user{username       = Username,
          (_, Else) ->
               Else
       end, ok, Modules).
+
+-spec check_resource_access
+        (rabbit_types:user(), rabbit_types:r(atom()), permission_atom()) ->
+            'ok' | rabbit_types:channel_exit().
 
 check_resource_access(User, R = #resource{kind = exchange, name = <<"">>},
                       Permission) ->

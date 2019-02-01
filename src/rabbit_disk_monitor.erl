@@ -76,36 +76,42 @@
 %%----------------------------------------------------------------------------
 
 -type disk_free_limit() :: (integer() | string() | {'mem_relative', float() | integer()}).
--spec start_link(disk_free_limit()) -> rabbit_types:ok_pid_or_error().
--spec get_disk_free_limit() -> integer().
--spec set_disk_free_limit(disk_free_limit()) -> 'ok'.
--spec get_min_check_interval() -> integer().
--spec set_min_check_interval(integer()) -> 'ok'.
--spec get_max_check_interval() -> integer().
--spec set_max_check_interval(integer()) -> 'ok'.
--spec get_disk_free() -> (integer() | 'unknown').
 
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
 
+-spec get_disk_free_limit() -> integer().
+
 get_disk_free_limit() ->
     gen_server:call(?MODULE, get_disk_free_limit, infinity).
+
+-spec set_disk_free_limit(disk_free_limit()) -> 'ok'.
 
 set_disk_free_limit(Limit) ->
     gen_server:call(?MODULE, {set_disk_free_limit, Limit}, infinity).
 
+-spec get_min_check_interval() -> integer().
+
 get_min_check_interval() ->
     gen_server:call(?MODULE, get_min_check_interval, infinity).
+
+-spec set_min_check_interval(integer()) -> 'ok'.
 
 set_min_check_interval(Interval) ->
     gen_server:call(?MODULE, {set_min_check_interval, Interval}, infinity).
 
+-spec get_max_check_interval() -> integer().
+
 get_max_check_interval() ->
     gen_server:call(?MODULE, get_max_check_interval, infinity).
 
+-spec set_max_check_interval(integer()) -> 'ok'.
+
 set_max_check_interval(Interval) ->
     gen_server:call(?MODULE, {set_max_check_interval, Interval}, infinity).
+
+-spec get_disk_free() -> (integer() | 'unknown').
 
 get_disk_free() ->
     gen_server:call(?MODULE, get_disk_free, infinity).
@@ -113,6 +119,8 @@ get_disk_free() ->
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
+
+-spec start_link(disk_free_limit()) -> rabbit_types:ok_pid_or_error().
 
 start_link(Args) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).

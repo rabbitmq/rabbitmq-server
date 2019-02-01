@@ -26,10 +26,8 @@
 
 %%----------------------------------------------------------------------------
 
--spec start_link(rabbit_types:amqqueue(), rabbit_prequeue:start_mode()) ->
+-spec start_link(amqqueue:amqqueue(), rabbit_prequeue:start_mode()) ->
           {'ok', pid(), pid()}.
-
-%%----------------------------------------------------------------------------
 
 start_link(Q, StartMode) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),

@@ -66,13 +66,21 @@ init_per_group(classic_queue, Config) ->
             auto_delete = true}
         } | Config];
 init_per_group(quorum_queue, Config) ->
-    [{single_active_consumer_queue_declare,
-        #'queue.declare'{arguments = [
-            {<<"x-single-active-consumer">>, bool, true},
-            {<<"x-queue-type">>, longstr, <<"quorum">>}
-        ],
-            durable = true, exclusive = false, auto_delete = false}
-    } | Config].
+    Ret = rabbit_ct_broker_helpers:rpc(
+            Config, 0, rabbit_feature_flags, enable, [quorum_queue]),
+    case Ret of
+        ok ->
+            [{single_active_consumer_queue_declare,
+              #'queue.declare'{
+                 arguments = [
+                              {<<"x-single-active-consumer">>, bool, true},
+                              {<<"x-queue-type">>, longstr, <<"quorum">>}
+                             ],
+                 durable = true, exclusive = false, auto_delete = false}
+             } | Config];
+        Error ->
+            {skip, {"Quorum queues are unsupported", Error}}
+    end.
 
 end_per_group(_, Config) ->
     Config.

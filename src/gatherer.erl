@@ -39,16 +39,6 @@
 
 %%----------------------------------------------------------------------------
 
--spec start_link() -> rabbit_types:ok_pid_or_error().
--spec stop(pid()) -> 'ok'.
--spec fork(pid()) -> 'ok'.
--spec finish(pid()) -> 'ok'.
--spec in(pid(), any()) -> 'ok'.
--spec sync_in(pid(), any()) -> 'ok'.
--spec out(pid()) -> {'value', any()} | 'empty'.
-
-%%----------------------------------------------------------------------------
-
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 
@@ -58,23 +48,37 @@
 
 %%----------------------------------------------------------------------------
 
+-spec start_link() -> rabbit_types:ok_pid_or_error().
+
 start_link() ->
     gen_server2:start_link(?MODULE, [], [{timeout, infinity}]).
+
+-spec stop(pid()) -> 'ok'.
 
 stop(Pid) ->
     gen_server2:call(Pid, stop, infinity).
 
+-spec fork(pid()) -> 'ok'.
+
 fork(Pid) ->
     gen_server2:call(Pid, fork, infinity).
+
+-spec finish(pid()) -> 'ok'.
 
 finish(Pid) ->
     gen_server2:cast(Pid, finish).
 
+-spec in(pid(), any()) -> 'ok'.
+
 in(Pid, Value) ->
     gen_server2:cast(Pid, {in, Value}).
 
+-spec sync_in(pid(), any()) -> 'ok'.
+
 sync_in(Pid, Value) ->
     gen_server2:call(Pid, {in, Value}, infinity).
+
+-spec out(pid()) -> {'value', any()} | 'empty'.
 
 out(Pid) ->
     gen_server2:call(Pid, out, infinity).

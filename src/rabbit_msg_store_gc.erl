@@ -37,30 +37,33 @@
 
 -spec start_link(rabbit_msg_store:gc_state()) ->
                            rabbit_types:ok_pid_or_error().
--spec combine(pid(), rabbit_msg_store:file_num(),
-                    rabbit_msg_store:file_num()) -> 'ok'.
--spec delete(pid(), rabbit_msg_store:file_num()) -> 'ok'.
--spec no_readers(pid(), rabbit_msg_store:file_num()) -> 'ok'.
--spec stop(pid()) -> 'ok'.
--spec set_maximum_since_use(pid(), non_neg_integer()) -> 'ok'.
-
-%%----------------------------------------------------------------------------
 
 start_link(MsgStoreState) ->
     gen_server2:start_link(?MODULE, [MsgStoreState],
                            [{timeout, infinity}]).
 
+-spec combine(pid(), rabbit_msg_store:file_num(),
+                    rabbit_msg_store:file_num()) -> 'ok'.
+
 combine(Server, Source, Destination) ->
     gen_server2:cast(Server, {combine, Source, Destination}).
+
+-spec delete(pid(), rabbit_msg_store:file_num()) -> 'ok'.
 
 delete(Server, File) ->
     gen_server2:cast(Server, {delete, File}).
 
+-spec no_readers(pid(), rabbit_msg_store:file_num()) -> 'ok'.
+
 no_readers(Server, File) ->
     gen_server2:cast(Server, {no_readers, File}).
 
+-spec stop(pid()) -> 'ok'.
+
 stop(Server) ->
     gen_server2:call(Server, stop, infinity).
+
+-spec set_maximum_since_use(pid(), non_neg_integer()) -> 'ok'.
 
 set_maximum_since_use(Pid, Age) ->
     gen_server2:cast(Pid, {set_maximum_since_use, Age}).
