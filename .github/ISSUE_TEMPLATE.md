@@ -1,10 +1,8 @@
 Thank you for using RabbitMQ.
 
-- IMPORTANT ---------------------------------------------------
-|                                                             |
-| STOP NOW AND READ THIS BEFORE OPENING A NEW ISSUE ON GITHUB |
-|                                                             |
----------------------------------------------------------------
+- IMPORTANT -----------------------------------------------------------
+STOP NOW AND READ THIS BEFORE OPENING A NEW ISSUE ON GITHUB
+--------------------------------------------------------------------------
 
 Unless you are CERTAIN you have found a reproducible bug in RabbitMQ, you must
 first ask your question or discuss your suspected issue on the mailing list:
