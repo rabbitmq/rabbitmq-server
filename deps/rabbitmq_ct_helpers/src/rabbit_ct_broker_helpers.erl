@@ -644,11 +644,14 @@ query_node(Config, NodeConfig) ->
       [rabbit, plugins_dir]),
     {ok, EnabledPluginsFile} = rpc(Config, Nodename, application, get_env,
       [rabbit, enabled_plugins_file]),
+    EnabledFeatureFlagsFile = rpc(Config, Nodename,
+      rabbit_feature_flags, enabled_feature_flags_list_file, []),
     rabbit_ct_helpers:set_config(NodeConfig, [
         {pid_file, PidFile},
         {mnesia_dir, MnesiaDir},
         {plugins_dir, PluginsDir},
-        {enabled_plugins_file, EnabledPluginsFile}
+        {enabled_plugins_file, EnabledPluginsFile},
+        {enabled_feature_flags_list_file, EnabledFeatureFlagsFile}
       ]).
 
 maybe_cluster_nodes(Config) ->
@@ -895,7 +898,9 @@ rabbitmqctl(Config, Node, Args) ->
       {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
-        ?config(enabled_plugins_file, NodeConfig)}
+        ?config(enabled_plugins_file, NodeConfig)},
+      {"RABBITMQ_FEATURE_FLAGS_FILE",
+        ?config(enabled_feature_flags_list_file, NodeConfig)}
     ],
     Cmd = [Rabbitmqctl, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
