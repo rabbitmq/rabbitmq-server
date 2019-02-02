@@ -32,6 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
       [
         &Validators.node_is_not_running/2,
         &Validators.mnesia_dir_is_set/2,
+        &Validators.feature_flags_file_is_set/2,
         &Validators.rabbit_is_loaded/2
       ],
       [args, opts]
