@@ -27,8 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
   def info_keys(), do: @info_keys
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   def merge_defaults([], opts), do: {["name", "state"], opts}
   def merge_defaults(args, opts), do: {args, opts}
