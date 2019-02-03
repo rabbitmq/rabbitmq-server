@@ -204,7 +204,7 @@ will be completed when this command returns.
 Shuts down the node, both RabbitMQ and its runtime.
 The command is blocking and will return after the runtime process exits.
 If RabbitMQ fails to stop, it will return a non-zero exit code.
-This command infers the process pid of the target node and
+This command infers the OS PID of the target node and
 therefore can only be used to shut down nodes running on the same
 host (or broadly speaking, in the same operating system,
 e.g. in the same VM or container)
