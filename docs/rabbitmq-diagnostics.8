@@ -129,6 +129,147 @@ The default value is
 .Qq / .
 .Bl -tag -width Ds
 .\" ------------------------------------
+.It Cm help
+.Pp
+Displays general help and commands supported by
+.Nm .
+.Pp
+Always exits with code 64 (EX_USAGE).
+.\" ------------------------------------
+.It Cm ping
+.Pp
+Most basic health check. Succeeds if target node (runtime) is running
+and
+.Nm
+can authenticate with it successfully.
+.\" ------------------------------------
+.It Cm memory_breakdown Op Fl -unit Ar memory_unit
+.Pp
+Displays node's memory usage by category.
+Supported memory units are:
+.Bl -bullet
+.It
+bytes
+.It
+megabytes
+.It
+gigabytes
+.It
+terabytes
+.El
+.Pp
+See
+.Lk https://www.rabbitmq.com/memory-use.html "RabbitMQ Memory Use guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl
+.Nm
+memory_breakdown --unit gigabytes
+.\" ------------------------------------
+.It Cm server_version
+.Pp
+Reports target node's version.
+.Pp
+Example:
+.Sp
+.Dl
+.Nm
+server_version -q
+.\" ------------------------------------
+.It Cm erlang_version
+.Pp
+Reports target node's Erlang/OTP version.
+.Pp
+Example:
+.Sp
+.Dl
+.Nm
+erlang_version -q
+.\" ------------------------------------
+.It Cm maybe_stuck
+.Pp
+Periodically samples stack traces of all Erlang processes
+("lightweight threads") on the node. Reports the processes for which
+stack trace samples are identical.
+.Pp
+Identical samples may indicate that the process is not making any progress
+but is not necessarily an indication of a problem.
+.Pp
+Example:
+.Sp
+.Dl
+.Nm
+maybe_stuck -q
+.\" ------------------------------------
+.It Cm runtime_thread_stats Op Fl -sample-interval Ar interval
+.Pp
+Performs sampling of runtime (kernel) threads' activity for
+.Ar interval
+seconds and reports it.
+.Pp
+For this command to work, Erlang/OTP on the target node must be compiled with
+microstate accounting support and have the runtime_tools package available.
+.Pp
+Example:
+.Sp
+.Dl
+.Nm
+runtime_thread_stats --sample-interval 15
+.\" ------------------------------------
+.It Cm tls_versions
+.Pp
+Lists all TLS versions supported by the runtime on the target node.
+Note that RabbitMQ can be configured to only accept a subset of those
+versions, for example, SSLv3 is disabled by default.
+.Pp
+See
+.Lk https://www.rabbitmq.com/ssl.html "RabbitMQ TLS guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl
+.Nm
+tls_versions -q
+.\" ------------------------------------
+.It Cm erlang_cookie_hash
+.Pp
+Outputs a hashed value of the shared secret used by the target node
+to authenticate CLI tools and peers. The value can be compared with the hash
+found in error messages of CLI tools.
+.Pp
+See
+.Lk https://www.rabbitmq.com/clustering.html#erlang-cookie "RabbitMQ Clustering guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl
+.Nm
+erlang_cookie_hash -q
+.\" ------------------------------------
+.It Cm discover_peers
+.Pp
+Runs a peer discovery on the target node and prints the discovered nodes, if any.
+.Pp
+See
+.Lk https://www.rabbitmq.com/cluster-formation.html "RabbitMQ Cluster Formation guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl
+.Nm
+discover_peers --timeout 60
+.\" ------------------------------------
+.It Cm list_channels Op Ar channelinfoitem ...
+See
+.Cm list_channels
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
 .It Cm list_queues Oo Fl p Ar vhost Oc Oo Fl -offline | Fl -online | Fl -local Oc Op Ar queueinfoitem ...
 See
 .Cm list_queues
@@ -171,6 +312,12 @@ See
 in
 .Xr rabbitmqctl 8
 .\" ------------------------------------
+.It Cm cluster_status
+See
+.Cm cluster_status
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
 .It Cm node_health_check
 Performs several health checks of the target node.
 .Pp
@@ -179,7 +326,9 @@ then checks that every queue and channel on the node can emit basic stats.
 .Pp
 Example:
 .Sp
-.Dl rabbitmqctl node_health_check -n rabbit@hostname
+.Dl
+.Nm
+node_health_check -n rabbit@hostname
 .\" ------------------------------------
 .It Cm environment
 See
