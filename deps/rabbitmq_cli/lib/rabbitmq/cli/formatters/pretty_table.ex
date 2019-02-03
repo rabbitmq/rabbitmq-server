@@ -13,12 +13,10 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2018 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Formatters.FormatterHelpers
-
 defmodule RabbitMQ.CLI.Formatters.PrettyTable do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
-  def format_stream(stream, options) do
+  def format_stream(stream, _opts) do
     # Flatten for list_consumers
     entries_with_keys = Stream.flat_map(stream,
       fn([first | _] = element) ->
@@ -62,7 +60,7 @@ defmodule RabbitMQ.CLI.Formatters.PrettyTable do
     end
   end
 
-  def format_output(output, options) do
+  def format_output(output, _opts) do
     string = to_string(:rabbit_misc.format("~p", [output]))
     lines = Stream.map(String.split(string, "\n"),
       fn(element) ->
