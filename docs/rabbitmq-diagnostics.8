@@ -42,28 +42,14 @@ See the
 to learn more about RabbitMQ diagnostics, monitoring and health checks.
 
 .Nm
-allows the operator to TODO.
+allows the operator to inspect node and cluster state. A number of
+health checks are available to be used interactively and by monitoring tools.
 
 .Pp
-The
-.Cm enable ,
-.Cm disable ,
-and
-.Cm set
-commands will update the plugins file and then attempt to connect to the
-broker and ensure it is running all enabled plugins.
-By default if it is not possible to connect to the running broker (for
-example if it is stopped) the operation will fail.
-If
-.Nm
-is used on the same host as the target node,
-.Fl -offline
-can be specified to make
-.Nm
-resolve and update plugin state directly (without contacting the node).
-Such changes will only have an effect on next node start.
+By default if it is not possible to connect to and authenticate with the target node
+(for example if it is stopped), the operation will fail.
 To learn more, see the
-.Lk https://www.rabbitmq.com/plugins.html "RabbitMQ Plugins guide"
+.Lk https://www.rabbitmq.com/monitoring.html "RabbitMQ Monitoring guide"
 .
 .\" ------------------------------------------------------------------
 .Sh OPTIONS
@@ -115,4 +101,155 @@ To learn more, see the
 .El
 .\" ------------------------------------------------------------------
 .Sh COMMANDS
+.\" ------------------------------------
+.Ss Topology Introspection
+.Pp
+The topology introspection commands list topology entities (e.g. queues) with tab-delimited columns.
+.
+These commands and their arguments are delegated to rabbitmqctl(8).
+.Pp
+Some commands (
+.Cm list_queues ,
+.Cm list_exchanges ,
+.Cm list_bindings
+and
+.Cm list_consumers )
+accept an optional
+.Ar vhost
+parameter.
+.Pp
+The
+.Cm list_queues ,
+.Cm list_exchanges
+and
+.Cm list_bindings
+commands accept an optional virtual host parameter for which to display
+results.
+The default value is
+.Qq / .
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm list_queues Oo Fl p Ar vhost Oc Oo Fl -offline | Fl -online | Fl -local Oc Op Ar queueinfoitem ...
+See
+.Cm list_queues
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_exchanges Oo Fl p Ar vhost Oc Op Ar exchangeinfoitem ...
+See
+.Cm list_exchanges
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_bindings Oo Fl p Ar vhost Oc Op Ar bindinginfoitem ...
+See
+.Cm list_bindings
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_connections Op Ar connectioninfoitem ...
+See
+.Cm list_connections
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_channels Op Ar channelinfoitem ...
+See
+.Cm list_channels
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_consumers Op Fl p Ar vhost
+See
+.Cm list_consumers
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm status
+See
+.Cm status
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm node_health_check
+Performs several health checks of the target node.
+.Pp
+Verifies the rabbit application is running and alarms are not set,
+then checks that every queue and channel on the node can emit basic stats.
+.Pp
+Example:
+.Sp
+.Dl rabbitmqctl node_health_check -n rabbit@hostname
+.\" ------------------------------------
+.It Cm environment
+See
+.Cm environment
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm report
+See
+.Cm report
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_global_parameters
+See
+.Cm list_global_parameters
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_operator_policies Op Fl p Ar vhost
+See
+.Cm list_operator_policies
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_parameters Op Fl p Ar vhost
+See
+.Cm list_parameters
+in
+.Xr rabbitmqctl 8
 .\" ------------------------------------------------------------------
+.It Cm list_permissions Op Fl p Ar vhost
+See
+.Cm list_permissions
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_policies Op Fl p Ar vhost
+See
+.Cm list_policies
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_topic_permissions Op Fl p Ar vhost
+See
+.Cm list_topic_permissions
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_user_permissions Ar username
+See
+.Cm list_user_permissions
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_user_topic_permissions Ar username
+See
+.Cm list_user_topic_permissions
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_users
+See
+.Cm list_users
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_vhosts Op Ar vhostinfoitem ...
+See
+.Cm list_vhosts
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
