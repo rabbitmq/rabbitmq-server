@@ -17,25 +17,71 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   alias RabbitMQ.CLI.Core.OsPid
 
-  use RabbitMQ.CLI.Core.MergesNoDefaults
+  def switches() do
+    [timeout: :integer,
+     wait: :boolean]
+  end
+
+  def aliases(), do: [timeout: :t]
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{wait: true, timeout: 120}, opts)}
+  end
+
+  def validate([], %{wait: false}) do
+    :ok
+  end
+
+  def validate([], %{node: node_name, wait: true, timeout: timeout}) do
+    hostname = :inet_db.gethostname()
+    case :rabbit_misc.rpc_call(node_name, :inet_db, :gethostname, [], timeout) do
+      {:badrpc, _} = err -> err
+      remote_hostname    ->
+        case hostname == remote_hostname do
+          true  -> :ok;
+          false ->
+            msg = "Node #{node_name} is not local (local hostname: #{hostname}, remote: #{remote_hostname}). " <>
+                  "This command can only be used in --wait mode with local nodes."
+            {:validation_failure, msg}
+        end
+    end
+  end
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
-  def run([], %{node: node_name}) do
+  def run([], %{node: node_name, wait: false, timeout: timeout}) do
+    shut_down_node_without_waiting(node_name, timeout)
+  end
+
+  def run([], %{node: node_name, wait: true, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :os, :getpid, []) do
       pid when is_list(pid) ->
-        shutdown_node_and_wait_pid_to_stop(node_name, pid)
-
+        shut_down_node_and_wait_pid_to_stop(node_name, pid, timeout)
       other ->
         other
     end
   end
 
-  def shutdown_node_and_wait_pid_to_stop(node_name, pid) do
+  use RabbitMQ.CLI.DefaultOutput
+
+  def usage, do: "shutdown [--wait]"
+
+  def banner(_, _), do: nil
+
+
+  #
+  # Implementation
+  #
+
+  defp shut_down_node_without_waiting(node_name, timeout) do
+    :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [], timeout)
+  end
+
+  defp shut_down_node_and_wait_pid_to_stop(node_name, pid, timeout) do
     {:stream,
      RabbitMQ.CLI.Core.Helpers.stream_until_error([
        fn -> "Shutting down RabbitMQ node #{node_name} running at PID #{pid}" end,
        fn ->
-         res = :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
+         res = shut_down_node_without_waiting(node_name, timeout)
 
          case res do
            :ok -> "Waiting for PID #{pid} to terminate"
@@ -49,10 +95,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
        end
      ])}
   end
-
-  use RabbitMQ.CLI.DefaultOutput
-
-  def usage, do: "shutdown"
-
-  def banner(_, _), do: nil
 end

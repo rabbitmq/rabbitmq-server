@@ -27,7 +27,7 @@ defmodule ShutdownCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname()}}
+    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 15}}
   end
 
   test "validate: accepts no arguments", context do
@@ -38,11 +38,15 @@ defmodule ShutdownCommandTest do
     assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
+  test "validate: in no wait mode, does not check if target node is local", context do
+    assert @command.validate([], Map.merge(%{wait: false}, context[:opts])) == :ok
+  end
+
   test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
 
-    opts = %{node: target}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+    opts = %{node: target, wait: false, timeout: 1}
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "empty banner", context do
