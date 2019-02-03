@@ -17,6 +17,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListCiphersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
+  def scopes(), do: [:ctl, :diagnostics]
+
   def merge_defaults(args, opts) do
     {args, opts}
   end
