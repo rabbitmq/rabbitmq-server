@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
 
   def info_keys(), do: @info_keys
 
-  def scopes(), do: [:ctl]
+  def scopes(), do: [:ctl, :diagnostics]
   def switches(), do: [timeout: :integer]
   def aliases(), do: [t: :timeout]
 

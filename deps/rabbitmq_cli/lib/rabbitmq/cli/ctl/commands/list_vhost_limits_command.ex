@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
+  def scopes(), do: [:ctl, :diagnostics]
   def switches(), do: [global: :boolean]
 
   def merge_defaults(args, %{global: true} = opts) do
