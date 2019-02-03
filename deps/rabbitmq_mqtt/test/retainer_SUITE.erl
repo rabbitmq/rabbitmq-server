@@ -80,14 +80,6 @@ coerce_configuration_data(Config) ->
     emqttc:disconnect(C),
     ok.
 
-expect_publishes(_Topic, []) -> ok;
-expect_publishes(Topic, [Payload | Rest]) ->
-    receive
-        {publish, Topic, Payload} -> expect_publishes(Topic, Rest)
-    after 1500 ->
-        throw({publish_not_delivered, Payload})
-    end.
-
 %% -------------------------------------------------------------------
 %% When a client is subscribed to TopicA/Device.Field and another
 %% client publishes to TopicA/Device.Field the client should be
@@ -124,11 +116,10 @@ should_translate_amqp2mqtt_on_retention(Config) ->
 should_translate_amqp2mqtt_on_retention_search(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     {ok, C} = emqttc:start_link(connection_opts(P)),
-	emqttc:publish(C, <<"TopicA/Device.Field">>, <<"Payload">>, [{retain, true}]),
-	emqttc:subscribe(C, <<"TopicA/Device/Field">>, qos1),
-	expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
-	emqttc:disconnect(C),
-	ok.
+    emqttc:publish(C, <<"TopicA/Device.Field">>, <<"Payload">>, [{retain, true}]),
+    emqttc:subscribe(C, <<"TopicA/Device/Field">>, qos1),
+    expect_publishes(<<"TopicA/Device/Field">>, [<<"Payload">>]),
+    emqttc:disconnect(C).
 
 connection_opts(Port) ->
   [{host, "localhost"},
@@ -137,3 +128,11 @@ connection_opts(Port) ->
    {proto_ver,3},
    {logger, info},
    {puback_timeout, 1}].
+
+ expect_publishes(_Topic, []) -> ok;
+ expect_publishes(Topic, [Payload | Rest]) ->
+     receive
+         {publish, Topic, Payload} -> expect_publishes(Topic, Rest)
+     after 1500 ->
+         throw({publish_not_delivered, Payload})
+     end.
