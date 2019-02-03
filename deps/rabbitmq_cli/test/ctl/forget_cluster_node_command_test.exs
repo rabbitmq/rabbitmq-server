@@ -30,6 +30,8 @@ defmodule ForgetClusterNodeCommandTest do
                                                [:rabbit, :plugins_dir])
     rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
     mnesia_dir = :rabbit_misc.rpc_call(node, :rabbit_mnesia, :dir, [])
+    feature_flags_file = :rabbit_misc.rpc_call(node,
+      :rabbit_feature_flags, :enabled_feature_flags_list_file, [])
 
     on_exit([], fn ->
       start_rabbitmq_app()
@@ -38,6 +40,7 @@ defmodule ForgetClusterNodeCommandTest do
     {:ok, opts: %{rabbitmq_home: rabbitmq_home,
                   plugins_dir: plugins_dir,
                   mnesia_dir: mnesia_dir,
+                  feature_flags_file: feature_flags_file,
                   offline: false}}
   end
 

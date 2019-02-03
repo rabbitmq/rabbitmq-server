@@ -14,17 +14,22 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule ListHashesCommandTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case
   @command RabbitMQ.CLI.Ctl.Commands.ListHashesCommand
 
-  test "validate: providing arguments when listing hashes is reported as invalid", _context do
-    assert match?(
-      {:validation_failure, {:bad_argument, :too_many_args}},
-      @command.validate(["value"], %{})
-    )
+  test "merge_defaults: nothing to do" do
+    assert @command.merge_defaults([], %{}) == {[], %{}}
   end
 
-  test "run: list hashes", _context do
+  test "validate: treats positional arguments as a failure" do
+    assert @command.validate(["extra-arg"], %{}) == {:validation_failure, :too_many_args}
+  end
+
+  test "validate: treats empty positional arguments and default switches as a success" do
+    assert @command.validate([], %{}) == :ok
+  end
+
+  test "run: lists hashes", _context do
     assert match?(
       {:ok, _},
       @command.run([], %{})

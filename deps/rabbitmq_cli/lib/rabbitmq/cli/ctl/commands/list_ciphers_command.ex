@@ -17,15 +17,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListCiphersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts) do
-    {args, opts}
-  end
+  def scopes(), do: [:ctl, :diagnostics]
 
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, {:bad_argument, :too_many_args}}
-  end
-
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def distribution(_), do: :none
 

@@ -62,12 +62,26 @@ defmodule RabbitMQCtlTest do
     delete_user "kirk"
   end
 
-## ------------------------ Malformed Commands --------------------------------
+## ------------------------ Help and Malformed Commands --------------------------------
 
-  test "Empty command shows usage message" do
+  test "when invoked without arguments, displays a generic usage message and exits with a non-zero code" do
     command = []
     assert capture_io(:stderr, fn ->
       error_check(command, exit_usage())
+    end) =~ ~r/\nUsage:\n/
+  end
+
+  test "when invoked with only a --help, shows a generic usage message and exits with a success" do
+    command = ["--help"]
+    assert capture_io(:stdio, fn ->
+      error_check(command, exit_ok())
+    end) =~ ~r/\nUsage:\n/
+  end
+
+  test "when invoked with --help [command], shows a generic usage message and exits with a success" do
+    command = ["--help", "status"]
+    assert capture_io(:stdio, fn ->
+      error_check(command, exit_ok())
     end) =~ ~r/\nUsage:\n/
   end
 

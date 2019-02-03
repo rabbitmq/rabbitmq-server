@@ -16,16 +16,9 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
-
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate([_ | _], _) do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
@@ -33,11 +26,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   end
 
   def output({:ok, {[], _}}, _options) do
-    # This is a trick to print a string without formatting it first.
-    # Insert your favorite "error, operation completed successfully" joke here.
-    #
-    # TODO: use a new or command-specific formatter instead?
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_ok(), "No peers discovered"}
+    {:ok, "No peers discovered"}
   end
 
   def output({:ok, {nodes, _}}, _options) do
@@ -45,8 +34,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.DiscoverPeersCommand do
   end
 
   use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def usage, do: "discover_peers"
 

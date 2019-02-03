@@ -11,9 +11,10 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2018-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
+
+defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
   alias RabbitMQ.CLI.Ctl.InfoKeys
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -21,20 +22,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  @info_keys ~w(name tracing cluster_state)a
+  @info_keys ~w(name state stability provided_by desc)a
 
   def info_keys(), do: @info_keys
 
   def scopes(), do: [:ctl, :diagnostics]
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
-  def merge_defaults([], opts) do
-    merge_defaults(["name"], opts)
-  end
-
-  def merge_defaults(args, opts) do
-    {args, Map.merge(%{table_headers: true}, opts)}
-  end
+  def merge_defaults([], opts), do: {["name", "state"], opts}
+  def merge_defaults(args, opts), do: {args, opts}
 
   def validate(args, _) do
     case InfoKeys.validate_info_keys(args, @info_keys) do
@@ -45,35 +41,32 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([_ | _] = args, %{node: node_name, timeout: time_out}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :info_all, [], time_out)
+  def run([_|_] = args, %{node: node_name, timeout: time_out}) do
+    :rabbit_misc.rpc_call(node_name, :rabbit_ff_extra, :cli_info, [], time_out)
     |> filter_by_arg(args)
   end
 
-  def usage, do: "list_vhosts [--no-table-headers] [<vhostinfoitem> ...]"
+  def usage, do: "list_feature_flags [<feature-flag-info-item> ...]"
 
   def usage_additional() do
-    "<vhostinfoitem> must be a member of the list [name, tracing, cluster_state]."
+    "<feature-flag-info-item> must be a member of the list [name, state, stability, provided_by, desc]."
   end
 
-  #
-  # Implementation
-  #
-
-  defp filter_by_arg(vhosts, _) when is_tuple(vhosts) do
-    vhosts
+  defp filter_by_arg(ff_info, _) when is_tuple(ff_info) do
+    # tuple means unexpected data
+    ff_info
   end
 
-  defp filter_by_arg(vhosts, [_ | _] = args) do
+  defp filter_by_arg(ff_info, [_|_] = args) when is_list(ff_info) do
     symbol_args = InfoKeys.prepare_info_keys(args)
-
-    vhosts
-    |> Enum.map(fn vhost ->
-      symbol_args
-      |> Enum.filter(fn arg -> vhost[arg] != nil end)
-      |> Enum.map(fn arg -> {arg, vhost[arg]} end)
-    end)
+    Enum.map(ff_info,
+      fn(ff) ->
+        symbol_args
+        |> Enum.filter(fn(arg) -> ff[arg] != nil end)
+        |> Enum.map(fn(arg) -> {arg, ff[arg]} end)
+      end
+    )
   end
 
-  def banner(_, _), do: "Listing vhosts ..."
+  def banner(_,_), do: "Listing feature flags ..."
 end
