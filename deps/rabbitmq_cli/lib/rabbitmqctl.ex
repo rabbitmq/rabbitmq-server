@@ -129,9 +129,6 @@ defmodule RabbitMQCtl do
                 {:validation_failure, err} ->
                   argument_validation_error_output(err, command, unparsed_command, options)
 
-                  {:badrpc, _} = err ->
-                    format_error(err, options, command)
-
                 {:error, _} = err ->
                   format_error(err, options, command)
               end
