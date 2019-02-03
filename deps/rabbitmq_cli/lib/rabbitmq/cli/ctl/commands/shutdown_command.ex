@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   def validate([], %{node: node_name, wait: true, timeout: timeout}) do
     hostname = :inet_db.gethostname()
     case :rabbit_misc.rpc_call(node_name, :inet_db, :gethostname, [], timeout) do
-      {:badrpc, _} = err -> err
+      {:badrpc, _} = err -> {:error, err}
       remote_hostname    ->
         case hostname == remote_hostname do
           true  -> :ok;
