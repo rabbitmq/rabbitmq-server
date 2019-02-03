@@ -18,22 +18,27 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
   alias RabbitMQ.CLI.Core.OsPid
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
+
+  def validate([], %{node: node_name}) do
+    hostname = :inet_db.gethostname()
+    case :rabbit_misc.rpc_call(node_name, :inet_db, :gethostname, []) do
+      {:badrpc, _} = err -> err
+      remote_hostname    ->
+        case hostname == remote_hostname do
+          true  -> :ok;
+          false ->
+            msg = "Node #{node_name} is not local (local hostname: #{hostname}, remote: #{remote_hostname}). " <>
+                  "This command can only be used with local nodes."
+            {:validation_failure, msg}
+        end
+    end
+  end
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name}) do
-    ## TODO: should this be a validator?
     case :rabbit_misc.rpc_call(node_name, :os, :getpid, []) do
       pid when is_list(pid) ->
-        hostname = :inet_db.gethostname()
-        case :rabbit_misc.rpc_call(node_name, :inet_db, :gethostname, []) do
-          {:badrpc, _} = err -> err
-          remote_hostname    ->
-            case hostname == remote_hostname do
-              true  -> shutdown_node_and_wait_pid_to_stop(node_name, pid);
-              false -> {:error, "The RabbitMQ host #{remote_hostname} is not local." <>
-                                " This command can only run on the local host."}
-            end
-        end;
+        shutdown_node_and_wait_pid_to_stop(node_name, pid)
       other ->
         other
     end
