@@ -19,15 +19,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListHashesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def merge_defaults(args, opts) do
-    {args, opts}
-  end
-
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, {:bad_argument, :too_many_args}}
-  end
-
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def distribution(_), do: :none
 
