@@ -17,9 +17,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts), do: {args, opts}
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def validate([], _) do
     {:validation_failure, :not_enough_args}
@@ -105,6 +104,26 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
     end
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
+  def usage,
+    do: [
+      "set_vm_memory_high_watermark <fraction>",
+      "set_vm_memory_high_watermark absolute <value>"
+    ]
+
+  def banner(["absolute", arg], %{node: node_name}) do
+    "Setting memory threshold on #{node_name} to #{arg} bytes ..."
+  end
+
+  def banner([arg], %{node: node_name}) do
+    "Setting memory threshold on #{node_name} to #{arg} ..."
+  end
+
+  #
+  # Implementation
+  #
+
   defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name})
        when num > 0 do
     val = Helpers.memory_unit_absolute(num, rest)
@@ -116,16 +135,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
       [{:absolute, val}]
     )
   end
-
-  def usage,
-    do: [
-      "set_vm_memory_high_watermark <fraction>",
-      "set_vm_memory_high_watermark absolute <value>"
-    ]
-
-  def banner(["absolute", arg], %{node: node_name}),
-    do: "Setting memory threshold on #{node_name} to #{arg} bytes ..."
-
-  def banner([arg], %{node: node_name}),
-    do: "Setting memory threshold on #{node_name} to #{arg} ..."
 end

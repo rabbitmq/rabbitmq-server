@@ -27,10 +27,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
     "none"
   ]
 
-  def merge_defaults(args, opts), do: {args, opts}
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
-  def validate([], _), do: {:validation_failure, :not_enough_args}
-  def validate([_ | _] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+  def validate([], _) do
+    {:validation_failure, :not_enough_args}
+  end
+  def validate(args, _) when length(args) > 1 do
+    {:validation_failure, :too_many_args}
+  end
 
   def validate([level], _) do
     case Enum.member?(@known_levels, level) do

@@ -17,17 +17,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   @info_keys ~w(name type durable auto_delete internal arguments policy)a
 
   def info_keys(), do: @info_keys
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
+
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   def merge_defaults([], opts) do
     merge_defaults(~w(name type), opts)
@@ -58,6 +55,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
       info_keys
     )
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
     "list_exchanges [-p <vhost>] [--no-table-headers] [<exchangeinfoitem> ...]"

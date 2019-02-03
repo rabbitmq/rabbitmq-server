@@ -15,24 +15,15 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListTopicPermissionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
-  def validate([_ | _], _) do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate([], _), do: :ok
-
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout, vhost: vhost}) do
@@ -44,6 +35,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListTopicPermissionsCommand do
       timeout
     )
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage, do: "list_topic_permissions [-p <vhost>] [--no-table-headers]"
 

@@ -55,10 +55,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearTopicPermissionsCommand do
 
   def usage, do: "clear_topic_permissions [-p vhost] <username> [<exchange>]"
 
-  def banner([username], %{vhost: vhost}),
-    do: "Clearing topic permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
+  def banner([username], %{vhost: vhost}) do
+    "Clearing topic permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
+  end
 
-  def banner([username, exchange], %{vhost: vhost}),
-    do:
-      "Clearing topic permissions on \"#{exchange}\" for user \"#{username}\" in vhost \"#{vhost}\" ..."
+  def banner([username, exchange], %{vhost: vhost}) do
+    "Clearing topic permissions on \"#{exchange}\" for user \"#{username}\" in vhost \"#{vhost}\" ..."
+  end
 end

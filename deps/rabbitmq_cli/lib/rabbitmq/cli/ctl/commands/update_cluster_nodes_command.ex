@@ -18,14 +18,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def merge_defaults(args, opts) do
-    {args, opts}
-  end
-
-  def validate([], _), do: {:validation_failure, :not_enough_args}
-  def validate([_], _), do: :ok
-  def validate(_, _), do: {:validation_failure, :too_many_args}
-
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
   def run([seed_node], %{node: node_name}) do

@@ -19,11 +19,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @default_timeout 10_000
 
-  def switches(), do: [pid: :integer, timeout: :integer]
-
-  def aliases(), do: [P: :pid, t: :timeout]
-
   def scopes(), do: [:ctl, :diagnostics]
+
+  def switches(), do: [pid: :integer, timeout: :integer]
+  def aliases(), do: [P: :pid, t: :timeout]
 
   def merge_defaults(args, opts) do
     timeout =
@@ -38,9 +37,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def validate([_ | _] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], %{pid: _}), do: {:validation_failure, "Cannot specify both pid and pidfile"}
-  def validate([], %{pid: _} = opts), do: Validators.rabbit_is_loaded([], opts)
   def validate([], _), do: {:validation_failure, "No pid or pidfile specified"}
-  def validate([_], opts), do: Validators.rabbit_is_loaded([], opts)
+
+  def validate_execution_environment([], %{pid: _} = opts) do
+    Validators.rabbit_is_loaded([], opts)
+  end
+  def validate_execution_environment([_pid_file], opts) do
+    Validators.rabbit_is_loaded([], opts)
+  end
 
   def run([pid_file], %{node: node_name, timeout: timeout} = opts) do
     app_names = :rabbit_and_plugins
@@ -66,6 +70,82 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
       pid
     )
   end
+
+  def usage, do: "wait [<pid_file>] [--pid|-P <pid>]"
+
+  ## Banners are included in wait steps
+  def banner(_, _), do: nil
+
+  def output({:error, err}, _opts) do
+    case format_error(err) do
+      :undefined -> RabbitMQ.CLI.DefaultOutput.output({:error, err})
+      error_str -> {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(), error_str}
+    end
+  end
+
+  def output({:stream, stream}, _opts) do
+    {:stream,
+     Stream.map(stream, fn
+       {:error, err} ->
+         {:error,
+          case format_error(err) do
+            :undefined -> err
+            error_str -> error_str
+          end}
+
+       other ->
+         other
+     end)}
+  end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def wait_for(timeout, fun) do
+    sleep = round(timeout / 10)
+
+    case wait_for_loop(timeout, sleep, fun) do
+      {:error, :timeout} -> {:error, {:timeout, timeout}}
+      other -> other
+    end
+  end
+
+  def wait_for_loop(timeout, _, _) when timeout <= 0 do
+    {:error, :timeout}
+  end
+
+  def wait_for_loop(timeout, sleep, fun) do
+    time = :erlang.system_time(:milli_seconds)
+
+    case fun.() do
+      {:error, :loop} ->
+        time_to_fun = :erlang.system_time(:milli_seconds) - time
+
+        time_taken =
+          case {time_to_fun > timeout, time_to_fun > sleep} do
+            ## The function took longer than timeout
+            {true, _} ->
+              time_to_fun
+
+            ## The function took longer than sleep
+            {false, true} ->
+              time_to_fun
+
+            ## We need to sleep
+            {false, false} ->
+              :timer.sleep(sleep)
+              time_to_fun + sleep
+          end
+
+        wait_for_loop(timeout - time_taken, sleep, fun)
+
+      other ->
+        other
+    end
+  end
+
+  #
+  # Implementation
+  #
 
   defp wait_for_pid_funs(node_name, app_names, timeout, quiet) do
     app_names_formatted = :io_lib.format('~p', [app_names])
@@ -102,35 +182,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   defp log_param(fun, _quiet = false) do
     fn val -> {:ok, val, fun.(val)} end
   end
-
-  def usage, do: "wait [<pid_file>] [--pid|-P <pid>]"
-
-  ## Banners are included in wait steps
-  def banner(_, _), do: nil
-
-  def output({:error, err}, _opts) do
-    case format_error(err) do
-      :undefined -> RabbitMQ.CLI.DefaultOutput.output({:error, err})
-      error_str -> {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(), error_str}
-    end
-  end
-
-  def output({:stream, stream}, _opts) do
-    {:stream,
-     Stream.map(stream, fn
-       {:error, err} ->
-         {:error,
-          case format_error(err) do
-            :undefined -> err
-            error_str -> error_str
-          end}
-
-       other ->
-         other
-     end)}
-  end
-
-  use RabbitMQ.CLI.DefaultOutput
 
   defp format_error(:process_not_running) do
     "Error: process is not running."
@@ -207,48 +258,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
         end
       end
     )
-  end
-
-  def wait_for(timeout, fun) do
-    sleep = round(timeout / 10)
-
-    case wait_for_loop(timeout, sleep, fun) do
-      {:error, :timeout} -> {:error, {:timeout, timeout}}
-      other -> other
-    end
-  end
-
-  def wait_for_loop(timeout, _, _) when timeout <= 0 do
-    {:error, :timeout}
-  end
-
-  def wait_for_loop(timeout, sleep, fun) do
-    time = :erlang.system_time(:milli_seconds)
-
-    case fun.() do
-      {:error, :loop} ->
-        time_to_fun = :erlang.system_time(:milli_seconds) - time
-
-        time_taken =
-          case {time_to_fun > timeout, time_to_fun > sleep} do
-            ## The function took longer than timeout
-            {true, _} ->
-              time_to_fun
-
-            ## The function took longer than sleep
-            {false, true} ->
-              time_to_fun
-
-            ## We need to sleep
-            {false, false} ->
-              :timer.sleep(sleep)
-              time_to_fun + sleep
-          end
-
-        wait_for_loop(timeout - time_taken, sleep, fun)
-
-      other ->
-        other
-    end
   end
 end

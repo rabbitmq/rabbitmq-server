@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def merge_defaults(args, opts), do: {args, opts}
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def validate(args, _) when length(args) < 2 do
     {:validation_failure, :not_enough_args}

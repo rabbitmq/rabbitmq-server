@@ -18,13 +18,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
+
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   @info_keys ~w(pid name port host peer_port peer_host ssl ssl_protocol
                 ssl_key_exchange ssl_cipher ssl_hash peer_cert_subject
@@ -67,6 +64,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
       )
     end)
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
     "list_connections [--no-table-headers] [<connectioninfoitem> ...]"

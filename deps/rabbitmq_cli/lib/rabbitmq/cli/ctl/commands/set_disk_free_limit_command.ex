@@ -17,8 +17,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-  def merge_defaults(args, opts), do: {args, opts}
+
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def validate([], _) do
     {:validation_failure, :not_enough_args}
@@ -76,7 +76,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
     set_disk_free_limit_absolute([limit], opts)
   end
 
-  ## ----------------------- Memory-Relative Call ----------------------------
+  use RabbitMQ.CLI.DefaultOutput
+
+  def banner(["mem_relative", arg], %{node: node_name}) do
+    "Setting disk free limit on #{node_name} to #{arg} times the total RAM ..."
+  end
+
+  def banner([arg], %{node: node_name}),
+    do: "Setting disk free limit on #{node_name} to #{arg} bytes ..."
+
+  def usage, do: "set_disk_free_limit <disk_limit>\nset_disk_free_limit mem_relative <fraction>"
+
+  #
+  # Implementation
+  #
 
   defp set_disk_free_limit_relative(["mem_relative", fraction], %{node: node_name})
        when is_float(fraction) do
@@ -111,18 +124,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
     end
   end
 
-  ## ------------------------- Helpers / Misc --------------------------------
-
   defp make_rpc_call(node_name, args) do
     :rabbit_misc.rpc_call(node_name, :rabbit_disk_monitor, :set_disk_free_limit, args)
   end
-
-  def banner(["mem_relative", arg], %{node: node_name}) do
-    "Setting disk free limit on #{node_name} to #{arg} times the total RAM ..."
-  end
-
-  def banner([arg], %{node: node_name}),
-    do: "Setting disk free limit on #{node_name} to #{arg} bytes ..."
-
-  def usage, do: "set_disk_free_limit <disk_limit>\nset_disk_free_limit mem_relative <fraction>"
 end

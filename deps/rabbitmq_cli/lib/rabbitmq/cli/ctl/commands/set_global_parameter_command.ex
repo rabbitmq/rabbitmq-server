@@ -17,24 +17,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts) do
-    {args, opts}
-  end
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
-  def validate([], _) do
+  def validate(args, _) when length(args) < 2 do
     {:validation_failure, :not_enough_args}
   end
-
-  def validate([_ | _] = args, _) when length(args) < 2 do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate([_ | _] = args, _) when length(args) > 2 do
+  def validate(args, _) when length(args) > 2 do
     {:validation_failure, :too_many_args}
   end
-
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
@@ -47,6 +38,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
       [name, value, Helpers.cli_acting_user()]
     )
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "set_global_parameter <name> <value>"
 

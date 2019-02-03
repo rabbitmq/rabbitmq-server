@@ -30,13 +30,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
   }
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Report
-
-  def merge_defaults(args, opts), do: {args, opts}
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def validate([_ | _] = args, _) when length(args) != 0,
     do: {:validation_failure, :too_many_args}
@@ -86,6 +83,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
     end
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Report
+
+  def usage, do: "report"
+
+  def banner(_, %{node: node_name}), do: "Reporting server status of node #{node_name} ..."
+
+  #
+  # Implementation
+  #
+
   defp run_command(command, args, opts) do
     {args, opts} = command.merge_defaults(args, opts)
     banner = command.banner(args, opts)
@@ -97,8 +106,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
     command.info_keys()
     |> Enum.map(&Atom.to_string/1)
   end
-
-  def usage, do: "report"
-
-  def banner(_, %{node: node_name}), do: "Reporting server status of node #{node_name} ..."
 end

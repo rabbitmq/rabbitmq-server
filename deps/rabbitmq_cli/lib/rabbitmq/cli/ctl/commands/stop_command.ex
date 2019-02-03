@@ -15,7 +15,6 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
   alias RabbitMQ.CLI.Core.OsPid
 
   def merge_defaults(args, opts) do
@@ -57,6 +56,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
         {:ok, "process #{pid} (take from pid file #{pidfile_path}) is no longer running"}
     end
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "stop [--idempotent] [<pidfile>]"
 

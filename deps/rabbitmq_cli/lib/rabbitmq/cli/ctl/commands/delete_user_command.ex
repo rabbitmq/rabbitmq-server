@@ -17,14 +17,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate([], _), do: {:validation_failure, :not_enough_args}
-  def validate(args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
-  def validate([_], _), do: :ok
-
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([username], %{node: node_name}) do
@@ -35,6 +30,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
       [username, Helpers.cli_acting_user()]
     )
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "delete_user <username>"
 

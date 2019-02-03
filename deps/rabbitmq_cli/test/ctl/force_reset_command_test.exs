@@ -23,13 +23,10 @@ defmodule ForceResetCommandTest do
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
 
-
     start_rabbitmq_app()
 
     on_exit([], fn ->
       start_rabbitmq_app()
-
-
     end)
 
     :ok
@@ -65,7 +62,7 @@ defmodule ForceResetCommandTest do
     target = :jake@thedog
 
     opts = %{node: target}
-    assert match?({:badrpc, :nodedown}, @command.run([], opts))
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "banner", context do

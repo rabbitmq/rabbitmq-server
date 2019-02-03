@@ -19,10 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
     {args, Map.merge(%{global: false, vhost: "/", per_connection_delay: 0, limit: 0}, opts)}
   end
 
-  def validate(args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
-  def validate(args, _) when length(args) < 1, do: {:validation_failure, :not_enough_args}
-  def validate([_], _), do: :ok
-
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([explanation], %{

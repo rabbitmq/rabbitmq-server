@@ -17,15 +17,9 @@ alias RabbitMQ.CLI.Core.Config
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate(args, _) when length(args) > 0 do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate([], %{}), do: :ok
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   ##
   def validate_execution_environment(args, opts) do
@@ -53,6 +47,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
         :ok
     end
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "force_boot"
 

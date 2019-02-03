@@ -18,7 +18,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def switches(), do: [offline: :boolean]
 
@@ -26,9 +25,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     {args, Map.merge(%{offline: false}, opts)}
   end
 
-  def validate([], _), do: {:validation_failure, :not_enough_args}
-  def validate([_, _ | _], _), do: {:validation_failure, :too_many_args}
-  def validate([_], _), do: :ok
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
 
   def validate_execution_environment([_node_to_remove] = args, %{offline: true} = opts) do
     Validators.chain(
@@ -62,6 +59,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     ])
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
   def usage() do
     "forget_cluster_node [--offline] <existing_cluster_member_node>"
   end
@@ -69,6 +68,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   def banner([node_to_remove], _) do
     "Removing node #{node_to_remove} from the cluster"
   end
+
+  #
+  # Implementation
+  #
 
   defp become(node_name, opts) do
     :error_logger.tty(false)

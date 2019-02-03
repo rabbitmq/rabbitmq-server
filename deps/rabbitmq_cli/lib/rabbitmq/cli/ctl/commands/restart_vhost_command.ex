@@ -18,14 +18,11 @@ alias RabbitMQ.CLI.Core.ExitCodes
 defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   def merge_defaults(args, opts), do: {args, Map.merge(%{vhost: "/"}, opts)}
 
-  def validate([], _), do: :ok
-  def validate(_, _), do: {:validation_failure, :too_many_args}
-
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, vhost: vhost, timeout: timeout}) do

@@ -18,14 +18,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(default_opts(), opts)}
+    {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def usage, do: "cancel_sync_queue [-p <vhost>] queue"
-
-  def validate([], _), do: {:validation_failure, :not_enough_args}
-  def validate([_], _), do: :ok
-  def validate(_, _), do: {:validation_failure, :too_many_args}
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
@@ -39,9 +35,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
     )
   end
 
+  def usage, do: "cancel_sync_queue [-p <vhost>] queue"
+
   def banner([queue], %{vhost: vhost, node: _node}) do
     "Stopping synchronising queue '#{queue}' in vhost '#{vhost}' ..."
   end
-
-  defp default_opts, do: %{vhost: "/"}
 end

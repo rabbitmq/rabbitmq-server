@@ -23,16 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearOperatorPolicyCommand do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def validate([], _) do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate([_, _ | _], _) do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate([_], _), do: :ok
-
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([key], %{node: node_name, vhost: vhost}) do

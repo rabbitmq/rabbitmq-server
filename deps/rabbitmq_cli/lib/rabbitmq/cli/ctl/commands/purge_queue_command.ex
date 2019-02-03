@@ -15,25 +15,14 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def validate(args, _) when length(args) > 1 do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate([], _) do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate(_, _), do: :ok
-
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([queue], %{node: node_name, vhost: vhost, timeout: timeout}) do
@@ -52,6 +41,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
     end
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
+  def usage, do: "purge_queue <queue>"
+
+  def banner([queue], %{vhost: vhost}) do
+    "Purging queue '#{queue}' in vhost '#{vhost}' ..."
+  end
+
+  #
+  # Implementation
+  #
+
   defp purge(node_name, q, timeout) do
     res = :rabbit_misc.rpc_call(node_name, :rabbit_amqqueue, :purge, [q], timeout)
 
@@ -59,11 +60,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
       {:ok, _message_count} -> :ok
       _ -> res
     end
-  end
-
-  def usage, do: "purge_queue <queue>"
-
-  def banner([queue], %{vhost: vhost}) do
-    "Purging queue '#{queue}' in vhost '#{vhost}' ..."
   end
 end
