@@ -21,9 +21,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   @default_timeout 60_000
   @info_keys ~w(name durable auto_delete
@@ -126,6 +123,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       end)
     end)
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
     "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<queueinfoitem> ...]"

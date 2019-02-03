@@ -15,9 +15,6 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
@@ -26,15 +23,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
     {args, Map.merge(%{table_headers: true}, opts)}
   end
 
-  def validate([_ | _], _) do
-    {:validation_failure, :too_many_args}
-  end
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
-  def validate(_, _), do: :ok
 
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :list_users, [], timeout)
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage, do: "list_users [--no-table-headers]"
 

@@ -15,20 +15,19 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate([_ | _], _), do: {:validation_failure, :too_many_args}
-  def validate(_, _), do: :ok
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :environment, [])
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def usage, do: "environment"
 

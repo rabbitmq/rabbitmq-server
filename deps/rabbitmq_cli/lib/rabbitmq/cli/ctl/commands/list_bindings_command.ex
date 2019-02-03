@@ -17,9 +17,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
 
@@ -27,8 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   def merge_defaults([], opts) do
     merge_defaults(
@@ -40,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   end
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(default_opts(), opts)}
+    {args, Map.merge(%{vhost: "/", table_headers: true}, opts)}
   end
 
   def validate(args, _) do
@@ -65,6 +61,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
     )
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+
   def usage() do
     "list_bindings [-p <vhost>] [--no-table-headers] [<bindinginfoitem> ...]"
   end
@@ -72,10 +72,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   def usage_additional() do
     "<bindinginfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."
-  end
-
-  defp default_opts() do
-    %{vhost: "/", table_headers: true}
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."

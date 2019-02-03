@@ -52,7 +52,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate([_, _ | _], _options) do
+  def validate(args, _options) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
 

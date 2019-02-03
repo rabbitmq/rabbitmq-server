@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
   @default_timeout 60_000
 
   def scopes(), do: [:ctl, :diagnostics]
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   def merge_defaults(args, opts) do
     timeout =
@@ -31,11 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
     {args, Map.merge(opts, %{timeout: timeout})}
   end
 
-  def switches(), do: [timeout: :integer]
-  def aliases(), do: [t: :timeout]
-
-  def validate([_], _), do: {:validation_failure, :too_many_args}
-  def validate([], _), do: :ok
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
     # this is very similar to what net_adm:ping/1 does reimplemented with support for custom timeouts

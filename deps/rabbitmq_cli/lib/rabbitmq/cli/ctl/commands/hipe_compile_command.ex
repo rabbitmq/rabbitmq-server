@@ -17,7 +17,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   #
   # API
@@ -25,11 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
 
   def distribution(_), do: :none
 
-  def merge_defaults(args, opts) do
-    {args, opts}
-  end
-
-  def usage, do: "hipe_compile <directory>"
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def validate([], _), do: {:validation_failure, :not_enough_args}
 
@@ -67,6 +62,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
     Code.ensure_loaded(:rabbit_hipe)
     hipe_compile(String.trim(target_dir))
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def usage, do: "hipe_compile <directory>"
 
   def banner([target_dir], _) do
     "Will pre-compile RabbitMQ server modules with HiPE to #{target_dir} ..."

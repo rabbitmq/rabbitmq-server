@@ -17,7 +17,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def switches(), do: [priority: :integer, apply_to: :string]
 
@@ -28,15 +27,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
-
-  def validate([_ | _] = args, _) when length(args) < 3 do
+  def validate(args, _) when length(args) < 3 do
     {:validation_failure, :not_enough_args}
   end
-
-  def validate([_ | _] = args, _) when length(args) > 3 do
+  def validate(args, _) when length(args) > 3 do
     {:validation_failure, :too_many_args}
   end
-
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
@@ -54,6 +50,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
       [vhost, name, pattern, definition, priority, apply_to, Helpers.cli_acting_user()]
     )
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage,
     do:

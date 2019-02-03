@@ -19,9 +19,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def scopes(), do: [:ctl, :diagnostics]
 
@@ -68,6 +65,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
       )
     end)
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
     "list_channels [--no-table-headers] [<channelinfoitem> ...]"

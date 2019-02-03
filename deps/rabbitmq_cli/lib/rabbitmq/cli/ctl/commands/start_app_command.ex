@@ -17,9 +17,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StartAppCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts), do: {args, opts}
-  def validate([_ | _] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
-  def validate([], _), do: :ok
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :start, [])

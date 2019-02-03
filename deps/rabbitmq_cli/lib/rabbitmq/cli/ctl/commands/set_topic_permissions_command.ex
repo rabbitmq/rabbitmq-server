@@ -17,24 +17,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def validate([], _) do
+  def validate(args, _) when length(args) < 4 do
     {:validation_failure, :not_enough_args}
   end
-
-  def validate([_ | _] = args, _) when length(args) < 4 do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate([_ | _] = args, _) when length(args) > 4 do
+  def validate(args, _) when length(args) > 4 do
     {:validation_failure, :too_many_args}
   end
-
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
@@ -47,6 +40,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
       [user, vhost, exchange, write_pattern, read_pattern, Helpers.cli_acting_user()]
     )
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage,
     do: "set_topic_permissions [-p <vhost>] <username> <exchange> <write_pattern> <read_pattern>"

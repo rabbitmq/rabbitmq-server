@@ -23,17 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearVhostLimitsCommand do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def validate([], _) do
-    :ok
-  end
-
-  def validate([_], _) do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate([_ | _] = args, _) when length(args) > 1 do
-    {:validation_failure, :too_many_args}
-  end
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost_limit, :clear, [

@@ -15,9 +15,8 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts), do: {args, opts}
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def validate([], _) do
     {:validation_failure, :not_enough_args}
@@ -44,11 +43,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
     end
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def usage, do: "eval <expr>"
 
   def banner(_, _), do: nil
+
+  #
+  # Implementation
+  #
 
   defp make_bindings(arguments, opts) do
     Enum.with_index(arguments, 1)

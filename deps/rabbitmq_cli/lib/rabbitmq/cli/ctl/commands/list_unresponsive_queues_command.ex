@@ -21,9 +21,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   @info_keys ~w(name durable auto_delete
             arguments pid recoverable_slaves)a
@@ -32,8 +29,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(),
-    do: [queue_timeout: :integer, local: :boolean, timeout: :integer]
+  def switches() do
+    [queue_timeout: :integer, local: :boolean, timeout: :integer]
+  end
 
   def aliases(), do: [t: :timeout]
 
@@ -81,6 +79,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
       RpcStream.receive_list_items(node_name, mfas, timeout, info_keys, chunks)
     end)
   end
+
+  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
     "list_unresponsive_queues [--local] [--queue-timeout <queue-timeout>] [<unresponsiveq_ueueinfoitem> ...] [--no-table-headers]"

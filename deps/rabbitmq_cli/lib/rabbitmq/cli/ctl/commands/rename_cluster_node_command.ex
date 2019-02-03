@@ -13,19 +13,18 @@
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
-require Integer
-
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
+  require Integer
   alias RabbitMQ.CLI.Core.Validators
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts), do: {args, opts}
 
-  def validate([], _), do: {:validation_failure, :not_enough_args}
-  def validate([_], _), do: {:validation_failure, :not_enough_args}
+  def validate(args, _) when length(args) < 2 do
+    {:validation_failure, :not_enough_args}
+  end
 
   def validate(_, _) do
     :ok
@@ -55,6 +54,27 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
     end
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
+  def usage() do
+    "rename_cluster_node <oldnode1> <newnode1> [oldnode2] [newnode2] ..."
+  end
+
+  def banner(args, _) do
+    [
+      "Renaming cluster nodes: \n ",
+      for {node_from, node_to} <- make_node_pairs(args) do
+        "#{node_from} -> #{node_to} \n"
+      end
+    ]
+    |> List.flatten()
+    |> Enum.join()
+  end
+
+  #
+  # Implementation
+  #
+
   defp validate_args_count_even(args, _) do
     case agrs_count_even?(args) do
       true ->
@@ -76,20 +96,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
 
   defp make_node_pairs([from, to | rest]) do
     [{to_atom(from), to_atom(to)} | make_node_pairs(rest)]
-  end
-
-  def usage() do
-    "rename_cluster_node <oldnode1> <newnode1> [oldnode2] [newnode2] ..."
-  end
-
-  def banner(args, _) do
-    [
-      "Renaming cluster nodes: \n ",
-      for {node_from, node_to} <- make_node_pairs(args) do
-        "#{node_from} -> #{node_to} \n"
-      end
-    ]
-    |> List.flatten()
-    |> Enum.join()
   end
 end

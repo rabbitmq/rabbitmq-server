@@ -15,18 +15,12 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-
-  defp default_opts, do: %{vhost: "/"}
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(default_opts(), opts)}
+    {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def validate([], _), do: {:validation_failure, :not_enough_args}
-  def validate([_], _), do: :ok
-  def validate(_, _), do: {:validation_failure, :too_many_args}
-
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([queue], %{vhost: vhost, node: node_name}) do
@@ -38,6 +32,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
       :infinity
     )
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "sync_queue [-p <vhost>] queue"
 

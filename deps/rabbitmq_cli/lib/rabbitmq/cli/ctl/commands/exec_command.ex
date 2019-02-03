@@ -15,9 +15,8 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts), do: {args, opts}
+  use RabbitMQ.CLI.Core.MergesNoDefaults
 
   def switches(), do: [offline: :boolean]
 
@@ -58,6 +57,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
         {:error, Exception.message(ex)}
     end
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Inspect
 

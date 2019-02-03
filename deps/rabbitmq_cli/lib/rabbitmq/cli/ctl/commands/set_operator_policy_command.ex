@@ -17,7 +17,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def switches(), do: [priority: :integer, apply_to: :string]
 
@@ -54,6 +53,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
       [vhost, name, pattern, definition, priority, apply_to, Helpers.cli_acting_user()]
     )
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage,
     do:

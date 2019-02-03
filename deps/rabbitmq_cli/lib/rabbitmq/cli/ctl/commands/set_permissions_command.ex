@@ -17,7 +17,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
@@ -47,6 +46,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
       [user, vhost, conf, write, read, Helpers.cli_acting_user()]
     )
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "set_permissions [-p <vhost>] <username> <conf> <write> <read>"
 

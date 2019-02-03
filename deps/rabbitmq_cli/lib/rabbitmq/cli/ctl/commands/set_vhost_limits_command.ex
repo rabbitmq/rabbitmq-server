@@ -17,22 +17,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
   alias RabbitMQ.CLI.Core.Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def validate([], _) do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate([_ | _] = args, _) when length(args) > 1 do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate(_, _), do: :ok
-
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([definition], %{node: node_name, vhost: vhost}) do
@@ -42,6 +32,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
       Helpers.cli_acting_user()
     ])
   end
+
+  use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "set_vhost_limits [-p <vhost>] <definition>"
 

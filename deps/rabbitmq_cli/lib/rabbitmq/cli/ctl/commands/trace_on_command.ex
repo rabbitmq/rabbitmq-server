@@ -15,15 +15,12 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.TraceOnCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(_, opts) do
     {[], Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def validate([_ | _], _), do: {:validation_failure, :too_many_args}
-  def validate(_, _), do: :ok
-
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, vhost: vhost}) do
@@ -32,6 +29,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOnCommand do
       other -> other
     end
   end
+
+use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "trace_on [-p <vhost>]"
 

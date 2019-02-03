@@ -14,27 +14,26 @@
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
+  alias RabbitMQ.CLI.Core.ExitCodes
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def merge_defaults(args, opts), do: {args, opts}
-
-  def validate([_ | _] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
-  def validate([], _), do: :ok
-
+  use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :force_reset, [])
   end
 
-  def usage, do: "force_reset"
-
-  def banner(_, %{node: node_name}), do: "Forcefully resetting node #{node_name} ..."
-
   def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
-     RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
+    {:error, ExitCodes.exit_software(),
+              RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
   end
 
   use RabbitMQ.CLI.DefaultOutput
+
+  def usage, do: "force_reset"
+
+  def banner(_, %{node: node_name}), do: "Forcefully resetting node #{node_name} ..."
 end
