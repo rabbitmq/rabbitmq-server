@@ -43,6 +43,14 @@ defmodule ShutdownCommandTest do
     assert @command.validate([], Map.merge(%{wait: false}, context[:opts])) == :ok
   end
 
+  # this command performs rpc calls in validate/2
+  test "validate: request to a non-existent node returns nodedown" do
+    target = :jake@thedog
+
+    opts = %{node: target, wait: true, timeout: 10}
+    assert match?({:error, {:badrpc, _}}, @command.validate([], opts))
+  end
+
   test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
 
