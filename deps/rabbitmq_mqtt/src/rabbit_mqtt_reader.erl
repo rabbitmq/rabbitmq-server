@@ -325,16 +325,17 @@ parse(Bytes, ParseState) ->
 send_will_and_terminate(PState, State) ->
     send_will_and_terminate(PState, {shutdown, conn_closed}, State).
 
-send_will_and_terminate(PState, Reason, State) ->
+send_will_and_terminate(PState, Reason, State = #state{conn_name = ConnStr}) ->
     rabbit_mqtt_processor:send_will(PState),
+    rabbit_log_connection:debug("MQTT: about to send will message (if any) on connection ~p", [ConnStr]),
     % todo: flush channel after publish
     {stop, Reason, State}.
 
 network_error(closed,
-              State = #state{ conn_name  = ConnStr,
-                              proc_state = PState }) ->
+              State = #state{conn_name  = ConnStr,
+                             proc_state = PState}) ->
     MqttConn = PState#proc_state.connection,
-    Fmt = "MQTT detected network error for ~p: peer closed TCP connection~n",
+    Fmt = "MQTT connection ~p will terminate because peer closed TCP connection~n",
     Args = [ConnStr],
     case MqttConn of
         undefined  -> rabbit_log_connection:debug(Fmt, Args);
@@ -343,9 +344,10 @@ network_error(closed,
     send_will_and_terminate(PState, State);
 
 network_error(Reason,
-              State = #state{ conn_name  = ConnStr,
-                              proc_state = PState }) ->
-    rabbit_log_connection:info("MQTT detected network error for ~p: ~p~n", [ConnStr, Reason]),
+              State = #state{conn_name  = ConnStr,
+                             proc_state = PState}) ->
+    rabbit_log_connection:info("MQTT detected network error for ~p: ~p~n",
+                               [ConnStr, Reason]),
     send_will_and_terminate(PState, State).
 
 run_socket(State = #state{ connection_state = blocked }) ->
