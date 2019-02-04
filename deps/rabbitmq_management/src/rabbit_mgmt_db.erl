@@ -346,7 +346,8 @@ event_queue() ->
 
 consumers_stats(VHost) ->
     Data =  get_data_from_nodes({rabbit_mgmt_data, consumer_data, [VHost]}),
-    Consumers = [V || {_,V} <- maps:to_list(Data)],
+    Consumers = rabbit_mgmt_data_compat:fill_consumer_active_fields(
+                  [V || {_,V} <- maps:to_list(Data)]),
     ChPids = [ pget(channel_pid, Con)
                || Con <- Consumers, [] =:= pget(channel_details, Con)],
     ChDets = get_channel_detail_lookup(ChPids),
@@ -379,7 +380,9 @@ detail_queue_stats(Ranges, Objs, Interval) ->
        QueueData = maps:get(Id, DataLookup),
        Props = maps:get(queue_stats, QueueData),
        Stats = queue_stats(QueueData, Ranges, Interval),
-       Consumers = [{consumer_details, maps:get(consumer_stats, QueueData)}],
+       ConsumerStats = rabbit_mgmt_data_compat:fill_consumer_active_fields(
+                         maps:get(consumer_stats, QueueData)),
+       Consumers = [{consumer_details, ConsumerStats}],
        StatsD = [{deliveries,
                   detail_stats(QueueData, channel_queue_stats_deliver_stats,
                                deliver_get, second(Id), Ranges, Interval)},
@@ -579,7 +582,9 @@ detail_channel_stats(Ranges, Objs, Interval) ->
          ChannelData = maps:get(Id, DataLookup),
          Props = maps:get(channel_stats, ChannelData),
          Stats = channel_stats(ChannelData, Ranges, Interval),
-         Consumers = [{consumer_details, maps:get(consumer_stats, ChannelData)}],
+         ConsumerStats = rabbit_mgmt_data_compat:fill_consumer_active_fields(
+                           maps:get(consumer_stats, ChannelData)),
+         Consumers = [{consumer_details, ConsumerStats}],
          StatsD = [{publishes,
                     detail_stats(ChannelData, channel_exchange_stats_fine_stats,
                                  fine_stats, first(Id), Ranges, Interval)},
