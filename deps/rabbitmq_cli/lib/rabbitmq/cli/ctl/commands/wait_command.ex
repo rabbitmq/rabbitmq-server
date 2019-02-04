@@ -37,6 +37,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def validate([_ | _] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], %{pid: _}), do: {:validation_failure, "Cannot specify both pid and pidfile"}
+  def validate([_], _), do: :ok
+  def validate([], %{pid: _}), do: :ok
   def validate([], _), do: {:validation_failure, "No pid or pidfile specified"}
 
   def validate_execution_environment([], %{pid: _} = opts) do
