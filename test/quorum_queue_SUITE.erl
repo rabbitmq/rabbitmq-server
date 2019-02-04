@@ -114,8 +114,6 @@ all_tests() ->
      subscribe_and_nack,
      subscribe_and_multiple_nack,
      subscribe_should_fail_when_global_qos_true,
-     publisher_confirms,
-     publisher_confirms_with_deleted_queue,
      dead_letter_to_classic_queue,
      dead_letter_to_quorum_queue,
      dead_letter_from_classic_to_quorum_queue,
@@ -1122,41 +1120,6 @@ subscribe_and_multiple_nack(Config) ->
             wait_for_messages_ready(Servers, RaName, 0),
             wait_for_messages_pending_ack(Servers, RaName, 0)
     end.
-
-publisher_confirms(Config) ->
-    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    QQ = ?config(queue_name, Config),
-    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-
-    RaName = ra_name(QQ),
-    amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    publish(Ch, QQ),
-    wait_for_messages_ready(Servers, RaName, 1),
-    wait_for_messages_pending_ack(Servers, RaName, 0),
-    ct:pal("WAIT FOR CONFIRMS ~n", []),
-    amqp_channel:wait_for_confirms(Ch, 5000),
-    amqp_channel:unregister_confirm_handler(Ch),
-    ok.
-
-publisher_confirms_with_deleted_queue(Config) ->
-    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    QQ = ?config(queue_name, Config),
-    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    % subscribe(Ch, QQ, false),
-    publish(Ch, QQ),
-    delete_queues(Ch, [QQ]),
-    ct:pal("WAIT FOR CONFIRMS ~n", []),
-    amqp_channel:wait_for_confirms_or_die(Ch, 5000),
-    amqp_channel:unregister_confirm_handler(Ch),
-    ok.
 
 dead_letter_to_classic_queue(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
