@@ -28,7 +28,7 @@
         receive Body ->
                 true = Bool,
                 passed
-        after 1000 ->
+        after 5000 ->
                 throw(Error)
         end).
 
