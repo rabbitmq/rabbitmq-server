@@ -1294,16 +1294,17 @@ close_remote_socket(Config, Socket) when is_port(Socket) ->
     {ok, {IPv4, Port}} = inet:sockname(Socket),
     IPv6 = ipv4_mapped_ipv6_address(IPv4),
     rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, close_remote_socket, [{ok, {IPv6, Port}}]).
+        ?MODULE, close_remote_socket1, [{ok, {IPv4, Port}}, {ok, {IPv6, Port}}]).
 
-close_remote_socket(SockName) ->
+close_remote_socket1(SockNameIPv4, SockNameIPv6) ->
     AllPorts = [{P, erlang:port_info(P)} || P <- erlang:ports()],
     [RemoteSocket] = [
         P
     || {P, I} <- AllPorts,
         I =/= undefined,
         proplists:get_value(name, I) =:= "tcp_inet",
-        inet:peername(P) =:= SockName],
+        inet:peername(P) =:= SockNameIPv4 orelse
+        inet:peername(P) =:= SockNameIPv6],
     ok = gen_tcp:close(RemoteSocket).
 
 %% -------------------------------------------------------------------
