@@ -17,7 +17,8 @@
 -module(rabbit_mgmt_data_compat).
 
 -export([fill_get_empty_queue_metric/1,
-         drop_get_empty_queue_metric/1]).
+         drop_get_empty_queue_metric/1,
+         fill_consumer_active_fields/1]).
 
 fill_get_empty_queue_metric(Slide) ->
     exometer_slide:map(
@@ -47,3 +48,14 @@ drop_get_empty_queue_metric(Slide) ->
           (Value) ->
               Value
       end, Slide).
+
+fill_consumer_active_fields(ConsumersStats) ->
+    [case proplists:get_value(active, ConsumerStats) of
+         undefined ->
+             [{active, true},
+              {activity_status, up}
+              | ConsumerStats];
+         _ ->
+             ConsumerStats
+     end
+     || ConsumerStats <- ConsumersStats].
