@@ -37,7 +37,7 @@ initial_state(Socket, SSLLoginName) ->
     {ok, {PeerAddr, _PeerPort}} = rabbit_net:peername(RealSocket),
     initial_state(RealSocket, SSLLoginName,
         adapter_info(Socket, 'MQTT'),
-        fun send_client/2, PeerAddr).
+        fun serialise_and_send_to_client/2, PeerAddr).
 
 initial_state(Socket, SSLLoginName,
               AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
@@ -105,6 +105,9 @@ process_request(?CONNECT,
                    []    -> rabbit_mqtt_util:gen_client_id();
                    [_|_] -> ClientId0
                end,
+     rabbit_log_connection:debug("Received a CONNECT, client ID: ~p (expanded to ~p), username: ~p, "
+                                 "clean session: ~p, protocol version: ~p, keepalive: ~p",
+                                 [ClientId0, ClientId, Username, CleanSess, ProtoVersion, Keepalive]),
     AdapterInfo1 = add_client_id_to_adapter_info(rabbit_data_coercion:to_binary(ClientId), AdapterInfo),
     PState = PState0#proc_state{adapter_info = AdapterInfo1},
     {Return, PState1} =
@@ -226,6 +229,7 @@ process_request(?SUBSCRIBE,
                             retainer_pid = RPid,
                             send_fun = SendFun,
                             message_id  = StateMsgId} = PState0) ->
+    rabbit_log_connection:debug("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
     check_subscribe(Topics, fun() ->
         {QosResponse, PState1} =
             lists:foldl(fun (#mqtt_topic{name = TopicName,
@@ -274,6 +278,7 @@ process_request(?UNSUBSCRIBE,
                                                       client_id     = ClientId,
                                                       subscriptions = Subs0,
                                                       send_fun      = SendFun } = PState) ->
+    rabbit_log_connection:debug("Received an UNSUBSCRIBE for topic(s) ~p", [Topics]),
     Queues = rabbit_mqtt_util:subcription_queue_name(ClientId),
     Subs1 =
     lists:foldl(
@@ -300,11 +305,14 @@ process_request(?UNSUBSCRIBE,
     {ok, PState #proc_state{ subscriptions = Subs1 }};
 
 process_request(?PINGREQ, #mqtt_frame{}, #proc_state{ send_fun = SendFun } = PState) ->
+    rabbit_log_connection:debug("Received a PINGREQ"),
     SendFun(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = ?PINGRESP }},
                 PState),
+    rabbit_log_connection:debug("Sent a PINGRESP"),
     {ok, PState};
 
 process_request(?DISCONNECT, #mqtt_frame{}, PState) ->
+    rabbit_log_connection:debug("Received a DISCONNECT"),
     {stop, PState}.
 
 hand_off_to_retainer(RetainerPid, Topic, #mqtt_msg{payload = <<"">>}) ->
@@ -824,8 +832,15 @@ human_readable_mqtt_version(4) ->
 human_readable_mqtt_version(_) ->
     "N/A".
 
-send_client(Frame, #proc_state{ socket = Sock }) ->
-    rabbit_net:port_command(Sock, rabbit_mqtt_frame:serialise(Frame)).
+serialise_and_send_to_client(Frame, #proc_state{ socket = Sock }) ->
+    try rabbit_net:port_command(Sock, rabbit_mqtt_frame:serialise(Frame)) of
+      Res ->
+        Res
+    catch _:Error ->
+      rabbit_log_connection:error("MQTT: a socket write failed, the socket might already be closed"),
+      rabbit_log_connection:debug("Failed to write to socket ~p, error: ~p, frame: ~p",
+                                  [Sock, Error, Frame])
+    end.
 
 close_connection(PState = #proc_state{ connection = undefined }) ->
     PState;
