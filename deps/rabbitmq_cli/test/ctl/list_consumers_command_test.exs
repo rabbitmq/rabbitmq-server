@@ -169,5 +169,43 @@ defmodule ListConsumersCommandTest do
     end
   end
 
+  test "fill_consumer_active_fields: add missing fields if necessary" do
+    consumer38 = [
+      queue_name: {:resource, "/", :queue, "queue1"},
+      channel_pid: "",
+      consumer_tag: "ctag1",
+      ack_required: false,
+      prefetch_count: 0,
+      active: true,
+      activity_status: :up,
+      arguments: []
+    ]
+    assert @command.fill_consumer_active_fields({[
+      consumer38
+    ], {1, :continue}}) == {[consumer38], {1, :continue}}
+
+    assert @command.fill_consumer_active_fields({[
+      [
+        queue_name: {:resource, "/", :queue, "queue2"},
+        channel_pid: "",
+        consumer_tag: "ctag2",
+        ack_required: false,
+        prefetch_count: 0,
+        arguments: []
+      ]
+    ], {1, :continue}}) == {[
+                              [
+                                queue_name: {:resource, "/", :queue, "queue2"},
+                                channel_pid: "",
+                                consumer_tag: "ctag2",
+                                ack_required: false,
+                                prefetch_count: 0,
+                                active: true,
+                                activity_status: :up,
+                                arguments: []
+                              ]
+                            ], {1, :continue}}
+
+  end
 
 end
