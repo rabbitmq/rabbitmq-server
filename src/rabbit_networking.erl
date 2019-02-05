@@ -295,8 +295,7 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
                      port = Port,
                      opts = Opts}).
 
-%% @todo Temporary, to be removed before merge. Real fix is
-%% in an OTP PR at https://github.com/erlang/otp/pull/2117
+%% @todo Remove once Dialyzer only runs on Erlang/OTP 21.3 or above.
 -dialyzer({nowarn_function, record_distribution_listener/0}).
 
 record_distribution_listener() ->

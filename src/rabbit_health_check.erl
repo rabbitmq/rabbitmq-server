@@ -50,15 +50,10 @@ run_checks([C|Cs]) ->
             Error
     end.
 
-%% A lot of health checks seem to not be able to fail anymore.
 node_health_check(list_channels) ->
     case rabbit_channel:info_local([pid]) of
         L when is_list(L) ->
-            ok%;
-%        Other ->
-%            ErrorMsg = io_lib:format("list_channels unexpected output: ~p",
-%                                     [Other]),
-%            {error_string, ErrorMsg}
+            ok
     end;
 
 node_health_check(list_queues) ->
@@ -67,11 +62,7 @@ node_health_check(list_queues) ->
 node_health_check(rabbit_node_monitor) ->
     case rabbit_node_monitor:partitions() of
         L when is_list(L) ->
-            ok%;
-%        Other ->
-%            ErrorMsg = io_lib:format("rabbit_node_monitor reports unexpected partitions value: ~p",
-%                                     [Other]),
-%            {error_string, ErrorMsg}
+            ok
     end;
 
 node_health_check(alarms) ->
@@ -88,9 +79,5 @@ health_check_queues([]) ->
 health_check_queues([VHost|RestVHosts]) ->
     case rabbit_amqqueue:info_local(VHost) of
         L when is_list(L) ->
-            health_check_queues(RestVHosts)%;
-%        Other ->
-%            ErrorMsg = io_lib:format("list_queues unexpected output for vhost ~s: ~p",
-%                                     [VHost, Other]),
-%            {error_string, ErrorMsg}
+            health_check_queues(RestVHosts)
     end.
