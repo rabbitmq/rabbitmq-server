@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_log_ra).
+-module(rabbit_log_ra_shim).
 
 %% just a shim to redirect logs from ra to rabbit_log
 
