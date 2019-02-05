@@ -113,21 +113,36 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             RaMachine = ra_machine(NewQ),
-            case ra:start_cluster(RaName, RaMachine,
-                                  [{RaName, Node} || Node <- Nodes]) of
+            ServerIds = [{RaName, Node} || Node <- Nodes],
+            ClusterName = RaName,
+            RaConfs = [begin
+                           UId = ra:new_uid(ra_lib:to_binary(ClusterName)),
+                           FName = rabbit_misc:rs(QName),
+                           #{cluster_name => ClusterName,
+                             id => ServerId,
+                             uid => UId,
+                             friendly_name => FName,
+                             initial_members => ServerIds,
+                             log_init_args => #{uid => UId},
+                             machine => RaMachine}
+                       end || ServerId <- ServerIds],
+
+            case ra:start_cluster(RaConfs) of
                 {ok, _, _} ->
                     rabbit_event:notify(queue_created,
                                         [{name, QName},
                                          {durable, Durable},
                                          {auto_delete, AutoDelete},
                                          {arguments, Arguments},
-                                         {user_who_performed_action, ActingUser}]),
+                                         {user_who_performed_action,
+                                          ActingUser}]),
                     {new, NewQ};
                 {error, Error} ->
                     _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-                    rabbit_misc:protocol_error(internal_error,
-                                               "Cannot declare a queue '~s' on node '~s': ~255p",
-                                               [rabbit_misc:rs(QName), node(), Error])
+                    rabbit_misc:protocol_error(
+                      internal_error,
+                      "Cannot declare a queue '~s' on node '~s': ~255p",
+                      [rabbit_misc:rs(QName), node(), Error])
             end;
         {existing, _} = Ex ->
             Ex
