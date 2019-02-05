@@ -174,7 +174,7 @@ block_size(_) -> 8.
 %% These functions have been copied here to stay compatible with R16B03.
 
 %%--------------------------------------------------------------------
--spec pbdkdf2(string(), iodata(), integer(), integer(), fun(), atom(), integer())
+-spec pbdkdf2(iodata(), iodata(), integer(), integer(), fun(), atom(), integer())
 	     -> binary().
 %%
 %% Description: Implements password based decryption key derive function 2.
