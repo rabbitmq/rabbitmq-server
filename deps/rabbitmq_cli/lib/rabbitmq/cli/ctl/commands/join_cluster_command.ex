@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
-  def run([target_node], options=%{node: node_name, ram: ram, disc: disc}) do
+  def run([target_node], %{node: node_name, ram: ram, disc: disc} = opts) do
     node_type =
       case {ram, disc} do
         {true, false} -> :ram
@@ -48,7 +48,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
         {false, false} -> :disc
       end
 
-    long_or_short_names = Config.get_option(:longnames, options)
+    long_or_short_names = Config.get_option(:longnames, opts)
     target_node_normalised = Helpers.normalise_node(target_node, long_or_short_names)
 
     :rabbit_misc.rpc_call(
