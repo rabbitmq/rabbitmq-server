@@ -48,7 +48,6 @@ groups() ->
       {parallel_tests, [parallel], [
           amqp_connection_refusal,
           configurable_server_properties,
-          confirms,
           credit_flow_settings,
           dynamic_mirroring,
           gen_server2_with_state,
@@ -931,71 +930,6 @@ test_topic_expect_match(X, List) ->
 %% ---------------------------------------------------------------------------
 %% Unordered tests (originally from rabbit_tests.erl).
 %% ---------------------------------------------------------------------------
-
-confirms(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, confirms1, [Config]).
-
-confirms1(_Config) ->
-    {_Writer, Ch} = test_spawn(),
-    DeclareBindDurableQueue =
-        fun() ->
-                rabbit_channel:do(Ch, #'queue.declare'{durable = true}),
-                receive #'queue.declare_ok'{queue = Q0} ->
-                        rabbit_channel:do(Ch, #'queue.bind'{
-                                                 queue = Q0,
-                                                 exchange = <<"amq.direct">>,
-                                                 routing_key = "confirms-magic" }),
-                        receive #'queue.bind_ok'{} -> Q0
-                        after ?TIMEOUT -> throw(failed_to_bind_queue)
-                        end
-                after ?TIMEOUT -> throw(failed_to_declare_queue)
-                end
-        end,
-    %% Declare and bind two queues
-    QName1 = DeclareBindDurableQueue(),
-    QName2 = DeclareBindDurableQueue(),
-    %% Get the first one's pid (we'll crash it later)
-    {ok, Q1} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName1)),
-    QPid1 = amqqueue:get_pid(Q1),
-    %% Enable confirms
-    rabbit_channel:do(Ch, #'confirm.select'{}),
-    receive
-        #'confirm.select_ok'{} -> ok
-    after ?TIMEOUT -> throw(failed_to_enable_confirms)
-    end,
-    %% Publish a message
-    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
-                                           routing_key = "confirms-magic"
-                                          },
-                      rabbit_basic:build_content(
-                        #'P_basic'{delivery_mode = 2}, <<"">>)),
-    %% We must not kill the queue before the channel has processed the
-    %% 'publish'.
-    ok = rabbit_channel:flush(Ch),
-    %% Crash the queue
-    QPid1 ! boom,
-    %% Wait for a nack
-    receive
-        #'basic.nack'{} -> ok;
-        #'basic.ack'{}  -> throw(received_ack_instead_of_nack)
-    after ?TIMEOUT-> throw(did_not_receive_nack)
-    end,
-    receive
-        #'basic.ack'{} -> throw(received_ack_when_none_expected)
-    after 1000 -> ok
-    end,
-    %% Cleanup
-    rabbit_channel:do(Ch, #'queue.delete'{queue = QName2}),
-    receive
-        #'queue.delete_ok'{} -> ok
-    after ?TIMEOUT -> throw(failed_to_cleanup_queue)
-    end,
-    unlink(Ch),
-    ok = rabbit_channel:shutdown(Ch),
-
-    passed.
-
 gen_server2_with_state(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, gen_server2_with_state1, [Config]).
