@@ -105,32 +105,33 @@ defmodule RabbitMQCtl do
 
             maybe_with_distribution(command, options, fn ->
               # rabbitmq/rabbitmq-cli#278
-              options = Helpers.normalise_node_option(options)
-
-              # The code below implements a tiny decision tree that has
-              # to do with CLI argument and environment state validation.
-
-              # validate CLI arguments
-              case command.validate(arguments, options) do
-                :ok ->
-                  # then optionally validate execution environment
-                  case maybe_validate_execution_environment(command, arguments, options) do
+              case Helpers.normalise_node_option(options) do
+                {:error, _} = err ->
+                  format_error(err, options, command)
+                {:ok, options} ->
+                  # The code below implements a tiny decision tree that has
+                  # to do with CLI argument and environment state validation.
+                  case command.validate(arguments, options) do
                     :ok ->
-                      result = proceed_to_execution(command, arguments, options)
-                      handle_command_output(result, command, options, output_fun)
+                      # then optionally validate execution environment
+                      case maybe_validate_execution_environment(command, arguments, options) do
+                        :ok ->
+                          result = proceed_to_execution(command, arguments, options)
+                          handle_command_output(result, command, options, output_fun)
+
+                        {:validation_failure, err} ->
+                          environment_validation_error_output(err, command, unparsed_command, options)
+
+                        {:error, _} = err ->
+                          format_error(err, options, command)
+                      end
 
                     {:validation_failure, err} ->
-                      environment_validation_error_output(err, command, unparsed_command, options)
+                      argument_validation_error_output(err, command, unparsed_command, options)
 
                     {:error, _} = err ->
                       format_error(err, options, command)
                   end
-
-                {:validation_failure, err} ->
-                  argument_validation_error_output(err, command, unparsed_command, options)
-
-                {:error, _} = err ->
-                  format_error(err, options, command)
               end
             end)
         end
@@ -352,6 +353,13 @@ defmodule RabbitMQCtl do
   defp exit_program(code) do
     :net_kernel.stop()
     exit({:shutdown, code})
+  end
+
+  defp format_error({:error, {:node_name, err_reason} = result}, opts, module) do
+    op = CommandModules.module_to_command(module)
+    node = opts[:node]
+    {:error, ExitCodes.exit_code_for(result),
+      "Error: operation #{op} failed due to invalid node name (node: #{node} reason: #{err_reason}).\nIf using FQDN node names, use the -l / --longnames argument"}
   end
 
   defp format_error({:error, {:badrpc_multi, :nodedown, [node | _]} = result}, opts, _) do
