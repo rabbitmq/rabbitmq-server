@@ -16,7 +16,7 @@
 %%
 %% For the full spec see: http://www.rabbitmq.com/dlx.html
 %%
--module(unit_inbroker_dead_letter_SUITE).
+-module(dead_lettering_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("kernel/include/file.hrl").
