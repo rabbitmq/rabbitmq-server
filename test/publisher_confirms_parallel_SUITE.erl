@@ -16,7 +16,7 @@
 %%
 %% For the full spec see: http://www.rabbitmq.com/confirms.html
 %%
--module(unit_inbroker_publisher_confirms_SUITE).
+-module(publisher_confirms_parallel_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("kernel/include/file.hrl").
