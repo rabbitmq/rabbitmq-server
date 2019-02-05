@@ -24,8 +24,6 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     normalise_node(Config.get_option(:node), node_name_type)
   end
 
-  def normalise_node(name, node_name_type \\ :shortnames)
-
   def normalise_node(nil, node_name_type) do
     normalise_node(Config.get_option(:node), node_name_type)
   end

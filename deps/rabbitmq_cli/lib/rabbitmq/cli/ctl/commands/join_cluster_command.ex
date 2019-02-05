@@ -14,7 +14,7 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{Config, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
-  def run([target_node], %{node: node_name, ram: ram, disc: disc}) do
+  def run([target_node], options=%{node: node_name, ram: ram, disc: disc}) do
     node_type =
       case {ram, disc} do
         {true, false} -> :ram
@@ -48,11 +48,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
         {false, false} -> :disc
       end
 
+    long_or_short_names = Config.get_option(:longnames, options)
+    target_node_normalised = Helpers.normalise_node(target_node, long_or_short_names)
+
     :rabbit_misc.rpc_call(
       node_name,
       :rabbit_mnesia,
       :join_cluster,
-      [Helpers.normalise_node(target_node), node_type]
+      [target_node_normalised, node_type]
     )
   end
 
