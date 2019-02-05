@@ -25,7 +25,7 @@
 
 -compile(export_all).
 
--define(TIMEOUT, 30000).
+-define(TIMEOUT, 60000).
 
 -import(quorum_queue_utils, [wait_for_messages/2]).
 
