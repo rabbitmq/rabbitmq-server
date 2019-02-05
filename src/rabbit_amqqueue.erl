@@ -1507,7 +1507,7 @@ forget_all_durable(Node) ->
     %% Note rabbit is not running so we avoid e.g. the worker pool. Also why
     %% we don't invoke the return from rabbit_binding:process_deletions/1.
     {atomic, ok} =
-        ramnesia:transaction(
+        mnevis:transaction(
           fun () ->
                   Qs = mnesia:match_object(rabbit_durable_queue,
                                            amqqueue:pattern_match_all(), write),

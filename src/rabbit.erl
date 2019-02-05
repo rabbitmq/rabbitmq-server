@@ -1037,7 +1037,7 @@ io:format("Recover vhost ~n"),
 maybe_insert_default_data() ->
     case rabbit_table:needs_default_data() of
         true  ->
-            {ok, _, {_, Leader}} = ra:members(ramnesia_node:node_id()),
+            {ok, _, {_, Leader}} = ra:members(mnevis_node:node_id()),
             case Leader == node() of
                 true ->
                     insert_default_data();

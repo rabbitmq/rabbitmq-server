@@ -829,7 +829,7 @@ legacy_cluster_nodes(Nodes) ->
     %% We get all the info that we can, including the nodes from
     %% mnesia, which will be there if the node is a disc node (empty
     %% list otherwise)
-    lists:usort(Nodes ++ ramnesia:db_nodes()).
+    lists:usort(Nodes ++ mnevis:db_nodes()).
 
 legacy_disc_nodes(AllNodes) ->
     case AllNodes == [] orelse lists:member(node(), AllNodes) of

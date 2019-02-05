@@ -254,7 +254,7 @@ rename_in_running_mnesia(FromNode, ToNode) ->
     ok.
 
 transform_table(Table, Map) ->
-    ramnesia:transaction(
+    mnevis:transaction(
       fun () ->
               mnesia:lock({table, Table}, write),
               transform_table(Table, Map, mnesia:first(Table))

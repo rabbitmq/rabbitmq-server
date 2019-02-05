@@ -418,7 +418,7 @@ internal_system_x() ->
 -spec cluster_name() -> 'ok'.
 
 cluster_name() ->
-    {atomic, ok} = ramnesia:transaction(fun cluster_name_tx/0),
+    {atomic, ok} = mnevis:transaction(fun cluster_name_tx/0),
     ok.
 
 cluster_name_tx() ->
@@ -656,7 +656,7 @@ transform(TableName, Fun, FieldList, NewRecordName) ->
     ok.
 
 create(Tab, TabDef) ->
-    {atomic, ok} = ramnesia:create_table(Tab, TabDef),
+    {atomic, ok} = mnevis:create_table(Tab, TabDef),
     ok.
 
 %% Dumb replacement for rabbit_exchange:declare that does not require

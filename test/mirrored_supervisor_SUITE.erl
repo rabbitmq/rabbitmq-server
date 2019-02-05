@@ -48,7 +48,7 @@ init_per_suite(Config) ->
     lists:foreach(
       fun ({Tab, TabDef}) ->
               TabDef1 = proplists:delete(match, TabDef),
-              case ramnesia:create_table(Tab, TabDef1) of
+              case mnevis:create_table(Tab, TabDef1) of
                   {atomic, ok} ->
                       ok;
                   {aborted, Reason} ->
@@ -277,7 +277,7 @@ pid_of(Id) ->
     Pid.
 
 tx_fun(Fun) ->
-    case ramnesia:transaction(Fun) of
+    case mnevis:transaction(Fun) of
         {atomic,  Result}         -> Result;
         {aborted, Reason}         -> throw({error, Reason})
     end.

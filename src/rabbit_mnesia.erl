@@ -80,14 +80,15 @@ init() ->
     %% Create schema on all nodes
     ok = create_schema(),
 
-    ramnesia_node:start(),
-    ramnesia_node:trigger_election(),
+    %% TODO mnevis: node start
+    mnevis_node:start(),
+    mnevis_node:trigger_election(),
 
-    {ok, _, _} = ra:members(ramnesia_node:node_id()),
+    {ok, _, _} = ra:members(mnevis_node:node_id()),
 
-    io:format("~nDb nodes ~p~n", [ramnesia:db_nodes()]),
+    io:format("~nDb nodes ~p~n", [mnevis:db_nodes()]),
 
-    io:format("~nRunning Db nodes ~p~n", [ramnesia:running_db_nodes()]),
+    io:format("~nRunning Db nodes ~p~n", [mnevis:running_db_nodes()]),
 
     io:format("Get cluster status ~n"),
     {ok, Status} = cluster_status_from_mnesia(),
@@ -405,7 +406,7 @@ remove_node_offline_node(Node) ->
     %% want - we need to know the running nodes *now*.  If the current node is a
     %% RAM node it will return bogus results, but we don't care since we only do
     %% this operation from disc nodes.
-    case {ramnesia:running_db_nodes() -- [Node], node_type()} of
+    case {mnevis:running_db_nodes() -- [Node], node_type()} of
         {[], disc} ->
             start_mnesia(),
             try
@@ -509,7 +510,7 @@ cluster_status_from_mnesia() ->
             %            end,
             % case rabbit_table:is_present() of
                 % true  ->
-                AllNodes = ramnesia:db_nodes(),
+                AllNodes = mnevis:db_nodes(),
 
                          %% Ignoring disk node setting
                          % DiscCopies = mnesia:table_info(schema, disc_copies),
@@ -519,7 +520,7 @@ cluster_status_from_mnesia() ->
                                      % end,
                          %% `mnesia:system_info(running_db_nodes)' is safe since
                          %% we know that mnesia is running
-                         RunningNodes = ramnesia:running_db_nodes(),
+                         RunningNodes = mnevis:running_db_nodes(),
                          {ok, {AllNodes, AllNodes, RunningNodes}}
                 % false -> {error, tables_not_present}
             % end

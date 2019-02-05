@@ -54,7 +54,7 @@ ensure_secondary_indexes() ->
   ensure_secondary_index(rabbit_queue, vhost),
   ok.
 
-%% TODO ramnesia add table index
+%% TODO mnevis add table index
 ensure_secondary_index(Table, Field) ->
   case mnesia:add_table_index(Table, Field) of
     {atomic, ok}                          -> ok;
