@@ -309,7 +309,7 @@ boot() ->
                      % rabbit_mnesia:check_cluster_consistency(),
                      % broker_start(Apps)
 
-                     broker_start()
+                     broker_start(Apps)
              end).
 
 ensure_config() ->
