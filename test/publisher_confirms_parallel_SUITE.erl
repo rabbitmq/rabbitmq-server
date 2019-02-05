@@ -44,7 +44,7 @@ groups() ->
                              confirm_mandatory_unroutable,
                              confirm_unroutable_message],
     [
-     {publisher_confirm_tests, [], 
+     {publisher_confirm_tests, [],
       [
        {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
        {mirrored_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
@@ -327,7 +327,7 @@ confirm_minority(Config) ->
     receive
         #'basic.nack'{} -> throw(unexpected_nack);
         #'basic.ack'{} -> ok
-    after 30000 ->
+    after 60000 ->
             throw(missing_ack)
     end.
 
