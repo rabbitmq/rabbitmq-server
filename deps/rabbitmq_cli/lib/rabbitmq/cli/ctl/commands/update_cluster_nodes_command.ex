@@ -14,7 +14,7 @@
 ## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
-  alias RabbitMQ.CLI.Core.Helpers
+  alias RabbitMQ.CLI.Core.{Config, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -22,12 +22,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
-  def run([seed_node], %{node: node_name}) do
+  def run([seed_node], options=%{node: node_name}) do
+    long_or_short_names = Config.get_option(:longnames, options)
+    seed_node_normalised = Helpers.normalise_node(seed_node, long_or_short_names)
     :rabbit_misc.rpc_call(
       node_name,
       :rabbit_mnesia,
       :update_cluster_nodes,
-      [Helpers.normalise_node(seed_node)]
+      [seed_node_normalised]
     )
   end
 

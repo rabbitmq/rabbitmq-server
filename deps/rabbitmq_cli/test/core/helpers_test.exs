@@ -56,56 +56,56 @@ defmodule HelpersTest do
   test "longnames: 'rabbit' as node name, correct domain is used" do
     default_name = Config.get_option(:node)
     options = %{node: default_name, longnames: true}
-    options = @subject.normalise_node_option(options)
+    {:ok, options} = @subject.normalise_node_option(options)
     assert options[:node] == :"rabbit@#{hostname()}.#{domain()}"
   end
 
   test "shortnames: 'rabbit' as node name, no domain is used" do
     options = %{node: :rabbit, longnames: false}
-    options = @subject.normalise_node_option(options)
+    {:ok, options} = @subject.normalise_node_option(options)
     assert options[:node] == :"rabbit@#{hostname()}"
   end
 
   ## ------------------- normalise_node tests (:shortnames) --------------------
 
   test "shortnames: if nil input, retrieve standard rabbit hostname" do
-    assert @subject.normalise_node(nil) == get_rabbit_hostname()
+    assert @subject.normalise_node(nil, :shortnames) == get_rabbit_hostname()
   end
 
   test "shortnames: if input is an atom short name, return the atom with hostname" do
     want = String.to_atom("rabbit_test@#{hostname()}")
-    got = @subject.normalise_node(:rabbit_test)
+    got = @subject.normalise_node(:rabbit_test, :shortnames)
     assert want == got
   end
 
   test "shortnames: if input is a string fully qualified node name, return an atom" do
     want = String.to_atom("rabbit_test@#{hostname()}")
-    got = @subject.normalise_node("rabbit_test@#{hostname()}")
+    got = @subject.normalise_node("rabbit_test@#{hostname()}", :shortnames)
     assert want == got
   end
 
   test "shortnames: if input is a short node name, host name is added" do
     want = String.to_atom("rabbit_test@#{hostname()}")
-    got = @subject.normalise_node("rabbit_test")
+    got = @subject.normalise_node("rabbit_test", :shortnames)
     assert want == got
   end
 
   test "shortnames: if input is a hostname without a node name, default node name is added" do
     default_name = Config.get_option(:node)
     want = String.to_atom("#{default_name}@#{hostname()}")
-    got = @subject.normalise_node("@#{hostname()}")
+    got = @subject.normalise_node("@#{hostname()}", :shortnames)
     assert want == got
   end
 
   test "shortnames: if input is a short node name with an @ and no hostname, local host name is added" do
     want = String.to_atom("rabbit_test@#{hostname()}")
-    got = @subject.normalise_node("rabbit_test@")
+    got = @subject.normalise_node("rabbit_test@", :shortnames)
     assert want == got
   end
 
   test "shortnames: if input contains more than one @, return an atom" do
     want = String.to_atom("rabbit@rabbit_test@#{hostname()}")
-    got = @subject.normalise_node("rabbit@rabbit_test@#{hostname()}")
+    got = @subject.normalise_node("rabbit@rabbit_test@#{hostname()}", :shortnames)
     assert want == got
   end
 
