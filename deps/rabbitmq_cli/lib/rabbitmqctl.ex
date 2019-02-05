@@ -503,6 +503,7 @@ defmodule RabbitMQCtl do
 
      * See the CLI, clustering and networking guides on http://rabbitmq.com/documentation.html to learn more
      * Consult server logs on node #{node}
+     * If target node is configured to use long node names, don't forget to use --longnames with CLI tools
     """
   end
 
