@@ -161,10 +161,8 @@ See
 to learn more.
 .Pp
 Example:
-.Sp
-.Dl
-.Nm
-memory_breakdown --unit gigabytes
+.sp
+.Dl rabbitmq-diagnostics memory_breakdown --unit gigabytes
 .\" ------------------------------------
 .It Cm server_version
 .Pp
@@ -172,9 +170,7 @@ Reports target node's version.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-server_version -q
+.Dl rabbitmq-diagnostics server_version -q
 .\" ------------------------------------
 .It Cm erlang_version
 .Pp
@@ -182,9 +178,7 @@ Reports target node's Erlang/OTP version.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-erlang_version -q
+.Dl rabbitmq-diagnostics erlang_version -q
 .\" ------------------------------------
 .It Cm maybe_stuck
 .Pp
@@ -197,9 +191,7 @@ but is not necessarily an indication of a problem.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-maybe_stuck -q
+.Dl rabbitmq-diagnostics maybe_stuck -q
 .\" ------------------------------------
 .It Cm runtime_thread_stats Op Fl -sample-interval Ar interval
 .Pp
@@ -212,9 +204,7 @@ microstate accounting support and have the runtime_tools package available.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-runtime_thread_stats --sample-interval 15
+.Dl rabbitmq-diagnostics runtime_thread_stats --sample-interval 15
 .\" ------------------------------------
 .It Cm tls_versions
 .Pp
@@ -228,9 +218,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-tls_versions -q
+.Dl rabbitmq-diagnostics tls_versions -q
 .\" ------------------------------------
 .It Cm erlang_cookie_hash
 .Pp
@@ -244,9 +232,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-erlang_cookie_hash -q
+.Dl rabbitmq-diagnostics erlang_cookie_hash -q
 .\" ------------------------------------
 .It Cm discover_peers
 .Pp
@@ -258,9 +244,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-discover_peers --timeout 60
+.Dl rabbitmq-diagnostics discover_peers --timeout 60
 .\" ------------------------------------
 .It Cm list_channels Op Ar channelinfoitem ...
 See
@@ -314,9 +298,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-alarms
+.Dl rabbitmq-diagnostics alarms
 .\" ------------------------------------
 .It Cm listeners
 .Pp
@@ -330,9 +312,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-listeners
+.Dl rabbitmq-diagnostics listeners
 .\" ------------------------------------
 .It Cm is_running
 .Pp
@@ -341,9 +321,7 @@ the target node.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-is_running
+.Dl rabbitmq-diagnostics is_running
 .\" ------------------------------------
 .It Cm is_booting
 .Pp
@@ -352,9 +330,7 @@ the target node.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-is_booting
+.Dl rabbitmq-diagnostics is_booting
 .\" ------------------------------------
 
 check_port_connectivity [-t <timeout>]
@@ -370,9 +346,7 @@ was used to stop the application, this check will fail.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-check_running
+.Dl rabbitmq-diagnostics check_running
 .\" ------------------------------------
 .It Cm check_local_alarms
 .Pp
@@ -385,9 +359,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-check_local_alarms
+.Dl rabbitmq-diagnostics check_local_alarms
 .\" ------------------------------------
 .It Cm check_alarms
 .Pp
@@ -400,9 +372,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-check_alarms
+.Dl rabbitmq-diagnostics check_alarms
 .\" ------------------------------------
 .It Cm check_port_connectivity
 .Pp
@@ -418,9 +388,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-check_port_connectivity
+.Dl rabbitmq-diagnostics check_port_connectivity
 .\" ------------------------------------
 .It Cm check_protocol_listener
 .Pp
@@ -433,9 +401,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-check_protocol_listener mqtt
+.Dl rabbitmq-diagnostics check_protocol_listener mqtt
 .\" ------------------------------------
 .It Cm check_port_listener
 .Pp
@@ -449,9 +415,7 @@ to learn more.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-check_port_listener 5672
+.Dl rabbitmq-diagnostics check_port_listener 5672
 .\" ------------------------------------
 .It Cm status
 See
@@ -545,7 +509,5 @@ then checks that every queue and channel on the node can emit basic stats.
 .Pp
 Example:
 .Sp
-.Dl
-.Nm
-node_health_check -n rabbit@hostname
+.Dl rabbitmq-diagnostics node_health_check -n rabbit@hostname
 .\" ------------------------------------
