@@ -77,12 +77,13 @@ init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
 
+    %% TODO mnevis: node start
+    mnevis_node:start(),
+
     %% Create schema on all nodes
     ok = create_schema(),
 
-    %% TODO mnevis: node start
-    mnevis_node:start(),
-    mnevis_node:trigger_election(),
+
 
     {ok, _, _} = ra:members(mnevis_node:node_id()),
 
@@ -840,10 +841,10 @@ schema_ok_or_move() ->
 %% We only care about disc nodes since ram nodes are supposed to catch
 %% up only
 create_schema() ->
-    io:format("Create schema ~n"),
-    stop_mnesia(),
-    rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
-    start_mnesia(),
+    % io:format("Create schema ~n"),
+    % stop_mnesia(),
+    % rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
+    % start_mnesia(),
 
     io:format("Create tables ~n"),
     ok = rabbit_table:create(),

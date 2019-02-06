@@ -39,7 +39,7 @@
 create() ->
     lists:foreach(fun ({Tab, TabDef}) ->
                           TabDef1 = proplists:delete(match, TabDef),
-                          case mnesia:create_table(Tab, TabDef1) of
+                          case mnevis:create_table(Tab, TabDef1) of
                               {atomic, ok} -> ok;
                               {aborted, Reason} ->
                                   throw({error, {table_creation_failed,
@@ -69,7 +69,7 @@ ensure_secondary_index(Table, Field) ->
 -spec create_local_copy('disc' | 'ram') -> 'ok'.
 
 create_local_copy(disc) ->
-    create_local_copy(schema, disc_copies),
+    create_local_copy(schema, ram_copies),
     create_local_copies(disc);
 create_local_copy(ram)  ->
     create_local_copies(ram),
@@ -194,14 +194,14 @@ clear_ram_only_tables() ->
 create_local_copies(Type) ->
     lists:foreach(
       fun ({Tab, TabDef}) ->
-              HasDiscCopies     = has_copy_type(TabDef, disc_copies),
+              HasDiscCopies     = has_copy_type(TabDef, ram_copies),
               HasDiscOnlyCopies = has_copy_type(TabDef, disc_only_copies),
               LocalTab          = proplists:get_bool(local_content, TabDef),
               StorageType =
                   if
                       Type =:= disc orelse LocalTab ->
                           if
-                              HasDiscCopies     -> disc_copies;
+                              HasDiscCopies     -> ram_copies;
                               HasDiscOnlyCopies -> disc_only_copies;
                               true              -> ram_copies
                           end;
@@ -271,35 +271,35 @@ names() -> [Tab || {Tab, _} <- definitions()].
 definitions(disc) ->
     definitions();
 definitions(ram) ->
-    [{Tab, [{disc_copies, []}, {ram_copies, [node()]} |
+    [{Tab, [{ram_copies, []}, {ram_copies, [node()]} |
             proplists:delete(
-              ram_copies, proplists:delete(disc_copies, TabDef))]} ||
+              ram_copies, proplists:delete(ram_copies, TabDef))]} ||
         {Tab, TabDef} <- definitions()].
 
 definitions() ->
     [{rabbit_user,
       [{record_name, internal_user},
        {attributes, record_info(fields, internal_user)},
-       {disc_copies, [node()]},
+       {ram_copies, [node()]},
        {match, #internal_user{_='_'}}]},
      {rabbit_user_permission,
       [{record_name, user_permission},
        {attributes, record_info(fields, user_permission)},
-       {disc_copies, [node()]},
+       {ram_copies, [node()]},
        {match, #user_permission{user_vhost = #user_vhost{_='_'},
                                 permission = #permission{_='_'},
                                 _='_'}}]},
      {rabbit_topic_permission,
       [{record_name, topic_permission},
        {attributes, record_info(fields, topic_permission)},
-       {disc_copies, [node()]},
+       {ram_copies, [node()]},
        {match, #topic_permission{topic_permission_key = #topic_permission_key{_='_'},
                                  permission = #permission{_='_'},
                                  _='_'}}]},
      {rabbit_vhost,
       [{record_name, vhost},
        {attributes, record_info(fields, vhost)},
-       {disc_copies, [node()]},
+       {ram_copies, [node()]},
        {match, #vhost{_='_'}}]},
      {rabbit_listener,
       [{record_name, listener},
@@ -309,7 +309,7 @@ definitions() ->
      {rabbit_durable_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
-       {disc_copies, [node()]},
+       {ram_copies, [node()]},
        {match, #route{binding = binding_match(), _='_'}}]},
      {rabbit_semi_durable_route,
       [{record_name, route},
@@ -346,7 +346,7 @@ definitions() ->
      {rabbit_durable_exchange,
       [{record_name, exchange},
        {attributes, record_info(fields, exchange)},
-       {disc_copies, [node()]},
+       {ram_copies, [node()]},
        {match, #exchange{name = exchange_name_match(), _='_'}}]},
      {rabbit_exchange,
       [{record_name, exchange},
@@ -359,12 +359,12 @@ definitions() ->
      {rabbit_runtime_parameters,
       [{record_name, runtime_parameters},
        {attributes, record_info(fields, runtime_parameters)},
-       {disc_copies, [node()]},
+       {ram_copies, [node()]},
        {match, #runtime_parameters{_='_'}}]},
      {rabbit_durable_queue,
       [{record_name, amqqueue},
        {attributes, amqqueue:fields()},
-       {disc_copies, [node()]},
+       {ram_copies, [node()]},
        {match, amqqueue:pattern_match_on_name(queue_name_match())}]},
      {rabbit_queue,
       [{record_name, amqqueue},
