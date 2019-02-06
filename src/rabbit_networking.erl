@@ -177,7 +177,7 @@ tcp_listener_addresses_auto(Port) ->
 
 -spec tcp_listener_spec
         (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
-         protocol(), any(), non_neg_integer(), label()) ->
+         any(), protocol(), non_neg_integer(), label()) ->
             supervisor:child_spec().
 
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
@@ -284,6 +284,9 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
                      ip_address = IPAddress,
                      port = Port,
                      opts = Opts}).
+
+%% @todo Remove once Dialyzer only runs on Erlang/OTP 21.3 or above.
+-dialyzer({nowarn_function, record_distribution_listener/0}).
 
 record_distribution_listener() ->
     {Name, Host} = rabbit_nodes:parts(node()),
@@ -449,6 +452,7 @@ gethostaddr(Host, Family) ->
         {error, Reason} -> host_lookup_error(Host, Reason)
     end.
 
+-spec host_lookup_error(_, _) -> no_return().
 host_lookup_error(Host, Reason) ->
     rabbit_log:error("invalid host ~p - ~p~n", [Host, Reason]),
     throw({error, {invalid_host, Host, Reason}}).

@@ -78,6 +78,7 @@ master_prepare(Ref, QName, Log, SPids) ->
                       non_neg_integer(),
                       bq(), bqs()) ->
                           {'already_synced', bqs()} | {'ok', bqs()} |
+                          {'cancelled', bqs()} |
                           {'shutdown', any(), bqs()} |
                           {'sync_died', any(), bqs()}.
 

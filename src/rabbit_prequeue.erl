@@ -97,8 +97,13 @@ crash_restart(Q0) when ?is_amqqueue(Q0) ->
 
 %% This gen_server2 always hands over to some other module at the end
 %% of init/1.
+-spec handle_call(_, _, _) -> no_return().
 handle_call(_Msg, _From, _State)     -> exit(unreachable).
+-spec handle_cast(_, _) -> no_return().
 handle_cast(_Msg, _State)            -> exit(unreachable).
+-spec handle_info(_, _) -> no_return().
 handle_info(_Msg, _State)            -> exit(unreachable).
+-spec terminate(_, _) -> no_return().
 terminate(_Reason, _State)           -> exit(unreachable).
+-spec code_change(_, _, _) -> no_return().
 code_change(_OldVsn, _State, _Extra) -> exit(unreachable).
