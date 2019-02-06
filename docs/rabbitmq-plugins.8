@@ -19,7 +19,7 @@
 .Os "RabbitMQ Server"
 .Sh NAME
 .Nm rabbitmq-plugins
-.Nd command line for managing RabbitMQ plugins
+.Nd command line tool for managing RabbitMQ plugins
 .\" ------------------------------------------------------------------
 .Sh SYNOPSIS
 .\" ------------------------------------------------------------------
@@ -63,8 +63,8 @@ and
 .Cm set
 commands will update the plugins file and then attempt to connect to the
 broker and ensure it is running all enabled plugins.
-By default if it is not possible to connect to the running broker (for
-example if it is stopped) the operation will fail.
+By default if it is not possible to connect to and authenticate with the target node
+(for example if it is stopped), the operation will fail.
 If
 .Nm
 is used on the same host as the target node,
@@ -249,11 +249,12 @@ plugin and its dependencies and disables everything else:
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
 .\" ------------------------------------------------------------------
-.Xr rabbitmq-env.conf 5 ,
-.Xr rabbitmq-echopid 8 ,
+.Xr rabbitmqctl 8 ,
+.Xr rabbitmq-diagnostics 8 ,
 .Xr rabbitmq-server 8 ,
 .Xr rabbitmq-service 8 ,
-.Xr rabbitmqctl 8
+.Xr rabbitmq-env.conf 5 ,
+.Xr rabbitmq-echopid 8
 .\" ------------------------------------------------------------------
 .Sh AUTHOR
 .\" ------------------------------------------------------------------
