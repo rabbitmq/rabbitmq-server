@@ -660,7 +660,7 @@ tick(_Ts, #state{name = Name,
                EnqueueBytes,
                CheckoutBytes},
     [{mod_call, rabbit_quorum_queue,
-      update_metrics, [QName, Metrics]}, {aux, emit}].
+      handle_tick, [QName, Metrics]}, {aux, emit}].
 
 -spec overview(state()) -> map().
 overview(#state{consumers = Cons,
