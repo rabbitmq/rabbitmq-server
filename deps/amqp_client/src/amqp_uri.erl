@@ -277,5 +277,6 @@ run_state_monad(FunList, State) ->
 
 return(V) -> V.
 
+-spec fail(_) -> no_return().
 fail(Reason) -> throw(Reason).
 %% --=: end :=--
