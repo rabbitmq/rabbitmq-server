@@ -80,6 +80,7 @@ init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
                                    TC =:= decrypt_start_app_file;
                                    TC =:= decrypt_start_app_undefined ->
     application:load(rabbit),
+    application:set_env(rabbit, feature_flags_file, ""),
     Config;
 init_per_testcase(_Testcase, Config) ->
     Config.
@@ -262,7 +263,7 @@ decrypt_start_app_undefined(Config) ->
         rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch
         exit:{bad_configuration, config_entry_decoder} -> ok;
-        _:_ -> exit(unexpected_exception)
+        _:Exception -> exit({unexpected_exception, Exception})
     end.
 
 decrypt_start_app_wrong_passphrase(Config) ->
@@ -282,7 +283,7 @@ decrypt_start_app_wrong_passphrase(Config) ->
         rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch
         exit:{decryption_error,_,_} -> ok;
-        _:_ -> exit(unexpected_exception)
+        _:Exception -> exit({unexpected_exception, Exception})
     end.
 
 rabbitmqctl_encode(_Config) ->
