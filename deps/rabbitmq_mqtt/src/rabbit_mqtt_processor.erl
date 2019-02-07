@@ -509,7 +509,7 @@ process_login(_UserBin, _PassBin, _ProtoVersion,
                                                    vhost = VHost}}) when is_pid(Channel) ->
     UsernameStr = rabbit_data_coercion:to_list(Username),
     VHostStr = rabbit_data_coercion:to_list(VHost),
-    rabbit_log_connection:warning("MQTT duplicate connect/login attempt for user ~p, vhost ~p",
+    rabbit_log_connection:warning("MQTT detected duplicate connect/login attempt for user ~p, vhost ~p",
                                   [UsernameStr, VHostStr]),
     connack_dup_auth;
 process_login(UserBin, PassBin, ProtoVersion,
