@@ -11,10 +11,10 @@
 /git-revisions.txt
 /logs/
 /PACKAGES/
+*.plt
 /plugins/
 /rebar.config
 /rebar.lock
 /test/ct.cover.spec
 /xrefr
-
 /amqp_client.d
