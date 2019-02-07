@@ -1132,7 +1132,7 @@ try_to_write_enabled_feature_flags_list(FeatureNames) ->
 enabled_feature_flags_list_file() ->
     case application:get_env(rabbit, feature_flags_file) of
         {ok, Val} -> Val;
-        _         -> filename:join([rabbit_mnesia:dir(), "feature_flags"])
+        undefined -> throw(feature_flags_file_not_set)
     end.
 
 %% -------------------------------------------------------------------
