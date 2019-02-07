@@ -184,10 +184,18 @@ determine_elixir_version(Config) ->
 
 compute_code_path(Config) ->
     EntireCodePath = code:get_path(),
-    CodePath = rabbit_ct_broker_helpers:filter_out_erlang_code_path(
-                 EntireCodePath),
+    CodePath = filter_out_erlang_code_path(EntireCodePath),
     ct:pal(?LOW_IMPORTANCE, "Code path: ~p", [CodePath]),
     rabbit_ct_helpers:set_config(Config, {erlang_code_path, CodePath}).
+
+filter_out_erlang_code_path(CodePath) ->
+    ErlangRoot = code:root_dir(),
+    ErlangRootLen = string:len(ErlangRoot),
+    lists:filter(
+      fun(Dir) ->
+              Dir =/= "." andalso
+              string:substr(Dir, 1, ErlangRootLen) =/= ErlangRoot
+      end, CodePath).
 
 find_terraform_ssh_key(Config) ->
     Config1 =

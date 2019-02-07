@@ -41,7 +41,6 @@
     control_action/2, control_action/3, control_action/4,
     rabbitmqctl/3, rabbitmqctl_list/3,
 
-    filter_out_erlang_code_path/1,
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
     rpc/5, rpc/6,
@@ -1199,21 +1198,13 @@ clear_permissions(Config, Node, Username, VHost, ActingUser) ->
          rabbit_data_coercion:to_binary(VHost),
          ActingUser]).
 
-filter_out_erlang_code_path(CodePath) ->
-    ErlangRoot = code:root_dir(),
-    ErlangRootLen = string:len(ErlangRoot),
-    lists:filter(
-      fun(Dir) ->
-              Dir =/= "." andalso
-              string:substr(Dir, 1, ErlangRootLen) =/= ErlangRoot
-      end, CodePath).
-
 %% Functions to execute code on a remote node/broker.
 
 add_code_path_to_node(Node, Module) ->
     Path1 = filename:dirname(code:which(Module)),
     Path2 = filename:dirname(code:which(?MODULE)),
-    Paths = filter_out_erlang_code_path(lists:usort([Path1, Path2])),
+    Paths = filter_ct_helpers_and_testsuites_paths(
+              lists:usort([Path1, Path2])),
     case Paths of
         [] ->
             ok;
@@ -1238,6 +1229,23 @@ add_code_path_to_node(Node, Module) ->
                     ok
             end
     end.
+
+filter_ct_helpers_and_testsuites_paths(CodePath) ->
+    lists:filter(
+      fun(Dir) ->
+              DirName = filename:basename(Dir),
+              ParentDirName = filename:basename(
+                                filename:dirname(Dir)),
+              Dir =/= "." andalso
+              %% FIXME: This filtering is too naive. How to properly
+              %% distinguish RabbitMQ-related applications from
+              %% test-only modules?
+              ((ParentDirName =:= "rabbitmq_ct_helpers" andalso
+                DirName =:= "ebin") orelse
+               (ParentDirName =:= "rabbitmq_ct_client_helpers" andalso
+                DirName =:= "ebin") orelse
+               (DirName =:= "test"))
+      end, CodePath).
 
 add_code_path_to_all_nodes(Config, Module) ->
     Nodenames = get_node_configs(Config, nodename),
