@@ -83,6 +83,9 @@ build_content_frames(FragsRev, FrameMax, ChannelInt) ->
 build_content_frames(SizeAcc, FramesAcc, _FragSizeRem, [],
                      [], _BodyPayloadMax, _ChannelInt) ->
     {SizeAcc, lists:reverse(FramesAcc)};
+build_content_frames(SizeAcc, FramesAcc, _FragSizeRem, [],
+                     [<<>>], _BodyPayloadMax, _ChannelInt) ->
+    {SizeAcc, lists:reverse(FramesAcc)};
 build_content_frames(SizeAcc, FramesAcc, FragSizeRem, FragAcc,
                      Frags, BodyPayloadMax, ChannelInt)
   when FragSizeRem == 0 orelse Frags == [] ->

@@ -21,6 +21,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -include("rabbit_memory.hrl").
+-include("rabbit.hrl").
 
 -compile(export_all).
 
@@ -42,7 +43,8 @@ groups() ->
             encrypt_decrypt_term,
             version_equivalence,
             pid_decompose_compose,
-            platform_and_version
+            platform_and_version,
+            frame_encoding_does_not_fail_with_empty_binary_payload
         ]},
         {parse_mem_limit, [parallel], [
             parse_mem_limit_relative_exactly_max,
@@ -387,6 +389,21 @@ version_equivalence(_Config) ->
     true = rabbit_misc:version_minor_equivalent(<<"3.0.0">>, <<"3.0.0.1">>),
     false = rabbit_misc:version_minor_equivalent(<<"3.0.0">>, <<"3.1.0">>),
     false = rabbit_misc:version_minor_equivalent(<<"3.0.0.1">>, <<"3.1.0.1">>).
+
+frame_encoding_does_not_fail_with_empty_binary_payload(_Config) ->
+    [begin
+         Content = #content{
+             class_id = 60, properties = none, properties_bin = <<0,0>>, protocol = rabbit_framing_amqp_0_9_1,
+             payload_fragments_rev = P
+         },
+         ExpectedFrames = rabbit_binary_generator:build_simple_content_frames(1, Content, 0, rabbit_framing_amqp_0_9_1)
+     end || {P, ExpectedFrames} <- [
+                    {[], [[<<2,0,1,0,0,0,14>>,[<<0,60,0,0,0,0,0,0,0,0,0,0>>,<<0,0>>],206]]},
+                    {[<<>>], [[<<2,0,1,0,0,0,14>>,[<<0,60,0,0,0,0,0,0,0,0,0,0>>,<<0,0>>],206]]},
+                    {[<<"payload">>], [[<<2,0,1,0,0,0,14>>,[<<0,60,0,0,0,0,0,0,0,0,0,7>>,<<0,0>>],206],
+                                       [<<3,0,1,0,0,0,7>>,[<<"payload">>],206]]}
+                    ]],
+    ok.
 
 set_stats_interval(Interval) ->
     application:set_env(rabbit, collect_statistics, coarse),
