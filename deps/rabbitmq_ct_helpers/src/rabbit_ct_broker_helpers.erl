@@ -643,15 +643,28 @@ query_node(Config, NodeConfig) ->
       [rabbit, plugins_dir]),
     {ok, EnabledPluginsFile} = rpc(Config, Nodename, application, get_env,
       [rabbit, enabled_plugins_file]),
-    EnabledFeatureFlagsFile = rpc(Config, Nodename,
-      rabbit_feature_flags, enabled_feature_flags_list_file, []),
-    rabbit_ct_helpers:set_config(NodeConfig, [
-        {pid_file, PidFile},
-        {mnesia_dir, MnesiaDir},
-        {plugins_dir, PluginsDir},
-        {enabled_plugins_file, EnabledPluginsFile},
-        {enabled_feature_flags_list_file, EnabledFeatureFlagsFile}
-      ]).
+    Vars0 = [{pid_file, PidFile},
+             {mnesia_dir, MnesiaDir},
+             {plugins_dir, PluginsDir},
+             {enabled_plugins_file, EnabledPluginsFile}],
+    Vars = try
+               EnabledFeatureFlagsFile = rpc(Config, Nodename,
+                                             rabbit_feature_flags,
+                                             enabled_feature_flags_list_file,
+                                             []),
+               ct:pal("RABBITMQ_FEATURE_FLAGS_FILE=~p~n", [EnabledFeatureFlagsFile]),
+               [{enabled_feature_flags_list_file, EnabledFeatureFlagsFile}
+                | Vars0]
+           catch
+               exit:{undef, [{rabbit_feature_flags, _, _, _} | _]} ->
+                   %% This happens if the queried node is a RabbitMQ
+                   %% 3.7.x node. If this is the case, we can ignore
+                   %% this and leave the `enabled_plugins_file` config
+                   %% variable unset.
+                   ct:pal("NO RABBITMQ_FEATURE_FLAGS_FILE"),
+                   Vars0
+           end,
+    rabbit_ct_helpers:set_config(NodeConfig, Vars).
 
 maybe_cluster_nodes(Config) ->
     Clustered0 = rabbit_ct_helpers:get_config(Config, rmq_nodes_clustered),
@@ -892,15 +905,22 @@ rabbitmqctl(Config, Node, Args) ->
     Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
     NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
-    Env = [
+    Env0 = [
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
       {"RABBITMQ_MNESIA_DIR", ?config(mnesia_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
-        ?config(enabled_plugins_file, NodeConfig)},
-      {"RABBITMQ_FEATURE_FLAGS_FILE",
-        ?config(enabled_feature_flags_list_file, NodeConfig)}
+        ?config(enabled_plugins_file, NodeConfig)}
     ],
+    Ret = rabbit_ct_helpers:get_config(
+            NodeConfig, enabled_feature_flags_list_file),
+    Env = case Ret of
+              undefined ->
+                  Env0;
+              EnabledFeatureFlagsFile ->
+                  Env0 ++
+                  [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
+          end,
     Cmd = [Rabbitmqctl, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
 
