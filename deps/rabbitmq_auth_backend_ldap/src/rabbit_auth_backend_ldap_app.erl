@@ -36,7 +36,7 @@ start(_Type, _StartArgs) ->
     {ok, Backends} = application:get_env(rabbit, auth_backends),
     case configured(rabbit_auth_backend_ldap, Backends) of
         true  -> ok;
-        false -> rabbit_log:warning(
+        false -> rabbit_log_ldap:warning(
                    "LDAP plugin loaded, but rabbit_auth_backend_ldap is not "
                    "in the list of auth_backends. LDAP auth will not work.~n")
     end,
