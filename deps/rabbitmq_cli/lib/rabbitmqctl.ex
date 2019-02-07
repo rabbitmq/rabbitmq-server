@@ -317,6 +317,10 @@ defmodule RabbitMQCtl do
   defp format_validation_error(:bad_argument), do: "Bad argument."
   defp format_validation_error({:bad_argument, detail}), do: "Bad argument. #{detail}"
 
+  defp format_validation_error({:unsupported_target, details}) do
+    details
+  end
+
   defp format_validation_error({:bad_option, opts}) do
     header = "Invalid options for this command:"
 
