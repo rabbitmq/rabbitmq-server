@@ -40,9 +40,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ShutdownCommand do
         case hostname == remote_hostname do
           true  -> :ok;
           false ->
-            msg = "Node #{node_name} is not local (local hostname: #{hostname}, remote: #{remote_hostname}). " <>
-                  "This command can only be used in --wait mode with local nodes."
-            {:validation_failure, msg}
+            msg = "\nThis command can only --wait for shutdown of local nodes but node #{node_name} is remote (local hostname: #{hostname}, remote: #{remote_hostname}).\n" <>
+                  "Pass --no-wait to shut node #{node_name} down without waiting.\n"
+            {:validation_failure, {:unsupported_target, msg}}
         end
     end
   end
