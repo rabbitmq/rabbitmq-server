@@ -93,10 +93,24 @@ init_per_group(classic_queue, Config) ->
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
        {queue_durable, false}]);
 init_per_group(quorum_queue, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
-       {queue_durable, true}]);
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(
+              Config, nodename),
+    Ret = rabbit_ct_broker_helpers:rpc(
+            Config, 0,
+            rabbit_feature_flags,
+            is_supported_remotely,
+            [Nodes, [quorum_queue], 60000]),
+    case Ret of
+        true ->
+            ok = rabbit_ct_broker_helpers:rpc(
+                    Config, 0, rabbit_feature_flags, enable, [quorum_queue]),
+            rabbit_ct_helpers:set_config(
+              Config,
+              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+               {queue_durable, true}]);
+        false ->
+            {skip, "Quorum queues are unsupported"}
+    end;
 init_per_group(mirrored_queue, Config) ->
     rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
         <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
