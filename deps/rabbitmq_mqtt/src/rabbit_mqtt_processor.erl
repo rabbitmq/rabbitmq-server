@@ -109,66 +109,68 @@ process_request(?CONNECT,
                                  "clean session: ~p, protocol version: ~p, keepalive: ~p",
                                  [ClientId0, ClientId, Username, CleanSess, ProtoVersion, Keepalive]),
     AdapterInfo1 = add_client_id_to_adapter_info(rabbit_data_coercion:to_binary(ClientId), AdapterInfo),
-    PState = PState0#proc_state{adapter_info = AdapterInfo1},
-    {Return, PState1} =
+    PState1 = PState0#proc_state{adapter_info = AdapterInfo1},
+    {Return, PState5} =
         case {lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)),
               ClientId0 =:= [] andalso CleanSess =:= false} of
             {false, _} ->
-                {?CONNACK_PROTO_VER, PState};
+                {?CONNACK_PROTO_VER, PState1};
             {_, true} ->
-                {?CONNACK_INVALID_ID, PState};
+                {?CONNACK_INVALID_ID, PState1};
             _ ->
                 case creds(Username, Password, SSLLoginName) of
                     nocreds ->
                         rabbit_log_connection:error("MQTT login failed: no credentials provided~n"),
-                        {?CONNACK_CREDENTIALS, PState};
+                        {?CONNACK_CREDENTIALS, PState1};
                     {invalid_creds, {undefined, Pass}} when is_list(Pass) ->
                         rabbit_log_connection:error("MQTT login failed: no user username is provided"),
-                        {?CONNACK_CREDENTIALS, PState};
+                        {?CONNACK_CREDENTIALS, PState1};
                     {invalid_creds, {User, undefined}} when is_list(User) ->
                         rabbit_log_connection:error("MQTT login failed for ~p: no password provided", [User]),
-                        {?CONNACK_CREDENTIALS, PState};
+                        {?CONNACK_CREDENTIALS, PState1};
                     {UserBin, PassBin} ->
-                        case process_login(UserBin, PassBin, ProtoVersion, PState) of
+                        case process_login(UserBin, PassBin, ProtoVersion, PState1) of
+                            connack_dup_auth ->
+                                {SessionPresent0, PState2} = maybe_clean_sess(PState1),
+                                {{?CONNACK_ACCEPT, SessionPresent0}, PState2};
                             {?CONNACK_ACCEPT, Conn, VHost, AState} ->
-                                 RetainerPid =
-                                   rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
+                                RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
                                 link(Conn),
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
                                 link(Ch),
                                 amqp_channel:enable_delivery_flow_control(Ch),
-                                ok = rabbit_mqtt_collector:register(
-                                  ClientId, self()),
+                                ok = rabbit_mqtt_collector:register(ClientId, self()),
                                 Prefetch = rabbit_mqtt_util:env(prefetch),
                                 #'basic.qos_ok'{} = amqp_channel:call(
                                   Ch, #'basic.qos'{prefetch_count = Prefetch}),
                                 rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
-                                {SP, ProcState} =
-                                    maybe_clean_sess(
-                                        PState #proc_state{
+                                PState3 = PState1#proc_state{
                                             will_msg   = make_will_msg(Var),
                                             clean_sess = CleanSess,
                                             channels   = {Ch, undefined},
                                             connection = Conn,
                                             client_id  = ClientId,
                                             retainer_pid = RetainerPid,
-                                            auth_state = AState}),
-                                {{?CONNACK_ACCEPT, SP}, ProcState};
+                                            auth_state = AState},
+                                {SessionPresent1, PState4} = maybe_clean_sess(PState3),
+                                {{?CONNACK_ACCEPT, SessionPresent1}, PState4};
                             ConnAck ->
-                                {ConnAck, PState}
+                                {ConnAck, PState1}
                         end
                 end
         end,
     {ReturnCode, SessionPresent} = case Return of
-        {?CONNACK_ACCEPT, _} = Return -> Return;
-        Return                        -> {Return, false}
-    end,
-    SendFun(#mqtt_frame{ fixed    = #mqtt_frame_fixed{ type = ?CONNACK},
-                         variable = #mqtt_frame_connack{
-                                     session_present = SessionPresent,
-                                     return_code = ReturnCode}},
-            PState1),
-    {ok, PState1};
+                                       {?CONNACK_ACCEPT, _} ->
+                                           Return;
+                                       Return ->
+                                           {Return, false}
+                                   end,
+    SendFun(#mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?CONNACK},
+                        variable = #mqtt_frame_connack{
+                                      session_present = SessionPresent,
+                                      return_code = ReturnCode}},
+            PState5),
+    {ok, PState5};
 
 process_request(?PUBACK,
                 #mqtt_frame{
@@ -467,11 +469,13 @@ maybe_clean_sess(PState = #proc_state { clean_sess = true,
                                         client_id  = ClientId }) ->
     {_, Queue} = rabbit_mqtt_util:subcription_queue_name(ClientId),
     {ok, Channel} = amqp_connection:open_channel(Conn),
-    try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue }) of
-        #'queue.delete_ok'{} -> ok = amqp_channel:close(Channel)
-    catch
-        exit:_Error -> ok
-    end,
+    ok = try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue }) of
+             #'queue.delete_ok'{} -> ok
+         catch
+             exit:_Error -> ok
+         after
+             amqp_channel:close(Channel)
+         end,
     {false, PState}.
 
 session_present(Conn, ClientId)  ->
@@ -499,12 +503,21 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
                dup     = false,
                payload = Msg }.
 
+process_login(_UserBin, _PassBin, _ProtoVersion,
+              #proc_state{channels   = {Channel, _},
+                          auth_state = #auth_state{username = Username,
+                                                   vhost = VHost}}) when is_pid(Channel) ->
+    UsernameStr = rabbit_data_coercion:to_list(Username),
+    VHostStr = rabbit_data_coercion:to_list(VHost),
+    rabbit_log_connection:warning("MQTT duplicate connect/login attempt for user ~p, vhost ~p",
+                                  [UsernameStr, VHostStr]),
+    connack_dup_auth;
 process_login(UserBin, PassBin, ProtoVersion,
-              #proc_state{ channels     = {undefined, undefined},
-                           socket       = Sock,
-                           adapter_info = AdapterInfo,
-                           ssl_login_name = SslLoginName,
-                           peer_addr    = Addr}) ->
+              #proc_state{channels     = {undefined, undefined},
+                          socket       = Sock,
+                          adapter_info = AdapterInfo,
+                          ssl_login_name = SslLoginName,
+                          peer_addr    = Addr}) ->
     {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
     rabbit_log_connection:info(
