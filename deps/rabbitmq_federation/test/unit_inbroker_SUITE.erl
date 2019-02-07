@@ -143,19 +143,18 @@ remove_credentials(Config) ->
     Test(<<"amqps://">>, <<"localhost:5672/%2f">>),
     ok.
 
-get_connection_name(_Config) ->
-    Q = amqqueue:new(rabbit_misc:r(<<"/">>, queue, <<"queue">>),
-                     self(),
-                     false,
-                     false,
-                     none,
-                     [],
-                     undefined,
-                     #{},
-                     classic),
+get_connection_name(Config) ->
+    FeatureFlagsFile = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env, [rabbit, feature_flags_file, "/tmp/none"]),
+    application:set_env(rabbit, feature_flags_file, FeatureFlagsFile),
+
+    Amqqueue = amqqueue:new(#resource{kind = queue}, none, false, false, none, [], <<"/">>, #{}, classic),
+    AmqqueueWithPolicy = amqqueue:set_policy(Amqqueue, [{name, <<"my.federation.policy">>}]),
+    AmqqueueWithEmptyPolicy = amqqueue:set_policy(Amqqueue, []),
+
+
     <<"Federation link (upstream: my.upstream, policy: my.federation.policy)">> = rabbit_federation_link_util:get_connection_name(
         #upstream{name = <<"my.upstream">>},
-        #upstream_params{x_or_q = amqqueue:set_policy(Q, [{name, <<"my.federation.policy">>}])}
+        #upstream_params{x_or_q = AmqqueueWithPolicy}
     ),
     <<"Federation link (upstream: my.upstream, policy: my.federation.policy)">> = rabbit_federation_link_util:get_connection_name(
         #upstream{name = <<"my.upstream">>},
@@ -163,7 +162,7 @@ get_connection_name(_Config) ->
     ),
     <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
         #upstream{},
-        #upstream_params{x_or_q = amqqueue:set_policy(Q, [])}
+        #upstream_params{x_or_q = AmqqueueWithEmptyPolicy}
     ),
     <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
         #upstream{},
