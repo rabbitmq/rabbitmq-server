@@ -144,10 +144,17 @@ remove_credentials(Config) ->
     ok.
 
 get_connection_name(Config) ->
-    FeatureFlagsFile = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env, [rabbit, feature_flags_file, "/tmp/none"]),
-    application:set_env(rabbit, feature_flags_file, FeatureFlagsFile),
-
-    Amqqueue = amqqueue:new(#resource{kind = queue}, none, false, false, none, [], <<"/">>, #{}, classic),
+    Amqqueue = rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          amqqueue, new, [rabbit_misc:r(<<"/">>, queue, <<"queue">>),
+                          self(),
+                          false,
+                          false,
+                          none,
+                          [],
+                          undefined,
+                          #{},
+                          classic]),
     AmqqueueWithPolicy = amqqueue:set_policy(Amqqueue, [{name, <<"my.federation.policy">>}]),
     AmqqueueWithEmptyPolicy = amqqueue:set_policy(Amqqueue, []),
 
