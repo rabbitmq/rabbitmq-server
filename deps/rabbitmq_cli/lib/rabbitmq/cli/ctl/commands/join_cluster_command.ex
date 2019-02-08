@@ -63,6 +63,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     "join_cluster [--disc|--ram] <existing_cluster_member_node>"
   end
 
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Join the cluster with the specified node"
+
   def banner([target_node], %{node: node_name}) do
     "Clustering node #{node_name} with #{target_node}"
   end

@@ -73,6 +73,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
     "list_connections [--no-table-headers] [<connectioninfoitem> ...]"
   end
 
+  def help_section(), do: :list
+
   def usage_additional() do
     "<connectioninfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."

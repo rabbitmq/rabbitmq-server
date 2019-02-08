@@ -88,6 +88,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
     "list_unresponsive_queues [--local] [--queue-timeout <queue-timeout>] [<unresponsiveq_ueueinfoitem> ...] [--no-table-headers]"
   end
 
+  def help_section(), do: :list
+
   def usage_additional() do
     "<unresponsive_queueinfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."

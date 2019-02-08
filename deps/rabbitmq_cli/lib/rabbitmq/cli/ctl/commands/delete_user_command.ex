@@ -34,6 +34,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "delete_user <username>"
+  def help_section(), do: :user_management
 
   def banner([arg], _), do: "Deleting user \"#{arg}\" ..."
 end

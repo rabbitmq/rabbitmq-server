@@ -31,5 +31,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
 
   def usage, do: "environment"
 
+  def help_section(), do: :report
+
   def banner(_, %{node: node_name}), do: "Application environment of node #{node_name} ..."
 end

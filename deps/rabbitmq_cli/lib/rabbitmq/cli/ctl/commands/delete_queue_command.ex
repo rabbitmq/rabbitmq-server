@@ -21,6 +21,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
 
   def usage(), do: "delete_queue queue_name [--if_empty|-e] [--if_unused|-u]"
 
+  def help_section(), do: :queues
+
   def banner([qname], %{vhost: vhost, if_empty: if_empty, if_unused: if_unused}) do
     if_empty_str =
       case if_empty do

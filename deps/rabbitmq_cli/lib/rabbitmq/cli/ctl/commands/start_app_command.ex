@@ -26,5 +26,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StartAppCommand do
 
   def usage, do: "start_app"
 
+  def help_section(), do: :node_management
+
+  def description(), do: "Starts the RabbitMQ application inside the Erlang VM node"
+
   def banner(_, %{node: node_name}), do: "Starting node #{node_name} ..."
 end

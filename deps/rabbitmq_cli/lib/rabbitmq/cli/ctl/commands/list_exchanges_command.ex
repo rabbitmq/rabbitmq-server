@@ -64,6 +64,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
     "list_exchanges [-p <vhost>] [--no-table-headers] [<exchangeinfoitem> ...]"
   end
 
+  def help_section(), do: :list
+
   def usage_additional() do
     "<exchangeinfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."

@@ -46,6 +46,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
   end
 
   def usage, do: "add_user <username> <password>"
+  def help_section(), do: :user_management
 
   def banner([username, _password], _), do: "Adding user \"#{username}\" ..."
 

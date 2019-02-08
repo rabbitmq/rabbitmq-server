@@ -46,6 +46,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
   def usage,
     do: "set_topic_permissions [-p <vhost>] <username> <exchange> <write_pattern> <read_pattern>"
 
+  def help_section(), do: :user_management
+
   def banner([user, exchange, _, _], %{vhost: vhost}),
     do:
       "Setting topic permissions on \"#{exchange}\" for user \"#{user}\" in vhost \"#{vhost}\" ..."

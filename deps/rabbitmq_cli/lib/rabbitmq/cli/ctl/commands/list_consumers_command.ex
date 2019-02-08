@@ -71,6 +71,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
     "list_consumers [-p vhost] [--no-table-headers] [<consumerinfoitem> ...]"
   end
 
+  def help_section(), do: :list
+
   def usage_additional() do
     "<consumerinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."
   end

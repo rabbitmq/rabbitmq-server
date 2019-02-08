@@ -91,6 +91,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
   def usage,
     do: "decode value passphrase [--cipher cipher] [--hash hash] [--iterations iterations]"
 
+  def help_section(), do: :encode
+
+  def description(), do: "Decrypt a value"
+
   def banner([_, _], _) do
     "Decrypting value ..."
   end

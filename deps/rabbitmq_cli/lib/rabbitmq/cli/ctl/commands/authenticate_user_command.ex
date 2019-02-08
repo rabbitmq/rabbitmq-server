@@ -34,6 +34,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   end
 
   def usage, do: "authenticate_user <username> <password>"
+  def help_section(), do: :user_management
 
   def banner([username, _password], _), do: "Authenticating user \"#{username}\" ..."
 

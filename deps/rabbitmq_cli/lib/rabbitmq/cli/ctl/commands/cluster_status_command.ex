@@ -48,6 +48,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
   def usage, do: "cluster_status"
 
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Print cluster status of the node"
+
   def banner(_, %{node: node_name}), do: "Cluster status of node #{node_name} ..."
 
   #

@@ -30,6 +30,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
   end
 
   def usage, do: "restart_vhost [-p <vhost>]"
+  def help_section(), do: :vhost
 
   def banner(_, %{node: node_name, vhost: vhost}) do
     "Trying to restart vhost '#{vhost}' on node '#{node_name}' ..."

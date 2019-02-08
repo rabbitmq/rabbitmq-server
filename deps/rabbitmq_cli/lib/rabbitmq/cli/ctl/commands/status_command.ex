@@ -31,5 +31,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
   def usage, do: "status"
 
+  def help_section(), do: :report
+
   def banner(_, %{node: node_name}), do: "Status of node #{node_name} ..."
 end

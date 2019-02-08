@@ -15,6 +15,8 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   alias RabbitMQ.CLI.Core.{CommandModules, Config, ExitCodes}
+  alias RabbitMQ.CLI.Core.CommandModules
+
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -44,7 +46,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     CommandModules.load(opts)
 
     case opts[:list_commands] do
-      true -> commands()
+      true -> commands_description()
       _ -> all_usage(opts)
     end
   end
@@ -58,11 +60,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   end
 
   def all_usage(opts) do
+    tool_name = program_name(opts)
     Enum.join(
-      tool_usage(program_name(opts)) ++
+      tool_usage(tool_name) ++
         options_usage() ++
-        [Enum.join(["Commands:"] ++ commands(), "\n")] ++
-        additional_usage(),
+        [Enum.join(["Commands:"] ++ commands_description(), "\n")] ++
+        help_additional(tool_name),
       "\n\n"
     )
   end
@@ -76,10 +79,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def usage(), do: "help (<command> | [--list-commands])"
 
+  def help_section(), do: :help
+
   defp tool_usage(tool_name) do
     [
       "\nUsage:\n" <>
-        "#{tool_name} [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"
+        "#{tool_name} [-n <node>] [-t <timeout>] [-l|--longnames] [-q|--quiet] <command> [<command options>]"
     ]
   end
 
@@ -110,35 +115,121 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   end
 
   defp options_usage() do
-    ["General options:
-    short            | long          | description
-    -----------------|---------------|--------------------------------
-    -?               | --help        | displays command usage information
-    -n <node>        | --node <node> | connect to node <node>
-    -l               | --longnames   | use long host names
-    -q               | --quiet       | suppress informational messages
-    -s               | --silent      | suppress informational messages
-                                     | and table header row
+    [
+    #   "General options:
+    # short            | long          | description
+    # -----------------|---------------|--------------------------------
+    # -?               | --help        | displays command usage information
+    # -n <node>        | --node <node> | connect to node <node>
+    # -l               | --longnames   | use long host names
+    # -q               | --quiet       | suppress informational messages
+    # -s               | --silent      | suppress informational messages
+                                     # | and table header row"
+# ,
+# "
+# Default node is \"rabbit@server\", where `server` is the local hostname. On a host
+# named \"server.example.com\", the node name of the RabbitMQ Erlang node will
+# usually be rabbit@server (unless RABBITMQ_NODENAME has been set to some
+# non-default value at broker startup time). The output of hostname -s is usually
+# the correct suffix to use after the \"@\" sign. See rabbitmq-server(1) for
+# details of configuring the RabbitMQ broker.
 
-Default node is \"rabbit@server\", where `server` is the local hostname. On a host
-named \"server.example.com\", the node name of the RabbitMQ Erlang node will
-usually be rabbit@server (unless RABBITMQ_NODENAME has been set to some
-non-default value at broker startup time). The output of hostname -s is usually
-the correct suffix to use after the \"@\" sign. See rabbitmq-server(1) for
-details of configuring the RabbitMQ broker.
+# Most options have a corresponding \"long option\" i.e. \"-q\" or \"--quiet\".
+# Long options for boolean values may be negated with the \"--no-\" prefix,
+# i.e. \"--no-quiet\" or \"--no-table-headers\"
 
-Most options have a corresponding \"long option\" i.e. \"-q\" or \"--quiet\".
-Long options for boolean values may be negated with the \"--no-\" prefix,
-i.e. \"--no-quiet\" or \"--no-table-headers\"
+# Quiet output mode is selected with the \"-q\" flag. Informational messages are
+# suppressed when quiet mode is in effect.
 
-Quiet output mode is selected with the \"-q\" flag. Informational messages are
-suppressed when quiet mode is in effect.
+# If target RabbitMQ node is configured to use long node names, the \"--longnames\"
+# option must be specified.
 
-If target RabbitMQ node is configured to use long node names, the \"--longnames\"
-option must be specified.
+# Some commands accept an optional virtual host parameter for which
+# to display results. The default value is \"/\"."
+]
+  end
 
-Some commands accept an optional virtual host parameter for which
-to display results. The default value is \"/\"."]
+  def commands_description() do
+    module_map = CommandModules.module_map()
+
+    pad_commands_to = Enum.reduce(module_map, 0,
+      fn({name, _}, longest) ->
+        name_length = String.length(name)
+        case name_length > longest do
+          true  -> name_length
+          false -> longest
+        end
+      end)
+
+    module_map
+    |> Enum.map(
+      fn({name, cmd}) ->
+        description = case function_exported?(cmd, :description, 0) do
+          true  -> cmd.description()
+          false -> ""
+        end
+        help_section = case function_exported?(cmd, :help_section, 0) do
+          true  -> cmd.help_section()
+          false -> :other
+        end
+        {name, {description, help_section}}
+      end)
+    |> Enum.group_by(fn({name, {description, help_section}}) -> help_section end)
+    |> Enum.sort_by(
+      fn({help_section, _}) ->
+        ## TODO: sort help sections
+        case help_section do
+          :other -> 100
+          :help -> 1
+          _ -> 2
+        end
+      end)
+    |> Enum.map(
+      fn({help_section, section_helps}) ->
+        [
+          section_head(help_section) <> ":" |
+          Enum.sort(section_helps)
+          |> Enum.map(
+            fn({name, {description, _}}) ->
+              "    #{String.pad_trailing(name, pad_commands_to)}  #{description}"
+            end)
+        ]
+
+      end)
+    |> Enum.concat()
+  end
+
+  def section_head(help_section) do
+    case help_section do
+      :help ->
+        "Print this help and commad specific help"
+      :user_management ->
+        "User management"
+      :cluster_management ->
+        "Cluster management"
+      :node_management ->
+        "Node start/stop"
+      :queues ->
+        "Queue management"
+      :list ->
+        "List internal objects"
+      :vhost ->
+        "Vhost management"
+      :parameters ->
+        "Runtime parameters and policies"
+      :report ->
+        "Node status"
+      :trace ->
+        "Enable/disable tracing"
+      :encode ->
+        "Encoding/decoding"
+      :settings ->
+        "Node settings"
+      :feature_flags ->
+        "Feature flag management"
+      :other ->
+        "Other"
+    end
   end
 
   def commands() do
@@ -187,14 +278,18 @@ to display results. The default value is \"/\"."]
     end
   end
 
+  defp help_additional(tool_name) do
+    ["Use '#{tool_name} help <command>' to get more info about a specific command"]
+  end
+
   defp additional_usage() do
     [
-      "<timeout> - operation timeout in seconds. Default is \"infinity\".",
-      CommandModules.module_map()
-      |> Map.values()
-      |> Enum.filter(&:erlang.function_exported(&1, :usage_additional, 0))
-      |> Enum.map(& &1.usage_additional)
-      |> Enum.join("\n\n")
+      # "<timeout> - operation timeout in seconds. Default is \"infinity\".",
+      # CommandModules.module_map()
+      # |> Map.values()
+      # |> Enum.filter(&:erlang.function_exported(&1, :usage_additional, 0))
+      # |> Enum.map(& &1.usage_additional)
+      # |> Enum.join("\n\n")
     ]
   end
 

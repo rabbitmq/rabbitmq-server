@@ -36,4 +36,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
   end
 
   def usage, do: "set_cluster_name <name>"
+
+  def help_section(), do: :settings
 end

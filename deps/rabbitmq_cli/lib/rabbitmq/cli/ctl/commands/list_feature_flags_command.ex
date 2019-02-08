@@ -48,6 +48,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
 
   def usage, do: "list_feature_flags [<feature-flag-info-item> ...]"
 
+  def help_section(), do: :feature_flags
+
   def usage_additional() do
     "<feature-flag-info-item> must be a member of the list [name, state, stability, provided_by, desc]."
   end

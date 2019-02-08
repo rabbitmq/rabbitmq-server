@@ -67,6 +67,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HipeCompileCommand do
 
   def usage, do: "hipe_compile <directory>"
 
+  def description(), do: "Performs HiPE-compilation and caches resulting .beam-files in the given directory"
+
   def banner([target_dir], _) do
     "Will pre-compile RabbitMQ server modules with HiPE to #{target_dir} ..."
   end

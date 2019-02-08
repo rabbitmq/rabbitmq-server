@@ -66,6 +66,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     "forget_cluster_node [--offline] <existing_cluster_member_node>"
   end
 
+  def help_section(), do: :cluster_management
+
+  def description(), do: "Remove a stopped node from the cluster"
+
   def banner([node_to_remove], _) do
     "Removing node #{node_to_remove} from the cluster"
   end

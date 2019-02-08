@@ -44,6 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
   end
 
   def usage, do: "list_user_permissions [--no-table-headers] <username>"
+  def help_section(), do: :user_management
 
   def banner([username], _), do: "Listing permissions for user \"#{username}\" ..."
 end

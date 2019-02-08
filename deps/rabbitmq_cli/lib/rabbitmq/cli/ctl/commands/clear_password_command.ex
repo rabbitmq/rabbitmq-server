@@ -34,6 +34,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPasswordCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "clear_password <username>"
+  def help_section(), do: :user_management
 
   def banner([user], _), do: "Clearing password for user \"#{user}\" ..."
 end

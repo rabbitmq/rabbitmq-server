@@ -89,6 +89,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def usage, do: "report"
 
+  def help_section(), do: :report
+
   def banner(_, %{node: node_name}), do: "Reporting server status of node #{node_name} ..."
 
   #

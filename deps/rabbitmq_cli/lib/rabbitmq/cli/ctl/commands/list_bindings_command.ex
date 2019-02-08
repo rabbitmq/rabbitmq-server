@@ -69,6 +69,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
     "list_bindings [-p <vhost>] [--no-table-headers] [<bindinginfoitem> ...]"
   end
 
+  def help_section(), do: :list
+
   def usage_additional() do
     "<bindinginfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."

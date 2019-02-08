@@ -132,6 +132,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
     "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<queueinfoitem> ...]"
   end
 
+  def help_section(), do: :list
+
   def usage_additional() do
     ["<queueinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."]
   end

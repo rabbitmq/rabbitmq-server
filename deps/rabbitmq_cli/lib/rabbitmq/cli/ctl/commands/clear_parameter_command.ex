@@ -46,6 +46,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand do
 
   def usage, do: "clear_parameter [-p <vhost>] <component_name> <key>"
 
+  def help_section(), do: :parameters
+
   def banner([component_name, key], %{vhost: vhost}) do
     "Clearing runtime parameter \"#{key}\" for component \"#{component_name}\" on vhost \"#{vhost}\" ..."
   end

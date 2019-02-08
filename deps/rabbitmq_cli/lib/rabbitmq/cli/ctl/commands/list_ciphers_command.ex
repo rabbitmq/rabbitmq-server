@@ -32,5 +32,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListCiphersCommand do
 
   def usage, do: "list_ciphers"
 
+  def help_section(), do: :encode
+
+  def description(), do: "Lists cipher suites supported by encoding commands"
+
   def banner(_, _), do: "Listing supported ciphers ..."
 end

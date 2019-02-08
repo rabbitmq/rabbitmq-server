@@ -55,6 +55,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
 
   def usage, do: "set_log_level <log_level>"
 
+  def help_section(), do: :settings
+
   def banner([log_level], _), do: "Setting log level to \"#{log_level}\" ..."
 
   def output({:error, {:invalid_log_level, level}}, _opts) do

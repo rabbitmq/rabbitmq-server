@@ -28,9 +28,12 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
               | {:ok, any}
               | {:stream, Enum.t()}
               | {:error, RabbitMQ.CLI.Core.ExitCodes.exit_code(), [String.t()]}
+
   @optional_callbacks formatter: 0,
                       scopes: 0,
                       usage_additional: 0,
+                      description: 0,
+                      help_section: 0,
                       switches: 0,
                       aliases: 0,
                       # validates execution environment, e.g. file presence,
@@ -45,6 +48,8 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
 
   @callback formatter() :: atom()
   @callback scopes() :: [atom()]
+  @callback description() :: String.t()
+  @callback help_section() :: String.t()
   @callback usage_additional() :: String.t() | [String.t()]
   ## Erlang distribution control
   ## :cli - default rabbitmqctl generated node name

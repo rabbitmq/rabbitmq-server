@@ -42,5 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand do
 
   def usage, do: "list_global_parameters [--no-table-headers]"
 
+  def help_section(), do: :parameters
+
   def banner(_, _), do: "Listing global runtime parameters ..."
 end
