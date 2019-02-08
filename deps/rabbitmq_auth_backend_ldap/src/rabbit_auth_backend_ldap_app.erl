@@ -36,9 +36,9 @@ start(_Type, _StartArgs) ->
     {ok, Backends} = application:get_env(rabbit, auth_backends),
     case configured(rabbit_auth_backend_ldap, Backends) of
         true  -> ok;
-        false -> rabbit_log:warning(
+        false -> rabbit_log_ldap:warning(
                    "LDAP plugin loaded, but rabbit_auth_backend_ldap is not "
-                   "in the list of auth_backends. LDAP auth will not work.~n")
+                   "in the list of auth_backends. LDAP auth will not work.")
     end,
     {ok, SSL} = application:get_env(rabbitmq_auth_backend_ldap, use_ssl),
     {ok, TLS} = application:get_env(rabbitmq_auth_backend_ldap, use_starttls),
@@ -62,4 +62,3 @@ configured(M,  [_    |T]) -> configured(M, T).
 %%----------------------------------------------------------------------------
 
 init([]) -> {ok, {{one_for_one, 3, 10}, []}}.
-
