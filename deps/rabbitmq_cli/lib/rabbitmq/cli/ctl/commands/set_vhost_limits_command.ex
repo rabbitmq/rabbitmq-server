@@ -39,6 +39,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
 
   def help_section(), do: :parameters
 
+  def description(), do: "Sets virtual host limits"
+
   def banner([definition], %{vhost: vhost}) do
     "Setting vhost limits to \"#{definition}\" for vhost \"#{vhost}\" ..."
   end

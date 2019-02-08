@@ -45,6 +45,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand do
 
   def help_section(), do: :parameters
 
+  def description(), do: "Sets a runtime parameter."
+
   def banner([name, value], _) do
     "Setting global runtime parameter \"#{name}\" to \"#{value}\" ..."
   end

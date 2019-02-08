@@ -53,6 +53,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
 
   def help_section(), do: :parameters
 
+  def description(), do: "Sets a runtime parameter."
+
   def banner([component_name, name, value], %{vhost: vhost}) do
     "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" in vhost \"#{
       vhost

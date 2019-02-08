@@ -208,7 +208,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
       :cluster_management ->
         "Cluster management"
       :node_management ->
-        "Node start/stop"
+        "Application management"
       :queues ->
         "Queue management"
       :list ->
