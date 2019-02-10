@@ -122,6 +122,7 @@ all_tests() -> [
     get_encoding_test,
     get_fail_test,
     publish_test,
+    publish_large_message_test,
     publish_accept_json_test,
     publish_fail_test,
     publish_base64_test,
@@ -2305,23 +2306,49 @@ get_fail_test(Config) ->
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
 
+
+-define(LARGE_BODY_BYTES, 25000000).
+
 publish_test(Config) ->
     Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
     Msg = msg(<<"publish_test">>, Headers, <<"Hello world">>),
     http_put(Config, "/queues/%2F/publish_test", #{}, {group, '2xx'}),
     ?assertEqual(#{routed => true},
-                 http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, ?OK)),
+                  http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, ?OK)),
     [Msg2] = http_post(Config, "/queues/%2F/publish_test/get", [{ackmode, ack_requeue_false},
-                                                           {count,    1},
-                                                           {encoding, auto}], ?OK),
+                                                                {count,    1},
+                                                                {encoding, auto}], ?OK),
     assert_item(Msg, Msg2),
     http_post(Config, "/exchanges/%2F/amq.default/publish", Msg2, ?OK),
     [Msg3] = http_post(Config, "/queues/%2F/publish_test/get", [{ackmode, ack_requeue_false},
-                                                           {count,    1},
-                                                           {encoding, auto}], ?OK),
+                                                               {count,    1},
+                                                               {encoding, auto}], ?OK),
     assert_item(Msg, Msg3),
     http_delete(Config, "/queues/%2F/publish_test", {group, '2xx'}),
     passed.
+
+publish_large_message_test(Config) ->
+  Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
+  Body = binary:copy(<<"a">>, ?LARGE_BODY_BYTES),
+  Msg = msg(<<"publish_accept_json_test">>, Headers, Body),
+  http_put(Config, "/queues/%2F/publish_accept_json_test", #{}, {group, '2xx'}),
+  ?assertEqual(#{routed => true},
+               http_post_accept_json(Config, "/exchanges/%2F/amq.default/publish",
+                                     Msg, ?OK)),
+
+  [Msg2] = http_post_accept_json(Config, "/queues/%2F/publish_accept_json_test/get",
+                                 [{ackmode, ack_requeue_false},
+                                  {count, 1},
+                                  {encoding, auto}], ?OK),
+  assert_item(Msg, Msg2),
+  http_post_accept_json(Config, "/exchanges/%2F/amq.default/publish", Msg2, ?OK),
+  [Msg3] = http_post_accept_json(Config, "/queues/%2F/publish_accept_json_test/get",
+                                 [{ackmode, ack_requeue_false},
+                                  {count, 1},
+                                  {encoding, auto}], ?OK),
+  assert_item(Msg, Msg3),
+  http_delete(Config, "/queues/%2F/publish_accept_json_test", {group, '2xx'}),
+  passed.
 
 publish_accept_json_test(Config) ->
     Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
