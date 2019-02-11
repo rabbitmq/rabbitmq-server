@@ -143,7 +143,7 @@ The current scope format is `<permission>:<vhost_pattern>/<name_pattern>[/<routi
 Wildcard patterns are strings with optional wildcard symbols `*` that match
 any sequence of characters.
 
-Wildcard patterns match as wollowing:
+Wildcard patterns match as following:
 
  * `*` matches any string
  * `foo*` matches any string starting with a `foo`
