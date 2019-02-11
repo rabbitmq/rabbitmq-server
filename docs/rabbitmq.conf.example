@@ -38,7 +38,7 @@
 ## and TLS listeners.
 ##
 # num_acceptors.tcp = 10
-# num_acceptors.ssl = 1
+# num_acceptors.ssl = 10
 
 
 ## Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
