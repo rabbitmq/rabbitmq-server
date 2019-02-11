@@ -91,6 +91,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def help_section(), do: :report
 
+  def description(), do: "Generate a server status report containing a concatenation of all server status information for support purposes"
+
   def banner(_, %{node: node_name}), do: "Reporting server status of node #{node_name} ..."
 
   #

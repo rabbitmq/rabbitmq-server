@@ -70,6 +70,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def usage, do: "node_health_check"
 
+  def help_section(), do: :report
+  def description(), do: "Run a generic health check on the node"
+
   def banner(_, %{node: node_name, timeout: timeout}) do
     ["Timeout: #{trunc(timeout / 1000)} seconds ...", "Checking health of node #{node_name} ..."]
   end

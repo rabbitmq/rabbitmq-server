@@ -64,5 +64,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def usage, do: "exec <expr> [--offline]"
 
+  def description(), do: "Executes Elixir code on the CLI node"
+
   def banner(_, _), do: nil
 end

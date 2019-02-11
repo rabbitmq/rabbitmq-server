@@ -22,9 +22,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
 
   def info_keys(), do: @info_keys
 
+  def description(), do: "Lists exchanges"
+  def usage(), do: "list_exchanges [-p <vhost>] [--no-table-headers] [<exchangeinfoitem> ...]"
   def scopes(), do: [:ctl, :diagnostics]
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+
+  def help_section(), do: :list
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+  def usage_additional(), do: "<exchangeinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."
+
+
 
   def merge_defaults([], opts) do
     merge_defaults(~w(name type), opts)
@@ -57,19 +65,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
   end
 
   use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
-
-  def usage() do
-    "list_exchanges [-p <vhost>] [--no-table-headers] [<exchangeinfoitem> ...]"
-  end
-
-  def help_section(), do: :list
-
-  def usage_additional() do
-    "<exchangeinfoitem> must be a member of the list [" <>
-      Enum.join(@info_keys, ", ") <> "]."
-  end
 
   def banner(_, %{vhost: vhost}), do: "Listing exchanges for vhost #{vhost} ..."
 end

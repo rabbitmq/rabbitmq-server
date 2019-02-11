@@ -30,6 +30,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
 
   def usage, do: "delete_vhost <vhost>"
   def help_section(), do: :vhost
+  def description(), do: "Deletes a virtual host"
 
   def banner([arg], _), do: "Deleting vhost \"#{arg}\" ..."
 end

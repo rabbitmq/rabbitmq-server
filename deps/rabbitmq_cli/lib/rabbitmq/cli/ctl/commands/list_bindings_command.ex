@@ -71,6 +71,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
 
   def help_section(), do: :list
 
+  def description(), do: "Lists all bindings on a vhost"
+
   def usage_additional() do
     "<bindinginfoitem> must be a member of the list [" <>
       Enum.join(@info_keys, ", ") <> "]."
