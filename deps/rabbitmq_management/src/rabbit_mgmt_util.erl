@@ -34,7 +34,7 @@
          filter_vhost/3]).
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
-         args/1]).
+         args/1, read_complete_body/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
          sort_list/2, destination_type/1, reply_list_or_paginate/3
          ]).
@@ -710,8 +710,16 @@ id0(Key, ReqData) ->
         Id        -> Id
     end.
 
+read_complete_body(Req) ->
+    read_complete_body(Req, <<"">>).
+read_complete_body(Req0, Acc) ->
+    case cowboy_req:read_body(Req0) of
+        {ok, Data, Req}   -> {ok, <<Acc/binary, Data/binary>>, Req};
+        {more, Data, Req} -> read_complete_body(Req, <<Acc/binary, Data/binary>>)
+    end.
+
 with_decode(Keys, ReqData, Context, Fun) ->
-    {ok, Body, ReqData1} = cowboy_req:read_body(ReqData),
+    {ok, Body, ReqData1} = read_complete_body(ReqData),
     with_decode(Keys, Body, ReqData1, Context, Fun).
 
 with_decode(Keys, Body, ReqData, Context, Fun) ->
@@ -807,7 +815,7 @@ with_vhost_and_props(Fun, ReqData, Context) ->
             not_found(rabbit_data_coercion:to_binary("vhost_not_found"),
                       ReqData, Context);
         VHost ->
-            {ok, Body, ReqData1} = cowboy_req:read_body(ReqData),
+            {ok, Body, ReqData1} = read_complete_body(ReqData),
             case decode(Body) of
                 {ok, Props} ->
                     try

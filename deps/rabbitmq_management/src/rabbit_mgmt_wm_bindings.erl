@@ -69,7 +69,7 @@ to_json(ReqData, {Mode, Context}) ->
       ReqData, {Mode, Context}).
 
 accept_content(ReqData0, {_Mode, Context}) ->
-    {ok, Body, ReqData} = cowboy_req:read_body(ReqData0),
+    {ok, Body, ReqData} = rabbit_mgmt_util:read_complete_body(ReqData0),
     Source = rabbit_mgmt_util:id(source, ReqData),
     Dest = rabbit_mgmt_util:id(destination, ReqData),
     DestType = rabbit_mgmt_util:id(dtype, ReqData),
