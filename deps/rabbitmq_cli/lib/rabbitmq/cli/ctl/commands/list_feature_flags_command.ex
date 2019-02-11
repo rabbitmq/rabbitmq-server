@@ -22,7 +22,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListFeatureFlagsCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  @info_keys ~w(name state stability provided_by desc)a
+  @info_keys ~w(name state stability provided_by desc doc_url)a
 
   def info_keys(), do: @info_keys
 
