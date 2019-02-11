@@ -1332,6 +1332,13 @@ end}.
     {datatype, string}
 ]}.
 
+{mapping, "log.ra.level", "rabbit.log.categories.ra.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.ra.file", "rabbit.log.categories.ra.file", [
+    {datatype, string}
+]}.
+
 {mapping, "log.default.level", "rabbit.log.categories.default.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.

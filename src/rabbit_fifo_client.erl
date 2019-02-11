@@ -73,7 +73,6 @@
                                    {maybe(term()), rabbit_fifo:command()}},
                 consumer_deliveries = #{} :: #{rabbit_fifo:consumer_tag() =>
                                                #consumer{}},
-                priority = normal :: normal | low,
                 block_handler = fun() -> ok end :: fun(() -> ok),
                 unblock_handler = fun() -> ok end :: fun(() -> ok),
                 timeout :: non_neg_integer()
@@ -710,7 +709,6 @@ consumer_id(ConsumerTag) ->
 
 send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
-                    priority = Priority,
                     soft_limit = SftLmt} = State0) ->
     {Seq, State} = next_seq(State0),
     ok = ra:pipeline_command(Server, Command, Seq, Priority),
@@ -719,20 +717,7 @@ send_command(Server, Correlation, Command, Priority,
               false -> ok
           end,
     {Tag, State#state{pending = Pending#{Seq => {Correlation, Command}},
-                      priority = Priority,
-                      slow = Tag == slow}};
-%% once a low priority command has been sent it's not possible to then
-%% send a normal priority command without risking that commands are
-%% re-ordered. From an AMQP 0.9.1 point of view this should only affect
-%% channels that _both_ publish and consume as the enqueue operation is the
-%% only low priority one that is sent.
-send_command(Node, Correlation, Command, normal,
-             #state{priority = low} = State) ->
-    send_command(Node, Correlation, Command, low, State);
-send_command(Node, Correlation, Command, low,
-             #state{priority = normal} = State) ->
-    send_command(Node, Correlation, Command, low,
-                 State#state{priority = low}).
+                      slow = Tag == slow}}.
 
 resend_command(Node, Correlation, Command,
                #state{pending = Pending} = State0) ->

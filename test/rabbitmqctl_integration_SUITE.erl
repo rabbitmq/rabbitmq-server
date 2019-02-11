@@ -17,6 +17,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -export([all/0
         ,groups/0
@@ -166,14 +167,7 @@ assert_ctl_queues(Config, Node, Args, Expected0) ->
     Expected = lists:sort(Expected0),
     Got0 = run_list_queues(Config, Node, Args),
     Got = lists:sort(lists:map(fun hd/1, Got0)),
-    case Got of
-        Expected ->
-            ok;
-        _ ->
-            ct:pal(error, "Listing queues on node ~p failed. Expected:~n~p~n~nGot:~n~p~n~n",
-                   [Node, Expected, Got]),
-            exit({list_queues_unexpected_on, Node, Expected, Got})
-    end.
+    ?assertMatch(Expected, Got).
 
 run_list_queues(Config, Node, Args) ->
     rabbit_ct_broker_helpers:rabbitmqctl_list(Config, Node, ["list_queues"] ++ Args ++ ["name", "--no-table-headers"]).
