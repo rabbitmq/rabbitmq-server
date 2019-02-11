@@ -271,9 +271,15 @@ parse_dest(VHostName, ClusterName, Def, SourceHeaders) ->
 parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
     Uris = get_uris(<<"dest-uri">>, Def),
     Address = pget(<<"dest-address">>, Def),
-    Properties = pget(<<"dest-properties">>, Def, []),
-    AppProperties = pget(<<"dest-application-properties">>, Def, []),
-    MessageAnns = pget(<<"dest-message-annotations">>, Def, []),
+    Properties =
+        rabbit_data_coercion:to_proplist(
+            pget(<<"dest-properties">>, Def, [])),
+    AppProperties =
+        rabbit_data_coercion:to_proplist(
+            pget(<<"dest-application-properties">>, Def, [])),
+    MessageAnns =
+        rabbit_data_coercion:to_proplist(
+            pget(<<"dest-message-annotations">>, Def, [])),
     #{module => rabbit_amqp10_shovel,
       uris => Uris,
       target_address => Address,
