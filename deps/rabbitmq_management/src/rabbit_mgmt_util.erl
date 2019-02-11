@@ -815,7 +815,7 @@ with_vhost_and_props(Fun, ReqData, Context) ->
             not_found(rabbit_data_coercion:to_binary("vhost_not_found"),
                       ReqData, Context);
         VHost ->
-            {ok, Body, ReqData1} = cowboy_req:read_body(ReqData),
+            {ok, Body, ReqData1} = read_complete_body(ReqData),
             case decode(Body) of
                 {ok, Props} ->
                     try
