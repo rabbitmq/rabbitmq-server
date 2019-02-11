@@ -24,7 +24,8 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, non_parallel_tests},
+      {group, with_map_config}
     ].
 
 groups() ->
@@ -38,7 +39,12 @@ groups() ->
           autodelete_amqp091_dest_on_publish,
           simple_amqp10_dest,
           simple_amqp10_src
-        ]}
+        ]},
+      {with_map_config, [], [
+          simple,
+          simple_amqp10_dest,
+          simple_amqp10_src
+      ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -63,8 +69,10 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_group(with_map_config, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{map_config, true}]);
 init_per_group(_, Config) ->
-    Config.
+    rabbit_ct_helpers:set_config(Config, [{map_config, false}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -102,6 +110,7 @@ simple_amqp10_dest(Config) ->
       end).
 
 test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
+    MapConfig = ?config(map_config, Config),
     shovel_test_utils:set_param(Config, <<"test">>,
                                 [{<<"src-protocol">>, Protocol},
                                  {ProtocolSrc, Src},
@@ -110,12 +119,28 @@ test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
                                  {<<"dest-add-forward-headers">>, true},
                                  {<<"dest-add-timestamp-header">>, true},
                                  {<<"dest-application-properties">>,
-                                  [{<<"app-prop-key">>, <<"app-prop-value">>}]},
+                                  case MapConfig of
+                                     true ->
+                                        #{<<"app-prop-key">> => <<"app-prop-value">>};
+                                     _ ->
+                                        [{<<"app-prop-key">>, <<"app-prop-value">>}]
+                                  end},
                                  {<<"dest-properties">>,
-                                  [{<<"user_id">>, <<"guest">>}]},
+                                  case MapConfig of
+                                     true ->
+                                         #{<<"user_id">> => <<"guest">>};
+                                     _ ->
+                                         [{<<"user_id">>, <<"guest">>}]
+                                  end},
                                  {<<"dest-message-annotations">>,
-                                  [{<<"message-ann-key">>,
-                                    <<"message-ann-value">>}]}]),
+                                  case MapConfig of
+                                     true ->
+                                         #{<<"message-ann-key">> =>
+                                               <<"message-ann-value">>};
+                                     _ ->
+                                         [{<<"message-ann-key">>,
+                                           <<"message-ann-value">>}]
+                                  end}]),
     Msg = publish_expect(Sess, Src, Dest, <<"tag1">>, <<"hello">>),
     ?assertMatch((#{user_id := <<"guest">>, creation_time := _}),
                  (amqp10_msg:properties(Msg))),
@@ -127,6 +152,7 @@ test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
                  (amqp10_msg:message_annotations(Msg))).
 
 simple_amqp10_src(Config) ->
+    MapConfig = ?config(map_config, Config),
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     with_session(Config,
@@ -139,7 +165,11 @@ simple_amqp10_src(Config) ->
                              {<<"dest-queue">>, Dest},
                              {<<"add-forward-headers">>, true},
                              {<<"dest-add-timestamp-header">>, true},
-                             {<<"publish-properties">>, [{<<"cluster_id">>, <<"x">>}]}
+                             {<<"publish-properties">>,
+                                case MapConfig of
+                                    true -> #{<<"cluster_id">> => <<"x">>};
+                                    _    -> [{<<"cluster_id">>, <<"x">>}]
+                                end}
                             ]),
               _Msg = publish_expect(Sess, Src, Dest, <<"tag1">>,
                                     <<"hello">>),
