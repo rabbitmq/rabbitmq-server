@@ -48,7 +48,7 @@ exact_match(_Config) ->
     ?assertEqual(false, wildcard:match(<<"string with unescaped % character">>,
                                        <<"string with unescaped % character">>)),
 
-    %% Here a wildcard is matched by another wildcard, so to match exacly the '*' character
+    %% Here a wildcard is matched by another wildcard, so to match exactly the '*' character
     %% we need to %-encode it
     ?assertEqual(true, wildcard:match(<<"wildcard * is matched by wildcard">>,
                                       <<"wildcard * is matched by wildcard">>)),
