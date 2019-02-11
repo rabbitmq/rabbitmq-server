@@ -90,7 +90,7 @@ all_definitions(ReqData, Context) ->
       Context).
 
 accept_json(ReqData0, Context) ->
-    {ok, Body, ReqData} = cowboy_req:read_body(ReqData0),
+    {ok, Body, ReqData} = rabbit_mgmt_util:read_complete_body(ReqData0),
     accept(Body, ReqData, Context).
 
 vhost_definitions(ReqData, VHost, Context) ->
