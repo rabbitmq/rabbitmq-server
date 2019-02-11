@@ -39,6 +39,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
 
   def help_section(), do: :queues
 
+  def description(), do: "Instructs a mirrored queue with unsynchronised mirrors (follower replicas) to synchronise them"
+
   def banner([queue], %{vhost: vhost, node: _node}) do
     "Synchronising queue '#{queue}' in vhost '#{vhost}' ..."
   end

@@ -39,6 +39,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
 
   def help_section(), do: :queues
 
+  def description(), do: "Instructs a synchronising mirrored queue to stop synchronising itself"
+
   def banner([queue], %{vhost: vhost, node: _node}) do
     "Stopping synchronising queue '#{queue}' in vhost '#{vhost}' ..."
   end

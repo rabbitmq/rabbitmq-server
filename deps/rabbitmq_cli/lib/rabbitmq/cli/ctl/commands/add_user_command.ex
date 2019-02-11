@@ -48,6 +48,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
   def usage, do: "add_user <username> <password>"
   def help_section(), do: :user_management
 
+  def description(), do: "Creates a new user in the internal database"
+
   def banner([username, _password], _), do: "Adding user \"#{username}\" ..."
 
   def output({:error, {:user_already_exists, username}}, _) do

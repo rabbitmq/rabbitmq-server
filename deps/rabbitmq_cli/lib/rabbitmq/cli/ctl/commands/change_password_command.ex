@@ -39,5 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
 
   def help_section(), do: :user_management
 
+  def description(), do: "Changes the user password"
+
   def banner([user | _], _), do: "Changing password for user \"#{user}\" ..."
 end
