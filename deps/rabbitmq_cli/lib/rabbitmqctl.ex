@@ -23,7 +23,7 @@ defmodule RabbitMQCtl do
     Output,
     Parser
   }
-
+  alias RabbitMQ.CLI.CommandBehaviour
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
   # Enable unit tests for private functions
@@ -114,7 +114,7 @@ defmodule RabbitMQCtl do
                   case command.validate(arguments, options) do
                     :ok ->
                       # then optionally validate execution environment
-                      case maybe_validate_execution_environment(command, arguments, options) do
+                      case CommandBehaviour.validate_execution_environment(command, arguments, options) do
                         :ok ->
                           result = proceed_to_execution(command, arguments, options)
                           handle_command_output(result, command, options, output_fun)
@@ -138,13 +138,6 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp maybe_validate_execution_environment(command, arguments, options) do
-    case function_exported?(command, :validate_execution_environment, 2) do
-      false -> :ok
-      true -> command.validate_execution_environment(arguments, options)
-    end
-  end
-
   defp proceed_to_execution(command, arguments, options) do
     maybe_print_banner(command, arguments, options)
     maybe_run_command(command, arguments, options)
@@ -159,7 +152,7 @@ defmodule RabbitMQCtl do
       command.run(arguments, options) |> command.output(options)
     catch
       _error_type, error ->
-        IO.puts(:erlang.get_stacktrace())
+        IO.inspect(:erlang.get_stacktrace())
         format_error(error, options, command)
     end
   end
@@ -521,11 +514,7 @@ defmodule RabbitMQCtl do
   ## Runs code if distribution is successful, or not needed.
   @spec maybe_with_distribution(module(), options(), (() -> command_result())) :: command_result()
   defp maybe_with_distribution(command, options, code) do
-    distribution_type =
-      case function_exported?(command, :distribution, 1) do
-        false -> :cli
-        true -> command.distribution(options)
-      end
+    distribution_type = CommandBehaviour.distribution(command, options)
 
     case distribution_type do
       :none ->

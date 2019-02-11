@@ -12,6 +12,8 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
+alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
+
 
 defmodule RabbitMQ.CLI.Core.Parser do
   alias RabbitMQ.CLI.Core.{CommandModules, Config}
@@ -238,8 +240,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
   end
 
   defp build_switches(default, command, formatter) do
-    command_switches = apply_if_exported(command, :switches, [], [])
-    formatter_switches = apply_if_exported(formatter, :switches, [], [])
+    command_switches = CommandBehaviour.switches(command)
+    formatter_switches = FormatterBehaviour.switches(formatter)
 
     assert_no_conflict(
       command,
@@ -271,8 +273,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
   end
 
   defp build_aliases(default, command, formatter) do
-    command_aliases = apply_if_exported(command, :aliases, [], [])
-    formatter_aliases = apply_if_exported(formatter, :aliases, [], [])
+    command_aliases = CommandBehaviour.aliases(command)
+    formatter_aliases = FormatterBehaviour.aliases(formatter)
 
     assert_no_conflict(command, command_aliases, formatter_aliases, :redefining_formatter_aliases)
 
@@ -285,15 +287,6 @@ defmodule RabbitMQ.CLI.Core.Parser do
       command_aliases,
       {:command_invalid, {command, {:redefining_global_aliases, default, command_aliases}}}
     )
-  end
-
-  defp apply_if_exported(mod, fun, args, default) do
-    Code.ensure_loaded(mod)
-
-    case function_exported?(mod, fun, length(args)) do
-      true -> apply(mod, fun, args)
-      false -> default
-    end
   end
 
   defp merge_if_different(default, specific, error) do
