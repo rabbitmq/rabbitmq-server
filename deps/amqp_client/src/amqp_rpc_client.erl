@@ -68,7 +68,7 @@ start_link(Connection, Queue) ->
 %% @spec (RpcClient) -> ok
 %% where
 %%      RpcClient = pid()
-%% @doc Stops an exisiting RPC client.
+%% @doc Stops an existing RPC client.
 stop(Pid) ->
     gen_server:call(Pid, stop, amqp_util:call_timeout()).
 
