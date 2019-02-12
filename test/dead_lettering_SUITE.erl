@@ -741,7 +741,7 @@ dead_letter_override_policy(Config) ->
     [_] = consume(Ch, DLXQName, [P1]).
 
 %% 9) Policy is set after have declared a queue with dead letter arguments. Policy will be
-%%    overriden/ignored.
+%%    overridden/ignored.
 dead_letter_ignore_policy(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
