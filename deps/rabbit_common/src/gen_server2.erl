@@ -828,7 +828,7 @@ do_multi_call(Nodes, Name, Req, Timeout) ->
         spawn(
           fun () ->
                   %% Middleman process. Should be unsensitive to regular
-                  %% exit signals. The sychronization is needed in case
+                  %% exit signals. The synchronization is needed in case
                   %% the receiver would exit before the caller started
                   %% the monitor.
                   process_flag(trap_exit, true),
