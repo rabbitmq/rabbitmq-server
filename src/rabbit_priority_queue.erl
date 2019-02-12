@@ -20,7 +20,7 @@
 -include_lib("rabbit_framing.hrl").
 -behaviour(rabbit_backing_queue).
 
-%% enabled unconditionally. Disabling priority queueing after
+%% enabled unconditionally. Disabling priority queuing after
 %% it has been enabled is dangerous.
 -rabbit_boot_step({?MODULE,
                    [{description, "enable priority queue"},
