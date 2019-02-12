@@ -1271,7 +1271,7 @@ neighbour_cast(N, Msg) -> ?INSTR_MOD:cast(get_pid(N), Msg).
 neighbour_call(N, Msg) -> ?INSTR_MOD:call(get_pid(N), Msg, infinity).
 
 %% ---------------------------------------------------------------------------
-%% View monitoring and maintanence
+%% View monitoring and maintenance
 %% ---------------------------------------------------------------------------
 
 ensure_neighbour(_Ver, Self, {Self, undefined}, Self) ->

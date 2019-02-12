@@ -33,12 +33,14 @@ groups() ->
             all_messages_go_to_one_consumer,
             fallback_to_another_consumer_when_first_one_is_cancelled,
             fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled,
+            fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks,
             amqp_exclusive_consume_fails_on_exclusive_consumer_queue
         ]},
         {quorum_queue, [], [
             all_messages_go_to_one_consumer,
             fallback_to_another_consumer_when_first_one_is_cancelled,
-            fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled
+            fallback_to_another_consumer_when_exclusive_consumer_channel_is_cancelled,
+            fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks
             %% amqp_exclusive_consume_fails_on_exclusive_consumer_queue % Exclusive consume not implemented in QQ
         ]}
     ].
@@ -131,7 +133,7 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
     [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(1, MessageCount div 2)],
 
-    {MessagesPerConsumer1, _} = wait_for_messages(MessageCount div 2),
+    {ok, {MessagesPerConsumer1, _}} = wait_for_messages(MessageCount div 2),
     FirstActiveConsumerInList = maps:keys(maps:filter(fun(_CTag, Count) -> Count > 0 end, MessagesPerConsumer1)),
     ?assertEqual(1, length(FirstActiveConsumerInList)),
 
@@ -141,8 +143,8 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     {cancel_ok, FirstActiveConsumer} = wait_for_cancel_ok(),
 
     [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}) || _X <- lists:seq(MessageCount div 2 + 1, MessageCount - 1)],
-
-    {MessagesPerConsumer2, _} = wait_for_messages(MessageCount div 2 - 1),
+ 
+    {ok, {MessagesPerConsumer2, _}} = wait_for_messages(MessageCount div 2 - 1),
     SecondActiveConsumerInList = maps:keys(maps:filter(
         fun(CTag, Count) -> Count > 0 andalso CTag /= FirstActiveConsumer end,
         MessagesPerConsumer2)
@@ -153,7 +155,7 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     #'basic.cancel_ok'{} = amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = SecondActiveConsumer}),
 
     amqp_channel:cast(Ch, Publish, #amqp_msg{payload = <<"foobar">>}),
-    wait_for_messages(1),
+    ?assertMatch({ok, _}, wait_for_messages(1)),
 
     LastActiveConsumer = lists:nth(1, lists:delete(FirstActiveConsumer, lists:delete(SecondActiveConsumer, [CTag1, CTag2, CTag3]))),
 
@@ -167,6 +169,54 @@ fallback_to_another_consumer_when_first_one_is_cancelled(Config) ->
     after 1000 ->
         throw(failed)
     end,
+
+    amqp_connection:close(C),
+    ok.
+
+fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks(Config) ->
+    %% Let's ensure that although the consumer is cancelled we still keep the unacked
+    %% messages and accept acknowledgments on them.
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {C, Ch} = connection_and_channel(Config),
+    Q = queue_declare(Ch, Config),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = false}, self()),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = false}, self()),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = false}, self()),
+    Consumers0 = rpc:call(Server, rabbit_amqqueue, consumers_all, [<<"/">>]),
+    ?assertMatch([_, _, _], lists:filter(fun(Props) ->
+                                                 Resource = proplists:get_value(queue_name, Props),
+                                                 Q == Resource#resource.name
+                                         end, Consumers0)),
+
+    Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
+    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = P}) || P <- [<<"msg1">>, <<"msg2">>]],
+
+    {CTag, DTag1} = receive_deliver(),
+    {_CTag, DTag2} = receive_deliver(),
+
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"0">>, <<"2">>]]),
+    #'basic.cancel_ok'{} = amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+
+    receive
+        #'basic.cancel_ok'{consumer_tag = CTag} ->
+            ok
+    end,
+    Consumers1 = rpc:call(Server, rabbit_amqqueue, consumers_all, [<<"/">>]),
+    ?assertMatch([_, _], lists:filter(fun(Props) ->
+                                              Resource = proplists:get_value(queue_name, Props),
+                                              Q == Resource#resource.name
+                                      end, Consumers1)),
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"0">>, <<"2">>]]),
+
+    [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = P}) || P <- [<<"msg3">>, <<"msg4">>]],
+
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"4">>, <<"0">>, <<"4">>]]),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag1}),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag2}),
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"0">>, <<"2">>]]),
 
     amqp_connection:close(C),
     ok.
@@ -276,13 +326,13 @@ wait_for_messages(ExpectedCount) ->
     wait_for_messages(ExpectedCount, {}).
 
 wait_for_messages(0, State) ->
-    State;
-wait_for_messages(ExpectedCount, _) ->
+    {ok, State};
+wait_for_messages(ExpectedCount, State) ->
     receive
         {message, {MessagesPerConsumer, MessageCount}} ->
             wait_for_messages(ExpectedCount - 1, {MessagesPerConsumer, MessageCount})
     after 5000 ->
-        throw(message_waiting_timeout)
+            {missing, ExpectedCount, State}
     end.
 
 wait_for_cancel_ok() ->
@@ -291,4 +341,13 @@ wait_for_cancel_ok() ->
             {cancel_ok, CTag}
     after 5000 ->
         throw(consumer_cancel_ok_timeout)
+    end.
+
+receive_deliver() ->
+    receive
+        {#'basic.deliver'{consumer_tag = CTag,
+                          delivery_tag = DTag}, _} ->
+            {CTag, DTag}
+    after 5000 ->
+            exit(deliver_timeout)
     end.

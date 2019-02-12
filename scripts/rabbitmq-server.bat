@@ -167,7 +167,7 @@ rem
 rem The defaults are meant to reduce RabbitMQ's memory usage and help
 rem it reclaim memory at the cost of a slight decrease in performance
 rem (due to an increase in memory operations). These defaults can be
-rem overriden using the RABBITMQ_SERVER_ERL_ARGS variable.
+rem overridden using the RABBITMQ_SERVER_ERL_ARGS variable.
 
 set RABBITMQ_DEFAULT_ALLOC_ARGS=+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30
 

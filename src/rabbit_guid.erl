@@ -92,7 +92,7 @@ advance_blocks({B1, B2, B3, B4}, I) ->
     %% hashing {B5, I}. The new hash is used as last block, and the
     %% other three blocks are XORed with it.
     %%
-    %% Doing this is convenient because it avoids cascading conflits,
+    %% Doing this is convenient because it avoids cascading conflicts,
     %% while being very fast. The conflicts are avoided by propagating
     %% the changes through all the blocks at each round by XORing, so
     %% the only occasion in which a collision will take place is when
