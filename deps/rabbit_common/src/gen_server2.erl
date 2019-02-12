@@ -349,7 +349,7 @@ reply({To, Tag}, Reply) ->
     catch To ! {Tag, Reply}.
 
 %% -----------------------------------------------------------------
-%% Asyncronous broadcast, returns nothing, it's just send'n pray
+%% Asynchronous broadcast, returns nothing, it's just send'n pray
 %% -----------------------------------------------------------------
 abcast(Name, Request) when is_atom(Name) ->
     do_abcast([node() | nodes()], Name, {'$gen_cast', Request}).
