@@ -596,7 +596,7 @@ client_read2(false, undefined, _MsgLocation, Defer, _CState) ->
     Defer();
 client_read2(true, _Right, _MsgLocation, Defer, _CState) ->
     %% Of course, in the mean time, the GC could have run and our msg
-    %% is actually in a different file, unlocked. However, defering is
+    %% is actually in a different file, unlocked. However, deferring is
     %% the safest and simplest thing to do.
     Defer();
 client_read2(false, _Right,
