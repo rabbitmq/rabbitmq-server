@@ -1245,7 +1245,7 @@ get_parent() ->
 name_to_pid(Name) ->
     case whereis(Name) of
         undefined -> case whereis_name(Name) of
-                         undefined -> exit(could_not_find_registerd_name);
+                         undefined -> exit(could_not_find_registered_name);
                          Pid       -> Pid
                      end;
         Pid       -> Pid
