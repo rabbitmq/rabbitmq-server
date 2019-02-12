@@ -1735,7 +1735,7 @@ purge_and_index_reset(State) ->
 %%
 %% purge_betas_and_deltas/2 loads messages from the queue index,
 %% filling up q3 and in some cases moving messages form q2 to q3 while
-%% reseting q2 to an empty queue (see maybe_deltas_to_betas/2). The
+%% resetting q2 to an empty queue (see maybe_deltas_to_betas/2). The
 %% messages loaded into q3 are removed by calling
 %% remove_queue_entries/3 until there are no more messages to be read
 %% from the queue index. Messages are read in batches from the queue
