@@ -148,7 +148,7 @@ is_registry_written_to_disk() ->
 always_return_true() ->
     %% This function is here to trick Dialyzer. We want some functions
     %% in this initial on-disk registry to always return `true` or
-    %% `false`. However the generated regsitry will return actual
+    %% `false`. However the generated registry will return actual
     %% booleans. The `-spec()` correctly advertises a return type of
     %% `boolean()`. But in the meantime, Dialyzer only knows about this
     %% copy which, without the trick below, would always return either
