@@ -1085,7 +1085,7 @@ monitor_child(Pid) ->
 %%
 %% Shutdown all dynamic children. This happens when the supervisor is
 %% stopped. Because the supervisor can have millions of dynamic children, we
-%% can have an significative overhead here.
+%% can have significant overhead here.
 %%-----------------------------------------------------------------
 terminate_dynamic_children(Child, Dynamics, SupName) ->
     {Pids, EStack0} = monitor_dynamic_children(Child, Dynamics),
