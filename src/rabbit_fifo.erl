@@ -2117,7 +2117,7 @@ enq_check_settle_duplicate_test() ->
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
 run_snapshot_test(Name, Commands) ->
-    %% create every incremental permuation of the commands lists
+    %% create every incremental permutation of the commands lists
     %% and run the snapshot tests against that
     [begin
          run_snapshot_test0(Name, C)

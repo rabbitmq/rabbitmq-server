@@ -463,7 +463,7 @@ run_proper(Fun, Args, NumTests) ->
                       end}])).
 
 run_snapshot_test(Conf, Commands) ->
-    %% create every incremental permuation of the commands lists
+    %% create every incremental permutation of the commands lists
     %% and run the snapshot tests against that
     [begin
          % ?debugFmt("~w running command to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
