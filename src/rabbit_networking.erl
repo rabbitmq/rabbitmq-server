@@ -113,6 +113,11 @@
          _) ->
             'ok'.
 
+%% @todo Remove once Dialyzer only runs on Erlang/OTP 21.3 or above.
+-dialyzer({nowarn_function, boot/0}).
+-dialyzer({nowarn_function, boot_listeners/3}).
+-dialyzer({nowarn_function, record_distribution_listener/0}).
+
 %%----------------------------------------------------------------------------
 
 boot() ->
@@ -294,9 +299,6 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
                      ip_address = IPAddress,
                      port = Port,
                      opts = Opts}).
-
-%% @todo Remove once Dialyzer only runs on Erlang/OTP 21.3 or above.
--dialyzer({nowarn_function, record_distribution_listener/0}).
 
 record_distribution_listener() ->
     {Name, Host} = rabbit_nodes:parts(node()),

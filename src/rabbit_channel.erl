@@ -758,9 +758,7 @@ send(Command, #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Command).
 
 format_soft_error(#amqp_error{name = N, explanation = E, method = M}) ->
-    io_lib:format("operation ~s caused a channel exception ~s: ~ts", [M, N, E]);
-format_soft_error(Reason) ->
-    Reason.
+    io_lib:format("operation ~s caused a channel exception ~s: ~ts", [M, N, E]).
 
 handle_exception(Reason, State = #ch{protocol     = Protocol,
                                      channel      = Channel,

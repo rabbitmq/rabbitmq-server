@@ -1435,10 +1435,10 @@ handle_cast({force_event_refresh, Ref},
             [emit_consumer_created(
                Ch, CTag, false, AckRequired, QName, Prefetch,
                Args, Ref, ActingUser) ||
-                {Ch, CTag, AckRequired, Prefetch, Args, ActingUser}
+                {Ch, CTag, AckRequired, Prefetch, _, _, Args, ActingUser}
                     <- AllConsumers];
         {Ch, CTag} ->
-            [{Ch, CTag, AckRequired, Prefetch, Args, ActingUser}] = AllConsumers,
+            [{Ch, CTag, AckRequired, Prefetch, _, _, Args, ActingUser}] = AllConsumers,
             emit_consumer_created(
               Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref, ActingUser)
     end,
