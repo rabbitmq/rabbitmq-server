@@ -505,7 +505,7 @@ update_cluster_nodes(Config) ->
     assert_failure(fun () -> start_app(Rabbit) end),
     %% Bogus node
     assert_failure(fun () -> update_cluster_nodes(Rabbit, non@existent) end),
-    %% Inconsisent node
+    %% Inconsistent node
     assert_failure(fun () -> update_cluster_nodes(Rabbit, Hare) end),
     ok = update_cluster_nodes(Rabbit, Bunny),
     ok = start_app(Rabbit),
