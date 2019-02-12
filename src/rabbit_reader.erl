@@ -232,7 +232,7 @@ server_properties(Protocol) ->
     {ok, RawConfigServerProps} = application:get_env(rabbit,
                                                      server_properties),
 
-    %% Normalize the simplifed (2-tuple) and unsimplified (3-tuple) forms
+    %% Normalize the simplified (2-tuple) and unsimplified (3-tuple) forms
     %% from the config and merge them with the generated built-in properties
     NormalizedConfigServerProps =
         [{<<"capabilities">>, table, server_capabilities(Protocol)} |
