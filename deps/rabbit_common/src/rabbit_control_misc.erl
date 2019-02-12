@@ -109,7 +109,7 @@ spawn_emitter_caller(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
 rpc_call_emitter(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
     rabbit_misc:rpc_call(Node, Mod, Fun, Args++[Ref, Pid], Timeout).
 
-%% Agregator process expects correct numbers of explicits ACKs about
+%% Aggregator process expects correct numbers of explicits ACKs about
 %% finished emission process. While everything is linked, we still
 %% need somehow to wait for termination of all emitters before
 %% returning from RPC call - otherwise links will be just broken with
