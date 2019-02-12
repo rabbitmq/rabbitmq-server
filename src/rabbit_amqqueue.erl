@@ -108,12 +108,16 @@ warn_file_limit() ->
             ok
     end.
 
--spec recover(rabbit_types:vhost()) -> [amqqueue:amqqueue()].
+-spec recover(rabbit_types:vhost()) ->
+    {ClassicOk :: [amqqueue:amqqueue()],
+     ClassicFailed :: [amqqueue:amqqueue()],
+     Quorum :: [amqqueue:amqqueue()]}.
 
 recover(VHost) ->
     Classic = find_local_durable_classic_queues(VHost),
     Quorum = find_local_quorum_queues(VHost),
-    recover_classic_queues(VHost, Classic) ++ rabbit_quorum_queue:recover(Quorum).
+    {ClassicOk, ClassicFailed} = recover_classic_queues(VHost, Classic),
+    {ClassicOk, ClassicFailed, rabbit_quorum_queue:recover(Quorum)}.
 
 recover_classic_queues(VHost, Queues) ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
@@ -124,14 +128,15 @@ recover_classic_queues(VHost, Queues) ->
         BQ:start(VHost, [amqqueue:get_name(Q) || Q <- Queues]),
     case rabbit_amqqueue_sup_sup:start_for_vhost(VHost) of
         {ok, _}         ->
-            recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms));
+            OkQueues = recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms)),
+            OkQueuesNames = [amqqueue:get_name(Q) || Q <- OkQueues],
+            FailedQueues = [Q || Q <- Queues,
+                                 not lists:member(amqqueue:get_name(Q), OkQueuesNames)],
+            {OkQueues, FailedQueues};
         {error, Reason} ->
             rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
             throw({error, Reason})
     end.
-
-filter_per_type(Queues) ->
-    lists:partition(fun(Q) -> amqqueue:is_classic(Q) end, Queues).
 
 filter_pid_per_type(QPids) ->
     lists:partition(fun(QPid) -> ?IS_CLASSIC(QPid) end, QPids).
@@ -156,12 +161,14 @@ stop(VHost) ->
 -spec start([amqqueue:amqqueue()]) -> 'ok'.
 
 start(Qs) ->
-    {Classic, _Quorum} = filter_per_type(Qs),
     %% At this point all recovered queues and their bindings are
     %% visible to routing, so now it is safe for them to complete
     %% their initialisation (which may involve interacting with other
     %% queues).
-    _ = [amqqueue:get_pid(Q) ! {self(), go} || Q <- Classic],
+    _ = [amqqueue:get_pid(Q) ! {self(), go}
+         || Q <- Qs,
+            %% All queues are supposed to be classic here.
+            amqqueue:is_classic(Q)],
     ok.
 
 mark_local_durable_queues_stopped(VHost) ->
