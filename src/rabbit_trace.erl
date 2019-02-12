@@ -102,7 +102,7 @@ trace(#exchange{name = Name}, #basic_message{exchange_name = Name},
     ok;
 trace(X, Msg = #basic_message{content = #content{payload_fragments_rev = PFR}},
       RKPrefix, RKSuffix, Extra) ->
-    {ok, _} = rabbit_basic:publish(
+    ok = rabbit_basic:publish(
                 X, <<RKPrefix/binary, ".", RKSuffix/binary>>,
                 #'P_basic'{headers = msg_to_table(Msg) ++ Extra}, PFR),
     ok.

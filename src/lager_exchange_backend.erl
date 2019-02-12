@@ -165,8 +165,8 @@ handle_log_event({log, Message},
                                  headers      = Headers},
             Body = rabbit_data_coercion:to_binary(Formatter:format(Message, FormatConfig)),
             case rabbit_basic:publish(LogExch, RoutingKey, AmqpMsg, Body) of
-                {ok, _DeliveredQPids} -> ok;
-                {error, not_found}    -> ok
+                ok                 -> ok;
+                {error, not_found} -> ok
             end,
             {ok, State};
         false ->
