@@ -691,7 +691,7 @@ get_checked_out(Cid, From, To, #state{consumers = Consumers}) ->
     end.
 
 init_aux(Name) when is_atom(Name) ->
-    %% TODO: catch specific exeption throw if table already exists
+    %% TODO: catch specific exception throw if table already exists
     ok = ra_machine_ets:create_table(rabbit_fifo_usage,
                                      [named_table, set, public,
                                       {write_concurrency, true}]),
