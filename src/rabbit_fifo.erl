@@ -2186,7 +2186,7 @@ state_enter_test() ->
     [{mod_call, m, f, [a, the_name]}] = state_enter(leader, S0),
     ok.
 
-state_enter_montors_and_notifications_test() ->
+state_enter_monitors_and_notifications_test() ->
     Oth = spawn(fun () -> ok end),
     {State0, _} = enq(1, 1, first, test_init(test)),
     Cid = {<<"adf">>, self()},
