@@ -156,7 +156,7 @@
     #update_config{}.
 
 -type command() :: protocol() | ra_machine:builtin_command().
-%% all the command types suppored by ra fifo
+%% all the command types supported by ra fifo
 
 -type client_msg() :: delivery().
 %% the messages `rabbit_fifo' can send to consumers.
