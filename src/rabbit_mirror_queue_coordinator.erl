@@ -364,7 +364,7 @@ handle_cast({gm_deaths, DeadGMPids}, State = #state{q = Q}) when ?amqqueue_pid_r
             %% Different slave is now master, stop current coordinator normally.
             %% Initiating queue is now slave and the least we could do is report
             %% deaths which we 'think' we saw.
-            %% NOTE: Reported deaths here, could be inconsistant.
+            %% NOTE: Reported deaths here, could be inconsistent.
             rabbit_mirror_queue_misc:report_deaths(MPid, false, QueueName,
                                                    DeadPids),
             {stop, shutdown, State};

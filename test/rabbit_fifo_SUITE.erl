@@ -104,7 +104,7 @@ basics(Config) ->
                         exit(await_msg_timeout)
               end,
 
-    % process settle applied notificaiton
+    % process settle applied notification
     FState5b = process_ra_event(FState5, 250),
     _ = ra:stop_server(ServerId),
     _ = ra:restart_server(ServerId),

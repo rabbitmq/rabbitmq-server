@@ -1411,7 +1411,7 @@ does_node_support(Node, FeatureNames, Timeout) ->
             %% If rabbit_feature_flags:is_supported_locally/1 is undefined
             %% on the remote node, we consider it to be a 3.7.x node.
             %%
-            %% Theoritically, it could be an older version (3.6.x and
+            %% Theoretically, it could be an older version (3.6.x and
             %% older). But the RabbitMQ version consistency check
             %% (rabbit_misc:version_minor_equivalent/2) called from
             %% rabbit_mnesia:check_rabbit_consistency/2 already blocked

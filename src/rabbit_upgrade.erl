@@ -31,7 +31,7 @@
 %% clusters.
 %%
 %% Firstly, we have two different types of upgrades to do: Mnesia and
-%% everythinq else. Mnesia upgrades must only be done by one node in
+%% everything else. Mnesia upgrades must only be done by one node in
 %% the cluster (we treat a non-clustered node as a single-node
 %% cluster). This is the primary upgrader. The other upgrades need to
 %% be done by all nodes.
@@ -314,7 +314,7 @@ node_type_legacy() ->
     %% hang), we can't look at the config file (may not include us
     %% even if we're a disc node).  We also can't use
     %% rabbit_mnesia:node_type/0 because that will give false
-    %% postivies on Rabbit up to 2.5.1.
+    %% positives on Rabbit up to 2.5.1.
     case filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")) of
         true  -> disc;
         false -> ram

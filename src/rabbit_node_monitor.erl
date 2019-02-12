@@ -219,7 +219,7 @@ subscribe(Pid) ->
 %% We could confirm something by having an HA queue see the pausing
 %% state (and fail over into it) before the node monitor stops us, or
 %% by using unmirrored queues and just having them vanish (and
-%% confiming messages as thrown away).
+%% confirming messages as thrown away).
 %%
 %% So we have channels call in here before issuing confirms, to do a
 %% lightweight check that we have not entered a pausing state.
