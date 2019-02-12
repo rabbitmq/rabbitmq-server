@@ -94,7 +94,7 @@ amqp_uri_parsing(_Config) ->
     ?assertMatch({ok, #amqp_params_network{host = "::1"}},
                  amqp_uri:parse("amqp://[::1]")),
 
-    %% Varous other cases
+    %% Various other cases
     ?assertMatch({ok, #amqp_params_network{host = "host", port = 100}},
                  amqp_uri:parse("amqp://host:100")),
     ?assertMatch({ok, #amqp_params_network{host = "::1", port = 100}},
