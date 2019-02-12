@@ -184,7 +184,7 @@
          %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
          credit_mode = simple_prefetch :: credit_mode(), % part of snapshot data
          lifetime = once :: once | auto,
-         suspected_down = false :: boolean()
+         status = up :: up | suspected_down | cancelled
         }).
 
 -type consumer() :: #consumer{}.
@@ -193,7 +193,7 @@
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
          pending = [] :: [{msg_seqno(), ra_index(), raw_msg()}],
-         suspected_down = false :: boolean()
+         status = up :: up | suspected_down
         }).
 
 -record(state,
@@ -426,10 +426,7 @@ apply(Meta, #checkout{spec = {dequeue, Settlement},
             end
     end;
 apply(Meta, #checkout{spec = cancel, consumer_id = ConsumerId}, State0) ->
-    {State, Effects} = cancel_consumer(ConsumerId, State0, []),
-    % TODO: here we should really demonitor the pid but _only_ if it has no
-    % other consumers or enqueuers. leaving a monitor in place isn't harmful
-    % however
+    {State, Effects} = cancel_consumer(ConsumerId, State0, [], consumer_cancel),
     checkout(Meta, State, Effects);
 apply(Meta, #checkout{spec = Spec, meta = ConsumerMeta,
                       consumer_id = {_, Pid} = ConsumerId},
@@ -466,26 +463,30 @@ apply(_, {down, ConsumerPid, noconnection},
     % mark all consumers and enqueuers as suspected down
     % and monitor the node so that we can find out the final state of the
     % process at some later point
-    {Cons, State, Effects1} = maps:fold(
-                                  fun({_, P} = K,
-                                      #consumer{checked_out = Checked0} = C,
-                                      {Co, St0, Eff}) when node(P) =:= Node ->
-                                          St = return_all(St0, Checked0),
-                                          Credit = increase_credit(C, maps:size(Checked0)),
-                                          Eff1 = ConsumerUpdateActiveFun(St, K, C, false, suspected_down, Eff),
-                                          {maps:put(K, C#consumer{suspected_down = true,
-                                                                  credit = Credit,
-                                                                  checked_out = #{}}, Co),
-                                           St, Eff1};
-                                     (K, C, {Co, St, Eff}) ->
-                                          {maps:put(K, C, Co), St, Eff}
-                                  end, {#{}, State0, []}, Cons0),
+    {Cons, State, Effects1} =
+        maps:fold(fun({_, P} = K,
+                      #consumer{checked_out = Checked0} = C,
+                      {Co, St0, Eff}) when (node(P) =:= Node) and
+                                           (C#consumer.status =/= cancelled)->
+                          St = return_all(St0, Checked0),
+                          Credit = increase_credit(C, maps:size(Checked0)),
+                          Eff1 = ConsumerUpdateActiveFun(St, K, C, false,
+                                                         suspected_down, Eff),
+                          {maps:put(K,
+                                    C#consumer{status = suspected_down,
+                                               credit = Credit,
+                                               checked_out = #{}}, Co),
+                           St, Eff1};
+                     (K, C, {Co, St, Eff}) ->
+                          {maps:put(K, C, Co), St, Eff}
+                  end, {#{}, State0, []}, Cons0),
     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
-                            E#enqueuer{suspected_down = true};
+                            E#enqueuer{status = suspected_down};
                        (_, E) -> E
                     end, Enqs0),
     % mark waiting consumers as suspected if necessary
-    WaitingConsumers = maybe_mark_suspect_waiting_consumers(Node, State0, true),
+    WaitingConsumers = update_waiting_consumer_status(Node, State0,
+                                                            suspected_down),
 
     Effects2 = case maps:size(Cons) of
                    0 ->
@@ -514,12 +515,12 @@ apply(Meta, {down, Pid, _Info}, #state{consumers = Cons0,
     DownConsumers = maps:keys(
                       maps:filter(fun({_, P}, _) -> P =:= Pid end, Cons0)),
     {State, Effects} = lists:foldl(fun(ConsumerId, {S, E}) ->
-                                           cancel_consumer(ConsumerId, S, E)
+                                           cancel_consumer(ConsumerId, S, E, down)
                                    end, {State2, Effects1}, DownConsumers),
     checkout(Meta, State, Effects);
 apply(Meta, {nodeup, Node}, #state{consumers = Cons0,
-                                enqueuers = Enqs0,
-                                service_queue = SQ0} = State0) ->
+                                   enqueuers = Enqs0,
+                                   service_queue = SQ0} = State0) ->
     %% A node we are monitoring has come back.
     %% If we have suspected any processes of being
     %% down we should now re-issue the monitors for them to detect if they're
@@ -528,20 +529,20 @@ apply(Meta, {nodeup, Node}, #state{consumers = Cons0,
                 || P <- suspected_pids_for(Node, State0)],
 
     % un-suspect waiting consumers when necessary
-    WaitingConsumers = maybe_mark_suspect_waiting_consumers(Node, State0,
-                                                            false),
+    WaitingConsumers = update_waiting_consumer_status(Node, State0, up),
 
     Enqs1 = maps:map(fun(P, E) when node(P) =:= Node ->
-                             E#enqueuer{suspected_down = false};
+                             E#enqueuer{status = up};
                         (_, E) -> E
                      end, Enqs0),
     ConsumerUpdateActiveFun = consumer_active_flag_update_function(State0),
     {Cons1, SQ, Effects} =
         maps:fold(fun({_, P} = ConsumerId, C, {CAcc, SQAcc, EAcc})
-                        when node(P) =:= Node ->
+                        when (node(P) =:= Node) and
+                             (C#consumer.status =/= cancelled) ->
                           EAcc1 = ConsumerUpdateActiveFun(State0, ConsumerId, C, true, up, EAcc),
                           update_or_remove_sub(
-                            ConsumerId, C#consumer{suspected_down = false},
+                            ConsumerId, C#consumer{status = up},
                             CAcc, SQAcc, EAcc1);
                      (_, _, Acc) ->
                           Acc
@@ -587,26 +588,27 @@ handle_waiting_consumer_down(Pid,
     State = State0#state{waiting_consumers = StillUp},
     {Effects, State}.
 
-maybe_mark_suspect_waiting_consumers(_Node, #state{consumer_strategy = default},
-                                     _Suspected) ->
+update_waiting_consumer_status(_Node, #state{consumer_strategy = default},
+                               _Status) ->
     [];
-maybe_mark_suspect_waiting_consumers(_Node,
-                                     #state{consumer_strategy = single_active,
-                                            waiting_consumers = []},
-                                     _Suspected) ->
+update_waiting_consumer_status(_Node,
+                               #state{consumer_strategy = single_active,
+                                      waiting_consumers = []},
+                               _Status) ->
     [];
-maybe_mark_suspect_waiting_consumers(Node,
-                                     #state{consumer_strategy = single_active,
-                                            waiting_consumers = WaitingConsumers},
-                                     Suspected) ->
+update_waiting_consumer_status(Node,
+                               #state{consumer_strategy = single_active,
+                                      waiting_consumers = WaitingConsumers},
+                               Status) ->
     [begin
          case node(P) of
              Node ->
-                 {ConsumerId, Consumer#consumer{suspected_down = Suspected}};
+                 {ConsumerId, Consumer#consumer{status = Status}};
              _ ->
                  {ConsumerId, Consumer}
          end
-     end || {{_, P} = ConsumerId, Consumer} <- WaitingConsumers].
+     end || {{_, P} = ConsumerId, Consumer} <- WaitingConsumers,
+            Consumer#consumer.status =/= cancelled].
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
 state_enter(leader, #state{consumers = Cons,
@@ -739,12 +741,13 @@ query_consumers(#state{consumers = Consumers,
                        consumer_strategy = ConsumerStrategy } = State) ->
     ActiveActivityStatusFun = case ConsumerStrategy of
                                   default ->
-                                      fun(_ConsumerId, #consumer{suspected_down = SuspectedDown}) ->
-                                          case SuspectedDown of
-                                              true ->
-                                                  {false, suspected_down};
-                                              false ->
-                                                  {true, up}
+                                      fun(_ConsumerId,
+                                          #consumer{status = Status}) ->
+                                          case Status of
+                                              suspected_down  ->
+                                                  {false, Status};
+                                              _ ->
+                                                  {true, Status}
                                           end
                                       end;
                                   single_active ->
@@ -758,18 +761,24 @@ query_consumers(#state{consumers = Consumers,
                                           end
                                       end
                               end,
-    FromConsumers = maps:map(fun ({Tag, Pid}, #consumer{meta = Meta} = Consumer) ->
-                                    {Active, ActivityStatus} = ActiveActivityStatusFun({Tag, Pid}, Consumer),
-                                    {Pid, Tag,
-                                      maps:get(ack, Meta, undefined),
-                                      maps:get(prefetch, Meta, undefined),
-                                      Active,
-                                      ActivityStatus,
-                                      maps:get(args, Meta, []),
-                                      maps:get(username, Meta, undefined)}
-                             end, Consumers),
+    FromConsumers = maps:fold(fun (_, #consumer{status = cancelled}, Acc) ->
+                                      Acc;
+                                   ({Tag, Pid}, #consumer{meta = Meta} = Consumer, Acc) ->
+                                      {Active, ActivityStatus} = ActiveActivityStatusFun({Tag, Pid}, Consumer),
+                                      maps:put({Tag, Pid},
+                                               {Pid, Tag,
+                                                maps:get(ack, Meta, undefined),
+                                                maps:get(prefetch, Meta, undefined),
+                                                Active,
+                                                ActivityStatus,
+                                                maps:get(args, Meta, []),
+                                                maps:get(username, Meta, undefined)},
+                                               Acc)
+                              end, #{}, Consumers),
     FromWaitingConsumers =
-        lists:foldl(fun({{Tag, Pid}, #consumer{meta = Meta} = Consumer}, Acc) ->
+        lists:foldl(fun ({_, #consumer{status = cancelled}}, Acc) ->
+                                      Acc;
+                        ({{Tag, Pid}, #consumer{meta = Meta} = Consumer}, Acc) ->
                             {Active, ActivityStatus} = ActiveActivityStatusFun({Tag, Pid}, Consumer),
                             maps:put({Tag, Pid},
                                      {Pid, Tag,
@@ -854,42 +863,42 @@ num_checked_out(#state{consumers = Cons}) ->
                 end, 0, maps:values(Cons)).
 
 cancel_consumer(ConsumerId,
-                #state{consumer_strategy = default} = State, Effects) ->
+                #state{consumer_strategy = default} = State, Effects, Reason) ->
     %% general case, single active consumer off
-    cancel_consumer0(ConsumerId, State, Effects);
+    cancel_consumer0(ConsumerId, State, Effects, Reason);
 cancel_consumer(ConsumerId,
                 #state{consumer_strategy = single_active,
                        waiting_consumers = []} = State,
-                Effects) ->
+                Effects, Reason) ->
     %% single active consumer on, no consumers are waiting
-    cancel_consumer0(ConsumerId, State, Effects);
+    cancel_consumer0(ConsumerId, State, Effects, Reason);
 cancel_consumer(ConsumerId,
                 #state{consumers = Cons0,
                        consumer_strategy = single_active,
                        waiting_consumers = WaitingConsumers0} = State0,
-               Effects0) ->
+               Effects0, Reason) ->
     %% single active consumer on, consumers are waiting
     case maps:take(ConsumerId, Cons0) of
-        {#consumer{checked_out = Checked0}, _} ->
+        {Consumer, Cons1} ->
             % The active consumer is to be removed
             % Cancel it
-            State1 = return_all(State0, Checked0),
-            Effects1 = cancel_consumer_effects(ConsumerId, State1, Effects0),
+            {State1, Effects1} = maybe_return_all(ConsumerId, Consumer, Cons1, State0, Effects0, Reason),
+            Effects2 = cancel_consumer_effects(ConsumerId, State1, Effects1),
             % Take another one from the waiting consumers and put it in consumers
             [{NewActiveConsumerId, NewActiveConsumer}
              | RemainingWaitingConsumers] = WaitingConsumers0,
-            #state{service_queue = ServiceQueue} = State0,
+            #state{service_queue = ServiceQueue} = State1,
             ServiceQueue1 = maybe_queue_consumer(NewActiveConsumerId,
                                                  NewActiveConsumer,
                                                  ServiceQueue),
-            State = State1#state{consumers = #{NewActiveConsumerId =>
-                                               NewActiveConsumer},
+            State = State1#state{consumers = maps:put(NewActiveConsumerId,
+                                                      NewActiveConsumer, State1#state.consumers),
                                  service_queue = ServiceQueue1,
                                  waiting_consumers = RemainingWaitingConsumers},
-            Effects2 = consumer_update_active_effects(State, NewActiveConsumerId,
+            Effects = consumer_update_active_effects(State, NewActiveConsumerId,
                                                       NewActiveConsumer, true,
-                                                      single_active, Effects1),
-            {State, Effects2};
+                                                      single_active, Effects2),
+            {State, Effects};
         error ->
             % The cancelled consumer is not the active one
             % Just remove it from idle_consumers
@@ -914,21 +923,37 @@ consumer_update_active_effects(#state{queue_resource = QName },
       [QName, ConsumerId, false, Ack, Prefetch, Active, ActivityStatus, Args]}
       | Effects].
 
-cancel_consumer0(ConsumerId,
-                #state{consumers = C0} = S0, Effects0) ->
+cancel_consumer0(ConsumerId, #state{consumers = C0} = S0, Effects0, Reason) ->
     case maps:take(ConsumerId, C0) of
-        {#consumer{checked_out = Checked0}, Cons} ->
-            S = return_all(S0, Checked0),
-            Effects = cancel_consumer_effects(ConsumerId, S, Effects0),
-            case maps:size(Cons) of
+        {Consumer, Cons1} ->
+            {S, Effects2} = maybe_return_all(ConsumerId, Consumer, Cons1, S0, Effects0, Reason),
+            Effects = cancel_consumer_effects(ConsumerId, S, Effects2),
+            case maps:size(S#state.consumers) of
                 0 ->
-                    {S#state{consumers = Cons}, [{aux, inactive} | Effects]};
+                    {S, [{aux, inactive} | Effects]};
                 _ ->
-                    {S#state{consumers = Cons}, Effects}
+                    {S, Effects}
             end;
         error ->
             %% already removed: do nothing
             {S0, Effects0}
+    end.
+
+maybe_return_all(ConsumerId, #consumer{checked_out = Checked0} = Consumer, Cons1,
+                 #state{consumers = C0,
+                        service_queue = SQ0} = S0, Effects0, Reason) ->
+    case Reason of
+        consumer_cancel ->
+            {Cons, SQ, Effects1} =
+                update_or_remove_sub(ConsumerId,
+                                     Consumer#consumer{lifetime = once,
+                                                       credit = 0,
+                                                       status = cancelled},
+                                     C0, SQ0, Effects0),
+            {S0#state{consumers = Cons, service_queue = SQ}, Effects1};
+        down ->
+            S1 = return_all(S0, Checked0),
+            {S1#state{consumers = Cons1}, Effects0}
     end.
 
 apply_enqueue(#{index := RaftIdx} = Meta, From, Seq, RawMsg, State0) ->
@@ -1303,7 +1328,9 @@ checkout_one(#state{service_queue = SQ0,
                             %% can happen when draining
                             %% recurse without consumer on queue
                             checkout_one(InitState#state{service_queue = SQ1});
-                        {ok, #consumer{suspected_down = true}} ->
+                        {ok, #consumer{status = cancelled}} ->
+                            checkout_one(InitState#state{service_queue = SQ1});
+                        {ok, #consumer{status = suspected_down}} ->
                             checkout_one(InitState#state{service_queue = SQ1});
                         {ok, #consumer{checked_out = Checked0,
                                        next_msg_id = Next,
@@ -1358,8 +1385,9 @@ update_or_remove_sub(ConsumerId, #consumer{lifetime = once,
     case maps:size(Checked)  of
         0 ->
             % we're done with this consumer
-            {maps:remove(ConsumerId, Cons), ServiceQueue,
-             [{demonitor, process, ConsumerId} | Effects]};
+            % TODO: demonitor consumer pid but _only_ if there are no other
+            % monitors for this pid
+            {maps:remove(ConsumerId, Cons), ServiceQueue, Effects};
         _ ->
             % there are unsettled items so need to keep around
             {maps:put(ConsumerId, Con, Cons), ServiceQueue, Effects}
@@ -1378,7 +1406,6 @@ uniq_queue_in(Key, Queue) ->
         false ->
             queue:in(Key, Queue)
     end.
-
 
 update_consumer(ConsumerId, Meta, Spec,
                 #state{consumer_strategy = default} = State0) ->
@@ -1553,18 +1580,18 @@ message_size(Msg) ->
 suspected_pids_for(Node, #state{consumers = Cons0,
                                 enqueuers = Enqs0,
                                 waiting_consumers = WaitingConsumers0}) ->
-    Cons = maps:fold(fun({_, P}, #consumer{suspected_down = true}, Acc)
+    Cons = maps:fold(fun({_, P}, #consumer{status = suspected_down}, Acc)
                            when node(P) =:= Node ->
                              [P | Acc];
                         (_, _, Acc) -> Acc
                      end, [], Cons0),
-    Enqs = maps:fold(fun(P, #enqueuer{suspected_down = true}, Acc)
+    Enqs = maps:fold(fun(P, #enqueuer{status = suspected_down}, Acc)
                            when node(P) =:= Node ->
                              [P | Acc];
                         (_, _, Acc) -> Acc
                      end, Cons, Enqs0),
     lists:foldl(fun({{_, P},
-                     #consumer{suspected_down = true}}, Acc)
+                     #consumer{status = suspected_down}}, Acc)
                       when node(P) =:= Node ->
                         [P | Acc];
                    (_, Acc) -> Acc
@@ -1814,10 +1841,11 @@ return_checked_out_test() ->
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, [_Monitor,
               {send_msg, _, {delivery, _, [{MsgId, _}]}, ra_event},
-              {aux, active} | _
-             ]} = check(Cid, 2, State0),
-    % return
-    {_State2, _, [_]} = apply(meta(3), make_return(Cid, [MsgId]), State1),
+              {aux, active} | _ ]} = check_auto(Cid, 2, State0),
+    % returning immediately checks out the same message again
+    {_, ok, [{send_msg, _, {delivery, _, [{_, _}]}, ra_event},
+             {aux, active}]} =
+        apply(meta(3), make_return(Cid, [MsgId]), State1),
     ok.
 
 return_auto_checked_out_test() ->
@@ -1844,15 +1872,19 @@ cancelled_checkout_out_test() ->
     {State00, [_, _]} = enq(1, 1, first, test_init(test)),
     {State0, [_]} = enq(2, 2, second, State00),
     {State1, _} = check_auto(Cid, 2, State0),
-    % cancelled checkout should return all pending messages to queue
+    % cancelled checkout should not return pending messages to queue
     {State2, _, _} = apply(meta(3), make_checkout(Cid, cancel, #{}), State1),
     ?assertEqual(1, maps:size(State2#state.messages)),
-    ?assertEqual(1, lqueue:len(State2#state.returns)),
+    ?assertEqual(0, lqueue:len(State2#state.returns)),
 
-    {State3, {dequeue, {0, {_, first}}, _}, _} =
+    {State3, {dequeue, empty}} =
         apply(meta(3), make_checkout(Cid, {dequeue, settled}, #{}), State2),
+    %% settle
+    {State4, ok, _} =
+        apply(meta(4), make_settle(Cid, [0]), State3),
+
     {_State, {dequeue, {_, {_, second}}, _}, _} =
-        apply(meta(4), make_checkout(Cid, {dequeue, settled}, #{}), State3),
+        apply(meta(5), make_checkout(Cid, {dequeue, settled}, #{}), State4),
     ok.
 
 down_with_noproc_consumer_returns_unsettled_test() ->
@@ -1912,16 +1944,6 @@ down_with_noproc_enqueuer_is_cleaned_up_test() ->
     {State1, _, _} = apply(meta(3), {down, Pid, noproc}, State0),
     % ensure there are no enqueuers
     ?assert(0 =:= maps:size(State1#state.enqueuers)),
-    ok.
-
-completed_consumer_yields_demonitor_effect_test() ->
-    Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
-    {State0, [_, _]} = enq(1, 1, second, test_init(test)),
-    {State1, [{monitor, process, _} |  _]} = check(Cid, 2, State0),
-    {_, Effects} = settle(Cid, 3, 0, State1),
-    ?ASSERT_EFF({demonitor, _, _}, Effects),
-    % release cursor for empty queue
-    ?ASSERT_EFF({release_cursor, 3, _}, Effects),
     ok.
 
 discarded_message_without_dead_letter_handler_is_removed_test() ->
@@ -2299,7 +2321,10 @@ single_active_consumer_test() ->
     ?assertEqual(1, length(Effects1)),
 
     % cancelling the active consumer
-    {State3, _, Effects2} = apply(meta(3), #checkout{spec = cancel, consumer_id = {<<"ctag1">>, self()}}, State2),
+    {State3, _, Effects2} = apply(meta(3),
+                                  #checkout{spec = cancel,
+                                            consumer_id = {<<"ctag1">>, self()}},
+                                  State2),
     % the second registered consumer is now the active one
     ?assertEqual(1, map_size(State3#state.consumers)),
     ?assert(maps:is_key({<<"ctag2">>, self()}, State3#state.consumers)),
@@ -2402,15 +2427,16 @@ single_active_consumer_mark_waiting_consumers_as_suspected_when_down_noconnnecti
             State),
         NewState
                   end,
-    State1 = lists:foldl(AddConsumer, State0, [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
+    State1 = lists:foldl(AddConsumer, State0,
+                         [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
 
     % simulate node goes down
     {State2, _, _} = apply(#{}, {down, self(), noconnection}, State1),
 
     % all the waiting consumers should be suspected down
     ?assertEqual(3, length(State2#state.waiting_consumers)),
-    lists:foreach(fun({_, #consumer{suspected_down = SuspectedDown}}) ->
-                      ?assert(SuspectedDown)
+    lists:foreach(fun({_, #consumer{status = Status}}) ->
+                      ?assert(Status == suspected_down)
                   end, State2#state.waiting_consumers),
 
     % simulate node goes back up
@@ -2418,8 +2444,8 @@ single_active_consumer_mark_waiting_consumers_as_suspected_when_down_noconnnecti
 
     % all the waiting consumers should be un-suspected
     ?assertEqual(3, length(State3#state.waiting_consumers)),
-    lists:foreach(fun({_, #consumer{suspected_down = SuspectedDown}}) ->
-                      ?assertNot(SuspectedDown)
+    lists:foreach(fun({_, #consumer{status = Status}}) ->
+                      ?assert(Status /= suspected_down)
                   end, State3#state.waiting_consumers),
 
     ok.
@@ -2504,7 +2530,8 @@ query_consumers_test() ->
     State1 = lists:foldl(AddConsumer, State0, [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
     Consumers0 = State1#state.consumers,
     Consumer = maps:get({<<"ctag2">>, self()}, Consumers0),
-    Consumers1 = maps:put({<<"ctag2">>, self()}, Consumer#consumer{suspected_down = true}, Consumers0),
+    Consumers1 = maps:put({<<"ctag2">>, self()},
+                          Consumer#consumer{status = suspected_down}, Consumers0),
     State2 = State1#state{consumers = Consumers1},
 
     ?assertEqual(4, query_consumer_count(State2)),
