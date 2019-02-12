@@ -899,7 +899,7 @@ rpc_client_consume_loop(Channel) ->
 %% -------------------------------------------------------------------
 
 %% Test for the network client
-%% Sends a bunch of messages and immediatly closes the connection without
+%% Sends a bunch of messages and immediately closes the connection without
 %% closing the channel. Then gets the messages back from the queue and expects
 %% all of them to have been sent.
 pub_and_close(Config) ->
