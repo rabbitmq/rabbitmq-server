@@ -839,7 +839,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
     respond_and_close(State, Channel, Protocol, Reason,
                       {handshake_error, CS, Reason});
 %% when negotiation fails, e.g. due to channel_max being higher than the
-%% maxiumum allowed limit
+%% maximum allowed limit
 handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                                                       log_name = ConnName,
                                                       user = User},
