@@ -218,7 +218,7 @@ fi
 # The defaults are meant to reduce RabbitMQ's memory usage and help
 # it reclaim memory at the cost of a slight decrease in performance
 # (due to an increase in memory operations). These defaults can be
-# overriden using the RABBITMQ_SERVER_ERL_ARGS variable.
+# overridden using the RABBITMQ_SERVER_ERL_ARGS variable.
 RABBITMQ_DEFAULT_ALLOC_ARGS="+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30"
 
 ${ERL_DIR}erl ${RABBITMQ_DEFAULT_ALLOC_ARGS} \
