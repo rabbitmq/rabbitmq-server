@@ -339,7 +339,7 @@
 
    %% Enables flow control between queue mirrors.
    %% Disabling this can be dangerous and is not recommended.
-   %% When flow control is disablied, queue masters can outpace mirrors and not allow mirrors to catch up.
+   %% When flow control is disabled, queue masters can outpace mirrors and not allow mirrors to catch up.
    %% Mirrors will end up using increasingly more RAM, eventually triggering a memory alarm.
    %%
    %% {mirroring_flow_control, true},
