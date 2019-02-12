@@ -31,7 +31,7 @@
 %% clusters.
 %%
 %% Firstly, we have two different types of upgrades to do: Mnesia and
-%% everythinq else. Mnesia upgrades must only be done by one node in
+%% everything else. Mnesia upgrades must only be done by one node in
 %% the cluster (we treat a non-clustered node as a single-node
 %% cluster). This is the primary upgrader. The other upgrades need to
 %% be done by all nodes.
