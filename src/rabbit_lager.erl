@@ -406,7 +406,7 @@ prepare_rabbit_log_config() ->
 
     %% Upgrade log file never overrides the value set in rabbitmq.config
     case UpgradeFile of
-        %% No special env for upgrade logs - rederect to the default sink
+        %% No special env for upgrade logs - redirect to the default sink
         undefined -> ok;
         %% Redirect logs to default output.
         DefaultFile -> ok;
