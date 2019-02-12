@@ -407,12 +407,8 @@ purge(Node) ->
 stat(Leader) ->
     %% short timeout as we don't want to spend too long if it is going to
     %% fail anyway
-    case ra:local_query(Leader, fun rabbit_fifo:query_stat/1, 250) of
-        {ok, {_, {R, C}}, _} ->
-            {ok, R, C};
-        Err ->
-            Err
-    end.
+    {ok, {_, {R, C}}, _} = ra:local_query(Leader, fun rabbit_fifo:query_stat/1, 250),
+    {ok, R, C}.
 
 %% @doc returns the cluster name
 -spec cluster_name(state()) -> cluster_name().

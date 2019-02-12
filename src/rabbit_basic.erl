@@ -30,7 +30,7 @@
 -type properties_input() ::
         rabbit_framing:amqp_property_record() | [{atom(), any()}].
 -type publish_result() ::
-        {ok, [pid()]} | rabbit_types:error('not_found').
+        ok | rabbit_types:error('not_found').
 -type header() :: any().
 -type headers() :: rabbit_framing:amqp_table() | 'undefined'.
 
@@ -76,8 +76,7 @@ publish(Delivery = #delivery{
 
 publish(X, Delivery) ->
     Qs = rabbit_amqqueue:lookup(rabbit_exchange:route(X, Delivery)),
-    DeliveredQPids = rabbit_amqqueue:deliver(Qs, Delivery),
-    {ok, DeliveredQPids}.
+    rabbit_amqqueue:deliver(Qs, Delivery).
 
 -spec delivery
         (boolean(), boolean(), rabbit_types:message(), undefined | integer()) ->

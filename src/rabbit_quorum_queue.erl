@@ -85,8 +85,8 @@ init_state({Name, _}, QName = #resource{}) ->
                             fun() -> credit_flow:unblock(Name), ok end).
 
 -spec handle_event({'ra_event', amqqueue:ra_server_id(), any()}, rabbit_fifo_client:state()) ->
-                          {'internal', Correlators :: [term()], rabbit_fifo_client:state()} |
-                          {rabbit_fifo:client_msg(), rabbit_fifo_client:state()}.
+                          {internal, Correlators :: [term()], rabbit_fifo_client:actions(), rabbit_fifo_client:state()} |
+                          {rabbit_fifo:client_msg(), rabbit_fifo_client:state()} | eol.
 
 handle_event({ra_event, From, Evt}, QState) ->
     rabbit_fifo_client:handle_ra_event(From, Evt, QState).
@@ -560,12 +560,7 @@ info(Q, Items) ->
 stat(Q) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
     try
-        case rabbit_fifo_client:stat(Leader) of
-            {ok, _, _} = Stat ->
-                Stat;
-            _ ->
-                {ok, 0, 0}
-        end
+        {ok, _, _} = rabbit_fifo_client:stat(Leader)
     catch
         _:_ ->
             %% Leader is not available, cluster might be in minority
@@ -921,7 +916,7 @@ format(Q) when ?is_amqqueue(Q) ->
 is_process_alive(Name, Node) ->
     erlang:is_pid(rpc:call(Node, erlang, whereis, [Name], ?RPC_TIMEOUT)).
 
--spec quorum_messages(atom()) -> non_neg_integer().
+-spec quorum_messages(rabbit_amqqueue:name()) -> non_neg_integer().
 
 quorum_messages(QName) ->
     case ets:lookup(queue_coarse_metrics, QName) of

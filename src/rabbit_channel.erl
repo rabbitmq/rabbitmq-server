@@ -869,9 +869,7 @@ send(Command, #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Command).
 
 format_soft_error(#amqp_error{name = N, explanation = E, method = M}) ->
-    io_lib:format("operation ~s caused a channel exception ~s: ~ts", [M, N, E]);
-format_soft_error(Reason) ->
-    Reason.
+    io_lib:format("operation ~s caused a channel exception ~s: ~ts", [M, N, E]).
 
 handle_exception(Reason, State = #ch{protocol     = Protocol,
                                      channel      = Channel,
@@ -2145,19 +2143,14 @@ send_confirms_and_nacks(State) ->
 
 send_nacks([], _, State) ->
     State;
-send_nacks(_Rs, _, State = #ch{state = closing,
-                                tx    = none}) -> %% optimisation
+send_nacks(_Rs, _, State = #ch{state = closing}) -> %% optimisation
     State;
-send_nacks(Rs, Cs, State = #ch{tx = none}) ->
+send_nacks(Rs, Cs, State) ->
     coalesce_and_send(Rs, Cs,
                       fun(MsgSeqNo, Multiple) ->
                               #'basic.nack'{delivery_tag = MsgSeqNo,
                                             multiple     = Multiple}
-                      end, State);
-send_nacks(_MXs, _, State = #ch{state = closing}) -> %% optimisation
-    State#ch{tx = failed};
-send_nacks(_, _, State) ->
-    maybe_complete_tx(State#ch{tx = failed}).
+                      end, State).
 
 send_confirms([], _, State) ->
     State;
