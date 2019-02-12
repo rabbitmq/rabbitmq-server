@@ -142,7 +142,7 @@ cancel_timeout(_) ->
         reuse),
 
     timer:sleep(1000),
-    receive {hello, Worker, Test} -> exit(timeout_is_not_canceleld)
+    receive {hello, Worker, Test} -> exit(timeout_is_not_cancelled)
     after 0 -> ok
     end.
 
@@ -179,7 +179,7 @@ cancel_timeout_by_setting(_) ->
         reuse),
 
     timer:sleep(1000),
-    receive {hello, Worker, Test} -> exit(timeout_is_not_canceleld)
+    receive {hello, Worker, Test} -> exit(timeout_is_not_cancelled)
     after 0 -> ok
     end,
 
