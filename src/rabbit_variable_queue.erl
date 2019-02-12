@@ -1939,7 +1939,7 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
 maybe_write_msg_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
 
-%% Due to certain optimizations made inside
+%% Due to certain optimisations made inside
 %% rabbit_queue_index:pre_publish/7 we need to have two separate
 %% functions for index persistence. This one is only used when paging
 %% during memory pressure. We didn't want to modify
