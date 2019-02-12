@@ -371,7 +371,7 @@ else
     #     This is considered an abnormal process termination. Normally, we
     #     don't need to specify this exit code because the shell propagates it.
     #     Unfortunately, the signal handler doesn't work as expected in Dash,
-    #     thus we need to explicitely restate the exit code.
+    #     thus we need to explicitly restate the exit code.
     trap "stop_rabbitmq_server; exit 0" HUP TERM TSTP
     trap "stop_rabbitmq_server; exit 130" INT
 

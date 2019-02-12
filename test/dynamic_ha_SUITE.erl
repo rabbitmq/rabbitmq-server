@@ -484,7 +484,7 @@ failing_random_policies(Config) ->
     [A, B | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
     %% Those set of policies were found as failing by PropEr in the
-    %% `random_policy` test above. We add them explicitely here to make
+    %% `random_policy` test above. We add them explicitly here to make
     %% sure they get tested.
     ?assertEqual(true, test_random_policy(Config, Nodes,
         [{nodes, [A, B]}, {nodes, [A]}])),
