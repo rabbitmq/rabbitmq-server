@@ -144,7 +144,7 @@ default_restart_type(_)      -> temporary.
 
 %% Copyright Ericsson AB 1996-2016. All Rights Reserved.
 %%
-%% Code orignially from Erlang/OTP source lib/kernel/src/application.erl
+%% Code originally from Erlang/OTP source lib/kernel/src/application.erl
 %% and modified to use RestartTypes map
 %%
 ensure_all_started(Application, RestartTypes) ->

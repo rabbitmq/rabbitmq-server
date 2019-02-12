@@ -349,7 +349,7 @@ reply({To, Tag}, Reply) ->
     catch To ! {Tag, Reply}.
 
 %% -----------------------------------------------------------------
-%% Asyncronous broadcast, returns nothing, it's just send'n pray
+%% Asynchronous broadcast, returns nothing, it's just send'n pray
 %% -----------------------------------------------------------------
 abcast(Name, Request) when is_atom(Name) ->
     do_abcast([node() | nodes()], Name, {'$gen_cast', Request}).
@@ -828,7 +828,7 @@ do_multi_call(Nodes, Name, Req, Timeout) ->
         spawn(
           fun () ->
                   %% Middleman process. Should be unsensitive to regular
-                  %% exit signals. The sychronization is needed in case
+                  %% exit signals. The synchronization is needed in case
                   %% the receiver would exit before the caller started
                   %% the monitor.
                   process_flag(trap_exit, true),
@@ -1275,7 +1275,7 @@ name_to_pid(Name) ->
         undefined ->
             case whereis_name(Name) of
                 undefined ->
-                    exit(could_not_find_registerd_name);
+                    exit(could_not_find_registered_name);
                 Pid ->
                     Pid
             end;

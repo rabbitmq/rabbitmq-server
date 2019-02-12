@@ -21,7 +21,7 @@
 %% Behaviour module to provide pluggable message store index.
 %% The index is used to locate message on disk and for reference-counting.
 
-%% Message store have several addtitional assumptions about performance and
+%% Message store have several additional assumptions about performance and
 %% atomicity of some operations. See comments for each callback.
 
 -type(dir() :: string()).
@@ -59,7 +59,7 @@
 
 %% Update an entry in the index.
 %% Is called by a msg_store process only.
-%% The function is called duting message store recovery after crash.
+%% The function is called during message store recovery after crash.
 %% The difference between update and insert functions, is that update
 %% should not fail if entry already exist, and should be atomic.
 -callback update(msg_location(), index_state()) -> 'ok'.

@@ -1340,7 +1340,7 @@ pkg_erlang_cep_commit = master
 
 PACKAGES += erlang_js
 pkg_erlang_js_name = erlang_js
-pkg_erlang_js_description = A linked-in driver for Erlang to Mozilla's Spidermonkey Javascript runtime.
+pkg_erlang_js_description = A linked-in driver for Erlang to Mozilla's Spidermonkey JavaScript runtime.
 pkg_erlang_js_homepage = https://github.com/basho/erlang_js
 pkg_erlang_js_fetch = git
 pkg_erlang_js_repo = https://github.com/basho/erlang_js
@@ -4132,7 +4132,7 @@ pkg_yaws_commit = master
 
 PACKAGES += zab_engine
 pkg_zab_engine_name = zab_engine
-pkg_zab_engine_description = zab propotocol implement by erlang
+pkg_zab_engine_description = zab protocol implement by erlang
 pkg_zab_engine_homepage = https://github.com/xinmingyao/zab_engine
 pkg_zab_engine_fetch = git
 pkg_zab_engine_repo = https://github.com/xinmingyao/zab_engine
