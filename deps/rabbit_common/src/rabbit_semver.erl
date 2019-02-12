@@ -209,13 +209,13 @@ pes(VsnA, VsnB) ->
 %%%===================================================================
 %%% Friend Functions
 %%%===================================================================
-%% @doc helper function for the peg grammer to parse the iolist into a semver
+%% @doc helper function for the peg grammar to parse the iolist into a semver
 -spec internal_parse_version(iolist()) -> semver().
 internal_parse_version([MMP, AlphaPart, BuildPart, _]) ->
     {parse_major_minor_patch_minpatch(MMP), {parse_alpha_part(AlphaPart),
                                              parse_alpha_part(BuildPart)}}.
 
-%% @doc helper function for the peg grammer to parse the iolist into a major_minor_patch
+%% @doc helper function for the peg grammar to parse the iolist into a major_minor_patch
 -spec parse_major_minor_patch_minpatch(iolist()) -> major_minor_patch_minpatch().
 parse_major_minor_patch_minpatch([MajVsn, [], [], []]) ->
     strip_maj_version(MajVsn);
@@ -231,7 +231,7 @@ parse_major_minor_patch_minpatch([MajVsn,
                                   [<<".">>, MinPatch]]) ->
     {strip_maj_version(MajVsn), MinVsn, PatchVsn, MinPatch}.
 
-%% @doc helper function for the peg grammer to parse the iolist into an alpha part
+%% @doc helper function for the peg grammar to parse the iolist into an alpha part
 -spec parse_alpha_part(iolist()) -> [alpha_part()].
 parse_alpha_part([]) ->
     [];
