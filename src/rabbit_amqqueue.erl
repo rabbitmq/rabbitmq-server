@@ -237,7 +237,9 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
               rabbit_framing:amqp_table(),
               rabbit_types:maybe(pid()),
               rabbit_types:username()) ->
-    {'new' | 'existing' | 'absent' | 'owner_died', amqqueue:amqqueue()} |
+    {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
+    {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
+    {'absent', amqqueue:amqqueue(), absent_reason()} |
     rabbit_types:channel_exit().
 
 declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
@@ -1031,6 +1033,7 @@ notify_policy_changed(Q) when ?amqqueue_is_quorum(Q) ->
 
 -spec consumers(amqqueue:amqqueue()) ->
           [{pid(), rabbit_types:ctag(), boolean(), non_neg_integer(),
+            boolean(), atom(),
             rabbit_framing:amqp_table(), rabbit_types:username()}].
 
 consumers(Q) when ?amqqueue_is_classic(Q) ->

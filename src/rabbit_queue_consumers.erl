@@ -86,8 +86,8 @@ inactive(#state{consumers = Consumers}) ->
     priority_queue:is_empty(Consumers).
 
 -spec all(state()) -> [{ch(), rabbit_types:ctag(), boolean(),
-                        non_neg_integer(), rabbit_framing:amqp_table(),
-                        rabbit_types:username()}].
+                        non_neg_integer(), boolean(), atom(),
+                        rabbit_framing:amqp_table(), rabbit_types:username()}].
 
 all(State) ->
     all(State, none, false).

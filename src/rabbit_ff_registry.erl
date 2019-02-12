@@ -161,7 +161,7 @@ always_return_true() ->
     %% That's why this function makes a call which we know the result,
     %% but not Dialyzer, to "create" that hard-coded `true` return
     %% value.
-    rand:uniform(1) > 0.
+    erlang:get({?MODULE, always_undefined}) =:= undefined.
 
 always_return_false() ->
     not always_return_true().
