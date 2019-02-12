@@ -35,7 +35,7 @@
 %% `Module` must contain an attribute `erlang_version_support` containing a list of
 %% tuples:
 %%
-%% {ErlangVersion, [{OriginalFuntion, Arity, PreErlangVersionFunction,
+%% {ErlangVersion, [{OriginalFunction, Arity, PreErlangVersionFunction,
 %%                   PostErlangVersionFunction}]}
 %%
 %% All these new functions may be exported, and implemented as follows:

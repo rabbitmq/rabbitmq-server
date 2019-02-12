@@ -897,7 +897,7 @@ maybe_restart(Strategy, Child, State) ->
     case restart(Strategy, Child, State) of
         {try_again, Reason, NState2} ->
             %% Leaving control back to gen_server before
-            %% trying again. This way other incoming requsts
+            %% trying again. This way other incoming requests
             %% for the supervisor can be handled - e.g. a
             %% shutdown request for the supervisor or the
             %% child.
@@ -1085,7 +1085,7 @@ monitor_child(Pid) ->
 %%
 %% Shutdown all dynamic children. This happens when the supervisor is
 %% stopped. Because the supervisor can have millions of dynamic children, we
-%% can have an significative overhead here.
+%% can have significant overhead here.
 %%-----------------------------------------------------------------
 terminate_dynamic_children(Child, Dynamics, SupName) ->
     {Pids, EStack0} = monitor_dynamic_children(Child, Dynamics),
@@ -1438,7 +1438,7 @@ validMods(Mods) -> throw({invalid_modules, Mods}).
 %%% Add a new restart and calculate if the max restart
 %%% intensity has been reached (in that case the supervisor
 %%% shall terminate).
-%%% All restarts accured inside the period amount of seconds
+%%% All restarts occurring inside the period amount of seconds
 %%% are kept in the #state.restarts list.
 %%% Returns: {ok, State'} | {terminate, State'}
 %%% ------------------------------------------------------

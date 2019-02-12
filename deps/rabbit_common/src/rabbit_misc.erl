@@ -1222,7 +1222,7 @@ get_gc_info(Pid) ->
 guess_number_of_cpu_cores() ->
     rabbit_runtime:guess_number_of_cpu_cores().
 
-%% Discussion of choosen values is at
+%% Discussion of chosen values is at
 %% https://github.com/rabbitmq/rabbitmq-server/issues/151
 guess_default_thread_pool_size() ->
     PoolSize = 16 * guess_number_of_cpu_cores(),
@@ -1245,7 +1245,7 @@ get_parent() ->
 name_to_pid(Name) ->
     case whereis(Name) of
         undefined -> case whereis_name(Name) of
-                         undefined -> exit(could_not_find_registerd_name);
+                         undefined -> exit(could_not_find_registered_name);
                          Pid       -> Pid
                      end;
         Pid       -> Pid
