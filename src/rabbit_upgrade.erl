@@ -306,7 +306,7 @@ node_type_legacy() ->
     %% hang), we can't look at the config file (may not include us
     %% even if we're a disc node).  We also can't use
     %% rabbit_mnesia:node_type/0 because that will give false
-    %% postivies on Rabbit up to 2.5.1.
+    %% positives on Rabbit up to 2.5.1.
     case filelib:is_regular(filename:join(dir(), "rabbit_durable_exchange.DCD")) of
         true  -> disc;
         false -> ram
