@@ -34,8 +34,15 @@ defmodule DiagnosticsHelpersTest do
   end
 
   test "[human-readable] protocol labels" do
-    assert DH.protocol_label(:amqp)  == "AMQP 0-9-1 and AMQP 1.0"
-    assert DH.protocol_label(:mqtt)  == "MQTT"
+    assert DH.protocol_label(:amqp) == "AMQP 0-9-1 and AMQP 1.0"
+    assert DH.protocol_label(:'amqp/ssl') == "AMQP 0-9-1 and AMQP 1.0 over TLS"
+    assert DH.protocol_label(:mqtt) == "MQTT"
+    assert DH.protocol_label(:'mqtt/ssl') == "MQTT over TLS"
     assert DH.protocol_label(:stomp) == "STOMP"
+    assert DH.protocol_label(:'stomp/ssl') == "STOMP over TLS"
+    assert DH.protocol_label(:http) == "HTTP API"
+    assert DH.protocol_label(:https) == "HTTP API over TLS (HTTPS)"
+    assert DH.protocol_label(:'https/web-stomp') == "STOMP over WebSockets and TLS (HTTPS)"
+    assert DH.protocol_label(:'https/web-mqtt') == "MQTT over WebSockets and TLS (HTTPS)"
   end
 end
