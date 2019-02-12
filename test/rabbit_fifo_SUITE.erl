@@ -395,7 +395,8 @@ cancel_checkout(Config) ->
     {ok, F2} = rabbit_fifo_client:checkout(<<"tag">>, 10, undefined, F1),
     {_, _, F3} = process_ra_events0(F2, [], [], 250, fun (_, S) -> S end),
     {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, F3),
-    {ok, {{_, {_, m1}}, _}, _} = rabbit_fifo_client:dequeue(<<"d1">>, settled, F4),
+    {ok, F5} = rabbit_fifo_client:return(<<"tag">>, [0], F4),
+    {ok, {{_, {_, m1}}, _}, _} = rabbit_fifo_client:dequeue(<<"d1">>, settled, F5),
     ok.
 
 credit(Config) ->
