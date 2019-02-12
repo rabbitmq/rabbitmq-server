@@ -323,7 +323,7 @@ apply(Meta,
     case Cons0 of
         #{ConsumerId := Con0} ->
             % need to increment metrics before completing as any snapshot
-            % states taken need to includ them
+            % states taken need to include them
             complete_and_checkout(Meta, MsgIds, ConsumerId,
                                   Con0, [], State);
         _ ->
