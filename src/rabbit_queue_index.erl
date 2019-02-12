@@ -368,7 +368,7 @@ pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint
                      State1#qistate{pre_publish_cache = PPC1,
                                     delivered_cache   = DC1})).
 
-%% pre_publish_cache is the entry with most elements when comapred to
+%% pre_publish_cache is the entry with most elements when compared to
 %% delivered_cache so we only check the former in the guard.
 maybe_flush_pre_publish_cache(JournalSizeHint,
                               #qistate{pre_publish_cache = PPC} = State)
