@@ -128,11 +128,11 @@ recover_classic_queues(VHost, Queues) ->
         BQ:start(VHost, [amqqueue:get_name(Q) || Q <- Queues]),
     case rabbit_amqqueue_sup_sup:start_for_vhost(VHost) of
         {ok, _}         ->
-            OkQueues = recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms)),
-            OkQueuesNames = [amqqueue:get_name(Q) || Q <- OkQueues],
+            RecoveredQs = recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms)),
+            RecoveredNames = [amqqueue:get_name(Q) || Q <- RecoveredQs],
             FailedQueues = [Q || Q <- Queues,
-                                 not lists:member(amqqueue:get_name(Q), OkQueuesNames)],
-            {OkQueues, FailedQueues};
+                                 not lists:member(amqqueue:get_name(Q), RecoveredNames)],
+            {RecoveredQs, FailedQueues};
         {error, Reason} ->
             rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
             throw({error, Reason})
