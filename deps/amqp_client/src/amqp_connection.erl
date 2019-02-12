@@ -117,7 +117,7 @@
 %%     defaults to 0</li>
 %% <li>frame_max :: non_neg_integer() - The frame_max handshake parameter,
 %%     defaults to 0 (network only)</li>
-%% <li>heartbeat :: non_neg_integer() - The hearbeat interval in seconds,
+%% <li>heartbeat :: non_neg_integer() - The heartbeat interval in seconds,
 %%     defaults to 0 (turned off) (network only)</li>
 %% <li>connection_timeout :: non_neg_integer() | 'infinity'
 %%     - The connection timeout in milliseconds,
