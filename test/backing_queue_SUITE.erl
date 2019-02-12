@@ -730,7 +730,8 @@ bq_queue_recover1(Config) ->
     after 10000 -> exit(timeout_waiting_for_queue_death)
     end,
     rabbit_amqqueue:stop(?VHOST),
-    rabbit_amqqueue:start(rabbit_amqqueue:recover(?VHOST)),
+    {Ok, []} = rabbit_amqqueue:recover(?VHOST),
+    rabbit_amqqueue:start(Ok),
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
     rabbit_amqqueue:with_or_die(
       QName,
