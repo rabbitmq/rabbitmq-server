@@ -687,7 +687,7 @@ queue_unbind(Config) ->
 
 %% -------------------------------------------------------------------
 
-%% This is designed to exercize the internal queuing mechanism
+%% This is designed to exercise the internal queuing mechanism
 %% to ensure that sync methods are properly serialized
 sync_method_serialization(Config) ->
     abstract_method_serialization_test(
@@ -703,7 +703,7 @@ sync_method_serialization(Config) ->
         end,
         fun (_, _, _, _, _) -> ok end).
 
-%% This is designed to exercize the internal queuing mechanism
+%% This is designed to exercise the internal queuing mechanism
 %% to ensure that sending async methods and then a sync method is serialized
 %% properly
 async_sync_method_serialization(Config) ->
@@ -735,7 +735,7 @@ async_sync_method_serialization(Config) ->
                                                        passive = true})
         end).
 
-%% This is designed to exercize the internal queuing mechanism
+%% This is designed to exercise the internal queuing mechanism
 %% to ensure that sending sync methods and then an async method is serialized
 %% properly
 sync_async_method_serialization(Config) ->
