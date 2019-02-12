@@ -909,7 +909,7 @@
    %%   {rabbit_channel_lager_event, [{handlers, [
    %%                                   {lager_forwarder_backend,
    %%                                    [lager_event, info]}]}]},
-   %%   {rabbit_conection_lager_event, [{handlers, [
+   %%   {rabbit_connection_lager_event, [{handlers, [
    %%                                     {lager_forwarder_backend,
    %%                                      [lager_event, info]}]}]},
    %%   {rabbit_mirroring_lager_event, [{handlers, [
