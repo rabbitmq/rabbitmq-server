@@ -109,15 +109,15 @@ warn_file_limit() ->
     end.
 
 -spec recover(rabbit_types:vhost()) ->
-    {ClassicOk :: [amqqueue:amqqueue()],
-     ClassicFailed :: [amqqueue:amqqueue()],
+    {RecoveredClassic :: [amqqueue:amqqueue()],
+     FailedClassic :: [amqqueue:amqqueue()],
      Quorum :: [amqqueue:amqqueue()]}.
 
 recover(VHost) ->
-    Classic = find_local_durable_classic_queues(VHost),
+    AllClassic = find_local_durable_classic_queues(VHost),
     Quorum = find_local_quorum_queues(VHost),
-    {ClassicOk, ClassicFailed} = recover_classic_queues(VHost, Classic),
-    {ClassicOk, ClassicFailed, rabbit_quorum_queue:recover(Quorum)}.
+    {RecoveredClassic, FailedClassic} = recover_classic_queues(VHost, AllClassic),
+    {RecoveredClassic, FailedClassic, rabbit_quorum_queue:recover(Quorum)}.
 
 recover_classic_queues(VHost, Queues) ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
