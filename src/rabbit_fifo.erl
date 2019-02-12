@@ -1083,7 +1083,7 @@ increase_credit(#consumer{lifetime = once,
 increase_credit(#consumer{lifetime = auto,
                           credit_mode = credited,
                           credit = Credit}, _) ->
-    %% credit_mode: credit also doens't automatically increment credit
+    %% credit_mode: credit also doesn't automatically increment credit
     Credit;
 increase_credit(#consumer{credit = Current}, Credit) ->
     Current + Credit.
