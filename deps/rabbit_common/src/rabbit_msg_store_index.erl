@@ -21,7 +21,7 @@
 %% Behaviour module to provide pluggable message store index.
 %% The index is used to locate message on disk and for reference-counting.
 
-%% Message store have several addtitional assumptions about performance and
+%% Message store have several additional assumptions about performance and
 %% atomicity of some operations. See comments for each callback.
 
 -type(dir() :: string()).
