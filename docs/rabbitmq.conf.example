@@ -804,7 +804,7 @@
 ## See http://rabbitmq.com/logging.html and https://github.com/erlang-lager/lager for details.
 ##
 
-## Log direcrory, taken from the RABBITMQ_LOG_BASE env variable by default.
+## Log directory, taken from the RABBITMQ_LOG_BASE env variable by default.
 ##
 # log.dir = /var/log/rabbitmq
 
