@@ -87,7 +87,7 @@ notify_down_all(Config) ->
     declare(QCfg0),
     %% Testing rabbit_amqqueue:notify_down_all via rabbit_channel.
     %% Consumer count = 0 after correct channel termination and
-    %% notification of queues via delagate:call/3
+    %% notification of queues via delegate:call/3
     true = (0 =/= length(get_consumers(Config, Rabbit, ?DEFAULT_VHOST))),
     rabbit_ct_client_helpers:close_channel(RabbitCh),
     0 = length(get_consumers(Config, Rabbit, ?DEFAULT_VHOST)),

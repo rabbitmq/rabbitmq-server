@@ -396,7 +396,7 @@ prepare_rabbit_log_config() ->
             set_env_default_log_console();
         FileName when is_list(FileName) ->
             case os:getenv("RABBITMQ_LOGS_source") of
-                %% The user explicitely sets $RABBITMQ_LOGS;
+                %% The user explicitly sets $RABBITMQ_LOGS;
                 %% we should override a file location even
                 %% if it's set in rabbitmq.config
                 "environment" -> set_env_default_log_file(FileName, override);
@@ -406,7 +406,7 @@ prepare_rabbit_log_config() ->
 
     %% Upgrade log file never overrides the value set in rabbitmq.config
     case UpgradeFile of
-        %% No special env for upgrade logs - rederect to the default sink
+        %% No special env for upgrade logs - redirect to the default sink
         undefined -> ok;
         %% Redirect logs to default output.
         DefaultFile -> ok;

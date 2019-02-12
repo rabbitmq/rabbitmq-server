@@ -158,7 +158,7 @@
 
 %% Drop messages from the head of the queue while the supplied
 %% predicate on message properties returns true. Returns the first
-%% message properties for which the predictate returned false, or
+%% message properties for which the predicate returned false, or
 %% 'undefined' if the whole backing queue was traversed w/o the
 %% predicate ever returning false.
 -callback dropwhile(msg_pred(), state())

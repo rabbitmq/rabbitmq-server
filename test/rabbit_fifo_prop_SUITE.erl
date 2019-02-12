@@ -321,7 +321,7 @@ checkout_gen(Pid) ->
            }).
 
 expand(Ops) ->
-    %% execute each command against a rabbit_fifo state and capture all releavant
+    %% execute each command against a rabbit_fifo state and capture all relevant
     %% effects
     T = #t{},
     #t{effects = Effs} = T1 = lists:foldl(fun handle_op/2, T, Ops),
@@ -463,7 +463,7 @@ run_proper(Fun, Args, NumTests) ->
                       end}])).
 
 run_snapshot_test(Conf, Commands) ->
-    %% create every incremental permuation of the commands lists
+    %% create every incremental permutation of the commands lists
     %% and run the snapshot tests against that
     [begin
          % ?debugFmt("~w running command to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
