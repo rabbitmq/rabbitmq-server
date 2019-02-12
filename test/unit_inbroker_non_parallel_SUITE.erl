@@ -338,7 +338,7 @@ log_management_during_startup1(_Config) ->
     application:unset_env(lager, extra_sinks),
     ok = try rabbit:start() of
         ok -> exit({got_success_but_expected_failure,
-                    log_rotatation_parent_dirs_test})
+                    log_rotation_parent_dirs_test})
     catch
         _:{error, {cannot_log_to_file, _, Reason2}}
             when Reason2 =:= enoent orelse Reason2 =:= eacces -> ok;
