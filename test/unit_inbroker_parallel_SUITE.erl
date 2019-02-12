@@ -1384,7 +1384,7 @@ max_message_size(Config) ->
 
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
-    %% Binary is whithin the max size limit
+    %% Binary is within the max size limit
     amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"none">>}, #amqp_msg{payload = Binary2M}),
     %% The channel process is alive
     assert_channel_alive(Ch),
