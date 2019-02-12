@@ -226,7 +226,7 @@ export base_rmq_ref
 # If cloning from this computed location fails, we fallback to RabbitMQ
 # upstream which is GitHub.
 
-# Maccro to transform eg. "rabbit_common" to "rabbitmq-common".
+# Macro to transform eg. "rabbit_common" to "rabbitmq-common".
 rmq_cmp_repo_name = $(word 2,$(dep_$(1)))
 
 # Upstream URL for the current project.
