@@ -498,7 +498,7 @@ extract_q(KVRe, QRe, [Param | Rest], Acc) ->
 %%
 %%      The returned list of encodings is sorted, descendingly, according to the
 %%      Q values of the given list. The last element of this list is the given
-%%      default encoding unless this encoding is explicitily or implicitily
+%%      default encoding unless this encoding is explicitly or implicitily
 %%      marked with a Q value of 0.0 in the given Q values list.
 %%      Note: encodings with the same Q value are kept in the same order as
 %%            found in the input Q values list.
