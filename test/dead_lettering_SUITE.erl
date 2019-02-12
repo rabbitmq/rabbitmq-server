@@ -577,7 +577,7 @@ dead_letter_routing_key_header_BCC(Config) ->
 
 %% It is possible to form a cycle of message dead-lettering. For instance,
 %% this can happen when a queue dead-letters messages to the default exchange without
-%% specifiying a dead-letter routing key (5). Messages in such cycles (i.e. messages that
+%% specifying a dead-letter routing key (5). Messages in such cycles (i.e. messages that
 %% reach the same queue twice) will be dropped if there was no rejections in the entire cycle.
 %% i.e. x-message-ttl (7), x-max-length (6)
 %%
