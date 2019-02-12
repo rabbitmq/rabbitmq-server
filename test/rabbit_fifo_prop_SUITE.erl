@@ -321,7 +321,7 @@ checkout_gen(Pid) ->
            }).
 
 expand(Ops) ->
-    %% execute each command against a rabbit_fifo state and capture all releavant
+    %% execute each command against a rabbit_fifo state and capture all relevant
     %% effects
     T = #t{},
     #t{effects = Effs} = T1 = lists:foldl(fun handle_op/2, T, Ops),
