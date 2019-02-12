@@ -28,7 +28,7 @@
 %% is itself blocked - thus the only processes that need to check
 %% blocked/0 are ones that read from network sockets.
 %%
-%% Credit flows left to right when process send messags down the
+%% Credit flows left to right when process send messages down the
 %% chain, starting at the rabbit_reader, ending at the msg_store:
 %%  reader -> channel -> queue_process -> msg_store.
 %%
