@@ -1438,7 +1438,7 @@ validMods(Mods) -> throw({invalid_modules, Mods}).
 %%% Add a new restart and calculate if the max restart
 %%% intensity has been reached (in that case the supervisor
 %%% shall terminate).
-%%% All restarts accured inside the period amount of seconds
+%%% All restarts occurring inside the period amount of seconds
 %%% are kept in the #state.restarts list.
 %%% Returns: {ok, State'} | {terminate, State'}
 %%% ------------------------------------------------------
