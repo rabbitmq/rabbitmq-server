@@ -479,7 +479,7 @@ slave_recovers_after_vhost_down_and_master_migrated(Config) ->
     case rabbit_ct_broker_helpers:rpc(Config, A, rabbit_vhost_sup_sup, start_vhost, [<<"/">>]) of
       {ok, _Sup} -> ok;
       {error,{already_started, _Sup}} -> ok
-    end
+    end,
     timer:sleep(500),
     assert_slaves(B, QName, {B, [A]}, [{B, []}]).
 
