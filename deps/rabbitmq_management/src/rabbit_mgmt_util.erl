@@ -382,7 +382,7 @@ augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
                 [AugFun, SortFun, PageFun];
             {true, basic, extended} ->
                 % pagination with extended columns and sorting on basic
-                % here we can reduce the augementation set before
+                % here we can reduce the augmentation set before
                 % augmenting
                 [SortFun, PageFun, AugFun]
         end,
