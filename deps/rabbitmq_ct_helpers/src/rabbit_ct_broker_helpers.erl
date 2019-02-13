@@ -56,6 +56,11 @@
     kill_node/2,
     kill_node_after/3,
 
+    is_feature_flag_supported/2,
+    is_feature_flag_supported/3,
+    enable_feature_flag/2,
+    enable_feature_flag/3,
+
     set_partition_handling_mode/3,
     set_partition_handling_mode_globally/2,
     enable_dist_proxy_manager/1,
@@ -1374,6 +1379,32 @@ await_os_pid_death(Pid) ->
         true  -> timer:sleep(100),
                  await_os_pid_death(Pid);
         false -> ok
+    end.
+
+is_feature_flag_supported(Config, FeatureName) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    is_feature_flag_supported(Config, Nodes, FeatureName).
+
+is_feature_flag_supported(Config, [Node1 | _] = Nodes, FeatureName) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, Node1,
+      rabbit_feature_flags, is_supported_remotely,
+      [Nodes, [FeatureName], 60000]).
+
+enable_feature_flag(Config, FeatureName) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    enable_feature_flag(Config, Nodes, FeatureName).
+
+enable_feature_flag(Config, [Node1 | _] = Nodes, FeatureName) ->
+    case is_feature_flag_supported(Config, Nodes, FeatureName) of
+        true ->
+            rabbit_ct_broker_helpers:rpc(
+              Config, Node1, rabbit_feature_flags, enable, [FeatureName]);
+        false ->
+            {skip,
+             lists:flatten(
+               io_lib:format("'~s' feature flag is unsupported",
+                             [FeatureName]))}
     end.
 
 %% From a given list of gen_tcp client connections, return the list of
