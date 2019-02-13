@@ -382,7 +382,7 @@ augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
                 [AugFun, SortFun, PageFun];
             {true, basic, extended} ->
                 % pagination with extended columns and sorting on basic
-                % here we can reduce the augementation set before
+                % here we can reduce the augmentation set before
                 % augmenting
                 [SortFun, PageFun, AugFun]
         end,
@@ -452,7 +452,7 @@ sort_list(Facts, Sorts) -> sort_list_and_paginate(Facts, Sorts, undefined, false
       Fact :: [{atom(), term()}],
       SortColumn :: string().
 sort_list(Facts, _, [], _) ->
-    %% Do not sort when we are explicitly requsted to sort with an
+    %% Do not sort when we are explicitly requested to sort with an
     %% empty sort columns list. Note that this clause won't match when
     %% 'sort' parameter is not provided in a HTTP request at all.
     Facts;
