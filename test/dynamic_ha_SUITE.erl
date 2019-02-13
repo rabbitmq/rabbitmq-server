@@ -437,8 +437,8 @@ slave_recovers_after_vhost_down_and_up(Config) ->
 
     %% Crash vhost on a node hosting a mirror
     rabbit_ct_broker_helpers:force_vhost_failure(Config, B, <<"/">>),
-    %% Vhost is down now
-    false = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, is_vhost_alive, [<<"/">>]),
+    %% rabbit_ct_broker_helpers:force_vhost_failure/2 will retry up to 10 times to
+    %% make sure that the top vhost supervision tree process did go down. MK.
     timer:sleep(500),
     %% Vhost is back up
     case rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, start_vhost, [<<"/">>]) of
