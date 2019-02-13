@@ -1802,7 +1802,7 @@ exchanges_pagination_test(Config) ->
     http_get(Config, "/exchanges?page=1000", ?BAD_REQUEST),
     http_get(Config, "/exchanges?page=-1", ?BAD_REQUEST),
     http_get(Config, "/exchanges?page=not_an_integer_value", ?BAD_REQUEST),
-    http_get(Config, "/exchanges?page=1&page_size=not_an_intger_value", ?BAD_REQUEST),
+    http_get(Config, "/exchanges?page=1&page_size=not_an_integer_value", ?BAD_REQUEST),
     http_get(Config, "/exchanges?page=1&page_size=501", ?BAD_REQUEST), %% max 500 allowed
     http_get(Config, "/exchanges?page=-1&page_size=-2", ?BAD_REQUEST),
     http_delete(Config, "/exchanges/%2F/test0", {group, '2xx'}),
@@ -1944,7 +1944,7 @@ queue_pagination_test(Config) ->
     http_get(Config, "/queues?page=1000", ?BAD_REQUEST),
     http_get(Config, "/queues?page=-1", ?BAD_REQUEST),
     http_get(Config, "/queues?page=not_an_integer_value", ?BAD_REQUEST),
-    http_get(Config, "/queues?page=1&page_size=not_an_intger_value", ?BAD_REQUEST),
+    http_get(Config, "/queues?page=1&page_size=not_an_integer_value", ?BAD_REQUEST),
     http_get(Config, "/queues?page=1&page_size=501", ?BAD_REQUEST), %% max 500 allowed
     http_get(Config, "/queues?page=-1&page_size=-2", ?BAD_REQUEST),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
