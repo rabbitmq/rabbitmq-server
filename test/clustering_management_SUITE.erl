@@ -153,9 +153,9 @@ join_and_part_cluster(Config) ->
 join_cluster_bad_operations(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),
 
-    %% Non-existant node
+    %% Nonexistent node
     ok = stop_app(Rabbit),
-    assert_failure(fun () -> join_cluster(Rabbit, non@existant) end),
+    assert_failure(fun () -> join_cluster(Rabbit, non@existent) end),
     ok = start_app(Rabbit),
     assert_not_clustered(Rabbit),
 
@@ -217,8 +217,8 @@ forget_cluster_node(Config) ->
     ok = stop_app(Rabbit),
     %% We're passing the --offline flag, but Hare is online
     assert_failure(fun () -> forget_cluster_node(Hare, Rabbit, true) end),
-    %% Removing some non-existant node will fail
-    assert_failure(fun () -> forget_cluster_node(Hare, non@existant) end),
+    %% Removing some nonexistent node will fail
+    assert_failure(fun () -> forget_cluster_node(Hare, non@existent) end),
     ok = forget_cluster_node(Hare, Rabbit),
     assert_not_clustered(Hare),
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
@@ -480,8 +480,8 @@ update_cluster_nodes(Config) ->
     stop_reset_start(Hare),
     assert_failure(fun () -> start_app(Rabbit) end),
     %% Bogus node
-    assert_failure(fun () -> update_cluster_nodes(Rabbit, non@existant) end),
-    %% Inconsisent node
+    assert_failure(fun () -> update_cluster_nodes(Rabbit, non@existent) end),
+    %% Inconsistent node
     assert_failure(fun () -> update_cluster_nodes(Rabbit, Hare) end),
     ok = update_cluster_nodes(Rabbit, Bunny),
     ok = start_app(Rabbit),
