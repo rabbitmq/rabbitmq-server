@@ -39,7 +39,7 @@ CLI core consists of several modules implementing command execution process:
  * `RabbitMQCtl`: entry point. Generic execution logic.
  * `Parser`: responsible for command line argument parsing (drives Elixir's `OptionParser`)
  * `CommandModules`: responsible for command module discovery and loading
- * `Config`: responsible for config unification: merges enviroment variable and command argument values
+ * `Config`: responsible for config unification: merges environment variable and command argument values
  * `Output`: responsible for output formatting
  * `Helpers`: self-explanatory
 
