@@ -20,7 +20,7 @@
 
 -export([maybe_load_definitions/0]).
 
-%% We want to A) make sure we apply defintions before being open for
+%% We want to A) make sure we apply definitions before being open for
 %% business (hence why we don't do this in the mgmt app startup) and
 %% B) in fact do it before empty_db_check (so the defaults will not
 %% get created if we don't need 'em).
