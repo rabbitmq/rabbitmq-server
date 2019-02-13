@@ -165,7 +165,7 @@ enqueue(Msg, State) ->
 
 %% @doc Dequeue a message from the queue.
 %%
-%% This is a syncronous call. I.e. the call will block until the command
+%% This is a synchronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
 %%
 %% @param ConsumerTag a unique tag to identify this particular consumer.
@@ -297,7 +297,7 @@ discard(ConsumerTag, [_|_] = MsgIds,
 %% @doc Register with the rabbit_fifo queue to "checkout" messages as they
 %% become available.
 %%
-%% This is a syncronous call. I.e. the call will block until the command
+%% This is a synchronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
 %%
 %% @param ConsumerTag a unique tag to identify this particular consumer.
@@ -316,7 +316,7 @@ checkout(ConsumerTag, NumUnsettled, ConsumerInfo, State0) ->
 %% @doc Register with the rabbit_fifo queue to "checkout" messages as they
 %% become available.
 %%
-%% This is a syncronous call. I.e. the call will block until the command
+%% This is a synchronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
 %%
 %% @param ConsumerTag a unique tag to identify this particular consumer.
@@ -374,7 +374,7 @@ credit(ConsumerTag, Credit, Drain,
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%
-%% This is a syncronous call. I.e. the call will block until the command
+%% This is a synchronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
 %%
 %% @param ConsumerTag a unique tag to identify this particular consumer.
@@ -407,12 +407,8 @@ purge(Node) ->
 stat(Leader) ->
     %% short timeout as we don't want to spend too long if it is going to
     %% fail anyway
-    case ra:local_query(Leader, fun rabbit_fifo:query_stat/1, 250) of
-        {ok, {_, {R, C}}, _} ->
-            {ok, R, C};
-        Err ->
-            Err
-    end.
+    {ok, {_, {R, C}}, _} = ra:local_query(Leader, fun rabbit_fifo:query_stat/1, 250),
+    {ok, R, C}.
 
 %% @doc returns the cluster name
 -spec cluster_name(state()) -> cluster_name().

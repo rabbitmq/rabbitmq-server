@@ -77,7 +77,7 @@
 -type qpids() :: [pid()].
 -type qlen() :: rabbit_types:ok(non_neg_integer()).
 -type qfun(A) :: fun ((amqqueue:amqqueue()) -> A | no_return()).
--type qmsg() :: {name(), pid(), msg_id(), boolean(), rabbit_types:message()}.
+-type qmsg() :: {name(), pid() | {atom(), pid()}, msg_id(), boolean(), rabbit_types:message()}.
 -type msg_id() :: non_neg_integer().
 -type ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}.
@@ -244,7 +244,9 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
               rabbit_framing:amqp_table(),
               rabbit_types:maybe(pid()),
               rabbit_types:username()) ->
-    {'new' | 'existing' | 'absent' | 'owner_died', amqqueue:amqqueue()} |
+    {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
+    {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
+    {'absent', amqqueue:amqqueue(), absent_reason()} |
     rabbit_types:channel_exit().
 
 declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
@@ -1038,6 +1040,7 @@ notify_policy_changed(Q) when ?amqqueue_is_quorum(Q) ->
 
 -spec consumers(amqqueue:amqqueue()) ->
           [{pid(), rabbit_types:ctag(), boolean(), non_neg_integer(),
+            boolean(), atom(),
             rabbit_framing:amqp_table(), rabbit_types:username()}].
 
 consumers(Q) when ?amqqueue_is_classic(Q) ->

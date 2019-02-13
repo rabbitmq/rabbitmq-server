@@ -52,17 +52,17 @@ is_empty(_)       -> false.
 
 in(V, {L, Q}) -> {L+1, ?QUEUE:in(V, Q)}.
 
--spec in_r(value(), ?MODULE()) -> ?MODULE().
+-spec in_r(value(), ?MODULE(T)) -> ?MODULE(T).
 
 in_r(V, {L, Q}) -> {L+1, ?QUEUE:in_r(V, Q)}.
 
--spec out(?MODULE(T)) -> {result(T), ?MODULE()}.
+-spec out(?MODULE(T)) -> {result(T), ?MODULE(T)}.
 
 out({0, _Q} = Q) -> {empty, Q};
 out({L,  Q})     -> {Result, Q1} = ?QUEUE:out(Q),
                     {Result, {L-1, Q1}}.
 
--spec out_r(?MODULE(T)) -> {result(T), ?MODULE()}.
+-spec out_r(?MODULE(T)) -> {result(T), ?MODULE(T)}.
 
 out_r({0, _Q} = Q) -> {empty, Q};
 out_r({L,  Q})     -> {Result, Q1} = ?QUEUE:out_r(Q),

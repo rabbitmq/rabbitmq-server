@@ -615,7 +615,7 @@ validate_sync_batch_size(none) ->
 validate_sync_batch_size(N) when is_integer(N) andalso N > 0 ->
     ok;
 validate_sync_batch_size(N) ->
-    {error, "ha-sync-batch-size takes an integer greather than 0, "
+    {error, "ha-sync-batch-size takes an integer greater than 0, "
      "~p given", [N]}.
 
 validate_pos(PromoteOnShutdown) ->

@@ -87,7 +87,7 @@ find_next(Next, Last, Map) ->
         _ ->
             % in degenerate cases the range here could be very large
             % and hence this could be very slow
-            % the typical case should idealy be better
+            % the typical case should ideally be better
             % assuming fifo-ish deletion of entries
             find_next(Next+1, Last, Map)
     end.

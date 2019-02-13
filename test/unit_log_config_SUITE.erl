@@ -660,7 +660,7 @@ env_var_tty(_) ->
     application:set_env(rabbit, lager_log_root, "/tmp/log_base"),
     application:set_env(rabbit, lager_default_file, tty),
     application:set_env(rabbit, lager_upgrade_file, tty),
-    %% tty can only be set explicitely
+    %% tty can only be set explicitly
     os:putenv("RABBITMQ_LOGS_source", "environment"),
 
     rabbit_lager:configure_lager(),

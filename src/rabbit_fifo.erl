@@ -156,7 +156,7 @@
     #update_config{}.
 
 -type command() :: protocol() | ra_machine:builtin_command().
-%% all the command types suppored by ra fifo
+%% all the command types supported by ra fifo
 
 -type client_msg() :: delivery().
 %% the messages `rabbit_fifo' can send to consumers.
@@ -323,7 +323,7 @@ apply(Meta,
     case Cons0 of
         #{ConsumerId := Con0} ->
             % need to increment metrics before completing as any snapshot
-            % states taken need to includ them
+            % states taken need to include them
             complete_and_checkout(Meta, MsgIds, ConsumerId,
                                   Con0, [], State);
         _ ->
@@ -693,7 +693,7 @@ get_checked_out(Cid, From, To, #state{consumers = Consumers}) ->
     end.
 
 init_aux(Name) when is_atom(Name) ->
-    %% TODO: catch specific exeption throw if table already exists
+    %% TODO: catch specific exception throw if table already exists
     ok = ra_machine_ets:create_table(rabbit_fifo_usage,
                                      [named_table, set, public,
                                       {write_concurrency, true}]),
@@ -1108,7 +1108,7 @@ increase_credit(#consumer{lifetime = once,
 increase_credit(#consumer{lifetime = auto,
                           credit_mode = credited,
                           credit = Credit}, _) ->
-    %% credit_mode: credit also doens't automatically increment credit
+    %% credit_mode: credit also doesn't automatically increment credit
     Credit;
 increase_credit(#consumer{credit = Current}, Credit) ->
     Current + Credit.
@@ -2139,7 +2139,7 @@ enq_check_settle_duplicate_test() ->
     run_snapshot_test(?FUNCTION_NAME, Commands).
 
 run_snapshot_test(Name, Commands) ->
-    %% create every incremental permuation of the commands lists
+    %% create every incremental permutation of the commands lists
     %% and run the snapshot tests against that
     [begin
          run_snapshot_test0(Name, C)
@@ -2208,7 +2208,7 @@ state_enter_test() ->
     [{mod_call, m, f, [a, the_name]}] = state_enter(leader, S0),
     ok.
 
-state_enter_montors_and_notifications_test() ->
+state_enter_monitors_and_notifications_test() ->
     Oth = spawn(fun () -> ok end),
     {State0, _} = enq(1, 1, first, test_init(test)),
     Cid = {<<"adf">>, self()},
