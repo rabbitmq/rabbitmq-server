@@ -45,7 +45,6 @@
 
 -type bind_ok_or_error() :: 'ok' | bind_errors() |
                             rabbit_types:error(
-                              'binding_not_found' |
                               {'binding_invalid', string(), [any()]}).
 -type bind_res() :: bind_ok_or_error() | rabbit_misc:thunk(bind_ok_or_error()).
 -type inner_fun() ::
@@ -205,19 +204,15 @@ add(Src, Dst, B, ActingUser) ->
     lock_resource(Src),
     lock_resource(Dst),
     [SrcDurable, DstDurable] = [durable(E) || E <- [Src, Dst]],
-    case (SrcDurable andalso DstDurable andalso
-          mnesia:read({rabbit_durable_route, B}) =/= []) of
-        false -> ok = sync_route(#route{binding = B}, SrcDurable, DstDurable,
-                                 fun mnesia:write/3),
-                 x_callback(transaction, Src, add_binding, B),
-                 Serial = rabbit_exchange:serial(Src),
-                 fun () ->
-                         x_callback(Serial, Src, add_binding, B),
-                         ok = rabbit_event:notify(
-                                binding_created,
-                                info(B) ++ [{user_who_performed_action, ActingUser}])
-                 end;
-        true  -> rabbit_misc:const({error, binding_not_found})
+    ok = sync_route(#route{binding = B}, SrcDurable, DstDurable,
+                    fun mnesia:write/3),
+    x_callback(transaction, Src, add_binding, B),
+    Serial = rabbit_exchange:serial(Src),
+    fun () ->
+        x_callback(Serial, Src, add_binding, B),
+        ok = rabbit_event:notify(
+            binding_created,
+            info(B) ++ [{user_who_performed_action, ActingUser}])
     end.
 
 remove(Binding) -> remove(Binding, fun (_Src, _Dst) -> ok end, ?INTERNAL_USER).
@@ -231,7 +226,10 @@ remove(Binding, InnerFun, ActingUser) ->
               case mnesia:read(rabbit_route, B, write) of
                   [] -> case mnesia:read(rabbit_durable_route, B, write) of
                             [] -> rabbit_misc:const(ok);
-                            _  -> rabbit_misc:const({error, binding_not_found})
+                            %% We still delete the binding and run
+                            %% all post-delete functions if there is only
+                            %% a durable route in the database
+                            _  -> remove(Src, Dst, B, ActingUser)
                         end;
                   _  -> case InnerFun(Src, Dst) of
                             ok               -> remove(Src, Dst, B, ActingUser);
