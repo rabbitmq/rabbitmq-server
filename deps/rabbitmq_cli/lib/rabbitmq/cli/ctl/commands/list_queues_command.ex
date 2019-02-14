@@ -20,8 +20,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
   alias RabbitMQ.CLI.Core.Helpers
 
-  import RabbitMQ.CLI.CommandBehaviour, only: :macros
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   @default_timeout 60_000
@@ -34,17 +32,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             head_message_timestamp disk_reads disk_writes consumers
             consumer_utilisation memory slave_pids synchronised_slave_pids state)a
 
-  defcmd description: "Lists queues",
-         usage: "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<queueinfoitem> ...]",
-         scopes: [:ctl, :diagnostics],
-         switches: [ offline: :boolean,
+  def description(), do: "Lists queues"
+  def usage(), do: "list_queues [-p <vhost>] [--online] [--offline] [--local] [--no-table-headers] [<queueinfoitem> ...]"
+  def scopes(), do: [:ctl, :diagnostics]
+  def switches(), do: [ offline: :boolean,
                      online: :boolean,
                      local: :boolean,
-                     timeout: :integer ],
-         aliases: [t: :timeout],
-         help_section: :report,
-         formatter: RabbitMQ.CLI.Formatters.Table,
-         usage_additional: ["<queueinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."]
+                     timeout: :integer ]
+  def aliases(), do: [t: :timeout]
+  def help_section(), do: :report
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+  def usage_additional(), do: ["<queueinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."]
 
   def info_keys(), do: @info_keys
 
