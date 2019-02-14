@@ -712,18 +712,27 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
     QName = amqqueue:get_name(Q),
     {RaName, _} = amqqueue:get_pid(Q),
     ServerId = {RaName, Node},
-    case ra:leave_and_delete_server(ServerId) of
-        ok ->
-            Fun = fun(Q1) ->
-                          amqqueue:set_quorum_nodes(
-                            Q1,
-                            lists:delete(Node, amqqueue:get_quorum_nodes(Q1)))
-                  end,
-            rabbit_misc:execute_mnesia_transaction(
-              fun() -> rabbit_amqqueue:update(QName, Fun) end),
-            ok;
-        E ->
-            E
+    case amqqueue:get_quorum_nodes(Q) of
+        [Node] ->
+            %% deleting the last member is not allowed
+            {error, last_node};
+        _ ->
+            case ra:leave_and_delete_server(ServerId) of
+                ok ->
+                    Fun = fun(Q1) ->
+                                  amqqueue:set_quorum_nodes(
+                                    Q1,
+                                    lists:delete(Node,
+                                                 amqqueue:get_quorum_nodes(Q1)))
+                          end,
+                    rabbit_misc:execute_mnesia_transaction(
+                      fun() -> rabbit_amqqueue:update(QName, Fun) end),
+                    ok;
+                timeout ->
+                    {error, timeout};
+                E ->
+                    E
+            end
     end.
 
 shrink_all(Node) ->
@@ -733,11 +742,11 @@ shrink_all(Node) ->
                          [rabbit_misc:rs(QName), Node]),
          case delete_member(Q, Node) of
              ok ->
-                 {ok, QName};
-             Err ->
-                 rabbit_log:warning("~s: Failed to remove member ~w",
-                                    [rabbit_misc:rs(QName), Node]),
-                 {error, QName, Err}
+                 {QName, ok};
+             {error, Err} ->
+                 rabbit_log:warning("~s: Failed to remove member ~w, Error ~w",
+                                    [rabbit_misc:rs(QName), Node, Err]),
+                 {QName, {error, Err}}
          end
      end || Q <- rabbit_amqqueue:list(),
             amqqueue:get_type(Q) == quorum,
