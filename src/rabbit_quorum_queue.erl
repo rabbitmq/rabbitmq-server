@@ -37,6 +37,7 @@
 -export([requeue/3]).
 -export([policy_changed/2]).
 -export([cleanup_data_dir/0]).
+-export([shrink_all/1]).
 
 %%-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit.hrl").
@@ -724,6 +725,24 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
         E ->
             E
     end.
+
+shrink_all(Node) ->
+    [begin
+         QName = amqqueue:get_name(Q),
+         rabbit_log:info("~s: Removing member ~w",
+                         [rabbit_misc:rs(QName), Node]),
+         case delete_member(Q, Node) of
+             ok ->
+                 {ok, QName};
+             Err ->
+                 rabbit_log:warning("~s: Failed to remove member ~w",
+                                    [rabbit_misc:rs(QName), Node]),
+                 {error, QName, Err}
+         end
+     end || Q <- rabbit_amqqueue:list(),
+            amqqueue:get_type(Q) == quorum,
+            lists:member(Node, amqqueue:get_quorum_nodes(Q))].
+
 
 %%----------------------------------------------------------------------------
 dlx_mfa(Q) ->
