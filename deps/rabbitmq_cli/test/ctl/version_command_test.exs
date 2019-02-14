@@ -21,6 +21,7 @@ defmodule VersionCommandTest do
 
   setup_all do
     Application.load(:rabbit)
+    :ok
   end
 
   setup context do
