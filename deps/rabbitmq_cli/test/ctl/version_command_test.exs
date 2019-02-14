@@ -19,15 +19,6 @@ defmodule VersionCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.VersionCommand
 
-  setup_all do
-    Application.load(:rabbit)
-    :ok
-  end
-
-  setup context do
-    {:ok, opts: %{}}
-  end
-
   test "merge_defaults: merges no defaults" do
     assert @command.merge_defaults([], %{}) == {[], %{}}
   end
@@ -38,10 +29,5 @@ defmodule VersionCommandTest do
 
   test "validate: treats empty positional arguments and default switches as a success" do
     assert @command.validate([], %{}) == :ok
-  end
-
-  test "run: returns Erlang/OTP version on the local node" do
-    {:ok, version} = @command.run([], %{})
-    assert Regex.match?(~r/^\d+\.\d+\.\d+/, version)
   end
 end
