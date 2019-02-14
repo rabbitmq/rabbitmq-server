@@ -170,7 +170,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
           :other -> 100
           {:plugin, _} -> 99
           :help -> 1
-          _ -> 2
+          :application_management -> 2
+          :cluster_management -> 3
+          :user_management -> 4
+          :access_control -> 5
+          :parameters -> 6
+          :policies -> 7
+          :vhost_limits -> 8
+          :report -> 9
+          _ -> 98
         end
       end)
     |> Enum.map(
@@ -196,18 +204,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
         "User management"
       :cluster_management ->
         "Cluster management"
-      :node_management ->
+      :application_management ->
         "Application management"
       :queues ->
         "Queue management"
-      :list ->
-        "List internal objects"
-      :vhost ->
-        "Vhost management"
-      :parameters ->
-        "Runtime parameters and policies"
       :report ->
-        "Node status"
+        "Topology introspection"
+      :access_control ->
+        "Access control"
+      :parameters ->
+        "Paramater management"
+      :policies ->
+        "Policy management"
+      :vhost_limits ->
+        "Virtual host limits"
       :trace ->
         "Enable/disable tracing"
       :encode ->

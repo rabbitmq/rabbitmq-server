@@ -46,7 +46,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitStartupCommand do
 
   def usage, do: "await_startup"
 
-  def help_section(), do: :node_management
+  def help_section(), do: :application_management
 
   def description(), do: "Waits for the RabbitMQ application to start on existing node"
 

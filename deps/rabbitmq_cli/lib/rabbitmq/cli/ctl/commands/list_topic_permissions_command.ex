@@ -41,7 +41,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListTopicPermissionsCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage, do: "list_topic_permissions [-p <vhost>] [--no-table-headers]"
-  def help_section(), do: :user_management
+  def help_section(), do: :access_control
   def description(), do: "Lists topic permissions in a virtual host"
 
   def banner(_, %{vhost: vhost}), do: "Listing topic permissions for vhost \"#{vhost}\" ..."

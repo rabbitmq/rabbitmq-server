@@ -71,7 +71,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
     "list_consumers [-p vhost] [--no-table-headers] [<consumerinfoitem> ...]"
   end
 
-  def help_section(), do: :list
+  def help_section(), do: :report
 
   def description(), do: "Lists all consumers for a vhost"
 

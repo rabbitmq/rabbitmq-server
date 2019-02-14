@@ -88,7 +88,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
     "list_unresponsive_queues [--local] [--queue-timeout <queue-timeout>] [<unresponsiveq_ueueinfoitem> ...] [--no-table-headers]"
   end
 
-  def help_section(), do: :list
+  def help_section(), do: :report
 
   def description(), do: "Tests queues to respond within timeout. Lists those which did not respond"
 

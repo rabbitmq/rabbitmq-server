@@ -29,7 +29,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "add_vhost <vhost>"
-  def help_section(), do: :vhost
+  def help_section(), do: :access_control
   def description(), do: "Creates a virtual host"
 
   def banner([vhost], _), do: "Adding vhost \"#{vhost}\" ..."

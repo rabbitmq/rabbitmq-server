@@ -73,7 +73,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
     "list_connections [--no-table-headers] [<connectioninfoitem> ...]"
   end
 
-  def help_section(), do: :list
+  def help_section(), do: :report
 
   def description(), do: "Lists AMQP 0.9.1 connections for the node"
 

@@ -51,7 +51,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   end
 
   def usage, do: "list_vhosts [--no-table-headers] [<vhostinfoitem> ...]"
-  def help_section(), do: :vhost
+  def help_section(), do: :access_control
 
   def description(), do: "Lists virtual hosts"
 

@@ -50,7 +50,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
   def help_section(), do: :cluster_management
 
-  def description(), do: "Print cluster status of the node"
+  def description(), do: "Displays all the nodes in the cluster grouped by node type, together with the currently running nodes"
 
   def banner(_, %{node: node_name}), do: "Cluster status of node #{node_name} ..."
 

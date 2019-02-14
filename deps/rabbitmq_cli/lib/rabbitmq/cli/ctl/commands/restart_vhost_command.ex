@@ -30,7 +30,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RestartVhostCommand do
   end
 
   def usage, do: "restart_vhost [-p <vhost>]"
-  def help_section(), do: :vhost
+  def help_section(), do: :other
 
   def description(), do: "Restarts a failed vhost data storage and queues"
 

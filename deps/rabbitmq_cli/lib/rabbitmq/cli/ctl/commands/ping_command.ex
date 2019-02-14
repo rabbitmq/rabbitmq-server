@@ -66,7 +66,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PingCommand do
     "ping"
   end
 
-  def help_section(), do: :node_management
+  def help_section(), do: :application_management
 
   def description(), do: "Checks that the node process is running nad registered with EPMD"
 

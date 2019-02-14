@@ -41,7 +41,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage, do: "list_policies [-p <vhost>] [--no-table-headers]"
-  def help_section(), do: :parameters
+  def help_section(), do: :policies
 
   def description(), do: "Lists all policies for a virtual host"
 

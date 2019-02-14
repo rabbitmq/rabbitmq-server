@@ -27,7 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopAppCommand do
 
   def usage, do: "stop_app"
 
-  def help_section(), do: :node_management
+  def help_section(), do: :application_management
 
   def description(), do: "Stops the RabbitMQ application, leaving the runtme (Erlang VM) running"
 

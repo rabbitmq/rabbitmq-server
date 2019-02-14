@@ -65,7 +65,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
 
   def help_section(), do: :cluster_management
 
-  def description(), do: "Join the cluster with the specified node"
+  def description(), do: "Instructs the node to become a member of the cluster that the specified node is in"
 
   def banner([target_node], %{node: node_name}) do
     "Clustering node #{node_name} with #{target_node}"

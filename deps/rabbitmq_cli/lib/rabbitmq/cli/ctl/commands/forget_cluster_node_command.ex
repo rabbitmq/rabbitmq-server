@@ -68,7 +68,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
   def help_section(), do: :cluster_management
 
-  def description(), do: "Remove a stopped node from the cluster"
+  def description(), do: "Removes a cluster node remotely"
 
   def banner([node_to_remove], _) do
     "Removing node #{node_to_remove} from the cluster"

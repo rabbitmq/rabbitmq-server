@@ -74,7 +74,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
     "list_channels [--no-table-headers] [<channelinfoitem> ...]"
   end
 
-  def help_section(), do: :list
+  def help_section(), do: :report
 
   def description(), do: "Lists all channels in the node"
 

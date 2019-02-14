@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
                      local: :boolean,
                      timeout: :integer ],
          aliases: [t: :timeout],
-         help_section: :list,
+         help_section: :report,
          formatter: RabbitMQ.CLI.Formatters.Table,
          usage_additional: ["<queueinfoitem> must be a member of the list [" <> Enum.join(@info_keys, ", ") <> "]."]
 

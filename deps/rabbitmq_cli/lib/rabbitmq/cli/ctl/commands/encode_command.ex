@@ -83,7 +83,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def help_section(), do: :encode
 
-  def description(), do: "Encrypt a value"
+  def description(), do: "Encrypts a value"
 
   def banner([_, _], _) do
     "Encrypting value ..."
