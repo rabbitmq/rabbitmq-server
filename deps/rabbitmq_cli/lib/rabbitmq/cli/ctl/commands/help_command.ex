@@ -229,11 +229,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
       :other ->
         "Other"
       {:plugin, plugin} ->
-        plugin_name(plugin) <> " plugin"
+        snake_case_to_capitalized_string(plugin) <> " plugin"
+      custom ->
+        snake_case_to_capitalized_string(custom)
     end
   end
 
-  defp plugin_name(plugin) do
+  defp snake_case_to_capitalized_string(plugin) do
     to_string(plugin)
     |> String.split("_")
     |> Enum.map(&String.capitalize/1)
@@ -257,7 +259,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     case timeout_usage ++ command_usage do
       []    -> []
       usage ->
-        [flatten_string(["Command options: " | timeout_usage ++ command_usage], "")]
+        [flatten_string(["Command options: " | usage], "")]
     end
   end
 
