@@ -69,14 +69,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
         [Enum.join(["Commands:"] ++ commands_description(), "\n")] ++
         help_additional(tool_name),
       "\n\n"
-    )
+    ) <> "\n"
   end
 
   def all_usage(command, opts) do
     Enum.join([base_usage(command, opts)] ++
               options_usage() ++
               additional_usage(command),
-              "\n\n")
+              "\n\n") <> "\n"
   end
   defp tool_usage(tool_name) do
     [
@@ -244,17 +244,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     timeout_usage =
       case command_supports_timeout(command) do
         true ->
-          ["    <timeout> - operation timeout in seconds. Default is \"infinity\"."]
+          ["    <timeout> - operation timeout in seconds. Default is \"infinity\".\n"]
 
         false ->
           []
       end
     command_usage =
       case CommandBehaviour.usage_additional(command) do
-        list when is_list(list) -> list |> Enum.map(fn(ln) -> "    " <> ln end)
-        bin when is_binary(bin) -> ["    " <> bin]
+        list when is_list(list) -> list |> Enum.map(fn(ln) -> "    " <> ln <> "\n" end)
+        bin when is_binary(bin) -> ["    " <> bin <> "\n"]
       end
-    ["Command options: " | timeout_usage ++ command_usage]
+    case timeout_usage ++ command_usage do
+      []    -> []
+      usage ->
+        [flatten_string(["Command options: " | timeout_usage ++ command_usage], "")]
+    end
   end
 
   defp help_additional(tool_name) do
