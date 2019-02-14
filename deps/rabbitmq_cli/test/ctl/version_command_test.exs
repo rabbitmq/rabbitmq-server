@@ -16,7 +16,6 @@
 
 defmodule VersionCommandTest do
   use ExUnit.Case
-  import TestHelper
 
   @command RabbitMQ.CLI.Ctl.Commands.VersionCommand
 
@@ -40,8 +39,8 @@ defmodule VersionCommandTest do
     assert @command.validate([], %{}) == :ok
   end
 
-  test "run: returns Erlang/OTP version on the local node", context do
-    {:ok, version} = @command.run([], context[:opts])
+  test "run: returns Erlang/OTP version on the local node" do
+    {:ok, version} = @command.run([], %{})
     assert Regex.match?(~r/^\d+\.\d+\.\d+/, version)
   end
 end
