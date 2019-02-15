@@ -61,7 +61,7 @@ groups() ->
               promote_on_shutdown,
               promote_on_failure,
               slave_recovers_after_vhost_failure,
-              slave_recovers_after_vhost_down_an_up,
+              slave_recovers_after_vhost_down_and_up,
               master_migrates_on_vhost_down,
               slave_recovers_after_vhost_down_and_master_migrated,
               queue_survive_adding_dead_vhost_mirror
@@ -133,7 +133,7 @@ change_policy(Config) ->
 
     %% When we first declare a queue with no policy, it's not HA.
     amqp_channel:call(ACh, #'queue.declare'{queue = ?QNAME}),
-    timer:sleep(100),
+    timer:sleep(200),
     assert_slaves(A, ?QNAME, {A, ''}),
 
     %% Give it policy "all", it becomes HA and gets all mirrors
@@ -417,7 +417,7 @@ slave_recovers_after_vhost_failure(Config) ->
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     QName = <<"slave_recovers_after_vhost_failure-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
-    timer:sleep(300),
+    timer:sleep(500),
     assert_slaves(A, QName, {A, [B]}, [{A, []}]),
 
     %% Crash vhost on a node hosting a mirror
@@ -426,22 +426,25 @@ slave_recovers_after_vhost_failure(Config) ->
 
     assert_slaves(A, QName, {A, [B]}, [{A, []}]).
 
-slave_recovers_after_vhost_down_an_up(Config) ->
+slave_recovers_after_vhost_down_and_up(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     rabbit_ct_broker_helpers:set_ha_policy_all(Config),
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
-    QName = <<"slave_recovers_after_vhost_down_an_up-q">>,
+    QName = <<"slave_recovers_after_vhost_down_and_up-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
-    timer:sleep(100),
+    timer:sleep(200),
     assert_slaves(A, QName, {A, [B]}, [{A, []}]),
 
     %% Crash vhost on a node hosting a mirror
     rabbit_ct_broker_helpers:force_vhost_failure(Config, B, <<"/">>),
-    %% Vhost is down now
-    false = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, is_vhost_alive, [<<"/">>]),
-    timer:sleep(300),
+    %% rabbit_ct_broker_helpers:force_vhost_failure/2 will retry up to 10 times to
+    %% make sure that the top vhost supervision tree process did go down. MK.
+    timer:sleep(500),
     %% Vhost is back up
-    {ok, _Sup} = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, start_vhost, [<<"/">>]),
+    case rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, start_vhost, [<<"/">>]) of
+      {ok, _Sup} -> ok;
+      {error,{already_started, _Sup}} -> ok
+    end,
 
     assert_slaves(A, QName, {A, [B]}, [{A, []}]).
 
@@ -451,12 +454,12 @@ master_migrates_on_vhost_down(Config) ->
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     QName = <<"master_migrates_on_vhost_down-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
-    timer:sleep(100),
+    timer:sleep(200),
     assert_slaves(A, QName, {A, [B]}, [{A, []}]),
 
     %% Crash vhost on the node hosting queue master
     rabbit_ct_broker_helpers:force_vhost_failure(Config, A, <<"/">>),
-    timer:sleep(300),
+    timer:sleep(500),
     assert_slaves(A, QName, {B, []}).
 
 slave_recovers_after_vhost_down_and_master_migrated(Config) ->
@@ -465,16 +468,19 @@ slave_recovers_after_vhost_down_and_master_migrated(Config) ->
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     QName = <<"slave_recovers_after_vhost_down_and_master_migrated-q">>,
     amqp_channel:call(ACh, #'queue.declare'{queue = QName}),
-    timer:sleep(100),
+    timer:sleep(200),
     assert_slaves(A, QName, {A, [B]}, [{A, []}]),
     %% Crash vhost on the node hosting queue master
     rabbit_ct_broker_helpers:force_vhost_failure(Config, A, <<"/">>),
-    timer:sleep(300),
+    timer:sleep(500),
     assert_slaves(B, QName, {B, []}),
 
     %% Restart the vhost on the node (previously) hosting queue master
-    {ok, _Sup} = rabbit_ct_broker_helpers:rpc(Config, A, rabbit_vhost_sup_sup, start_vhost, [<<"/">>]),
-    timer:sleep(300),
+    case rabbit_ct_broker_helpers:rpc(Config, A, rabbit_vhost_sup_sup, start_vhost, [<<"/">>]) of
+      {ok, _Sup} -> ok;
+      {error,{already_started, _Sup}} -> ok
+    end,
+    timer:sleep(500),
     assert_slaves(B, QName, {B, [A]}, [{B, []}]).
 
 random_policy(Config) ->
@@ -569,7 +575,7 @@ assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, Att
                 State  ->
                     ct:pal("Waiting to leave state ~p~n Waiting for ~p~n",
                            [State, {ExpMNode, ExpSNodes}]),
-                    timer:sleep(100),
+                    timer:sleep(200),
                     assert_slaves0(RPCNode, QName, {ExpMNode, ExpSNodes},
                                    PermittedIntermediate,
                                    Attempts - 1)
