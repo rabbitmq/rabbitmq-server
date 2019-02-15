@@ -64,6 +64,7 @@
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([refresh_interceptors/0]).
 -export([force_event_refresh/1]).
+-export([source/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
@@ -415,6 +416,14 @@ force_event_refresh(Ref) ->
     [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
 
+-spec source(pid(), any()) -> any().
+
+source(Pid, Source) when is_pid(Pid) ->
+    case erlang:is_process_alive(Pid) of
+        true  -> Pid ! {channel_source, Source};
+        false -> {error, channel_terminated}
+    end.
+
 %%---------------------------------------------------------------------------
 
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
@@ -704,6 +713,10 @@ handle_info({{Ref, Node}, LateAnswer}, State = #ch{channel = Channel})
   when is_reference(Ref) ->
     rabbit_log_channel:warning("Channel ~p ignoring late answer ~p from ~p",
         [Channel, LateAnswer, Node]),
+    noreply(State);
+
+handle_info({channel_source, Source}, State) ->
+    put(channel_source, Source),
     noreply(State).
 
 handle_pre_hibernate(State) ->
@@ -875,7 +888,7 @@ check_topic_authorisation(Resource = #exchange{type = topic},
     check_topic_authorisation(Resource, User, AmqpParams, RoutingKey, Permission);
 check_topic_authorisation(Resource = #exchange{type = topic},
                           User, ConnPid, RoutingKey, Permission) when is_pid(ConnPid) ->
-    AmqpParams = get_amqp_params(ConnPid),
+    AmqpParams = get_amqp_params(ConnPid, get(channel_source)),
     check_topic_authorisation(Resource, User, AmqpParams, RoutingKey, Permission);
 check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
                           User = #user{username = Username},
@@ -898,7 +911,8 @@ check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost
 check_topic_authorisation(_, _, _, _, _) ->
     ok.
 
-get_amqp_params(ConnPid) when is_pid(ConnPid) ->
+get_amqp_params(_ConnPid, rabbit_reader) -> [];
+get_amqp_params(ConnPid, _Any) when is_pid(ConnPid) ->
     Timeout = get_operation_timeout(),
     get_amqp_params(ConnPid, rabbit_misc:is_process_alive(ConnPid), Timeout).
 
@@ -2064,6 +2078,7 @@ i(garbage_collection, _State) ->
 i(reductions, _State) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;
+i(channel_source, _State = #ch{}) -> get(channel_source);
 i(Item, _) ->
     throw({bad_argument, Item}).
 

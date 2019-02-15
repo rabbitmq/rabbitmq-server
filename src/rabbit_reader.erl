@@ -910,6 +910,7 @@ create_channel(Channel,
         rabbit_channel_sup_sup:start_channel(
           ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
                        Protocol, User, VHost, Capabilities, Collector}),
+    _ = rabbit_channel:source(ChPid, ?MODULE),
     MRef = erlang:monitor(process, ChPid),
     put({ch_pid, ChPid}, {Channel, MRef}),
     put({channel, Channel}, {ChPid, AState}),
