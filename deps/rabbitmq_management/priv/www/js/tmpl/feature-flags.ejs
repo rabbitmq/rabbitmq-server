@@ -30,9 +30,9 @@
          <td><%= fmt_string(feature_flag.name) %></td>
          <td class="c">
            <% if (feature_flag.state == "disabled") { %>
-           <form action="#/feature-flags-enable" method="put">
+           <form action="#/feature-flags-enable" method="put" style="display: inline-block">
            <input type="hidden" name="name" value="<%= fmt_string(feature_flag.name) %>"/>
-           <input type="submit" value="Enable" class="c" style="margin: 0px;"/>
+           <input type="submit" value="Enable" class="c"/>
            </form>
            <% } else { %>
            <abbr class="status-<%= fmt_string(state_color) %>"
