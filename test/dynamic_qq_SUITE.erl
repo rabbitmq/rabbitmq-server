@@ -87,21 +87,12 @@ init_per_testcase(Testcase, Config) ->
                 Config1,
                 rabbit_ct_broker_helpers:setup_steps() ++
                 rabbit_ct_client_helpers:setup_steps()),
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(
-              Config2, nodename),
-    Ret = rabbit_ct_broker_helpers:rpc(
-            Config2, 0,
-            rabbit_feature_flags,
-            is_supported_remotely,
-            [Nodes, [quorum_queue], 60000]),
-    case Ret of
-        true ->
-            ok = rabbit_ct_broker_helpers:rpc(
-                    Config2, 0, rabbit_feature_flags, enable, [quorum_queue]),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
+        ok ->
             Config2;
-        false ->
+        Skip ->
             end_per_testcase(Testcase, Config2),
-            {skip, "Quorum queues are unsupported"}
+            Skip
     end.
 
 end_per_testcase(Testcase, Config) ->

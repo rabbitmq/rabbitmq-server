@@ -151,17 +151,8 @@ init_per_group(Group, Config) ->
     Config2 = rabbit_ct_helpers:run_steps(Config1b,
                                           [fun merge_app_env/1 ] ++
                                           rabbit_ct_broker_helpers:setup_steps()),
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(
-              Config2, nodename),
-    Ret = rabbit_ct_broker_helpers:rpc(
-            Config2, 0,
-            rabbit_feature_flags,
-            is_supported_remotely,
-            [Nodes, [quorum_queue], 60000]),
-    case Ret of
-        true ->
-            ok = rabbit_ct_broker_helpers:rpc(
-                    Config2, 0, rabbit_feature_flags, enable, [quorum_queue]),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
+        ok ->
             ok = rabbit_ct_broker_helpers:rpc(
                    Config2, 0, application, set_env,
                    [rabbit, channel_queue_cleanup_interval, 100]),
@@ -174,9 +165,9 @@ init_per_group(Group, Config) ->
                 _ ->
                     Config2
             end;
-        false ->
+        Skip ->
             end_per_group(Group, Config2),
-            {skip, "Quorum queues are unsupported"}
+            Skip
     end.
 
 end_per_group(clustered, Config) ->
@@ -206,21 +197,12 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
                 rabbit_ct_client_helpers:setup_steps() ++
                 [fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
                  fun rabbit_ct_broker_helpers:cluster_nodes/1]),
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(
-              Config3, nodename),
-    Ret = rabbit_ct_broker_helpers:rpc(
-            Config3, 0,
-            rabbit_feature_flags,
-            is_supported_remotely,
-            [Nodes, [quorum_queue], 60000]),
-    case Ret of
-        true ->
-            ok = rabbit_ct_broker_helpers:rpc(
-                    Config3, 0, rabbit_feature_flags, enable, [quorum_queue]),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config3, quorum_queue) of
+        ok ->
             Config3;
-        false ->
+        Skip ->
             end_per_testcase(Testcase, Config3),
-            {skip, "Quorum queues are unsupported"}
+            Skip
     end;
 init_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
