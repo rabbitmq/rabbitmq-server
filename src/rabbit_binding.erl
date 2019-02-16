@@ -274,9 +274,8 @@ list_for_source(SrcName) ->
                         <- mnesia:match_object(rabbit_route, Route, read)]
       end).
 
-list_for_destination(DstName) ->
-    implicit_for_destination(DstName) ++
-        mnesia:async_dirty(
+list_for_destination(DstName = #resource{virtual_host = VHostPath}) ->
+    AllBindings = mnesia:async_dirty(
           fun() ->
                   Route = #route{binding = #binding{destination = DstName,
                                                     _ = '_'}},
@@ -284,7 +283,11 @@ list_for_destination(DstName) ->
                       #reverse_route{reverse_binding = B} <-
                           mnesia:match_object(rabbit_reverse_route,
                                               reverse_route(Route), read)]
-          end).
+          end),
+    Filtered    = lists:filter(fun(#binding{source = S}) ->
+                                       S =/= ?DEFAULT_EXCHANGE(VHostPath)
+                               end, AllBindings),
+    implicit_for_destination(DstName) ++ Filtered.
 
 implicit_bindings(VHostPath) ->
     DstQueues = rabbit_amqqueue:list_names(VHostPath),
