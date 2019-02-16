@@ -23,7 +23,7 @@
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
-         stop_and_halt/0, await_startup/0, await_startup/1,
+         stop_and_halt/0, await_startup/0, await_startup/1, await_startup/3,
          status/0, is_running/0, alarms/0,
          is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
@@ -31,7 +31,7 @@
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
 -export([log_locations/0, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
--export([is_booted/1]).
+-export([is_booted/1, is_booted/0, is_booting/1, is_booting/0]).
 
 -ifdef(TEST).
 
@@ -236,6 +236,13 @@
 
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
+%% 1 minute
+-define(BOOT_START_TIMEOUT,     1 * 60 * 1000).
+%% 12 hours
+-define(BOOT_FINISH_TIMEOUT,    12 * 60 * 60 * 1000).
+%% 100 ms
+-define(BOOT_STATUS_CHECK_INTERVAL, 100).
+
 %%----------------------------------------------------------------------------
 
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
@@ -248,7 +255,7 @@
 -spec boot() -> 'ok'.
 -spec stop() -> 'ok'.
 -spec stop_and_halt() -> no_return().
--spec await_startup() -> 'ok'.
+
 -spec status
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
@@ -575,7 +582,7 @@ ensure_sysmon_handler_app_config() ->
                 {port_limit, 100},
                 {gc_ms_limit, 0},
                 {schedule_ms_limit, 0},
-                {heap_word_limit, 10485760},
+                {heap_word_limit, 0},
                 {busy_port, false},
                 {busy_dist_port, true}
                ],
@@ -683,19 +690,7 @@ handle_app_error(Term) ->
             throw({Term, App, Reason})
     end.
 
-await_startup() ->
-    await_startup(node()).
-
-await_startup(Node) ->
-    case is_booting(Node) of
-        true -> wait_for_boot_to_finish(Node);
-        false ->
-            case is_running(Node) of
-                true -> ok;
-                false -> wait_for_boot_to_start(Node),
-                         wait_for_boot_to_finish(Node)
-            end
-    end.
+is_booting() -> is_booting(node()).
 
 is_booting(Node) ->
     case rpc:call(Node, erlang, whereis, [rabbit_boot]) of
@@ -704,11 +699,55 @@ is_booting(Node) ->
         P when is_pid(P)  -> true
     end.
 
+
+-spec await_startup() -> 'ok' | {'error', 'timeout'}.
+await_startup() ->
+    await_startup(node(), false).
+
+-spec await_startup(node() | non_neg_integer()) -> 'ok' | {'error', 'timeout'}.
+await_startup(Node) when is_atom(Node) ->
+    await_startup(Node, false);
+  await_startup(Timeout) when is_integer(Timeout) ->
+      await_startup(node(), false, Timeout).
+
+-spec await_startup(node(), boolean()) -> 'ok'  | {'error', 'timeout'}.
+await_startup(Node, PrintProgressReports) ->
+    case is_booting(Node) of
+        true  -> wait_for_boot_to_finish(Node, PrintProgressReports);
+        false ->
+            case is_running(Node) of
+                true  -> ok;
+                false -> wait_for_boot_to_start(Node),
+                         wait_for_boot_to_finish(Node, PrintProgressReports)
+            end
+    end.
+
+-spec await_startup(node(), boolean(), non_neg_integer()) -> 'ok'  | {'error', 'timeout'}.
+await_startup(Node, PrintProgressReports, Timeout) ->
+    case is_booting(Node) of
+        true  -> wait_for_boot_to_finish(Node, PrintProgressReports, Timeout);
+        false ->
+            case is_running(Node) of
+                true  -> ok;
+                false -> wait_for_boot_to_start(Node, Timeout),
+                         wait_for_boot_to_finish(Node, PrintProgressReports, Timeout)
+            end
+    end.
+
 wait_for_boot_to_start(Node) ->
+    wait_for_boot_to_start(Node, ?BOOT_START_TIMEOUT).
+
+wait_for_boot_to_start(Node, Timeout) ->
+    Iterations = Timeout div ?BOOT_STATUS_CHECK_INTERVAL,
+    do_wait_for_boot_to_start(Node, Iterations).
+
+do_wait_for_boot_to_start(_Node, IterationsLeft) when IterationsLeft =< 0 ->
+    {error, timeout};
+do_wait_for_boot_to_start(Node, IterationsLeft) ->
     case is_booting(Node) of
         false ->
-            timer:sleep(100),
-            wait_for_boot_to_start(Node);
+            timer:sleep(?BOOT_STATUS_CHECK_INTERVAL),
+            do_wait_for_boot_to_start(Node, IterationsLeft - 1);
         {badrpc, _} = Err ->
             Err;
         true  ->
@@ -716,6 +755,18 @@ wait_for_boot_to_start(Node) ->
     end.
 
 wait_for_boot_to_finish(Node) ->
+    wait_for_boot_to_finish(Node, false, ?BOOT_FINISH_TIMEOUT).
+
+wait_for_boot_to_finish(Node, PrintProgressReports) ->
+    wait_for_boot_to_finish(Node, PrintProgressReports, ?BOOT_FINISH_TIMEOUT).
+
+wait_for_boot_to_finish(Node, PrintProgressReports, Timeout) ->
+    Iterations = Timeout div ?BOOT_STATUS_CHECK_INTERVAL,
+    do_wait_for_boot_to_finish(Node, PrintProgressReports, Iterations).
+
+do_wait_for_boot_to_finish(_Node, _PrintProgressReports, IterationsLeft) when IterationsLeft =< 0 ->
+    {error, timeout};
+do_wait_for_boot_to_finish(Node, PrintProgressReports, IterationsLeft) ->
     case is_booting(Node) of
         false ->
             %% We don't want badrpc error to be interpreted as false,
@@ -728,9 +779,20 @@ wait_for_boot_to_finish(Node) ->
         {badrpc, _} = Err ->
             Err;
         true  ->
-            timer:sleep(100),
-            wait_for_boot_to_finish(Node)
+            maybe_print_boot_progress(PrintProgressReports, IterationsLeft),
+            timer:sleep(?BOOT_STATUS_CHECK_INTERVAL),
+            do_wait_for_boot_to_finish(Node, PrintProgressReports, IterationsLeft - 1)
     end.
+
+maybe_print_boot_progress(false = _PrintProgressReports, _IterationsLeft) ->
+  ok;
+maybe_print_boot_progress(true, IterationsLeft) ->
+  case IterationsLeft rem 100 of
+    %% This will be printed on the CLI command end to illustrate some
+    %% progress.
+    0 -> io:format("Still booting, will check again in 10 seconds...~n");
+    _ -> ok
+  end.
 
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
@@ -790,6 +852,8 @@ listeners() ->
 is_running() -> is_running(node()).
 
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
+
+is_booted() -> is_booted(node()).
 
 is_booted(Node) ->
     case is_booting(Node) of

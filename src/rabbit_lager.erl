@@ -307,36 +307,6 @@ configure_syslog_error_logger() ->
         _ -> ok
     end.
 
--define(SYSLOG_LOCAL_IP, {ip,{127,0,0,1}}).
-configure_syslog() ->
-    ok = app_utils:load_applications([syslog]),
-    %% https://github.com/schlagert/syslog#configuration
-    Protocol = case application:get_env(syslog, protocol) of
-                   undefined ->
-                       {rfc3164, udp, [?SYSLOG_LOCAL_IP]};
-                   %% {protocol,
-                   %%     rfc3164 |
-                   %%     rfc5424 |
-                   %%     {rfc3164 | rfc5424, tcp | udp} |
-                   %%     {rfc3164 | rfc5424, udp, [gen_udp:option()]} |
-                   %%     {rfc3164 | rfc5424, tcp, [gen_tcp:option()]} |
-                   %%     {rfc5424, tls, [ssl:connect_option()]}
-                   %% }
-                   {ok, Rfc} when Rfc =:= rfc3164; Rfc =:= rfc5424 ->
-                       {Rfc, udp, [?SYSLOG_LOCAL_IP]};
-                   {ok, {Rfc, Transport}} when Rfc =:= rfc3164; Rfc =:= rfc5424 ->
-                       {Rfc, Transport, [?SYSLOG_LOCAL_IP]};
-                   {ok, {Rfc, Transport, Opts}} when Rfc =:= rfc3164; Rfc =:= rfc5424 ->
-                       case proplists:lookup(ip, Opts) of
-                           none ->
-                               {Rfc, Transport, [?SYSLOG_LOCAL_IP|Opts]};
-                           _ ->
-                               {Rfc, Transport, Opts}
-                        end
-               end,
-    ok = application:unset_env(syslog, protocol),
-    ok = application:set_env(syslog, protocol, Protocol).
-
 remove_rabbit_handlers(Handlers, FormerHandlers) ->
     lists:filter(fun(Handler) ->
         not lists:member(Handler, FormerHandlers)
@@ -380,7 +350,7 @@ lager_backend(exchange) -> lager_exchange_backend.
 generate_handler(syslog_lager_backend, HandlerConfig) ->
     DefaultConfigVal = default_config_value(level),
     Level = proplists:get_value(level, HandlerConfig, DefaultConfigVal),
-    ok = configure_syslog(),
+    ok = app_utils:load_applications([syslog]),
     [{syslog_lager_backend,
      [Level,
       {},
@@ -426,7 +396,7 @@ prepare_rabbit_log_config() ->
             set_env_default_log_console();
         FileName when is_list(FileName) ->
             case os:getenv("RABBITMQ_LOGS_source") of
-                %% The user explicitely sets $RABBITMQ_LOGS;
+                %% The user explicitly sets $RABBITMQ_LOGS;
                 %% we should override a file location even
                 %% if it's set in rabbitmq.config
                 "environment" -> set_env_default_log_file(FileName, override);
@@ -436,7 +406,7 @@ prepare_rabbit_log_config() ->
 
     %% Upgrade log file never overrides the value set in rabbitmq.config
     case UpgradeFile of
-        %% No special env for upgrade logs - rederect to the default sink
+        %% No special env for upgrade logs - redirect to the default sink
         undefined -> ok;
         %% Redirect logs to default output.
         DefaultFile -> ok;

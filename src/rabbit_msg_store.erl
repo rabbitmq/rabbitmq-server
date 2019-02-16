@@ -263,7 +263,7 @@
 %% updated.
 %%
 %% On non-clean startup, we scan the files we discover, dealing with
-%% the possibilites of a crash having occurred during a compaction
+%% the possibilities of a crash having occurred during a compaction
 %% (this consists of tidyup - the compaction is deliberately designed
 %% such that data is duplicated on disk rather than risking it being
 %% lost), and rebuild the file summary and index ETS table.
@@ -594,7 +594,7 @@ client_read2(false, undefined, _MsgLocation, Defer, _CState) ->
     Defer();
 client_read2(true, _Right, _MsgLocation, Defer, _CState) ->
     %% Of course, in the mean time, the GC could have run and our msg
-    %% is actually in a different file, unlocked. However, defering is
+    %% is actually in a different file, unlocked. However, deferring is
     %% the safest and simplest thing to do.
     Defer();
 client_read2(false, _Right,

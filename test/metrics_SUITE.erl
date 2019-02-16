@@ -144,7 +144,7 @@ connection_metric_idemp(Config, {N, R}) ->
                || _ <- lists:seq(1, N)],
     Table = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_metrics)],
     Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
-    % referesh stats 'R' times
+    % refresh stats 'R' times
     [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
     force_metric_gc(Config),
     TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_metrics)],
@@ -158,7 +158,7 @@ channel_metric_idemp(Config, {N, R}) ->
     [amqp_connection:open_channel(Conn) || _ <- lists:seq(1, N)],
     Table = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_metrics)],
     Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_process_metrics)],
-    % referesh stats 'R' times
+    % refresh stats 'R' times
     [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
     force_metric_gc(Config),
     TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_metrics)],
@@ -181,7 +181,7 @@ queue_metric_idemp(Config, {N, R}) ->
 
     Table = [ Pid || {Pid, _, _} <- read_table_rpc(Config, queue_metrics)],
     Table2 = [ Pid || {Pid, _, _} <- read_table_rpc(Config, queue_coarse_metrics)],
-    % referesh stats 'R' times
+    % refresh stats 'R' times
     ChanTable = read_table_rpc(Config, channel_created),
     [[Pid ! emit_stats || {Pid, _, _} <- ChanTable ] || _ <- lists:seq(1, R)],
     force_metric_gc(Config),

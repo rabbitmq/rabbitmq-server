@@ -1334,7 +1334,7 @@ handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
 handle_method(#'basic.qos'{global         = false,
                            prefetch_count = PrefetchCount},
               _, State = #ch{limiter = Limiter}) ->
-    %% Ensures that if default was set, it's overriden
+    %% Ensures that if default was set, it's overridden
     Limiter1 = rabbit_limiter:unlimit_prefetch(Limiter),
     {reply, #'basic.qos_ok'{}, State#ch{consumer_prefetch = PrefetchCount,
                                         limiter = Limiter1}};

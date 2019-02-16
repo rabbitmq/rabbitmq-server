@@ -14,17 +14,18 @@
 .\" The Initial Developer of the Original Code is Pivotal Software, Inc.
 .\" Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 .\"
-.Dd April 25, 2017
+.Dd January 25, 2019
 .Dt RABBITMQCTL 8
 .Os "RabbitMQ Server"
 .Sh NAME
 .Nm rabbitmqctl
-.Nd command line for managing a RabbitMQ broker
+.Nd tool for managing RabbitMQ nodes
 .\" ------------------------------------------------------------------
 .Sh SYNOPSIS
 .\" ------------------------------------------------------------------
 .Nm
 .Op Fl q
+.Op Fl s
 .Op Fl l
 .Op Fl n Ar node
 .Op Fl t Ar timeout
@@ -33,35 +34,40 @@
 .\" ------------------------------------------------------------------
 .Sh DESCRIPTION
 .\" ------------------------------------------------------------------
-RabbitMQ is an implementation of AMQP, the emerging standard for high
-performance enterprise messaging.
-The RabbitMQ Server is a robust and scalable implementation of an AMQP
-broker.
+RabbitMQ is an open source multi-protocol messaging broker.
 .Pp
 .Nm
-is a command line tool for managing a RabbitMQ broker.
-It performs all actions by connecting to one of the broker's nodes.
+is a command line tool for managing a RabbitMQ server node.
+It performs all actions by connecting to the target RabbitMQ node
+on a dedicated CLI tool communication port and authenticating
+using a shared secret (known as the cookie file).
 .Pp
-Diagnostic information is displayed if the broker was not running, could
-not be reached, or rejected the connection due to mismatching Erlang
-cookies.
+Diagnostic information is displayed if connection failed,
+the target node was not running, or
+.Nm
+could not authenticate to
+the target node successfully.
+To learn more, see the
+.Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
+and
+.Lk https://www.rabbitmq.com/networking.html "RabbitMQ Networking guide"
 .\" ------------------------------------------------------------------
 .Sh OPTIONS
 .\" ------------------------------------------------------------------
 .Bl -tag -width Ds
 .It Fl n Ar node
 Default node is
-.Qq Pf rabbit@ Ar server ,
+.Qq Ar rabbit@target-hostname ,
 where
-.Ar server
+.Ar target-hostname
 is the local host.
 On a host named
 .Qq myserver.example.com ,
-the node name of the RabbitMQ Erlang node will usually be
+the node name will usually be
 .Qq rabbit@myserver
 (unless
 .Ev RABBITMQ_NODENAME
-has been set to some non-default value at broker startup time).
+has been overridden).
 The output of
 .Qq hostname -s
 is usually the correct suffix to use after the
@@ -69,13 +75,13 @@ is usually the correct suffix to use after the
 sign.
 See
 .Xr rabbitmq-server 8
-for details of configuring the RabbitMQ broker.
+for details of configuring a RabbitMQ node.
 .It Fl q , -quiet
 Quiet output mode is selected.
-Informational messages are suppressed when quiet mode is in effect.
+Informational messages are reduced when quiet mode is in effect.
 .It Fl s , -silent
 Silent output mode is selected.
-Informational messages and table headers are suppressed when silent mode is in effect.
+Informational messages are reduced and table headers are suppressed when silent mode is in effect.
 .It Fl -no-table-headers
 Do not output headers for tabular data.
 .It Fl -dry-run
@@ -83,19 +89,20 @@ Do not run the command.
 Only print information message.
 .It Fl t Ar timeout , Fl -timeout Ar timeout
 Operation timeout in seconds.
-Only applicable to
-.Qq list
-commands.
+Not all commands support timeouts.
 Default is
 .Cm infinity .
 .It Fl l , Fl -longnames
-Use longnames for erlang distribution.
-If RabbitMQ broker uses long node names for erlang distribution, the
-option must be specified.
+Must be specified when the cluster is configured to use long (FQDN) node names.
+To learn more, see the
+.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
 .It Fl -erlang-cookie Ar cookie
-Erlang distribution cookie.
-If RabbitMQ node is using a custom erlang cookie value, the cookie value
-must be set vith this parameter.
+Shared secret to use to authenticate to the target node.
+Prefer using a local file or the
+.Ev RABBITMQ_ERLANG_COOKIE
+environment variable instead of specifying this option on the command line.
+To learn more, see the
+.Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
 .El
 .\" ------------------------------------------------------------------
 .Sh COMMANDS
@@ -149,7 +156,7 @@ To use this precompiled files, you should set
 .Ev RABBITMQ_SERVER_CODE_PATH
 environment variable to directory specified in
 .Cm hipe_compile
-invokation.
+invocation.
 .Pp
 For example, to HiPE-compile modules and store them to
 .Pa /tmp/rabbit-hipe/ebin
@@ -194,22 +201,26 @@ Rotation is performed asynchronously, so there is no guarantee that it
 will be completed when this command returns.
 .\" ------------------------------------
 .It Cm shutdown
-Shuts down the Erlang process on which RabbitMQ is running.
-The command is blocking and will return after the Erlang process exits.
+Shuts down the node, both RabbitMQ and its runtime.
+The command is blocking and will return after the runtime process exits.
 If RabbitMQ fails to stop, it will return a non-zero exit code.
+This command infers the OS PID of the target node and
+therefore can only be used to shut down nodes running on the same
+host (or broadly speaking, in the same operating system,
+e.g. in the same VM or container)
 .Pp
 Unlike the stop command, the shutdown command:
 .Bl -bullet
 .It
 does not require a
 .Ar pid_file
-to wait for the Erlang process to exit
+to wait for the runtime process to exit
 .It
 returns a non-zero exit code if RabbitMQ node is not running
 .El
 .Pp
-For example, to shut down the Erlang process on which RabbitMQ is
-running:
+For example, this will shut down a locally running RabbitMQ node
+with default node name:
 .sp
 .Dl rabbitmqctl shutdown
 .\" ------------------------------------
@@ -244,7 +255,7 @@ For example, to instruct the RabbitMQ node to terminate:
 .Dl rabbitmqctl stop
 .\" ------------------------------------
 .It Cm stop_app
-Stops the RabbitMQ application, leaving the Erlang node running.
+Stops the RabbitMQ application, leaving the runtime (Erlang VM) running.
 .Pp
 This command is typically run prior to performing other management
 actions that require the RabbitMQ application to be stopped, e.g.\&
@@ -554,15 +565,17 @@ time it is started:
 The name of the queue to synchronise.
 .El
 .Pp
-Instructs a mirrored queue with unsynchronised slaves to synchronise
-itself.
+Instructs a mirrored queue with unsynchronised mirrors (follower replicas)
+to synchronise them.
 The queue will block while synchronisation takes place (all publishers
-to and consumers from the queue will block).
-The queue must be mirrored for this command to succeed.
+to and consumers using the queue will block or temporarily see no activity).
+This command can only be used with mirrored queues.
+To learn more, see the
+.Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
 .Pp
-Note that unsynchronised queues from which messages are being drained
-will become synchronised eventually.
-This command is primarily useful for queues which are not being drained.
+Note that queues with unsynchronised replicas and active consumers
+will become synchronised eventually (assuming that consumers make progress).
+This command is primarily useful for queues which do not have active consumers.
 .\" ------------------------------------
 .It Cm cancel_sync_queue Oo Fl p Ar vhost Oc Ar queue
 .Bl -tag -width Ds
@@ -594,10 +607,11 @@ For example, this sets the cluster name to
 .Dl rabbitmqctl set_cluster_name london
 .El
 .Ss User Management
-Note that
+Note that all user management commands
 .Nm
-manages the RabbitMQ internal user database.
-Users from any alternative authentication backend will not be visible to
+only can manage users in the internal RabbitMQ database.
+Users from any alternative authentication backends such as LDAP cannot be inspected
+or managed with those commands.
 .Nm .
 .Bl -tag -width Ds
 .\" ------------------------------------
@@ -610,11 +624,11 @@ The password the created user will use to log in to the broker.
 .El
 .Pp
 For example, this command instructs the RabbitMQ broker to create a (non-administrative) user named
-.Qq tonyg
+.Qq janeway
 with (initial) password
 .Qq changeit :
 .sp
-.Dl rabbitmqctl add_user tonyg changeit
+.Dl rabbitmqctl add_user janeway changeit
 .\" ------------------------------------
 .It Cm delete_user Ar username
 .Bl -tag -width Ds
@@ -623,9 +637,9 @@ The name of the user to delete.
 .El
 .Pp
 For example, this command instructs the RabbitMQ broker to delete the user named
-.Qq tonyg :
+.Qq janeway :
 .sp
-.Dl rabbitmqctl delete_user tonyg
+.Dl rabbitmqctl delete_user janeway
 .\" ------------------------------------
 .It Cm change_password Ar username Ar newpassword
 .Bl -tag -width Ds
@@ -637,11 +651,11 @@ The new password for the user.
 .Pp
 For example, this command instructs the RabbitMQ broker to change the
 password for the user named
-.Qq tonyg
+.Qq janeway
 to
 .Qq newpass :
 .sp
-.Dl rabbitmqctl change_password tonyg newpass
+.Dl rabbitmqctl change_password janeway newpass
 .\" ------------------------------------
 .It Cm clear_password Ar username
 .Bl -tag -width Ds
@@ -651,9 +665,9 @@ The name of the user whose password is to be cleared.
 .Pp
 For example, this command instructs the RabbitMQ broker to clear the
 password for the user named
-.Qq tonyg :
+.Qq janeway :
 .sp
-.Dl rabbitmqctl clear_password tonyg
+.Dl rabbitmqctl clear_password janeway
 .Pp
 This user now cannot log in with a password (but may be able to through
 e.g. SASL EXTERNAL if configured).
@@ -667,11 +681,11 @@ The password of the user.
 .El
 .Pp
 For example, this command instructs the RabbitMQ broker to authenticate the user named
-.Qq tonyg
+.Qq janeway
 with password
 .Qq verifyit :
 .sp
-.Dl rabbitmqctl authenticate_user tonyg verifyit
+.Dl rabbitmqctl authenticate_user janeway verifyit
 .\" ------------------------------------
 .It Cm set_user_tags Ar username Op Ar tag ...
 .Bl -tag -width Ds
@@ -683,10 +697,10 @@ Any existing tags will be removed.
 .El
 .Pp
 For example, this command instructs the RabbitMQ broker to ensure the user named
-.Qq tonyg
+.Qq janeway
 is an administrator:
 .sp
-.Dl rabbitmqctl set_user_tags tonyg administrator
+.Dl rabbitmqctl set_user_tags janeway administrator
 .Pp
 This has no effect when the user logs in via AMQP, but can be used to
 permit the user to manage users, virtual hosts and permissions when
@@ -694,9 +708,9 @@ the user logs in via some other means (for example with the management
 plugin).
 .Pp
 This command instructs the RabbitMQ broker to remove any tags from the user named
-.Qq tonyg :
+.Qq janeway :
 .sp
-.Dl rabbitmqctl set_user_tags tonyg
+.Dl rabbitmqctl set_user_tags janeway
 .\" ------------------------------------
 .It Cm list_users
 Lists users.
@@ -796,14 +810,14 @@ Sets user permissions.
 .Pp
 For example, this command instructs the RabbitMQ broker to grant the
 user named
-.Qq tonyg
+.Qq janeway
 access to the virtual host called
-.Qq /myvhost ,
+.Qq my-vhost ,
 with configure permissions on all resources whose names starts with
-.Qq tonyg- ,
+.Qq janeway- ,
 and write and read permissions on all resources:
 .sp
-.Dl rabbitmqctl set_permissions -p /myvhost tonyg Qo ^tonyg-.* Qc Qo .* Qc Qq .*
+.Dl rabbitmqctl set_permissions -p my-vhost janeway Qo ^janeway-.* Qc Qo .* Qc Qq .*
 .\" ------------------------------------
 .It Cm clear_permissions Oo Fl p Ar vhost Oc Ar username
 .Bl -tag -width Ds
@@ -819,11 +833,11 @@ Sets user permissions.
 .Pp
 For example, this command instructs the RabbitMQ broker to deny the user
 named
-.Qq tonyg
+.Qq janeway
 access to the virtual host called
-.Qq /myvhost :
+.Qq my-vhost :
 .sp
-.Dl rabbitmqctl clear_permissions -p /myvhost tonyg
+.Dl rabbitmqctl clear_permissions -p my-vhost janeway
 .\" ------------------------------------
 .It Cm list_permissions Op Fl p Ar vhost
 .Bl -tag -width Ds
@@ -838,12 +852,12 @@ Lists permissions in a virtual host.
 .Pp
 For example, this command instructs the RabbitMQ broker to list all the
 users which have been granted access to the virtual host called
-.Qq /myvhost ,
+.Qq my-vhost ,
 and the permissions they have for operations on resources in that
 virtual host.
 Note that an empty string means no permissions granted:
 .sp
-.Dl rabbitmqctl list_permissions -p /myvhost
+.Dl rabbitmqctl list_permissions -p my-vhost
 .\" ------------------------------------
 .It Cm list_user_permissions Ar username
 .Bl -tag -width Ds
@@ -855,11 +869,11 @@ Lists user permissions.
 .Pp
 For example, this command instructs the RabbitMQ broker to list all the
 virtual hosts to which the user named
-.Qq tonyg
+.Qq janeway
 has been granted access, and the permissions the user has for operations
 on resources in these virtual hosts:
 .sp
-.Dl rabbitmqctl list_user_permissions tonyg
+.Dl rabbitmqctl list_user_permissions janeway
 .\" ------------------------------------
 .It Cm set_topic_permissions Oo Fl p Ar vhost Oc Ar user Ar exchange Ar write Ar read
 .Bl -tag -width Ds
@@ -881,22 +895,22 @@ Sets user topic permissions.
 .Pp
 For example, this command instructs the RabbitMQ broker to let the
 user named
-.Qq tonyg
+.Qq janeway
 publish and consume messages going through the
 .Qq amp.topic
 exchange of the
-.Qq /myvhost
+.Qq my-vhost
 virtual host with a routing key starting with
-.Qq tonyg- :
+.Qq janeway- :
 .sp
-.Dl rabbitmqctl set_topic_permissions -p /myvhost tonyg amq.topic Qo ^tonyg-.* Qc Qo ^tonyg-.* Qc
+.Dl rabbitmqctl set_topic_permissions -p my-vhost janeway amq.topic Qo ^janeway-.* Qc Qo ^janeway-.* Qc
 .Pp
 Topic permissions support variable expansion for the following variables:
 username, vhost, and client_id. Note that client_id is expanded only when using MQTT.
 The previous example could be made more generic by using
 .Qq ^{username}-.* :
 .sp
-.Dl rabbitmqctl set_topic_permissions -p /myvhost tonyg amq.topic Qo ^{username}-.* Qc Qo ^{username}-.* Qc
+.Dl rabbitmqctl set_topic_permissions -p my-vhost janeway amq.topic Qo ^{username}-.* Qc Qo ^{username}-.* Qc
 .\" ------------------------------------
 .It Cm clear_topic_permissions Oo Fl p Ar vhost Oc Ar username Oo Ar exchange Oc
 .Bl -tag -width Ds
@@ -915,13 +929,13 @@ Clear user topic permissions.
 .Pp
 For example, this command instructs the RabbitMQ broker to remove topic permissions for user
 named
-.Qq tonyg
+.Qq janeway
 for the topic exchange
 .Qq amq.topic
 in the virtual host called
-.Qq /myvhost :
+.Qq my-vhost :
 .sp
-.Dl rabbitmqctl clear_topic_permissions -p /myvhost tonyg amq.topic
+.Dl rabbitmqctl clear_topic_permissions -p my-vhost janeway amq.topic
 .\" ------------------------------------
 .It Cm list_topic_permissions Op Fl p Ar vhost
 .Bl -tag -width Ds
@@ -935,9 +949,9 @@ Lists topic permissions in a virtual host.
 .Pp
 For example, this command instructs the RabbitMQ broker to list all the
 users which have been granted topic permissions in the virtual host called
-.Qq /myvhost:
+.Qq my-vhost:
 .sp
-.Dl rabbitmqctl list_topic_permissions -p /myvhost
+.Dl rabbitmqctl list_topic_permissions -p my-vhost
 .\" ------------------------------------
 .It Cm list_user_topic_permissions Ar username
 .Bl -tag -width Ds
@@ -949,22 +963,22 @@ Lists user topic permissions.
 .Pp
 For example, this command instructs the RabbitMQ broker to list all the
 virtual hosts to which the user named
-.Qq tonyg
+.Qq janeway
 has been granted access, and the topic permissions the user has in these virtual hosts:
 .sp
-.Dl rabbitmqctl list_topic_user_permissions tonyg
+.Dl rabbitmqctl list_topic_user_permissions janeway
 .El
 .Ss Parameter Management
-Certain features of RabbitMQ (such as the federation plugin) are
+Certain features of RabbitMQ (such as the Federation plugin) are
 controlled by dynamic, cluster-wide
 .Em parameters.
 There are 2 kinds of parameters: parameters scoped to a virtual host and
 global parameters.
 Each vhost-scoped parameter consists of a component name, a name and a
 value.
-The component name and name are strings, and the value is an Erlang term.
+The component name and name are strings, and the value is a valid JSON document.
 A global parameter consists of a name and value.
-The name is a string and the value is an Erlang term.
+The name is a string and the value is an arbitrary Erlang data structure.
 Parameters can be set, cleared and listed.
 In general you should refer to the documentation for the feature in
 question to see how to set parameters.
@@ -1216,10 +1230,9 @@ Suppresses the
 parameter.
 .El
 .El
-.Ss Server Status
-The server status queries interrogate the server and return a list of
-results with tab-delimited columns.
-Some queries (
+.Ss Topology Introspection
+The topology introspection commands list topology entities (e.g. queues) with tab-delimited columns.
+Some commands (
 .Cm list_queues ,
 .Cm list_exchanges ,
 .Cm list_bindings
@@ -1228,8 +1241,6 @@ and
 accept an optional
 .Ar vhost
 parameter.
-This parameter, if present, must be specified immediately after the
-query.
 .Pp
 The
 .Cm list_queues ,
@@ -1283,11 +1294,11 @@ Whether the queue will be deleted automatically when no longer used.
 .It Cm arguments
 Queue arguments.
 .It Cm policy
-Policy name applying to the queue.
+Effective policy name for the queue.
 .It Cm pid
-Id of the Erlang process associated with the queue.
+Erlang process identifier of the queue.
 .It Cm owner_pid
-Id of the Erlang process representing the connection which is the
+Id of the Erlang process of the connection which is the
 exclusive owner of the queue.
 Empty if the queue is non-exclusive.
 .It Cm exclusive
@@ -1331,7 +1342,7 @@ acknowledged.
 .It Cm message_bytes_ram
 Like
 .Cm message_bytes
-but counting only those messages which are in RAM.
+but counting only those messages which are currently held in RAM.
 .It Cm message_bytes_persistent
 Like
 .Cm message_bytes
@@ -1353,14 +1364,16 @@ immediately deliver messages to consumers.
 This can be less than 1.0 if consumers are limited by network congestion
 or prefetch count.
 .It Cm memory
-Bytes of memory consumed by the Erlang process associated with the
+Bytes of memory allocated by the runtime for the
 queue, including stack, heap and internal structures.
 .It Cm slave_pids
-If the queue is mirrored, this gives the IDs of the current slaves.
+If the queue is mirrored, this lists the IDs of the mirrors (follower replicas).
+To learn more, see the
+.Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
 .It Cm synchronised_slave_pids
-If the queue is mirrored, this gives the IDs of the current slaves which
-are synchronised with the master - i.e. those which could take over from
-the master without message loss.
+If the queue is mirrored, this gives the IDs of the mirrors (follower replicas) which
+are synchronised with the master (leader). To learn more, see the
+.Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
 .It Cm state
 The state of the queue.
 Normally
@@ -1383,9 +1396,9 @@ are specified then queue name and depth are displayed.
 .Pp
 For example, this command displays the depth and number of consumers for
 each queue of the virtual host named
-.Qq /myvhost
+.Qq my-vhost
 .sp
-.Dl rabbitmqctl list_queues -p /myvhost messages consumers
+.Dl rabbitmqctl list_queues -p my-vhost messages consumers
 .\" ------------------------------------
 .It Cm list_exchanges Oo Fl p Ar vhost Oc Op Ar exchangeinfoitem ...
 Returns exchange details.
@@ -1439,9 +1452,9 @@ are specified then exchange name and type are displayed.
 .Pp
 For example, this command displays the name and type for each exchange
 of the virtual host named
-.Qq /myvhost :
+.Qq my-vhost :
 .sp
-.Dl rabbitmqctl list_exchanges -p /myvhost name type
+.Dl rabbitmqctl list_exchanges -p my-vhost name type
 .\" ------------------------------------
 .It Cm list_bindings Oo Fl p Ar vhost Oc Op Ar bindinginfoitem ...
 Returns binding details.
@@ -1487,9 +1500,9 @@ are specified then all above items are displayed.
 .Pp
 For example, this command displays the exchange name and queue name of
 the bindings in the virtual host named
-.Qq /myvhost
+.Qq my-vhost
 .sp
-.Dl rabbitmqctl list_bindings -p /myvhost exchange_name queue_name
+.Dl rabbitmqctl list_bindings -p my-vhost exchange_name queue_name
 .\" ------------------------------------
 .It Cm list_connections Op Ar connectioninfoitem ...
 Returns TCP/IP connection statistics.
@@ -1695,13 +1708,13 @@ broker:
 .Dl rabbitmqctl status
 .\" ------------------------------------
 .It Cm node_health_check
-Health check of the RabbitMQ node.
-Verifies the rabbit application is running, list_queues and
-list_channels return, and alarms are not set.
+Performs several health checks of the target node.
 .Pp
-For example, this command performs a health check on the RabbitMQ node:
+Verifies the rabbit application is running and alarms are not set,
+then checks that every queue and channel on the node can emit basic stats.
 .sp
-.Dl rabbitmqctl node_health_check -n rabbit@stringer
+Example:
+.Dl rabbitmqctl node_health_check -n rabbit@hostname
 .\" ------------------------------------
 .It Cm environment
 Displays the name and value of each variable in the application
@@ -2211,11 +2224,12 @@ Reset stats database for all nodes in the cluster.
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
 .\" ------------------------------------------------------------------
-.Xr rabbitmq-env.conf 5 ,
-.Xr rabbitmq-echopid 8 ,
+.Xr rabbitmq-diagnostics 8 ,
 .Xr rabbitmq-plugins 8 ,
 .Xr rabbitmq-server 8 ,
-.Xr rabbitmq-service 8
+.Xr rabbitmq-service 8 ,
+.Xr rabbitmq-env.conf 5 ,
+.Xr rabbitmq-echopid 8
 .\" ------------------------------------------------------------------
 .Sh AUTHOR
 .\" ------------------------------------------------------------------

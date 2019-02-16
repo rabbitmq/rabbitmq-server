@@ -900,7 +900,7 @@ fun(Conf) ->
     end
 end}.
 
-%% Classic config-driven peer discuvery backend.
+%% Classic config-driven peer discovery backend.
 %%
 %% Make clustering happen *automatically* at startup - only applied
 %% to nodes that have just been reset or started for the first time.
@@ -1338,16 +1338,6 @@ end}.
 % ==========================
 
 {mapping, "net_ticktime", "kernel.net_ticktime",[
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
-]}.
-
-{mapping, "inet_dist_listen_min", "kernel.inet_dist_listen_min",[
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
-]}.
-
-{mapping, "inet_dist_listen_max", "kernel.inet_dist_listen_max",[
     {datatype, [integer]},
     {validators, ["non_zero_positive_integer"]}
 ]}.

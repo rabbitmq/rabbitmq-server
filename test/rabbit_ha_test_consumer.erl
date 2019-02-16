@@ -64,7 +64,7 @@ run(TestPid, Channel, Queue, CancelOnFailover, LowestSeen, MsgsToConsume) ->
                         CancelOnFailover, MsgNum, MsgsToConsume - 1);
                 MsgNum >= LowestSeen ->
                     error_logger:info_msg(
-                      "consumer ~p on ~p ignoring redeliverd msg ~p~n",
+                      "consumer ~p on ~p ignoring redelivered msg ~p~n",
                       [self(), Channel, MsgNum]),
                     true = Redelivered, %% ASSERTION
                     run(TestPid, Channel, Queue,

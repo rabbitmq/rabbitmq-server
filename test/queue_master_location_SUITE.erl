@@ -22,7 +22,7 @@
 %% location strategies can be applied in the following ways;
 %%   1. As policy,
 %%   2. As config (in rabbitmq.config),
-%%   3. or as part of the queue's declare arguements.
+%%   3. or as part of the queue's declare arguments.
 %%
 %% Currently supported strategies are;
 %%   min-masters : The queue master node is calculated as the one with the

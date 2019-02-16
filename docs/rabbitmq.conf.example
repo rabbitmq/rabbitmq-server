@@ -38,19 +38,19 @@
 ## and TLS listeners.
 ##
 # num_acceptors.tcp = 10
-# num_acceptors.ssl = 1
+# num_acceptors.ssl = 10
 
 
-## Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
-## and TLS handshake), in milliseconds.
+## Maximum amount of time allowed for the AMQP 0-9-1 and AMQP 1.0 handshake
+## (performed after socket connection and TLS handshake) to complete, in milliseconds.
 ##
 # handshake_timeout = 10000
 
 ## Set to 'true' to perform reverse DNS lookups when accepting a
-## connection. Hostnames will then be shown instead of IP addresses
-## in rabbitmqctl and the management plugin.
+## connection. rabbitmqctl and management UI will then display hostnames
+## instead of IP addresses. Default value is `false`.
 ##
-# reverse_dns_lookups = true
+# reverse_dns_lookups = false
 
 ##
 ## Security, Access Control
@@ -509,10 +509,10 @@
 # net_ticktime = 60
 
 ## Inter-node communication port range.
+## The parameters inet_dist_listen_min and inet_dist_listen_max  
+## can be configured in the classic config format only.
 ## Related doc guide: https://www.rabbitmq.com/networking.html#epmd-inet-dist-port-range.
-##
-# inet_dist_listen_min = 25672
-# inet_dist_listen_max = 25692
+
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Management Plugin
@@ -804,7 +804,7 @@
 ## See http://rabbitmq.com/logging.html and https://github.com/erlang-lager/lager for details.
 ##
 
-## Log direcrory, taken from the RABBITMQ_LOG_BASE env variable by default.
+## Log directory, taken from the RABBITMQ_LOG_BASE env variable by default.
 ##
 # log.dir = /var/log/rabbitmq
 

@@ -213,9 +213,7 @@ if "!RABBITMQ_CONFIG_FILE_NOEX!.conf" == "!RABBITMQ_CONFIG_FILE!" (
         mkdir "!RABBITMQ_GENERATED_CONFIG_DIR!"
     )
 
-    if not exist "!RABBITMQ_SCHEMA_DIR!\rabbit.schema" (
-        copy "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
-    )
+    copy /Y "!RABBITMQ_HOME!\priv\schema\rabbit.schema" "!RABBITMQ_SCHEMA_DIR!\rabbit.schema"
 
     set RABBITMQ_GENERATED_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
                                       -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
@@ -255,7 +253,7 @@ rem
 rem The defaults are meant to reduce RabbitMQ's memory usage and help
 rem it reclaim memory at the cost of a slight decrease in performance
 rem (due to an increase in memory operations). These defaults can be
-rem overriden using the RABBITMQ_SERVER_ERL_ARGS variable.
+rem overridden using the RABBITMQ_SERVER_ERL_ARGS variable.
 
 set RABBITMQ_DEFAULT_ALLOC_ARGS=+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30
 

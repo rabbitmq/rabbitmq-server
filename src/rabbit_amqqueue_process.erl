@@ -1121,7 +1121,7 @@ prioritise_cast(Msg, _Len, State) ->
 %% will be rate limited by how fast consumers receive messages -
 %% i.e. by notify_sent. We prioritise ack and resume to discourage
 %% starvation caused by prioritising notify_sent. We don't vary their
-%% prioritiy since acks should stay in order (some parts of the queue
+%% priority since acks should stay in order (some parts of the queue
 %% stack are optimised for that) and to make things easier to reason
 %% about. Finally, we prioritise ack over resume since it should
 %% always reduce memory use.

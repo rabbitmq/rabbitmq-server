@@ -1,0 +1,515 @@
+.\" vim:ft=nroff:
+.\" The contents of this file are subject to the Mozilla Public License
+.\" Version 1.1 (the "License"); you may not use this file except in
+.\" compliance with the License. You may obtain a copy of the License
+.\" at http://www.mozilla.org/MPL/
+.\"
+.\" Software distributed under the License is distributed on an "AS IS"
+.\" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+.\" the License for the specific language governing rights and
+.\" limitations under the License.
+.\"
+.\" The Original Code is RabbitMQ.
+.\"
+.\" The Initial Developer of the Original Code is Pivotal Software, Inc.
+.\" Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
+.\"
+.Dd January 29, 2019
+.Dt RABBITMQ-DIAGNOSTICS 8
+.Os "RabbitMQ Server"
+.Sh NAME
+.Nm rabbitmq-diagnostics
+.Nd RabbitMQ diagnostics, monitoring and health checks tools
+.\" ------------------------------------------------------------------
+.Sh SYNOPSIS
+.\" ------------------------------------------------------------------
+.Nm
+.Op Fl q
+.Op Fl s
+.Op Fl l
+.Op Fl n Ar node
+.Op Fl t Ar timeout
+.Ar command
+.Op Ar command_options
+.\" ------------------------------------------------------------------
+.Sh DESCRIPTION
+.\" ------------------------------------------------------------------
+.Nm
+is a command line tool that provides commands used for diagnostics, monitoring
+and health checks of RabbitMQ nodes.
+See the
+.Lk https://www.rabbitmq.com/documentation.html "RabbitMQ documentation guides"
+to learn more about RabbitMQ diagnostics, monitoring and health checks.
+
+.Nm
+allows the operator to inspect node and cluster state. A number of
+health checks are available to be used interactively and by monitoring tools.
+
+.Pp
+By default if it is not possible to connect to and authenticate with the target node
+(for example if it is stopped), the operation will fail.
+To learn more, see the
+.Lk https://www.rabbitmq.com/monitoring.html "RabbitMQ Monitoring guide"
+.
+.\" ------------------------------------------------------------------
+.Sh OPTIONS
+.\" ------------------------------------------------------------------
+.Bl -tag -width Ds
+.It Fl n Ar node
+Default node is
+.Qq Pf rabbit@ Ar target-hostname ,
+where
+.Ar target-hostname
+is the local host.
+On a host named
+.Qq myserver.example.com ,
+the node name will usually be
+.Qq rabbit@myserver
+(unless
+.Ev RABBITMQ_NODENAME
+has been overridden).
+The output of
+.Qq hostname -s
+is usually the correct suffix to use after the
+.Qq @
+sign.
+See
+.Xr rabbitmq-server 8
+for details of configuring a RabbitMQ node.
+.It Fl q , -quiet
+Quiet output mode is selected.
+Informational messages are reduced when quiet mode is in effect.
+.It Fl s , -silent
+Silent output mode is selected.
+Informational messages are reduced and table headers are suppressed when silent mode is in effect.
+.It Fl t Ar timeout , Fl -timeout Ar timeout
+Operation timeout in seconds.
+Not all commands support timeouts.
+Default is
+.Cm infinity .
+.It Fl l , Fl -longnames
+Must be specified when the cluster is configured to use long (FQDN) node names.
+To learn more, see the
+.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
+.It Fl -erlang-cookie Ar cookie
+Shared secret to use to authenticate to the target node.
+Prefer using a local file or the
+.Ev RABBITMQ_ERLANG_COOKIE
+environment variable instead of specifying this option on the command line.
+To learn more, see the
+.Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
+.El
+.\" ------------------------------------------------------------------
+.Sh COMMANDS
+.\" ------------------------------------
+.Pp
+Most commands provided by
+.Nm
+inspect node and cluster state or perform health checks.
+.Pp
+Commands that list topology entities (e.g. queues) use tab as column delimiter.
+These commands and their arguments are delegated to rabbitmqctl(8).
+.Pp
+Some commands (
+.Cm list_queues ,
+.Cm list_exchanges ,
+.Cm list_bindings
+and
+.Cm list_consumers )
+accept an optional
+.Ar vhost
+parameter.
+.Pp
+The
+.Cm list_queues ,
+.Cm list_exchanges
+and
+.Cm list_bindings
+commands accept an optional virtual host parameter for which to display
+results.
+The default value is
+.Qq / .
+.Bl -tag -width Ds
+.\" ------------------------------------
+.It Cm help
+.Pp
+Displays general help and commands supported by
+.Nm .
+.\" ------------------------------------
+.It Cm ping
+.Pp
+Most basic health check. Succeeds if target node (runtime) is running
+and
+.Nm
+can authenticate with it successfully.
+.\" ------------------------------------
+.It Cm memory_breakdown Op Fl -unit Ar memory_unit
+.Pp
+Displays node's memory usage by category.
+Supported memory units are:
+.Bl -bullet
+.It
+bytes
+.It
+megabytes
+.It
+gigabytes
+.It
+terabytes
+.El
+.Pp
+See
+.Lk https://www.rabbitmq.com/memory-use.html "RabbitMQ Memory Use guide"
+to learn more.
+.Pp
+Example:
+.sp
+.Dl rabbitmq-diagnostics memory_breakdown --unit gigabytes
+.\" ------------------------------------
+.It Cm server_version
+.Pp
+Reports target node's version.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics server_version -q
+.\" ------------------------------------
+.It Cm erlang_version
+.Pp
+Reports target node's Erlang/OTP version.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics erlang_version -q
+.\" ------------------------------------
+.It Cm maybe_stuck
+.Pp
+Periodically samples stack traces of all Erlang processes
+("lightweight threads") on the node. Reports the processes for which
+stack trace samples are identical.
+.Pp
+Identical samples may indicate that the process is not making any progress
+but is not necessarily an indication of a problem.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics maybe_stuck -q
+.\" ------------------------------------
+.It Cm runtime_thread_stats Op Fl -sample-interval Ar interval
+.Pp
+Performs sampling of runtime (kernel) threads' activity for
+.Ar interval
+seconds and reports it.
+.Pp
+For this command to work, Erlang/OTP on the target node must be compiled with
+microstate accounting support and have the runtime_tools package available.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics runtime_thread_stats --sample-interval 15
+.\" ------------------------------------
+.It Cm tls_versions
+.Pp
+Lists all TLS versions supported by the runtime on the target node.
+Note that RabbitMQ can be configured to only accept a subset of those
+versions, for example, SSLv3 is disabled by default.
+.Pp
+See
+.Lk https://www.rabbitmq.com/ssl.html "RabbitMQ TLS guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics tls_versions -q
+.\" ------------------------------------
+.It Cm erlang_cookie_hash
+.Pp
+Outputs a hashed value of the shared secret used by the target node
+to authenticate CLI tools and peers. The value can be compared with the hash
+found in error messages of CLI tools.
+.Pp
+See
+.Lk https://www.rabbitmq.com/clustering.html#erlang-cookie "RabbitMQ Clustering guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics erlang_cookie_hash -q
+.\" ------------------------------------
+.It Cm discover_peers
+.Pp
+Runs a peer discovery on the target node and prints the discovered nodes, if any.
+.Pp
+See
+.Lk https://www.rabbitmq.com/cluster-formation.html "RabbitMQ Cluster Formation guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics discover_peers --timeout 60
+.\" ------------------------------------
+.It Cm list_channels Op Ar channelinfoitem ...
+See
+.Cm list_channels
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_queues Oo Fl p Ar vhost Oc Oo Fl -offline | Fl -online | Fl -local Oc Op Ar queueinfoitem ...
+See
+.Cm list_queues
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_exchanges Oo Fl p Ar vhost Oc Op Ar exchangeinfoitem ...
+See
+.Cm list_exchanges
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_bindings Oo Fl p Ar vhost Oc Op Ar bindinginfoitem ...
+See
+.Cm list_bindings
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_connections Op Ar connectioninfoitem ...
+See
+.Cm list_connections
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_channels Op Ar channelinfoitem ...
+See
+.Cm list_channels
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_consumers Op Fl p Ar vhost
+See
+.Cm list_consumers
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm alarms
+.Pp
+Lists resource alarms, if any, in the cluster.
+.Pp
+See
+.Lk https://www.rabbitmq.com/alarms.html "RabbitMQ Resource Alarms guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics alarms
+.\" ------------------------------------
+.It Cm listeners
+.Pp
+Lists listeners (bound sockets) on this node. Use this to inspect
+what protocols and ports the node is listening on for client, CLI tool
+and peer connections.
+.Pp
+See
+.Lk https://www.rabbitmq.com/networking.html "RabbitMQ Networking guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics listeners
+.\" ------------------------------------
+.It Cm is_running
+.Pp
+Reports if RabbitMQ application is fully booted and running (that is, not stopped) on
+the target node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics is_running
+.\" ------------------------------------
+.It Cm is_booting
+.Pp
+Reports if RabbitMQ application is currently booting (not booted/running or stopped) on
+the target node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics is_booting
+.\" ------------------------------------
+
+check_port_connectivity [-t <timeout>]
+.\" ------------------------------------
+.It Cm check_running
+.Pp
+Health check that fails (returns with a non-zero code) if the RabbitMQ
+application is not running on the target node.
+.Pp
+If
+.Cm rabbitmqctl(8)
+was used to stop the application, this check will fail.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics check_running
+.\" ------------------------------------
+.It Cm check_local_alarms
+.Pp
+Health check that fails (returns with a non-zero code) if there are alarms
+in effect on the target node.
+.Pp
+See
+.Lk https://www.rabbitmq.com/alarms.html "RabbitMQ Resource Alarms guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics check_local_alarms
+.\" ------------------------------------
+.It Cm check_alarms
+.Pp
+Health check that fails (returns with a non-zero code) if there are alarms
+in effect on any of the cluster nodes.
+.Pp
+See
+.Lk https://www.rabbitmq.com/alarms.html "RabbitMQ Resource Alarms guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics check_alarms
+.\" ------------------------------------
+.It Cm check_port_connectivity
+.Pp
+Health check that fails (returns with a non-zero code) if any listener ports
+on the target node cannot accept a new TCP connection opened by
+.Nm.
+The check only validates if a new TCP connection is accepted. It does not
+perform messaging protocol handshake or authenticate.
+.Pp
+See
+.Lk https://www.rabbitmq.com/networking.html "RabbitMQ Networking guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics check_port_connectivity
+.\" ------------------------------------
+.It Cm check_protocol_listener
+.Pp
+Health check that fails (returns with a non-zero code) if the target node
+does not have a listener for the specified protocol.
+.Pp
+See
+.Lk https://www.rabbitmq.com/networking.html "RabbitMQ Networking guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics check_protocol_listener mqtt
+.\" ------------------------------------
+.It Cm check_port_listener
+.Pp
+Health check that fails (returns with a non-zero code) if the target node
+is not listening on the specified port (there is no listener that
+uses that port).
+.Pp
+See
+.Lk https://www.rabbitmq.com/networking.html "RabbitMQ Networking guide"
+to learn more.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics check_port_listener 5672
+.\" ------------------------------------
+.It Cm status
+See
+.Cm status
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm cluster_status
+See
+.Cm cluster_status
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm environment
+See
+.Cm environment
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm report
+See
+.Cm report
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_global_parameters
+See
+.Cm list_global_parameters
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_operator_policies Op Fl p Ar vhost
+See
+.Cm list_operator_policies
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_parameters Op Fl p Ar vhost
+See
+.Cm list_parameters
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------------------------------------
+.It Cm list_permissions Op Fl p Ar vhost
+See
+.Cm list_permissions
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_policies Op Fl p Ar vhost
+See
+.Cm list_policies
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_topic_permissions Op Fl p Ar vhost
+See
+.Cm list_topic_permissions
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_user_permissions Ar username
+See
+.Cm list_user_permissions
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_user_topic_permissions Ar username
+See
+.Cm list_user_topic_permissions
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_users
+See
+.Cm list_users
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm list_vhosts Op Ar vhostinfoitem ...
+See
+.Cm list_vhosts
+in
+.Xr rabbitmqctl 8
+.\" ------------------------------------
+.It Cm node_health_check
+Performs several health checks of the target node.
+.Pp
+Verifies the rabbit application is running and alarms are not set,
+then checks that every queue and channel on the node can emit basic stats.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-diagnostics node_health_check -n rabbit@hostname
+.\" ------------------------------------
