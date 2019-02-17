@@ -74,7 +74,7 @@
                            {'absent', rabbit_types:amqqueue(),absent_reason()}.
 -type not_found_or_absent() ::
         'not_found' | {'absent', rabbit_types:amqqueue(), absent_reason()}.
--spec recover(rabbit_types:vhost()) -> [rabbit_types:amqqueue()].
+-spec recover(rabbit_types:vhost()) -> {[rabbit_types:amqqueue()], [rabbit_types:amqqueue()]}.
 -spec stop(rabbit_types:vhost()) -> 'ok'.
 -spec start([rabbit_types:amqqueue()]) -> 'ok'.
 -spec declare
@@ -238,7 +238,11 @@ recover(VHost) ->
         BQ:start(VHost, [QName || #amqqueue{name = QName} <- Queues]),
     case rabbit_amqqueue_sup_sup:start_for_vhost(VHost) of
         {ok, _}         ->
-            recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms));
+            Recovered = recover_durable_queues(lists:zip(Queues, OrderedRecoveryTerms)),
+            RecoveredNames = [Name || #amqqueue{name = Name} <- Recovered],
+            FailedQueues = [Q || Q = #amqqueue{name = Name} <- Queues,
+                              not lists:member(Name, RecoveredNames)],
+            {Recovered, FailedQueues};
         {error, Reason} ->
             rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
             throw({error, Reason})
