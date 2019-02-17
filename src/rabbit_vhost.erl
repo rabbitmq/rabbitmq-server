@@ -72,9 +72,10 @@ recover(VHost) ->
     ok = rabbit_file:ensure_dir(VHostStubFile),
     ok = file:write_file(VHostStubFile, VHost),
     {RecoveredQs, FailedQs} = rabbit_amqqueue:recover(VHost),
+    AllQs = RecoveredQs ++ FailedQs,
     ok = rabbit_binding:recover(
             rabbit_exchange:recover(VHost),
-            [QName || #amqqueue{name = QName} <- RecoveredQs ++ FailedQs]),
+            [QName || #amqqueue{name = QName} <- AllQs]),
     ok = rabbit_amqqueue:start(RecoveredQs),
     %% Start queue mirrors.
     ok = rabbit_mirror_queue_misc:on_vhost_up(VHost),
@@ -327,4 +328,3 @@ info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
 info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
        AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, list()).
-
