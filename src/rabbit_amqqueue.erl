@@ -616,14 +616,14 @@ priv_absent(QueueName, _QPid, _IsDurable, timeout) ->
          rabbit_framing:amqp_table(), rabbit_types:maybe(pid())) ->
             'ok' | rabbit_types:channel_exit() | rabbit_types:connection_exit().
 
-assert_equivalence(Q, Durable1, AD1, Args1, Owner) ->
+assert_equivalence(Q, DurableDeclare, AutoDeleteDeclare, Args1, Owner) ->
     QName = amqqueue:get_name(Q),
-    Durable = amqqueue:is_durable(Q),
-    AD = amqqueue:is_auto_delete(Q),
-    rabbit_misc:assert_field_equivalence(Durable, Durable1, QName, durable),
-    rabbit_misc:assert_field_equivalence(AD, AD1, QName, auto_delete),
-    assert_args_equivalence(Q, Args1),
-    check_exclusive_access(Q, Owner, strict).
+    DurableQ = amqqueue:is_durable(Q),
+    AutoDeleteQ = amqqueue:is_auto_delete(Q),
+    ok = check_exclusive_access(Q, Owner, strict),
+    ok = rabbit_misc:assert_field_equivalence(DurableQ, DurableDeclare, QName, durable),
+    ok = rabbit_misc:assert_field_equivalence(AutoDeleteQ, AutoDeleteDeclare, QName, auto_delete),
+    ok = assert_args_equivalence(Q, Args1).
 
 -spec check_exclusive_access(amqqueue:amqqueue(), pid()) ->
           'ok' | rabbit_types:channel_exit().
