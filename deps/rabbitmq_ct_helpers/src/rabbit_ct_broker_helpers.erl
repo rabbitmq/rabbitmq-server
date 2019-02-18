@@ -139,7 +139,9 @@
     enable_plugin/3,
     disable_plugin/3,
 
-    test_channel/0
+    test_channel/0,
+    test_writer/1,
+    user/1
   ]).
 
 %% Internal functions exported to be used by rpc:call/4.
