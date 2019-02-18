@@ -163,13 +163,16 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
+    DeliveryLimit = args_policy_lookup(<<"delivery-limit">>, fun min/2, Q),
     #{name => Name,
       queue_resource => QName,
       dead_letter_handler => dlx_mfa(Q),
       become_leader_handler => {?MODULE, become_leader, [QName]},
       max_length => MaxLength,
       max_bytes => MaxBytes,
-      single_active_consumer_on => single_active_consumer_on(Q)}.
+      single_active_consumer_on => single_active_consumer_on(Q),
+      delivery_limit => DeliveryLimit
+     }.
 
 single_active_consumer_on(Q) ->
     QArguments = amqqueue:get_arguments(Q),

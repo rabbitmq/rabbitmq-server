@@ -43,14 +43,17 @@ register() ->
                           {policy_validator, <<"max-length-bytes">>},
                           {policy_validator, <<"queue-mode">>},
                           {policy_validator, <<"overflow">>},
+                          {policy_validator, <<"delivery-limit">>},
                           {operator_policy_validator, <<"expires">>},
                           {operator_policy_validator, <<"message-ttl">>},
                           {operator_policy_validator, <<"max-length">>},
                           {operator_policy_validator, <<"max-length-bytes">>},
+                          {operator_policy_validator, <<"delivery-limit">>},
                           {policy_merge_strategy, <<"expires">>},
                           {policy_merge_strategy, <<"message-ttl">>},
                           {policy_merge_strategy, <<"max-length">>},
-                          {policy_merge_strategy, <<"max-length-bytes">>}]],
+                          {policy_merge_strategy, <<"max-length-bytes">>},
+                          {policy_merge_strategy, <<"delivery-limit">>}]],
     ok.
 
 validate_policy(Terms) ->
@@ -111,9 +114,16 @@ validate_policy0(<<"overflow">>, <<"drop-head">>) ->
 validate_policy0(<<"overflow">>, <<"reject-publish">>) ->
     ok;
 validate_policy0(<<"overflow">>, Value) ->
-    {error, "~p is not a valid overflow value", [Value]}.
+    {error, "~p is not a valid overflow value", [Value]};
+
+validate_policy0(<<"delivery-limit">>, Value)
+  when is_integer(Value), Value >= 0 ->
+    ok;
+validate_policy0(<<"delivery-limit">>, Value) ->
+    {error, "~p is not a valid delivery limit", [Value]}.
 
 merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
 merge_policy_value(<<"max-length">>, Val, OpVal)       -> min(Val, OpVal);
 merge_policy_value(<<"max-length-bytes">>, Val, OpVal) -> min(Val, OpVal);
-merge_policy_value(<<"expires">>, Val, OpVal)          -> min(Val, OpVal).
+merge_policy_value(<<"expires">>, Val, OpVal)          -> min(Val, OpVal);
+merge_policy_value(<<"delivery-limit">>, Val, OpVal)   -> min(Val, OpVal).
