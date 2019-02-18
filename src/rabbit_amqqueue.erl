@@ -642,7 +642,7 @@ check_exclusive_access(Q, _ReaderPid, _MatchType) ->
       resource_locked,
       "cannot obtain exclusive access to locked ~s. It could be originally "
       "declared on another connection or the exclusive property value does not "
-      "match the original declaration.",
+      "match that of the original declaration.",
       [rabbit_misc:rs(QueueName)]).
 
 -spec with_exclusive_access_or_die(name(), pid(), qfun(A)) ->
