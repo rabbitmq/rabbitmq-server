@@ -532,13 +532,13 @@ with_or_die(Name, F) ->
                   end).
 
 assert_equivalence(#amqqueue{name        = QName,
-                             durable     = Durable,
-                             auto_delete = AD} = Q,
-                   Durable1, AD1, Args1, Owner) ->
-    rabbit_misc:assert_field_equivalence(Durable, Durable1, QName, durable),
-    rabbit_misc:assert_field_equivalence(AD, AD1, QName, auto_delete),
-    assert_args_equivalence(Q, Args1),
-    check_exclusive_access(Q, Owner, strict).
+                             durable     = DurableQ,
+                             auto_delete = AutoDeleteQ} = Q,
+                   DurableDeclare, AutoDeleteDeclare, Args1, Owner) ->
+    ok = check_exclusive_access(Q, Owner, strict),
+    ok = rabbit_misc:assert_field_equivalence(DurableQ, DurableDeclare, QName, durable),
+    ok = rabbit_misc:assert_field_equivalence(AutoDeleteQ, AutoDeleteDeclare, QName, auto_delete),
+    ok = assert_args_equivalence(Q, Args1).
 
 check_exclusive_access(Q, Owner) -> check_exclusive_access(Q, Owner, lax).
 
@@ -549,7 +549,9 @@ check_exclusive_access(#amqqueue{exclusive_owner = none}, _ReaderPid, lax) ->
 check_exclusive_access(#amqqueue{name = QueueName}, _ReaderPid, _MatchType) ->
     rabbit_misc:protocol_error(
       resource_locked,
-      "cannot obtain exclusive access to locked ~s",
+      "cannot obtain exclusive access to locked ~s. It could be originally "
+      "declared on another connection or the exclusive property value does not "
+      "match that of the original declaration.",
       [rabbit_misc:rs(QueueName)]).
 
 with_exclusive_access_or_die(Name, ReaderPid, F) ->
