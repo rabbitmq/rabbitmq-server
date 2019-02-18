@@ -16,7 +16,6 @@
 
 -module(channel_source_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
@@ -29,9 +28,9 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-          network_channel_source_notifications,
-          direct_channel_source_notifications,
-          undefined_channel_source_notifications
+          network_rabbit_reader_channel_source,
+          direct_channel_source,
+          undefined_channel_source
         ]}
     ].
 
@@ -71,53 +70,49 @@ end_per_testcase(Testcase, Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 
-network_channel_source_notifications(Config) ->
+network_rabbit_reader_channel_source(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, network_channel_source_notifications1, [Config]).
+      ?MODULE, network_rabbit_reader_channel_source1, [Config]).
 
-network_channel_source_notifications1(Config) ->
+network_rabbit_reader_channel_source1(Config) ->
     ExistingChannels = rabbit_channel:list(),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
-    {ok, _ClientCh} = amqp_connection:open_channel(Conn),
+    {ok, ClientCh} = amqp_connection:open_channel(Conn),
     [ServerCh] = rabbit_channel:list() -- ExistingChannels,
-    [{channel_source, rabbit_reader}] =
-        rabbit_channel:info(ServerCh, [channel_source]),
-    rabbit_channel:source(ServerCh, ?MODULE),
-    [{channel_source, ?MODULE}] =
-        rabbit_channel:info(ServerCh, [channel_source]),
+    [{source, rabbit_reader}] = rabbit_channel:info(ServerCh, [source]),
+    _ = rabbit_channel:source(ServerCh, ?MODULE),
+    [{source, ?MODULE}] = rabbit_channel:info(ServerCh, [source]),
+    amqp_channel:close(ClientCh),
     amqp_connection:close(Conn),
     {error, channel_terminated} = rabbit_channel:source(ServerCh, ?MODULE),
     passed.
 
-direct_channel_source_notifications(Config) ->
+direct_channel_source(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, direct_channel_source_notifications1, [Config]).
+      ?MODULE, direct_channel_source1, [Config]).
 
-direct_channel_source_notifications1(Config) ->
+direct_channel_source1(Config) ->
     ExistingChannels = rabbit_channel:list(),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection_direct(Config),
-    {ok, _ClientCh} = amqp_connection:open_channel(Conn),
+    {ok, ClientCh} = amqp_connection:open_channel(Conn),
     [ServerCh] = rabbit_channel:list() -- ExistingChannels,
-    [{channel_source, rabbit_direct}] =
-        rabbit_channel:info(ServerCh, [channel_source]),
-    rabbit_channel:source(ServerCh, ?MODULE),
-    [{channel_source, ?MODULE}] =
-        rabbit_channel:info(ServerCh, [channel_source]),
+    [{source, rabbit_direct}] = rabbit_channel:info(ServerCh, [source]),
+    _ = rabbit_channel:source(ServerCh, ?MODULE),
+    [{source, ?MODULE}] = rabbit_channel:info(ServerCh, [source]),
+    amqp_channel:close(ClientCh),
     amqp_connection:close(Conn),
     {error, channel_terminated} = rabbit_channel:source(ServerCh, ?MODULE),
     passed.
 
-undefined_channel_source_notifications(Config) ->
+undefined_channel_source(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, undefined_channel_source_notifications1, [Config]).
+      ?MODULE, undefined_channel_source1, [Config]).
 
-undefined_channel_source_notifications1(_Config) ->
+undefined_channel_source1(_Config) ->
     ExistingChannels = rabbit_channel:list(),
     {_Writer, _Limiter, ServerCh} = rabbit_ct_broker_helpers:test_channel(),
     [ServerCh] = rabbit_channel:list() -- ExistingChannels,
-    [{channel_source, undefined}] =
-        rabbit_channel:info(ServerCh, [channel_source]),
-    rabbit_channel:source(ServerCh, ?MODULE),
-    [{channel_source, ?MODULE}] =
-        rabbit_channel:info(ServerCh, [channel_source]),
+    [{source, undefined}] = rabbit_channel:info(ServerCh, [source]),
+    _ = rabbit_channel:source(ServerCh, ?MODULE),
+    [{source, ?MODULE}] = rabbit_channel:info(ServerCh, [source]),
     passed.
