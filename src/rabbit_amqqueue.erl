@@ -640,7 +640,9 @@ check_exclusive_access(Q, _ReaderPid, _MatchType) ->
     QueueName = amqqueue:get_name(Q),
     rabbit_misc:protocol_error(
       resource_locked,
-      "cannot obtain exclusive access to locked ~s",
+      "cannot obtain exclusive access to locked ~s. It could be originally "
+      "declared on another connection or the exclusive property value does not "
+      "match the original declaration.",
       [rabbit_misc:rs(QueueName)]).
 
 -spec with_exclusive_access_or_die(name(), pid(), qfun(A)) ->
