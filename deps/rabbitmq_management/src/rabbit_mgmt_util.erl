@@ -775,7 +775,7 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
               Method = props_to_method(MethodName, Props, Transformers, Extra),
               Node = get_node(Props),
               case rabbit_misc:rpc_call(Node, rabbit_channel, handle_method,
-                                        [Method, none, none,
+                                        [Method, none, ?MODULE, none,
                                          VHost, User]) of
                   {badrpc, nodedown} ->
                       Msg = io_lib:format("Node ~p could not be contacted", [Node]),
