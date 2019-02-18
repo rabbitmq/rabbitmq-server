@@ -29,6 +29,7 @@ groups() ->
     [
       {non_parallel_tests, [], [
           network_rabbit_reader_channel_source,
+          network_arbitrary_channel_source,
           direct_channel_source,
           undefined_channel_source
         ]}
@@ -85,6 +86,29 @@ network_rabbit_reader_channel_source1(Config) ->
     amqp_channel:close(ClientCh),
     amqp_connection:close(Conn),
     {error, channel_terminated} = rabbit_channel:source(ServerCh, ?MODULE),
+    passed.
+
+network_arbitrary_channel_source(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, network_arbitrary_channel_source1, [Config]).
+
+network_arbitrary_channel_source1(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    Writer = spawn(fun () -> rabbit_ct_broker_helpers:test_writer(self()) end),
+    {ok, Limiter} = rabbit_limiter:start_link(no_limiter_id),
+    {ok, Collector} = rabbit_queue_collector:start_link(no_collector_id),
+    {ok, Ch} = rabbit_channel:start_link(
+                 1, Conn, Writer, Conn, "", rabbit_framing_amqp_0_9_1,
+                 rabbit_ct_broker_helpers:user(<<"guest">>), <<"/">>, [],
+                 Collector, Limiter),
+    _ = rabbit_channel:source(Ch, ?MODULE),
+    [{amqp_params, #amqp_params_network{username = <<"guest">>,
+        password = <<"guest">>, host = "localhost", virtual_host = <<"/">>}}] =
+            rabbit_amqp_connection:amqp_params(Conn, 1000),
+    [{source, ?MODULE}] = rabbit_channel:info(Ch, [source]),
+    [exit(P, normal) || P <- [Writer, Limiter, Collector, Ch]],
+    amqp_connection:close(Conn),
+    {error, channel_terminated} = rabbit_channel:source(Ch, ?MODULE),
     passed.
 
 direct_channel_source(Config) ->
