@@ -18,7 +18,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.Shrink do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  defp default_opts, do: %{}
+  defp default_opts, do: %{errors_only: false}
+
+  def switches(),
+    do: [
+      errors_only: :boolean,
+    ]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(default_opts(), opts)}
@@ -36,14 +41,50 @@ defmodule RabbitMQ.CLI.Queues.Commands.Shrink do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([node], %{node: node_name}) do
+  def run([node], %{node: node_name,
+                    errors_only: errs}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [
            to_atom(node)
          ]) do
+      results when errs ->
+        for {{:resource, vhost, _kind, name}, {errors, _, _} = res} <- results,
+        do: [{:vhost, vhost},
+             {:name, name},
+             {:size, format_size res},
+             {:result, format_result res}]
       results ->
-        results
+        for {{:resource, vhost, _kind, name}, res} <- results,
+        do: [{:vhost, vhost},
+             {:name, name},
+             {:size, format_size res},
+             {:result, format_result res}]
     end
   end
+
+  defp format_size({:ok, size}) do
+    size
+  end
+  defp format_size({:error, _size, :timeout}) do
+    # the actual size is uncertain here
+    "?"
+  end
+  defp format_size({:error, size, _}) do
+    size
+  end
+
+  defp format_result({:ok, _size}) do
+    "ok"
+  end
+  defp format_result({:error, _size, :last_node}) do
+    "error: the last node cannot be removed"
+  end
+  defp format_result({:error, _size, :timeout}) do
+    "error: the operation timed out and may not have been completed"
+  end
+  defp format_result({:error, _size, err}) do
+    :io.format "error: ~W", [err, 10]
+  end
+
 
   use RabbitMQ.CLI.DefaultOutput
 
