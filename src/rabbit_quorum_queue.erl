@@ -740,13 +740,14 @@ shrink_all(Node) ->
          QName = amqqueue:get_name(Q),
          rabbit_log:info("~s: Removing member ~w",
                          [rabbit_misc:rs(QName), Node]),
+         Size = length(amqqueue:get_quorum_nodes(Q)),
          case delete_member(Q, Node) of
              ok ->
-                 {QName, ok};
+                 {QName, {ok, Size-1}};
              {error, Err} ->
                  rabbit_log:warning("~s: Failed to remove member ~w, Error ~w",
                                     [rabbit_misc:rs(QName), Node, Err]),
-                 {QName, {error, Err}}
+                 {QName, {error, Size, Err}}
          end
      end || Q <- rabbit_amqqueue:list(),
             amqqueue:get_type(Q) == quorum,

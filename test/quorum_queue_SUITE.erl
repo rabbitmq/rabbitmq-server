@@ -643,14 +643,14 @@ shrink_all(Config) ->
     timer:sleep(500),
     Result = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server2]),
     ct:pal("shring all result ~p", [Result]),
-    ?assertMatch([{_, ok}, {_, ok}], Result),
+    ?assertMatch([{_, {ok, 2}}, {_, {ok, 2}}], Result),
     Result1 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server1]),
     ct:pal("shring all result ~p", [Result1]),
-    ?assertMatch([{_, ok}, {_, ok}], Result1),
+    ?assertMatch([{_, {ok, 1}}, {_, {ok, 1}}], Result1),
     Result2 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server0]),
     ct:pal("shring all result ~p", [Result2]),
-    ?assertMatch([{_, {error, last_node}},
-                  {_, {error, last_node}}], Result2),
+    ?assertMatch([{_, {error, 1, last_node}},
+                  {_, {error, 1, last_node}}], Result2),
     ok.
 
 
