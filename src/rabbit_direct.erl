@@ -211,6 +211,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
           rabbit_direct_client_sup,
           [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
             User, VHost, Capabilities, Collector}]),
+    _ = rabbit_channel:source(ChannelPid, ?MODULE),
     {ok, ChannelPid}.
 
 -spec disconnect(pid(), rabbit_event:event_props()) -> 'ok'.
