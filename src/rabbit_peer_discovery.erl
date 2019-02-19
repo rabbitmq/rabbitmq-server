@@ -107,7 +107,7 @@ maybe_init() ->
 
 %% This module doesn't currently sanity-check the return value of
 %% `Backend:list_nodes()`. Therefore, it could return something invalid:
-%% thus the `{œk, any()} in the spec.
+%% thus the `{ok, any()} in the spec.
 %%
 %% `rabbit_mnesia:init_from_config()` does some verifications.
 
