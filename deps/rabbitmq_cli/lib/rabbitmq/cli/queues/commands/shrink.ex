@@ -18,15 +18,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.Shrink do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  defp default_opts, do: %{errors_only: false}
-
-  def switches(),
-    do: [
-      errors_only: :boolean,
-    ]
+  def switches() do
+    [errors_only: :boolean]
+  end
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(default_opts(), opts)}
+    {args, Map.merge(%{errors_only: false}, opts)}
   end
 
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
@@ -38,7 +35,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.Shrink do
            to_atom(node)
          ]) do
       results when errs ->
-        for {{:resource, vhost, _kind, name}, {errors, _, _} = res} <- results,
+        for {{:resource, vhost, _kind, name}, {_errors, _, _} = res} <- results,
         do: [{:vhost, vhost},
              {:name, name},
              {:size, format_size res},
