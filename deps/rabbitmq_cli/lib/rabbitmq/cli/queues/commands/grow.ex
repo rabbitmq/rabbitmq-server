@@ -13,45 +13,51 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2019 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.Shrink do
+defmodule RabbitMQ.CLI.Queues.Commands.Grow do
   import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  defp default_opts, do: %{errors_only: false}
+  defp default_opts, do: %{vhost_pattern: ".*",
+                           queue_pattern: ".*"}
 
   def switches(),
     do: [
-      errors_only: :boolean,
+      vhost_pattern: :string,
+      queue_pattern: :string
     ]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(default_opts(), opts)}
   end
 
-  def validate(args, _) when length(args) < 1 do
+  def validate(args, _) when length(args) < 2 do
     {:validation_failure, :not_enough_args}
   end
 
-  def validate(args, _) when length(args) > 1 do
+  def validate(args, _) when length(args) > 2 do
     {:validation_failure, :too_many_args}
   end
-
-  def validate([_], _), do: :ok
+  def validate([_, s], _) do
+   case s do
+     "all" -> :ok
+     "even" -> :ok
+     _ ->
+       {:validation_failure, {:unrecognised_strategy, s}}
+   end
+  end
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([node], %{node: node_name,
-                    errors_only: errs}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [
-           to_atom(node)
-         ]) do
-      results when errs ->
-        for {{:resource, vhost, _kind, name}, {errors, _, _} = res} <- results,
-        do: [{:vhost, vhost},
-             {:name, name},
-             {:size, format_size res},
-             {:result, format_result res}]
+  def run([node, strategy],
+    %{node: node_name,
+      vhost_pattern: vhost_pat,
+      queue_pattern: queue_pat}) do
+        case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :grow, [
+          to_atom(node),
+          vhost_pat,
+          queue_pat,
+          to_atom(strategy)]) do
       results ->
         for {{:resource, vhost, _kind, name}, res} <- results,
         do: [{:vhost, vhost},
@@ -75,9 +81,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.Shrink do
   defp format_result({:ok, _size}) do
     "ok"
   end
-  defp format_result({:error, _size, :last_node}) do
-    "error: the last node cannot be removed"
-  end
   defp format_result({:error, _size, :timeout}) do
     "error: the operation timed out and may not have been completed"
   end
@@ -85,14 +88,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.Shrink do
     :io.format "error: ~W", [err, 10]
   end
 
-
   use RabbitMQ.CLI.DefaultOutput
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
-  def banner([node], _) do
-    "Shrinking queues on #{node}..."
+  def banner([node, strategy], _) do
+    "Growing #{strategy} queues on #{node}..."
   end
 
-  def usage, do: "shrink <node> [--errors-only]"
+  def usage, do: "shrink <node> <all | even> [--vhost_pattern <pattern>] [--queue_pattern <pattern>]"
 end
