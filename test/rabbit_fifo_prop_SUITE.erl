@@ -35,7 +35,8 @@ all_tests() ->
      scenario11,
      scenario12,
      scenario13,
-     scenario14
+     scenario14,
+     scenario15
     ].
 
 groups() ->
@@ -236,26 +237,41 @@ scenario14(_Config) ->
                         max_bytes => 1}, Commands),
     ok.
 
+scenario15(_Config) ->
+    C1 = {<<>>, c:pid(0,179,1)},
+    E = c:pid(0,176,1),
+    Commands = [make_checkout(C1, {auto,2,simple_prefetch}),
+                make_enqueue(E, 1, msg1),
+                make_enqueue(E, 2, msg2),
+                make_return(C1, [0]),
+                make_return(C1, [2]),
+                make_settle(C1, [1])
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        delivery_limit => 1}, Commands),
+    ok.
+
 snapshots(_Config) ->
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, SingleActiveConsumer},
-                      frequency([{10, {0, 0, false}},
+              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit},
+                      frequency([{10, {0, 0, false, 0}},
                                  {5, {non_neg_integer(), non_neg_integer(),
-                                      boolean()}}]),
+                                      boolean(), non_neg_integer()}}]),
                       ?FORALL(O, ?LET(Ops, log_gen(200), expand(Ops)),
                               collect({Length, Bytes},
                                       snapshots_prop(
                                         config(?FUNCTION_NAME,
                                                Length, Bytes,
-                                               SingleActiveConsumer), O))))
+                                               SingleActiveConsumer, DeliveryLimit), O))))
       end, [], 2000).
 
-config(Name, Length, Bytes, SingleActive) ->
+config(Name, Length, Bytes, SingleActive, DeliveryLimit) ->
     #{name => Name,
       max_length => map_max(Length),
       max_bytes => map_max(Bytes),
-      single_active_consumer_on => SingleActive}.
+      single_active_consumer_on => SingleActive,
+      delivery_limit => map_max(DeliveryLimit)}.
 
 map_max(0) -> undefined;
 map_max(N) -> N.
