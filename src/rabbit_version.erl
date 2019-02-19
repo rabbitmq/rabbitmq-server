@@ -45,8 +45,9 @@
 -spec check_version_consistency
         (string(), string(), string()) -> rabbit_types:ok_or_error(any()).
 -spec check_version_consistency
-        (string(), string(), string(), string()) ->
-                                          rabbit_types:ok_or_error(any()).
+        (string(), string(), string(),
+         fun((string(), string()) -> boolean())) ->
+    rabbit_types:ok_or_error(any()).
 -spec check_otp_consistency
         (string()) -> rabbit_types:ok_or_error(any()).
 

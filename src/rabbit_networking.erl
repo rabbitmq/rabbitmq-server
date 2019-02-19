@@ -93,7 +93,7 @@
 -spec tcp_listener_addresses(listener_config()) -> [address()].
 -spec tcp_listener_spec
         (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
-         protocol(), any(), non_neg_integer(), label()) ->
+         any(), protocol(), non_neg_integer(), label()) ->
             supervisor:child_spec().
 -spec ensure_ssl() -> rabbit_types:infos().
 -spec poodle_check(atom()) -> 'ok' | 'danger'.
@@ -112,6 +112,11 @@
          {char(),char(),char(),char(),char(),char(),char(),char()},
          _) ->
             'ok'.
+
+%% @todo Remove once Dialyzer only runs on Erlang/OTP 21.3 or above.
+-dialyzer({nowarn_function, boot/0}).
+-dialyzer({nowarn_function, boot_listeners/3}).
+-dialyzer({nowarn_function, record_distribution_listener/0}).
 
 %%----------------------------------------------------------------------------
 
@@ -427,6 +432,7 @@ gethostaddr(Host, Family) ->
         {error, Reason} -> host_lookup_error(Host, Reason)
     end.
 
+-spec host_lookup_error(_, _) -> no_return().
 host_lookup_error(Host, Reason) ->
     rabbit_log:error("invalid host ~p - ~p~n", [Host, Reason]),
     throw({error, {invalid_host, Host, Reason}}).

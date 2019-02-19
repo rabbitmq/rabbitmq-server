@@ -30,7 +30,7 @@
 
 -spec add(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 -spec delete(rabbit_types:vhost(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
--spec update(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
+-spec update(rabbit_types:vhost(), fun((#vhost{}) -> #vhost{})) -> #vhost{}.
 -spec exists(rabbit_types:vhost()) -> boolean().
 -spec list() -> [rabbit_types:vhost()].
 -spec with(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
@@ -126,10 +126,6 @@ do_add(VHostPath, ActingUser) ->
             rabbit_event:notify(vhost_created, info(VHostPath)
                                 ++ [{user_who_performed_action, ActingUser}]),
             R;
-        {error, {no_such_vhost, VHostPath}} ->
-            Msg = rabbit_misc:format("failed to set up vhost '~s': it was concurrently deleted!",
-                                     [VHostPath]),
-            {error, Msg};
         {error, Reason} ->
             Msg = rabbit_misc:format("failed to set up vhost '~s': ~p",
                                      [VHostPath, Reason]),
@@ -218,10 +214,7 @@ assert_benign({error, not_found}, _) -> ok;
 assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the mnesia entries here is safe. If/when the down node
     %% restarts, it will clear out the on-disk storage of the queue.
-    case rabbit_amqqueue:internal_delete(Q#amqqueue.name, ActingUser) of
-        ok                 -> ok;
-        {error, not_found} -> ok
-    end.
+    rabbit_amqqueue:internal_delete(Q#amqqueue.name, ActingUser).
 
 internal_delete(VHostPath, ActingUser) ->
     [ok = rabbit_auth_backend_internal:clear_permissions(

@@ -80,8 +80,8 @@
 -spec declare
         (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
          rabbit_types:maybe(pid()), rabbit_types:username()) ->
-            {'new' | 'existing' | 'absent' | 'owner_died',
-             rabbit_types:amqqueue()} |
+            {'new' | 'existing' | 'owner_died', rabbit_types:amqqueue()} |
+            {'absent', rabbit_types:amqqueue(), absent_reason()} |
             rabbit_types:channel_exit().
 -spec declare
         (name(), boolean(), boolean(), rabbit_framing:amqp_table(),
@@ -129,7 +129,7 @@
 -spec notify_policy_changed(rabbit_types:amqqueue()) -> 'ok'.
 -spec consumers(rabbit_types:amqqueue()) ->
           [{pid(), rabbit_types:ctag(), boolean(), non_neg_integer(),
-            rabbit_framing:amqp_table()}].
+            rabbit_framing:amqp_table(), binary()}].
 -spec consumer_info_keys() -> rabbit_types:info_keys().
 -spec consumers_all(rabbit_types:vhost()) ->
           [{name(), pid(), rabbit_types:ctag(), boolean(),
@@ -161,7 +161,7 @@
 -spec notify_down_all(qpids(), pid()) -> ok_or_errors().
 -spec notify_down_all(qpids(), pid(), non_neg_integer()) ->
           ok_or_errors().
--spec activate_limit_all(qpids(), pid()) -> ok_or_errors().
+-spec activate_limit_all(qpids(), pid()) -> ok.
 -spec basic_get(rabbit_types:amqqueue(), pid(), boolean(), pid()) ->
           {'ok', non_neg_integer(), qmsg()} | 'empty'.
 -spec credit
@@ -453,6 +453,8 @@ not_found_or_absent(Name) ->
         [Q] -> {absent, Q, nodedown} %% Q exists on stopped node
     end.
 
+-spec not_found_or_absent_dirty(name()) -> not_found_or_absent().
+
 not_found_or_absent_dirty(Name) ->
     %% We should read from both tables inside a tx, to get a
     %% consistent view. But the chances of an inconsistency are small,
@@ -465,7 +467,7 @@ not_found_or_absent_dirty(Name) ->
 with(Name, F, E) ->
     with(Name, F, E, 2000).
 
-with(Name, F, E, RetriesLeft) ->
+with(#resource{} = Name, F, E, RetriesLeft) ->
     case lookup(Name) of
         {ok, Q = #amqqueue{state = live}} when RetriesLeft =:= 0 ->
             %% Something bad happened to that queue, we are bailing out
@@ -527,9 +529,15 @@ retry_wait(Q = #amqqueue{pid = QPid, name = Name, state = QState}, F, E, Retries
 with(Name, F) -> with(Name, F, fun (E) -> {error, E} end).
 
 with_or_die(Name, F) ->
-    with(Name, F, fun (not_found)           -> rabbit_misc:not_found(Name);
-                      ({absent, Q, Reason}) -> rabbit_misc:absent(Q, Reason)
-                  end).
+    with(Name, F, die_fun(Name)).
+
+-spec die_fun(name()) ->
+    fun((not_found_or_absent()) -> no_return()).
+
+die_fun(Name) ->
+    fun (not_found)           -> rabbit_misc:not_found(Name);
+        ({absent, Q, Reason}) -> rabbit_misc:absent(Q, Reason)
+    end.
 
 assert_equivalence(#amqqueue{name        = QName,
                              durable     = DurableQ,

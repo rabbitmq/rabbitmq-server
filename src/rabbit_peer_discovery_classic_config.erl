@@ -26,13 +26,12 @@
 %% API
 %%
 
--spec list_nodes() -> {ok, Nodes :: list()} | {error, Reason :: string()}.
+-spec list_nodes() -> {ok, {Nodes :: [node()], rabbit_types:node_type()}}.
 
 list_nodes() ->
-    case application:get_env(rabbit, cluster_nodes) of
-        {_Nodes, _NodeType} = Pair -> Pair;
-        Nodes when is_list(Nodes)  -> {Nodes, disc};
-        undefined                  -> {[], disc}
+    case application:get_env(rabbit, cluster_nodes, {[], disc}) of
+        {_Nodes, _NodeType} = Pair -> {ok, Pair};
+        Nodes when is_list(Nodes)  -> {ok, {Nodes, disc}}
     end.
 
 -spec supports_registration() -> boolean().

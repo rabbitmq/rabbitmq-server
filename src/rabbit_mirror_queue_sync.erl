@@ -67,6 +67,7 @@
                       non_neg_integer(),
                       bq(), bqs()) ->
                           {'already_synced', bqs()} | {'ok', bqs()} |
+                          {'cancelled', bqs()} |
                           {'shutdown', any(), bqs()} |
                           {'sync_died', any(), bqs()}.
 -spec slave(non_neg_integer(), reference(), timer:tref(), pid(),

@@ -36,7 +36,7 @@
 -export([init/1, handle_event/2, handle_call/2,
          handle_info/2, terminate/2, code_change/3]).
 
--record(state, {timer_ref :: reference()}).
+-record(state, {timer_ref :: reference() | undefined}).
 
 -define(INACTIVITY_TIMEOUT, 5000).
 
