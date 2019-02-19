@@ -287,8 +287,7 @@ reductions(Name) ->
             0
     end.
 
--spec recover([amqqueue:amqqueue()]) -> [amqqueue:amqqueue() |
-                                             {'absent', amqqueue:amqqueue(), atom()}].
+-spec recover([amqqueue:amqqueue()]) -> [amqqueue:amqqueue()].
 
 recover(Queues) ->
     [begin
