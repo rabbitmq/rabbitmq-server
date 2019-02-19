@@ -144,6 +144,12 @@
   %% a dtree used to track unconfirmed
   %% (to publishers) messages
   unconfirmed,
+  %% a set of tags for published messages that were
+  %% confirmed by at least one queue
+  %% this is needed to distinguish between confirms
+  %% and queue failures and make sure that at least
+  %% one queue confirmed the delivery
+  partially_confirmed,
   %% a list of tags for published messages that were
   %% delivered but are yet to be confirmed to the client
   confirmed,
@@ -506,6 +512,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 confirm_enabled         = false,
                 publish_seqno           = 1,
                 unconfirmed             = dtree:empty(),
+                partially_confirmed     = sets:new(),
                 rejected                = [],
                 confirmed               = [],
                 capabilities            = Capabilities,
@@ -1168,12 +1175,20 @@ record_rejects(MXs, State = #ch{rejected = R, tx = Tx}) ->
         none -> none;
         _    -> failed
     end,
-    State#ch{rejected = [MXs | R], tx = Tx1}.
+    State1 = clean_partially_confirmed(MXs, State),
+    State1#ch{rejected = [MXs | R], tx = Tx1}.
 
 record_confirms([], State) ->
     State;
 record_confirms(MXs, State = #ch{confirmed = C}) ->
-    State#ch{confirmed = [MXs | C]}.
+    State1 = clean_partially_confirmed(MXs, State),
+    State1#ch{confirmed = [MXs | C]}.
+
+clean_partially_confirmed(MXs, State = #ch{partially_confirmed = PC0}) ->
+    PC1 = lists:foldl(fun({MsgSeqNo, _}, PC) ->
+                          sets:del_element(MsgSeqNo, PC)
+                      end, PC0, MXs),
+    State#ch{partially_confirmed = PC1}.
 
 handle_method({Method, Content}, State) ->
     handle_method(Method, Content, State).
@@ -1774,14 +1789,23 @@ track_delivering_queue(NoAck, QPid, QName,
                                      false -> sets:add_element(QRef, DQ)
                                  end}.
 
-handle_publishing_queue_down(QPid, Reason, State = #ch{unconfirmed = UC})
+handle_publishing_queue_down(QPid, Reason,
+                             State = #ch{unconfirmed = UC,
+                                         partially_confirmed = PC})
   when ?IS_CLASSIC(QPid) ->
     case rabbit_misc:is_abnormal_exit(Reason) of
-        true  -> {MXs, UC1} = dtree:take_all(QPid, UC),
-                 record_rejects(MXs, State#ch{unconfirmed = UC1});
-        false -> {MXs, UC1} = dtree:take(QPid, UC),
-                 record_confirms(MXs, State#ch{unconfirmed = UC1})
-
+        true  ->
+            {MXs, UC1} = dtree:take_all(QPid, UC),
+            record_rejects(MXs, State#ch{unconfirmed = UC1});
+        false ->
+            {MXs, UC1} = dtree:take(QPid, UC),
+            {MXsConfirmed, MXsFailed} =
+                lists:partition(fun({MsgSeqNo,_}) ->
+                    sets:is_element(MsgSeqNo, PC)
+                end,
+                MXs),
+            State1 = record_confirms(MXsConfirmed, State#ch{unconfirmed = UC1}),
+            record_rejects(MXsFailed, State1)
     end;
 handle_publishing_queue_down(QPid, _Reason, _State) when ?IS_QUORUM(QPid) ->
     error(quorum_queues_should_never_be_monitored).
@@ -2129,10 +2153,24 @@ process_routing_confirm(true, QRefs, MsgSeqNo, XName, State) ->
     State#ch{unconfirmed = dtree:insert(MsgSeqNo, QRefs, XName,
                                         State#ch.unconfirmed)}.
 
-confirm(MsgSeqNos, QRef, State = #ch{unconfirmed = UC}) ->
+confirm(MsgSeqNos, QRef, State = #ch{unconfirmed = UC, partially_confirmed = PC0}) ->
     {MXs, UC1} = dtree:take(MsgSeqNos, QRef, UC),
+
+    {ConfirmedMsgSeqNos, _} = lists:unzip(MXs),
+    PartialMsgSeqNos = MsgSeqNos -- ConfirmedMsgSeqNos,
+
+    %% Add partially confirmed
+    PC1 = lists:foldl(
+        fun(MsgSeqNo, PC) ->
+            case dtree:is_pk(MsgSeqNo, UC1) of
+                true  -> sets:add_element(MsgSeqNo, PC);
+                false -> PC
+            end
+        end,
+        PC0, PartialMsgSeqNos),
+
     %% NB: don't call noreply/1 since we don't want to send confirms.
-    record_confirms(MXs, State#ch{unconfirmed = UC1}).
+    record_confirms(MXs, State#ch{unconfirmed = UC1, partially_confirmed = PC1}).
 
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = [], rejected = []}) ->
     State;

@@ -33,7 +33,7 @@
 -module(dtree).
 
 -export([empty/0, insert/4, take/3, take/2, take_one/2, take_all/2, drop/2,
-         is_defined/2, is_empty/1, smallest/1, size/1]).
+         is_pk/2, is_defined/2, is_empty/1, smallest/1, size/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -153,6 +153,10 @@ drop(PK, {P, S}) ->
         {value, {SKS, _V}} -> {gb_trees:delete(PK, P),
                                prune(SKS, gb_sets:singleton(PK), S)}
     end.
+
+-spec is_pk(pk(), ?MODULE()) -> boolean().
+
+is_pk(PK, {P, _S}) -> gb_trees:is_defined(PK, P).
 
 -spec is_defined(sk(), ?MODULE()) -> boolean().
 
