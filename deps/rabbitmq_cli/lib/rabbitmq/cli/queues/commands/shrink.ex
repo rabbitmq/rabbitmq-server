@@ -29,16 +29,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.Shrink do
     {args, Map.merge(default_opts(), opts)}
   end
 
-  def validate(args, _) when length(args) < 1 do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate(args, _) when length(args) > 1 do
-    {:validation_failure, :too_many_args}
-  end
-
-  def validate([_], _), do: :ok
-
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([node], %{node: node_name,
